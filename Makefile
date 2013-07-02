@@ -29,6 +29,7 @@ endif
 
 LDLIBS_AIO = -laio
 
+HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h)
 SOURCES = $(wildcard src/*.cpp)
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 ALL_BINARIES = $(patsubst %.cpp,%,$(SOURCES))
@@ -69,7 +70,7 @@ install:
 
 depend: Makefile.depends
 
-Makefile.depends: $(SOURCES)
+Makefile.depends: $(HEADERS) $(SOURCES)
 	$(CXX) -MM $(SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > Makefile.depends
 
 -include Makefile.depends
