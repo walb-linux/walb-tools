@@ -172,6 +172,7 @@ public:
     }
     ~BlockBuffer() noexcept { ::free(array_); }
     DISABLE_COPY_AND_ASSIGN(BlockBuffer);
+    DISABLE_MOVE(BlockBuffer);
 
     T *alloc() {
         if (nr_ == 0 || bmp_[idx_]) { return nullptr; }
@@ -228,6 +229,7 @@ public:
         , totalPre_(0), totalNew_(0) {}
     ~BlockAllocator() noexcept = default;
     DISABLE_COPY_AND_ASSIGN(BlockAllocator);
+    DISABLE_MOVE(BlockAllocator);
 
     /**
      * Allocate contiguous blocks.
@@ -279,6 +281,7 @@ public:
 
     ~BlockMultiBuffer() noexcept { ::free(buf_); }
     DISABLE_COPY_AND_ASSIGN(BlockMultiBuffer);
+    DISABLE_MOVE(BlockMultiBuffer);
 
     /**
      * Allocate memory
@@ -374,6 +377,7 @@ public:
 
     ~BlockMultiAllocator() noexcept {}
     DISABLE_COPY_AND_ASSIGN(BlockMultiAllocator);
+    DISABLE_MOVE(BlockMultiAllocator);
 
     /**
      * Allocated memory will be freed automatically.

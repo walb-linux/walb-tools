@@ -20,6 +20,7 @@ private:
 public:
     SequentialQueue() : q_() {}
     DISABLE_COPY_AND_ASSIGN(SequentialQueue);
+    DISABLE_MOVE(SequentialQueue);
 
     void push(std::shared_ptr<T> ptr) {
         q_.push(ptr);
@@ -53,6 +54,7 @@ private:
 public:
     RandomQueue() : m_(), rand_() {}
     DISABLE_COPY_AND_ASSIGN(RandomQueue);
+    DISABLE_MOVE(RandomQueue);
 
     void push(std::shared_ptr<T> ptr) {
         m_.insert(std::make_pair(rand_.get(), ptr));

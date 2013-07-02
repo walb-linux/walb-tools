@@ -818,6 +818,7 @@ public:
     }
     virtual ~WalbLogRecordRef() noexcept {}
     DISABLE_COPY_AND_ASSIGN(WalbLogRecordRef);
+    DISABLE_MOVE(WalbLogRecordRef);
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_.pbs(); }
@@ -893,6 +894,7 @@ public:
         , BlockData(logh.pbs()) {}
     virtual ~WalbLogpackData() noexcept {}
     DISABLE_COPY_AND_ASSIGN(WalbLogpackData);
+    DISABLE_MOVE(WalbLogpackData);
 
     bool isValid(bool isChecksum = true) const {
         if (!LogRecord::isValid()) { return false; }

@@ -272,6 +272,7 @@ public:
     }
     ~RandomIoSpecGenerator() noexcept {}
     DISABLE_COPY_AND_ASSIGN(RandomIoSpecGenerator);
+    DISABLE_MOVE(RandomIoSpecGenerator);
 
     void get(uint64_t &ioAddr, unsigned int &ioBlocks) {
         ioAddr = rand_.get() % sizeB_ + offsetB_;

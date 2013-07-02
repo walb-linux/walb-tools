@@ -39,6 +39,10 @@
     ClassName(const ClassName &rhs) = delete;           \
     ClassName &operator=(const ClassName &rhs) = delete
 
+#define DISABLE_MOVE(ClassName)                         \
+    ClassName(ClassName &&rhs) = delete;                \
+    ClassName &&operator=(ClassName &&rhs) = delete
+
 namespace cybozu {
 namespace util {
 
