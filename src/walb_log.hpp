@@ -710,6 +710,8 @@ private:
 class WalbLogRecord
 {
 public:
+    virtual ~WalbLogRecord() noexcept {}
+
     /* Interface to access a record */
     virtual size_t pos() const = 0;
     virtual unsigned int pbs() const = 0;
@@ -790,7 +792,7 @@ public:
     }
     WalbLogRecordRaw(WalbLogpackHeader &logh, size_t pos)
         : WalbLogRecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
-    virtual ~WalbLogRecordRaw() noexcept {}
+    ~WalbLogRecordRaw() noexcept override {}
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return pbs_; }
@@ -816,7 +818,7 @@ public:
         , pos_(pos) {
         assert(pos < logh.nRecords());
     }
-    virtual ~WalbLogRecordRef() noexcept {}
+    ~WalbLogRecordRef() noexcept override {}
     DISABLE_COPY_AND_ASSIGN(WalbLogRecordRef);
     DISABLE_MOVE(WalbLogRecordRef);
 
@@ -852,7 +854,7 @@ public:
     }
     template<typename T>
     const T* rawData(size_t idx) const {
-        return reinterpret_cast<T *>(data_[idx].get());
+        return reinterpret_cast<const T *>(data_[idx].get());
     }
 
     size_t nBlocks() const { return data_.size(); }
