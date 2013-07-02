@@ -1,3 +1,7 @@
 *~
 Makefile.depends
 walb
+GPATH
+GRTAGS
+GSYMS
+GTAGS
