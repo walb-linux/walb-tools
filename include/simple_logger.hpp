@@ -72,12 +72,12 @@ private:
 
 public:
     enum {
-        ERROR = 0,
-        WARN,
-        NOTICE,
-        INFO,
-        DEBUG,
-        MAX,
+        LOG_ERROR = 0,
+        LOG_WARN,
+        LOG_NOTICE,
+        LOG_INFO,
+        LOG_DEBUG,
+        LOG_MAX,
     };
 
     /**
@@ -110,7 +110,7 @@ public:
 
     void setLevel(int level) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (level < 0 || MAX <= level) { return; }
+        if (level < 0 || LOG_MAX <= level) { return; }
         level_ = level;
     }
 
@@ -136,7 +136,7 @@ public:
     }
 
 private:
-    SimpleLogger(const std::string &name, int level = INFO)
+    SimpleLogger(const std::string &name, int level = LOG_INFO)
         : name_(name), level_(level) {}
     SimpleLogger(const SimpleLogger&) = delete;
     SimpleLogger() = delete;
@@ -223,11 +223,11 @@ std::vector<std::string> SimpleLogger::levelStr_;
     cybozu::logger::SimpleLogger::get().write(                          \
         level, "(%s:%d) " fmt "\n", __func__, __LINE__, ##args)
 
-#define LOGe(fmt, args...) LOG(cybozu::logger::SimpleLogger::ERROR, fmt, ##args);
-#define LOGw(fmt, args...) LOG(cybozu::logger::SimpleLogger::WARN, fmt, ##args);
-#define LOGn(fmt, args...) LOG(cybozu::logger::SimpleLogger::NOTICE, fmt, ##args);
-#define LOGi(fmt, args...) LOG(cybozu::logger::SimpleLogger::INFO, fmt, ##args);
-#define LOGd(fmt, args...) LOG(cybozu::logger::SimpleLogger::DEBUG, fmt, ##args);
+#define LOGe(fmt, args...) LOG(cybozu::logger::SimpleLogger::LOG_ERROR, fmt, ##args);
+#define LOGw(fmt, args...) LOG(cybozu::logger::SimpleLogger::LOG_WARN, fmt, ##args);
+#define LOGn(fmt, args...) LOG(cybozu::logger::SimpleLogger::LOG_NOTICE, fmt, ##args);
+#define LOGi(fmt, args...) LOG(cybozu::logger::SimpleLogger::LOG_INFO, fmt, ##args);
+#define LOGd(fmt, args...) LOG(cybozu::logger::SimpleLogger::LOG_DEBUG, fmt, ##args);
 #define LOGe_(fmt, args...)
 #define LOGw_(fmt, args...)
 #define LOGn_(fmt, args...)
