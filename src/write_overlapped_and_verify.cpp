@@ -371,7 +371,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     }
     cybozu::thread::ThreadRunnerSet thSet;
     for (std::shared_ptr<Worker> &w : v) {
-        thSet.add(cybozu::thread::ThreadRunner(*w));
+        thSet.add(w);
     }
     thSet.start();
     thSet.join();
