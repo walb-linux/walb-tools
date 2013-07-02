@@ -16,8 +16,8 @@ endif
 
 INCLUDES_WALB = -I./walb/include -I./walb/tool
 
-CXXFLAGS = -Wall -Wextra -std=c++11 -pthread -I./include -I./src $(OPT_FLAGS) $(INCLUDES_WALB)
-CFLAGS = -Wall -Wextra -I./include -I./src $(OPT_FLAGS)
+CFLAGS = -Wall -Wextra -I./include -I./src $(OPT_FLAGS) $(INCLUDES_WALB)
+CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
 LDFLAGS = -static
