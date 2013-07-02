@@ -57,6 +57,13 @@ protected:
         isEnd_ = true;
     }
 
+    /**
+     * Call this in a catch clause.
+     */
+    void throwErrorLater() {
+        throwErrorLater(std::current_exception());
+    }
+
     void done() {
         if (isEnd_) { return; }
         promise_.set_value();
@@ -97,16 +104,16 @@ public:
 class ThreadRunner /* final */
 {
 private:
-    Runnable &runnable_;
+    std::shared_ptr<Runnable> runnableP_;
     std::shared_ptr<std::thread> threadPtr_;
 
 public:
-    explicit ThreadRunner(Runnable &runnable)
-        : runnable_(runnable)
+    explicit ThreadRunner(std::shared_ptr<Runnable> runnableP)
+        : runnableP_(runnableP)
         , threadPtr_() {}
 
     ThreadRunner(ThreadRunner &&rhs)
-        : runnable_(rhs.runnable_)
+        : runnableP_(rhs.runnableP_)
         , threadPtr_(std::move(rhs.threadPtr_)) {}
 
     ThreadRunner(const ThreadRunner &rhs) = delete;
@@ -123,7 +130,7 @@ public:
      */
     void start() {
         /* You need std::ref(). */
-        threadPtr_.reset(new std::thread(std::ref(runnable_)));
+        threadPtr_.reset(new std::thread(std::ref(*runnableP_)));
     }
 
     /**
@@ -134,7 +141,7 @@ public:
         if (!threadPtr_) { return; }
         threadPtr_->join();
         threadPtr_.reset();
-        runnable_.get();
+        runnableP_->get();
     }
 };
 
@@ -154,8 +161,8 @@ public:
         v_.push_back(std::move(runner));
     }
 
-    void add(Runnable &runnable) {
-        v_.push_back(ThreadRunner(runnable));
+    void add(std::shared_ptr<Runnable> runnableP) {
+        v_.push_back(ThreadRunner(runnableP));
     }
 
     void start() {
@@ -164,11 +171,17 @@ public:
         }
     }
 
-    void join() {
+    std::vector<std::exception_ptr> join() {
+        std::vector<std::exception_ptr> v;
         for (ThreadRunner &r : v_) {
-            r.join();
+            try {
+                r.join();
+            } catch (...) {
+                v.push_back(std::current_exception());
+            }
         }
         v_.clear();
+        return v;
     }
 };
 
@@ -236,7 +249,7 @@ public:
         lock lk(mutex_);
         checkError();
         if (closed_ && isEmpty()) { throw ClosedError(); }
-        while (!isError_ && isEmpty()) { condEmpty_.wait(lk); }
+        while (!isError_ && !closed_ && isEmpty()) { condEmpty_.wait(lk); }
         checkError();
         if (closed_ && isEmpty()) { throw ClosedError(); }
 
@@ -275,6 +288,14 @@ public:
     size_t maxSize() const { return size_; }
 
     /**
+     * Current size of the queue.
+     */
+    size_t size() const {
+        lock lk(mutex_);
+        return queue_.size();
+    }
+
+    /**
      * You should call this when error has ocurred.
      * Blockded threads will be waken up and will throw exceptions.
      */
@@ -298,6 +319,115 @@ private:
 
     void checkError() const {
         if (isError_) { throw OtherError(); }
+    }
+};
+
+/**
+ * Shared lock with limits.
+ */
+class MutexN
+{
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    const size_t max_;
+    size_t counter_;
+
+public:
+    explicit MutexN(size_t max)
+        : max_(max), counter_(0) {
+        if (max == 0) {
+            std::runtime_error("max must be > 0.");
+        }
+    }
+    void lock() {
+        std::unique_lock<std::mutex> lk(mutex_);
+        while (!(counter_ < max_)) {
+            cv_.wait(lk);
+        }
+        counter_++;
+    }
+    void unlock() {
+        std::unique_lock<std::mutex> lk(mutex_);
+        counter_--;
+        if (counter_ < max_) {
+            cv_.notify_one();
+        }
+    }
+};
+
+/**
+ * Sequence lock with limits.
+ */
+class SeqMutexN
+{
+private:
+    const size_t max_;
+    size_t counter_;
+    std::mutex mutex_;
+    std::queue<std::shared_ptr<std::condition_variable> > waitQ_;
+
+public:
+    explicit SeqMutexN(size_t max)
+        : max_(max), counter_(0) {
+    }
+    void lock(std::shared_ptr<std::condition_variable> cvP) {
+        std::unique_lock<std::mutex> lk(mutex_);
+        if (!(counter_ < max_)) {
+            waitQ_.push(cvP);
+            cvP->wait(lk);
+        }
+        counter_++;
+    }
+    void lock() {
+        lock(std::make_shared<std::condition_variable>());
+    }
+    void unlock() {
+        std::unique_lock<std::mutex> lk(mutex_);
+        counter_--;
+        if (counter_ < max_ && !waitQ_.empty()) {
+            waitQ_.front()->notify_one();
+            waitQ_.pop();
+        }
+    }
+};
+
+/**
+ * RAII for MutexN.
+ */
+class LockN
+{
+private:
+    MutexN &mutexN_;
+public:
+    LockN(MutexN &mutexN)
+        : mutexN_(mutexN) {
+        mutexN.lock();
+    }
+    ~LockN() noexcept {
+        mutexN_.unlock();
+    }
+};
+
+/**
+ * RAII for SeqMutexN.
+ */
+class SeqLockN
+{
+private:
+    SeqMutexN &seqMutexN_;
+public:
+    SeqLockN(SeqMutexN &seqMutexN)
+        : seqMutexN_(seqMutexN) {
+        seqMutexN.lock();
+    }
+    SeqLockN(SeqMutexN &seqMutexN,
+             std::shared_ptr<std::condition_variable> cvP)
+        : seqMutexN_(seqMutexN) {
+        seqMutexN.lock(cvP);
+    }
+    ~SeqLockN() noexcept {
+        seqMutexN_.unlock();
     }
 };
 

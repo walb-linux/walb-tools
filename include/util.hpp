@@ -39,9 +39,9 @@
     ClassName(const ClassName &rhs) = delete;           \
     ClassName &operator=(const ClassName &rhs) = delete
 
-#define DISABLE_MOVE(ClassName)                         \
-    ClassName(ClassName &&rhs) = delete;                \
-    ClassName &&operator=(ClassName &&rhs) = delete
+#define DISABLE_MOVE(ClassName)                     \
+    ClassName(ClassName &&rhs) = delete;            \
+    ClassName &operator=(ClassName &&rhs) = delete
 
 namespace cybozu {
 namespace util {
@@ -148,8 +148,8 @@ private:
         std::string s(msg);
         const size_t BUF_SIZE = 1024;
         char buf[BUF_SIZE];
-        ::strerror_r(errnum, buf, BUF_SIZE);
-        s += buf;
+        char *c = ::strerror_r(errnum, buf, BUF_SIZE);
+        s += c;
         return s;
     }
 };
@@ -261,7 +261,7 @@ public:
 std::string toUnitIntString(uint64_t val)
 {
     uint64_t mask = (1ULL << 10) - 1;
-    const char units[] = " kmgtpe";
+    char units[] = " kmgtpezy";
 
     size_t i = 0;
     while (i < sizeof(units)) {
@@ -269,11 +269,8 @@ std::string toUnitIntString(uint64_t val)
         i++;
         val >>= 10;
     }
-    assert(i < sizeof(units));
 
-    if (sizeof(units) <= i) {
-        throw std::logic_error("bug.");
-    } else if (0 < i) {
+    if (0 < i && i < sizeof(units)) {
         return formatString("%" PRIu64 "%c", val, units[i]);
     } else {
         return formatString("%" PRIu64 "", val);
