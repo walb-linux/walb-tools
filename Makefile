@@ -3,7 +3,7 @@
 CXX = g++-4.8.1
 CC = gcc-4.8.1
 
-OPT_FLAGS = 
+OPT_FLAGS =
 ifeq ($(DEBUG),1)
 OPT_FLAGS += -g -DDEBUG
 else
@@ -70,7 +70,7 @@ install:
 
 depend: Makefile.depends
 
-Makefile.depends: $(HEADERS) $(SOURCES)
+Makefile.depends: $(SOURCES)
 	$(CXX) -MM $(SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > Makefile.depends
 
 -include Makefile.depends
