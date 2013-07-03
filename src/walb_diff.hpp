@@ -28,7 +28,7 @@ namespace walb {
 namespace diff {
 
 /**
- * Compress
+ * Simple compressor.
  */
 bool compress(int type, const char *input, size_t inputSize,
               char *compressed, size_t &compressedSize)
@@ -46,7 +46,7 @@ bool compress(int type, const char *input, size_t inputSize,
 }
 
 /**
- * Uncompress.
+ * Simple uncompressor.
  */
 bool uncompress(int type, const char *compressed, size_t compressedSize,
                 char *output, size_t &outputSize)
@@ -86,7 +86,7 @@ public:
      * Clone.
      */
     WalbDiffRecord(const WalbDiffRecord &rec, bool isCheck = true)
-        : rec_(*rec.ptr<const struct walb_diff_record>()) {
+        : rec_(rec.rec_) {
         if (isCheck && !rec.isValid()) { throw RT_ERR("invalid record."); }
         if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
     }
@@ -138,6 +138,10 @@ public:
 
     virtual ~WalbDiffRecord() noexcept = default;
 
+    WalbDiffRecord &operator=(const WalbDiffRecord &rhs) {
+        rec_ = rhs.rec_;
+        return *this;
+    }
 
     bool isValid() const {
         if (!isNormal()) { return true; }
@@ -286,14 +290,7 @@ public:
         , compressedSize_(0) {}
 
     BlockDiffIo(const BlockDiffIo &rhs) = delete;
-
-    BlockDiffIo(BlockDiffIo &&rhs)
-        : ioBlocks_(rhs.ioBlocks_)
-        , compressionType_(rhs.compressionType_)
-        , data_(std::move(rhs.data_))
-        , bufSize_(rhs.bufSize_)
-        , compressedSize_(rhs.compressedSize_) {}
-
+    BlockDiffIo(BlockDiffIo &&rhs) = default;
     virtual ~BlockDiffIo() noexcept = default;
 
     void init(uint16_t ioBlocks, int compressionType = ::WALB_DIFF_CMPR_NONE) {
@@ -503,7 +500,7 @@ private:
 public:
     WalbDiffFileHeaderWithBody()
         : WalbDiffFileHeader(header_), header_() {}
-    virtual ~WalbDiffFileHeaderWithBody() noexcept = default;
+    ~WalbDiffFileHeaderWithBody() noexcept = default;
 };
 
 
@@ -801,7 +798,7 @@ public:
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
-        std::shared_ptr<WalbDiffFileHeader> p(new WalbDiffFileHeaderWithBody());
+        auto p = std::make_shared<WalbDiffFileHeaderWithBody>();
         fdr_.read(p->rawData(), p->rawSize());
         if (!p->isValid()) {
             throw RT_ERR("diff header invalid.\n");
@@ -823,14 +820,11 @@ public:
     std::pair<std::shared_ptr<WalbDiffRecord>, std::shared_ptr<BlockDiffIo> > readDiff() {
         if (pack_.isEnd() ||
             (recIdx_ == pack_.nRecords() && !readPackHeader())) {
-            return std::make_pair(
-                std::shared_ptr<WalbDiffRecord>(),
-                std::shared_ptr<BlockDiffIo>());
+            return std::make_pair(nullptr, nullptr);
         }
-        std::shared_ptr<WalbDiffRecord> recp(
-            new WalbDiffRecord(
-                reinterpret_cast<const char*>(&pack_.record(recIdx_)),
-                sizeof(struct walb_diff_record)));
+        auto recp = std::make_shared<WalbDiffRecord>(
+            reinterpret_cast<const char*>(&pack_.record(recIdx_)),
+            sizeof(struct walb_diff_record));
         std::shared_ptr<BlockDiffIo> iop = readDiffIo(*recp);
 
         assert(recp);
@@ -1045,7 +1039,7 @@ public:
         }
 
         /* Insert */
-        WalbDiffRecordPtr r(new WalbDiffRecord(rec));
+        auto r = std::make_shared<WalbDiffRecord>(rec);
         if (!put(r, ioPtr)) {
             throw RT_ERR("put failed.");
         }
@@ -1210,7 +1204,7 @@ private:
             assert(off1 - off0 < (2U << 16));
             blocks = off1 - off0;
             LOGd_("try to add (%" PRIu64 " %u)\n", off0, blocks);
-            WalbDiffRecordPtr mrec(new WalbDiffRecord(rec, off0, blocks));
+            auto mrec = std::make_shared<WalbDiffRecord>(rec, off0, blocks);
             assert(mrec->isValid());
             BlockDiffIoPtr iop;
             if (!mrec->isDiscard() && !mrec->isAllZero()) {
@@ -1230,7 +1224,7 @@ private:
             assert(off1 - off0 < (2U << 16));
             blocks = off1 - off0;
             LOGd_("try to add (%" PRIu64 " %u)\n", off0, blocks);
-            WalbDiffRecordPtr mrec(new WalbDiffRecord(rec, off0, blocks));
+            auto mrec = std::make_shared<WalbDiffRecord>(rec, off0, blocks);
             assert(mrec->isValid());
             BlockDiffIoPtr iop;
             if (!mrec->isDiscard() && !mrec->isAllZero()) {
