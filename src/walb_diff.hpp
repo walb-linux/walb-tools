@@ -87,7 +87,14 @@ public:
      */
     WalbDiffRecord(const WalbDiffRecord &rec, bool isCheck = true)
         : rec_(rec.rec_) {
-        if (isCheck && !rec.isValid()) { throw RT_ERR("invalid record."); }
+        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
+    }
+
+    /**
+     * Convert.
+     */
+    WalbDiffRecord(const struct walb_diff_record &rawRec, bool isCheck = true)
+        : rec_(rawRec) {
         if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
     }
 
@@ -144,7 +151,9 @@ public:
     }
 
     bool isValid() const {
-        if (!isNormal()) { return true; }
+        if (!isNormal()) {
+            return dataSize() == 0;
+        }
         if (::WALB_DIFF_CMPR_MAX <= compressionType()) { return false; }
         if (isAllZero() && isDiscard()) { return false; }
         if (ioBlocks() == 0) { return false; }
@@ -158,12 +167,15 @@ public:
 
     uint64_t ioAddress() const override { return rec_.io_address; }
     uint16_t ioBlocks() const override { return rec_.io_blocks; }
+    uint64_t endIoAddress() const { return ioAddress() + ioBlocks(); }
     size_t rawSize() const override { return sizeof(rec_); }
     const char *rawData() const override { return ptr<char>(); }
     char *rawData() { return ptr<char>(); }
+    struct walb_diff_record *rawRecord() { return &rec_; }
     const struct walb_diff_record *rawRecord() const { return &rec_; }
 
     uint8_t compressionType() const { return rec_.compression_type; }
+    bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
     uint32_t dataOffset() const { return rec_.data_offset; }
     uint32_t dataSize() const { return rec_.data_size; }
     uint32_t checksum() const { return rec_.checksum; }
@@ -214,11 +226,17 @@ public:
 
     void setNormal() {
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_NORMAL);
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
     }
     void setAllZero() {
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_NORMAL);
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_ALLZERO);
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
     }
     void setDiscard() {
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_NORMAL);
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_DISCARD);
     }
 
@@ -625,6 +643,7 @@ private:
     int fd_;
     cybozu::util::FdWriter fdw_;
     bool isWrittenHeader_;
+    bool isClosed_;
 
     /* Buffers. */
     WalbDiffPack pack_;
@@ -634,6 +653,7 @@ public:
     explicit WalbDiffWriter(int fd)
         : opener_(), fd_(fd), fdw_(fd)
         , isWrittenHeader_(false)
+        , isClosed_(false)
         , pack_()
         , ioPtrQ_() {}
 
@@ -642,9 +662,9 @@ public:
         , fd_(opener_->fd())
         , fdw_(fd_)
         , isWrittenHeader_(false)
+        , isClosed_(false)
         , pack_()
         , ioPtrQ_() {
-
         assert(0 < fd_);
     }
 
@@ -655,9 +675,12 @@ public:
     }
 
     void close() {
-        flush();
-        writeEof();
-        if (opener_) { opener_->close(); }
+        if (!isClosed_) {
+            flush();
+            writeEof();
+            if (opener_) { opener_->close(); }
+            isClosed_ = true;
+        }
     }
 
     /**
@@ -890,7 +913,7 @@ private:
 
         uint32_t csum = cybozu::util::calcChecksum(p.get(), rec.dataSize(), 0);
         if (rec.checksum() != csum) {
-            throw RT_ERR("checksum invalid %08x %08x.\n", rec.checksum(), csum);
+            throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
         }
 
         recIdx_++;
@@ -914,6 +937,346 @@ struct WalbDiff
     virtual WalbDiffFileHeader& header() = 0;
     virtual bool writeTo(int outFd) = 0;
     virtual void checkNoOverlappedAndSorted() const = 0;
+};
+
+/**
+ * Diff record and its data.
+ * Data compression is not supported.
+ */
+class RecData /* final */
+{
+private:
+    WalbDiffRecord rec_;
+    std::vector<char> data_;
+public:
+    struct walb_diff_record &rawRecord() { return *rec_.rawRecord(); }
+    const struct walb_diff_record &rawRecord() const { return *rec_.rawRecord(); }
+    WalbDiffRecord &record() { return rec_; }
+    const WalbDiffRecord &record() const { return rec_; }
+
+    char *rawData() { return &data_[0]; }
+    const char *rawData() const { return &data_[0]; }
+    uint32_t rawSize() const { return data_.size(); }
+
+    void copyFrom(const struct walb_diff_record &rec, const void *data, size_t size) {
+        rawRecord() = rec;
+        if (rec_.isNormal()) {
+            data_.resize(size);
+            ::memcpy(&data_[0], data, size);
+        } else {
+            data_.resize(0);
+        }
+    }
+    void copyFrom(const WalbDiffRecord &rec, const std::shared_ptr<BlockDiffIo> iop) {
+        rec_ = rec;
+        assert(!iop->isCompressed());
+        if (rec_.isNormal()) {
+            assert(rec_.ioBlocks() * LOGICAL_BLOCK_SIZE == iop->rawSize());
+            data_.resize(iop->rawSize());
+            ::memcpy(&data_[0], iop->rawData(), iop->rawSize());
+        } else {
+            data_.resize(0);
+        }
+    }
+    void moveFrom(const WalbDiffRecord &rec, std::vector<char> &&data) {
+        rec_ = rec;
+        data_ = std::move(data);
+    }
+
+    void updateChecksum() {
+        rec_.setChecksum(calcCsum());
+    }
+
+    bool isValid(bool isChecksum = false) const {
+        if (!rec_.isValid()) { return false; }
+        if (!rec_.isNormal()) { return true; }
+        if (rec_.isCompressed()) { return false; }
+        if (rec_.dataSize() != data_.size()) { return false; }
+        return isChecksum ? (rec_.checksum() == calcCsum()) : true;
+    }
+
+    void print(::FILE *fp) const {
+        rec_.printOneline(fp);
+        ::fprintf(fp, "size %zu checksum %0x\n"
+                  , data_.size()
+                  , cybozu::util::calcChecksum(&data_[0], data_.size(), 0));
+    }
+
+    void print() const { print(::stdout); }
+
+    /**
+     * Create (IO portions of rhs) - (that of *this).
+     * If non-overlapped, throw runtime error.
+     * The overlapped data of rhs will be used.
+     * *this will not be changed.
+     */
+    std::vector<RecData> minus(const RecData &rhs) const {
+        assert(isValid(true));
+        assert(rhs.isValid(true));
+        if (!rec_.isOverlapped(rhs.rec_)) {
+            throw RT_ERR("Non-overlapped.");
+        }
+        std::vector<RecData> v;
+        /*
+         * Pattern 1:
+         * __oo__ + xxxxxx = xxxxxx
+         */
+        if (rec_.isOverwrittenBy(rhs.rec_)) {
+            /* Empty */
+            return std::move(v);
+        }
+        /*
+         * Pattern 2:
+         * oooooo + __xx__ = ooxxoo
+         */
+        if (rhs.rec_.isOverwrittenBy(rec_)) {
+            uint16_t blks0 = rhs.rec_.ioAddress() - rec_.ioAddress();
+            uint16_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
+            uint64_t addr0 = rec_.ioAddress();
+            uint64_t addr1 = rec_.endIoAddress() - blks1;
+
+            WalbDiffRecord rec0(rec_), rec1(rec_);
+            rec0.setIoAddress(addr0);
+            rec0.setIoBlocks(blks0);
+            rec1.setIoAddress(addr1);
+            rec1.setIoBlocks(blks1);
+
+            size_t size0 = 0;
+            size_t size1 = 0;
+            if (rec_.isNormal()) {
+                size0 = blks0 * LOGICAL_BLOCK_SIZE;
+                size1 = blks1 * LOGICAL_BLOCK_SIZE;
+            }
+            std::vector<char> data0(size0), data1(size1);
+            if (rec_.isNormal()) {
+                size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
+                assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
+                rec0.setDataSize(size0);
+                rec1.setDataSize(size1);
+                ::memcpy(&data0[0], &data_[0], size0);
+                ::memcpy(&data1[0], &data_[off1], size1);
+            }
+
+            if (0 < blks0) {
+                RecData r;
+                r.moveFrom(rec0, std::move(data0));
+                r.updateChecksum();
+                v.push_back(std::move(r));
+            }
+            if (0 < blks1) {
+                RecData r;
+                r.moveFrom(rec1, std::move(data1));
+                r.updateChecksum();
+                v.push_back(std::move(r));
+            }
+            return std::move(v);
+        }
+        /*
+         * Pattern 3:
+         * oooo__ + __xxxx = ooxxxx
+         */
+        if (rec_.ioAddress() < rhs.rec_.ioAddress()) {
+            assert(rhs.rec_.ioAddress() < rec_.endIoAddress());
+            uint16_t rblks = rec_.endIoAddress() - rhs.rec_.ioAddress();
+            assert(rhs.rec_.ioAddress() + rblks == rec_.endIoAddress());
+
+            WalbDiffRecord rec(rec_);
+            /* rec.ioAddress() does not change. */
+            rec.setIoBlocks(rec_.ioBlocks() - rblks);
+            assert(rec.endIoAddress() == rhs.rec_.ioAddress());
+
+            size_t size = 0;
+            if (rec_.isNormal()) {
+                size = data_.size() - rblks * LOGICAL_BLOCK_SIZE;
+            }
+            std::vector<char> data(size);
+            if (rec_.isNormal()) {
+                assert(rec_.dataSize() == data_.size());
+                rec.setDataSize(size);
+                ::memcpy(&data[0], &data_[0], size);
+            }
+
+            RecData r;
+            r.moveFrom(rec, std::move(data));
+            r.updateChecksum();
+            v.push_back(std::move(r));
+            return std::move(v);
+        }
+        /*
+         * Pattern 4:
+         * __oooo + xxxx__ = xxxxoo
+         */
+        assert(rec_.ioAddress() < rhs.rec_.endIoAddress());
+        uint16_t rblks = rhs.rec_.endIoAddress() - rec_.ioAddress();
+        assert(rec_.ioAddress() + rblks == rhs.rec_.endIoAddress());
+        size_t off = rblks * LOGICAL_BLOCK_SIZE;
+
+        WalbDiffRecord rec(rec_);
+        rec.setIoAddress(rec_.ioAddress() + rblks);
+        rec.setIoBlocks(rec_.ioBlocks() - rblks);
+
+        size_t size = 0;
+        if (rec_.isNormal()) {
+            size = data_.size() - off;
+        }
+        std::vector<char> data(size);
+        if (rec_.isNormal()) {
+            assert(rec_.dataSize() == data_.size());
+            rec.setDataSize(size);
+            ::memcpy(&data[0], &data_[off], size);
+        }
+        assert(rhs.rec_.endIoAddress() == rec.ioAddress());
+        RecData r;
+        r.moveFrom(rec, std::move(data));
+        r.updateChecksum();
+        v.push_back(std::move(r));
+        return std::move(v);
+    }
+
+private:
+    uint32_t calcCsum() const {
+        return cybozu::util::calcChecksum(&data_[0], data_.size(), 0);
+    }
+};
+
+/**
+ * Simpler implementation of in-memory walb diff data.
+ * IO data compression is not supported.
+ */
+class WalbDiffMemory2
+    : public WalbDiff
+{
+private:
+    std::map<uint64_t, RecData> map_;
+    struct walb_diff_file_header h_;
+    WalbDiffFileHeader fileH_;
+    uint64_t nIos_; /* Number of IOs in the diff. */
+    uint64_t nBlocks_; /* Number of logical blocks in the diff. */
+
+    /* now editing */
+
+public:
+    WalbDiffMemory2()
+        : map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
+        fileH_.init();
+    }
+    ~WalbDiffMemory2() noexcept override = default;
+    bool init() {
+        /* Initialize always. */
+        return false;
+    }
+    bool add(const WalbDiffRecord &rec, const void *data, size_t size) {
+        /* Decide key range to search. */
+        uint64_t addr0 = rec.ioAddress();
+        if (addr0 <= fileH_.getMaxIoBlocks()) {
+            addr0 = 0;
+        } else {
+            addr0 -= fileH_.getMaxIoBlocks();
+        }
+        /* Search overlapped items. */
+        uint64_t addr1 = rec.endIoAddress();
+        std::queue<RecData> q;
+        auto it = map_.lower_bound(addr0);
+        while (it != map_.end() && it->first < addr1) {
+            RecData &r = it->second;
+            if (r.record().isOverlapped(rec)) {
+                q.push(std::move(r));
+                it = map_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        /* Eliminate overlaps. */
+        RecData r0;
+        r0.copyFrom(*rec.rawRecord(), data, size);
+        while (!q.empty()) {
+            std::vector<RecData> v = q.front().minus(r0);
+            for (RecData &r : v) {
+                uint64_t addr = r.record().ioAddress();
+                map_.insert(std::make_pair(addr, std::move(r)));
+            }
+            q.pop();
+        }
+        /* Insert the item. */
+        map_.insert(std::make_pair(rec.ioAddress(), std::move(r0)));
+        /* Update maxIoBlocks. */
+        fileH_.setMaxIoBlocksIfNecessary(rec.ioBlocks());
+        return true;
+    }
+    bool sync() override {
+        /* do nothing. */
+        return true;
+    }
+    void print(::FILE *fp) const {
+        auto it = map_.cbegin();
+        while (it != map_.cend()) {
+            const WalbDiffRecord &rec = it->second.record();
+            rec.printOneline(fp);
+            ++it;
+        }
+    }
+    void print() const override { print(::stdout); }
+    uint64_t getNBlocks() const override { return nBlocks_; }
+    uint64_t getNIos() const override { return nIos_; }
+    WalbDiffFileHeader& header() override { return fileH_; }
+    bool writeTo(int outFd) override {
+        WalbDiffWriter writer(outFd);
+        writer.writeHeader(fileH_);
+        auto it = map_.cbegin();
+        while (it != map_.cend()) {
+            const RecData &r = it->second;
+
+            /*
+             * This is not good code.
+             * writer.writeDiff should copy the IO data to its internal buffer.
+             */
+            auto iop = std::make_shared<BlockDiffIo>(r.record().ioBlocks());
+            std::shared_ptr<char> blocks
+                = cybozu::util::allocateBlocks<char>(
+                    LOGICAL_BLOCK_SIZE, r.rawSize());
+            ::memcpy(blocks.get(), r.rawData(), r.rawSize());
+            iop->putCompressed(blocks, r.rawSize());
+            writer.writeDiff(r.record(), iop);
+
+            ++it;
+        }
+        writer.flush();
+        return true;
+    }
+    void checkNoOverlappedAndSorted() const override {
+        auto it = map_.cbegin();
+        const WalbDiffRecord *prev = nullptr;
+        while (it != map_.cend()) {
+            const WalbDiffRecord *curr = &it->second.record();
+            if (prev) {
+                if (!(prev->ioAddress() < curr->ioAddress())) {
+                    throw RT_ERR("Not sorted.");
+                }
+                if (!(prev->endIoAddress() <= curr->ioAddress())) {
+                    throw RT_ERR("Overlapped records exist.");
+                }
+            }
+            prev = curr;
+            ++it;
+        }
+    }
+    bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop) override {
+        if (rec.isNormal()) {
+            return add(rec, iop->rawData(), iop->rawSize());
+        } else {
+            return add(rec, nullptr, 0);
+        }
+    }
+    /**
+     * C-like interface of add().
+     */
+    bool add(const struct walb_diff_record &rawRec, const void *data, size_t size) {
+        return add(WalbDiffRecord(rawRec), data, size);
+    }
+
+
+private:
+    /* now editing */
 };
 
 /**
@@ -1085,7 +1448,6 @@ public:
     WalbDiffFileHeader& header() override { return fileH_; }
 
     bool writeTo(int outFd) override {
-        ::printf("writeTo %d\n", outFd); /* debug */
         WalbDiffWriter walbDiffWriter(outFd);
         walbDiffWriter.writeHeader(fileH_);
         Map::const_iterator it = map_.cbegin();

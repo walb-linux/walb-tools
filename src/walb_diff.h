@@ -43,6 +43,8 @@ enum {
 
 /**
  * Walb diff metadata record for an IO.
+ *
+ * If the flags is 0, the record is invalid.
  */
 struct walb_diff_record
 {

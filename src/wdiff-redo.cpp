@@ -325,6 +325,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
+            assert(recP->isNormal());
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }
@@ -356,10 +357,6 @@ public:
                 recP->printOneline();
             }
             /* redo */
-            if (!recP->isNormal()) {
-                throw RT_ERR("not normal record.");
-                /* TODO: should use exists() instead isNormal(). */
-            }
             executeDiffIo(recP, ioP);
 
             p = wdiffR.readDiff();
