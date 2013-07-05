@@ -125,7 +125,7 @@ private:
     std::deque<std::shared_ptr<Wdiff> > doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the WalbDiffMerger instance. */
 
-    walb::diff::WalbDiffMemory wdiffMem_;
+    walb::diff::WalbDiffMemory2 wdiffMem_;
 
 public:
     WalbDiffMerger() {}
@@ -198,16 +198,15 @@ private:
      * to a specified queue.
      */
     void moveToQueueUpto(std::queue<DiffData> &q, uint64_t maxAddr) {
-        std::unique_ptr<walb::diff::WalbDiffMemory::Iterator> it =
-            std::move(wdiffMem_.iterator());
-        it->begin();
-        while (it->isValid() &&
-               it->record().ioAddress() + it->record().ioBlocks() <= maxAddr) {
-            DiffRecordPtr recp(new DiffRecord(it->record()));
-            DiffIoPtr iop = it->diffIoPtr();
+        auto it = wdiffMem_.iterator();
+        it.begin();
+        while (it.isValid() && it.record().endIoAddress() <= maxAddr) {
+            auto recp = std::make_shared<DiffRecord>(it.record());
+            auto iop = std::make_shared<DiffIo>(recp->ioBlocks());
+            iop->moveFrom(it.recData().forMove());
             q.push(std::make_pair(recp, iop));
-            it->erase();
-            it->next();
+            it.erase();
+            it.next();
         }
     }
 

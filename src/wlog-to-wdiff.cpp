@@ -192,25 +192,25 @@ private:
         assert(0 < logd.ioSizeLb());
         const size_t ioSizeB = logd.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         DiffIoPtr iop(new DiffIo(logd.ioSizeLb()));
-        std::shared_ptr<char> b = cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, ioSizeB);
-        bool ret = iop->put(b);
-        if (!ret) { throw RT_ERR("iop->put() failed."); }
+
+        std::vector<char> buf(ioSizeB);
         size_t remaining = ioSizeB;
         size_t off = 0;
         const unsigned int pbs = logd.pbs();
         for (size_t i = 0; i < logd.ioSizePb(); i++) {
             if (pbs <= remaining) {
-                ::memcpy(&(b.get())[off], logd.rawData<char>(i), pbs);
+                ::memcpy(&buf[off], logd.rawData<char>(i), pbs);
                 off += pbs;
                 remaining -= pbs;
             } else {
-                ::memcpy(&(b.get())[off], logd.rawData<char>(i), remaining);
+                ::memcpy(&buf[off], logd.rawData<char>(i), remaining);
                 off += remaining;
                 remaining = 0;
             }
         }
         assert(remaining == 0);
         assert(off == ioSizeB);
+        iop->moveFrom(std::move(buf));
 
         /* All-zero. */
         if (iop->calcIsAllZero()) {

@@ -212,15 +212,16 @@ public:
 
     bool submit(uint64_t ioAddr, uint16_t ioBlocks, DiffIoPtr ioP) override {
         if (!ioP) { return false; }
+        assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
+        assert(ioP->rawSize() == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }
 
-        std::shared_ptr<char> p = ioP->get();
-        //::printf("issue %zu %zu %p\n", oft, size, p.get()); /* debug */
-        bd_.write(oft, size, p.get());
+        //::printf("issue %zu %zu %p\n", oft, size, ioP->rawData()); /* debug */
+        bd_.write(oft, size, ioP->rawData());
         return true;
     }
 
@@ -243,16 +244,24 @@ public:
         : v_(size, 0) {}
     ~ZeroMemory() noexcept {}
 
-    void grow(size_t newSize) {
-        if (v_.size() < newSize) {
-            size_t oldSize = v_.size();
-            v_.resize(newSize);
+    void resize(size_t newSize) {
+        size_t oldSize = v_.size();
+        v_.resize(newSize);
+        if (oldSize < newSize) {
             ::memset(&v_[oldSize], 0, newSize - oldSize);
         }
     }
 
     std::shared_ptr<T> makePtr() {
         return std::shared_ptr<T>(&v_[0], [](T *){});
+    }
+
+    std::vector<T> &&forMove() {
+        return std::move(v_);
+    }
+
+    void moveFrom(std::vector<T> &&v) {
+        v_ = std::move(v);
     }
 };
 
@@ -372,9 +381,11 @@ private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
         DiffIoPtr ioP(new walb::diff::BlockDiffIo(ioBlocks));
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        zeroMem_.grow(size);
-        ioP->putCompressed(zeroMem_.makePtr(), size);
-        return ioExec_.submit(ioAddr, ioBlocks, ioP);
+        zeroMem_.resize(size);
+        ioP->moveFrom(std::move(zeroMem_.forMove()));
+        bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
+        zeroMem_.moveFrom(ioP->forMove());
+        return ret;
     }
 
     bool executeDiscardIo(UNUSED uint64_t ioAddr, UNUSED uint16_t ioBlocks) {

@@ -21,37 +21,6 @@ private:
     const uint32_t ioSize_;
     std::vector<char> buf0_;
 
-    /**
-     * RETURN:
-     *   Number of read blocks [logical block]
-     */
-    uint16_t readChunk(cybozu::util::FdReader &reader) {
-        uint16_t c = 0;
-        char *p = &buf0_[0];
-        try {
-            while (c < ioBlocks_) {
-                reader.read(p, LOGICAL_BLOCK_SIZE);
-                p += LOGICAL_BLOCK_SIZE;
-                c++;
-            }
-            assert(ioBlocks_ == c);
-        } catch (cybozu::util::EofError &e) {
-            /* do nothing. */
-        }
-        return c;
-    }
-
-    std::shared_ptr<walb::diff::BlockDiffIo> createEmptyBlockDiffIo(
-        uint16_t ioBlocks) {
-        uint32_t ioSize = ioBlocks * LOGICAL_BLOCK_SIZE;
-        auto iop = std::make_shared<walb::diff::BlockDiffIo>(
-            ioBlocks, ::WALB_DIFF_CMPR_NONE);
-        auto blkp = cybozu::util::allocateBlocks<char>(
-            LOGICAL_BLOCK_SIZE, ioSize);
-        iop->put(blkp);
-        return iop;
-    }
-
 public:
     explicit FullImageToWalbDiffConverter(uint16_t ioBlocks)
         : ioBlocks_(ioBlocks)
@@ -71,8 +40,8 @@ public:
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            auto iop = createEmptyBlockDiffIo(blks);
-            ::memcpy(iop->rawData(), &buf0_[0], blks * LOGICAL_BLOCK_SIZE);
+            auto iop = std::make_shared<walb::diff::BlockDiffIo>(blks);
+            iop->copyFrom(&buf0_[0], blks * LOGICAL_BLOCK_SIZE);
             walb::diff::WalbDiffRecord rec(ioAddr, blks);
             rec.setNormal();
             rec.setDataSize(blks * LOGICAL_BLOCK_SIZE);
@@ -84,6 +53,26 @@ public:
             blks = readChunk(reader);
         }
         writer.close();
+    }
+private:
+    /**
+     * RETURN:
+     *   Number of read blocks [logical block]
+     */
+    uint16_t readChunk(cybozu::util::FdReader &reader) {
+        uint16_t c = 0;
+        char *p = &buf0_[0];
+        try {
+            while (c < ioBlocks_) {
+                reader.read(p, LOGICAL_BLOCK_SIZE);
+                p += LOGICAL_BLOCK_SIZE;
+                c++;
+            }
+            assert(ioBlocks_ == c);
+        } catch (cybozu::util::EofError &e) {
+            /* do nothing. */
+        }
+        return c;
     }
 };
 
