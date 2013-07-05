@@ -1112,7 +1112,7 @@ private:
  * Simpler implementation of in-memory walb diff data.
  * IO data compression is not supported.
  */
-class WalbDiffMemory2
+class WalbDiffMemory
     : public WalbDiff
 {
 private:
@@ -1123,11 +1123,11 @@ private:
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
-    WalbDiffMemory2()
+    WalbDiffMemory()
         : map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
-    ~WalbDiffMemory2() noexcept override = default;
+    ~WalbDiffMemory() noexcept override = default;
     bool init() {
         /* Initialize always. */
         return false;
@@ -1318,27 +1318,27 @@ public:
         }
     };
     class ConstIterator
-        : public IteratorBase<const WalbDiffMemory2, Map::iterator>
+        : public IteratorBase<const WalbDiffMemory, Map::iterator>
     {
     public:
-        explicit ConstIterator(const WalbDiffMemory2 *mem)
-            : IteratorBase<const WalbDiffMemory2, Map::iterator>(mem) {
+        explicit ConstIterator(const WalbDiffMemory *mem)
+            : IteratorBase<const WalbDiffMemory, Map::iterator>(mem) {
         }
         ConstIterator(const ConstIterator &rhs)
-            : IteratorBase<const WalbDiffMemory2, Map::iterator>(rhs) {
+            : IteratorBase<const WalbDiffMemory, Map::iterator>(rhs) {
         }
         ~ConstIterator() noexcept override = default;
 
     };
     class Iterator
-        : public IteratorBase<WalbDiffMemory2, Map::iterator>
+        : public IteratorBase<WalbDiffMemory, Map::iterator>
     {
     public:
-        explicit Iterator(WalbDiffMemory2 *mem)
-            : IteratorBase<WalbDiffMemory2, Map::iterator>(mem) {
+        explicit Iterator(WalbDiffMemory *mem)
+            : IteratorBase<WalbDiffMemory, Map::iterator>(mem) {
         }
         Iterator(const Iterator &rhs)
-            : IteratorBase<WalbDiffMemory2, Map::iterator>(rhs) {
+            : IteratorBase<WalbDiffMemory, Map::iterator>(rhs) {
         }
         ~Iterator() noexcept override = default;
         /**
@@ -1365,358 +1365,6 @@ public:
     }
     ConstIterator constIterator() const {
         return ConstIterator(this);
-    }
-private:
-    /* now editing */
-};
-
-/**
- * In-memory walb diff manager.
- */
-class WalbDiffMemory /* final */
-    : public WalbDiff
-{
-private:
-    using WalbDiffRecordPtr = std::shared_ptr<WalbDiffRecord>;
-    using BlockDiffIoPtr = std::shared_ptr<BlockDiffIo>;
-    using Key = std::pair<uint64_t, uint16_t>;
-    using Value = std::pair<WalbDiffRecordPtr, BlockDiffIoPtr>;
-    using Map = std::map<Key, Value>;
-
-    Map map_;
-    struct walb_diff_file_header h_;
-    WalbDiffFileHeader fileH_;
-    uint64_t nIos_; /* Number of IOs in the diff. */
-    uint64_t nBlocks_; /* Number of logical blocks in the diff. */
-
-    template <typename DiffMemory, typename MapIterator>
-    class IteratorBase {
-    protected:
-        DiffMemory &wdiffMem_;
-        MapIterator it_;
-
-    public:
-        explicit IteratorBase(DiffMemory &wdiffMem)
-            : wdiffMem_(wdiffMem), it_() {}
-        virtual ~IteratorBase() noexcept {}
-
-        virtual bool isValid() const = 0;
-        virtual void begin() = 0;
-        virtual void end() = 0;
-
-        void next() { ++it_; }
-        void prev() { --it_; }
-        void lowerBound(const WalbDiffKey &key) {
-            it_ = wdiffMem_.map_.lower_bound(wdiffMem_.getKey(key));
-        }
-        void upperBound(const WalbDiffKey &key) {
-            it_ = wdiffMem_.map_.upper_bound(wdiffMem_.getKey(key));
-        }
-
-        const WalbDiffRecord &record() const {
-            if (!isValid()) { throw RT_ERR("invalid iterator position."); }
-            Value v = it_->second;
-            assert(v.first); /* must not be nullptr */
-            return *v.first;
-        }
-
-        WalbDiffRecord &record() {
-            if (!isValid()) { throw RT_ERR("invalid iterator position."); }
-            Value v = it_->second;
-            assert(v.first); /* must not be nullptr */
-            return *v.first;
-        }
-
-#if 0
-        const BlockDiffIo &diffIo() const {
-            BlockDiffIoPtr iop = diffIoPtr();
-            if (!iop) { throw RT_ERR("diffIo null."); }
-            return *iop;
-        }
-#endif
-
-        BlockDiffIoPtr diffIoPtr() const {
-            if (!isValid()) { throw RT_ERR("invalid iterator position."); }
-            Value v = it_->second;
-            return v.second;
-        }
-    };
-public:
-    WalbDiffMemory()
-        : map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
-        fileH_.init();
-    }
-    ~WalbDiffMemory() noexcept = default;
-
-    bool init() {
-        /* Initialize always. */
-        return false;
-    }
-
-    /**
-     * Add an IO.
-     * Overlapped IOs will be updated appropriately.
-     *
-     * RETURN:
-     *   never return false.
-     */
-    bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> ioPtr) override {
-        /* Decide key range of candidates. */
-        uint64_t addr0 = rec.ioAddress();
-        if (addr0 <= fileH_.getMaxIoBlocks()) {
-            addr0 = 0;
-        } else {
-            addr0 -= fileH_.getMaxIoBlocks();
-        }
-        uint64_t addr1 = rec.ioAddress() + rec.ioBlocks();
-
-        /* Search overlapped IOs. */
-        Key key0 = std::make_pair(addr0, 0);
-        Key key1 = std::make_pair(addr1, 0);
-        Key key;
-        std::queue<Value> q;
-        Map::iterator it = map_.upper_bound(key0);
-        while (it != map_.end() && (key = it->first, key < key1)) {
-            Value v = it->second;
-            WalbDiffRecordPtr recp = v.first;
-            assert(recp->isValid());
-            if (recp->isOverlapped(rec)) { q.push(v); }
-            ++it;
-        }
-        while (!q.empty()) {
-            Value v = q.front();
-            q.pop();
-            WalbDiffRecordPtr recp = v.first;
-            BlockDiffIoPtr iop = v.second;
-            if (!del(*recp)) { throw RT_ERR("delete failed"); }
-            putNonOverlappedArea(*recp, *iop, rec);
-        }
-
-        /* Insert */
-        auto r = std::make_shared<WalbDiffRecord>(rec);
-        if (!put(r, ioPtr)) {
-            throw RT_ERR("put failed.");
-        }
-
-        /* Update maxIoBlocks */
-        fileH_.setMaxIoBlocksIfNecessary(rec.ioBlocks());
-        return true;
-    }
-    bool sync() { /* do nothing. */ return true; }
-    void print(::FILE *fp) const {
-        Map::const_iterator it = map_.cbegin();
-        while (it != map_.cend()) {
-            WalbDiffRecord &rec = *it->second.first;
-            rec.printOneline(fp);
-            ++it;
-        }
-    }
-    void print() const { print(::stdout); }
-
-    void checkStatistics() const {
-        uint64_t nBlocks = 0;
-        uint64_t nIos = 0;
-        Map::const_iterator it = map_.cbegin();
-        while (it != map_.cend()) {
-            WalbDiffRecord &rec = *it->second.first;
-            nBlocks += rec.ioBlocks();
-            nIos++;
-            ++it;
-        }
-        if (nBlocks_ != nBlocks) {
-            throw RT_ERR("nBlocks_ %" PRIu64 " nBlocks %" PRIu64 "\n",
-                         nBlocks_, nBlocks);
-        }
-        if (nIos_ != nIos) {
-            throw RT_ERR("nIos_ %" PRIu64 " nIos %" PRIu64 "\n",
-                         nIos_, nIos);
-        }
-    }
-
-    uint64_t getNBlocks() const override { return nBlocks_; }
-    uint64_t getNIos() const override { return nIos_; }
-
-    WalbDiffFileHeader& header() override { return fileH_; }
-
-    bool writeTo(int outFd) override {
-        WalbDiffWriter walbDiffWriter(outFd);
-        walbDiffWriter.writeHeader(fileH_);
-        Map::const_iterator it = map_.cbegin();
-        while (it != map_.cend()) {
-            Value v = it->second;
-            WalbDiffRecordPtr recp = v.first;
-            BlockDiffIoPtr iop = v.second;
-            walbDiffWriter.writeDiff(*recp, iop);
-            it++;
-        }
-        walbDiffWriter.flush();
-        return true;
-    }
-    void compactRange(const WalbDiffRecord *, const WalbDiffRecord *) {
-        /* do nothing. */
-    }
-    void checkNoOverlappedAndSorted() const override {
-        Map::const_iterator it = map_.cbegin();
-        WalbDiffRecord prevKey;
-        while (it != map_.cend()) {
-            WalbDiffRecord &key = *it->second.first;
-            if (it != map_.cbegin()) {
-                if (prevKey.isOverlapped(key)) {
-                    LOGe("overlap!!! (%" PRIu64 " %u) (%" PRIu64 " %u)\n",
-                         prevKey.ioAddress(), prevKey.ioBlocks(),
-                         key.ioAddress(), key.ioBlocks());
-                    throw RT_ERR("Overlapped records exist.");
-                }
-                if (key.ioAddress() <= prevKey.ioAddress()) {
-                    throw RT_ERR("Not sorted.");
-                }
-            }
-            prevKey.setIoAddress(key.ioAddress());
-            prevKey.setIoBlocks(key.ioBlocks());
-            ++it;
-        }
-    }
-
-    bool empty() const { return map_.empty(); }
-
-    class ConstIterator /* final */
-        : public IteratorBase<const WalbDiffMemory, Map::const_iterator> {
-    public:
-        explicit ConstIterator(const WalbDiffMemory &wdiffMem)
-            : IteratorBase<const WalbDiffMemory, Map::const_iterator>(wdiffMem) {}
-        ~ConstIterator() noexcept override {}
-
-        bool isValid() const override { return it_ != wdiffMem_.map_.cend(); }
-        void begin() override { it_ = wdiffMem_.map_.cbegin(); }
-        void end() override { it_ = wdiffMem_.map_.cend(); }
-    };
-
-    class Iterator /* final */
-        : public IteratorBase<WalbDiffMemory, Map::iterator> {
-    public:
-        explicit Iterator(WalbDiffMemory &wdiffMem)
-            : IteratorBase<WalbDiffMemory, Map::iterator>(wdiffMem) {}
-        ~Iterator() noexcept override {}
-
-        bool isValid() const override { return it_ != wdiffMem_.map_.end(); }
-        void begin() override { it_ = wdiffMem_.map_.begin(); }
-        void end() override { it_ = wdiffMem_.map_.end(); }
-
-        /**
-         * Erase the item on the iterator.
-         * The iterator will indicate the removed item.
-         *
-         * CAUSION:
-         *   statistics will be incorrect.
-         */
-        void erase() {
-            if (!isValid()) {
-                throw RT_ERR("tried to delete an item on the invalid iterator.");
-            }
-            wdiffMem_.map_.erase(it_);
-        }
-    };
-
-    /**
-     * Get an const iterator.
-     *
-     * You must not change the map contents during traverse of the map.
-     */
-    std::unique_ptr<ConstIterator> constIterator() const {
-        std::unique_ptr<ConstIterator> p(new ConstIterator(*this));
-        return std::move(p);
-    }
-
-    /**
-     * Get an iterator.
-     *
-     * You can delete items on the iterator.
-     */
-    std::unique_ptr<Iterator> iterator() {
-        std::unique_ptr<Iterator> p(new Iterator(*this));
-        return std::move(p);
-    }
-
-private:
-    void putNonOverlappedArea(
-        WalbDiffRecord &rec, BlockDiffIo &io, const WalbDiffRecord &overlappedRec) {
-
-        assert(rec.isOverlapped(overlappedRec));
-        if (rec.isOverwrittenBy(overlappedRec)) { return; }
-        LOGd_("deleted (%" PRIu64 " %u)\n", rec.ioAddress(), rec.ioBlocks());
-        uint64_t off0, off1;
-        uint16_t blocks;
-
-        assert(rec.isValid());
-        assert(overlappedRec.isValid());
-
-        /* Left portion is not overlapped. */
-        off0 = rec.ioAddress();
-        off1 = overlappedRec.ioAddress();
-        if (off0 < off1) {
-            assert(off1 - off0 < (2U << 16));
-            blocks = off1 - off0;
-            LOGd_("try to add (%" PRIu64 " %u)\n", off0, blocks);
-            auto mrec = std::make_shared<WalbDiffRecord>(rec, off0, blocks);
-            assert(mrec->isValid());
-            BlockDiffIoPtr iop;
-            if (!mrec->isDiscard() && !mrec->isAllZero()) {
-                iop = io.getPortion(0, blocks);
-                mrec->setChecksum(iop->calcChecksum());
-            }
-            if (!put(mrec, iop)) {
-                throw RT_ERR("Put left portion failed.");
-            }
-            LOGd_("added (%" PRIu64 " %u)\n", off0, blocks);
-        }
-
-        /* Right portion is not overlapped. */
-        off0 = overlappedRec.ioAddress() + overlappedRec.ioBlocks();
-        off1 = rec.ioAddress() + rec.ioBlocks();
-        if (off0 < off1) {
-            assert(off1 - off0 < (2U << 16));
-            blocks = off1 - off0;
-            LOGd_("try to add (%" PRIu64 " %u)\n", off0, blocks);
-            auto mrec = std::make_shared<WalbDiffRecord>(rec, off0, blocks);
-            assert(mrec->isValid());
-            BlockDiffIoPtr iop;
-            if (!mrec->isDiscard() && !mrec->isAllZero()) {
-                iop = io.getPortion(rec.ioBlocks() - blocks, blocks);
-                mrec->setChecksum(iop->calcChecksum());
-            }
-            if (!put(mrec, iop)) {
-                throw RT_ERR("Put right portion failed.");
-            }
-            LOGd_("added (%" PRIu64 " %u)\n", off0, blocks);
-        }
-    }
-
-    bool put(WalbDiffRecordPtr rec, BlockDiffIoPtr io) {
-        assert(rec->isValid());
-        std::pair<Map::iterator, bool> p =
-            map_.insert(std::make_pair(getKey(*rec), std::make_pair(rec, io)));
-        nIos_++;
-        nBlocks_ += rec->ioBlocks();
-        return p.second;
-    }
-
-    bool del(Map::iterator &it) {
-        WalbDiffRecordPtr rec = it->second.first;
-        nIos_--;
-        nBlocks_ -= rec->ioBlocks();
-        map_.erase(it);
-        return true;
-    }
-
-    bool del(const WalbDiffRecord &rec) {
-        nIos_--;
-        nBlocks_ -= rec.ioBlocks();
-        size_t n = map_.erase(getKey(rec));
-        return n == 1;
-    }
-
-    Key getKey(const WalbDiffRecord &rec) const {
-        return std::make_pair(rec.ioAddress(), rec.ioBlocks());
     }
 };
 

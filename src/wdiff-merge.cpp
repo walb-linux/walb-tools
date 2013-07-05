@@ -125,7 +125,7 @@ private:
     std::deque<std::shared_ptr<Wdiff> > doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the WalbDiffMerger instance. */
 
-    walb::diff::WalbDiffMemory2 wdiffMem_;
+    walb::diff::WalbDiffMemory wdiffMem_;
 
 public:
     WalbDiffMerger() {}

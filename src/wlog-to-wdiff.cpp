@@ -48,8 +48,7 @@ public:
         cybozu::util::FdReader fdr(inputLogFd);
 
         /* Prepare walb diff. */
-        walb::diff::WalbDiffMemory2 walbDiff;
-        //walb::diff::WalbDiffMemory walbDiff;
+        walb::diff::WalbDiffMemory walbDiff;
 
         /* Loop */
         uint64_t lsid = -1;
