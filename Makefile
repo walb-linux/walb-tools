@@ -16,7 +16,7 @@ endif
 
 INCLUDES_WALB = -I./walb/include -I./walb/tool
 
-CFLAGS = -Wall -Wextra -I./include -I./src $(OPT_FLAGS) $(INCLUDES_WALB)
+CFLAGS = -Wall -Wextra -I./cybozulib/include -I./include -I./src $(OPT_FLAGS) $(INCLUDES_WALB)
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)

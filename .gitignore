@@ -1,6 +1,7 @@
 *~
 Makefile.depends
 walb
+cybozulib
 GPATH
 GRTAGS
 GSYMS

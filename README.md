@@ -10,11 +10,15 @@ WalB kernel device driver is available here: [WalB repository](https://github.co
 - walb-proxy: forward wlog data from workers to servers.
 - walb-server: manage backup data.
 
+- wlog-XXX: tools for walb log data.
+- wdiff-XXX: tools for walb diff data.
+
 ### Requirements for build
 
 - C++11 compiler.
 - Header files of WalB kernel driver.
 - libaio.
+- cybozulib [GitHub repository](https://github.com/herumi/cybozulib/).
 
 ## License
 
