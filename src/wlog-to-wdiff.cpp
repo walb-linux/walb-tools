@@ -43,12 +43,13 @@ public:
     WalbLogToDiff() {}
     ~WalbLogToDiff() noexcept {}
 
-    void convert(int inputLogFd, int outputWdiffFd) {
+    void convert(int inputLogFd, int outputWdiffFd,
+                 uint16_t maxIoBlocks = uint16_t(-1)) {
         /* Wrap input. */
         cybozu::util::FdReader fdr(inputLogFd);
 
         /* Prepare walb diff. */
-        walb::diff::WalbDiffMemory walbDiff;
+        walb::diff::WalbDiffMemory walbDiff(maxIoBlocks);
 
         /* Loop */
         uint64_t lsid = -1;

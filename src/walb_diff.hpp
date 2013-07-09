@@ -974,6 +974,41 @@ public:
     void print() const { print(::stdout); }
 
     /**
+     * Split the RecData into pieces
+     * where each ioBlocks is <= a specified one.
+     */
+    std::vector<RecData> split(uint16_t ioBlocks) const {
+        assert(isValid());
+        std::vector<RecData> v;
+        uint64_t addr = rec_.ioAddress();
+        uint16_t remaining = rec_.ioBlocks();
+
+        while (0 < remaining) {
+            uint16_t blks = std::min(ioBlocks, remaining);
+            WalbDiffRecord rec(rec_);
+            size_t size = (rec.isNormal() ? blks * LOGICAL_BLOCK_SIZE : 0);
+            std::vector<char> data(size);
+            rec.setIoAddress(addr);
+            rec.setIoBlocks(blks);
+            rec.setDataSize(size);
+            if (rec.isNormal()) {
+                size_t off = (addr - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
+                ::memcpy(&data[0], rawData() + off, size);
+            }
+            RecData r;
+            r.moveFrom(rec, std::move(data));
+            r.updateChecksum();
+            assert(r.isValid());
+            v.push_back(std::move(r));
+
+            addr += blks;
+            remaining -= blks;
+        }
+        assert(addr == rec_.endIoAddress());
+        return std::move(v);
+    }
+
+    /**
      * Create (IO portions of rhs) - (that of *this).
      * If non-overlapped, throw runtime error.
      * The overlapped data of rhs will be used.
@@ -1116,6 +1151,7 @@ class WalbDiffMemory
     : public WalbDiff
 {
 private:
+    const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
     std::map<uint64_t, RecData> map_;
     struct walb_diff_file_header h_;
     WalbDiffFileHeader fileH_;
@@ -1123,8 +1159,8 @@ private:
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
-    WalbDiffMemory()
-        : map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
+    explicit WalbDiffMemory(uint16_t maxIoBlocks = uint16_t(-1))
+        : maxIoBlocks_(maxIoBlocks), map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
     ~WalbDiffMemory() noexcept override = default;
@@ -1172,9 +1208,18 @@ public:
         /* Insert the item. */
         nIos_++;
         nBlocks_ += r0.record().ioBlocks();
-        map_.insert(std::make_pair(rec.ioAddress(), std::move(r0)));
-        /* Update maxIoBlocks. */
-        fileH_.setMaxIoBlocksIfNecessary(rec.ioBlocks());
+        std::vector<RecData> rv;
+        if (maxIoBlocks_ < rec.ioBlocks()) {
+            rv = r0.split(maxIoBlocks_);
+        } else {
+            rv.push_back(std::move(r0));
+        }
+        for (RecData &r : rv) {
+            uint64_t addr = r.record().ioAddress();
+            uint16_t blks = r.record().ioBlocks();
+            map_.insert(std::make_pair(addr, std::move(r)));
+            fileH_.setMaxIoBlocksIfNecessary(blks);
+        }
         return true;
     }
     bool sync() override {
