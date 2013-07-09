@@ -1051,12 +1051,13 @@ public:
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
             }
+            rec0.setDataSize(size0);
+            rec1.setDataSize(size1);
+
             std::vector<char> data0(size0), data1(size1);
             if (rec_.isNormal()) {
                 size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
-                rec0.setDataSize(size0);
-                rec1.setDataSize(size1);
                 ::memcpy(&data0[0], &data_[0], size0);
                 ::memcpy(&data1[0], &data_[off1], size1);
             }
@@ -1065,12 +1066,14 @@ public:
                 RecData r;
                 r.moveFrom(rec0, std::move(data0));
                 r.updateChecksum();
+                assert(r.isValid());
                 v.push_back(std::move(r));
             }
             if (0 < blks1) {
                 RecData r;
                 r.moveFrom(rec1, std::move(data1));
                 r.updateChecksum();
+                assert(r.isValid());
                 v.push_back(std::move(r));
             }
             return std::move(v);
@@ -1103,6 +1106,7 @@ public:
             RecData r;
             r.moveFrom(rec, std::move(data));
             r.updateChecksum();
+            assert(r.isValid());
             v.push_back(std::move(r));
             return std::move(v);
         }
@@ -1133,6 +1137,7 @@ public:
         RecData r;
         r.moveFrom(rec, std::move(data));
         r.updateChecksum();
+        assert(r.isValid());
         v.push_back(std::move(r));
         return std::move(v);
     }
