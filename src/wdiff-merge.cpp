@@ -69,21 +69,19 @@ private:
             if (isEnd_) { return; }
 
             /* for check */
-            uint64_t addr = 0;
-            uint16_t blocks = 0;
+            uint64_t endIoAddr = 0;
             if (isDiffData(buf_)) {
                 DiffRecordPtr recp = buf_.first;
-                addr = recp->ioAddress();
-                blocks = recp->ioBlocks();
+                endIoAddr = recp->endIoAddress();
             }
 
             fill();
-            buf_ = reader_.readDiff();
+            buf_ = reader_.readDiffAndUncompress();
 
             /* for check */
             if (isDiffData(buf_)) {
                 DiffRecordPtr recp = buf_.first;
-                if (!(addr + blocks <= recp->ioAddress())) {
+                if (!(endIoAddr <= recp->ioAddress())) {
                     throw RT_ERR("Invalid wdiff: IOs must be sorted and not overlapped each other.");
                 }
             }
@@ -116,7 +114,7 @@ private:
 
         void fill() const {
             if (!isDiffData(buf_)) {
-                buf_ = reader_.readDiff();
+                buf_ = reader_.readDiffAndUncompress();
             }
         }
     };
@@ -147,8 +145,10 @@ public:
      *
      * @outFd file descriptor for output wdiff.
      * @shouldValidateUuid validate that all wdiff's uuid are the same if true,
+     * @maxIoBlocks Max io blocks in the output wdiff [logical block].
+     *     0 means no limitation.
      */
-    void merge(int outFd, bool shouldValidateUuid) {
+    void merge(int outFd, bool shouldValidateUuid, uint16_t maxIoBlocks = 0) {
         if (wdiffs_.empty()) {
             throw RT_ERR("Wdiff's is not set.");
         }
@@ -161,7 +161,8 @@ public:
         ::memset(&headerT, 0, sizeof(headerT));
         walb::diff::WalbDiffFileHeader wdiffH(headerT);
         wdiffH.setUuid(uuid);
-        wdiffH.setMaxIoBlocksIfNecessary(getMaxIoBlocks());
+        wdiffH.setMaxIoBlocksIfNecessary(
+            maxIoBlocks == 0 ? getMaxIoBlocks() : maxIoBlocks);
         wdiffWriter.writeHeader(wdiffH);
 
         uint64_t doneAddr = 0;
@@ -169,11 +170,11 @@ public:
         while (!wdiffs_.empty()) {
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-                DiffData &d = wdiffs_[i]->front();
-                DiffRecordPtr recp = d.first;
-                DiffIoPtr iop = d.second;
+                DiffRecordPtr recp;
+                DiffIoPtr iop;
+                std::tie(recp, iop) = wdiffs_[i]->front();
                 if (canMergeIo(i, recp)) {
-                    mergeIo(recp, iop);
+                    mergeIo(recp, iop, maxIoBlocks);
                     wdiffs_[i]->pop();
                 }
             }
@@ -184,13 +185,6 @@ public:
         writeDiffUpto(wdiffWriter, uint64_t(-1));
         wdiffWriter.flush();
         assert(wdiffMem_.empty());
-
-        /* Check the maxIoBlocks is valid. */
-        if (wdiffH.getMaxIoBlocks() != wdiffMem_.header().getMaxIoBlocks()) {
-            ::fprintf(::stderr, "wdiffH.getMaxIoBlocks() %u wdiffMem_.header().getMaxIoBlocks() %u\n",
-                      wdiffH.getMaxIoBlocks(), wdiffMem_.header().getMaxIoBlocks());
-            throw RT_ERR("Invalid max io blocks.");
-        }
     }
 private:
     /**
@@ -217,11 +211,20 @@ private:
         std::queue<DiffData> q;
         moveToQueueUpto(q, maxAddr);
         while (!q.empty()) {
-            DiffData &d = q.front();
-            DiffRecordPtr recp = d.first;
-            DiffIoPtr iop = d.second;
+            DiffRecordPtr recp;
+            DiffIoPtr iop0, iop1;
+            std::tie(recp, iop0) = q.front();
             q.pop();
-            wdiffWriter.writeDiff(*recp, iop);
+            if (recp->isNormal()) {
+                iop1 = std::make_shared<DiffIo>(recp->ioBlocks(), ::WALB_DIFF_CMPR_SNAPPY);
+                *iop1 = iop0->compress(::WALB_DIFF_CMPR_SNAPPY);
+                recp->setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
+                recp->setDataSize(iop1->rawSize());
+                recp->setChecksum(iop1->calcChecksum());
+            } else {
+                iop1 = iop0;
+            }
+            wdiffWriter.writeDiff(*recp, iop1);
         }
     }
 
@@ -247,17 +250,17 @@ private:
         }
     }
 
-    void mergeIo(DiffRecordPtr recp, DiffIoPtr iop) {
-        wdiffMem_.add(*recp, iop);
+    void mergeIo(DiffRecordPtr recp, DiffIoPtr iop, uint16_t maxIoBlocks) {
+        assert(!recp->isCompressed());
+        wdiffMem_.add(*recp, iop, maxIoBlocks);
     }
 
     bool canMergeIo(size_t i, DiffRecordPtr recp) {
         if (i == 0) { return true; }
         assert(recp);
-        uint64_t ioAddress = recp->ioAddress();
-        uint16_t ioBlocks = recp->ioBlocks();
+        uint64_t endIoAddr = recp->endIoAddress();
         for (size_t j = 0; j < i; j++) {
-            if (!(ioAddress + ioBlocks <= wdiffs_[j]->currentAddress())) {
+            if (!(endIoAddr <= wdiffs_[j]->currentAddress())) {
                 return false;
             }
         }
@@ -293,8 +296,7 @@ int main(int argc, char *argv[])
         for (int i = 1; i < argc - 1; i++) {
             merger.addWdiff(argv[i]);
         }
-        cybozu::util::FileOpener fo(argv[argc - 1], O_WRONLY | O_CREAT | O_TRUNC,
-                                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        cybozu::util::FileOpener fo(argv[argc - 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
         merger.merge(fo.fd(), false);
         fo.close();
         return 0;

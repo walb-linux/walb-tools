@@ -357,7 +357,7 @@ public:
         walb::diff::WalbDiffReader wdiffR(0);
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
-        std::pair<DiffRecPtr, DiffIoPtr> p = wdiffR.readDiff();
+        std::pair<DiffRecPtr, DiffIoPtr> p = wdiffR.readDiffAndUncompress();
         DiffRecPtr recP = p.first;
         DiffIoPtr ioP = p.second;
         while (recP) {
@@ -368,7 +368,7 @@ public:
             /* redo */
             executeDiffIo(recP, ioP);
 
-            p = wdiffR.readDiff();
+            p = wdiffR.readDiffAndUncompress();
             recP = p.first; ioP = p.second;
         }
         ::printf("Input statistics:\n");

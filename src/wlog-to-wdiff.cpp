@@ -77,7 +77,7 @@ public:
               writtenBlocks, walbDiff.getNBlocks(),
               walbDiff.getNIos(), lsid);
 
-        walbDiff.writeTo(outputWdiffFd);
+        walbDiff.writeTo(outputWdiffFd, ::WALB_DIFF_CMPR_SNAPPY);
     }
 
 private:
@@ -87,14 +87,14 @@ private:
      * @lsid begin lsid.
      * @writtenBlocks written logical blocks.
      * @fdr input wlog reader.
-     * @walbDiff walb diff manager.
+     * @walbDiff walb diff memory manager.
      *
      * RETURN:
      *   true if wlog is remaining, or false.
      */
     bool convertWlog(
         uint64_t &lsid, uint64_t &writtenBlocks, cybozu::util::FdReader &fdr,
-        walb::diff::WalbDiff &walbDiff) {
+        walb::diff::WalbDiffMemory &walbDiff) {
 
         bool ret = true;
 
@@ -153,10 +153,9 @@ private:
                 LogpackData logd(logh, i);
                 readLogpackData(fdr, ba, logd);
                 //logd.print(); /* debug */
-                std::pair<DiffRecordPtr, DiffIoPtr>
-                    diffData = convertLogpackDataToDiffRecord(logd);
-                DiffRecordPtr diffRec = diffData.first;
-                DiffIoPtr diffIo = diffData.second;
+                DiffRecordPtr diffRec;
+                DiffIoPtr diffIo;
+                std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(logd);
                 if (diffRec) {
                     bool ret = walbDiff.add(*diffRec, diffIo);
                     if (!ret) {

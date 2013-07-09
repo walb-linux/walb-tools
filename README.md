@@ -16,8 +16,9 @@ WalB kernel device driver is available here: [WalB repository](https://github.co
 ### Requirements for build
 
 - C++11 compiler.
-- Header files of WalB kernel driver.
 - libaio.
+- libsnappy.
+- Header files of WalB kernel driver.
 - cybozulib [GitHub repository](https://github.com/herumi/cybozulib/).
 
 ## License

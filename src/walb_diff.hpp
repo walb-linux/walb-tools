@@ -9,6 +9,8 @@
 #include <map>
 #include <queue>
 
+#include <snappy.h>
+
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "fileio.hpp"
@@ -26,42 +28,6 @@ static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 
 namespace walb {
 namespace diff {
-
-/**
- * Simple compressor.
- */
-bool compress(int type, const char *input, size_t inputSize,
-              char *compressed, size_t &compressedSize)
-{
-    switch (type) {
-    case ::WALB_DIFF_CMPR_NONE:
-        if (compressedSize < inputSize) { return false; }
-        ::memcpy(compressed, input, inputSize);
-        compressedSize = inputSize;
-        break;
-    default:
-        throw RT_ERR("Not yet implementation.");
-    }
-    return true;
-}
-
-/**
- * Simple uncompressor.
- */
-bool uncompress(int type, const char *compressed, size_t compressedSize,
-                char *output, size_t &outputSize)
-{
-    switch (type) {
-    case ::WALB_DIFF_CMPR_NONE:
-        if (outputSize < compressedSize) { return false; }
-        ::memcpy(output, compressed, compressedSize);
-        outputSize = compressedSize;
-        break;
-    default:
-        throw RT_ERR("Not yet implementation.");
-    }
-    return true;
-}
 
 /**
  * Class for struct walb_diff_record.
@@ -283,7 +249,6 @@ struct WalbDiffKey : public WalbDiffRecord
  * Block diff for an IO.
  */
 class BlockDiffIo
-    : public block_diff::BlockDiffValue<BlockDiffIo>
 {
 private:
     uint16_t ioBlocks_; /* [logical block]. */
@@ -303,9 +268,17 @@ public:
         , data_() {
     }
 
-    BlockDiffIo(const BlockDiffIo &rhs) = delete;
-    BlockDiffIo(BlockDiffIo &&rhs) = default;
+    BlockDiffIo(const BlockDiffIo &) = delete;
+    BlockDiffIo(BlockDiffIo &&) = default;
     virtual ~BlockDiffIo() noexcept = default;
+
+    BlockDiffIo &operator=(BlockDiffIo &) = delete;
+    BlockDiffIo &operator=(BlockDiffIo &&rhs) {
+        ioBlocks_ = rhs.ioBlocks_;
+        compressionType_ = rhs.compressionType_;
+        data_ = std::move(rhs.data_);
+        return *this;
+    }
 
     void init(uint16_t ioBlocks, int compressionType = ::WALB_DIFF_CMPR_NONE) {
         ioBlocks_ = ioBlocks;
@@ -314,6 +287,7 @@ public:
 
     uint16_t getIoBlocks() const { return ioBlocks_; }
     int getCompressionType() const { return compressionType_; }
+    void setCompressionType(int type) { compressionType_ = type; }
     bool isCompressed() const { return compressionType_ != ::WALB_DIFF_CMPR_NONE; }
 
     void copyFrom(const char *data, size_t size) {
@@ -325,34 +299,9 @@ public:
     }
     std::vector<char> &&forMove() { return std::move(data_); }
 
-    const char *rawData() const override { return &data_[0]; }
-    char *rawData() override { return &data_[0]; }
-    size_t rawSize() const override { return data_.size(); }
-
-    /**
-     * Get a part of the diffIo.
-     *
-     * @offset [logical block]
-     * @nBlocks [logical block]
-     */
-    std::shared_ptr<BlockDiffIo> getPortion(size_t offset, size_t nBlocks) const override {
-        assert(offset < ioBlocks_);
-        assert(0 < nBlocks);
-        assert(nBlocks <= ioBlocks_);
-        const size_t offB = offset * LOGICAL_BLOCK_SIZE;
-        const size_t sizeB = nBlocks * LOGICAL_BLOCK_SIZE;
-        auto iop = std::make_shared<BlockDiffIo>(nBlocks);
-        if (isCompressed()) {
-            std::vector<char> b(sizeB);
-            size_t sizeB1 = sizeB;
-            uncompress(getCompressionType(), rawData(), rawSize(), &b[0], sizeB1);
-            assert(sizeB1 == sizeB);
-            iop->copyFrom(&b[0] + offB, sizeB);
-        } else {
-            iop->copyFrom(rawData() + offB, sizeB);
-        }
-        return iop;
-    }
+    const char *rawData() const  { return &data_[0]; }
+    char *rawData()  { return &data_[0]; }
+    size_t rawSize() const  { return data_.size(); }
 
     /**
      * Calculate checksum.
@@ -373,6 +322,47 @@ public:
             if (p[i] != 0) { return false; }
         }
         return true;
+    }
+
+    BlockDiffIo compress(int type) const {
+        if (isCompressed()) {
+            throw RT_ERR("Could not compress already compressed diff IO.");
+        }
+        if (type != ::WALB_DIFF_CMPR_SNAPPY) {
+            throw RT_ERR("Currently only snappy is supported.");
+        }
+        BlockDiffIo io(getIoBlocks(), type);
+        assert(0 < rawSize());
+        std::vector<char> data(snappy::MaxCompressedLength(rawSize()));
+        size_t size;
+        snappy::RawCompress(rawData(), rawSize(), &data[0], &size);
+        data.resize(size);
+        io.moveFrom(std::move(data));
+        return std::move(io);
+    }
+
+    BlockDiffIo uncompress() const {
+        if (!isCompressed()) {
+            throw RT_ERR("Need not uncompress already uncompressed diff IO.");
+        }
+        if (getCompressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
+            throw RT_ERR("Currently only snappy is supported.");
+        }
+        BlockDiffIo io(getIoBlocks());
+        std::vector<char> data(getIoBlocks() * LOGICAL_BLOCK_SIZE);
+        assert(0 < rawSize());
+        size_t size;
+        if (!snappy::GetUncompressedLength(rawData(), rawSize(), &size)) {
+            throw RT_ERR("snappy::GetUncompressedLength() failed.");
+        }
+        if (size != data.size()) {
+            throw RT_ERR("Uncompressed data size is not invaid.");
+        }
+        if (!snappy::RawUncompress(rawData(), rawSize(), &data[0])) {
+            throw RT_ERR("snappy::RawUncompress() failed.");
+        }
+        io.moveFrom(std::move(data));
+        return std::move(io);
     }
 };
 
@@ -722,7 +712,6 @@ private:
     WalbDiffPack pack_;
     uint16_t recIdx_;
     uint32_t totalSize_;
-    std::vector<char> buf_;
 
 public:
     explicit WalbDiffReader(int fd)
@@ -788,8 +777,7 @@ public:
      *   if the input stream reached the end, diff record will be nullptr.
      */
     std::pair<std::shared_ptr<WalbDiffRecord>, std::shared_ptr<BlockDiffIo> > readDiff() {
-        if (pack_.isEnd() ||
-            (recIdx_ == pack_.nRecords() && !readPackHeader())) {
+        if (!canRead()) {
             return std::make_pair(nullptr, nullptr);
         }
         auto recp = std::make_shared<WalbDiffRecord>(
@@ -814,16 +802,60 @@ public:
      *   False if the input stream reached the end.
      */
     bool readDiff(struct walb_diff_record &rec, std::vector<char> &data) {
-        if (pack_.isEnd() ||
-            (recIdx_ == pack_.nRecords() && !readPackHeader())) {
-            return false;
-        }
+        if (!canRead()) return false;
         rec = pack_.record(recIdx_);
         WalbDiffRecord recW(rec);
         data.resize(recW.dataSize());
         readDiffIo(recW, &data[0]);
         return true;
     }
+
+    std::pair<std::shared_ptr<WalbDiffRecord>, std::shared_ptr<BlockDiffIo> > readDiffAndUncompress() {
+        auto recp = std::make_shared<WalbDiffRecord>();
+        std::vector<char> data;
+        if (!readDiffAndUncompress(*recp->rawRecord(), data)) {
+            return std::make_pair(nullptr, nullptr);
+        }
+        std::shared_ptr<BlockDiffIo> iop;
+        if (0 < recp->dataSize()) {
+            iop = std::make_shared<BlockDiffIo>(recp->ioBlocks());
+            iop->moveFrom(std::move(data));
+        }
+        return std::make_pair(recp, iop);
+    }
+
+    /**
+     * Read and uncompress a diff IO.
+     * RETURN:
+     *   False if the input stream reached in the end.
+     */
+    bool readDiffAndUncompress(struct walb_diff_record &rec, std::vector<char> &data) {
+        if (!readDiff(rec, data)) return false;
+        WalbDiffRecord recW(rec);
+        if (!recW.isCompressed()) {
+            return true;
+        }
+        BlockDiffIo io0(recW.ioBlocks(), recW.compressionType());
+        io0.moveFrom(std::move(data));
+        BlockDiffIo io1 = io0.uncompress();
+        recW.setDataSize(recW.ioBlocks() * LOGICAL_BLOCK_SIZE);
+        recW.setCompressionType(::WALB_DIFF_CMPR_NONE);
+        recW.setChecksum(io1.calcChecksum());
+        data = io1.forMove();
+        assert(data.size() == recW.dataSize());
+        assert(recW.isValid());
+        rec = *recW.rawRecord();
+        return true;
+    }
+
+    bool canRead() {
+        if (pack_.isEnd() ||
+            (recIdx_ == pack_.nRecords() && !readPackHeader())) {
+            return false;
+        }
+        return true;
+    }
+
 private:
     /**
      * Read pack header.
@@ -856,14 +888,15 @@ private:
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }
+        std::vector<char> data;
         std::shared_ptr<BlockDiffIo> iop;
         if (0 < rec.dataSize()) {
-            buf_.resize(rec.dataSize());
+            data.resize(rec.dataSize());
             iop = std::make_shared<BlockDiffIo>(rec.ioBlocks(), rec.compressionType());
         }
-        readDiffIo(rec, &buf_[0]);
+        readDiffIo(rec, &data[0]);
         if (0 < rec.dataSize()) {
-            iop->copyFrom(&buf_[0], rec.dataSize());
+            iop->moveFrom(std::move(data));
         }
         return iop;
     }
@@ -888,23 +921,6 @@ private:
         recIdx_++;
         totalSize_ += rec.dataSize();
     }
-};
-
-/**
- * Interface.
- */
-struct WalbDiff
-{
-    virtual ~WalbDiff() noexcept = default;
-    virtual bool init() = 0;
-    virtual bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop) = 0;
-    virtual bool sync() = 0;
-    virtual void print() const = 0;
-    virtual uint64_t getNBlocks() const = 0;
-    virtual uint64_t getNIos() const = 0;
-    virtual WalbDiffFileHeader& header() = 0;
-    virtual bool writeTo(int outFd) = 0;
-    virtual void checkNoOverlappedAndSorted() const = 0;
 };
 
 /**
@@ -1153,7 +1169,6 @@ private:
  * IO data compression is not supported.
  */
 class WalbDiffMemory
-    : public WalbDiff
 {
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
@@ -1168,13 +1183,14 @@ public:
         : maxIoBlocks_(maxIoBlocks), map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
-    ~WalbDiffMemory() noexcept override = default;
+    ~WalbDiffMemory() noexcept = default;
     bool init() {
         /* Initialize always. */
         return false;
     }
     bool empty() const { return map_.empty(); }
-    bool add(const WalbDiffRecord &rec, const void *data, size_t size) {
+    bool add(const WalbDiffRecord &rec, const void *data, size_t size,
+             uint16_t maxIoBlocks) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.ioAddress();
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -1214,7 +1230,9 @@ public:
         nIos_++;
         nBlocks_ += r0.record().ioBlocks();
         std::vector<RecData> rv;
-        if (maxIoBlocks_ < rec.ioBlocks()) {
+        if (0 < maxIoBlocks && maxIoBlocks < rec.ioBlocks()) {
+            rv = r0.split(maxIoBlocks);
+        } else if (maxIoBlocks_ < rec.ioBlocks()) {
             rv = r0.split(maxIoBlocks_);
         } else {
             rv.push_back(std::move(r0));
@@ -1227,7 +1245,7 @@ public:
         }
         return true;
     }
-    bool sync() override {
+    bool sync() {
         /* do nothing. */
         return true;
     }
@@ -1239,9 +1257,9 @@ public:
             ++it;
         }
     }
-    void print() const override { print(::stdout); }
-    uint64_t getNBlocks() const override { return nBlocks_; }
-    uint64_t getNIos() const override { return nIos_; }
+    void print() const { print(::stdout); }
+    uint64_t getNBlocks() const { return nBlocks_; }
+    uint64_t getNIos() const { return nIos_; }
     void checkStatistics() const {
         uint64_t nBlocks = 0;
         uint64_t nIos = 0;
@@ -1261,22 +1279,37 @@ public:
                          nIos_, nIos);
         }
     }
-    WalbDiffFileHeader& header() override { return fileH_; }
-    bool writeTo(int outFd) override {
+    WalbDiffFileHeader& header() { return fileH_; }
+    bool writeTo(int outFd, bool isCompressed = true) {
         WalbDiffWriter writer(outFd);
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
         while (it != map_.cend()) {
             const RecData &r = it->second;
-            auto iop = std::make_shared<BlockDiffIo>(r.record().ioBlocks());
-            iop->copyFrom(r.rawData(), r.rawSize());
-            writer.writeDiff(r.record(), iop);
+            WalbDiffRecord rec(r.record());
+            auto iop = std::make_shared<BlockDiffIo>(rec.ioBlocks());
+            if (rec.isNormal()) {
+                if (isCompressed) {
+                    std::vector<char> data(snappy::MaxCompressedLength(r.rawSize()));
+                    size_t size;
+                    snappy::RawCompress(r.rawData(), r.rawSize(), &data[0], &size);
+                    data.resize(size);
+                    iop->setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
+                    iop->moveFrom(std::move(data));
+                    rec.setDataSize(size);
+                    rec.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
+                    rec.setChecksum(iop->calcChecksum());
+                } else {
+                    iop->copyFrom(r.rawData(), r.rawSize());
+                }
+            }
+            writer.writeDiff(rec, iop);
             ++it;
         }
         writer.flush();
         return true;
     }
-    void checkNoOverlappedAndSorted() const override {
+    void checkNoOverlappedAndSorted() const {
         auto it = map_.cbegin();
         const WalbDiffRecord *prev = nullptr;
         while (it != map_.cend()) {
@@ -1293,18 +1326,20 @@ public:
             ++it;
         }
     }
-    bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop) override {
+    bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop,
+             uint16_t maxIoBlocks = 0) {
         if (rec.isNormal()) {
-            return add(rec, iop->rawData(), iop->rawSize());
+            return add(rec, iop->rawData(), iop->rawSize(), maxIoBlocks);
         } else {
-            return add(rec, nullptr, 0);
+            return add(rec, nullptr, 0, maxIoBlocks);
         }
     }
     /**
      * C-like interface of add().
      */
-    bool add(const struct walb_diff_record &rawRec, const void *data, size_t size) {
-        return add(WalbDiffRecord(rawRec), data, size);
+    bool add(const struct walb_diff_record &rawRec, const void *data, size_t size,
+             uint16_t maxIoBlocks = 0) {
+        return add(WalbDiffRecord(rawRec), data, size, maxIoBlocks);
     }
 
     using Map = std::map<uint64_t, RecData>;

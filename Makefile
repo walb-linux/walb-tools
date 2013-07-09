@@ -28,6 +28,7 @@ LDLIBS = -lpthread
 endif
 
 LDLIBS_AIO = -laio
+LDLIBS_SNAPPY = -lsnappy
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h)
 SOURCES = $(wildcard src/*.cpp)
@@ -50,13 +51,8 @@ echo_binaries:
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $(patsubst %.cpp,%.o,$<)
 
-src/wlog-cat: src/wlog-cat.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO)
-src/wlog-redo: src/wlog-redo.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO)
-
 src/%: src/%.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_SNAPPY)
 
 clean:
 	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o
