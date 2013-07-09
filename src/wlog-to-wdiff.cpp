@@ -19,6 +19,8 @@
 #include <cstdlib>
 #include <type_traits>
 
+#include "cybozu/option.hpp"
+
 #include "util.hpp"
 #include "walb_log.hpp"
 #include "walb_diff.hpp"
@@ -262,15 +264,26 @@ private:
     }
 };
 
+struct Option : public cybozu::Option
+{
+    uint32_t maxIoSize;
+    Option() {
+        //setUsage("Usage: wlog-to-wdiff < [wlogs] > [wdiff]");
+        appendOpt(&maxIoSize, uint16_t(-1), "x", "max IO size in the output wdiff [byte].");
+        appendHelp("h");
+    }
+};
+
 int main(int argc, UNUSED char *argv[])
 {
     try {
-        if (1 < argc) {
-            ::printf("Usage: wlog-to-wdiff < [wlogs] > [wdiff]\n");
+        Option opt;
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
             return 1;
         }
         WalbLogToDiff l2d;
-        l2d.convert(0, 1);
+        l2d.convert(0, 1, opt.maxIoSize);
         return 0;
     } catch (std::runtime_error &e) {
         LOGe("%s\n", e.what());
