@@ -21,6 +21,8 @@
 #include <cstdlib>
 #include <type_traits>
 
+#include "cybozu/option.hpp"
+
 #include "util.hpp"
 #include "walb_log.hpp"
 #include "walb_diff.hpp"
@@ -285,19 +287,54 @@ private:
     }
 };
 
+struct Option : public cybozu::Option
+{
+    uint32_t maxIoSize;
+    std::vector<std::string> inputWdiffs;
+    std::string outputWdiff;
+    Option() {
+        setUsage("Usage: wdiff-merge (options) -i [input wdiffs] -o [merged wdiff]");
+        appendOpt(&maxIoSize, 0, "x", "max IO size [byte]. 0 means no limitation.");
+        appendVec(&inputWdiffs, "i", "Input wdiff paths.");
+        appendMust(&outputWdiff, "o", "Output wdiff path.");
+        appendHelp("h");
+    }
+
+    uint16_t maxIoBlocks() const {
+        if (uint16_t(-1) < maxIoSize) {
+            throw RT_ERR("Max IO size must be less than 32M.");
+        }
+        return maxIoSize / LOGICAL_BLOCK_SIZE;
+    }
+
+    bool parse(int argc, char *argv[]) {
+        if (!cybozu::Option::parse(argc, argv)) {
+            goto error;
+        }
+        if (inputWdiffs.empty()) {
+            ::printf("You must specify one or more input wdiff files.\n");
+            goto error;
+        }
+        return true;
+      error:
+        usage();
+        return false;
+    }
+};
+
 int main(int argc, char *argv[])
 {
     try {
-        if (argc < 3) {
-            ::printf("Usage: wdiff-merge [input wdiffs] [merged wdiff]\n");
+        Option opt;
+        if (!opt.parse(argc, argv)) {
             return 1;
         }
         WalbDiffMerger merger;
-        for (int i = 1; i < argc - 1; i++) {
-            merger.addWdiff(argv[i]);
+        for (std::string &path : opt.inputWdiffs) {
+            merger.addWdiff(path);
         }
-        cybozu::util::FileOpener fo(argv[argc - 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        merger.merge(fo.fd(), false);
+        cybozu::util::FileOpener fo(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        merger.merge(fo.fd(), false, opt.maxIoBlocks());
         fo.close();
         return 0;
     } catch (std::runtime_error &e) {

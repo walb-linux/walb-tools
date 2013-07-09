@@ -55,7 +55,7 @@ for i in 1 2 3 4; do
   $BIN/wdiff-redo --zerodiscard ddev32M.0 < ${i}.wdiff
   $BIN/wlog-redo --zerodiscard ddev32M.1 < ${i}.wlog
 done
-$BIN/wdiff-merge 1.wdiff 2.wdiff 3.wdiff 4.wdiff all.wdiff
+$BIN/wdiff-merge -x 16K -i 1.wdiff 2.wdiff 3.wdiff 4.wdiff -o all.wdiff
 $BIN/wdiff-redo --zerodiscard ddev32M.2 < all.wdiff
 sha1sum ddev32M.0 ddev32M.1 ddev32M.2
 $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
