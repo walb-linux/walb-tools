@@ -63,6 +63,20 @@ check_result $? "consolidation test 1."
 $BIN/bdiff -b 512 ddev32M.0 ddev32M.2
 check_result $? "consolidation test 2."
 
+echo "#################### MaxIoBlocks test #################### "
+make_zero_image 0 1 2
+for i in 1 2 3 4; do
+  $BIN/wlog-to-wdiff -x  4K < ${i}.wlog > ${i}-4K.wdiff
+  $BIN/wlog-to-wdiff -x 16K < ${i}.wlog > ${i}-16K.wdiff
+  $BIN/wdiff-redo --zerodiscard ddev32M.0 < ${i}.wdiff
+  $BIN/wdiff-redo --zerodiscard ddev32M.1 < ${i}-4K.wdiff
+  $BIN/wdiff-redo --zerodiscard ddev32M.2 < ${i}-16K.wdiff
+  $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
+  check_result $? "maxIoBlocks test ${i}th wdiff 4K"
+  $BIN/bdiff -b 512 ddev32M.0 ddev32M.2
+  check_result $? "maxIoBlocks test ${i}th wdiff 16K"
+done
+
 echo "TEST_SUCCESS"
 exit 0
 
