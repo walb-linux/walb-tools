@@ -157,10 +157,7 @@ private:
                 DiffIoPtr diffIo;
                 std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(logd);
                 if (diffRec) {
-                    bool ret = walbDiff.add(*diffRec, diffIo);
-                    if (!ret) {
-                        throw RT_ERR("add failed.");
-                    }
+                    walbDiff.add(*diffRec, std::move(*diffIo));
                     writtenBlocks += diffRec->ioBlocks();
                 }
             }
@@ -192,8 +189,8 @@ private:
         /* Copy data from logpack data to diff io data. */
         assert(0 < logd.ioSizeLb());
         const size_t ioSizeB = logd.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        DiffIoPtr iop(new DiffIo(logd.ioSizeLb()));
-
+        auto iop = std::make_shared<DiffIo>();
+        iop->setIoBlocks(logd.ioSizeLb());
         std::vector<char> buf(ioSizeB);
         size_t remaining = ioSizeB;
         size_t off = 0;
@@ -216,7 +213,8 @@ private:
         /* All-zero. */
         if (iop->calcIsAllZero()) {
             mrec.setAllZero();
-            iop.reset(new DiffIo());
+            mrec.setDataSize(0);
+            *iop = DiffIo();
             return std::make_pair(p, iop);
         }
 

@@ -162,9 +162,12 @@ private:
     }
 };
 
-using DiffRecPtr = std::shared_ptr<walb::diff::WalbDiffRecord>;
-using DiffIoPtr = std::shared_ptr<walb::diff::BlockDiffIo>;
-using DiffHeaderPtr = std::shared_ptr<walb::diff::WalbDiffFileHeader>;
+using DiffRec = walb::diff::WalbDiffRecord;
+using DiffIo = walb::diff::BlockDiffIo;
+using DiffHeader = walb::diff::WalbDiffFileHeader;
+using DiffRecPtr = std::shared_ptr<DiffRec>;
+using DiffIoPtr = std::shared_ptr<DiffIo>;
+using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
 
 /**
  * Diff IO executor interface.
@@ -184,7 +187,7 @@ public:
      * RETURN:
      *   false if the IO can not be executable.
      */
-    virtual bool submit(uint64_t ioAddr, uint16_t ioBlocks, DiffIoPtr ioP) = 0;
+    virtual bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) = 0;
 
     /**
      * Wait for all submitted IOs permanent.
@@ -210,7 +213,7 @@ public:
     }
     ~SimpleDiffIoExecutor() noexcept override {}
 
-    bool submit(uint64_t ioAddr, uint16_t ioBlocks, DiffIoPtr ioP) override {
+    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) override {
         if (!ioP) { return false; }
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
@@ -314,15 +317,15 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(DiffRecPtr recP, DiffIoPtr ioP) {
-        const uint64_t ioAddr = recP->ioAddress();
-        const uint16_t ioBlocks = recP->ioBlocks();
+    void executeDiffIo(const DiffRec &rec, const DiffIoPtr ioP) {
+        const uint64_t ioAddr = rec.ioAddress();
+        const uint16_t ioBlocks = rec.ioBlocks();
         bool isSuccess = false;
-        if (recP->isAllZero()) {
+        if (rec.isAllZero()) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
             if (isSuccess) { outStat_.nIoAllZero++; }
             inStat_.nIoAllZero++;
-        } else if (recP->isDiscard()) {
+        } else if (rec.isDiscard()) {
             if (config_.isDiscard()) {
                 isSuccess = executeDiscardIo(ioAddr, ioBlocks);
             } else if (config_.isZeroDiscard()) {
@@ -334,7 +337,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
-            assert(recP->isNormal());
+            assert(rec.isNormal());
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }
@@ -344,7 +347,7 @@ public:
             outStat_.nBlocks += ioBlocks;
         } else {
             ::printf("Failed to redo: ");
-            recP->printOneline();
+            rec.printOneline();
         }
         inStat_.nBlocks += ioBlocks;
     }
@@ -357,19 +360,21 @@ public:
         walb::diff::WalbDiffReader wdiffR(0);
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
-        std::pair<DiffRecPtr, DiffIoPtr> p = wdiffR.readDiffAndUncompress();
-        DiffRecPtr recP = p.first;
-        DiffIoPtr ioP = p.second;
-        while (recP) {
-            if (!recP->isValid()) {
-                ::printf("Invalid record: ");
-                recP->printOneline();
-            }
-            /* redo */
-            executeDiffIo(recP, ioP);
 
-            p = wdiffR.readDiffAndUncompress();
-            recP = p.first; ioP = p.second;
+        DiffRec rec;
+        DiffIo io;
+        while (wdiffR.readAndUncompressDiff(rec, io)) {
+            if (!rec.isValid()) {
+                ::printf("Invalid record: ");
+                rec.printOneline();
+            }
+            if (!io.isValid()) {
+                ::printf("Invalid io: ");
+                io.printOneline();
+            }
+            auto ioP = std::make_shared<DiffIo>();
+            *ioP = std::move(io);
+            executeDiffIo(rec, ioP);
         }
         ::printf("Input statistics:\n");
         inStat_.print();
@@ -379,7 +384,8 @@ public:
 
 private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
-        DiffIoPtr ioP(new walb::diff::BlockDiffIo(ioBlocks));
+        auto ioP = std::make_shared<DiffIo>();
+        ioP->setIoBlocks(ioBlocks);
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         zeroMem_.resize(size);
         ioP->moveFrom(std::move(zeroMem_.forMove()));

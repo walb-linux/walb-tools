@@ -15,23 +15,22 @@ int main(UNUSED int argc, UNUSED char *argv[])
 {
     try{
         /* Read a wdiff file and show the contents. */
-        using DiffRecPtr = std::shared_ptr<walb::diff::WalbDiffRecord>;
-        using DiffIoPtr = std::shared_ptr<walb::diff::BlockDiffIo>;
+        using DiffRec = walb::diff::WalbDiffRecord;
+        using DiffIo = walb::diff::BlockDiffIo;
         using DiffHeaderPtr = std::shared_ptr<walb::diff::WalbDiffFileHeader>;
 
         walb::diff::WalbDiffReader wdiffR(0);
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
-        std::pair<DiffRecPtr, DiffIoPtr> p = wdiffR.readDiff();
-        DiffRecPtr recP = p.first;
-        DiffIoPtr ioP = p.second;
-        while (recP) {
-            if (!recP->isValid()) {
+
+        /* now editing */
+        DiffRec rec;
+        DiffIo io;
+        while (wdiffR.readDiff(rec, io)) {
+            if (!rec.isValid()) {
                 ::printf("Invalid record: ");
             }
-            recP->printOneline();
-            p = wdiffR.readDiff();
-            recP = p.first; ioP = p.second;
+            rec.printOneline();
         }
         return 0;
     } catch (std::runtime_error &e) {

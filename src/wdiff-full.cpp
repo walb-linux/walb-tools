@@ -40,9 +40,12 @@ public:
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            auto iop = std::make_shared<walb::diff::BlockDiffIo>(blks);
+            auto iop = std::make_shared<walb::diff::BlockDiffIo>();
+            iop->setIoBlocks(blks);
             iop->copyFrom(&buf0_[0], blks * LOGICAL_BLOCK_SIZE);
-            walb::diff::WalbDiffRecord rec(ioAddr, blks);
+            walb::diff::WalbDiffRecord rec;
+            rec.setIoAddress(ioAddr);
+            rec.setIoBlocks(blks);
             rec.setNormal();
             rec.setDataSize(blks * LOGICAL_BLOCK_SIZE);
             rec.setChecksum(iop->calcChecksum());

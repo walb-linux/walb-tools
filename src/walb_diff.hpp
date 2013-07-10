@@ -73,41 +73,6 @@ public:
         }
     }
 
-    /**
-     * For key.
-     */
-    WalbDiffRecord(uint64_t ioAddress0, uint16_t ioBlocks0)
-        : rec_() {
-        init();
-        setIoAddress(ioAddress0);
-        setIoBlocks(ioBlocks0);
-    }
-
-    /**
-     * Clone and get a portion.
-     */
-    WalbDiffRecord(const WalbDiffRecord &rec,
-                   uint64_t ioAddress0, uint16_t ioBlocks0,
-                   int compressionType = ::WALB_DIFF_CMPR_NONE,
-                   uint32_t compressedSize = 0)
-        : rec_(*rec.ptr<const struct walb_diff_record>()) {
-
-        /* Update metadata. */
-        setPortion(ioAddress0, ioBlocks0);
-
-        if (rec.isDiscard() || rec.isAllZero()) { return; }
-
-        if (compressionType == ::WALB_DIFF_CMPR_NONE) {
-            compressedSize = ioBlocks0 * LOGICAL_BLOCK_SIZE;
-        }
-        setCompressionType(compressionType);
-        setDataSize(compressedSize);
-
-        if (!isValid()) {
-            throw RT_ERR("record invalid.");
-        }
-    }
-
     virtual ~WalbDiffRecord() noexcept = default;
 
     WalbDiffRecord &operator=(const WalbDiffRecord &rhs) {
@@ -116,13 +81,28 @@ public:
     }
 
     bool isValid() const {
-        if (!exists()) { return false; }
-        if (!isNormal()) {
-            return dataSize() == 0;
+        if (!exists()) {
+            LOGd("Does not exist.\n");
+            return false;
         }
-        if (::WALB_DIFF_CMPR_MAX <= compressionType()) { return false; }
-        if (isAllZero() && isDiscard()) { return false; }
-        if (ioBlocks() == 0) { return false; }
+        if (!isNormal()) {
+            if (isAllZero() && isDiscard()) {
+                LOGd("allzero and discard flag is exclusive.\n");
+                return false;
+            }
+            if (dataSize() != 0) {
+                LOGd("dataSize must be 0.\n");
+            }
+            return true;
+        }
+        if (::WALB_DIFF_CMPR_MAX <= compressionType()) {
+            LOGd("compression type is invalid.\n");
+            return false;
+        }
+        if (ioBlocks() == 0) {
+            LOGd("ioBlocks() must not be 0 for normal IO.\n");
+            return false;
+        }
         return true;
     }
 
@@ -212,45 +192,69 @@ public:
         rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_DISCARD);
     }
-
+    /**
+     * Split a record into two records
+     * where the first record's ioBlocks will be a specified one.
+     *
+     * CAUSION:
+     *   The checksum of splitted records will be invalid state.
+     *   Only non-compressed records can be splitted.
+     */
+    std::pair<WalbDiffRecord, WalbDiffRecord> split(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
+            throw RT_ERR("split: ioBlocks0 is out or range.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("split: compressed data can not be splitted.");
+        }
+        WalbDiffRecord r0(*this), r1(*this);
+        uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
+        r0.setIoBlocks(ioBlocks0);
+        r1.setIoBlocks(ioBlocks1);
+        r1.setIoAddress(ioAddress() + ioBlocks0);
+        if (isNormal()) {
+            r0.setDataSize(ioBlocks0 * LOGICAL_BLOCK_SIZE);
+            r1.setDataSize(ioBlocks1 * LOGICAL_BLOCK_SIZE);
+        }
+        return std::make_pair(r0, r1);
+    }
+    /**
+     * Split a record into several records
+     * where all splitted records' ioBlocks will be <= a specified one.
+     *
+     * CAUSION:
+     *   The checksum of splitted records will be invalid state.
+     *   Only non-compressed records can be splitted.
+     */
+    std::vector<WalbDiffRecord> splitAll(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0) {
+            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("splitAll: compressed data can not be splitted.");
+        }
+        std::vector<WalbDiffRecord> v;
+        uint64_t addr = ioAddress();
+        uint16_t remaining = ioBlocks();
+        while (0 < remaining) {
+            uint16_t blks = std::min(ioBlocks0, remaining);
+            v.emplace_back(*this);
+            v.back().setIoAddress(addr);
+            v.back().setIoBlocks(blks);
+            if (isNormal()) {
+                v.back().setDataSize(blks * LOGICAL_BLOCK_SIZE);
+            }
+            addr += blks;
+            remaining -= blks;
+        }
+        assert(!v.empty());
+        return std::move(v);
+    }
 private:
     void init() {
         ::memset(&rec_, 0, sizeof(rec_));
         setExists();
     }
-
-    void setPortion(uint64_t ioAddress0, uint16_t ioBlocks0) {
-        assert(ioAddress() <= ioAddress0);
-        assert(ioAddress0 < ioAddress() + ioBlocks());
-        assert(ioAddress0 + ioBlocks0 <= ioAddress() + ioBlocks());
-
-        setIoAddress(ioAddress0);
-        setIoBlocks(ioBlocks0);
-    }
-};
-
-/**
- * Constant WalbDiffKeys.
- */
-struct WalbDiffKey : public WalbDiffRecord
-{
-    WalbDiffKey(uint64_t ioAddress, uint16_t ioBlocks)
-        : WalbDiffRecord(ioAddress, ioBlocks) {}
-    ~WalbDiffKey() noexcept override = default;
-
-    struct Min : public WalbDiffRecord {
-        Min() : WalbDiffRecord(uint64_t(0), uint16_t(0)) {}
-        ~Min() noexcept override = default;
-    };
-
-    struct Max : public WalbDiffRecord {
-        Max() : WalbDiffRecord(uint64_t(-1), 0) {}
-        ~Max() noexcept override = default;
-    };
-    struct Header : public WalbDiffRecord {
-        Header() : WalbDiffRecord(uint64_t(-1), uint16_t(-1)) {}
-        ~Header() noexcept override = default;
-    };
 };
 
 /**
@@ -264,23 +268,22 @@ private:
     std::vector<char> data_;
 
 public:
-    BlockDiffIo(uint16_t ioBlocks, int compressionType = ::WALB_DIFF_CMPR_NONE)
-        : ioBlocks_(ioBlocks)
-        , compressionType_(compressionType)
-        , data_() {
-    }
-
     BlockDiffIo()
         : ioBlocks_(0)
         , compressionType_(::WALB_DIFF_CMPR_NONE)
         , data_() {
     }
 
-    BlockDiffIo(const BlockDiffIo &) = delete;
+    BlockDiffIo(const BlockDiffIo &) = default;
     BlockDiffIo(BlockDiffIo &&) = default;
     virtual ~BlockDiffIo() noexcept = default;
 
-    BlockDiffIo &operator=(BlockDiffIo &) = delete;
+    BlockDiffIo &operator=(const BlockDiffIo &rhs) {
+        ioBlocks_ = rhs.ioBlocks_;
+        compressionType_ = rhs.compressionType_;
+        data_ = rhs.data_;
+        return *this;
+    }
     BlockDiffIo &operator=(BlockDiffIo &&rhs) {
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
@@ -288,28 +291,51 @@ public:
         return *this;
     }
 
-    void init(uint16_t ioBlocks, int compressionType = ::WALB_DIFF_CMPR_NONE) {
-        ioBlocks_ = ioBlocks;
-        compressionType_ = compressionType;
-    }
-
-    uint16_t getIoBlocks() const { return ioBlocks_; }
-    int getCompressionType() const { return compressionType_; }
+    uint16_t ioBlocks() const { return ioBlocks_; }
+    void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
+    int compressionType() const { return compressionType_; }
     void setCompressionType(int type) { compressionType_ = type; }
     bool isCompressed() const { return compressionType_ != ::WALB_DIFF_CMPR_NONE; }
 
-    void copyFrom(const char *data, size_t size) {
+    bool isValid() const {
+        if (ioBlocks_ == 0) {
+            if (!data_.empty()) {
+                LOGd("Data is not empty.\n");
+                return false;
+            }
+            return true;
+        } else {
+            if (isCompressed()) {
+                if (data_.size() == 0) {
+                    LOGd("data size is not 0: %zu\n", data_.size());
+                    return false;
+                }
+                return true;
+            } else {
+                if (data_.size() != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
+                    LOGd("dataSize is not the same: %zu %u\n"
+                         , data_.size(), ioBlocks_ * LOGICAL_BLOCK_SIZE);
+                    return false;
+                }
+                return true;
+            }
+        }
+    }
+
+    void copyFrom(const void *data, size_t size) {
         data_.resize(size);
         ::memcpy(&data_[0], data, size);
     }
     void moveFrom(std::vector<char> &&data) {
         data_ = std::move(data);
     }
+    const std::vector<char> &data() const { return data_; }
+    std::vector<char> &data() { return data_; }
     std::vector<char> &&forMove() { return std::move(data_); }
 
-    const char *rawData() const  { return &data_[0]; }
-    char *rawData()  { return &data_[0]; }
-    size_t rawSize() const  { return data_.size(); }
+    const char *rawData() const { return &data_[0]; }
+    char *rawData() { return &data_[0]; }
+    size_t rawSize() const { return data_.size(); }
 
     /**
      * Calculate checksum.
@@ -317,6 +343,65 @@ public:
     uint32_t calcChecksum() const {
         if (!rawData()) { return 0; }
         return cybozu::util::calcChecksum(rawData(), rawSize(), 0);
+    }
+
+    /**
+     * Split the IO into two IOs
+     * where the first IO's ioBlocks will be a specified one.
+     *
+     * CAUSION:
+     *   Compressed IO can not be splitted.
+     */
+    std::pair<BlockDiffIo, BlockDiffIo> split(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
+            throw RT_ERR("split: ioBlocks0 is out or range.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("split: compressed IO can not be splitted.");
+        }
+        assert(isValid());
+
+        BlockDiffIo r0, r1;
+        uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
+        r0.setIoBlocks(ioBlocks0);
+        r1.setIoBlocks(ioBlocks1);
+        size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
+        size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
+        r0.data_.resize(size0);
+        r1.data_.resize(size1);
+        ::memcpy(&r0.data_[0], &data_[0], size0);
+        ::memcpy(&r1.data_[0], &data_[size0], size1);
+
+        return std::make_pair(std::move(r0), std::move(r1));
+    }
+
+    std::vector<BlockDiffIo> splitAll(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0) {
+            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("splitAll: compressed IO can not be splitted.");
+        }
+        assert(isValid());
+
+        std::vector<BlockDiffIo> v;
+        uint16_t remaining = ioBlocks();
+        size_t off = 0;
+        while (0 < remaining) {
+            BlockDiffIo io;
+            uint16_t blks = std::min(remaining, ioBlocks0);
+            size_t size = blks * LOGICAL_BLOCK_SIZE;
+            io.setIoBlocks(blks);
+            io.data_.resize(size);
+            ::memcpy(&io.data_[0], &data_[off], size);
+            v.push_back(std::move(io));
+            remaining -= blks;
+            off += size;
+        }
+        assert(off == data_.size());
+        assert(!v.empty());
+
+        return std::move(v);
     }
 
     /**
@@ -332,6 +417,10 @@ public:
         return true;
     }
 
+    /**
+     * Compress an IO data.
+     * Supported algorithms: snappy.
+     */
     BlockDiffIo compress(int type) const {
         if (isCompressed()) {
             throw RT_ERR("Could not compress already compressed diff IO.");
@@ -339,39 +428,70 @@ public:
         if (type != ::WALB_DIFF_CMPR_SNAPPY) {
             throw RT_ERR("Currently only snappy is supported.");
         }
-        BlockDiffIo io(getIoBlocks(), type);
-        assert(0 < rawSize());
-        std::vector<char> data(snappy::MaxCompressedLength(rawSize()));
+        if (ioBlocks() == 0) {
+            return BlockDiffIo();
+        }
+        assert(isValid());
+        BlockDiffIo io;
+        io.setIoBlocks(ioBlocks());
+        io.setCompressionType(type);
+        io.data_.resize(snappy::MaxCompressedLength(rawSize()));
         size_t size;
-        snappy::RawCompress(rawData(), rawSize(), &data[0], &size);
-        data.resize(size);
-        io.moveFrom(std::move(data));
+        snappy::RawCompress(rawData(), rawSize(), io.rawData(), &size);
+        io.data_.resize(size);
         return std::move(io);
     }
 
+    /**
+     * Uncompress an IO data.
+     * Supported algorithms: snappy.
+     */
     BlockDiffIo uncompress() const {
         if (!isCompressed()) {
             throw RT_ERR("Need not uncompress already uncompressed diff IO.");
         }
-        if (getCompressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
+        if (compressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
             throw RT_ERR("Currently only snappy is supported.");
         }
-        BlockDiffIo io(getIoBlocks());
-        std::vector<char> data(getIoBlocks() * LOGICAL_BLOCK_SIZE);
-        assert(0 < rawSize());
+        if (ioBlocks() == 0) {
+            return BlockDiffIo();
+        }
+        BlockDiffIo io;
+        io.setIoBlocks(ioBlocks());
+        io.data_.resize(ioBlocks() * LOGICAL_BLOCK_SIZE);
         size_t size;
         if (!snappy::GetUncompressedLength(rawData(), rawSize(), &size)) {
             throw RT_ERR("snappy::GetUncompressedLength() failed.");
         }
-        if (size != data.size()) {
+        if (size != io.rawSize()) {
             throw RT_ERR("Uncompressed data size is not invaid.");
         }
-        if (!snappy::RawUncompress(rawData(), rawSize(), &data[0])) {
+        if (!snappy::RawUncompress(rawData(), rawSize(), io.rawData())) {
             throw RT_ERR("snappy::RawUncompress() failed.");
         }
-        io.moveFrom(std::move(data));
         return std::move(io);
     }
+
+    void print(::FILE *fp) const {
+        ::fprintf(fp,
+                  "ioBlocks %u\n"
+                  "type %d\n"
+                  "size %zu\n"
+                  "checksum %0x\n"
+                  , ioBlocks()
+                  , compressionType()
+                  , rawSize()
+                  , calcChecksum());
+    }
+    void print() const { print(::stdout); }
+    void printOneline(::FILE *fp) const {
+        ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
+                  , ioBlocks()
+                  , compressionType()
+                  , rawSize()
+                  , calcChecksum());
+    }
+    void printOneline() const { printOneline(::stdout); }
 };
 
 /**
@@ -459,7 +579,6 @@ public:
         : WalbDiffFileHeader(header_), header_() {}
     ~WalbDiffFileHeaderWithBody() noexcept = default;
 };
-
 
 /**
  * Walb diff pack wrapper.
@@ -642,15 +761,16 @@ public:
      * @rec record.
      * @iop may contains nullptr.
      */
-    void writeDiff(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop) {
-        if (!isWrittenHeader_) {
-            throw RT_ERR("Call writeHeader() before calling writeDiff().");
+    void writeDiff(const WalbDiffRecord &rec, const std::shared_ptr<BlockDiffIo> iop) {
+        checkWrittenHeader();
+        assert(rec.isValid());
+        if (iop) {
+            assert(iop->isValid());
         }
-
-        /* Check data size. */
-        if (0 < rec.dataSize() && rec.dataSize() != iop->rawSize()) {
-            throw RT_ERR("rec.dataSize() %zu iop.rawSize %zu differ.",
-                         rec.dataSize(), iop->rawSize());
+        if (rec.isNormal()) {
+            assert(rec.compressionType() == iop->compressionType());
+            assert(rec.dataSize() == iop->rawSize());
+            assert(rec.checksum() == iop->calcChecksum());
         }
 
         /* Try to add. */
@@ -659,13 +779,46 @@ public:
             return;
         }
 
-        /* Flush. */
+        /* Flush and add. */
         writePack();
-
-        /* Add. */
         UNUSED bool ret = pack_.add(*rec.rawRecord());
         assert(ret);
         ioPtrQ_.push(iop);
+    }
+
+    /**
+     * Compress and write a diff data.
+     *
+     * @rec record.
+     * @io IO data.
+     */
+    void compressAndWriteDiff(const WalbDiffRecord &rec, const BlockDiffIo &io) {
+        assert(rec.isValid());
+        assert(io.isValid());
+        assert(rec.compressionType() == io.compressionType());
+        assert(rec.dataSize() == io.rawSize());
+        if (rec.isNormal()) {
+            assert(rec.ioBlocks() == io.ioBlocks());
+            assert(rec.checksum() == io.calcChecksum());
+        }
+
+        auto iop = std::make_shared<BlockDiffIo>();
+        if (!rec.isNormal()) {
+            writeDiff(rec, iop);
+            return;
+        }
+
+        WalbDiffRecord rec0(rec);
+        if (rec.isCompressed()) {
+            /* copy */
+            *iop = io;
+        } else {
+            *iop = io.compress(::WALB_DIFF_CMPR_SNAPPY);
+            rec0.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
+            rec0.setDataSize(iop->rawSize());
+            rec0.setChecksum(iop->calcChecksum());
+        }
+        writeDiff(rec0, iop);
     }
 
     /**
@@ -702,6 +855,12 @@ private:
         pack_.setEnd();
         pack_.updateChecksum();
         fdw_.write(pack_.rawData(), pack_.rawSize());
+    }
+
+    void checkWrittenHeader() const {
+        if (!isWrittenHeader_) {
+            throw RT_ERR("Call writeHeader() before calling writeDiff().");
+        }
     }
 };
 
@@ -778,81 +937,46 @@ public:
     /**
      * Read a diff IO.
      *
-     * DO NOT GC the *this before collecting the returned object.
-     *
      * RETURN:
-     *   a pair (diff record, diff io data).
-     *   if the input stream reached the end, diff record will be nullptr.
+     *   false if the input stream reached the end.
      */
-    std::pair<std::shared_ptr<WalbDiffRecord>, std::shared_ptr<BlockDiffIo> > readDiff() {
-        if (!canRead()) {
-            return std::make_pair(nullptr, nullptr);
-        }
-        auto recp = std::make_shared<WalbDiffRecord>(
-            reinterpret_cast<const char*>(&pack_.record(recIdx_)),
-            sizeof(struct walb_diff_record));
-        std::shared_ptr<BlockDiffIo> iop = readDiffIo(*recp);
-
-        assert(recp);
-        if (recp->dataSize() == 0) {
-            //recp->printOneline(); /* debug */
-            assert(!iop);
-        } else {
-            assert(recp->dataSize() == iop->rawSize());
-        }
-        return std::make_pair(recp, iop);
-    }
-
-    /**
-     * Read a diff IO.
-     *
-     * RETURN:
-     *   False if the input stream reached the end.
-     */
-    bool readDiff(struct walb_diff_record &rec, std::vector<char> &data) {
+    bool readDiff(WalbDiffRecord &rec, BlockDiffIo &io) {
         if (!canRead()) return false;
-        rec = pack_.record(recIdx_);
-        WalbDiffRecord recW(rec);
-        data.resize(recW.dataSize());
-        readDiffIo(recW, &data[0]);
+        ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
+        if (!rec.isValid()) {
+            throw RT_ERR("Invalid record.");
+        }
+        readDiffIo(rec, io);
         return true;
     }
 
-    std::pair<std::shared_ptr<WalbDiffRecord>, std::shared_ptr<BlockDiffIo> > readDiffAndUncompress() {
-        auto recp = std::make_shared<WalbDiffRecord>();
-        std::vector<char> data;
-        if (!readDiffAndUncompress(*recp->rawRecord(), data)) {
-            return std::make_pair(nullptr, nullptr);
-        }
-        std::shared_ptr<BlockDiffIo> iop;
-        if (0 < recp->dataSize()) {
-            iop = std::make_shared<BlockDiffIo>(recp->ioBlocks());
-            iop->moveFrom(std::move(data));
-        }
-        return std::make_pair(recp, iop);
-    }
-
     /**
-     * Read and uncompress a diff IO.
+     * Read a diff IO and uncompress it.
+     *
      * RETURN:
-     *   False if the input stream reached in the end.
+     *   false if the input stream reached the end.
      */
-    bool readDiffAndUncompress(struct walb_diff_record &rec, std::vector<char> &data) {
-        if (!readDiff(rec, data)) return false;
-        WalbDiffRecord recW(rec);
-        if (!recW.isCompressed()) {
+    bool readAndUncompressDiff(WalbDiffRecord &rec, BlockDiffIo &io) {
+        WalbDiffRecord rec0;
+        BlockDiffIo io0;
+        if (!readDiff(rec0, io0)) {
+            rec0.clearExists();
+            rec = rec0;
+            io = std::move(io0);
+            return false;
+        }
+        if (!rec0.isCompressed()) {
+            rec = rec0;
+            io = std::move(io0);
             return true;
         }
-        BlockDiffIo io0(recW.ioBlocks(), recW.compressionType());
-        io0.moveFrom(std::move(data));
-        BlockDiffIo io1 = io0.uncompress();
-        recW.setDataSize(recW.ioBlocks() * LOGICAL_BLOCK_SIZE);
-        recW.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        recW.setChecksum(io1.calcChecksum());
-        data = io1.forMove();
-        assert(data.size() == recW.dataSize());
-        assert(recW.isValid());
-        rec = *recW.rawRecord();
+        rec = rec0;
+        io = io0.uncompress();
+        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
+        rec.setDataSize(io.rawSize());
+        rec.setChecksum(io.calcChecksum());
+        assert(rec.isValid());
+        assert(io.isValid());
         return true;
     }
 
@@ -888,40 +1012,22 @@ private:
 
     /**
      * Read a diff IO.
-     * RETURN:
-     *   shared pointer of BlockDiffIo.
-     *   If rec.dataSize() == 0, nullptr will be returned.
+     * @rec diff record.
+     * @io block IO to be filled.
+     *
+     * If rec.dataSize() == 0, io will not be changed.
      */
-    std::shared_ptr<BlockDiffIo> readDiffIo(const WalbDiffRecord &rec) {
+    void readDiffIo(const WalbDiffRecord &rec, BlockDiffIo &io) {
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }
-        std::vector<char> data;
-        std::shared_ptr<BlockDiffIo> iop;
         if (0 < rec.dataSize()) {
-            data.resize(rec.dataSize());
-            iop = std::make_shared<BlockDiffIo>(rec.ioBlocks(), rec.compressionType());
-        }
-        readDiffIo(rec, &data[0]);
-        if (0 < rec.dataSize()) {
-            iop->moveFrom(std::move(data));
-        }
-        return iop;
-    }
+            io.data().resize(rec.dataSize());
+            io.setIoBlocks(rec.ioBlocks());
+            io.setCompressionType(rec.compressionType());
 
-    /**
-     * Read a diff IO.
-     * @rec corresponding diff record.
-     * @data pointer to fill read IO data.
-     *   buffer size must be >= rec.dataSize().
-     */
-    void readDiffIo(const WalbDiffRecord &rec, char *data) {
-        if (rec.dataOffset() != totalSize_) {
-            throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
-        }
-        if (0 < rec.dataSize()) {
-            fdr_.read(data, rec.dataSize());
-            uint32_t csum = cybozu::util::calcChecksum(data, rec.dataSize(), 0);
+            fdr_.read(io.rawData(), io.rawSize());
+            uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.rawSize(), 0);
             if (rec.checksum() != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
             }
@@ -932,103 +1038,126 @@ private:
 };
 
 /**
- * Diff record and its data.
+ * Diff record and its IO data.
  * Data compression is not supported.
  */
-class RecData /* final */
+class DiffRecIo /* final */
 {
 private:
     WalbDiffRecord rec_;
-    std::vector<char> data_;
+    BlockDiffIo io_;
 public:
     struct walb_diff_record &rawRecord() { return *rec_.rawRecord(); }
     const struct walb_diff_record &rawRecord() const { return *rec_.rawRecord(); }
     WalbDiffRecord &record() { return rec_; }
     const WalbDiffRecord &record() const { return rec_; }
 
-    char *rawData() { return &data_[0]; }
-    const char *rawData() const { return &data_[0]; }
-    uint32_t rawSize() const { return data_.size(); }
+    BlockDiffIo &io() { return io_; }
+    const BlockDiffIo &io() const { return io_; }
 
-    void copyFrom(const struct walb_diff_record &rec, const void *data, size_t size) {
-        rawRecord() = rec;
-        if (rec_.isNormal()) {
-            data_.resize(size);
-            ::memcpy(&data_[0], data, size);
+    void copyFrom(const WalbDiffRecord &rec, const BlockDiffIo &io) {
+        rec_ = rec;
+        if (rec.isNormal()) {
+            io_.setIoBlocks(io.ioBlocks());
+            io_.setCompressionType(io.compressionType());
+            io_.data().resize(io.data().size());
+            ::memcpy(io_.rawData(), io.rawData(), io.rawSize());
         } else {
-            data_.resize(0);
+            io_ = BlockDiffIo();
         }
     }
-    void copyFrom(const WalbDiffRecord &rec, const std::shared_ptr<BlockDiffIo> iop) {
+    void moveFrom(const WalbDiffRecord &rec, BlockDiffIo &&io) {
         rec_ = rec;
-        assert(!iop->isCompressed());
-        if (rec_.isNormal()) {
-            assert(rec_.ioBlocks() * LOGICAL_BLOCK_SIZE == iop->rawSize());
-            data_.resize(iop->rawSize());
-            ::memcpy(&data_[0], iop->rawData(), iop->rawSize());
+        if (rec.isNormal()) {
+            io_ = std::move(io);
         } else {
-            data_.resize(0);
+            io_ = BlockDiffIo();
         }
     }
     void moveFrom(const WalbDiffRecord &rec, std::vector<char> &&data) {
         rec_ = rec;
-        data_ = std::move(data);
+        if (rec.isNormal()) {
+            io_.setIoBlocks(rec.ioBlocks());
+            io_.setCompressionType(rec.compressionType());
+            io_.data() = std::move(data);
+        } else {
+            io_ = BlockDiffIo();
+        }
     }
-    std::vector<char> &&forMove() { return std::move(data_); }
 
     void updateChecksum() {
-        rec_.setChecksum(calcCsum());
+        rec_.setChecksum(io_.calcChecksum());
     }
 
     bool isValid(bool isChecksum = false) const {
-        if (!rec_.isValid()) { return false; }
-        if (!rec_.isNormal()) { return true; }
-        if (rec_.isCompressed()) { return false; }
-        if (rec_.dataSize() != data_.size()) { return false; }
-        return isChecksum ? (rec_.checksum() == calcCsum()) : true;
+        if (!rec_.isValid()) {
+            LOGd("rec is not valid.\n");
+            return false;
+        }
+        if (!io_.isValid()) {
+            LOGd("io is not valid.\n");
+            return false;
+        }
+        if (!rec_.isNormal()) {
+            if (io_.ioBlocks() != 0) {
+                LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
+                return false;
+            }
+            return true;
+        }
+        if (rec_.ioBlocks() != io_.ioBlocks()) {
+            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks());
+            return false;
+        }
+        if (rec_.dataSize() != io_.rawSize()) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.rawSize());
+            return false;
+        }
+        if (rec_.isCompressed()) {
+            LOGd("DiffRecIo does not support compressed data.\n");
+            return false;
+        }
+        if (isChecksum && rec_.checksum() != io_.calcChecksum()) {
+            LOGd("checksum invalid %0x %0x\n", rec_.checksum(), io_.calcChecksum());
+            return false;
+        }
+        return true;
     }
 
     void print(::FILE *fp) const {
         rec_.printOneline(fp);
-        ::fprintf(fp, "size %zu checksum %0x\n"
-                  , data_.size()
-                  , cybozu::util::calcChecksum(&data_[0], data_.size(), 0));
+        io_.printOneline(fp);
     }
 
     void print() const { print(::stdout); }
 
     /**
-     * Split the RecData into pieces
+     * Split the DiffRecIo into pieces
      * where each ioBlocks is <= a specified one.
      */
-    std::vector<RecData> split(uint16_t ioBlocks) const {
+    std::vector<DiffRecIo> splitAll(uint16_t ioBlocks) const {
         assert(isValid());
-        std::vector<RecData> v;
-        uint64_t addr = rec_.ioAddress();
-        uint16_t remaining = rec_.ioBlocks();
+        std::vector<DiffRecIo> v;
 
-        while (0 < remaining) {
-            uint16_t blks = std::min(ioBlocks, remaining);
-            WalbDiffRecord rec(rec_);
-            size_t size = (rec.isNormal() ? blks * LOGICAL_BLOCK_SIZE : 0);
-            std::vector<char> data(size);
-            rec.setIoAddress(addr);
-            rec.setIoBlocks(blks);
-            rec.setDataSize(size);
-            if (rec.isNormal()) {
-                size_t off = (addr - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
-                ::memcpy(&data[0], rawData() + off, size);
-            }
-            RecData r;
-            r.moveFrom(rec, std::move(data));
+        std::vector<WalbDiffRecord> recV = rec_.splitAll(ioBlocks);
+        std::vector<BlockDiffIo> ioV;
+        if (rec_.isNormal()) {
+            ioV = io_.splitAll(ioBlocks);
+        } else {
+            ioV.resize(recV.size());
+        }
+        assert(recV.size() == ioV.size());
+        auto it0 = recV.begin();
+        auto it1 = ioV.begin();
+        while (it0 != recV.end() && it1 != ioV.end()) {
+            DiffRecIo r;
+            r.moveFrom(*it0, std::move(*it1));
             r.updateChecksum();
             assert(r.isValid());
             v.push_back(std::move(r));
-
-            addr += blks;
-            remaining -= blks;
+            ++it0;
+            ++it1;
         }
-        assert(addr == rec_.endIoAddress());
         return std::move(v);
     }
 
@@ -1038,13 +1167,13 @@ public:
      * The overlapped data of rhs will be used.
      * *this will not be changed.
      */
-    std::vector<RecData> minus(const RecData &rhs) const {
+    std::vector<DiffRecIo> minus(const DiffRecIo &rhs) const {
         assert(isValid(true));
         assert(rhs.isValid(true));
         if (!rec_.isOverlapped(rhs.rec_)) {
             throw RT_ERR("Non-overlapped.");
         }
-        std::vector<RecData> v;
+        std::vector<DiffRecIo> v;
         /*
          * Pattern 1:
          * __oo__ + xxxxxx = xxxxxx
@@ -1082,19 +1211,19 @@ public:
             if (rec_.isNormal()) {
                 size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
-                ::memcpy(&data0[0], &data_[0], size0);
-                ::memcpy(&data1[0], &data_[off1], size1);
+                ::memcpy(&data0[0], io_.rawData(), size0);
+                ::memcpy(&data1[0], io_.rawData() + off1, size1);
             }
 
             if (0 < blks0) {
-                RecData r;
+                DiffRecIo r;
                 r.moveFrom(rec0, std::move(data0));
                 r.updateChecksum();
                 assert(r.isValid());
                 v.push_back(std::move(r));
             }
             if (0 < blks1) {
-                RecData r;
+                DiffRecIo r;
                 r.moveFrom(rec1, std::move(data1));
                 r.updateChecksum();
                 assert(r.isValid());
@@ -1118,16 +1247,16 @@ public:
 
             size_t size = 0;
             if (rec_.isNormal()) {
-                size = data_.size() - rblks * LOGICAL_BLOCK_SIZE;
+                size = io_.rawSize() - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data(size);
             if (rec_.isNormal()) {
-                assert(rec_.dataSize() == data_.size());
+                assert(rec_.dataSize() == io_.rawSize());
                 rec.setDataSize(size);
-                ::memcpy(&data[0], &data_[0], size);
+                ::memcpy(&data[0], io_.rawData(), size);
             }
 
-            RecData r;
+            DiffRecIo r;
             r.moveFrom(rec, std::move(data));
             r.updateChecksum();
             assert(r.isValid());
@@ -1149,26 +1278,21 @@ public:
 
         size_t size = 0;
         if (rec_.isNormal()) {
-            size = data_.size() - off;
+            size = io_.rawSize() - off;
         }
         std::vector<char> data(size);
         if (rec_.isNormal()) {
-            assert(rec_.dataSize() == data_.size());
+            assert(rec_.dataSize() == io_.rawSize());
             rec.setDataSize(size);
-            ::memcpy(&data[0], &data_[off], size);
+            ::memcpy(&data[0], io_.rawData() + off, size);
         }
         assert(rhs.rec_.endIoAddress() == rec.ioAddress());
-        RecData r;
+        DiffRecIo r;
         r.moveFrom(rec, std::move(data));
         r.updateChecksum();
         assert(r.isValid());
         v.push_back(std::move(r));
         return std::move(v);
-    }
-
-private:
-    uint32_t calcCsum() const {
-        return cybozu::util::calcChecksum(&data_[0], data_.size(), 0);
     }
 };
 
@@ -1180,7 +1304,7 @@ class WalbDiffMemory
 {
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
-    std::map<uint64_t, RecData> map_;
+    std::map<uint64_t, DiffRecIo> map_;
     struct walb_diff_file_header h_;
     WalbDiffFileHeader fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
@@ -1197,8 +1321,11 @@ public:
         return false;
     }
     bool empty() const { return map_.empty(); }
-    bool add(const WalbDiffRecord &rec, const void *data, size_t size,
-             uint16_t maxIoBlocks) {
+
+    void add(const WalbDiffRecord &rec, const BlockDiffIo &io, uint16_t maxIoBlocks = 0) {
+        add(rec, BlockDiffIo(io), maxIoBlocks);
+    }
+    void add(const WalbDiffRecord &rec, BlockDiffIo &&io, uint16_t maxIoBlocks = 0) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.ioAddress();
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -1208,10 +1335,10 @@ public:
         }
         /* Search overlapped items. */
         uint64_t addr1 = rec.endIoAddress();
-        std::queue<RecData> q;
+        std::queue<DiffRecIo> q;
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
-            RecData &r = it->second;
+            DiffRecIo &r = it->second;
             if (r.record().isOverlapped(rec)) {
                 nIos_--;
                 nBlocks_ -= r.record().ioBlocks();
@@ -1222,11 +1349,12 @@ public:
             }
         }
         /* Eliminate overlaps. */
-        RecData r0;
-        r0.copyFrom(*rec.rawRecord(), data, size);
+        DiffRecIo r0;
+        r0.moveFrom(rec, std::move(io));
+        assert(r0.isValid());
         while (!q.empty()) {
-            std::vector<RecData> v = q.front().minus(r0);
-            for (RecData &r : v) {
+            std::vector<DiffRecIo> v = q.front().minus(r0);
+            for (DiffRecIo &r : v) {
                 nIos_++;
                 nBlocks_ += r.record().ioBlocks();
                 uint64_t addr = r.record().ioAddress();
@@ -1237,21 +1365,20 @@ public:
         /* Insert the item. */
         nIos_++;
         nBlocks_ += r0.record().ioBlocks();
-        std::vector<RecData> rv;
+        std::vector<DiffRecIo> rv;
         if (0 < maxIoBlocks && maxIoBlocks < rec.ioBlocks()) {
-            rv = r0.split(maxIoBlocks);
+            rv = r0.splitAll(maxIoBlocks);
         } else if (maxIoBlocks_ < rec.ioBlocks()) {
-            rv = r0.split(maxIoBlocks_);
+            rv = r0.splitAll(maxIoBlocks_);
         } else {
             rv.push_back(std::move(r0));
         }
-        for (RecData &r : rv) {
+        for (DiffRecIo &r : rv) {
             uint64_t addr = r.record().ioAddress();
             uint16_t blks = r.record().ioBlocks();
             map_.insert(std::make_pair(addr, std::move(r)));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
-        return true;
     }
     bool sync() {
         /* do nothing. */
@@ -1293,25 +1420,17 @@ public:
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecData &r = it->second;
-            WalbDiffRecord rec(r.record());
-            auto iop = std::make_shared<BlockDiffIo>(rec.ioBlocks());
-            if (rec.isNormal()) {
-                if (isCompressed) {
-                    std::vector<char> data(snappy::MaxCompressedLength(r.rawSize()));
-                    size_t size;
-                    snappy::RawCompress(r.rawData(), r.rawSize(), &data[0], &size);
-                    data.resize(size);
-                    iop->setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-                    iop->moveFrom(std::move(data));
-                    rec.setDataSize(size);
-                    rec.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-                    rec.setChecksum(iop->calcChecksum());
-                } else {
-                    iop->copyFrom(r.rawData(), r.rawSize());
+            const DiffRecIo &r = it->second;
+            assert(r.isValid());
+            if (isCompressed) {
+                writer.compressAndWriteDiff(r.record(), r.io());
+            } else {
+                auto iop = std::make_shared<BlockDiffIo>();
+                if (r.record().isNormal()) {
+                    *iop = r.io();
                 }
+                writer.writeDiff(r.record(), iop);
             }
-            writer.writeDiff(rec, iop);
             ++it;
         }
         writer.flush();
@@ -1334,23 +1453,8 @@ public:
             ++it;
         }
     }
-    bool add(const WalbDiffRecord &rec, std::shared_ptr<BlockDiffIo> iop,
-             uint16_t maxIoBlocks = 0) {
-        if (rec.isNormal()) {
-            return add(rec, iop->rawData(), iop->rawSize(), maxIoBlocks);
-        } else {
-            return add(rec, nullptr, 0, maxIoBlocks);
-        }
-    }
-    /**
-     * C-like interface of add().
-     */
-    bool add(const struct walb_diff_record &rawRec, const void *data, size_t size,
-             uint16_t maxIoBlocks = 0) {
-        return add(WalbDiffRecord(rawRec), data, size, maxIoBlocks);
-    }
 
-    using Map = std::map<uint64_t, RecData>;
+    using Map = std::map<uint64_t, DiffRecIo>;
     template <typename DiffMemory, typename MapIterator>
     class IteratorBase {
     protected:
@@ -1436,20 +1540,18 @@ public:
         ~Iterator() noexcept override = default;
         /**
          * Erase the item on the iterator.
-         * The iterator will indicate the removed item.
-         * CAUSION:
-         *   statistics will be incorrect.
+         * The iterator will indicate the next of the removed item.
          */
         void erase() {
             checkValid();
             mem_->nIos_--;
             mem_->nBlocks_ -= it_->second.record().ioBlocks();
-            mem_->map_.erase(it_);
+            it_ = mem_->map_.erase(it_);
             if (mem_->map_.empty()) {
                 mem_->fileH_.resetMaxIoBlocks();
             }
         }
-        RecData &recData() {
+        DiffRecIo &recIo() {
             return it_->second;
         }
     };

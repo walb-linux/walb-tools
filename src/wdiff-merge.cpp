@@ -35,26 +35,27 @@
 class WalbDiffMerger /* final */
 {
 private:
-    using Block = std::shared_ptr<uint8_t>;
     using DiffRecord = walb::diff::WalbDiffRecord;
-    using DiffRecordPtr = std::shared_ptr<DiffRecord>;
     using DiffIo = walb::diff::BlockDiffIo;
-    using DiffIoPtr = std::shared_ptr<DiffIo>;
-    using DiffData  = std::pair<DiffRecordPtr, DiffIoPtr>;
+    using DiffRecIo = walb::diff::DiffRecIo;
 
     class Wdiff {
     private:
         std::string wdiffPath_;
         mutable walb::diff::WalbDiffReader reader_;
         std::shared_ptr<walb::diff::WalbDiffFileHeader> headerP_;
-        mutable DiffData buf_;
+        mutable DiffRecord rec_;
+        mutable DiffIo io_;
+        mutable bool isFilled_;
         mutable bool isEnd_;
 
     public:
         Wdiff(const std::string &wdiffPath)
             : wdiffPath_(wdiffPath), reader_(wdiffPath, O_RDONLY)
             , headerP_(reader_.readHeader())
-            , buf_()
+            , rec_()
+            , io_()
+            , isFilled_(false)
             , isEnd_(false) {}
 
         const std::string &path() const { return wdiffPath_; }
@@ -62,37 +63,31 @@ private:
         walb::diff::WalbDiffReader &reader() { return reader_; }
         walb::diff::WalbDiffFileHeader &header() { return *headerP_; }
 
-        DiffData &front() {
-            if (!isEnd_) { fill(); }
-            return buf_;
+        const DiffRecord &front() {
+            fill();
+            assert(isFilled_);
+            return rec_;
         }
 
-        void pop() {
-            if (isEnd_) { return; }
+        void pop(DiffIo &io) {
+            if (isEnd()) return;
 
             /* for check */
-            uint64_t endIoAddr = 0;
-            if (isDiffData(buf_)) {
-                DiffRecordPtr recp = buf_.first;
-                endIoAddr = recp->endIoAddress();
-            }
+            uint64_t endIoAddr0 = rec_.endIoAddress();
 
+            assert(isFilled_);
+            io = std::move(io_);
+            isFilled_ = false;
             fill();
-            buf_ = reader_.readDiffAndUncompress();
 
             /* for check */
-            if (isDiffData(buf_)) {
-                DiffRecordPtr recp = buf_.first;
-                if (!(endIoAddr <= recp->ioAddress())) {
-                    throw RT_ERR("Invalid wdiff: IOs must be sorted and not overlapped each other.");
-                }
+            if (!isEnd() && rec_.ioAddress() < endIoAddr0) {
+                throw RT_ERR("Invalid wdiff: IOs must be sorted and not overlapped each other.");
             }
         }
 
         bool isEnd() const {
-            if (isEnd_) { return true; }
             fill();
-            isEnd_ = !isDiffData(buf_);
             return isEnd_;
         }
 
@@ -103,20 +98,21 @@ private:
          *   or maximum value.
          */
         uint64_t currentAddress() const {
-            if (isEnd()) { return uint64_t(-1); }
-            DiffRecordPtr recp = buf_.first;
-            return recp->ioAddress();
+            if (isEnd()) return uint64_t(-1);
+            assert(isFilled_);
+            return rec_.ioAddress();
         }
 
     private:
-        bool isDiffData(const DiffData &diffData) const {
-            const DiffRecordPtr p = diffData.first;
-            return p.get() != nullptr;
-        }
-
         void fill() const {
-            if (!isDiffData(buf_)) {
-                buf_ = reader_.readDiffAndUncompress();
+            if (isEnd_ || isFilled_) return;
+            if (reader_.readAndUncompressDiff(rec_, io_)) {
+                isFilled_ = true;
+            } else {
+                rec_.clearExists();
+                io_ = DiffIo();
+                isFilled_ = false;
+                isEnd_ = true;
             }
         }
     };
@@ -172,12 +168,13 @@ public:
         while (!wdiffs_.empty()) {
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-                DiffRecordPtr recp;
-                DiffIoPtr iop;
-                std::tie(recp, iop) = wdiffs_[i]->front();
-                if (canMergeIo(i, recp)) {
-                    mergeIo(recp, iop, maxIoBlocks);
-                    wdiffs_[i]->pop();
+                DiffRecord rec(wdiffs_[i]->front());
+                assert(rec.isValid());
+                if (canMergeIo(i, rec)) {
+                    DiffIo io;
+                    wdiffs_[i]->pop(io);
+                    assert(io.isValid());
+                    mergeIo(rec, std::move(io), maxIoBlocks);
                 }
             }
             removeEndedWdiffs();
@@ -193,16 +190,14 @@ private:
      * Move all IOs which ioAddress + ioBlocks <= maxAddr
      * to a specified queue.
      */
-    void moveToQueueUpto(std::queue<DiffData> &q, uint64_t maxAddr) {
+    void moveToQueueUpto(std::queue<DiffRecIo> &q, uint64_t maxAddr) {
         auto it = wdiffMem_.iterator();
         it.begin();
         while (it.isValid() && it.record().endIoAddress() <= maxAddr) {
-            auto recp = std::make_shared<DiffRecord>(it.record());
-            auto iop = std::make_shared<DiffIo>(recp->ioBlocks());
-            iop->moveFrom(it.recData().forMove());
-            q.push(std::make_pair(recp, iop));
+            walb::diff::DiffRecIo r = std::move(it.recIo());
+            assert(r.isValid());
+            q.push(std::move(r));
             it.erase();
-            it.next();
         }
     }
 
@@ -210,23 +205,13 @@ private:
      * Write all wdiff IOs which ioAddress + ioBlocks <= maxAddr.
      */
     void writeDiffUpto(walb::diff::WalbDiffWriter &wdiffWriter, uint64_t maxAddr) {
-        std::queue<DiffData> q;
+        std::queue<DiffRecIo> q;
         moveToQueueUpto(q, maxAddr);
         while (!q.empty()) {
-            DiffRecordPtr recp;
-            DiffIoPtr iop0, iop1;
-            std::tie(recp, iop0) = q.front();
+            DiffRecIo r = std::move(q.front());
             q.pop();
-            if (recp->isNormal()) {
-                iop1 = std::make_shared<DiffIo>(recp->ioBlocks(), ::WALB_DIFF_CMPR_SNAPPY);
-                *iop1 = iop0->compress(::WALB_DIFF_CMPR_SNAPPY);
-                recp->setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-                recp->setDataSize(iop1->rawSize());
-                recp->setChecksum(iop1->calcChecksum());
-            } else {
-                iop1 = iop0;
-            }
-            wdiffWriter.writeDiff(*recp, iop1);
+            assert(r.isValid());
+            wdiffWriter.compressAndWriteDiff(r.record(), r.io());
         }
     }
 
@@ -252,17 +237,15 @@ private:
         }
     }
 
-    void mergeIo(DiffRecordPtr recp, DiffIoPtr iop, uint16_t maxIoBlocks) {
-        assert(!recp->isCompressed());
-        wdiffMem_.add(*recp, iop, maxIoBlocks);
+    void mergeIo(const DiffRecord &rec, DiffIo &&io, uint16_t maxIoBlocks) {
+        assert(!rec.isCompressed());
+        wdiffMem_.add(rec, std::move(io), maxIoBlocks);
     }
 
-    bool canMergeIo(size_t i, DiffRecordPtr recp) {
-        if (i == 0) { return true; }
-        assert(recp);
-        uint64_t endIoAddr = recp->endIoAddress();
+    bool canMergeIo(size_t i, const DiffRecord &rec) {
+        if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
-            if (!(endIoAddr <= wdiffs_[j]->currentAddress())) {
+            if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {
                 return false;
             }
         }
