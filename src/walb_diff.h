@@ -22,9 +22,11 @@ extern "C" {
 
 /**
  * Walb diff flag bit indicators.
+ *
+ * ALLZERO and DISCARD is exclusive.
  */
 enum {
-    WALB_DIFF_FLAG_NORMAL = 0,
+    WALB_DIFF_FLAG_EXIST = 0,
     WALB_DIFF_FLAG_ALLZERO,
     WALB_DIFF_FLAG_DISCARD,
     WALB_DIFF_FLAGS_MAX,

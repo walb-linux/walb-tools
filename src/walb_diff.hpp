@@ -45,7 +45,6 @@ public:
     WalbDiffRecord()
         : rec_() {
         init();
-        setNormal();
     }
 
     /**
@@ -117,6 +116,7 @@ public:
     }
 
     bool isValid() const {
+        if (!exists()) { return false; }
         if (!isNormal()) {
             return dataSize() == 0;
         }
@@ -146,6 +146,9 @@ public:
     uint32_t dataSize() const { return rec_.data_size; }
     uint32_t checksum() const { return rec_.checksum; }
 
+    bool exists() const {
+        return (rec_.flags & (1U << ::WALB_DIFF_FLAG_EXIST)) != 0;
+    }
     bool isAllZero() const {
         return (rec_.flags & (1U << ::WALB_DIFF_FLAG_ALLZERO)) != 0;
     }
@@ -153,7 +156,7 @@ public:
         return (rec_.flags & (1U << ::WALB_DIFF_FLAG_DISCARD)) != 0;
     }
     bool isNormal() const {
-        return (rec_.flags & (1U << ::WALB_DIFF_FLAG_NORMAL)) != 0;
+        return !isAllZero() && !isDiscard();
     }
 
     void print(::FILE *fp) const {
@@ -164,12 +167,12 @@ public:
                   "dataOffset: %u\n"
                   "dataSize: %u\n"
                   "checksum: %08x\n"
-                  "isNormal: %d\n"
+                  "exists: %d\n"
                   "isAllZero: %d\n"
                   "isDiscard: %d\n",
                   ioAddress(), ioBlocks(),
                   compressionType(), dataOffset(), dataSize(),
-                  checksum(), isNormal(), isAllZero(), isDiscard());
+                  checksum(), exists(), isAllZero(), isDiscard());
     }
 
     void print() const { print(::stdout); }
@@ -178,7 +181,7 @@ public:
         ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
                   ioAddress(), ioBlocks(),
                   compressionType(), dataOffset(), dataSize(),
-                  checksum(), isNormal(), isAllZero(), isDiscard());
+                  checksum(), exists(), isAllZero(), isDiscard());
     }
 
     void printOneline() const { printOneline(::stdout); }
@@ -190,18 +193,22 @@ public:
     void setDataSize(uint32_t size) { rec_.data_size = size; }
     void setChecksum(uint32_t csum) { rec_.checksum = csum; }
 
+    void setExists() {
+        rec_.flags |= (1U << ::WALB_DIFF_FLAG_EXIST);
+    }
+    void clearExists() {
+        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_EXIST);
+    }
+
     void setNormal() {
-        rec_.flags |= (1U << ::WALB_DIFF_FLAG_NORMAL);
         rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
         rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
     }
     void setAllZero() {
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_NORMAL);
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_ALLZERO);
         rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
     }
     void setDiscard() {
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_NORMAL);
         rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
         rec_.flags |= (1U << ::WALB_DIFF_FLAG_DISCARD);
     }
@@ -209,6 +216,7 @@ public:
 private:
     void init() {
         ::memset(&rec_, 0, sizeof(rec_));
+        setExists();
     }
 
     void setPortion(uint64_t ioAddress0, uint16_t ioBlocks0) {
