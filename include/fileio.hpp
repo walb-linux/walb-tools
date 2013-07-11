@@ -79,6 +79,13 @@ public:
     }
 
     /**
+     * true if seekable.
+     */
+    bool seekable() {
+        return ::lseek(fd_, 0, SEEK_CUR) != -1;
+    }
+
+    /**
      * lseek.
      */
     void lseek(off_t oft, int whence) {
