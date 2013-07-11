@@ -15,6 +15,12 @@
 #include "walb_diff.hpp"
 #include "walb_diff_merge.hpp"
 
+/**
+ * Virtual full image scanner.
+ *
+ * (1) Call readAndWriteTo() to write all the data to a file descriptor.
+ * (2) Call read() multiple times for various purposes.
+ */
 class VirtualFullScanner
 {
 private:
@@ -28,6 +34,11 @@ private:
     bool isEndDiff_; /* true if there is no more wdiff IO. */
 
 public:
+    /**
+     * @inputFd a base image file descriptor.
+     *   stdin (non-seekable) or a raw image file or a block device.
+     * @wdiffPaths walb diff files. Each wdiff is sorted by time.
+     */
     VirtualFullScanner(int inputFd, const std::vector<std::string> &wdiffPaths)
         : reader_(inputFd)
         , isInputFdSeekable_(reader_.seekable())
@@ -42,8 +53,11 @@ public:
     }
     /**
      * Write all data to a specified fd.
+     *
+     * @outputFd output file descriptor.
+     * @bufSize buffer size [byte].
      */
-    void readAndWriteTo(int outputFd, size_t bufSize = 4096) {
+    void readAndWriteTo(int outputFd, size_t bufSize) {
         cybozu::util::FdWriter writer(outputFd);
         std::shared_ptr<char> buf =
             cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, bufSize);
