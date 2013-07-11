@@ -77,7 +77,7 @@ public:
             /* Read wdiff IO partially. */
             uint16_t blks0 = std::min(blks, currentDiffBlocks());
             readWdiff(data, blks0);
-            return blks0;
+            return blks0 * LOGICAL_BLOCK_SIZE;
         }
         /* Read the base image. */
         uint16_t blks0 = blks;
@@ -116,13 +116,20 @@ private:
      */
     void readWdiff(char *data, size_t blks) {
         assert(recIo_.isValid());
+        const walb::diff::WalbDiffRecord &rec = recIo_.record();
         const walb::diff::BlockDiffIo &io = recIo_.io();
-        assert(offInIo_ < io.ioBlocks());
-        assert(!io.isCompressed());
-        size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
-        ::memcpy(data, io.rawData() + off, blks * LOGICAL_BLOCK_SIZE);
+        assert(offInIo_ < rec.ioBlocks());
+        if (rec.isNormal()) {
+            assert(!io.isCompressed());
+            size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
+            ::memcpy(data, io.rawData() + off, blks * LOGICAL_BLOCK_SIZE);
+        } else {
+            /* Read zero image for both ALL_ZERO and DISCARD.. */
+            assert(rec.isDiscard() || rec.isAllZero());
+            ::memset(data, 0, blks * LOGICAL_BLOCK_SIZE);
+        }
         offInIo_ += blks;
-        assert(offInIo_ <= io.ioBlocks());
+        assert(offInIo_ <= rec.ioBlocks());
 
         /* Skip to read the base image. */
         for (size_t i = 0; i < blks; i++) {
@@ -137,9 +144,10 @@ private:
      */
     void fillDiffIo() {
         if (isEndDiff_) return;
-        /* At beginning time, recIo_.io().ioBlocks() returns 0. */
-        assert(offInIo_ <= recIo_.io().ioBlocks());
-        if (offInIo_ == recIo_.io().ioBlocks()) {
+        walb::diff::WalbDiffRecord &rec = recIo_.record();
+        /* At beginning time, rec.ioBlocks() returns 0. */
+        assert(offInIo_ <= rec.ioBlocks());
+        if (offInIo_ == rec.ioBlocks()) {
             offInIo_ = 0;
             if (!merger_.pop(recIo_)) {
                 isEndDiff_ = true;
@@ -161,7 +169,7 @@ struct Option : public cybozu::Option
     std::string inputPath;
     std::string outputPath;
     std::vector<std::string> inputWdiffs;
-    uint32_t blockSize;
+    uint32_t bufferSize;
     Option() {
         setDescription("\nvirt-full-cat:\n"
                        "  Full scan of virtul full image that consists\n"
@@ -170,7 +178,7 @@ struct Option : public cybozu::Option
         appendOpt(&inputPath, "-", "i", "Input full image path. '-' means stdin. (default '-')");
         appendOpt(&outputPath, "-", "o", "Output full image path. '-' means stdout. (default '-')");
         appendVec(&inputWdiffs, "d", "Input wdiff paths");
-        appendOpt(&blockSize, 64U << 10, "b", "Block size [byte].");
+        appendOpt(&blockSize, 2 << 16, "b", "Buffer size [byte].");
         appendHelp("h");
     }
     bool parse(int argc, char *argv[]) {
@@ -211,7 +219,7 @@ int main(int argc, char *argv[])
             outFd = outFo->fd();
         }
         VirtualFullScanner scanner(inFd, opt.inputWdiffs);
-        scanner.readAndWriteTo(outFd);
+        scanner.readAndWriteTo(outFd, opt.bufferSize);
         if (outFo) outFo->close();
 
 #if 0
@@ -221,7 +229,7 @@ int main(int argc, char *argv[])
             ::printf("%s\n", s.c_str());
         }
         ::printf("%u %s\n%s\n"
-                 , opt.blockSize
+                 , opt.bufferSize
                  , opt.inputPath.c_str()
                  , opt.outputPath.c_str());
 #endif
