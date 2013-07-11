@@ -18,6 +18,7 @@ class VirtualFullScanner
 {
 private:
     cybozu::util::FdReader reader_;
+    const bool isInputFdSeekable_;
     walb::diff::WalbDiffMerger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     walb::diff::DiffRecIo recIo_; /* current diff rec IO. */
@@ -27,6 +28,7 @@ private:
 public:
     VirtualFullScanner(int inputFd, const std::vector<std::string> &wdiffPaths)
         : reader_(inputFd)
+        , isInputFdSeekable_(reader_.seekable())
         , merger_()
         , addr_(0)
         , recIo_()
@@ -76,8 +78,7 @@ public:
         if (addr_ == diffAddr) {
             /* Read wdiff IO partially. */
             uint16_t blks0 = std::min(blks, currentDiffBlocks());
-            readWdiff(data, blks0);
-            return blks0 * LOGICAL_BLOCK_SIZE;
+            return readWdiff(data, blks0);
         }
         /* Read the base image. */
         uint16_t blks0 = blks;
@@ -113,8 +114,10 @@ private:
      * Read from the current diff IO.
      * @data buffer.
      * @blks [logical block]. This must be <= remaining size.
+     * RETURN:
+     *   really read size [byte].
      */
-    void readWdiff(char *data, size_t blks) {
+    size_t readWdiff(char *data, size_t blks) {
         assert(recIo_.isValid());
         const walb::diff::WalbDiffRecord &rec = recIo_.record();
         const walb::diff::BlockDiffIo &io = recIo_.io();
@@ -130,14 +133,22 @@ private:
         }
         offInIo_ += blks;
         assert(offInIo_ <= rec.ioBlocks());
-
-        /* Skip to read the base image. */
-        for (size_t i = 0; i < blks; i++) {
-            char buf[LOGICAL_BLOCK_SIZE];
-            reader_.read(buf, LOGICAL_BLOCK_SIZE);
-        }
-
+        skipBase(blks);
         addr_ += blks;
+        return blks * LOGICAL_BLOCK_SIZE;
+    }
+    /**
+     * Skip to read the base image.
+     */
+    void skipBase(size_t blks) {
+        if (isInputFdSeekable_) {
+            reader_.lseek(blks * LOGICAL_BLOCK_SIZE, SEEK_CUR);
+        } else {
+            for (size_t i = 0; i < blks; i++) {
+                char buf[LOGICAL_BLOCK_SIZE];
+                reader_.read(buf, LOGICAL_BLOCK_SIZE);
+            }
+        }
     }
     /**
      * Set recIo_ approximately.
@@ -178,7 +189,7 @@ struct Option : public cybozu::Option
         appendOpt(&inputPath, "-", "i", "Input full image path. '-' means stdin. (default '-')");
         appendOpt(&outputPath, "-", "o", "Output full image path. '-' means stdout. (default '-')");
         appendVec(&inputWdiffs, "d", "Input wdiff paths");
-        appendOpt(&blockSize, 2 << 16, "b", "Buffer size [byte].");
+        appendOpt(&bufferSize, 2 << 16, "b", "Buffer size [byte].");
         appendHelp("h");
     }
     bool parse(int argc, char *argv[]) {
