@@ -14,9 +14,10 @@ OPT_FLAGS += -pg
 else
 endif
 
+INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
 INCLUDES_WALB = -I./walb/include -I./walb/tool
 
-CFLAGS = -Wall -Wextra -I./cybozulib/include -I./include -I./src $(OPT_FLAGS) $(INCLUDES_WALB)
+CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB)
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
