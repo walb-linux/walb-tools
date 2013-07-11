@@ -21,3 +21,4 @@ wlog-to-wdiff
 wlog-update
 write_overlapped_and_verify
 write_random_data
+virt-full-cat
