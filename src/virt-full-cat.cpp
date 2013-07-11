@@ -10,15 +10,17 @@
 #include <string>
 #include <memory>
 #include "cybozu/option.hpp"
+#include "memory_buffer.hpp"
+#include "fileio.hpp"
 #include "walb_diff.hpp"
 #include "walb_diff_merge.hpp"
-#include "fileio.hpp"
 
 class VirtualFullScanner
 {
 private:
     cybozu::util::FdReader reader_;
     const bool isInputFdSeekable_;
+    std::shared_ptr<char> bufForSkip_;
     walb::diff::WalbDiffMerger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     walb::diff::DiffRecIo recIo_; /* current diff rec IO. */
@@ -29,6 +31,7 @@ public:
     VirtualFullScanner(int inputFd, const std::vector<std::string> &wdiffPaths)
         : reader_(inputFd)
         , isInputFdSeekable_(reader_.seekable())
+        , bufForSkip_(allocateBufForSkipStatic(isInputFdSeekable_))
         , merger_()
         , addr_(0)
         , recIo_()
@@ -42,10 +45,11 @@ public:
      */
     void readAndWriteTo(int outputFd, size_t bufSize = 4096) {
         cybozu::util::FdWriter writer(outputFd);
-        std::vector<char> buf(bufSize);
+        std::shared_ptr<char> buf =
+            cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, bufSize);
         size_t rSize;
-        while (0 < (rSize = read(&buf[0], bufSize))) {
-            writer.write(&buf[0], rSize);
+        while (0 < (rSize = read(buf.get(), bufSize))) {
+            writer.write(buf.get(), rSize);
         }
         writer.fdatasync();
     }
@@ -145,8 +149,8 @@ private:
             reader_.lseek(blks * LOGICAL_BLOCK_SIZE, SEEK_CUR);
         } else {
             for (size_t i = 0; i < blks; i++) {
-                char buf[LOGICAL_BLOCK_SIZE];
-                reader_.read(buf, LOGICAL_BLOCK_SIZE);
+                assert(bufForSkip_);
+                reader_.read(bufForSkip_.get(), LOGICAL_BLOCK_SIZE);
             }
         }
     }
@@ -172,6 +176,15 @@ private:
     uint16_t currentDiffBlocks() const {
         assert(offInIo_ <= recIo_.record().ioBlocks());
         return recIo_.record().ioBlocks() - offInIo_;
+    }
+
+    static std::shared_ptr<char> allocateBufForSkipStatic(bool isInputFdSeekable) {
+        if (isInputFdSeekable) {
+            return nullptr;
+        } else {
+            return cybozu::util::allocateBlocks<char>(
+                LOGICAL_BLOCK_SIZE, LOGICAL_BLOCK_SIZE);
+        }
     }
 };
 
