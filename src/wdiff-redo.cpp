@@ -11,7 +11,7 @@
 #include <getopt.h>
 
 #include "util.hpp"
-#include "walb_diff.hpp"
+#include "walb_diff_file.hpp"
 
 /**
  * Command line configuration.

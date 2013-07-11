@@ -11,7 +11,8 @@
 #include <cstdio>
 #include <cassert>
 #include "fileio.hpp"
-#include "walb_diff.hpp"
+#include "walb_diff_base.hpp"
+#include "walb_diff_file.hpp"
 #include "memory_buffer.hpp"
 
 class FullImageToWalbDiffConverter

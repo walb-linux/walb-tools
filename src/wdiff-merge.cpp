@@ -24,8 +24,6 @@
 #include "cybozu/option.hpp"
 
 #include "util.hpp"
-#include "walb_log.hpp"
-#include "walb_diff.hpp"
 #include "walb_diff_merge.hpp"
 
 #include <sys/types.h>

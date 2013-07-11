@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief walb diff merger.
+ * @brief walb diff virtual full image scanner.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -12,7 +12,9 @@
 #include "cybozu/option.hpp"
 #include "memory_buffer.hpp"
 #include "fileio.hpp"
-#include "walb_diff.hpp"
+#include "walb_diff_base.hpp"
+#include "walb_diff_file.hpp"
+#include "walb_diff_mem.hpp"
 #include "walb_diff_merge.hpp"
 
 #ifndef WALB_DIFF_VIRT_HPP

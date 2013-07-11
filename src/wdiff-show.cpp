@@ -9,7 +9,7 @@
 #include <cstdio>
 
 #include "util.hpp"
-#include "walb_diff.hpp"
+#include "walb_diff_file.hpp"
 
 int main(UNUSED int argc, UNUSED char *argv[])
 {

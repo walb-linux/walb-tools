@@ -23,7 +23,8 @@
 
 #include "util.hpp"
 #include "walb_log.hpp"
-#include "walb_diff.hpp"
+#include "walb_diff_file.hpp"
+#include "walb_diff_mem.hpp"
 #include "simple_logger.hpp"
 
 /**
