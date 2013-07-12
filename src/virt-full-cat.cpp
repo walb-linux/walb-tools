@@ -47,11 +47,6 @@ struct Option : public cybozu::Option
 int main(int argc, char *argv[])
 {
     try {
-#if 0
-        for (int i = 0; i < argc; i++) {
-            ::printf("%s\n", argv[i]);
-        }
-#endif
         Option opt;
         if (!opt.parse(argc, argv)) return 1;
 
@@ -71,19 +66,6 @@ int main(int argc, char *argv[])
         walb::diff::VirtualFullScanner scanner(inFd, opt.inputWdiffs);
         scanner.readAndWriteTo(outFd, opt.bufferSize);
         if (outFo) outFo->close();
-
-#if 0
-        opt.put();
-
-        for (std::string &s : opt.inputWdiffs) {
-            ::printf("%s\n", s.c_str());
-        }
-        ::printf("%u %s\n%s\n"
-                 , opt.bufferSize
-                 , opt.inputPath.c_str()
-                 , opt.outputPath.c_str());
-#endif
-
         return 0;
     } catch (std::runtime_error &e) {
         ::fprintf(::stderr, "%s\n", e.what());
