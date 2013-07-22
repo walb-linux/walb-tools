@@ -21,12 +21,7 @@ struct Option : public cybozu::Option
         appendHelp("h");
     }
     bool parse(int argc, char *argv[]) {
-        if (!cybozu::Option::parse(argc, argv)) return false;
-        //if (wdevNameV.empty()) goto error;
-        return true;
-      error:
-        usage();
-        return false;
+        return cybozu::Option::parse(argc, argv);
     }
 };
 

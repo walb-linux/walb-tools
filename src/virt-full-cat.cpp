@@ -21,10 +21,16 @@ struct Option : public cybozu::Option
     std::vector<std::string> inputWdiffs;
     uint32_t bufferSize;
     Option() {
-        setDescription("\nvirt-full-cat:\n"
-                       "  Full scan of virtul full image that consists\n"
-                       "  a base full image and additional wdiff files.\n");
-        setUsage("Usage: virt-full-cat (options) -i [input image] -d [input wdiffs] -o [output image]");
+        setUsage("virt-full-cat:\n"
+                 "  Full scan of virtul full image that consists\n"
+                 "  a base full image and additional wdiff files.\n"
+                 "Usage: virt-full-cat (options) -i [input image] -d [input wdiffs] -o [output image]\n"
+                 "Options:\n"
+                 "  -i arg:  Input full image path. '-' means stdin. (default '-')\n"
+                 "  -o arg:  Output full image path. '-' means stdout. (default '-')\n"
+                 "  -w args: Input wdiff paths\n"
+                 "  -b arg:  Buffer size [byte]. default: '64K'\n"
+                 "  -h:      Show this help message.\n");
         appendOpt(&inputPath, "-", "i", "Input full image path. '-' means stdin. (default '-')");
         appendOpt(&outputPath, "-", "o", "Output full image path. '-' means stdout. (default '-')");
         appendVec(&inputWdiffs, "d", "Input wdiff paths");

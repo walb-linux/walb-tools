@@ -31,14 +31,10 @@ public:
     }
     void run() {
         uint32_t i;
-        if (sock_.readAll(reinterpret_cast<char *>(&i), sizeof(i)) != cybozu::Socket::NOERR) {
-            throw std::runtime_error("recv failed.");
-        }
+        sock_.readAll(&i, sizeof(i));
         ::printf("recv %u\n", i);
         i++;
-        if (sock_.writeAll(reinterpret_cast<char *>(&i), sizeof(i)) != cybozu::Socket::NOERR) {
-            throw std::runtime_error("send failed.");
-        }
+        sock_.writeAll(&i, sizeof(i));
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 };

@@ -23,14 +23,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (!sock.writeAll(reinterpret_cast<char *>(&val), sizeof(val))) {
-        ::printf("send failed.\n");
-        return 1;
-    }
-    if (!sock.readAll(reinterpret_cast<char *>(&val), sizeof(val))) {
-        ::printf("recv failed.\n");
-        return 1;
-    }
+    sock.writeAll(&val, sizeof(val));
+    sock.readAll(&val, sizeof(val));
     ::printf("recv %u\n", val);
     return 0;
 }
