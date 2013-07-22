@@ -12,9 +12,12 @@
 #include <thread>
 #include <memory>
 #include <queue>
+#include <deque>
 #include <string>
 #include <exception>
 #include <vector>
+#include <atomic>
+#include <cassert>
 
 /**
  * Thread utilities.
@@ -49,12 +52,12 @@ protected:
     std::string name_;
     std::promise<void> promise_;
     std::shared_future<void> future_;
-    bool isEnd_;
+    std::atomic<bool> isEnd_;
 
     void throwErrorLater(std::exception_ptr p) {
         if (isEnd_) { return; }
         promise_.set_exception(p);
-        isEnd_ = true;
+        isEnd_.store(true);
     }
 
     /**
@@ -65,9 +68,9 @@ protected:
     }
 
     void done() {
-        if (isEnd_) { return; }
+        if (isEnd_.load()) { return; }
         promise_.set_value();
-        isEnd_ = true;
+        isEnd_.store(true);
     }
 
 public:
@@ -79,7 +82,7 @@ public:
 
     virtual ~Runnable() noexcept {
         try {
-            if (!isEnd_) { done(); }
+            if (!isEnd_.load()) { done(); }
         } catch (...) {}
     }
 
@@ -96,6 +99,13 @@ public:
     void get() {
         future_.get();
     }
+
+    /**
+     * The runnable has been executed.
+     */
+    bool isEnd() const {
+        return isEnd_.load();
+    }
 };
 
 /**
@@ -105,24 +115,26 @@ class ThreadRunner /* final */
 {
 private:
     std::shared_ptr<Runnable> runnableP_;
-    std::shared_ptr<std::thread> threadPtr_;
+    std::shared_ptr<std::thread> threadP_;
 
 public:
     explicit ThreadRunner(std::shared_ptr<Runnable> runnableP)
         : runnableP_(runnableP)
-        , threadPtr_() {}
-
+        , threadP_() {}
+    ThreadRunner(const ThreadRunner &rhs) = delete;
     ThreadRunner(ThreadRunner &&rhs)
         : runnableP_(rhs.runnableP_)
-        , threadPtr_(std::move(rhs.threadPtr_)) {}
-
-    ThreadRunner(const ThreadRunner &rhs) = delete;
-    ThreadRunner &operator=(const ThreadRunner &rhs) = delete;
-
+        , threadP_(std::move(rhs.threadP_)) {}
     ~ThreadRunner() noexcept {
         try {
             join();
         } catch (...) {}
+    }
+    ThreadRunner &operator=(const ThreadRunner &rhs) = delete;
+    ThreadRunner &operator=(ThreadRunner &&rhs) {
+        runnableP_ = std::move(rhs.runnableP_);
+        threadP_ = std::move(rhs.threadP_);
+        return *this;
     }
 
     /**
@@ -130,7 +142,7 @@ public:
      */
     void start() {
         /* You need std::ref(). */
-        threadPtr_.reset(new std::thread(std::ref(*runnableP_)));
+        threadP_.reset(new std::thread(std::ref(*runnableP_)));
     }
 
     /**
@@ -138,10 +150,17 @@ public:
      * You will get an exception thrown in the thread running.
      */
     void join() {
-        if (!threadPtr_) { return; }
-        threadPtr_->join();
-        threadPtr_.reset();
+        if (!threadP_) { return; }
+        threadP_->join();
+        threadP_.reset();
         runnableP_->get();
+    }
+
+    /**
+     * Check whether you can join the thread just now.
+     */
+    bool canJoin() const {
+        return runnableP_->isEnd();
     }
 };
 
@@ -171,6 +190,9 @@ public:
         }
     }
 
+    /**
+     * Wait for all threads.
+     */
     std::vector<std::exception_ptr> join() {
         std::vector<std::exception_ptr> v;
         for (ThreadRunner &r : v_) {
@@ -181,7 +203,71 @@ public:
             }
         }
         v_.clear();
-        return v;
+        return std::move(v);
+    }
+};
+
+/**
+ * Manage ThreadRunners which starting/ending timing differ.
+ * This is not thread safe.
+ * Use just one manager thread to control a pool.
+ */
+class ThreadRunnerPool /* final */
+{
+private:
+    std::deque<ThreadRunner> q_;
+
+public:
+    ThreadRunnerPool() : q_() {}
+    ~ThreadRunnerPool() noexcept {
+        join();
+    }
+    void add(ThreadRunner &&runner) {
+        q_.push_back(std::move(runner));
+    }
+    ThreadRunner &add(std::shared_ptr<Runnable> runnableP) {
+        assert(runnableP);
+        q_.push_back(ThreadRunner(runnableP));
+        return q_.back();
+    }
+    /**
+     * Remove all ended threads.
+     */
+    std::vector<std::exception_ptr> gc() {
+        std::vector<std::exception_ptr> v;
+        auto it = q_.begin();
+        while (it != q_.end()) {
+            ThreadRunner &r = *it;
+            if (r.canJoin()) {
+                try {
+                    r.join();
+                } catch (...) {
+                    v.push_back(std::current_exception());
+                }
+                it = q_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return std::move(v);
+    }
+    /**
+     * Wait for all threads done.
+     */
+    std::vector<std::exception_ptr> join() {
+        std::vector<std::exception_ptr> v;
+        for (ThreadRunner &r : q_) {
+            try {
+                r.join();
+            } catch (...) {
+                v.push_back(std::current_exception());
+            }
+        }
+        q_.clear();
+        return std::move(v);
+    }
+    size_t size() const {
+        return q_.size();
     }
 };
 
