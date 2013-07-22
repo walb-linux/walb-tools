@@ -36,7 +36,7 @@ SOURCES = $(wildcard src/*.cpp)
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 ALL_BINARIES = $(patsubst %.cpp,%,$(SOURCES))
 BINARIES = $(filter-out src/test_%,$(ALL_BINARIES))
-TEST_BINARIES = $(filter src/test_%,$(ALL_BINARIES))
+TEST_BINARIES = $(filter src/test_%,$(ALL_BINARIES)) $(patsubst %.cpp,%,$(wildcard utest/*.cpp))
 
 all: build
 build: Makefile.depends $(ALL_BINARIES)
@@ -54,6 +54,9 @@ echo_binaries:
 
 src/%: src/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_SNAPPY)
+
+test/%: test/%.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 clean:
 	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o
