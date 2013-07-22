@@ -6,39 +6,33 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cstdio>
-#include <Poco/Net/SocketAddress.h>
-#include <Poco/Net/StreamSocket.h>
-#include <Poco/Util/Application.h>
+#include "cybozu/socket.hpp"
 
-namespace {
-
-class app : public Poco::Util::Application
+int main(int argc, char *argv[])
 {
-public:
-    int main(const std::vector<std::string> &args) {
-        std::string address = args[0];
-        uint16_t port = std::stol(args[1]);
-        Poco::Net::SocketAddress sAddr(address, port);
-
-        Poco::Net::StreamSocket sock(Poco::Net::IPAddress::IPv4);
-        sock.setSendBufferSize(1 << 20); // 1MiB
-        sock.setReceiveBufferSize(1 << 20); // 1MiB
-        sock.connect(sAddr);
-
-        char buf[4096];
-        buf[0] = 1;
-        if (sock.sendBytes(buf, 1) != 1) {
-            throw std::runtime_error("send bytes failed.");
-        }
-        if (sock.receiveBytes(buf, 1) != 1) {
-            throw std::runtime_error("recv bytes failed.");
-        }
-        ::printf("received %0x\n", buf[0]);
-        sock.close();
-        return EXIT_OK;
+    cybozu::Socket sock;
+    if (argc < 4) {
+        ::printf("specify address, port, and value.\n");
+        return 1;
     }
-};
+    std::string addr(argv[1]);
+    uint16_t port = atoi(argv[2]);
+    uint32_t val = atoi(argv[3]);
+    if (!sock.connect(addr, port)) {
+        ::printf("connect failed.\n");
+        return 1;
+    }
 
-} //anonymous namespace
+    if (!sock.writeAll(reinterpret_cast<char *>(&val), sizeof(val))) {
+        ::printf("send failed.\n");
+        return 1;
+    }
+    if (!sock.readAll(reinterpret_cast<char *>(&val), sizeof(val))) {
+        ::printf("recv failed.\n");
+        return 1;
+    }
+    ::printf("recv %u\n", val);
+    return 0;
+}
 
-POCO_APP_MAIN(app);
+/* end of file */

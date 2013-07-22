@@ -6,77 +6,73 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cstdio>
-#include <Poco/Net/TCPServerConnection.h>
-#include <Poco/Net/TCPServer.h>
-#include <Poco/Util/ServerApplication.h>
+#include <chrono>
+#include <thread>
+#include "thread_util.hpp"
+#include "cybozu/socket.hpp"
 
 #define LISTEN_PORT 8080
 
-namespace {
-
-/**
- * Connection handler.
- */
-class Connection : public Poco::Net::TCPServerConnection
+class Worker : public cybozu::thread::Runnable
 {
+private:
+    cybozu::Socket sock_;
 public:
-    Connection(const Poco::Net::StreamSocket &s)
-        : Poco::Net::TCPServerConnection(s) {
+    Worker(cybozu::Socket &&sock)
+        : sock_(sock) /* sock will be invalid. */ {
     }
-
-    /**
-     * Currently receive 1 byte and print, send 1 byte.
-     */
-    void run() {
-        Poco::Net::StreamSocket &sock = socket();
-        sock.setSendBufferSize(1 << 20); // 1MiB
-        sock.setReceiveBufferSize(1 << 20); // 1MiB
-        char buf[4096];
-        if (sock.receiveBytes(buf, 1) != 1) {
-            throw std::runtime_error("receive failed.");
+    void operator()() noexcept override {
+        try {
+            run();
+            done();
+        } catch (...) {
+            throwErrorLater();
         }
-        ::printf("receive %0x\n", buf[0]);
-        buf[0] = buf[0] + 1;
-        if (sock.sendBytes(buf, 1) != 1) {
+    }
+    void run() {
+        uint32_t i;
+        if (sock_.readAll(reinterpret_cast<char *>(&i), sizeof(i)) != cybozu::Socket::NOERR) {
+            throw std::runtime_error("recv failed.");
+        }
+        ::printf("recv %u\n", i);
+        i++;
+        if (sock_.writeAll(reinterpret_cast<char *>(&i), sizeof(i)) != cybozu::Socket::NOERR) {
             throw std::runtime_error("send failed.");
         }
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 };
 
-class ConnectionFactory : public Poco::Net::TCPServerConnectionFactory
+int main()
 {
-public:
-    ConnectionFactory()
-        : Poco::Net::TCPServerConnectionFactory() {
+#if 0
+    if (daemon(0, 0) < 0) {
+        ::printf("daemon() failed\n");
+        return 1;
+    }
+#endif
+
+    cybozu::Socket ssock;
+    if (!ssock.bind(LISTEN_PORT)) {
+        ::printf("bind failed.\n");
+        return 1;
     }
 
-    Poco::Net::TCPServerConnection* createConnection(const Poco::Net::StreamSocket& socket) override {
-        return new Connection(socket);
-    }
-};
-
-class app : public Poco::Util::ServerApplication
-{
-public:
-    const char *name() const {
-        return "server";
-    }
-    int main(const std::vector<std::string> &args) {
-        for (const auto &s : args) {
-            ::printf("arg: %s\n", s.c_str());
+    cybozu::thread::ThreadRunnerPool pool;
+    while (true) {
+        while (!ssock.queryAccept()) {
         }
-        Poco::Net::ServerSocket s;
-        s.bind(LISTEN_PORT, true);
-        s.listen();
-        Poco::Net::TCPServer server(new ConnectionFactory(), s);
-        server.start();
-        waitForTerminationRequest();
-        server.stop();
-        Poco::ThreadPool::defaultPool().joinAll();
-        return Application::EXIT_OK;
+        cybozu::Socket sock;
+        if (!ssock.accept(sock)) {
+            ::printf("accept failed.\n");
+            return 1;
+        }
+        pool.add(std::make_shared<Worker>(std::move(sock))).start();
+        pool.gc();
+        ::printf("pool size %zu\n", pool.size());
     }
-};
+    pool.join();
+    return 0;
+}
 
-} //anonymous namespace
-
-POCO_SERVER_MAIN(app);
+/* end of file */
