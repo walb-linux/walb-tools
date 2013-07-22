@@ -25,7 +25,7 @@
 #include "walb_log.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
-#include "simple_logger.hpp"
+#include "logger.hpp"
 
 /**
  * Converter from walb logs to a walb diff.
