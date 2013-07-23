@@ -49,19 +49,25 @@ public:
         return !(*this == rhs);
     }
     bool isDirty() const { return gid1 != gid2; }
-    /**
-     * This is a bit strict check.
-     */
     bool canMerge(const MetaDiff &diff) const {
-        return gid1 == diff.gid0;
+#if 1
+        /* This is a bit more strict check. */
+        return gid1 == diff.gid0 && gid1 < diff.gid1;
+#else
+        return gid1 < diff.gid1;
+#endif
     }
     MetaDiff merge(const MetaDiff &diff) const {
         assert(canMerge(diff));
+#if 1
         return MetaDiff(gid0, diff.gid1, std::max(gid2, diff.gid2));
+#else
+        return MetaDiff(std::min(gid0, diff.gid0), diff.gid1, std::max(gid2, diff.gid2));
+#endif
     }
 private:
     void check() const {
-        if (!(gid0 <= gid1 && gid1 <= gid2)) {
+        if (!(gid0 < gid1 && gid1 <= gid2)) {
             throw std::runtime_error("invalid MetaDiff.");
         }
     }
