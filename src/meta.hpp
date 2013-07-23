@@ -20,8 +20,9 @@ namespace walb {
  *   (1) all data for gid0 <= gid < gid1.
  *   (2) partial data for gid1 <= gid < gid2.
  */
-struct MetaDiff
+class MetaDiff
 {
+public:
     const uint64_t gid0;
     const uint64_t gid1;
     const uint64_t gid2;
@@ -58,6 +59,7 @@ struct MetaDiff
         assert(canMerge(diff));
         return MetaDiff(gid0, diff.gid1, std::max(gid2, diff.gid2));
     }
+private:
     void check() const {
         if (!(gid0 <= gid1 && gid1 <= gid2)) {
             throw std::runtime_error("invalid MetaDiff.");
@@ -72,8 +74,9 @@ struct MetaDiff
  *   (1) all data at gid0.
  *   (2) partial data for gid0 <= gid < gid1.
  */
-struct MetaSnap
+class MetaSnap
 {
+public:
     const uint64_t gid0;
     const uint64_t gid1;
     /**
@@ -110,6 +113,7 @@ struct MetaSnap
     bool isTooOld(const MetaDiff &diff) const {
         return diff.gid1 <= gid0;
     }
+private:
     void check() const {
         if (!(gid0 <= gid1)) {
             throw std::runtime_error("invalid MetaSnap.");
