@@ -22,8 +22,7 @@ int main(int argc, char *argv[])
         ::printf("connect failed.\n");
         return 1;
     }
-
-    sock.writeAll(&val, sizeof(val));
+    sock.write(&val, sizeof(val));
     sock.readAll(&val, sizeof(val));
     ::printf("recv %u\n", val);
     return 0;

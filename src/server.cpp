@@ -42,7 +42,7 @@ public:
         sock_.readAll(&i, sizeof(i));
         LOGd("recv %u", i);
         i++;
-        sock_.writeAll(&i, sizeof(i));
+        sock_.write(&i, sizeof(i));
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 };
