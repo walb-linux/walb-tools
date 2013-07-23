@@ -13,11 +13,13 @@
 #include <memory>
 #include <queue>
 #include <deque>
+#include <map>
 #include <string>
 #include <exception>
 #include <vector>
 #include <atomic>
 #include <cassert>
+#include <functional>
 
 /**
  * Thread utilities.
@@ -30,8 +32,12 @@
  * You can throw error in your runnable operator()().
  * It will be thrown from join().
  *
- * You can ThreadRunnableSet class to
+ * You can use ThreadRunnableSet class to
  * start/join multiple threads in bulk.
+ * This is useful for benchmark.
+ *
+ * You can use ThreadRunnerPool class to
+ * manage multiple tasks.
  *
  * BoundedQueue class will help you to
  * make threads' communication functionalities
@@ -44,7 +50,9 @@ namespace thread {
  * This is used by thread runners.
  * Any exceptions will be thrown when
  * join() of thread runners' call.
- * You should call throwErrorLater() or done() finally.
+ *
+ * You must call throwErrorLater() or done() finally
+ * inside your operator()().
  */
 class Runnable
 {
@@ -53,11 +61,13 @@ protected:
     std::promise<void> promise_;
     std::shared_future<void> future_;
     std::atomic<bool> isEnd_;
+    std::function<void()> callback_;
 
     void throwErrorLater(std::exception_ptr p) {
         if (isEnd_) { return; }
         promise_.set_exception(p);
         isEnd_.store(true);
+        callback_();
     }
 
     /**
@@ -71,6 +81,7 @@ protected:
         if (isEnd_.load()) { return; }
         promise_.set_value();
         isEnd_.store(true);
+        callback_();
     }
 
 public:
@@ -78,7 +89,8 @@ public:
         : name_(name)
         , promise_()
         , future_(promise_.get_future())
-        , isEnd_(false) {}
+        , isEnd_(false)
+        , callback_() {}
 
     virtual ~Runnable() noexcept {
         try {
@@ -101,15 +113,23 @@ public:
     }
 
     /**
-     * The runnable has been executed.
+     * Returns true when the execution has done.
      */
     bool isEnd() const {
         return isEnd_.load();
+    }
+
+    /**
+     * Set a callback function which will be called at end.
+     */
+    void setCallback(std::function<void()> f) {
+        callback_ = f;
     }
 };
 
 /**
  * Thread runner.
+ * This is not thread-safe.
  */
 class ThreadRunner /* final */
 {
@@ -209,65 +229,90 @@ public:
 
 /**
  * Manage ThreadRunners which starting/ending timing differ.
- * This is not thread safe.
- * Use just one manager thread to control a pool.
+ * This is thread-safe class.
+ *
+ * (1) You add workers and start them.
+ * (2) You should call gc() periodically to check error occurence in the workers execution.
+ * (3) You should call join() to wait for all threads to be done.
  */
 class ThreadRunnerPool /* final */
 {
 private:
-    std::deque<ThreadRunner> q_;
+    std::map<uint32_t, ThreadRunner> map_; /* running */
+    std::vector<ThreadRunner> done_;
+    uint32_t id_;
+    mutable std::mutex mutex_;
+    mutable std::condition_variable cv_;
 
 public:
-    ThreadRunnerPool() : q_() {}
+    ThreadRunnerPool() : map_(), done_(), id_(0), mutex_() ,cv_() {}
     ~ThreadRunnerPool() noexcept {
         join();
-    }
-    void add(ThreadRunner &&runner) {
-        q_.push_back(std::move(runner));
-    }
-    ThreadRunner &add(std::shared_ptr<Runnable> runnableP) {
-        assert(runnableP);
-        q_.push_back(ThreadRunner(runnableP));
-        return q_.back();
+        assert(map_.empty());
+        assert(done_.empty());
     }
     /**
-     * Remove all ended threads.
+     * You must call start() of returned ThreadRunner reference by yourself.
+     */
+    ThreadRunner &add(std::shared_ptr<Runnable> runnableP) {
+        assert(runnableP);
+        std::lock_guard<std::mutex> lk(mutex_);
+        uint32_t id = id_;
+        ++id_;
+        auto pair = map_.insert(std::make_pair(id, ThreadRunner(runnableP)));
+        assert(pair.second);
+        /* This callback will move the runnable from map_ to done_. */
+        auto callback = [this, id]() {
+            std::lock_guard<std::mutex> lk(mutex_);
+            auto it = map_.find(id);
+            assert(it != map_.end());
+            done_.push_back(std::move(it->second));
+            map_.erase(it);
+            if (map_.empty()) {
+                cv_.notify_all();
+            }
+        };
+        runnableP->setCallback(callback);
+        return pair.first->second;
+    }
+    /**
+     * Remove all ended threads and get exceptions of them if exists.
+     * RETURN:
+     *   a list of exceptions thrown from threads.
      */
     std::vector<std::exception_ptr> gc() {
-        std::vector<std::exception_ptr> v;
-        auto it = q_.begin();
-        while (it != q_.end()) {
-            ThreadRunner &r = *it;
-            if (r.canJoin()) {
-                try {
-                    r.join();
-                } catch (...) {
-                    v.push_back(std::current_exception());
-                }
-                it = q_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        return std::move(v);
+        std::lock_guard<std::mutex> lk(mutex_);
+        return gcNolock();
     }
     /**
      * Wait for all threads done.
+     * RETURN:
+     *   the same as gc().
      */
     std::vector<std::exception_ptr> join() {
+        std::unique_lock<std::mutex> lk(mutex_);
+        while (!map_.empty()) {
+            cv_.wait(lk);
+        }
+        return gcNolock();
+    }
+    size_t size() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return map_.size();
+    }
+private:
+    std::vector<std::exception_ptr> gcNolock() {
         std::vector<std::exception_ptr> v;
-        for (ThreadRunner &r : q_) {
+        for (ThreadRunner &r : done_) {
             try {
                 r.join();
             } catch (...) {
                 v.push_back(std::current_exception());
             }
         }
-        q_.clear();
+        done_.clear();
+        done_.shrink_to_fit();
         return std::move(v);
-    }
-    size_t size() const {
-        return q_.size();
     }
 };
 
