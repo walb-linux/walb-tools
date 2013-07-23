@@ -11,6 +11,7 @@
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
+#include "file_path.hpp"
 #include "logger.hpp"
 
 /* These should be defined in the parameter header. */
@@ -47,35 +48,6 @@ public:
     }
 };
 
-/**
- * A file path management.
- */
-class FilePath
-{
-private:
-    std::string path_;
-
-public:
-    const int SEPARATOR = '/';
-    explicit FilePath(const std::string &pathStr) : path_(pathStr) {}
-    explicit FilePath(std::string &&pathStr) : path_(std::move(pathStr)) {}
-    FilePath operator+(const FilePath &rhs) const {
-        if (path_.empty()) {
-            return rhs;
-        }
-        if (path_.back() == SEPARATOR) {
-            return FilePath(path_ + rhs.path_);
-        }
-        std::string path(path_);
-        path += SEPARATOR;
-        path += rhs.path_;
-        return FilePath(std::move(path));
-    }
-    std::string str() const {
-        return path_;
-    }
-};
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -91,7 +63,7 @@ struct Option : cybozu::Option
         return cybozu::Option::parse(argc, argv);
     }
     std::string logFilePath() const {
-        return (FilePath(baseDirStr) + FilePath(logFileStr)).str();
+        return (cybozu::FilePath(baseDirStr) + cybozu::FilePath(logFileStr)).str();
     }
 };
 
