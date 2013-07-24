@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief Walb diff files management.
+ * @brief Time utility header.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -35,9 +35,9 @@ int32_t localTimeDiff()
     time_t now1 = ::mktime(&tm1);
     int32_t diff = 0;
     if (now0 <= now1) {
-        diff = now1 - now0;
+        diff = -(now1 - now0);
     } else {
-        diff = -(now0 - now1);
+        diff = now0 - now1;
     }
     assert(diff < 60 * 60 * 24);
     assert(-(60 * 60 * 24) < diff);
@@ -111,7 +111,7 @@ time_t strToUnixTime(const std::string &ts)
     if (ts0 == time_t(-1)) {
         throw std::runtime_error("mktime failed.");
     }
-    return ts0 + localTimeDiff();
+    return ts0 - localTimeDiff();
 }
 
 } //namespace cybozu
