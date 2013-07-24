@@ -1,24 +1,31 @@
 /**
  * @file
- * @brief Meta snapshot and diff.
+ * @brief Worker data management.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cassert>
 #include <time.h>
+#include "cybozu/serializer.hpp"
 #include "queue_file.hpp"
 #include "file_path.hpp"
+#include "tmp_file.hpp"
 
 #ifndef WALB_TOOLS_WORKER_DATA_HPP
 #define WALB_TOOLS_WORKER_DATA_HPP
+
+namespace walb {
 
 /**
  * Snapshot record.
  */
 struct snapshot_record
 {
-    /* The record covers gid0_ <= gid < gid1_ range. */
+    /* The record covers gid0_ <= gid < gid1_ range.
+     * A worker can split wlogs using the gid range.
+     * wlog-to-wdiff transfer requires wlog
+     */
     uint64_t gid0;
     uint64_t gid1;
     uint64_t lsid;
@@ -57,18 +64,30 @@ public:
         ::memcpy(&rec_, data, sizeof(rec_));
         return true;
     }
+    template <class InputStream>
+    void load(InputStream &in) {
+        cybozu::loadPod(raw(), in);
+    }
+    template <class OutputStream>
+    void save(OutputStream &out) const {
+        cybozu::savePod(out, raw());
+    }
 };
 
 /**
  * Persistent data for a volume managed by a worker.
+ *
+ * queue file:
+ *   must have at least one record.
  */
 class WorkerData
 {
 private:
     std::string baseDir_; /* base directory. */
     std::string name_; /* volume identifier. */
+    SnapshotRecord doneRec_;
     uint64_t nextGid_;
-    uint64_t lsid_;
+    uint64_t nextLsid_;
     uint64_t sizePb_;
 
 public:
@@ -78,21 +97,34 @@ public:
     WorkerData(const std::string &baseDir, const std::string &name, uint64_t sizePb)
         : baseDir_(baseDir)
         , name_(name)
+        , doneRec_()
         , nextGid_(0)
-        , lsid_(0)
+        , nextLsid_(0)
         , sizePb_(sizePb) {
-        assert(0 < sizePb);
+        cybozu::FilePath fp(baseDir_);
+        if (!fp.isFull()) {
+            throw std::runtime_error("base directory must be full path.");
+        }
+        if (!fp.stat().isDirectory()) {
+            throw std::runtime_error("base directory does not exist.");
+        }
+        if (sizePb == 0) {
+            throw std::runtime_error("sizePb must be positive.");
+        }
     }
     /**
      * You must call this before using.
      * @lsid the oldest lsid of the walb device.
      */
     void init(uint64_t lsid) {
+        cybozu::FilePath rp = doneRecordPath();
         cybozu::FilePath qp = queuePath();
-        if (!qp.stat().exists()) {
+        if (!rp.stat().exists() || !qp.stat().exists()) {
+            initDoneRecord(lsid);
             cybozu::util::QueueFile qf(qp.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
-            initAddQueue(qf, lsid);
+            qf.sync();
         } else {
+            loadDoneRecord();
             cybozu::util::QueueFile qf(qp.str(), O_RDWR);
             initScanQueue(qf);
         }
@@ -112,14 +144,14 @@ public:
      */
     std::pair<uint64_t, uint64_t> takeSnapshot(uint64_t lsid, bool canMerge) {
         /* Determine gid range. */
-        if (lsid < lsid_) {
+        if (lsid < nextLsid_) {
             throw std::runtime_error("bad lsid.");
         }
-        uint64_t n = 1 + (lsid - lsid_) / sizePb_;
+        uint64_t n = 1 + (lsid - nextLsid_) / sizePb_;
         uint64_t gid0 = nextGid_;
         uint64_t gid1 = nextGid_ + n;
         nextGid_ += gid1;
-        lsid_ = lsid;
+        nextLsid_ = lsid;
 
         /* Timestamp */
         time_t ts = ::time(nullptr);
@@ -148,13 +180,13 @@ public:
         if (nextGid_ != rec.raw().gid0) {
             return false;
         }
-        if (rec.raw().lsid < lsid_) {
+        if (rec.raw().lsid < nextLsid_) {
             return false;
         }
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         qf.push(rec.rawData(), rec.rawSize());
         nextGid_ = rec.raw().gid1;
-        lsid_ = rec.raw().lsid;
+        nextLsid_ = rec.raw().lsid;
         return true;
     }
     std::string dirPath() const {
@@ -202,49 +234,70 @@ public:
         rec.load(&v[0], v.size());
     }
 private:
+    cybozu::FilePath doneRecordPath() const {
+        return cybozu::FilePath(dirPath()) + cybozu::FilePath("done");
+    }
     cybozu::FilePath queuePath() const {
         return cybozu::FilePath(dirPath()) + cybozu::FilePath("queue");
     }
     /**
-     * Scan the queue and set nextGid_ and lsid_.
+     * Scan the queue and set nextGid_ and nextLsid_.
      */
     void initScanQueue(cybozu::util::QueueFile &qf) {
         qf.gc();
         cybozu::util::QueueFile::ConstIterator it = qf.begin();
-        nextGid_ = 0;
-        lsid_ = 0;
-        while (it != qf.cend()) {
+        SnapshotRecord prev;
+        while (!it.isEndMark()) {
             std::vector<uint8_t> v;
             SnapshotRecord rec;
             if (it.isValid() && !it.isDeleted()) {
                 it.get(v);
                 rec.load(&v[0], v.size());
                 if (!rec.isValid()) {
-                    throw std::runtime_error("snapshot record invalid.");
+                    throw std::runtime_error("queue broken.");
                 }
-                if (!rec.empty()) {
-                    nextGid_ = std::max(nextGid_, rec.raw().gid1);
-                    lsid_ = std::max(lsid_, rec.raw().lsid);
+                if (it != qf.begin()) {
+                    if (!(prev.raw().gid1 == rec.raw().gid0)) {
+                        throw std::runtime_error("queue broken.");
+                    }
+                    if (!(prev.raw().lsid <= rec.raw().lsid)) {
+                        throw std::runtime_error("queue broken.");
+                    }
                 }
+                assert(!rec.empty());
+                nextGid_ = std::max(nextGid_, rec.raw().gid1);
+                nextLsid_ = std::max(nextLsid_, rec.raw().lsid);
             }
             ++it;
+            prev = rec;
         }
     }
-    /**
-     * Add an initial record.
-     */
-    void initAddQueue(cybozu::util::QueueFile &qf, uint64_t lsid) {
-        SnapshotRecord rec;
-        rec.raw().gid0 = 0;
-        rec.raw().gid1 = 0;
-        rec.raw().timestamp = ::time(nullptr);
-        rec.raw().lsid = lsid;
-        rec.raw().can_merge = true;
+    void initDoneRecord(uint64_t lsid) {
+        doneRec_.raw().gid0 = 0;
+        doneRec_.raw().gid1 = 0;
+        doneRec_.raw().timestamp = ::time(nullptr);
+        doneRec_.raw().lsid = lsid;
+        doneRec_.raw().can_merge = true;
+        saveDoneRecord();
         nextGid_ = 0;
-        lsid_ = lsid;
-        qf.push(rec.rawData(), rec.rawSize());
-        qf.sync();
+        nextLsid_ = lsid;
+    }
+    void loadDoneRecord() {
+        cybozu::util::FileOpener fo(doneRecordPath().str(), O_RDONLY);
+        cybozu::util::FdReader fdr(fo.fd());
+        fdr.read(doneRec_.rawData(), doneRec_.rawSize());
+        if (!doneRec_.isValid()) {
+            throw std::runtime_error("read done record is not valid.");
+        }
+    }
+    void saveDoneRecord() const {
+        cybozu::TmpFile tmpF(dirPath());
+        cybozu::util::FdWriter fdw(tmpF.fd());
+        fdw.write(doneRec_.rawData(), doneRec_.rawSize());
+        tmpF.save(doneRecordPath().str());
     }
 };
+
+} //namespace walb
 
 #endif /* WALB_TOOLS_WORKER_DATA_HPP */
