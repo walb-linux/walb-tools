@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstring>
 #include <memory>
+#include <list>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -75,6 +76,7 @@ public:
 
 /**
  * A file path management.
+ * Escaped separator character "\\/" is not supported.
  */
 class FilePath
 {
@@ -83,28 +85,82 @@ private:
     std::shared_ptr<FileStat> statP_;
 
 public:
-    const int SEPARATOR = '/';
+    static const int SEPARATOR = '/';
 
     explicit FilePath(const std::string &path) : path_(path), statP_() {}
     explicit FilePath(std::string &&path) : path_(std::move(path)), statP_() {}
     FilePath operator+(const FilePath &rhs) const {
+        if (rhs.isRoot()) {
+            std::runtime_error("full path can not be added.");
+        }
         if (path_.empty()) {
             return rhs;
         }
-        if (path_.back() == SEPARATOR) {
+        if (isRoot()) {
             return FilePath(path_ + rhs.path_);
         }
         std::string path(path_);
-        path += SEPARATOR;
-        path += rhs.path_;
-        return FilePath(std::move(path));
+        path.push_back(SEPARATOR);
+        path.append(rhs.path_);
+        return FilePath(std::move(path)).removeRedundancy();
+    }
+    bool operator==(const FilePath &rhs) const {
+        std::string s0 = removeRedundancy().str();
+        std::string s1 = rhs.removeRedundancy().str();
+        return s0 == s1;
+    }
+    bool operator!=(const FilePath &rhs) const {
+        return !(*this == rhs);
     }
     bool isFull() const {
         if (path_.empty()) return false;
         return path_[0] == SEPARATOR;
     }
-    std::string str() const {
+    bool isRoot() const {
+        if (!isFull()) return false;
+        return removeRedundancy().str().size() == 1;
+    }
+    std::string baseName() const {
+        std::list<std::string> li = split();
+        eliminateRelativeParents(li);
+        if (li.empty()) {
+            return join(li, isFull());
+        } else {
+            return li.back();
+        }
+    }
+    std::string dirName() const {
+        std::list<std::string> li = split();
+        eliminateRelativeParents(li);
+        if (!li.empty()) {
+            li.pop_back();
+        }
+        return join(li, isFull());
+    }
+    size_t depth() const {
+        if (!isFull()) {
+            throw std::runtime_error("depth can not be defined for relative path.");
+        }
+        std::list<std::string> li = split();
+        eliminateRelativeParents(li);
+        return li.size();
+    }
+    FilePath removeRedundancy() const {
+        std::list<std::string> li;
+        const bool isFull0 = isFull();
+        li = split();
+        eliminateRelativeParents(li);
+        return FilePath(join(li, isFull0));
+    }
+    FilePath parent() const {
+        if (isRoot()) return *this;
+        return (*this + FilePath("..")).removeRedundancy();
+    }
+    const std::string &str() const {
         return path_;
+    }
+    const char *cStr() const {
+        return path_.c_str();
     }
     FileStat &stat(bool isForce = false) {
         if (!statP_ || isForce) {
@@ -126,6 +182,95 @@ public:
     }
     bool rename(const FilePath &newPath) {
         return ::rename(path_.c_str(), newPath.str().c_str()) == 0;
+    }
+    bool chmod(mode_t mode) {
+        return ::chmod(path_.c_str(), mode) == 0;
+    }
+private:
+    /**
+     * Split by SEPARATOR and eliminate "" and ".".
+     */
+    std::list<std::string> split() const {
+        std::list<std::string> li;
+        /* Split by SEPARATOR. */
+        std::string sep;
+        sep.push_back(SEPARATOR);
+        std::string s = str();
+        while (!s.empty()) {
+            size_t n = s.find(sep);
+            if (n == std::string::npos) {
+                li.push_back(s);
+                s = "";
+            } else {
+                if (0 < n) {
+                    li.push_back(s.substr(0, n));
+                }
+                s = s.substr(n + 1);
+            }
+        }
+        /* eliminate "" and "." */
+        auto it = li.begin();
+        while (it != li.end()) {
+            std::string &s0 = *it;
+            if (s0.empty() || s0 == ".") {
+                it = li.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return std::move(li);
+    }
+    /**
+     * eliminate "xxx/.." pattern.
+     */
+    static void eliminateRelativeParents(std::list<std::string> &li0) {
+        if (li0.empty()) return;
+        std::list<std::string> li1;
+        li1.push_back(std::move(li0.front()));
+        li0.pop_front();
+        while (!li0.empty()) {
+            li1.push_back(std::move(li0.front()));
+            li0.pop_front();
+            assert(2 <= li1.size());
+            auto it = li1.rbegin();
+            std::string &s1 = *it;
+            ++it;
+            std::string &s0 = *it;
+            if (s0 != ".." && s1 == "..") {
+                li1.pop_back();
+                li1.pop_back();
+                if (li1.empty()) {
+                    if (li0.empty()) {
+                        break;
+                    } else {
+                        li1.push_back(std::move(li0.front()));
+                        li0.pop_front();
+                    }
+                }
+            }
+        }
+        li0 = std::move(li1);
+    }
+    /**
+     * Convert separated path names to its path string.
+     * RETURN:
+     *   If li is not empty like ["a", "b", "c"],
+     *     "a/b/c" (isFull0 is false).
+     *     "/a/b/c" (isFull0 is true).
+     *   If li is empty,
+     *     "." (isFull0 is false).
+     *     "/" (isFull0 is true).
+     */
+    static std::string join(std::list<std::string> &li, bool isFull0) {
+        std::string s1;
+        if (isFull0) s1.push_back(SEPARATOR);
+        for (std::string &s0 : li) {
+            s1.append(s0);
+            s1.push_back(SEPARATOR);
+        }
+        if (!li.empty()) s1.resize(s1.size() - 1);
+        if (s1.empty()) s1.push_back('.');
+        return std::move(s1);
     }
 };
 
