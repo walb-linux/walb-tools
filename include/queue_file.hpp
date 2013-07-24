@@ -168,7 +168,7 @@ public:
 class QueueFile
 {
 private:
-    QueueFileHeader header_;
+    mutable QueueFileHeader header_;
     MmappedFile mmappedFile_;
     cybozu::file::Lock lock_;
 
@@ -192,7 +192,7 @@ public:
     }
     void push(const void *data, uint32_t size) {
         if (size == 0) {
-            std::runtime_error("can not push zero-size data.");
+            throw std::runtime_error("can not push zero-size data.");
         }
         mmappedFile_.resize(getRequiredFileSize(size));
         QueueRecordHeaderOp recOp(&record(header_.endOffset));
@@ -201,8 +201,7 @@ public:
         recOp.setChecksum(data, header_.salt);
         ::memcpy(recOp.dataPtr<void>(), data, size);
         header_.endOffset += recOp.totalSize();
-        bool ret = recOp.goNext();
-        assert(ret);
+        if (!recOp.goNext()) assert(false);
         recOp.init(); /* end mark. */
     }
     void push(const std::string& s) {
@@ -361,6 +360,10 @@ public:
             offset_ += recOp.totalSize();
             return ret;
         }
+        /**
+         * After calling this functions,
+         * You must call gc() for readers not to see the deleted records.
+         */
         void setDeleted() {
             QueueRecordHeaderOp recOp(&qfw_.record(offset_));
             recOp.setDeleted();
@@ -473,9 +476,9 @@ private:
      * GC deleted records at the front of the queue.
      * After calling this, the front().isDeleted() must be false if exists.
      */
-    void gcFront() {
+    void gcFront() const {
         if (header_.beginOffset == header_.endOffset) return;
-        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
+        QueueRecordHeaderOp recOp(&record(header_.beginOffset));
         while (!recOp.isEndMark() && recOp.isDeleted()) {
             header_.beginOffset += recOp.totalSize();
             recOp.goNext();
