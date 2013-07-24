@@ -8,10 +8,14 @@
 #include <cassert>
 #include <time.h>
 #include "queue_file.hpp"
+#include "file_path.hpp"
 
 #ifndef WALB_TOOLS_WORKER_DATA_HPP
 #define WALB_TOOLS_WORKER_DATA_HPP
 
+/**
+ * Snapshot record.
+ */
 struct snapshot_record
 {
     /* The record covers gid0_ <= gid < gid1_ range. */
@@ -25,6 +29,9 @@ struct snapshot_record
     uint32_t reserved2;
 } __attribute__((packed));
 
+/**
+ * Snapshot record wrapper.
+ */
 class SnapshotRecord
 {
 private:
@@ -32,27 +39,22 @@ private:
 
 public:
     size_t rawSize() const { return sizeof(rec_); }
-    struct void *rawData() { return reinterpret_cast<void *>(&rec_); }
+    void *rawData() { return reinterpret_cast<void *>(&rec_); }
     const void *rawData() const { return reinterpret_cast<const void *>(&rec_); }
-    struct snapshot_record *raw() { return &rec_; }
-    const struct snapshot_record *raw() const { return &rec_; }
+    struct snapshot_record &raw() { return rec_; }
+    const struct snapshot_record &raw() const { return rec_; }
     bool isValid() const {
-        if (!(raw().gid0 <= raw().gid1)) {
-            return false;
-        }
-        return true;
+        return raw().gid0 <= raw().gid1;
     }
     /**
      * If empty() is true, the snapshot record has no meaning.
      */
-    bool empty() const { return raw().gid0 == raw().gid1; }
-    /**
-     * If canMerge() is false, we must separate wdiffs with gid0.
-     */
-    bool canMerge() const { return raw().can_merge; }
+    bool empty() const {
+        return raw().gid0 == raw().gid1;
+    }
     bool load(const void *data, size_t size) {
         if (sizeof(rec_) != size) return false;
-        ::memcpy(&rec_, data, sizeof(rec));
+        ::memcpy(&rec_, data, sizeof(rec_));
         return true;
     }
 };
@@ -73,7 +75,7 @@ public:
     /**
      * @sizePb [physical block].
      */
-    WorkerData(const std::string &baseDir, const std::string &name, uint64_t uint64_t sizePb)
+    WorkerData(const std::string &baseDir, const std::string &name, uint64_t sizePb)
         : baseDir_(baseDir)
         , name_(name)
         , nextGid_(0)
@@ -88,10 +90,10 @@ public:
     void init(uint64_t lsid) {
         cybozu::FilePath qp = queuePath();
         if (!qp.stat().exists()) {
-            cybozu::util::QueueFile qf(qp.str(), O_CREAT | O_TRUNC | O_RDRW, 0644);
+            cybozu::util::QueueFile qf(qp.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
             initAddQueue(qf, lsid);
         } else {
-            cybozu::util::QueueFile qf(qp.str(), O_RDRW);
+            cybozu::util::QueueFile qf(qp.str(), O_RDWR);
             initScanQueue(qf);
         }
     }
@@ -149,7 +151,7 @@ public:
         if (rec.raw().lsid < lsid_) {
             return false;
         }
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDRW);
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         qf.push(rec.rawData(), rec.rawSize());
         nextGid_ = rec.raw().gid1;
         lsid_ = rec.raw().lsid;
@@ -159,11 +161,11 @@ public:
         return (cybozu::FilePath(baseDir_) + cybozu::FilePath(name_)).str();
     }
     bool empty() const {
-        cybozu::QueueFile qf(queuePath().str(), O_RDRW);
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         return qf.empty();
     }
     SnapshotRecord front() const {
-        cybozu::QueueFile qf(queuePath().str(), O_RDRW);
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         std::vector<uint8_t> v;
         qf.front(v);
         SnapshotRecord rec;
@@ -171,15 +173,15 @@ public:
         return rec;
     }
     void pop() {
-        cybozu::QueueFile qf(queuePath().str(), O_RDRW);
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         qf.pop();
     }
     /**
      * Remove old records which corresponding wlogs has been transferred.
      */
     void removeBefore(uint64_t gid) {
-        cybozu::QueueFile qf(queuePath().str(), O_RDRW);
-        cybozu::QueueFile::Iterator it = qf.begin();
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        cybozu::util::QueueFile::Iterator it = qf.begin();
         while (!it.isEndMark()) {
             if (!it.isDeleted()) {
                 SnapshotRecord rec;
@@ -193,7 +195,7 @@ public:
         }
         qf.gc();
     }
-    void getRecordFromIterator(SnapshotRecord &rec, cybozu::QueueFile::Iterator &it) {
+    void getRecordFromIterator(SnapshotRecord &rec, cybozu::util::QueueFile::Iterator &it) {
         assert(!it.isEndMark());
         std::vector<uint8_t> v;
         it.get(v);
@@ -207,7 +209,6 @@ private:
      * Scan the queue and set nextGid_ and lsid_.
      */
     void initScanQueue(cybozu::util::QueueFile &qf) {
-        cybozu::util::QueueFile qf(qp.str(), O_RDRW);
         qf.gc();
         cybozu::util::QueueFile::ConstIterator it = qf.begin();
         nextGid_ = 0;
