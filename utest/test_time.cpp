@@ -19,4 +19,11 @@ CYBOZU_TEST_AUTO(test)
         std::string s1 = cybozu::unixTimeToStr(t0);
         CYBOZU_TEST_EQUAL(s0, s1);
     }
+    {
+        /* leap second. */
+        std::string s0("20120630235960");
+        time_t t0 = cybozu::strToUnixTime(s0);
+        std::string s1 = cybozu::unixTimeToStr(t0);
+        CYBOZU_TEST_EQUAL("20120701000000", s1);
+    }
 }
