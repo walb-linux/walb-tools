@@ -47,7 +47,8 @@ public:
     /**
      * read.
      */
-    void read(char *buf, size_t size) {
+    void read(void *data, size_t size) {
+        char *buf = reinterpret_cast<char *>(data);
         size_t s = 0;
         while (s < size) {
             ssize_t ret = ::read(fd_, &buf[s], size - s);
@@ -64,7 +65,8 @@ public:
     /**
      * write.
      */
-    void write(const char *buf, size_t size) {
+    void write(const void *data, size_t size) {
+        const char *buf = reinterpret_cast<const char *>(data);
         size_t s = 0;
         while (s < size) {
             ssize_t ret = ::write(fd_, &buf[s], size - s);
@@ -123,7 +125,7 @@ class FdReader : public FdOperator
 {
 public:
     FdReader(int fd) : FdOperator(fd) {}
-    void write(const char *buf, size_t size) = delete;
+    void write(const void *, size_t) = delete;
     void fdatasync() = delete;
     void fsync() = delete;
 };
@@ -135,7 +137,7 @@ class FdWriter : public FdOperator
 {
 public:
     FdWriter(int fd) : FdOperator(fd) {}
-    virtual void read(char *buf, size_t size) = delete;
+    void read(void *, size_t) = delete;
 };
 
 /**
@@ -277,7 +279,8 @@ public:
     /**
      * Read data and fill a buffer.
      */
-    void read(off_t oft, size_t size, char* buf) {
+    void read(off_t oft, size_t size, void *data) {
+        char *buf = reinterpret_cast<char *>(data);
         if (deviceSize_ < oft + size) { throw EofError(); }
         ::lseek(fd_, oft, SEEK_SET);
         size_t s = 0;
@@ -299,7 +302,8 @@ public:
     /**
      * Write data of a buffer.
      */
-    void write(off_t oft, size_t size, const char* buf) {
+    void write(off_t oft, size_t size, const void* data) {
+        const char *buf = reinterpret_cast<const char *>(data);
         if (deviceSize_ < oft + size) { throw EofError(); }
         ::lseek(fd_, oft, SEEK_SET);
         size_t s = 0;
