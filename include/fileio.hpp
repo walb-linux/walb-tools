@@ -41,80 +41,41 @@ class FdOperator
 private:
     int fd_;
 public:
-    FdOperator(int fd)
-        : fd_(fd) {}
-
-    /**
-     * read.
-     */
+    explicit FdOperator(int fd) : fd_(fd) {}
+    size_t readsome(void *data, size_t size) {
+        ssize_t ret = ::read(fd_, data, size);
+        if (ret < 0) throw LibcError(errno, "read failed: ");
+        if (ret == 0) throw EofError();
+        return ret;
+    }
     void read(void *data, size_t size) {
         char *buf = reinterpret_cast<char *>(data);
         size_t s = 0;
         while (s < size) {
-            ssize_t ret = ::read(fd_, &buf[s], size - s);
-            if (ret < 0) {
-                throw LibcError(errno, "read failed: ");
-            }
-            if (ret == 0) {
-                throw EofError();
-            }
-            s += ret;
+            s += readsome(&buf[s], size - s);
         }
     }
-
-    /**
-     * write.
-     */
     void write(const void *data, size_t size) {
         const char *buf = reinterpret_cast<const char *>(data);
         size_t s = 0;
         while (s < size) {
             ssize_t ret = ::write(fd_, &buf[s], size - s);
-            if (ret < 0) {
-                throw LibcError(errno, "write failed: ");
-            }
-            if (ret == 0) {
-                throw EofError();
-            }
+            if (ret < 0) throw LibcError(errno, "write failed: ");
+            if (ret == 0) throw EofError();
             s += ret;
         }
     }
-
-    /**
-     * true if seekable.
-     */
     bool seekable() {
         return ::lseek(fd_, 0, SEEK_CUR) != -1;
     }
-
-    /**
-     * lseek.
-     */
     void lseek(off_t oft, int whence) {
-        off_t ret = ::lseek(fd_, oft, whence);
-        if (ret == -1) {
-            throw LibcError(errno, "lseek failed: ");
-        }
+        if (::lseek(fd_, oft, whence) == off_t(-1)) throw LibcError(errno, "lseek failed: ");
     }
-
-    /**
-     * fdatasync.
-     */
     void fdatasync() {
-        int ret = ::fdatasync(fd_);
-        if (ret) {
-            throw LibcError(errno, "fdsync failed: ");
-        }
+        if (::fdatasync(fd_) < 0) throw LibcError(errno, "fdsync failed: ");
     }
-
-    /**
-     * fsync.
-     */
     void fsync() {
-        int ret = ::fsync(fd_);
-        if (ret) {
-            throw LibcError(errno, "fsync failed: ");
-        }
+        if (::fsync(fd_) < 0) throw LibcError(errno, "fsync failed: ");
     }
 };
 
@@ -124,7 +85,7 @@ public:
 class FdReader : public FdOperator
 {
 public:
-    FdReader(int fd) : FdOperator(fd) {}
+    explicit FdReader(int fd) : FdOperator(fd) {}
     void write(const void *, size_t) = delete;
     void fdatasync() = delete;
     void fsync() = delete;
@@ -136,7 +97,8 @@ public:
 class FdWriter : public FdOperator
 {
 public:
-    FdWriter(int fd) : FdOperator(fd) {}
+    explicit FdWriter(int fd) : FdOperator(fd) {}
+    size_t readsome(void *, size_t) = delete;
     void read(void *, size_t) = delete;
 };
 
@@ -148,53 +110,81 @@ class FileOpener
 {
 private:
     int fd_;
-    std::once_flag closeFlag_;
+    bool isClosed_;
 public:
     FileOpener(const std::string& filePath, int flags)
         : fd_(staticOpen(filePath, flags))
-        , closeFlag_() {}
-
-    FileOpener(const std::string& filePath, int flags, int mode)
+        , isClosed_(false) {
+    }
+    FileOpener(const std::string& filePath, int flags, mode_t mode)
         : fd_(staticOpen(filePath, flags, mode))
-        , closeFlag_() {}
-
-    ~FileOpener() {
+        , isClosed_(false) {
+    }
+    virtual ~FileOpener() noexcept {
         try {
             close();
         } catch (...) {
         }
     }
-
     int fd() const {
-        if (fd_ < 0) {
-            throw RT_ERR("fd < 0.");
-        }
+        if (fd_ < 0) throw RT_ERR("fd < 0.");
         return fd_;
     }
-
     void close() {
-        std::call_once(closeFlag_, [&]() {
-                if (::close(fd_)) {
-                    throw LibcError(errno, "close failed: ");
-                }
-                fd_ = -1;
-            });
+        if (isClosed_) return;
+        if (::close(fd_) < 0) {
+            throw LibcError(errno, "close failed: ");
+        }
+        isClosed_ = true;
+        fd_ = -1;
     }
 private:
     static int staticOpen(const std::string& filePath, int flags) {
         int fd = ::open(filePath.c_str(), flags);
-        if (fd < 0) {
-            throw LibcError(errno, "open failed: ");
-        }
+        if (fd < 0) throw LibcError(errno, "open failed: ");
         return fd;
     }
-    static int staticOpen(const std::string& filePath, int flags, int mode) {
+    static int staticOpen(const std::string& filePath, int flags, mode_t mode) {
         int fd = ::open(filePath.c_str(), flags, mode);
-        if (fd < 0) {
-            throw LibcError(errno, "open failed: ");
-        }
+        if (fd < 0) throw LibcError(errno, "open failed: ");
         return fd;
     }
+};
+
+class FileOperator
+    : public FileOpener, public FdOperator
+{
+public:
+    FileOperator(const std::string& filePath, int flags)
+        : FileOpener(filePath, flags), FdOperator(fd()) {
+    }
+    FileOperator(const std::string& filePath, int flags, mode_t mode)
+        : FileOpener(filePath, flags, mode), FdOperator(fd()) {
+    }
+};
+
+class FileReader : public FileOperator
+{
+public:
+    FileReader(const std::string &path, int flags)
+        : FileOperator(path, flags) {
+    }
+    void write(const void *, size_t) = delete;
+    void fdatasync() = delete;
+    void fsync() = delete;
+};
+
+class FileWriter : public FileOperator
+{
+public:
+    FileWriter(const std::string &path, int flags)
+        : FileOperator(path, flags) {
+    }
+    FileWriter(const std::string &path, int flags, mode_t mode)
+        : FileOperator(path, flags, mode) {
+    }
+    size_t readsome(void *, size_t) = delete;
+    void read(void *, size_t) = delete;
 };
 
 /**
