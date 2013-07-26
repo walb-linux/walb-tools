@@ -24,11 +24,11 @@ struct meta_record
 {
     uint16_t preamble;
     uint8_t is_snapshot; /* snapshot or diff. */
-    uint8_t can_merge;
+    uint8_t can_merge; /* no meaning for snapshot. */
     uint32_t reserved0;
     uint64_t gid0;
     uint64_t gid1;
-    uint64_t gid2;
+    uint64_t gid2; /* no meaning for snapshot. */
     uint64_t lsid;
     uint64_t timestamp; /* unix time. */
 } __attribute__((packed));
@@ -44,7 +44,14 @@ public:
     MetaRecord() {
         init();
     }
-    void init() {
+    MetaRecord(const MetaRecord &rhs) : rec_() {
+        raw() = rhs.raw();
+    }
+    MetaRecord &operator=(const MetaRecord &rhs) {
+        raw() = rhs.raw();
+        return *this;
+    }
+    virtual void init() {
         ::memset(&rec_, 0, sizeof(rec_));
         raw().preamble = META_RECORD_PREAMBLE;
     }
@@ -73,7 +80,9 @@ public:
 class MetaDiff : public MetaRecord
 {
 public:
-    MetaDiff() : MetaRecord() {}
+    MetaDiff() : MetaRecord() {
+        raw().is_snapshot = false;
+    }
     /**
      * Dirty diff.
      */
@@ -91,6 +100,16 @@ public:
     MetaDiff(uint64_t gid0, uint64_t gid1)
         : MetaDiff(gid0, gid1, gid1) {
     }
+    MetaDiff(const MetaDiff &rhs) : MetaRecord(rhs) {
+    }
+    MetaDiff &operator=(const MetaDiff &rhs) {
+        raw() = rhs.raw();
+        return *this;
+    }
+    void init() override {
+        MetaRecord::init();
+        raw().is_snapshot = false;
+    }
     bool operator==(const MetaDiff &rhs) const {
         return gid0() == rhs.gid0()
             && gid1() == rhs.gid1()
@@ -99,11 +118,20 @@ public:
     bool operator!=(const MetaDiff &rhs) const {
         return !(*this == rhs);
     }
+    bool isValid() const {
+        try {
+            check();
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
     bool isDirty() const { return gid1() != gid2(); }
     uint64_t gid0() const { return raw().gid0; }
     uint64_t gid1() const { return raw().gid1; }
     uint64_t gid2() const { return raw().gid2; }
     bool canMerge(const MetaDiff &diff) const {
+        if (!diff.raw().can_merge) return false;
 #if 1
         /* This is a bit more strict check. */
         return gid1() == diff.gid0() && gid1() < diff.gid1();
@@ -145,7 +173,9 @@ private:
 class MetaSnap : public MetaRecord
 {
 public:
-    MetaSnap() : MetaRecord() {}
+    MetaSnap() : MetaRecord() {
+        raw().is_snapshot = true;
+    }
     /**
      * Dirty snapshot.
      */
@@ -162,6 +192,16 @@ public:
     explicit MetaSnap(uint64_t gid)
         : MetaSnap(gid, gid) {
     }
+    MetaSnap(const MetaSnap &rhs) : MetaRecord(rhs) {
+    }
+    MetaSnap &operator=(const MetaSnap &rhs) {
+        raw() = rhs.raw();
+        return *this;
+    }
+    void init() override {
+        MetaRecord::init();
+        raw().is_snapshot = true;
+    }
     uint64_t gid0() const { return raw().gid0; }
     uint64_t gid1() const { return raw().gid1; }
     bool operator==(const MetaSnap &rhs) const {
@@ -170,6 +210,14 @@ public:
     }
     bool operator!=(const MetaSnap &rhs) const {
         return !(*this == rhs);
+    }
+    bool isValid() const {
+        try {
+            check();
+            return true;
+        } catch (...) {
+            return false;
+        }
     }
     bool isDirty() const { return gid0() != gid1(); }
     /**
@@ -202,6 +250,17 @@ private:
         }
     }
 };
+
+static inline MetaSnap getSnapFromDiff(const MetaDiff &diff)
+{
+    MetaSnap snap;
+    snap.init();
+    snap.raw().gid0 = diff.gid1();
+    snap.raw().gid1 = diff.gid2();
+    snap.raw().timestamp = diff.raw().timestamp;
+    snap.raw().lsid = diff.raw().lsid;
+    return snap;
+}
 
 } //namespace walb
 
