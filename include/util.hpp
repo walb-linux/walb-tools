@@ -19,6 +19,7 @@
 #include <cerrno>
 #include <cassert>
 #include <cstdio>
+#include <cctype>
 
 #include <sys/time.h>
 
@@ -326,6 +327,48 @@ template <typename ByteType>
 void printByteArray(ByteType *data, size_t size)
 {
     printByteArray<ByteType>(::stdout, data, size);
+}
+
+/**
+ * "0x" prefix will not be put.
+ */
+template <typename IntType>
+std::string intToHexStr(IntType i)
+{
+    std::string s;
+    while (0 < i) {
+        int m = i % 16;
+        if (m < 10) {
+            s.push_back(m + '0');
+        } else {
+            s.push_back(m - 10 + 'a');
+        }
+        i /= 16;
+    }
+    std::reverse(s.begin(), s.end());
+    return std::move(s);
+}
+
+/**
+ * The function does not assume "0x" prefix.
+ */
+template <typename IntType>
+bool hexStrToInt(const std::string &hexStr, IntType &i)
+{
+    std::string s1;
+    i = 0;
+    for (char c : hexStr) {
+        c = std::tolower(c);
+        s1.push_back(c);
+        if ('0' <= c && c <= '9') {
+            i = i * 16 + (c - '0');
+        } else if ('a' <= c && c <= 'f') {
+            i = i * 16 + (c - 'a' + 10);
+        } else {
+            return false;
+        }
+    }
+    return intToHexStr(i) == s1;
 }
 
 } //namespace util
