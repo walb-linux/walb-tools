@@ -13,69 +13,36 @@
 
 namespace cybozu {
 
-template <>
-struct InputStreamTag<util::FdOperator>
-{
-    static inline size_t read(util::FdOperator &is, char *buf, size_t size) {
-        return is.readsome(buf, size);
+#define DEFINE_SERIALIZE_LOADER(type)                                   \
+    template <>                                                         \
+    struct InputStreamTag<type>                                         \
+    {                                                                   \
+        static inline size_t readSome(type &is, void *buf, size_t size) { \
+            return is.readsome(buf, size);                              \
+        }                                                               \
+        static inline void read(type &is, void *buf, size_t size) {     \
+            return is.read(buf, size);                                  \
+        }                                                               \
     }
-};
 
-template <>
-struct InputStreamTag<util::FdReader>
-{
-    static inline size_t read(util::FdReader &is, char *buf, size_t size) {
-        return is.readsome(buf, size);
-    }
-};
+DEFINE_SERIALIZE_LOADER(util::FdOperator);
+DEFINE_SERIALIZE_LOADER(util::FdReader);
+DEFINE_SERIALIZE_LOADER(util::FileOperator);
+DEFINE_SERIALIZE_LOADER(util::FileReader);
 
-template <>
-struct InputStreamTag<util::FileOperator>
-{
-    static inline size_t read(util::FileOperator &is, char *buf, size_t size) {
-        return is.readsome(buf, size);
+#define DEFINE_SERIALIZE_SAVER(type)                                    \
+    template <>                                                         \
+    struct OutputStreamTag<type>                                        \
+    {                                                                   \
+        static inline void write(type &os, const void *buf, size_t size) { \
+            os.write(buf, size);                                        \
+        }                                                               \
     }
-};
 
-template <>
-struct InputStreamTag<util::FileReader>
-{
-    static inline size_t read(util::FileReader &is, char *buf, size_t size) {
-        return is.readsome(buf, size);
-    }
-};
-
-template <>
-struct OutputStreamTag<util::FdOperator>
-{
-    static inline void write(util::FdOperator &os, const char *buf, size_t size) {
-        os.write(buf, size);
-    }
-};
-
-template <>
-struct OutputStreamTag<util::FdWriter>
-{
-    static inline void write(util::FdWriter &os, const char *buf, size_t size) {
-        os.write(buf, size);
-    }
-};
-
-template <>
-struct OutputStreamTag<util::FileOperator>
-{
-    static inline void write(util::FileOperator &os, const char *buf, size_t size) {
-        os.write(buf, size);
-    }
-};
-
-template <>
-struct OutputStreamTag<util::FileWriter>
-{
-    static inline void write(util::FileWriter &os, const char *buf, size_t size) {
-        os.write(buf, size);
-    }
-};
+DEFINE_SERIALIZE_SAVER(util::FdOperator);
+DEFINE_SERIALIZE_SAVER(util::FdWriter);
+DEFINE_SERIALIZE_SAVER(util::FileOperator);
+DEFINE_SERIALIZE_SAVER(util::FileWriter);
 
 } //namespace cybozu
 

@@ -17,16 +17,20 @@ namespace cybozu {
 template <>
 struct InputStreamTag<TmpFile>
 {
-    static inline size_t read(TmpFile &is, char *buf, size_t size) {
+    static inline size_t readSome(TmpFile &is, void *buf, size_t size) {
         util::FdReader fdr(is.fd());
         return fdr.readsome(buf, size);
+    }
+    static inline void read(TmpFile &is, void *buf, size_t size) {
+        util::FdReader fdr(is.fd());
+        return fdr.read(buf, size);
     }
 };
 
 template <>
 struct OutputStreamTag<TmpFile>
 {
-    static inline void write(TmpFile &os, const char *buf, size_t size) {
+    static inline void write(TmpFile &os, const void *buf, size_t size) {
         util::FdWriter fdw(os.fd());
         fdw.write(buf, size);
     }

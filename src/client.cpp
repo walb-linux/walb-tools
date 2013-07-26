@@ -18,12 +18,9 @@ int main(int argc, char *argv[])
     std::string addr(argv[1]);
     uint16_t port = atoi(argv[2]);
     uint32_t val = atoi(argv[3]);
-    if (!sock.connect(addr, port)) {
-        ::printf("connect failed.\n");
-        return 1;
-    }
+    sock.connect(addr, port);
     sock.write(&val, sizeof(val));
-    sock.readAll(&val, sizeof(val));
+    sock.read(&val, sizeof(val));
     ::printf("recv %u\n", val);
     return 0;
 }

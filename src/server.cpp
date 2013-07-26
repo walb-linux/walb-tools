@@ -40,7 +40,7 @@ public:
     }
     void run() {
         uint32_t i;
-        sock_.readAll(&i, sizeof(i));
+        sock_.read(&i, sizeof(i));
         LOGd("recv %u", i);
         i++;
         sock_.write(&i, sizeof(i));
@@ -84,20 +84,14 @@ int main(int argc, char *argv[])
 #endif
 
     cybozu::Socket ssock;
-    if (!ssock.bind(opt.port)) {
-        LOGe("bind failed.");
-        return 1;
-    }
+    ssock.bind(opt.port);
 
     cybozu::thread::ThreadRunnerPool pool;
     while (true) {
         while (!ssock.queryAccept()) {
         }
         cybozu::Socket sock;
-        if (!ssock.accept(sock)) {
-            LOGe("accept failed.");
-            return 1;
-        }
+        ssock.accept(sock);
         pool.add(std::make_shared<RequestWorker>(std::move(sock))).start();
         pool.gc();
         LOGi("pool size %zu", pool.size());
