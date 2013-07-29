@@ -9,9 +9,11 @@
 #include <cstring>
 #include <memory>
 #include <list>
+#include <queue>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #ifndef CYBOZU_FILE_PATH_HPP
 #define CYBOZU_FILE_PATH_HPP
@@ -75,6 +77,53 @@ public:
 };
 
 /**
+ * opendir()/closedir()/readdir() wrapper.
+ */
+class Directory
+{
+private:
+    DIR *dirP_;
+    mutable std::queue<std::string> q_;
+public:
+    explicit Directory(const std::string &path) : dirP_(nullptr), q_() {
+        dirP_ = ::opendir(path.c_str());
+        if (!dirP_) {
+            throw std::runtime_error("opendir failed.");
+        }
+    }
+    ~Directory() noexcept {
+        if (dirP_) {
+            ::closedir(dirP_);
+            dirP_ = nullptr;
+        }
+    }
+    bool isEnd() const {
+        return q_.empty() && !readAhead();
+    }
+    std::string next() const {
+        if (isEnd()) {
+            throw std::runtime_error("no more data.");
+        }
+        assert(!q_.empty());
+        std::string s = std::move(q_.front());
+        q_.pop();
+        return std::move(s);
+    }
+private:
+    /**
+     * RETURN:
+     *   false readdir() returns nullptr.
+     */
+    bool readAhead() const {
+        assert(dirP_);
+        struct dirent *ent = ::readdir(dirP_);
+        if (!ent) return false;
+        q_.push(std::string(ent->d_name));
+        return true;
+    }
+};
+
+/**
  * A file path management.
  * Escaped separator character "\\/" is not supported.
  */
@@ -82,7 +131,7 @@ class FilePath
 {
 private:
     std::string path_;
-    std::shared_ptr<FileStat> statP_;
+    mutable std::shared_ptr<FileStat> statP_;
 
 public:
     static const int SEPARATOR = '/';
@@ -162,29 +211,54 @@ public:
     const char *cStr() const {
         return path_.c_str();
     }
-    FileStat &stat(bool isForce = false) {
+    FileStat &stat(bool isForce = false) const {
         if (!statP_ || isForce) {
             statP_ = std::make_shared<FileStat>(path_);
         }
         return *statP_;
     }
-    bool remove() {
+    bool remove() const {
         return stat().isDirectory() ? rmdir() : unlink();
     }
-    bool unlink() {
-        return ::unlink(path_.c_str()) == 0;
+    bool unlink() const {
+        bool ret = ::unlink(path_.c_str()) == 0;
+        statP_.reset();
+        return ret;
     }
-    bool mkdir(mode_t mode = 0755) {
-        return ::mkdir(path_.c_str(), mode) == 0;
+    bool mkdir(mode_t mode = 0755) const {
+        bool ret = ::mkdir(path_.c_str(), mode) == 0;
+        statP_.reset();
+        return ret;
     }
-    bool rmdir() {
-        return ::rmdir(path_.c_str()) == 0;
+    bool rmdir() const {
+        bool ret = ::rmdir(path_.c_str()) == 0;
+        statP_.reset();
+        return ret;
     }
-    bool rename(const FilePath &newPath) {
-        return ::rename(path_.c_str(), newPath.str().c_str()) == 0;
+    bool rename(const FilePath &newPath) const {
+        bool ret = ::rename(path_.c_str(), newPath.cStr()) == 0;
+        statP_.reset();
+        return ret;
     }
-    bool chmod(mode_t mode) {
-        return ::chmod(path_.c_str(), mode) == 0;
+    bool chmod(mode_t mode) const {
+        bool ret = ::chmod(path_.c_str(), mode) == 0;
+        statP_.reset();
+        return ret;
+    }
+    bool rmdirRecursive() const {
+        if (!stat().isDirectory()) return false;
+        Directory dir(str());
+        while (!dir.isEnd()) {
+            std::string s = dir.next();
+            if (s == "." || s == "..") continue;
+            FilePath child = *this + FilePath(s);
+            if (child.stat().isDirectory()) {
+                if (!child.rmdirRecursive()) return false;
+            } else {
+                if (!child.unlink()) return false;
+            }
+        }
+        return rmdir();
     }
 private:
     /**
