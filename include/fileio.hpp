@@ -441,6 +441,17 @@ private:
     }
 };
 
+/**
+ * Create a file if it does not exist.
+ */
+void createEmptyFile(const std::string &path, mode_t mode = 0644)
+{
+    struct stat st;
+    if (::stat(path.c_str(), &st) == 0) return;
+    FileWriter writer(path, O_CREAT | O_TRUNC | O_RDWR, mode);
+    writer.close();
+}
+
 }} //namespace cybozu::util
 
 #endif /* FILEIO_HPP */
