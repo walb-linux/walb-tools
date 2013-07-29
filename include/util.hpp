@@ -335,6 +335,7 @@ void printByteArray(ByteType *data, size_t size)
 template <typename IntType>
 std::string intToHexStr(IntType i)
 {
+    if (i == 0) return "0";
     std::string s;
     while (0 < i) {
         int m = i % 16;
