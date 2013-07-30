@@ -5,3 +5,4 @@ test_tmp_file
 test_time
 test_fileio
 test_wdiff_data
+test_worker_data

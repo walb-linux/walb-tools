@@ -1,6 +1,7 @@
 #include "cybozu/test.hpp"
 #include "wdiff_data.hpp"
 #include "file_path.hpp"
+#include "for_test.hpp"
 
 void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool canMerge)
 {
@@ -16,28 +17,6 @@ void createFile(walb::WalbDiffFiles &diffFiles, walb::MetaDiff &diff)
     cybozu::FilePath fp = diffFiles.dirPath() + cybozu::FilePath(diffFiles.createDiffFileName(diff));
     cybozu::util::createEmptyFile(fp.str());
 }
-
-class TestDirectory
-{
-private:
-    cybozu::FilePath fp_;
-public:
-    explicit TestDirectory(const std::string &path)
-        : fp_(path) {
-        if (fp_.stat().exists()) {
-            throw std::runtime_error("directory already exists.");
-        }
-        if (!fp_.mkdir()) {
-            throw std::runtime_error("mkdir() failed.");
-        }
-    }
-    ~TestDirectory() noexcept {
-        try {
-            fp_.rmdirRecursive();
-        } catch (...) {
-        }
-    }
-};
 
 CYBOZU_TEST_AUTO(merge)
 {

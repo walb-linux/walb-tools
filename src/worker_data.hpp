@@ -11,6 +11,7 @@
 #include "queue_file.hpp"
 #include "file_path.hpp"
 #include "tmp_file.hpp"
+#include "tmp_file_serializer.hpp"
 #include "meta.hpp"
 
 #ifndef WALB_TOOLS_WORKER_DATA_HPP
@@ -95,8 +96,6 @@ public:
         uint64_t n = 1 + (lsid - nextLsid_) / sizePb_;
         uint64_t gid0 = nextGid_;
         uint64_t gid1 = nextGid_ + n;
-        nextGid_ += gid1;
-        nextLsid_ = lsid;
 
         /* Timestamp */
         time_t ts = ::time(nullptr);
@@ -110,25 +109,8 @@ public:
         rec.raw().timestamp = ts;
         rec.raw().can_merge = canMerge;
 
-        if (!addRecord(rec)) throw std::runtime_error("addRecord() failed.");
+        addRecord(rec);
         return std::make_pair(gid0, gid1);
-    }
-    /**
-     * Add a snapshot record.
-     */
-    bool addRecord(const MetaSnap &rec) {
-        assert(rec.isValid());
-        if (nextGid_ != rec.raw().gid0) {
-            return false;
-        }
-        if (rec.raw().lsid < nextLsid_) {
-            return false;
-        }
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        qf.push(rec.rawData(), rec.rawSize());
-        nextGid_ = rec.raw().gid1;
-        nextLsid_ = rec.raw().lsid;
-        return true;
     }
     cybozu::FilePath dirPath() const {
         return baseDir_ + cybozu::FilePath(name_);
@@ -139,15 +121,15 @@ public:
     }
     MetaSnap front() const {
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        std::vector<uint8_t> v;
-        qf.front(v);
         MetaSnap rec;
-        rec.load(&v[0], v.size());
+        qf.front(rec.raw());
         return rec;
     }
     void pop() {
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        qf.front(doneRec_.raw());
         qf.pop();
+        saveDoneRecord();
     }
     /**
      * Remove old records which corresponding wlogs has been transferred.
@@ -164,16 +146,30 @@ public:
             getRecordFromIterator(rec, it);
             if (gid <= rec.raw().gid0) break;
             it.setDeleted();
+            doneRec_ = rec;
             ++it;
         }
         qf.gc();
+        saveDoneRecord();
     }
-    template <class QueueIterator>
-    void getRecordFromIterator(MetaSnap &rec, QueueIterator &it) {
-        assert(!it.isEndMark());
-        std::vector<uint8_t> v;
-        it.get(v);
-        rec.load(&v[0], v.size());
+    /**
+     * for debug.
+     */
+    std::vector<MetaSnap> getAllRecords() const {
+        std::vector<MetaSnap> v;
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        cybozu::util::QueueFile::ConstIterator it = qf.cbegin();
+        while (!it.isEndMark()) {
+            if (it.isDeleted()) {
+                ++it;
+                continue;
+            }
+            MetaSnap rec;
+            getRecordFromIterator(rec, it);
+            v.push_back(rec);
+            ++it;
+        }
+        return std::move(v);
     }
 private:
     cybozu::FilePath doneRecordPath() const {
@@ -235,6 +231,26 @@ private:
         cybozu::TmpFile tmpFile(dirPath().str());
         cybozu::save(tmpFile, doneRec_);
         tmpFile.save(doneRecordPath().str());
+    }
+    void addRecord(const MetaSnap &rec) {
+        assert(rec.isValid());
+        if (nextGid_ != rec.raw().gid0) {
+            throw std::runtime_error("addRecord: gid0 invalid.");
+        }
+        if (rec.raw().lsid < nextLsid_) {
+            throw std::runtime_error("addREcord: lsid invalid.");
+        }
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        qf.push(rec.rawData(), rec.rawSize());
+        nextGid_ = rec.raw().gid1;
+        nextLsid_ = rec.raw().lsid;
+    }
+    template <class QueueIterator>
+    void getRecordFromIterator(MetaSnap &rec, QueueIterator &it) const {
+        assert(!it.isEndMark());
+        std::vector<uint8_t> v;
+        it.get(v);
+        rec.load(&v[0], v.size());
     }
 };
 
