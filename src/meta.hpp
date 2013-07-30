@@ -60,6 +60,12 @@ public:
     void *rawData() { return &rec_; }
     const void *rawData() const { return &rec_; }
     size_t rawSize() const { return sizeof(rec_); }
+    void load(const void *data, size_t size) {
+        if (size != sizeof(rec_)) {
+            throw std::runtime_error("bad size.");
+        }
+        ::memcpy(&rec_, data, sizeof(rec_));
+    }
     template <typename InputStream>
     void load(InputStream &is) {
         cybozu::loadPod(rec_, is);
