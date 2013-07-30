@@ -5,9 +5,11 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
+#include <cstdio>
 #include <cassert>
 #include <stdexcept>
 #include <iostream>
+#include <cinttypes>
 #include "cybozu/serializer.hpp"
 
 #ifndef WALB_TOOLS_META_HPP
@@ -158,6 +160,17 @@ public:
         os << d0.gid0() << ", " << d0.gid1() << ", " << d0.gid2() << std::endl;
         return os;
     }
+    void print(FILE *fp) const {
+        ::fprintf(
+            fp,
+            "MetaDiff ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " %" PRIu64 " "
+            "can_merge %d lsid %" PRIu64 "\n"
+            , raw().timestamp, gid0(), gid1(), gid2()
+            , raw().can_merge, raw().lsid);
+    }
+    void print() const {
+        print(::stdout);
+    }
 private:
     void check() const {
         if (raw().is_snapshot) {
@@ -245,6 +258,17 @@ public:
     friend inline std::ostream &operator<<(std::ostream& os, const MetaSnap &s0) {
         os << s0.gid0() << ", " << s0.gid1() << std::endl;
         return os;
+    }
+    void print(FILE *fp) const {
+        ::fprintf(
+            fp,
+            "MetaSnap ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " "
+            "can_merge %d lsid %" PRIu64 "\n"
+            , raw().timestamp, gid0(), gid1()
+            , raw().can_merge, raw().lsid);
+    }
+    void print() const {
+        print(::stdout);
     }
 private:
     void check() const {
