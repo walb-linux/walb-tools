@@ -6,3 +6,4 @@ test_time
 test_fileio
 test_wdiff_data
 test_worker_data
+test_process
