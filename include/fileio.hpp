@@ -45,14 +45,15 @@ public:
     size_t readsome(void *data, size_t size) {
         ssize_t ret = ::read(fd_, data, size);
         if (ret < 0) throw LibcError(errno, "read failed: ");
-        if (ret == 0) throw EofError();
         return ret;
     }
     void read(void *data, size_t size) {
         char *buf = reinterpret_cast<char *>(data);
         size_t s = 0;
         while (s < size) {
-            s += readsome(&buf[s], size - s);
+            size_t r = readsome(&buf[s], size - s);
+            if (r == 0) throw EofError();
+            s += r;
         }
     }
     void write(const void *data, size_t size) {
