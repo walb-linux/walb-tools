@@ -217,6 +217,14 @@ public:
         }
         return *statP_;
     }
+    FilePath toFullPath() const {
+        if (isFull()) return *this;
+        char buf[PATH_MAX + 1];
+        if (::getcwd(buf, PATH_MAX + 1) == nullptr) {
+            throw std::runtime_error("getcwd failed.");
+        }
+        return FilePath(buf) + *this;
+    }
     bool remove() const {
         return stat().isDirectory() ? rmdir() : unlink();
     }
