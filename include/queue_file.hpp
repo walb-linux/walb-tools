@@ -214,6 +214,17 @@ public:
         gcFront();
         return header_.beginOffset == header_.endOffset;
     }
+    template <typename T>
+    void front(T& data) const {
+        gcFront();
+        assert(!empty());
+        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
+        assert(!recOp.isEndMark());
+        if (recOp.dataSize() != sizeof(data)) {
+            throw std::runtime_error("front(): data size differs.");
+        }
+        ::memcpy(&data, recOp.dataPtr<void>(), sizeof(data));
+    }
     template <typename CharT>
     void front(std::vector<CharT>& v) const {
         gcFront();
