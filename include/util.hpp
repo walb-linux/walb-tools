@@ -29,13 +29,6 @@
 #define RT_ERR(fmt, args...)                                    \
     std::runtime_error(cybozu::util::formatString(fmt, ##args))
 
-#define CHECKx(cond)                                                \
-    do {                                                            \
-        if (!(cond)) {                                              \
-            throw RT_ERR("check error: %s:%d", __func__, __LINE__); \
-        }                                                           \
-    } while (0)
-
 #define DISABLE_COPY_AND_ASSIGN(ClassName)              \
     ClassName(const ClassName &rhs) = delete;           \
     ClassName &operator=(const ClassName &rhs) = delete
@@ -115,6 +108,19 @@ void testFormatString()
         assert(st.size() == 20);
     }
 }
+
+namespace {
+
+static inline void checkCond(bool cond, const char *name, int line)
+{
+    if (!cond) {
+        throw RT_ERR("check error: %s:%d", name, line);
+    }
+}
+
+} //anonymous namespace
+
+#define CHECKx(cond) checkCond(cond, __func__, __LINE__)
 
 /**
  * Get unix time in double.
