@@ -9,7 +9,9 @@
 #define UTIL_HPP
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
+#include <vector>
 #include <stdexcept>
 #include <string>
 #include <cstdarg>
@@ -370,6 +372,85 @@ bool hexStrToInt(const std::string &hexStr, IntType &i)
         }
     }
     return intToHexStr(i) == s1;
+}
+
+/**
+ * Trim first and last spaces from a string.
+ */
+std::string trimSpace(const std::string &str, const std::string &spaces = " \t\r\n")
+{
+    auto isSpace = [&](char c) -> bool {
+        for (char space : spaces) {
+            if (c == space) return true;
+        }
+        return false;
+    };
+
+    size_t i0, i1;
+    for (i0 = 0; i0 < str.size(); i0++) {
+        if (!isSpace(str[i0])) break;
+    }
+    for (i1 = str.size(); 0 < i1; i1--) {
+        if (!isSpace(str[i1 - 1])) break;
+    }
+    if (i0 < i1) {
+        return str.substr(i0, i1 - i0);
+    } else {
+        return "";
+    }
+}
+
+/**
+ * Split a string with separators.
+ */
+std::vector<std::string> splitString(
+    const std::string str, const std::string separators, bool isTrimSpace = true)
+{
+    std::string s(str);
+    std::vector<std::string> v;
+
+    auto isSep = [&](int c) -> bool {
+        for (char sepChar : separators) {
+            if (sepChar == c) return true;
+        }
+        return false;
+    };
+    auto findSep = [&](const std::string &s) -> size_t {
+        for (size_t i = 0; i < s.size(); i++) {
+            if (isSep(s[i])) return i;
+        }
+        return std::string::npos;
+    };
+
+    while (true) {
+        size_t pos = findSep(s);
+        if (pos == std::string::npos) {
+            v.push_back(s);
+            break;
+        }
+        v.push_back(s.substr(0, pos));
+        s = s.substr(pos + 1);
+    }
+    if (isTrimSpace) {
+        for (std::string &s : v) s = trimSpace(s);
+    }
+    return std::move(v);
+}
+
+template <typename C>
+void printList(const C &container)
+{
+    std::cout << "[";
+    if (!container.empty()) {
+        typename C::const_iterator it = container.cbegin();
+        std::cout << *it;
+        ++it;
+        while (it != container.cend()) {
+            std::cout << ", " << *it;
+            ++it;
+        }
+    }
+    std::cout << "]" << std::endl;
 }
 
 } //namespace util
