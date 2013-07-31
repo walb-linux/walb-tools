@@ -135,7 +135,7 @@ private:
 
 public:
     static const int SEPARATOR = '/';
-
+    FilePath() : path_("."), statP_() {} /* current directly */
     explicit FilePath(const std::string &path) : path_(path), statP_() {}
     explicit FilePath(std::string &&path) : path_(std::move(path)), statP_() {}
     FilePath operator+(const FilePath &rhs) const {
