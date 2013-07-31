@@ -153,6 +153,9 @@ public:
         path.append(rhs.path_);
         return FilePath(std::move(path)).removeRedundancy();
     }
+    FilePath operator+(const std::string &rhs) const {
+        return *this + cybozu::FilePath(rhs);
+    }
     bool operator==(const FilePath &rhs) const {
         std::string s0 = removeRedundancy().str();
         std::string s1 = rhs.removeRedundancy().str();
