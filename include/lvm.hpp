@@ -17,6 +17,7 @@
 #include "cybozu/file.hpp"
 #include "cybozu/atoi.hpp"
 #include "cybozu/itoa.hpp"
+#include "cybozu/string_operation.hpp"
 #include "fileio.hpp"
 #include "file_path.hpp"
 #include "process.hpp"
@@ -38,6 +39,24 @@ using VgList = std::vector<Vg>;
 
 namespace local {
 
+static bool isSpace(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static void trim(std::string &str)
+{
+    cybozu::Trim(str, isSpace);
+}
+
+static std::vector<std::string> splitAndTrim(const std::string &str, char sep)
+{
+    std::vector<std::string> v;
+    cybozu::Split(v, str, sep);
+    for (std::string &s : v) trim(s);
+    return std::move(v);
+}
+
 static bool isDeviceAvailable(const cybozu::FilePath &path) {
     if (!path.stat().exists()) return false;
 
@@ -49,9 +68,9 @@ static bool isDeviceAvailable(const cybozu::FilePath &path) {
     args.push_back("Open");
     args.push_back(path.str());
 
-    std::string s0 = cybozu::process::call("/sbin/dmsetup", args);
-    std::string s1 = cybozu::util::trimSpace(s0);
-    uint64_t i = cybozu::atoi(s1);
+    std::string s = cybozu::process::call("/sbin/dmsetup", args);
+    trim(s);
+    uint64_t i = cybozu::atoi(s);
     return i == 0;
 }
 
@@ -395,9 +414,9 @@ LvList listLv(const std::string &arg = "")
     if (!arg.empty()) args.push_back(arg);
     std::string result
         = local::callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
-    for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
+    for (const std::string &s0 : local::splitAndTrim(result, '\n')) {
         if (s0.empty()) continue; /* last '\n' */
-        std::vector<std::string> v = cybozu::util::splitString(s0, ",");
+        std::vector<std::string> v = local::splitAndTrim(s0, ',');
         if (v.size() != 4) {
             throw std::runtime_error("invalid output of lvs.");
         }
@@ -499,9 +518,9 @@ VgList listVg()
     VgList list;
     std::string result
         = local::callLvm("/sbin/vgs", "vg_name,vg_size,vg_free");
-    for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
+    for (const std::string &s0 : local::splitAndTrim(result, '\n')) {
         if (s0.empty()) continue;
-        std::vector<std::string> v = cybozu::util::splitString(s0, ",");
+        std::vector<std::string> v = local::splitAndTrim(s0, ',');
         if (v.size() != 3) {
             throw std::runtime_error("invalid output of vgs.");
         }
