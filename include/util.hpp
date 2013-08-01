@@ -406,32 +406,31 @@ std::string trimSpace(const std::string &str, const std::string &spaces = " \t\r
  * Split a string with separators.
  */
 std::vector<std::string> splitString(
-    const std::string str, const std::string separators, bool isTrimSpace = true)
+    const std::string &str, const std::string &separators, bool isTrimSpace = true)
 {
-    std::string s(str);
-    std::vector<std::string> v;
-
     auto isSep = [&](int c) -> bool {
         for (char sepChar : separators) {
             if (sepChar == c) return true;
         }
         return false;
     };
-    auto findSep = [&](const std::string &s) -> size_t {
-        for (size_t i = 0; i < s.size(); i++) {
-            if (isSep(s[i])) return i;
+    auto findSep = [&](size_t pos) -> size_t {
+        for (size_t i = pos; i < str.size(); i++) {
+            if (isSep(str[i])) return i;
         }
         return std::string::npos;
     };
 
+    std::vector<std::string> v;
+    size_t cur = 0;
     while (true) {
-        size_t pos = findSep(s);
+        size_t pos = findSep(cur);
         if (pos == std::string::npos) {
-            v.push_back(s);
+            v.push_back(str.substr(cur));
             break;
         }
-        v.push_back(s.substr(0, pos));
-        s = s.substr(pos + 1);
+        v.push_back(str.substr(cur, pos - cur));
+        cur = pos + 1;
     }
     if (isTrimSpace) {
         for (std::string &s : v) s = trimSpace(s);
