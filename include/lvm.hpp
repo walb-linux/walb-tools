@@ -39,7 +39,7 @@ using LvMap = std::map<std::string, LogicalVolume>;
 using LvList = std::vector<LogicalVolume>;
 using VgList = std::vector<VolumeGroup>;
 
-namespace {
+namespace local {
 
 static cybozu::FilePath getLvmPath(
     const std::string &vgName, const std::string &prefix, const std::string &name)
@@ -147,12 +147,12 @@ bool waitForDeviceAvailable(cybozu::FilePath &path)
 {
     for (int i = 0; i < 10; i++) {
         if (isDeviceAvailable(path)) return true;
-        sleepMs(1000);
+        local::sleepMs(1000);
     }
     return false;
 }
 
-} //namespace anonumous
+} //namespace local
 
 /**
  * Prototypes.
@@ -197,7 +197,7 @@ public:
     uint64_t sizeLb() const { return sizeLb_; }
     bool isSnapshot() const { return isSnapshot_; }
     cybozu::FilePath path() const {
-        return getLvmPath(vgName_, prefix_, name_);
+        return local::getLvmPath(vgName_, prefix_, name_);
     }
     LogicalVolume snapshot(const std::string &prefix) const {
         checkVolume();
@@ -205,7 +205,7 @@ public:
     }
     bool hasSnapshot(const std::string &prefix) const {
         checkVolume();
-        return getLvmPath(vgName_, prefix, name_).stat().exists();
+        return local::getLvmPath(vgName_, prefix, name_).stat().exists();
     }
     LvList snapshotList() const {
         checkVolume();
@@ -284,12 +284,12 @@ LogicalVolume createLv(const std::string &vgName, const std::string &name, uint6
 {
     std::vector<std::string> args;
     args.push_back("--name=" + VOLUME_PREFIX + name);
-    args.push_back(getSizeOpt(sizeLb));
+    args.push_back(local::getSizeOpt(sizeLb));
     args.push_back(vgName);
     cybozu::process::call("/sbin/lvcreate", args);
 
-    cybozu::FilePath lvPath = getLvmPath(vgName, VOLUME_PREFIX, name);
-    if (waitForDeviceAvailable(lvPath)) {
+    cybozu::FilePath lvPath = local::getLvmPath(vgName, VOLUME_PREFIX, name);
+    if (local::waitForDeviceAvailable(lvPath)) {
         return LogicalVolume(vgName, VOLUME_PREFIX, name, sizeLb, false);
     }
     /* creation failed. */
@@ -306,14 +306,14 @@ LogicalVolume createSnapshot(
     uint64_t snapSizeLb = std::min(sizeLb, MAX_SNAPSHOT_SIZE);
     std::vector <std::string> args;
     args.push_back("-s");
-    args.push_back(getSizeOpt(snapSizeLb));
+    args.push_back(local::getSizeOpt(snapSizeLb));
     args.push_back("--name=" + prefix + name);
-    cybozu::FilePath lvPath = getLvmPath(vgName, VOLUME_PREFIX, name);
+    cybozu::FilePath lvPath = local::getLvmPath(vgName, VOLUME_PREFIX, name);
     args.push_back(lvPath.str());
     cybozu::process::call("/sbin/lvcreate", args);
 
-    cybozu::FilePath snapPath = getLvmPath(vgName, prefix, name);
-    if (waitForDeviceAvailable(snapPath)) {
+    cybozu::FilePath snapPath = local::getLvmPath(vgName, prefix, name);
+    if (local::waitForDeviceAvailable(snapPath)) {
         return LogicalVolume(vgName, prefix, name, snapSizeLb, true);
     }
     /* possible invalid snapshot. */
@@ -334,7 +334,7 @@ void removeLv(const std::string &pathStr)
     args.push_back("-f");
     args.push_back(path.str());
     cybozu::process::call("/sbin/lvremove", args);
-    sleepMs(1000); /* for safety. */
+    local::sleepMs(1000); /* for safety. */
 }
 
 /**
@@ -342,7 +342,7 @@ void removeLv(const std::string &pathStr)
  */
 void removeLvAll(const std::string &vgName, const std::string &name)
 {
-    cybozu::FilePath path = getLvmPath(vgName, VOLUME_PREFIX, name);
+    cybozu::FilePath path = local::getLvmPath(vgName, VOLUME_PREFIX, name);
     LogicalVolume lv = locateLv(path.str());
     for (LogicalVolume &snap : lv.snapshotList()) {
         removeLv(snap.path().str());
@@ -357,10 +357,10 @@ void resizeLv(const std::string &pathStr, uint64_t newSizeLb)
 {
     std::vector<std::string> args;
     args.push_back("-f"); /* force volume shrink */
-    args.push_back(getSizeOpt(newSizeLb));
+    args.push_back(local::getSizeOpt(newSizeLb));
     args.push_back(pathStr);
     cybozu::process::call("/sbin/lvcreate", args);
-    sleepMs(1000); /* for safety. */
+    local::sleepMs(1000); /* for safety. */
 }
 
 /**
@@ -374,7 +374,7 @@ LvList listLv(const std::string &arg = "")
     std::vector<std::string> args;
     if (!arg.empty()) args.push_back(arg);
     std::string result
-        = callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
+        = local::callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
     for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
         std::vector<std::string> v = cybozu::util::splitString(s0, ",");
         if (v.size() != 4) {
@@ -382,10 +382,10 @@ LvList listLv(const std::string &arg = "")
         }
         bool isSnapshot = !v[1].empty();
         std::string volName = isSnapshot ? v[1] : v[0];
-        if (!hasPrefix(volName, VOLUME_PREFIX)) continue;
-        uint64_t sizeLb = parseSizeLb(v[2]);
+        if (!local::hasPrefix(volName, VOLUME_PREFIX)) continue;
+        uint64_t sizeLb = local::parseSizeLb(v[2]);
         std::string name = volName.substr(VOLUME_PREFIX.size());
-        std::string prefix = isSnapshot ? getPrefix(v[0], name) : VOLUME_PREFIX;
+        std::string prefix = isSnapshot ? local::getPrefix(v[0], name) : VOLUME_PREFIX;
         std::string &vgName = v[3];
 
         list.push_back(LogicalVolume(vgName, prefix, name, sizeLb, isSnapshot));
@@ -449,15 +449,15 @@ VgList listVg()
 {
     VgList list;
     std::string result
-        = callLvm("/sbin/vgs", "vg_name,vg_size,vg_free");
+        = local::callLvm("/sbin/vgs", "vg_name,vg_size,vg_free");
     for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
         std::vector<std::string> v = cybozu::util::splitString(s0, ",");
         if (v.size() != 3) {
             throw std::runtime_error("failed to detect VG.");
         }
         std::string vgName = v[0];
-        uint64_t sizeLb = parseSizeLb(v[1]);
-        uint64_t freeLb = parseSizeLb(v[2]);
+        uint64_t sizeLb = local::parseSizeLb(v[1]);
+        uint64_t freeLb = local::parseSizeLb(v[2]);
         list.push_back(VolumeGroup(vgName, sizeLb, freeLb));
     }
     return std::move(list);
