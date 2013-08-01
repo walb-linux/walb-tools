@@ -41,11 +41,18 @@ public:
     bool operator<(const BlockDiffKey &rhs) const {
         return compare(rhs) < 0;
     }
-    bool operator!=(const BlockDiffKey &rhs) const { return !(*this == rhs); }
-    bool operator<=(const BlockDiffKey &rhs) const { return *this < rhs || *this == rhs; }
-    bool operator>(const BlockDiffKey &rhs) const { return !(*this <= rhs); }
-    bool operator>=(const BlockDiffKey &rhs) const { return !(*this < rhs); }
-
+    bool operator!=(const BlockDiffKey &rhs) const {
+        return compare(rhs) != 0;
+    }
+    bool operator<=(const BlockDiffKey &rhs) const {
+        return compare(rhs) <= 0;
+    }
+    bool operator>(const BlockDiffKey &rhs) const {
+        return compare(rhs) > 0;
+    }
+    bool operator>=(const BlockDiffKey &rhs) const {
+        return compare(rhs) < 0;
+    }
     bool isOverlapped(const BlockDiffKey &rhs) const {
         return ioAddress() < rhs.ioAddress() + rhs.ioBlocks() &&
             rhs.ioAddress() < ioAddress() + ioBlocks();
