@@ -5,8 +5,8 @@
  *
  * (C) 2012 Cybozu Labs, Inc.
  */
-#ifndef UTIL_HPP
-#define UTIL_HPP
+#ifndef CYBOZU_UTIL_HPP
+#define CYBOZU_UTIL_HPP
 
 #include <algorithm>
 #include <memory>
@@ -28,6 +28,8 @@
 
 #define RT_ERR(fmt, args...)                                    \
     std::runtime_error(cybozu::util::formatString(fmt, ##args))
+
+#define CHECKx(cond) cybozu::util::checkCond(cond, __func__, __LINE__)
 
 #define DISABLE_COPY_AND_ASSIGN(ClassName)              \
     ClassName(const ClassName &rhs) = delete;           \
@@ -109,18 +111,12 @@ void testFormatString()
     }
 }
 
-namespace {
-
 static inline void checkCond(bool cond, const char *name, int line)
 {
     if (!cond) {
         throw RT_ERR("check error: %s:%d", name, line);
     }
 }
-
-} //anonymous namespace
-
-#define CHECKx(cond) checkCond(cond, __func__, __LINE__)
 
 /**
  * Get unix time in double.
@@ -381,4 +377,4 @@ bool hexStrToInt(const std::string &hexStr, IntType &i)
 } //namespace util
 } //namespace cybozu
 
-#endif /* UTIL_HPP */
+#endif /* CYBOZU_UTIL_HPP */
