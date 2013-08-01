@@ -10,6 +10,7 @@
 #include <exception>
 #include <string>
 #include <map>
+#include <vector>
 #include <sstream>
 #include <thread>
 #include <chrono>
@@ -26,27 +27,16 @@
 namespace cybozu {
 namespace lvm {
 
-const std::string VOLUME_PREFIX = "i_";
-const std::string SNAP_PREFIX = "snap_";
-const std::string RESTORE_PREFIX = "r_";
-const uint64_t MAX_SNAPSHOT_SIZE = 1024ULL << 30; /* 1 TiB. */
 const unsigned int LBS = 512;
 
-class LogicalVolume;
-class VolumeGroup;
+class Lv;
+class Vg;
 
-using LvMap = std::map<std::string, LogicalVolume>;
-using LvList = std::vector<LogicalVolume>;
-using VgList = std::vector<VolumeGroup>;
+using LvMap = std::map<std::string, Lv>;
+using LvList = std::vector<Lv>;
+using VgList = std::vector<Vg>;
 
 namespace local {
-
-static cybozu::FilePath getLvmPath(
-    const std::string &vgName, const std::string &prefix, const std::string &name)
-{
-    return cybozu::FilePath("/dev") + cybozu::FilePath(vgName)
-        + cybozu::FilePath(prefix + name);
-}
 
 static bool isDeviceAvailable(const cybozu::FilePath &path) {
     if (!path.stat().exists()) return false;
@@ -157,85 +147,116 @@ bool waitForDeviceAvailable(cybozu::FilePath &path)
 /**
  * Prototypes.
  */
-LogicalVolume createLv(const std::string &vgName, const std::string &name, uint64_t sizeLb);
-LogicalVolume createSnapshot(
-    const std::string &vgName, const std::string &prefix, const std::string &name,
+static cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
+Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb);
+Lv createSnapshot(
+    const std::string &vgName, const std::string &lvName, const std::string &snapName,
     uint64_t sizeLb);
-void removeLv(const std::string &pathStr);
-void removeLvAll(const std::string &vgName, const std::string &name);
-void resizeLv(const std::string &pathStr, uint64_t newSizeLb);
+void remove(const std::string &pathStr);
+void resize(const std::string &pathStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
 LvMap getLvMap(const std::string &arg);
-LvList findLv(const std::string &name, bool isSnapshot);
-LogicalVolume locateLv(const std::string &volPathStr);
+LvList find(const std::string &vgName, const std::string &name);
+LvList findLv(const std::string &vgName, const std::string &lvName);
+LvList findSnap(const std::string &vgName, const std::string &snapName);
+Lv locate(const std::string &lvPathStr);
+Lv locate(const std::string &vgName, const std::string &name);
 VgList listVg();
-VolumeGroup findVg(const std::string &vgName);
+Vg getVg(const std::string &vgName);
 
 /**
  * Logical volume manager.
  */
-class LogicalVolume
+class Lv
 {
 private:
-    std::string vgName_;
-    std::string prefix_;
-    std::string name_;
+    std::string vgName_; /* volume group name. */
+    std::string lvName_; /* logical volume name. */
+    std::string snapName_; /* snapshot name. "" if isSnaphsot_ is false. */
     uint64_t sizeLb_; /* [logical block]. */
     bool isSnapshot_;
 public:
-    LogicalVolume() {
+    Lv() {
         throw std::runtime_error("default constructor invalid.");
     }
-    LogicalVolume(const std::string &vgName, const std::string &prefix,
-                  const std::string &name,
-                  uint64_t sizeLb, bool isSnapshot)
-        : vgName_(vgName), prefix_(prefix), name_(name)
+    Lv(const std::string &vgName, const std::string &lvName,
+                  const std::string &snapName, uint64_t sizeLb, bool isSnapshot)
+        : vgName_(vgName), lvName_(lvName), snapName_(snapName)
         , sizeLb_(sizeLb), isSnapshot_(isSnapshot) {
     }
-    const std::string &name() const { return name_; }
     const std::string &vgName() const { return vgName_; }
+    const std::string &lvName() const { return lvName_; }
+    const std::string &snapName() const { return snapName_; }
+    const std::string &name() const {
+        return isSnapshot() ? snapName() : lvName();
+    }
     uint64_t sizeLb() const { return sizeLb_; }
     bool isSnapshot() const { return isSnapshot_; }
     cybozu::FilePath path() const {
-        return local::getLvmPath(vgName_, prefix_, name_);
+        return getLvmPath(vgName_, name());
     }
-    LogicalVolume snapshot(const std::string &prefix) const {
+    Lv snapshot(const std::string &snapName, uint64_t sizeLb = 0) const {
         checkVolume();
-        return createSnapshot(vgName_, prefix, name_, sizeLb_);
+        if (sizeLb == 0 || sizeLb_ < sizeLb) sizeLb = sizeLb_;
+        return createSnapshot(vgName_, lvName_, snapName, sizeLb);
     }
-    bool hasSnapshot(const std::string &prefix) const {
+    /**
+     * @snapName specify an empty string for wildcard.
+     */
+    bool hasSnapshot(const std::string &snapName = "") const {
         checkVolume();
-        return local::getLvmPath(vgName_, prefix, name_).stat().exists();
+        for (Lv &lv : listLv(vgName())) {
+            if (lv.isSnapshot() &&
+                lv.lvName() == lvName() &&
+                (snapName.empty() || snapName == lv.snapName())) {
+                return true;
+            }
+        }
+        return false;
     }
     LvList snapshotList() const {
         checkVolume();
         LvList v;
-        for (LogicalVolume &lv : listLv(vgName())) {
-            if (lv.name() == name_ && lv.isSnapshot()) {
+        for (Lv &lv : listLv(vgName())) {
+            if (lv.isSnapshot() && lv.lvName() == lvName()) {
                 v.push_back(lv);
             }
         }
         return std::move(v);
     }
+    Lv parent() const {
+        checkSnapshot();
+        for (Lv &lv : listLv(vgName())) {
+            if (!lv.isSnapshot() && lv.lvName() == lvName()) {
+                return lv;
+            }
+        }
+        throw std::runtime_error("Every snapshot must have parent logical volume.");
+    }
     void resize(uint64_t newSizeLb) {
-        resizeLv(path().str(), newSizeLb);
+        cybozu::lvm::resize(path().str(), newSizeLb);
         sizeLb_ = newSizeLb;
     }
     void remove() {
-        removeLv(path().str());
+        cybozu::lvm::remove(path().str());
     }
     void print(::FILE *fp) const {
         ::fprintf(
             fp,
-            "%s/%s%s sizeLb %" PRIu64 " snapshot %d\n"
-            , vgName_.c_str(), prefix_.c_str(), name_.c_str()
-            , sizeLb_, isSnapshot_);
+            "%s/%s sizeLb %" PRIu64 " snapshot %d (%s)\n"
+            , vgName_.c_str(), name().c_str()
+            , sizeLb_, isSnapshot_, lvName_.c_str());
     }
     void print() const { print(::stdout); }
 private:
     void checkVolume() const {
         if (isSnapshot_) {
-            throw std::logic_error("tried to create a snapshot of a snapshot.");
+            throw std::logic_error("This must be logical volume.");
+        }
+    }
+    void checkSnapshot() const {
+        if (!isSnapshot_) {
+            throw std::logic_error("This must be snapshot.");
         }
     }
 };
@@ -243,7 +264,7 @@ private:
 /**
  * Volume group manager.
  */
-class VolumeGroup
+class Vg
 {
 private:
     std::string vgName_;
@@ -251,17 +272,17 @@ private:
     uint64_t freeLb_;
 
 public:
-    VolumeGroup() {
+    Vg() {
         throw std::runtime_error("default constructor invalid.");
     }
-    VolumeGroup(const std::string &vgName, uint64_t sizeLb, uint64_t freeLb)
+    Vg(const std::string &vgName, uint64_t sizeLb, uint64_t freeLb)
         : vgName_(vgName), sizeLb_(sizeLb), freeLb_(freeLb) {
     }
-    LogicalVolume create(const std::string &name, uint64_t sizeLb) {
+    Lv create(const std::string &lvName, uint64_t sizeLb) {
         if (freeLb_ < sizeLb) {
             throw std::runtime_error("VG free size not enough.");
         }
-        LogicalVolume lv = createLv(vgName_, name, sizeLb);
+        Lv lv = createLv(vgName_, lvName, sizeLb);
         freeLb_ -= sizeLb;
         return lv;
     }
@@ -278,43 +299,53 @@ public:
 };
 
 /**
+ * Get lvm path.
+ */
+static cybozu::FilePath getLvmPath(
+    const std::string &vgName, const std::string &name)
+{
+    return cybozu::FilePath("/dev") + cybozu::FilePath(vgName)
+        + cybozu::FilePath(name);
+}
+
+/**
  * Create a volume.
  */
-LogicalVolume createLv(const std::string &vgName, const std::string &name, uint64_t sizeLb)
+Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb)
 {
     std::vector<std::string> args;
-    args.push_back("--name=" + VOLUME_PREFIX + name);
+    args.push_back("--name=" + lvName);
     args.push_back(local::getSizeOpt(sizeLb));
     args.push_back(vgName);
     cybozu::process::call("/sbin/lvcreate", args);
 
-    cybozu::FilePath lvPath = local::getLvmPath(vgName, VOLUME_PREFIX, name);
+    cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     if (local::waitForDeviceAvailable(lvPath)) {
-        return LogicalVolume(vgName, VOLUME_PREFIX, name, sizeLb, false);
+        return Lv(vgName, lvName, "", sizeLb, false);
     }
     /* creation failed. */
-    throw std::runtime_error("Lv seems invalid: abort.");
+    throw std::runtime_error("LV seems invalid: abort.");
 }
 
 /**
  * Create a snapshot.
+ * @sizeLb data size for snapshot area [logical block].
  */
-LogicalVolume createSnapshot(
-    const std::string &vgName, const std::string &prefix,
-    const std::string &name, uint64_t sizeLb)
+Lv createSnapshot(
+    const std::string &vgName, const std::string &lvName, const std::string &snapName,
+    uint64_t sizeLb)
 {
-    uint64_t snapSizeLb = std::min(sizeLb, MAX_SNAPSHOT_SIZE);
     std::vector <std::string> args;
     args.push_back("-s");
-    args.push_back(local::getSizeOpt(snapSizeLb));
-    args.push_back("--name=" + prefix + name);
-    cybozu::FilePath lvPath = local::getLvmPath(vgName, VOLUME_PREFIX, name);
+    args.push_back(local::getSizeOpt(sizeLb));
+    args.push_back("--name=" + snapName);
+    cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     args.push_back(lvPath.str());
     cybozu::process::call("/sbin/lvcreate", args);
 
-    cybozu::FilePath snapPath = local::getLvmPath(vgName, prefix, name);
+    cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
     if (local::waitForDeviceAvailable(snapPath)) {
-        return LogicalVolume(vgName, prefix, name, snapSizeLb, true);
+        return Lv(vgName, lvName, snapName, sizeLb, true);
     }
     /* possible invalid snapshot. */
     throw std::runtime_error("Snapshot seems invalid; abort.");
@@ -323,7 +354,7 @@ LogicalVolume createSnapshot(
 /**
  * Remove a volume or a snapshot.
  */
-void removeLv(const std::string &pathStr)
+void remove(const std::string &pathStr)
 {
     cybozu::FilePath path(pathStr);
     if (!path.stat().exists()) {
@@ -338,35 +369,24 @@ void removeLv(const std::string &pathStr)
 }
 
 /**
- * Remove a volume and its all snapshots.
- */
-void removeLvAll(const std::string &vgName, const std::string &name)
-{
-    cybozu::FilePath path = local::getLvmPath(vgName, VOLUME_PREFIX, name);
-    LogicalVolume lv = locateLv(path.str());
-    for (LogicalVolume &snap : lv.snapshotList()) {
-        removeLv(snap.path().str());
-    }
-    removeLv(path.str());
-}
-
-/**
  * Resize a volume.
  */
-void resizeLv(const std::string &pathStr, uint64_t newSizeLb)
+void resize(const std::string &pathStr, uint64_t newSizeLb)
 {
     std::vector<std::string> args;
     args.push_back("-f"); /* force volume shrink */
     args.push_back(local::getSizeOpt(newSizeLb));
     args.push_back(pathStr);
-    cybozu::process::call("/sbin/lvcreate", args);
+    cybozu::process::call("/sbin/lvresize", args);
     local::sleepMs(1000); /* for safety. */
 }
+
+/* now editing */
 
 /**
  * RETURN:
  *   Volume list including snapshots.
- * @arg vgName or volumePath.
+ * @arg "" or vgName or volumePath.
  */
 LvList listLv(const std::string &arg = "")
 {
@@ -376,19 +396,18 @@ LvList listLv(const std::string &arg = "")
     std::string result
         = local::callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
     for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
+        if (s0.empty()) continue; /* last '\n' */
         std::vector<std::string> v = cybozu::util::splitString(s0, ",");
         if (v.size() != 4) {
-            throw std::runtime_error("invalid output from lvs.");
+            throw std::runtime_error("invalid output of lvs.");
         }
         bool isSnapshot = !v[1].empty();
-        std::string volName = isSnapshot ? v[1] : v[0];
-        if (!local::hasPrefix(volName, VOLUME_PREFIX)) continue;
+        std::string lvName = isSnapshot ? v[1] : v[0];
+        std::string snapName = isSnapshot ? v[0] : "";
         uint64_t sizeLb = local::parseSizeLb(v[2]);
-        std::string name = volName.substr(VOLUME_PREFIX.size());
-        std::string prefix = isSnapshot ? local::getPrefix(v[0], name) : VOLUME_PREFIX;
         std::string &vgName = v[3];
 
-        list.push_back(LogicalVolume(vgName, prefix, name, sizeLb, isSnapshot));
+        list.push_back(Lv(vgName, lvName, snapName, sizeLb, isSnapshot));
     }
     return std::move(list);
 }
@@ -396,12 +415,12 @@ LvList listLv(const std::string &arg = "")
 /**
  * RETURN:
  *   Volume list not including snapshots.
- * @arg vgName or volumePath.
+ * @arg "" or vgName or volumePath.
  */
 LvMap getLvMap(const std::string &arg)
 {
     LvMap map;
-    for (LogicalVolume &lv : listLv(arg)) {
+    for (Lv &lv : listLv(arg)) {
         if (lv.isSnapshot()) continue;
         auto pair = map.insert(std::make_pair(lv.name(), lv));
         if (!pair.second) assert(false);
@@ -412,17 +431,42 @@ LvMap getLvMap(const std::string &arg)
 /**
  * Find logical volume objects with a name.
  *
- * @name volume identifier.
- * @isSnapshot
+ * @vgName vg identifier. "" means wildcard.
+ * @name lv or snapshot name. you must specify this.
  * RETURN:
- *   if isSnapshot is true, only snapshots will be added.
- *   else, only volumes will be added.
+ *   logical volume or snapshot list.
  */
-LvList findLv(const std::string &name, bool isSnapshot = false)
+LvList find(const std::string &vgName, const std::string &name)
 {
     LvList list;
-    for (LogicalVolume &lv : listLv()) {
-        if (lv.name() == name && isSnapshot == lv.isSnapshot()) {
+    for (Lv &lv : listLv(vgName)) {
+        if (lv.name() == name) list.push_back(lv);
+    }
+    return std::move(list);
+}
+
+/**
+ * Find logical volumes.
+ */
+LvList findLv(const std::string &vgName, const std::string &lvName)
+{
+    LvList list;
+    for (Lv &lv : listLv(vgName)) {
+        if (!lv.isSnapshot() && lv.lvName() == lvName) {
+            list.push_back(lv);
+        }
+    }
+    return std::move(list);
+}
+
+/**
+ * Find snapshots.
+ */
+LvList findSnap(const std::string &vgName, const std::string &snapName)
+{
+    LvList list;
+    for (Lv &lv : listLv(vgName)) {
+        if (lv.isSnapshot() && lv.snapName() == snapName) {
             list.push_back(lv);
         }
     }
@@ -432,13 +476,18 @@ LvList findLv(const std::string &name, bool isSnapshot = false)
 /**
  * Get logical volume object using a device path.
  */
-LogicalVolume locateLv(const std::string &volPathStr)
+Lv locate(const std::string &pathStr)
 {
-    LvList list = listLv(volPathStr);
+    LvList list = listLv(pathStr);
     if (list.empty()) {
-        throw std::runtime_error("failed to detect LV " + volPathStr);
+        throw std::runtime_error("failed to detect LV " + pathStr);
     }
     return list.front();
+}
+
+Lv locate(const std::string &vgName, const std::string &name)
+{
+    return locate(getLvmPath(vgName, name).str());
 }
 
 /**
@@ -451,24 +500,25 @@ VgList listVg()
     std::string result
         = local::callLvm("/sbin/vgs", "vg_name,vg_size,vg_free");
     for (const std::string &s0 : cybozu::util::splitString(result, "\n")) {
+        if (s0.empty()) continue;
         std::vector<std::string> v = cybozu::util::splitString(s0, ",");
         if (v.size() != 3) {
-            throw std::runtime_error("failed to detect VG.");
+            throw std::runtime_error("invalid output of vgs.");
         }
         std::string vgName = v[0];
         uint64_t sizeLb = local::parseSizeLb(v[1]);
         uint64_t freeLb = local::parseSizeLb(v[2]);
-        list.push_back(VolumeGroup(vgName, sizeLb, freeLb));
+        list.push_back(Vg(vgName, sizeLb, freeLb));
     }
     return std::move(list);
 }
 
 /**
- * Find a volume group.
+ * Get a volume group.
  */
-VolumeGroup findVg(const std::string &vgName)
+Vg getVg(const std::string &vgName)
 {
-    for (VolumeGroup &vg : listVg()) {
+    for (Vg &vg : listVg()) {
         if (vg.name() == vgName) return vg;
     }
     throw std::runtime_error("VG not found.");
