@@ -228,31 +228,46 @@ public:
         }
         return FilePath(buf) + *this;
     }
-    bool remove() const {
-        return stat().isDirectory() ? rmdir() : unlink();
+    bool remove(int *err = nullptr) const {
+        return stat().isDirectory() ? rmdir(err) : unlink(err);
     }
-    bool unlink() const {
+    bool unlink(int *err = nullptr) const {
         bool ret = ::unlink(path_.c_str()) == 0;
+        setError(ret, err);
         statP_.reset();
         return ret;
     }
-    bool mkdir(mode_t mode = 0755) const {
+    bool mkdir(mode_t mode = 0755, int *err = nullptr) const {
         bool ret = ::mkdir(path_.c_str(), mode) == 0;
+        setError(ret, err);
         statP_.reset();
         return ret;
     }
-    bool rmdir() const {
+    bool rmdir(int *err = nullptr) const {
         bool ret = ::rmdir(path_.c_str()) == 0;
+        setError(ret, err);
         statP_.reset();
         return ret;
     }
-    bool rename(const FilePath &newPath) const {
+    bool rename(const FilePath &newPath, int *err = nullptr) const {
         bool ret = ::rename(path_.c_str(), newPath.cStr()) == 0;
+        setError(ret, err);
         statP_.reset();
         return ret;
     }
-    bool chmod(mode_t mode) const {
+    bool link(const FilePath &newPath, int *err = nullptr) const {
+        bool ret = ::link(path_.c_str(), newPath.cStr()) == 0;
+        setError(ret, err);
+        return ret;
+    }
+    bool symlink(const FilePath &newPath, int *err = nullptr) const {
+        bool ret = ::symlink(path_.c_str(), newPath.cStr()) == 0;
+        setError(ret, err);
+        return ret;
+    }
+    bool chmod(mode_t mode, int *err = nullptr) const {
         bool ret = ::chmod(path_.c_str(), mode) == 0;
+        setError(ret, err);
         statP_.reset();
         return ret;
     }
@@ -272,6 +287,11 @@ public:
         return rmdir();
     }
 private:
+    static void setError(bool ret, int *err) {
+        if (!ret && err != nullptr) {
+            *err = errno;
+        }
+    }
     /**
      * Split by SEPARATOR and eliminate "" and ".".
      */
