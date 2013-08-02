@@ -59,8 +59,15 @@ private:
 public:
     WalbDiffFiles(const std::string &dirStr, bool doesReset = false)
         : dir_(dirStr), mmap_(), mutex_() {
+        if (!dir_.stat().exists()) {
+            if (!dir_.mkdir()) {
+                throw std::runtime_error("Reset (mkdir) failed.");
+            }
+            reset(0);
+            return;
+        }
         if (!dir_.stat().isDirectory()) {
-            throw std::runtime_error("Directory does not exist.");
+            throw std::runtime_error("It's not a directory.");
         }
         if (doesReset) {
             if (!dir_.rmdirRecursive()) {
@@ -70,9 +77,9 @@ public:
                 throw std::runtime_error("Reset (mkdir) failed.");
             }
             reset(0);
-        } else {
-            reloadMetadata();
+            return;
         }
+        reloadMetadata();
     }
     ~WalbDiffFiles() noexcept {
         try {
