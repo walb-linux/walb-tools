@@ -1,4 +1,5 @@
 #include "cybozu/test.hpp"
+#include "meta.hpp"
 #include "wdiff_data.hpp"
 #include "file_path.hpp"
 #include "for_test.hpp"
@@ -14,7 +15,8 @@ void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool canMerge)
 
 void createFile(walb::WalbDiffFiles &diffFiles, walb::MetaDiff &diff)
 {
-    cybozu::FilePath fp = diffFiles.dirPath() + cybozu::FilePath(diffFiles.createDiffFileName(diff));
+    cybozu::FilePath fp = diffFiles.dirPath()
+        + cybozu::FilePath(walb::createDiffFileName(diff));
     cybozu::util::createEmptyFile(fp.str());
 }
 

@@ -10,11 +10,32 @@
 #include <stdexcept>
 #include <iostream>
 #include <cinttypes>
+#include <string>
+#include <vector>
 #include "cybozu/serializer.hpp"
+#include "util.hpp"
+#include "time.hpp"
 
 #ifndef WALB_TOOLS_META_HPP
 #define WALB_TOOLS_META_HPP
 
+/**
+ * Wdiff file name format:
+ *   [timestamp]-[can_merge]-[gid0]-[gid1].wdiff (clean diff)
+ *   [timestamp]-[can_merge]-[gid0]-[gid1]-[gid2].wdiff (dirty diff)
+ *   timestamp: YYYYMMDDhhmmss format.
+ *   can_merge: 0 or 1.
+ *   gid0, gid1, gid2: positive integer (hex without prefix "0x").
+ *   gid0 < gid1. gid1 <= gid2.
+ *
+ * Merge rule:
+ *   ts0-c-gid0-gid1.wdiff + ts1-0-gid1-gid2.wdiff --> ts1-c-gid0-gid2.wdiff
+ *   ts0 <= ts1.
+ *   See MetaDiff::canMerge() for detail.
+ *
+ * Use createDiffFileName() and parseDiffFileName()
+ * to convert from/to a MetaDiff to/from its filename.
+ */
 namespace walb {
 
 const uint16_t META_RECORD_PREAMBLE = 0x0311;
@@ -281,6 +302,10 @@ private:
     }
 };
 
+/**
+ * RETURN:
+ *   MetaSnap as a result of application of the given MetaDiff.
+ */
 static inline MetaSnap getSnapFromDiff(const MetaDiff &diff)
 {
     MetaSnap snap;
@@ -290,6 +315,90 @@ static inline MetaSnap getSnapFromDiff(const MetaDiff &diff)
     snap.raw().timestamp = diff.raw().timestamp;
     snap.raw().lsid = diff.raw().lsid;
     return snap;
+}
+
+/**
+ * @name input file name.
+ * @diff will be set.
+ * RETURN:
+ *   false if parsing failed. diff may be updated partially.
+ */
+static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff) {
+    diff.init();
+    const std::string minName("YYYYMMDDhhmmss-0-0-1.wdiff");
+    std::string s = name;
+    if (s.size() < minName.size()) {
+        return false;
+    }
+    /* timestamp */
+    std::string ts = s.substr(0, 14);
+    diff.raw().timestamp = cybozu::strToUnixTime(ts);
+    if (s[14] != '-') return false;
+    /* can_merge */
+    if (s[15] == '0') {
+        diff.raw().can_merge = 0;
+    } else if (s[15] == '1') {
+        diff.raw().can_merge = 1;
+    } else {
+        return false;
+    }
+    if (s[16] != '-') return false;
+    s = s.substr(17);
+    /* gid0, gid1, (gid2). */
+    std::vector<uint64_t> gidV;
+    for (int i = 0; i < 3; i++) {
+        size_t n = s.find("-");
+        if (n == std::string::npos) break;
+        uint64_t gid;
+        if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
+            return false;
+        }
+        gidV.push_back(gid);
+        s = s.substr(n + 1);
+    }
+    size_t n = s.find(".wdiff");
+    if (n == std::string::npos) return false;
+    uint64_t gid;
+    if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
+        return false;
+    }
+    gidV.push_back(gid);
+    switch (gidV.size()) {
+    case 2:
+        diff.raw().gid0 = gidV[0];
+        diff.raw().gid1 = gidV[1];
+        diff.raw().gid2 = gidV[1];
+        break;
+    case 3:
+        diff.raw().gid0 = gidV[0];
+        diff.raw().gid1 = gidV[1];
+        diff.raw().gid2 = gidV[2];
+        break;
+    default:
+        return false;
+    }
+    return diff.isValid();
+}
+
+/**
+ * Create a diff file name.
+ */
+static inline std::string createDiffFileName(const MetaDiff &diff) {
+    assert(diff.isValid());
+    std::string s;
+    s += cybozu::unixTimeToStr(diff.raw().timestamp);
+    s.push_back('-');
+    s.push_back(diff.raw().can_merge ? '1' : '0');
+    s.push_back('-');
+    s += cybozu::util::intToHexStr(diff.gid0());
+    s.push_back('-');
+    s += cybozu::util::intToHexStr(diff.gid1());
+    if (diff.isDirty()) {
+        s.push_back('-');
+        s += cybozu::util::intToHexStr(diff.gid2());
+    }
+    s += ".wdiff";
+    return std::move(s);
 }
 
 } //namespace walb
