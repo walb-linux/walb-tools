@@ -10,6 +10,7 @@
 #include <memory>
 #include <list>
 #include <queue>
+#include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -270,6 +271,21 @@ public:
         setError(ret, err);
         statP_.reset();
         return ret;
+    }
+    void printRecursive() const {
+        if (!stat().isDirectory()) return;
+        ::printf("%s\n", cStr());
+        Directory dir(str());
+        while (!dir.isEnd()) {
+            std::string s = dir.next();
+            if (s == "." || s == "..") continue;
+            FilePath child = *this + FilePath(s);
+            if (child.stat().isDirectory()) {
+                child.printRecursive();
+            } else {
+                ::printf("%s\n", child.cStr());
+            }
+        }
     }
     bool rmdirRecursive() const {
         if (!stat().isDirectory()) return false;
