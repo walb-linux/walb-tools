@@ -61,7 +61,7 @@ public:
         : dir_(dirStr), mmap_(), mutex_() {
         if (!dir_.stat().exists()) {
             if (!dir_.mkdir()) {
-                throw std::runtime_error("Reset (mkdir) failed.");
+                throw std::runtime_error("mkdir failed: " + dir_.str());
             }
             reset(0);
             return;
@@ -87,6 +87,9 @@ public:
         } catch (...) {
         }
     }
+    DISABLE_COPY_AND_ASSIGN(WalbDiffFiles);
+    DISABLE_MOVE(WalbDiffFiles);
+
     /**
      * CAUSION:
      *   All data inside the directory will be removed.
@@ -470,6 +473,8 @@ private:
             throw std::runtime_error("GetFileList failed.");
         }
         for (cybozu::FileInfo &info : list) {
+            if (info.name == "." || info.name == ".." || !info.isFile)
+                continue;
             MetaDiff diff;
             if (!parseDiffFileName(info.name, diff)) continue;
             mmap_.insert(std::make_pair(diff.gid0(), diff));
