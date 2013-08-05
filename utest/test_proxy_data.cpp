@@ -32,3 +32,10 @@ CYBOZU_TEST_AUTO(server)
         CYBOZU_TEST_EQUAL(proxyData.getServer("server3"), server3);
     }
 }
+
+CYBOZU_TEST_AUTO(wdiff)
+{
+
+
+
+}

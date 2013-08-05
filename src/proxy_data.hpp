@@ -114,36 +114,44 @@ public:
         reloadServerRecords();
         ::printf("hoge4\n"); /* debug */
     }
+    /**
+     * Before calling this, you must create a wdiff file in a master directory
+     * that is corresponding to a given metadiff.
+     *
+     * This member function will make hardlinks of the file
+     * to server directories. Then, the original file will be removed.
+     */
     bool add(const MetaDiff &diff, const std::vector<std::string> &servers) {
-        /*
-         * TODO:
-         * add primary wdiff directory.
-         * make hard links of wdiffs in servers' directory.
-         * remove the wdiff from the primary wdiff directory.
-         */
-
-        /* now editing */
-        return false;
-    }
-    static void mkdirIfNotExists(const cybozu::FilePath &path) {
-        if (!path.stat().exists() && !path.mkdir()) {
-            throw std::runtime_error("mkdir failed: " + path.str());
+        cybozu::FilePath fPath(createDiffFileName(diff));
+        cybozu::FilePath oldPath = getMasterDir() + fPath;
+        for (const std::string &name : servers) {
+            checkServer(name);
+            cybozu::FilePath newPath = getServerDir(name) + fPath;
+            if (!oldPath.link(newPath)) {
+                throw std::runtime_error("link() failed: " + newPath.str());
+            }
+            WalbDiffFiles &wdiffs = getWdiffFiles(name);
+            if (!wdiffs.add(diff)) {
+                throw std::runtime_error("wdiffs add failed.");
+            }
         }
-        if (!path.stat().isDirectory()) {
-            throw std::runtime_error("Not directory: " + path.str());
+        wdiffsP_->removeBeforeGid(diff.gid1());
+        if (!oldPath.unlink()) {
+            throw std::runtime_error("unlink() failed: " + oldPath.str());
         }
+        return true;
     }
     /**
      * @name server name.
      * @gid all wdiffs before gid will be removed.
      */
     void removeBeforeGid(const std::string &name, uint64_t gid) {
-        assert(existsServer(name));
-
-        /* now editing */
+        checkServer(name);
+        getWdiffFiles(name).removeBeforeGid(gid);
     }
     bool existsServer(const std::string &name) const {
-        return serverMap_.find(name) !=  serverMap_.end();
+        return serverMap_.find(name) != serverMap_.end()
+            && wdiffsMap_.find(name) != wdiffsMap_.end();
     }
     const Server &getServer(const std::string &name) const {
         return serverMap_.at(name);
@@ -180,6 +188,19 @@ private:
         }
         return str.substr(0, pos);
     }
+    static void mkdirIfNotExists(const cybozu::FilePath &path) {
+        if (!path.stat().exists() && !path.mkdir()) {
+            throw std::runtime_error("mkdir failed: " + path.str());
+        }
+        if (!path.stat().isDirectory()) {
+            throw std::runtime_error("Not directory: " + path.str());
+        }
+    }
+    void checkServer(const std::string &name) const {
+        if (!existsServer(name)) {
+            throw std::runtime_error("server does not exist: " + name);
+        }
+    }
     cybozu::FilePath getDir() const {
         return baseDir_ + cybozu::FilePath(name_);
     }
@@ -196,7 +217,7 @@ private:
         return getDir() + cybozu::FilePath(name + ".server");
     }
     void saveServerRecord(const std::string &name) const {
-        assert(existsServer());
+        assert(existsServer(name));
         const Server &server = getServer(name);
         cybozu::FilePath fp = serverRecordPath(name);
         cybozu::TmpFile tmpFile(fp.parent().str());
@@ -235,6 +256,9 @@ private:
         if (!res0.second || !res1.second) {
             throw std::runtime_error("map emplace failed.");
         }
+    }
+    WalbDiffFiles &getWdiffFiles(const std::string &name) {
+        return wdiffsMap_.at(name);
     }
 };
 
