@@ -9,9 +9,11 @@ class TestDirectory
 {
 private:
     cybozu::FilePath fp_;
+    bool isTmp_;
+
 public:
-    explicit TestDirectory(const std::string &path)
-        : fp_(path) {
+    explicit TestDirectory(const std::string &path, bool isTmp = true)
+        : fp_(path), isTmp_(isTmp) {
         if (fp_.stat().exists()) {
             throw std::runtime_error("directory already exists.");
         }
@@ -21,7 +23,10 @@ public:
     }
     ~TestDirectory() noexcept {
         try {
-            fp_.rmdirRecursive();
+            fp_.printRecursive();
+            if (isTmp_) {
+                fp_.rmdirRecursive();
+            }
         } catch (...) {
         }
     }
