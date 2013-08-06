@@ -438,6 +438,36 @@ std::vector<std::string> splitString(
     return std::move(v);
 }
 
+bool hasPrefix(const std::string &name, const std::string &prefix)
+{
+    return name.substr(0, prefix.size()) == prefix;
+}
+
+std::string removePrefix(const std::string &name, const std::string &prefix)
+{
+    assert(hasPrefix(name, prefix));
+    return name.substr(prefix.size());
+}
+
+/**
+ * @name like "XXX_YYYYY"
+ * @base like "YYYYY"
+ * RETURN:
+ *   prefix like "XXX_".
+ */
+std::string getPrefix(const std::string &name, const std::string &base)
+{
+    size_t s0 = name.size();
+    size_t s1 = base.size();
+    if (s0 <= s1) {
+        throw std::runtime_error("There is no prefix.");
+    }
+    if (name.substr(s0 - s1) != base) {
+        throw std::runtime_error("Base name differs.");
+    }
+    return name.substr(0, s0 - s1);
+}
+
 template <typename C>
 void printList(const C &container)
 {
