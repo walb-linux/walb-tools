@@ -9,7 +9,7 @@
 #include <map>
 #include <mutex>
 #include <vector>
-#include <queue>
+#include <deque>
 #include <time.h>
 #include "cybozu/serializer.hpp"
 #include "cybozu/file.hpp"
@@ -29,6 +29,9 @@ namespace walb {
 /**
  * Manager for walb diff files.
  *
+ * Wdiff files:
+ *   See meta.hpp for wdiff file name format.
+ *
  * LatestRecord file:
  *   This indicates the latest snapshot gid(s).
  *   The file contents is a serialized MetaSnap object.
@@ -39,13 +42,20 @@ class WalbDiffFiles
 private:
     cybozu::FilePath dir_;
     MetaSnap latestRecord_;
+    const bool isContiguous_;
     using Mmap = std::multimap<uint64_t, MetaDiff>;
     Mmap mmap_;
     mutable std::mutex mutex_; /* for mmap_. */
 
 public:
-    WalbDiffFiles(const std::string &dirStr, bool doesReset = false)
-        : dir_(dirStr), mmap_(), mutex_() {
+    /**
+     * @dirStr a directory that contains wdiff files and latest records.
+     * @isContiguous:
+     *   true for server data. must be contiguous.
+     *   false for proxy data. must not be contiguous but newer.
+     */
+    WalbDiffFiles(const std::string &dirStr, bool isContiguous, bool doesReset = false)
+        : dir_(dirStr), isContiguous_(isContiguous), mmap_(), mutex_() {
         if (!dir_.stat().exists()) {
             if (!dir_.mkdir()) {
                 throw std::runtime_error("mkdir failed: " + dir_.str());
@@ -96,11 +106,16 @@ public:
      */
     bool add(const MetaDiff &diff) {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (!latestRecord_.canApply(diff)) return false;
-        mmap_.insert(std::make_pair(diff.gid0(), diff));
-        latestRecord_ = latestRecord_.apply(diff);
+        if (isContiguous_) {
+            if (!latestRecord_.canApply(diff)) return false;
+            latestRecord_ = latestRecord_.apply(diff);
+        } else {
+            if (diff.gid0() < latestRecord_.gid0()) return false;
+            latestRecord_ = getSnapFromDiff(diff);
+        }
         latestRecord_.raw().timestamp = diff.raw().timestamp;
         saveLatestRecord();
+        mmap_.insert(std::make_pair(diff.gid0(), diff));
         return true;
     }
     /**
@@ -112,12 +127,14 @@ public:
      *
      * There must be diffs which gid0/gid1 is the given gid0/gid1.
      * and there is no diff which can_merge are false between them.
+     * Also, they are all contiguous.
      *
      * RETURN:
      *   true if successfuly merged.
      *   or false.
      */
     bool merge(uint64_t gid0, uint64_t gid1) {
+        assert(isContiguous_);
         std::lock_guard<std::mutex> lk(mutex_);
         Mmap::const_iterator it = mmap_.lower_bound(gid0);
         if (it == mmap_.cend()) return false;
@@ -142,36 +159,32 @@ public:
     /**
      * Search diffs which can be merged.
      * RETURN:
-     *   A list of gid ranges.
+     *   A list of gid ranges each of which can be merged.
      */
-    std::vector<std::pair<uint64_t, uint64_t> > getMergeCandidates() const {
+    std::vector<std::pair<uint64_t, uint64_t> > getMergingCandidates() const {
         std::lock_guard<std::mutex> lk(mutex_);
-        std::queue<MetaDiff> q;
-        std::vector<std::pair<uint64_t, uint64_t> > v;
-        auto insert = [&]() {
-            uint64_t bgn = 0, end = 0;
-            assert(!q.empty());
-            if (q.size() == 1) {
-                q.pop();
-                return;
-            }
-            bgn = q.front().gid0();
-            while (!q.empty()) {
-                end = q.front().gid1();
-                q.pop();
-            }
-            v.push_back(std::make_pair(bgn, end));
-        };
-        for (const MetaDiff &diff : listDiffNolock()) {
-            if (q.empty() || diff.raw().can_merge) {
-                q.push(diff);
-            } else {
-                insert();
-                q.push(diff);
-            }
+        return getMergingCandidatesNolock();
+    }
+    /**
+     * Get transfer candidates.
+     * @size max total size [byte].
+     */
+    std::vector<MetaDiff> getTransferCandidates(uint64_t size) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        std::vector<std::pair<uint64_t, uint64_t> > pV
+            = getMergingCandidatesNolock();
+        if (pV.empty()) return {};
+        uint64_t gid0 = pV.front().first;
+        uint64_t gid1 = pV.front().second;
+        uint64_t total = 0;
+        std::vector<MetaDiff> diffV;
+        for (MetaDiff &diff : listDiffNolock(gid0, gid1)) {
+            uint64_t size0 = getDiffFileSize(diff);
+            if (size < total + size0) break;
+            diffV.push_back(diff);
+            total += size0;
         }
-        insert();
-        return std::move(v);
+        return std::move(diffV);
     }
     /**
      * Remove wdiffs before a specified gid.
@@ -276,10 +289,25 @@ public:
     }
 private:
     /**
+     * Check MetaDiffs are contiguous.
+     */
+    static bool isContigous(std::vector<MetaDiff> &diffV) {
+        if (diffV.empty()) return true;
+        auto curr = diffV.cbegin();
+        auto prev = curr;
+        while (curr != diffV.cend()) {
+            if (prev->gid1() != curr->gid0()) return false;
+            prev = curr;
+            ++curr;
+        }
+        return true;
+    }
+    /**
      * Check whether whole data of oldestGid() <= gid < latestGid() exist.
+     * this is meaningfull only when isContiguous_ is true.
      */
     bool checkNolock() const {
-        if (mmap_.empty()) return true;
+        if (!isContiguous_ || mmap_.empty()) return true;
         Mmap::const_iterator it = mmap_.cbegin();
         MetaDiff diff;
         it = nextKey(it, diff);
@@ -322,8 +350,8 @@ private:
         assert(it != mmap_.rend());
         diff = it->second;
         ++it;
-        while (it != mmap_.rend() && diff.raw().gid0 == it->first) {
-            if (diff.raw().gid1 < it->second.gid1()) {
+        while (it != mmap_.rend() && diff.gid0() == it->first) {
+            if (diff.gid1() < it->second.gid1()) {
                 diff = it->second;
             }
             ++it;
@@ -395,7 +423,18 @@ private:
         }
     }
     /**
+     * Get size of a wdiff files.
+     * RETURN:
+     *   size [byte].
+     *   0 if the file does not exist.
+     */
+    size_t getDiffFileSize(const MetaDiff &diff) const {
+        cybozu::FilePath fPath(createDiffFileName(diff));
+        return (dir_ + fPath).stat().size();
+    }
+    /**
      * Remove diff files.
+     * @pathStrV file name list (not full paths).
      */
     void removeFiles(const std::vector<std::string> &pathStrV) const {
         for (const std::string &pathStr : pathStrV) {
@@ -450,14 +489,19 @@ private:
      *
      * RETURN:
      *   An iterator follows of the next key.
-     *   Its gid0 must be the gid1 of the given diff if valid.
+     *   Its gid0 must be the gid1 of the given diff if valid
+     *   (only when isContiguous_ is true).
      */
     Mmap::iterator removeOverlapped(Mmap::iterator it, const MetaDiff &diff) {
         std::vector<std::string> v;
-        while (it != mmap_.end() && it->second.gid1() <= diff.gid1()) {
+        while (it != mmap_.end()) {
             MetaDiff &diff0 = it->second;
             assert(diff.gid0() <= diff0.gid0());
+            if (diff.gid1() < diff0.gid1()) {
+                break;
+            }
             if (diff0 == diff) {
+                /* Skip the given diff. */
                 ++it;
                 continue;
             }
@@ -467,7 +511,11 @@ private:
 #ifdef DEBUG
         if (it != mmap_.end()) {
             MetaDiff &diff0 = it->second;
-            assert(diff.gid1() == diff0.gid0());
+            if (isContiguous_) {
+                assert(diff.gid1() == diff0.gid0());
+            } else {
+                assert(diff.gid1() <= diff0.gid0());
+            }
         }
 #endif
         removeFiles(v);
@@ -500,6 +548,32 @@ private:
         for (const MetaDiff &diff : diffV) {
             v.push_back(createDiffFileName(diff));
         }
+        return std::move(v);
+    }
+    std::vector<std::pair<uint64_t, uint64_t> > getMergingCandidatesNolock() const {
+        std::deque<MetaDiff> q;
+        std::vector<std::pair<uint64_t, uint64_t> > v;
+        auto insert = [&]() {
+            uint64_t bgn = 0, end = 0;
+            assert(!q.empty());
+            bgn = q.front().gid0();
+            while (!q.empty()) {
+                end = q.front().gid1();
+                q.pop_front();
+            }
+            v.push_back(std::make_pair(bgn, end));
+        };
+        for (const MetaDiff &diff : listDiffNolock()) {
+            bool canMerge = q.empty() ||
+                (diff.raw().can_merge != 0 && q.back().canMerge(diff));
+            if (canMerge) {
+                q.push_back(diff);
+            } else {
+                insert();
+                q.push_back(diff);
+            }
+        }
+        if (!q.empty()) insert();
         return std::move(v);
     }
 };
