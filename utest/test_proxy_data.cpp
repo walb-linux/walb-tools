@@ -6,7 +6,7 @@
 CYBOZU_TEST_AUTO(server)
 {
     std::string testDirStr("proxy_data0");
-    TestDirectory testDir(testDirStr, false);
+    TestDirectory testDir(testDirStr, true);
 
     walb::Server server1("server1", "192.168.1.1", 5678);
     walb::Server server2("server2", "192.168.1.2", 5678);
@@ -35,7 +35,33 @@ CYBOZU_TEST_AUTO(server)
 
 CYBOZU_TEST_AUTO(wdiff)
 {
+    std::string testDirStr("proxy_data1");
+    TestDirectory testDir(testDirStr, true);
 
+    walb::ProxyData proxyData(testDirStr, "0");
+    walb::Server server1("server1", "192.168.1.1", 5678);
+    walb::Server server2("server2", "192.168.1.2", 5678);
+    proxyData.addServer(server1);
+    proxyData.addServer(server2);
 
+    walb::MetaDiff diff;
+    setDiff(diff, 0, 1, true);
+    createDiffFile(proxyData.getWdiffFiles(), diff);
+    proxyData.add(diff);
+    setDiff(diff, 1, 2, true);
+    createDiffFile(proxyData.getWdiffFiles(), diff);
+    proxyData.add(diff);
+    setDiff(diff, 5, 7, true);
+    createDiffFile(proxyData.getWdiffFiles(), diff);
+    proxyData.add(diff);
 
+    std::vector<walb::MetaDiff> v;
+    v = proxyData.getTransferCandidates("server1", 1);
+    CYBOZU_TEST_EQUAL(v.size(), 2);
+    proxyData.removeBeforeGid("server1", 2);
+    v = proxyData.getTransferCandidates("server1", 1);
+    CYBOZU_TEST_EQUAL(v.size(), 1);
+    proxyData.removeBeforeGid("server1", 7);
+    CYBOZU_TEST_EQUAL(proxyData.getWdiffFiles().listDiff().size(), 0);
+    CYBOZU_TEST_EQUAL(proxyData.getWdiffFiles().latestGid(), 7);
 }

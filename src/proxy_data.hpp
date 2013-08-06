@@ -83,6 +83,10 @@ public:
  * but will merge wdiffs and transfer them to servers.
  *
  * This is thread safe.
+ *
+ * TODO:
+ *   * use mutex_ for exclusive accesses.
+ *   * implement mergeCandidates().
  */
 class ProxyData
 {
@@ -106,13 +110,13 @@ public:
             throw std::runtime_error("Does not exist: " + baseDir_.str());
         }
         mkdirIfNotExists(getDir());
-        ::printf("hoge1\n"); /* debug */
-        wdiffsP_ = std::make_shared<WalbDiffFiles>(getMasterDir().str());
-        ::printf("hoge2\n"); /* debug */
+        wdiffsP_ = std::make_shared<WalbDiffFiles>(getMasterDir().str(), false);
         mkdirIfNotExists(getServerDir());
-        ::printf("hoge3\n"); /* debug */
         reloadServerRecords();
-        ::printf("hoge4\n"); /* debug */
+    }
+    const WalbDiffFiles &getWdiffFiles() const {
+        assert(wdiffsP_);
+        return *wdiffsP_;
     }
     /**
      * Before calling this, you must create a wdiff file in a master directory
@@ -121,10 +125,14 @@ public:
      * This member function will make hardlinks of the file
      * to server directories. Then, the original file will be removed.
      */
-    bool add(const MetaDiff &diff, const std::vector<std::string> &servers) {
+    void add(const MetaDiff &diff) {
+        if (!wdiffsP_->add(diff)) {
+            throw std::runtime_error("add() error.");
+        }
         cybozu::FilePath fPath(createDiffFileName(diff));
         cybozu::FilePath oldPath = getMasterDir() + fPath;
-        for (const std::string &name : servers) {
+        for (const auto &pair : serverMap_) {
+            const std::string &name = pair.first;
             checkServer(name);
             cybozu::FilePath newPath = getServerDir(name) + fPath;
             if (!oldPath.link(newPath)) {
@@ -136,10 +144,6 @@ public:
             }
         }
         wdiffsP_->removeBeforeGid(diff.gid1());
-        if (!oldPath.unlink()) {
-            throw std::runtime_error("unlink() failed: " + oldPath.str());
-        }
-        return true;
     }
     /**
      * @name server name.
@@ -148,6 +152,18 @@ public:
     void removeBeforeGid(const std::string &name, uint64_t gid) {
         checkServer(name);
         getWdiffFiles(name).removeBeforeGid(gid);
+    }
+    /**
+     * Get transfer candidates.
+     * @name server name.
+     * @size maximum total size [byte].
+     * RETURN:
+     *   MetaDiff list that can be merged to a diff
+     *   which will be transferred to the server.
+     */
+    std::vector<MetaDiff> getTransferCandidates(const std::string &name, uint64_t size) {
+        assert(existsServer(name));
+        return getWdiffFiles(name).getTransferCandidates(size);
     }
     bool existsServer(const std::string &name) const {
         return serverMap_.find(name) != serverMap_.end()
@@ -158,7 +174,7 @@ public:
     }
     void addServer(const Server &server) {
         const std::string &name = server.name();
-        assert(existsServer(name));
+        assert(!existsServer(name));
         emplace(name, server);
         saveServerRecord(name);
     }
@@ -172,13 +188,6 @@ public:
         if (!dp.rmdirRecursive()) {
             throw std::runtime_error("failed to remove directory: " + dp.str());
         }
-    }
-    /**
-     * THe merge candidates.
-     */
-    std::vector<MetaDiff> mergeCandidates(uint64_t size) {
-        /* now editing */
-        return {};
     }
 private:
     static std::string removeSuffix(const std::string &str, const std::string &suffix) {
@@ -252,7 +261,7 @@ private:
         auto res1 = wdiffsMap_.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(name),
-            std::forward_as_tuple(dp.str()));
+            std::forward_as_tuple(dp.str(), false));
         if (!res0.second || !res1.second) {
             throw std::runtime_error("map emplace failed.");
         }
