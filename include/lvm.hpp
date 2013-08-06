@@ -151,6 +151,9 @@ void remove(const std::string &pathStr);
 void resize(const std::string &pathStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
 LvMap getLvMap(const std::string &arg);
+bool exists(const std::string &vgName, const std::string &name);
+bool existsLv(const std::string &vgName, const std::string &lvName);
+bool existsSnap(const std::string &vgName, const std::string &snapName);
 LvList find(const std::string &vgName, const std::string &name);
 LvList findLv(const std::string &vgName, const std::string &lvName);
 LvList findSnap(const std::string &vgName, const std::string &snapName);
@@ -190,7 +193,10 @@ public:
     cybozu::FilePath path() const {
         return getLvmPath(vgName_, name());
     }
-    Lv snapshot(const std::string &snapName, uint64_t sizeLb = 0) const {
+    bool exists() const {
+        return cybozu::lvm::exists(vgName(), name());
+    }
+    Lv takeSnapshot(const std::string &snapName, uint64_t sizeLb = 0) const {
         checkVolume();
         if (sizeLb == 0 || sizeLb_ < sizeLb) sizeLb = sizeLb_;
         return createSnapshot(vgName_, lvName_, snapName, sizeLb);
@@ -218,6 +224,14 @@ public:
             }
         }
         return std::move(v);
+    }
+    Lv getSnapshot(const std::string &snapName) const {
+        for (Lv &lv : snapshotList()) {
+            if (lv.snapName() == snapName) {
+                return lv;
+            }
+        }
+        throw std::runtime_error("Not found.");
     }
     Lv parent() const {
         checkSnapshot();
@@ -421,6 +435,25 @@ LvMap getLvMap(const std::string &arg)
         if (!pair.second) assert(false);
     }
     return std::move(map);
+}
+
+/**
+ * RETURN:
+ *   True when the volume with the name exists.
+ */
+bool exists(const std::string &vgName, const std::string &name)
+{
+    return !find(vgName, name).empty();
+}
+
+bool existsLv(const std::string &vgName, const std::string &lvName)
+{
+    return !findLv(vgName, lvName).empty();
+}
+
+bool existsSnap(const std::string &vgName, const std::string &snapName)
+{
+    return !findSnap(vgName, snapName).empty();
 }
 
 /**

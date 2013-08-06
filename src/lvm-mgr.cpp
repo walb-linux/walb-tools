@@ -116,7 +116,7 @@ void dispatch(const Option &opt)
         }
         opt.checkNumArgs(1);
         std::string name = opt.args[0];
-        cybozu::lvm::Lv snap = lv.snapshot(name, opt.sizeLb());
+        cybozu::lvm::Lv snap = lv.takeSnapshot(name, opt.sizeLb());
         snap.print();
         ::printf("snapshot created.\n");
     } else if (opt.command == "remove") {
