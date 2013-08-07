@@ -249,12 +249,21 @@ public:
     void remove() {
         cybozu::lvm::remove(path().str());
     }
+    template <typename OutputStream>
+    void print(OutputStream &os) const {
+        os << vgName_ << "/" << name() << " sizeLb " << sizeLb_ << " snapshot "
+           << isSnapshot_ << " (" << lvName_ << ")" << std::endl;
+    }
     void print(::FILE *fp) const {
-        ::fprintf(
-            fp,
-            "%s/%s sizeLb %" PRIu64 " snapshot %d (%s)\n"
-            , vgName_.c_str(), name().c_str()
-            , sizeLb_, isSnapshot_, lvName_.c_str());
+        std::stringstream ss;
+        print(ss);
+        std::string s(ss.str());
+        if (::fwrite(&s[0], 1, s.size(), fp) < s.size()) {
+            throw std::runtime_error("fwrite failed.");
+        }
+        if (::fflush(fp) != 0) {
+            throw std::runtime_error("fflush failed.");
+        }
     }
     void print() const { print(::stdout); }
 private:
