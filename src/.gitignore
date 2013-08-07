@@ -3,6 +3,7 @@ bdiff
 test_aio
 test_logger
 test_memory_buffer
+test_server_data
 verify_wldev
 verify_wlog
 verify_written_data

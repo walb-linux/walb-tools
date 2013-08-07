@@ -6,11 +6,14 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cassert>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <map>
 #include <memory>
+#include <sstream>
 #include "cybozu/file.hpp"
+#include "cybozu/atoi.hpp"
 #include "lvm.hpp"
 #include "file_path.hpp"
 #include "wdiff_data.hpp"
@@ -90,11 +93,12 @@ public:
      * Get volume data.
      */
     cybozu::lvm::Lv volume() const {
+        std::string lvName = VOLUME_PREFIX + name_;
         std::vector<cybozu::lvm::Lv> v =
-            cybozu::lvm::findLv(vgName_, VOLUME_PREFIX + name_);
+            cybozu::lvm::findLv(vgName_, lvName);
         if (v.empty()) {
             throw std::runtime_error(
-                "Volume does not exist: " + vgName_ + "/" + name_);
+                "Volume does not exist: " + vgName_ + "/" + lvName);
         }
         return v[0];
     }
@@ -105,42 +109,126 @@ public:
     /**
      * Get restored snapshots.
      */
-    std::map<std::string, cybozu::lvm::Lv> restores() const {
-        std::map<std::string, cybozu::lvm::Lv> map;
+    std::map<uint64_t, cybozu::lvm::Lv> restores() const {
+        std::map<uint64_t, cybozu::lvm::Lv> map;
+        std::string prefix = RESTORE_PREFIX + name_ + "_";
         for (cybozu::lvm::Lv &lv : volume().snapshotList()) {
-            if (cybozu::util::hasPrefix(lv.snapName(), RESTORE_PREFIX)) {
-                std::string name
-                    = cybozu::util::removePrefix(lv.snapName(), RESTORE_PREFIX);
-                map.insert(std::make_pair(name, lv));
+            if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
+                std::string gidStr
+                    = cybozu::util::removePrefix(lv.snapName(), prefix);
+                uint64_t gid = cybozu::atoi(gidStr);
+                map.insert(std::make_pair(gid, lv));
             }
         }
         return std::move(map);
     }
-    void info(FILE *fp) const {
+    template <typename OutputStream>
+    void print(OutputStream &os) const {
+
+        MetaSnap oldest = baseRecord_;
+        MetaSnap latest = wdiffsP_->latest();
+        std::string oldestState = oldest.isDirty() ? "dirty" : "clean";
+        std::string latestState = latest.isDirty() ? "dirty" : "clean";
         /* now editing */
+
+        os << "vg: " << vgName_ << std::endl;
+        os << "name: " << name_ << std::endl;
+        os << "sizeLb: " << volume().sizeLb() << std::endl;
+        os << "oldest: (" << oldest.gid0() << ", " << oldest.gid1() << ") "
+           << oldestState << std::endl;
+        os << "latest: (" << latest.gid0() << ", " << latest.gid1() << ") "
+           << latestState << std::endl;
+
+        os << "----------restored snapshots----------" << std::endl;
+        for (auto &pair : restores()) {
+            cybozu::lvm::Lv &lv = pair.second;
+            lv.print(os);
+        }
+
+        os << "----------diff files----------" << std::endl;
+        std::vector<std::string> v = wdiffsP_->listName();
+        for (std::string &fileName : v) {
+            os << fileName << std::endl;
+        }
+        os << "----------end----------" << std::endl;
     }
-    /**
-     * Merge all diffs before gid into the original lv.
-     */
-    void merge(uint64_t gid) {
-        /* now editing */
+    void print(::FILE *fp) const {
+        std::stringstream ss;
+        print(ss);
+        std::string s(ss.str());
+        if (::fwrite(&s[0], 1, s.size(), fp) < s.size()) {
+            throw std::runtime_error("fwrite failed.");
+        }
+        ::fflush(fp);
     }
+    void print() const { print(::stdout); }
     /**
      * Create a restore volume as a snapshot.
+     * @gid restored snapshot will indicates the gid.
      */
-    bool restore(const std::string &name) {
-        cybozu::lvm::Lv snap = volume().takeSnapshot(RESTORE_PREFIX + name);
+    bool restore(uint64_t gid = uint64_t(-1)) {
+        if (gid == uint64_t(-1)) {
+            gid = getLatestCleanSnapshot();
+        } else {
+            if (canRestore(gid)) {
+
+            }
+        }
+        std::string suffix
+            = cybozu::util::formatString("_%" PRIu64 "", gid);
+        std::string snapName = RESTORE_PREFIX + name_ + suffix;
+        if (volume().hasSnapshot(snapName)) return false;
+        cybozu::lvm::Lv snap = volume().takeSnapshot(snapName);
         return snap.exists();
+    }
+    /**
+     * Whether a specified gid can be restored.
+     * That means wdiffs has the clean snaphsot for the gid.
+     */
+    bool canRestore(uint64_t gid) const {
+        for (const MetaDiff &diff : wdiffsP_->listDiff()) {
+            if (diff.gid1() == gid && !diff.isDirty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    /**
+     * Get the latest clean snapshot.
+     *
+     * RETURN:
+     *   gid that means the latest clean snapshot.
+     */
+    uint64_t getLatestCleanSnapshot() const {
+        /* now editing */
+        return uint64_t(-1);
     }
     /**
      * Drop a restored snapshot.
      */
     bool drop(const std::string &name) {
-        if (!volume().hasSnapshot(RESTORE_PREFIX + name)) {
+        std::string snapName = RESTORE_PREFIX + name;
+        if (!volume().hasSnapshot(snapName)) {
             return false;
         }
-        volume().getSnapshot(RESTORE_PREFIX + name).remove();
+        volume().getSnapshot(snapName).remove();
         return true;
+    }
+    /**
+     * Apply all diffs before gid into the original lv.
+     * Applied diff will be deleted after the application completed successfully.
+     */
+    void apply(uint64_t gid) {
+        throw RT_ERR("%s: not yet implemented.", __func__);
+        /* now editing */
+    }
+    /**
+     * You must prepare wdiff file before calling this.
+     * Add a wdiff.
+     */
+    void add(const MetaDiff &diff) {
+        throw RT_ERR("%s: not yet implemented.", __func__);
+        /* now editing */
     }
     /**
      * Delete dangling diffs.
@@ -153,7 +241,7 @@ private:
         return baseDir_ + cybozu::FilePath(name_);
     }
     cybozu::FilePath baseRecordPath() const {
-        getDir() + cybozu::FilePath("base");
+        return getDir() + cybozu::FilePath("base");
     }
     bool loadBaseRecord() {
         if (!baseRecordPath().stat().isFile()) return false;

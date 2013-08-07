@@ -256,6 +256,10 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         return latestRecord_.gid0();
     }
+    MetaSnap latest() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return latestRecord_;
+    }
     /**
      * Get the oldest gid in the directory.
      */
