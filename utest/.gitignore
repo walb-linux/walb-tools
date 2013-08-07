@@ -9,3 +9,4 @@ test_worker_data
 test_process
 test_util
 test_proxy_data
+test_fdstream
