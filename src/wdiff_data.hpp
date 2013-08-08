@@ -248,23 +248,29 @@ public:
             it = removeOverlapped(it, diff);
         }
     }
+    MetaSnap latest() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return latestRecord_;
+    }
     /**
      * Get the latest gid in the directory.
      * You can add only a diff which gid0 is latestGid().
      */
     uint64_t latestGid() const {
         std::lock_guard<std::mutex> lk(mutex_);
-        return latestRecord_.gid0();
+        return latestGidNolock();
     }
-    MetaSnap latest() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return latestRecord_;
+    uint64_t latestGidNolock() const {
+        return latestRecord_.gid0();
     }
     /**
      * Get the oldest gid in the directory.
      */
     uint64_t oldestGid() const {
         std::lock_guard<std::mutex> lk(mutex_);
+        return oldestGidNolock();
+    }
+    uint64_t oldestGidNolock() const {
         if (mmap_.empty()) {
             return latestRecord_.gid0();
         } else {
@@ -473,8 +479,8 @@ private:
      *   maximum gid1 among wdiffs which timestmap are all before a given timestamp.
      */
     uint64_t getMaxGidBeforeTime(uint64_t timestamp) const {
-        uint64_t gid1 = 0;
-        Mmap::const_iterator it = mmap_.begin();
+        uint64_t gid1 = oldestGidNolock();
+        Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
             if (diff.raw().timestamp < timestamp && gid1 < diff.gid1()) {
@@ -483,6 +489,24 @@ private:
             ++it;
         }
         return gid1;
+    }
+    /**
+     * CAUSION:
+     *   the lock must be held.
+     * RETURN:
+     *   minimum gid0 among wdiffs which timestamp are all after a given timestamp.
+     */
+    uint64_t getMinGidAfterTime(uint64_t timestamp) const {
+        uint64_t gid0 = latestGidNolock();
+        Mmap::const_iterator it = mmap_.cbegin();
+        while (it != mmap_.cend()) {
+            const MetaDiff &diff = it->second;
+            if (timestamp < diff.raw().timestamp && diff.gid0() < gid0) {
+                gid0 = diff.gid0();
+            }
+            ++it;
+        }
+        return gid0;
     }
     /**
      * Remove overlapped diff files.
