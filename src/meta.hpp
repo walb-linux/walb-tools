@@ -35,6 +35,8 @@
  *
  * Use createDiffFileName() and parseDiffFileName()
  * to convert from/to a MetaDiff to/from its filename.
+ *
+ * Use canConsolidate() and consolidate() to consolidate diff list.
  */
 namespace walb {
 
@@ -266,9 +268,23 @@ public:
     bool canApply(const MetaDiff &diff) const {
         return diff.gid0() <= gid0() && gid0() < diff.gid1();
     }
+    /**
+     * startToApply() and finishToApply() will do the same thing
+     * as apply(). This is for consistency.
+     */
     MetaSnap apply(const MetaDiff &diff) const {
         assert(canApply(diff));
         return MetaSnap(diff.gid1(), std::max(gid1(), diff.gid2()));
+    }
+    MetaSnap startToApply(const MetaDiff &diff) const {
+        assert(canApply(diff));
+        return MetaSnap(gid0(), std::max(gid1(), diff.gid2()));
+    }
+    MetaSnap finishToApply(const MetaDiff &diff) const {
+        assert(canApply(diff));
+        assert(gid1() == std::max(gid1(), diff.gid2()));
+        assert(diff.gid1() <= gid1());
+        return MetaSnap(diff.gid1(), gid1());
     }
     bool isTooNew(const MetaDiff &diff) const {
         return gid0() < diff.gid0();
@@ -399,6 +415,32 @@ static inline std::string createDiffFileName(const MetaDiff &diff) {
     }
     s += ".wdiff";
     return std::move(s);
+}
+
+/**
+ * Check whether a list of meta diffs can be consolidated.
+ */
+static inline bool canConsolidate(const std::vector<MetaDiff> &diffV) {
+    if (diffV.empty()) return false;
+    MetaDiff diff = diffV[0];
+    for (size_t i = 1; i < diffV.size(); i++) {
+        if (!diff.canMerge(diffV[i])) return false;
+        diff = diff.merge(diffV[i]);
+    }
+    return true;
+}
+
+/**
+ * Consolidate meta diff list.
+ */
+static inline MetaDiff consolidate(const std::vector<MetaDiff> &diffV) {
+    assert(!diffV.empty());
+    MetaDiff diff = diffV[0];
+    for (size_t i = 1; i < diffV.size(); i++) {
+        assert(diff.canMerge(diffV[i]));
+        diff = diff.merge(diffV[i]);
+    }
+    return diff;
 }
 
 } //namespace walb

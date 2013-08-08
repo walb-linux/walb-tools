@@ -38,3 +38,22 @@ CYBOZU_TEST_AUTO(serialize)
 
     ::unlink("test0.bin");
 }
+
+CYBOZU_TEST_AUTO(apply)
+{
+    {
+        walb::MetaSnap s0(0, 0);
+        walb::MetaDiff d1(0, 10, 10);
+        CYBOZU_TEST_EQUAL(s0.startToApply(d1).finishToApply(d1), s0.apply(d1));
+    }
+    {
+        walb::MetaSnap s0(0, 10);
+        walb::MetaDiff d1(0, 10, 12);
+        CYBOZU_TEST_EQUAL(s0.startToApply(d1).finishToApply(d1), s0.apply(d1));
+    }
+    {
+        walb::MetaSnap s0(5, 10);
+        walb::MetaDiff d1(0, 15, 16);
+        CYBOZU_TEST_EQUAL(s0.startToApply(d1).finishToApply(d1), s0.apply(d1));
+    }
+}
