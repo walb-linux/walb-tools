@@ -117,7 +117,7 @@ public:
         return true;
     }
     /**
-     * Merge gid range [gid0, gid1) into a wdiff.
+     * Consolidate gid range [gid0, gid1) into a wdiff.
      *
      * You must call this after created the merged diff file.
      * Old wdiff files will not be removed.
@@ -131,7 +131,7 @@ public:
      *   true if successfuly merged.
      *   or false.
      */
-    bool merge(uint64_t gid0, uint64_t gid1) {
+    bool consolidate(uint64_t gid0, uint64_t gid1) {
         assert(isContiguous_);
         Mmap::const_iterator it = mmap_.lower_bound(gid0);
         if (it == mmap_.cend()) return false;
@@ -222,19 +222,6 @@ public:
         removeFiles(v);
     }
     /**
-     * Remove wdiffs before a specified timestamp.
-     */
-    void removeBeforeTime(uint64_t timestamp) {
-        uint64_t gid1 = getMaxGidBeforeTime(timestamp);
-        removeBeforeGid(gid1);
-    }
-    /**
-     * List wdiff name before a given timestamp.
-     */
-    std::vector<std::string> listBeforeTime(uint64_t timestamp) const {
-        return convertDiffToName(listDiff(0, getMaxGidBeforeTime(timestamp)));
-    }
-    /**
      * List of wdiff name in order of gid.
      * RETURN:
      *   list of wdiff name.
@@ -252,6 +239,7 @@ public:
      *   the list does not contain overlapped ones.
      */
     std::vector<MetaDiff> listDiff(uint64_t gid0, uint64_t gid1) const {
+        assert(gid0 < gid1);
         Mmap::const_iterator it = mmap_.lower_bound(gid0);
         if (it == mmap_.cend()) return {};
         std::vector<MetaDiff> v;
@@ -266,6 +254,18 @@ public:
     }
     std::vector<MetaDiff> listDiff() const {
         return listDiff(0, uint64_t(-1));
+    }
+    /**
+     * Get diff list of timestamp range.
+     *
+     * @ts0, @ts1: timestamp range [ts0, ts1).
+     */
+    std::vector<MetaDiff> listDiffInTimeRange(uint64_t ts0, uint64_t ts1) const {
+        assert(ts0 < ts1);
+        uint64_t gid0 = getMinGidAfterTime(ts0);
+        uint64_t gid1 = getMaxGidBeforeTime(ts1);
+        if (gid1 <= gid0) return {};
+        return listDiff(gid0, gid1);
     }
     /**
      * Remove wdiff files which have been already merged.
@@ -339,6 +339,48 @@ public:
     }
     const cybozu::FilePath &dirPath() const {
         return dir_;
+    }
+    /**
+     * RETURN:
+     *   maximum gid1 among wdiffs which timestmap are all before a given timestamp.
+     */
+    uint64_t getMaxGidBeforeTime(uint64_t timestamp) const {
+        uint64_t gid1 = oldestGid();
+        Mmap::const_iterator it = mmap_.cbegin();
+        while (it != mmap_.cend()) {
+            const MetaDiff &diff = it->second;
+            if (diff.raw().timestamp <= timestamp && gid1 < diff.gid1()) {
+                gid1 = diff.gid1();
+            }
+            ++it;
+        }
+        return gid1;
+    }
+    /**
+     * RETURN:
+     *   minimum gid0 among wdiffs which timestamp are all after a given timestamp.
+     */
+    uint64_t getMinGidAfterTime(uint64_t timestamp) const {
+        uint64_t gid0 = latestGid();
+        Mmap::const_iterator it = mmap_.cbegin();
+        while (it != mmap_.cend()) {
+            const MetaDiff &diff = it->second;
+            if (timestamp <= diff.raw().timestamp && diff.gid0() < gid0) {
+                gid0 = diff.gid0();
+            }
+            ++it;
+        }
+        return gid0;
+    }
+    /**
+     * Get size of a wdiff files.
+     * RETURN:
+     *   size [byte].
+     *   0 if the file does not exist.
+     */
+    size_t getDiffFileSize(const MetaDiff &diff) const {
+        cybozu::FilePath fPath(createDiffFileName(diff));
+        return (dir_ + fPath).stat().size();
     }
 private:
     /**
@@ -450,16 +492,6 @@ private:
         tmpFile.save(latestRecordPath().str());
     }
     /**
-     * Get size of a wdiff files.
-     * RETURN:
-     *   size [byte].
-     *   0 if the file does not exist.
-     */
-    size_t getDiffFileSize(const MetaDiff &diff) const {
-        cybozu::FilePath fPath(createDiffFileName(diff));
-        return (dir_ + fPath).stat().size();
-    }
-    /**
      * Remove diff files.
      * @pathStrV file name list (not full paths).
      */
@@ -471,42 +503,6 @@ private:
                 /* TODO: put log. */
             }
         }
-    }
-    /**
-     * CAUSION:
-     *   the lock must be held.
-     * RETURN:
-     *   maximum gid1 among wdiffs which timestmap are all before a given timestamp.
-     */
-    uint64_t getMaxGidBeforeTime(uint64_t timestamp) const {
-        uint64_t gid1 = oldestGid();
-        Mmap::const_iterator it = mmap_.cbegin();
-        while (it != mmap_.cend()) {
-            const MetaDiff &diff = it->second;
-            if (diff.raw().timestamp < timestamp && gid1 < diff.gid1()) {
-                gid1 = diff.gid1();
-            }
-            ++it;
-        }
-        return gid1;
-    }
-    /**
-     * CAUSION:
-     *   the lock must be held.
-     * RETURN:
-     *   minimum gid0 among wdiffs which timestamp are all after a given timestamp.
-     */
-    uint64_t getMinGidAfterTime(uint64_t timestamp) const {
-        uint64_t gid0 = latestGid();
-        Mmap::const_iterator it = mmap_.cbegin();
-        while (it != mmap_.cend()) {
-            const MetaDiff &diff = it->second;
-            if (timestamp < diff.raw().timestamp && diff.gid0() < gid0) {
-                gid0 = diff.gid0();
-            }
-            ++it;
-        }
-        return gid0;
     }
     /**
      * Remove overlapped diff files.

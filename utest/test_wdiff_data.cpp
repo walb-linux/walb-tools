@@ -4,7 +4,7 @@
 #include "file_path.hpp"
 #include "for_test.hpp"
 
-CYBOZU_TEST_AUTO(merge)
+CYBOZU_TEST_AUTO(consolidate)
 {
     cybozu::FilePath fp("test_wdiff_files_dir0");
     TestDirectory testDir(fp.str(), true);
@@ -32,11 +32,11 @@ CYBOZU_TEST_AUTO(merge)
 
     setDiff(diff, 0, 2, false);
     createDiffFile(diffFiles, diff);
-    CYBOZU_TEST_ASSERT(diffFiles.merge(0, 2));
+    CYBOZU_TEST_ASSERT(diffFiles.consolidate(0, 2));
 
     setDiff(diff, 2, 5, false);
     createDiffFile(diffFiles, diff);
-    CYBOZU_TEST_ASSERT(diffFiles.merge(2, 5));
+    CYBOZU_TEST_ASSERT(diffFiles.consolidate(2, 5));
 
     for (const std::string &s : diffFiles.listName()) {
         ::printf("%s\n", s.c_str());
