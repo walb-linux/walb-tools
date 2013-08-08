@@ -132,7 +132,7 @@ public:
     MetaDiff(const MetaDiff &rhs) : MetaRecord(rhs) {
     }
     MetaDiff &operator=(const MetaDiff &rhs) {
-        raw() = rhs.raw();
+        MetaRecord::operator=(rhs);
         return *this;
     }
     void init() override {
@@ -235,7 +235,7 @@ public:
     MetaSnap(const MetaSnap &rhs) : MetaRecord(rhs) {
     }
     MetaSnap &operator=(const MetaSnap &rhs) {
-        raw() = rhs.raw();
+        MetaRecord::operator=(rhs);
         return *this;
     }
     void init() override {
