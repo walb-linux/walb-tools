@@ -7,7 +7,6 @@
  */
 #include <cassert>
 #include <map>
-#include <mutex>
 #include <vector>
 #include <deque>
 #include <time.h>
@@ -28,6 +27,7 @@ namespace walb {
 
 /**
  * Manager for walb diff files.
+ * This is not thread-safe.
  *
  * Wdiff files:
  *   See meta.hpp for wdiff file name format.
@@ -45,7 +45,6 @@ private:
     const bool isContiguous_;
     using Mmap = std::multimap<uint64_t, MetaDiff>;
     Mmap mmap_;
-    mutable std::mutex mutex_; /* for mmap_. */
 
 public:
     /**
@@ -55,7 +54,7 @@ public:
      *   false for proxy data. must not be contiguous but newer.
      */
     WalbDiffFiles(const std::string &dirStr, bool isContiguous, bool doesReset = false)
-        : dir_(dirStr), isContiguous_(isContiguous), mmap_(), mutex_() {
+        : dir_(dirStr), isContiguous_(isContiguous), mmap_() {
         if (!dir_.stat().exists()) {
             if (!dir_.mkdir()) {
                 throw std::runtime_error("mkdir failed: " + dir_.str());
@@ -105,7 +104,6 @@ public:
      * Before calling this, you must settle the diff file.
      */
     bool add(const MetaDiff &diff) {
-        std::lock_guard<std::mutex> lk(mutex_);
         if (isContiguous_) {
             if (!latestRecord_.canApply(diff)) return false;
             latestRecord_ = latestRecord_.apply(diff);
@@ -135,7 +133,6 @@ public:
      */
     bool merge(uint64_t gid0, uint64_t gid1) {
         assert(isContiguous_);
-        std::lock_guard<std::mutex> lk(mutex_);
         Mmap::const_iterator it = mmap_.lower_bound(gid0);
         if (it == mmap_.cend()) return false;
         MetaDiff merged, diff;
@@ -162,23 +159,44 @@ public:
      *   A list of gid ranges each of which can be merged.
      */
     std::vector<std::pair<uint64_t, uint64_t> > getMergingCandidates() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return getMergingCandidatesNolock();
+        std::deque<MetaDiff> q;
+        std::vector<std::pair<uint64_t, uint64_t> > v;
+        auto insert = [&]() {
+            uint64_t bgn = 0, end = 0;
+            assert(!q.empty());
+            bgn = q.front().gid0();
+            while (!q.empty()) {
+                end = q.front().gid1();
+                q.pop_front();
+            }
+            v.push_back(std::make_pair(bgn, end));
+        };
+        for (const MetaDiff &diff : listDiff()) {
+            bool canMerge = q.empty() ||
+                (diff.raw().can_merge != 0 && q.back().canMerge(diff));
+            if (canMerge) {
+                q.push_back(diff);
+            } else {
+                insert();
+                q.push_back(diff);
+            }
+        }
+        if (!q.empty()) insert();
+        return std::move(v);
     }
     /**
      * Get transfer candidates.
      * @size max total size [byte].
      */
     std::vector<MetaDiff> getTransferCandidates(uint64_t size) {
-        std::lock_guard<std::mutex> lk(mutex_);
         std::vector<std::pair<uint64_t, uint64_t> > pV
-            = getMergingCandidatesNolock();
+            = getMergingCandidates();
         if (pV.empty()) return {};
         uint64_t gid0 = pV.front().first;
         uint64_t gid1 = pV.front().second;
         uint64_t total = 0;
         std::vector<MetaDiff> diffV;
-        for (MetaDiff &diff : listDiffNolock(gid0, gid1)) {
+        for (MetaDiff &diff : listDiff(gid0, gid1)) {
             uint64_t size0 = getDiffFileSize(diff);
             if (size < total + size0) break;
             diffV.push_back(diff);
@@ -189,24 +207,32 @@ public:
     /**
      * Remove wdiffs before a specified gid.
      */
-    void removeBeforeGid(uint64_t gid) {
-        std::lock_guard<std::mutex> lk(mutex_);
-        removeBeforeGidNolock(gid);
+    void removeBeforeGid(uint64_t gid1) {
+        std::vector<std::string> v;
+        Mmap::iterator it = mmap_.begin();
+        while (it != mmap_.end()) {
+            MetaDiff &diff = it->second;
+            if (diff.gid1() <= gid1) {
+                it = mmap_.erase(it);
+                v.push_back(createDiffFileName(diff));
+            } else {
+                ++it;
+            }
+        }
+        removeFiles(v);
     }
     /**
      * Remove wdiffs before a specified timestamp.
      */
     void removeBeforeTime(uint64_t timestamp) {
-        std::lock_guard<std::mutex> lk(mutex_);
         uint64_t gid1 = getMaxGidBeforeTime(timestamp);
-        removeBeforeGidNolock(gid1);
+        removeBeforeGid(gid1);
     }
     /**
      * List wdiff name before a given timestamp.
      */
     std::vector<std::string> listBeforeTime(uint64_t timestamp) const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return convertDiffToName(listDiffNolock(0, getMaxGidBeforeTime(timestamp)));
+        return convertDiffToName(listDiff(0, getMaxGidBeforeTime(timestamp)));
     }
     /**
      * List of wdiff name in order of gid.
@@ -215,31 +241,36 @@ public:
      *   the list does not contain overlapped ones.
      */
     std::vector<std::string> listName() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return convertDiffToName(listDiffNolock());
+        return convertDiffToName(listDiff());
     }
     std::vector<std::string> listName(uint64_t gid0, uint64_t gid1) const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return convertDiffToName(listDiffNolock(gid0, gid1));
+        return convertDiffToName(listDiff(gid0, gid1));
     }
     /**
      * RETURN:
      *   list of diff.
      *   the list does not contain overlapped ones.
      */
-    std::vector<MetaDiff> listDiff() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return listDiffNolock();
-    }
     std::vector<MetaDiff> listDiff(uint64_t gid0, uint64_t gid1) const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return listDiffNolock(gid0, gid1);
+        Mmap::const_iterator it = mmap_.lower_bound(gid0);
+        if (it == mmap_.cend()) return {};
+        std::vector<MetaDiff> v;
+        MetaDiff diff;
+        while (it != mmap_.cend()) {
+            it = nextKey(it, diff);
+            if (gid1 < diff.gid1()) break;
+            v.push_back(diff);
+            it = skipOverlapped(it, diff.gid1());
+        }
+        return std::move(v);
+    }
+    std::vector<MetaDiff> listDiff() const {
+        return listDiff(0, uint64_t(-1));
     }
     /**
      * Remove wdiff files which have been already merged.
      */
     void cleanup() {
-        std::lock_guard<std::mutex> lk(mutex_);
         Mmap::iterator it;
         it = mmap_.begin();
         while (it != mmap_.end()) {
@@ -249,7 +280,6 @@ public:
         }
     }
     MetaSnap latest() const {
-        std::lock_guard<std::mutex> lk(mutex_);
         return latestRecord_;
     }
     /**
@@ -257,20 +287,12 @@ public:
      * You can add only a diff which gid0 is latestGid().
      */
     uint64_t latestGid() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return latestGidNolock();
-    }
-    uint64_t latestGidNolock() const {
         return latestRecord_.gid0();
     }
     /**
      * Get the oldest gid in the directory.
      */
     uint64_t oldestGid() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return oldestGidNolock();
-    }
-    uint64_t oldestGidNolock() const {
         if (mmap_.empty()) {
             return latestRecord_.gid0();
         } else {
@@ -283,16 +305,37 @@ public:
      * Get the latest snapshot record.
      */
     MetaSnap latestSnap() const {
-        std::lock_guard<std::mutex> lk(mutex_);
         return latestRecord_;
     }
     /**
      * Reload metadata by scanning directory entries.
      * searching "*.wdiff" files.
      */
+    /**
+     * See reloadMetadata();
+     */
     void reloadMetadata() {
-        std::lock_guard<std::mutex> lk(mutex_);
-        reloadMetadataNolock();
+        mmap_.clear();
+        std::vector<cybozu::FileInfo> list;
+        if (!cybozu::GetFileList(list, dir_.str(), "wdiff")) {
+            throw std::runtime_error("GetFileList failed.");
+        }
+        for (cybozu::FileInfo &info : list) {
+            if (info.name == "." || info.name == ".." || !info.isFile)
+                continue;
+            MetaDiff diff;
+            if (!parseDiffFileName(info.name, diff)) continue;
+            mmap_.insert(std::make_pair(diff.gid0(), diff));
+        }
+        check();
+        if (mmap_.empty()) {
+            loadLatestRecord();
+        } else {
+            MetaDiff diff;
+            prevKey(mmap_.rbegin(), diff);
+            latestRecord_ = getSnapFromDiff(diff);
+            saveLatestRecord();
+        }
     }
     const cybozu::FilePath &dirPath() const {
         return dir_;
@@ -316,7 +359,7 @@ private:
      * Check whether whole data of oldestGid() <= gid < latestGid() exist.
      * this is meaningfull only when isContiguous_ is true.
      */
-    bool checkNolock() const {
+    bool check() const {
         if (!isContiguous_ || mmap_.empty()) return true;
         Mmap::const_iterator it = mmap_.cbegin();
         MetaDiff diff;
@@ -407,32 +450,6 @@ private:
         tmpFile.save(latestRecordPath().str());
     }
     /**
-     * See reloadMetadata();
-     */
-    void reloadMetadataNolock() {
-        mmap_.clear();
-        std::vector<cybozu::FileInfo> list;
-        if (!cybozu::GetFileList(list, dir_.str(), "wdiff")) {
-            throw std::runtime_error("GetFileList failed.");
-        }
-        for (cybozu::FileInfo &info : list) {
-            if (info.name == "." || info.name == ".." || !info.isFile)
-                continue;
-            MetaDiff diff;
-            if (!parseDiffFileName(info.name, diff)) continue;
-            mmap_.insert(std::make_pair(diff.gid0(), diff));
-        }
-        checkNolock();
-        if (mmap_.empty()) {
-            loadLatestRecord();
-        } else {
-            MetaDiff diff;
-            prevKey(mmap_.rbegin(), diff);
-            latestRecord_ = getSnapFromDiff(diff);
-            saveLatestRecord();
-        }
-    }
-    /**
      * Get size of a wdiff files.
      * RETURN:
      *   size [byte].
@@ -456,30 +473,13 @@ private:
         }
     }
     /**
-     * See removeBeforeGid().
-     */
-    void removeBeforeGidNolock(uint64_t gid1) {
-        std::vector<std::string> v;
-        Mmap::iterator it = mmap_.begin();
-        while (it != mmap_.end()) {
-            MetaDiff &diff = it->second;
-            if (diff.gid1() <= gid1) {
-                it = mmap_.erase(it);
-                v.push_back(createDiffFileName(diff));
-            } else {
-                ++it;
-            }
-        }
-        removeFiles(v);
-    }
-    /**
      * CAUSION:
      *   the lock must be held.
      * RETURN:
      *   maximum gid1 among wdiffs which timestmap are all before a given timestamp.
      */
     uint64_t getMaxGidBeforeTime(uint64_t timestamp) const {
-        uint64_t gid1 = oldestGidNolock();
+        uint64_t gid1 = oldestGid();
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
@@ -497,7 +497,7 @@ private:
      *   minimum gid0 among wdiffs which timestamp are all after a given timestamp.
      */
     uint64_t getMinGidAfterTime(uint64_t timestamp) const {
-        uint64_t gid0 = latestGidNolock();
+        uint64_t gid0 = latestGid();
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
@@ -550,25 +550,6 @@ private:
         return it;
     }
     /**
-     * See listDiff().
-     */
-    std::vector<MetaDiff> listDiffNolock(uint64_t gid0, uint64_t gid1) const {
-        Mmap::const_iterator it = mmap_.lower_bound(gid0);
-        if (it == mmap_.cend()) return {};
-        std::vector<MetaDiff> v;
-        MetaDiff diff;
-        while (it != mmap_.cend()) {
-            it = nextKey(it, diff);
-            if (gid1 < diff.gid1()) break;
-            v.push_back(diff);
-            it = skipOverlapped(it, diff.gid1());
-        }
-        return std::move(v);
-    }
-    std::vector<MetaDiff> listDiffNolock() const {
-        return listDiffNolock(0, uint64_t(-1));
-    }
-    /**
      * Convert diff list to name list.
      */
     static std::vector<std::string> convertDiffToName(const std::vector<MetaDiff> &diffV) {
@@ -576,32 +557,6 @@ private:
         for (const MetaDiff &diff : diffV) {
             v.push_back(createDiffFileName(diff));
         }
-        return std::move(v);
-    }
-    std::vector<std::pair<uint64_t, uint64_t> > getMergingCandidatesNolock() const {
-        std::deque<MetaDiff> q;
-        std::vector<std::pair<uint64_t, uint64_t> > v;
-        auto insert = [&]() {
-            uint64_t bgn = 0, end = 0;
-            assert(!q.empty());
-            bgn = q.front().gid0();
-            while (!q.empty()) {
-                end = q.front().gid1();
-                q.pop_front();
-            }
-            v.push_back(std::make_pair(bgn, end));
-        };
-        for (const MetaDiff &diff : listDiffNolock()) {
-            bool canMerge = q.empty() ||
-                (diff.raw().can_merge != 0 && q.back().canMerge(diff));
-            if (canMerge) {
-                q.push_back(diff);
-            } else {
-                insert();
-                q.push_back(diff);
-            }
-        }
-        if (!q.empty()) insert();
         return std::move(v);
     }
 };
