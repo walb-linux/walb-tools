@@ -22,18 +22,20 @@ struct Option : public cybozu::Option
     }
 };
 
-struct TmpDir
+/**
+ * Create a temporal directory with RAII style.
+ */
+class TmpDir
 {
+private:
     cybozu::FilePath path_;
+public:
     TmpDir(const std::string &prefix) : path_() {
-        for (uint16_t i = 0; i < 65535; i++) {
+        for (uint8_t i = 0; i < 100; i++) {
             path_ = makePath(prefix, i);
             if (!path_.stat().exists()) break;
         }
         if (!path_.mkdir()) throw RT_ERR("mkdir failed.");
-    }
-    cybozu::FilePath path() const {
-        return path_;
     }
     ~TmpDir() noexcept {
         try {
@@ -41,8 +43,12 @@ struct TmpDir
         } catch (...) {
         }
     }
-    static cybozu::FilePath makePath(const std::string &prefix, uint16_t i) {
-        std::string pathStr = cybozu::util::formatString("%s%06u", prefix.c_str(), i);
+    cybozu::FilePath path() const {
+        return path_;
+    }
+private:
+    static cybozu::FilePath makePath(const std::string &prefix, uint8_t i) {
+        std::string pathStr = cybozu::util::formatString("%s%02u", prefix.c_str(), i);
         return cybozu::FilePath(pathStr);
     }
 };
@@ -53,6 +59,13 @@ void testServerData(const Option &opt)
     cybozu::FilePath dir = tmpDir.path();
 
     cybozu::lvm::Vg vg = cybozu::lvm::getVg(opt.vgName);
+
+    /* create server data. */
+
+
+    /* volume group. */
+
+
 
     /* now editing */
 }
