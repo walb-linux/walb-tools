@@ -130,9 +130,11 @@ std::string getSizeOpt(uint64_t sizeLb) {
  */
 bool waitForDeviceAvailable(cybozu::FilePath &path)
 {
-    for (int i = 0; i < 10; i++) {
+    const size_t timeoutMs = 5000;
+    const size_t intervalMs = 100;
+    for (size_t i = 0; i < timeoutMs / intervalMs; i++) {
         if (isDeviceAvailable(path)) return true;
-        local::sleepMs(1000);
+        local::sleepMs(intervalMs);
     }
     return false;
 }
@@ -161,6 +163,7 @@ Lv locate(const std::string &lvPathStr);
 Lv locate(const std::string &vgName, const std::string &name);
 VgList listVg();
 Vg getVg(const std::string &vgName);
+bool existsVg(const std::string &vgName);
 
 /**
  * Logical volume manager.
@@ -383,7 +386,7 @@ void remove(const std::string &pathStr)
     args.push_back("-f");
     args.push_back(path.str());
     cybozu::process::call("/sbin/lvremove", args);
-    local::sleepMs(1000); /* for safety. */
+    local::sleepMs(100); /* for safety. */
 }
 
 /**
@@ -396,7 +399,7 @@ void resize(const std::string &pathStr, uint64_t newSizeLb)
     args.push_back(local::getSizeOpt(newSizeLb));
     args.push_back(pathStr);
     cybozu::process::call("/sbin/lvresize", args);
-    local::sleepMs(1000); /* for safety. */
+    local::sleepMs(100); /* for safety. */
 }
 
 /* now editing */
@@ -559,6 +562,14 @@ Vg getVg(const std::string &vgName)
         if (vg.name() == vgName) return vg;
     }
     throw std::runtime_error("VG not found.");
+}
+
+bool existsVg(const std::string &vgName)
+{
+    for (Vg &vg : listVg()) {
+        if (vg.name() == vgName) return true;
+    }
+    return false;
 }
 
 }} //namespace cybozu::lvm
