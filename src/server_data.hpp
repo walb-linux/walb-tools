@@ -57,6 +57,9 @@ public:
         if (!baseDir_.stat().isDirectory()) {
             throw std::runtime_error("Directory not found: " + baseDir_.str());
         }
+        if (!cybozu::lvm::existsVg(vgName_)) {
+            throw std::runtime_error("Vg does not exist: " + vgName_);
+        }
         wdiffsP_ = std::make_shared<WalbDiffFiles>(getDir().str(), true);
         if (!loadBaseRecord()) {
             /* TODO: gid can be specified. */
@@ -70,7 +73,7 @@ public:
      * Create a volume.
      * @sizeLb volume size [logical block].
      */
-    void createLv(size_t sizeLb) {
+    void createLv(uint64_t sizeLb) {
         assert(0 < sizeLb);
         if (lvExists()) return;
         getVg().create(lvName(), sizeLb);
@@ -79,7 +82,7 @@ public:
      * Grow the volume.
      * @newSizeLb [logical block].
      */
-    void growLv(size_t newSizeLb) {
+    void growLv(uint64_t newSizeLb) {
         cybozu::lvm::Lv lv = getLv();
         if (lv.sizeLb() == newSizeLb) {
             /* no need to grow. */
@@ -132,7 +135,7 @@ public:
     /**
      * Get restored snapshots.
      */
-    std::map<uint64_t, cybozu::lvm::Lv> restores() const {
+    std::map<uint64_t, cybozu::lvm::Lv> getRestores() const {
         std::map<uint64_t, cybozu::lvm::Lv> map;
         std::string prefix = RESTORE_PREFIX + name_ + "_";
         for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
@@ -150,9 +153,16 @@ public:
      *
      * RETURN:
      *   gid that means the latest clean snapshot.
+     *   uint64_t(-1) means that there is no clean snapshot.
      */
     uint64_t getLatestCleanSnapshot() const {
-        /* now editing */
+        std::vector<MetaDiff> v = wdiffsP_->listDiff();
+        auto it = v.crbegin();
+        while (it != v.crend()) {
+            const MetaDiff &diff = *it;
+            if (diff.isClean()) return diff.gid1();
+            ++it;
+        }
         return uint64_t(-1);
     }
     template <typename OutputStream>
@@ -172,7 +182,7 @@ public:
            << latestState << std::endl;
 
         os << "----------restored snapshots----------" << std::endl;
-        for (auto &pair : restores()) {
+        for (auto &pair : getRestores()) {
             cybozu::lvm::Lv &lv = pair.second;
             lv.print(os);
         }
@@ -201,14 +211,10 @@ public:
     bool restore(uint64_t gid = uint64_t(-1)) {
         if (gid == uint64_t(-1)) {
             gid = getLatestCleanSnapshot();
-        } else {
-            if (canRestore(gid)) {
-
-            }
+            if (gid == uint64_t(-1)) return false;
         }
-        std::string suffix
-            = cybozu::util::formatString("_%" PRIu64 "", gid);
-        std::string snapName = RESTORE_PREFIX + name_ + suffix;
+        if (!canRestore(gid)) return false;
+        std::string snapName = restoredSnapshotName(gid);
         if (getLv().hasSnapshot(snapName)) return false;
         cybozu::lvm::Lv snap = getLv().takeSnapshot(snapName);
         return snap.exists();
@@ -218,18 +224,19 @@ public:
      * That means wdiffs has the clean snaphsot for the gid.
      */
     bool canRestore(uint64_t gid) const {
+        MetaSnap snap = baseRecord_;
         for (const MetaDiff &diff : wdiffsP_->listDiff()) {
-            if (diff.gid1() == gid && !diff.isDirty()) {
-                return true;
-            }
+            if (gid < diff.gid1()) break;
+            assert(snap.canApply(diff));
+            snap = snap.apply(diff);
         }
-        return false;
+        return snap.isClean() && snap.gid0() == gid;
     }
     /**
      * Drop a restored snapshot.
      */
-    bool drop(const std::string &name) {
-        std::string snapName = RESTORE_PREFIX + name;
+    bool drop(uint64_t gid) {
+        std::string snapName = restoredSnapshotName(gid);
         if (!getLv().hasSnapshot(snapName)) {
             return false;
         }
@@ -407,6 +414,10 @@ private:
         if (!baseRecord_.isValid()) {
             throw std::runtime_error("baseRecord is not valid.");
         }
+    }
+    std::string restoredSnapshotName(uint64_t gid) const {
+        std::string suffix = cybozu::util::formatString("_%" PRIu64 "", gid);
+        return RESTORE_PREFIX + name_ + suffix;
     }
 };
 
