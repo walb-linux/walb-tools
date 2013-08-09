@@ -57,7 +57,7 @@ public:
         if (!baseDir_.stat().isDirectory()) {
             throw std::runtime_error("Directory not found: " + baseDir_.str());
         }
-        if (!cybozu::lvm::existsVg(vgName_)) {
+        if (!cybozu::lvm::vgExists(vgName_)) {
             throw std::runtime_error("Vg does not exist: " + vgName_);
         }
         wdiffsP_ = std::make_shared<WalbDiffFiles>(getDir().str(), true);

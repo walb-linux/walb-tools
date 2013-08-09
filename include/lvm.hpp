@@ -154,8 +154,8 @@ void resize(const std::string &pathStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
 LvMap getLvMap(const std::string &arg);
 bool exists(const std::string &vgName, const std::string &name);
-bool existsLv(const std::string &vgName, const std::string &lvName);
-bool existsSnap(const std::string &vgName, const std::string &snapName);
+bool lvExists(const std::string &vgName, const std::string &lvName);
+bool snapExists(const std::string &vgName, const std::string &snapName);
 LvList find(const std::string &vgName, const std::string &name);
 LvList findLv(const std::string &vgName, const std::string &lvName);
 LvList findSnap(const std::string &vgName, const std::string &snapName);
@@ -163,7 +163,7 @@ Lv locate(const std::string &lvPathStr);
 Lv locate(const std::string &vgName, const std::string &name);
 VgList listVg();
 Vg getVg(const std::string &vgName);
-bool existsVg(const std::string &vgName);
+bool vgExists(const std::string &vgName);
 
 /**
  * Logical volume manager.
@@ -458,12 +458,12 @@ bool exists(const std::string &vgName, const std::string &name)
     return !find(vgName, name).empty();
 }
 
-bool existsLv(const std::string &vgName, const std::string &lvName)
+bool lvExists(const std::string &vgName, const std::string &lvName)
 {
     return !findLv(vgName, lvName).empty();
 }
 
-bool existsSnap(const std::string &vgName, const std::string &snapName)
+bool snapExists(const std::string &vgName, const std::string &snapName)
 {
     return !findSnap(vgName, snapName).empty();
 }
@@ -564,7 +564,7 @@ Vg getVg(const std::string &vgName)
     throw std::runtime_error("VG not found.");
 }
 
-bool existsVg(const std::string &vgName)
+bool vgExists(const std::string &vgName)
 {
     for (Vg &vg : listVg()) {
         if (vg.name() == vgName) return true;
