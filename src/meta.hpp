@@ -157,6 +157,7 @@ public:
             return false;
         }
     }
+    bool isClean() const { return gid1() == gid2(); }
     bool isDirty() const { return gid1() != gid2(); }
     uint64_t gid0() const { return raw().gid0; }
     uint64_t gid1() const { return raw().gid1; }
@@ -261,6 +262,7 @@ public:
             return false;
         }
     }
+    bool isClean() const { return gid0() == gid1(); }
     bool isDirty() const { return gid0() != gid1(); }
     /**
      * Check a diff can be applied to the snapshot.
