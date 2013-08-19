@@ -40,7 +40,7 @@ struct UncompressorZlib : walb::compressor_local::UncompressorIF {
                 if (readSize == 0) return pos;
                 pos += readSize;
                 if (pos == maxOutSize) {
-                    // QQQ : need dec.isEmpty()
+                    if (dec.isEmpty()) return pos;
                     break; // data full
                 }
             }
