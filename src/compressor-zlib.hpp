@@ -2,7 +2,7 @@
 #include <cybozu/zlib.hpp>
 #include <cybozu/stream.hpp>
 
-struct CompressorZlib {
+struct CompressorZlib : walb::compressor_local::CompressorIF {
     size_t maxInSize_;
     size_t compressionLevel_;
     CompressorZlib(size_t maxInSize, size_t compressionLevel)
@@ -26,7 +26,7 @@ struct CompressorZlib {
     }
 };
 
-struct UncompressorZlib {
+struct UncompressorZlib : walb::compressor_local::UncompressorIF {
     UncompressorZlib(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {

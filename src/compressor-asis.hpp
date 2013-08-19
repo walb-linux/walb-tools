@@ -1,7 +1,7 @@
 #pragma once
 #include <string.h>
 
-struct CompressorAsIs {
+struct CompressorAsIs : walb::compressor_local::CompressorIF {
     size_t maxInSize_;
     CompressorAsIs(size_t maxInSize, size_t)
         : maxInSize_(maxInSize) {}
@@ -17,7 +17,7 @@ struct CompressorAsIs {
     }
 };
 
-struct UncompressorAsIs {
+struct UncompressorAsIs : walb::compressor_local::UncompressorIF {
     UncompressorAsIs(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {

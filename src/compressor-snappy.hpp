@@ -1,7 +1,7 @@
 #pragma once
 #include <snappy.h>
 
-struct CompressorSnappy {
+struct CompressorSnappy : walb::compressor_local::CompressorIF {
     size_t maxInSize_;
     CompressorSnappy(size_t maxInSize, size_t)
         : maxInSize_(maxInSize) {}
@@ -18,7 +18,7 @@ struct CompressorSnappy {
     }
 };
 
-struct UncompressorSnappy {
+struct UncompressorSnappy : walb::compressor_local::UncompressorIF {
     UncompressorSnappy(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
