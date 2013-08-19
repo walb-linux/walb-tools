@@ -13,7 +13,7 @@ namespace walb {
 class CompressorError : public std::exception {
     std::string str_;
 public:
-	CompressorError(const std::string& str) : str_(str) {}
+    CompressorError(const std::string& str) : str_(str) {}
     ~CompressorError() throw() {}
     const char *what() { return str_.c_str(); }
 };

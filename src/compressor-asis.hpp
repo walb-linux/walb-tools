@@ -2,13 +2,13 @@
 #include <string.h>
 
 struct CompressorAsIs {
-	size_t maxInSize_;
+    size_t maxInSize_;
     CompressorAsIs(size_t maxInSize, size_t)
-		: maxInSize_(maxInSize) {}
-	size_t getMaxOutSize() const
+        : maxInSize_(maxInSize) {}
+    size_t getMaxOutSize() const
     {
-		return maxInSize_;
-	}
+        return maxInSize_;
+    }
     size_t run(void *out, const void *in, size_t inSize)
     {
         if (inSize > maxInSize_) throw walb::CompressorError("too large inSize");

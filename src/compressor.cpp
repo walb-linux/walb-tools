@@ -3,16 +3,16 @@
 #include "compressor-snappy.hpp"
 
 #define IMPL_CSTR(className, ...) \
-	switch (mode) { \
-	case Compressor::AsIs: \
+    switch (mode) { \
+    case Compressor::AsIs: \
         engine_ = (void*)new className ## AsIs(__VA_ARGS__); \
         break; \
-	case Compressor::Snappy: \
+    case Compressor::Snappy: \
         engine_ = (void*)new className ## Snappy(__VA_ARGS__); \
         break; \
-	default: \
+    default: \
         throw walb::CompressorError("invalid mode"); \
-	}
+    }
 
 #define IMPL_DISPATCH(className, func, ...) \
     switch (mode_) { \
@@ -20,24 +20,24 @@
         return ((className ## AsIs*)engine_)->func(__VA_ARGS__); \
     case Compressor::Snappy: \
         return ((className ## Snappy*)engine_)->func(__VA_ARGS__); \
-	default: \
+    default: \
         throw walb::CompressorError("invalid mode"); \
-	}
+    }
 
 #define IMPL_DSTR(className) \
-	switch (mode_) { \
-	case Compressor::AsIs: \
+    switch (mode_) { \
+    case Compressor::AsIs: \
         delete (className ## AsIs*)engine_; \
         break; \
-	case Compressor::Snappy: \
+    case Compressor::Snappy: \
         delete (className ## Snappy*)engine_; \
         break; \
-	default: \
+    default: \
         throw walb::CompressorError("invalid mode"); \
-	}
+    }
 
 walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t para)
-	: mode_(mode), engine_(0)
+    : mode_(mode), engine_(0)
 {
     IMPL_CSTR(Compressor, maxInSize, para)
 }
@@ -58,7 +58,7 @@ walb::Compressor::~Compressor() throw()
 }
 
 walb::Uncompressor::Uncompressor(walb::Compressor::Mode mode, size_t para)
-	: mode_(mode), engine_(0)
+    : mode_(mode), engine_(0)
 {
     IMPL_CSTR(Uncompressor, para)
 }
