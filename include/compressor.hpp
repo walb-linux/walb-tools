@@ -18,6 +18,21 @@ public:
     const char *what() { return str_.c_str(); }
 };
 
+namespace compressor_local {
+
+struct CompressorIF {
+	virtual ~CompressorIF() throw() {}
+	virtual size_t getMaxOutSize() const = 0;
+	virtual size_t run(void *out, const void *in, size_t inSize) = 0;
+};
+
+struct UncompressorIF {
+    virtual ~UncompressorIF() throw() {}
+    virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
+};
+
+}
+
 /**
  * compression class
  */
@@ -26,7 +41,8 @@ class Compressor
 public:
     enum Mode {
         AsIs,
-        Snappy
+        Snappy,
+		Zlib
     };
     Compressor(Mode mode, size_t maxInSize, size_t para = 0);
     ~Compressor() throw();
@@ -36,7 +52,7 @@ private:
     Compressor(const Compressor&);
     void operator=(const Compressor&);
     Mode mode_;
-    void *engine_;
+    compressor_local::CompressorIF *engine_;
 };
 
 /**
@@ -52,7 +68,7 @@ private:
     Uncompressor(const Uncompressor&);
     void operator=(const Uncompressor&);
     Compressor::Mode mode_;
-    void *engine_;
+    compressor_local::UncompressorIF *engine_;
 };
 
 } //namespace walb
