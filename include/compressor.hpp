@@ -42,7 +42,8 @@ public:
     enum Mode {
         AsIs,
         Snappy,
-		Zlib
+        Zlib,
+        Xz
     };
     Compressor(Mode mode, size_t maxInSize, size_t para = 0);
     ~Compressor() throw();
