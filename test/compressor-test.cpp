@@ -24,4 +24,5 @@ CYBOZU_TEST_AUTO(test)
 	test(walb::Compressor::AsIs);
 	test(walb::Compressor::Snappy);
 	test(walb::Compressor::Zlib);
+	test(walb::Compressor::Xz);
 }

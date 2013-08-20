@@ -2,6 +2,7 @@
 #include "compressor-asis.hpp"
 #include "compressor-snappy.hpp"
 #include "compressor-zlib.hpp"
+#include "compressor-xz.hpp"
 
 #define IMPL_CSTR(className, ...) \
     switch (mode) { \
@@ -14,14 +15,17 @@
     case Compressor::Zlib: \
         engine_ = new className ## Zlib(__VA_ARGS__); \
         break; \
+    case Compressor::Xz: \
+        engine_ = new className ## Xz(__VA_ARGS__); \
+        break; \
     default: \
         throw walb::CompressorError("invalid mode"); \
     }
 
-walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t para)
+walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t compressionLevel)
     : mode_(mode), engine_(0)
 {
-    IMPL_CSTR(Compressor, maxInSize, para)
+    IMPL_CSTR(Compressor, maxInSize, compressionLevel)
 }
 
 size_t walb::Compressor::getMaxOutSize() const
