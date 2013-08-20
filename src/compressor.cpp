@@ -23,7 +23,7 @@
     }
 
 walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t compressionLevel)
-    : mode_(mode), engine_(0)
+    : engine_(0)
 {
     IMPL_CSTR(Compressor, maxInSize, compressionLevel)
 }
@@ -44,7 +44,7 @@ walb::Compressor::~Compressor() throw()
 }
 
 walb::Uncompressor::Uncompressor(walb::Compressor::Mode mode, size_t para)
-    : mode_(mode), engine_(0)
+    : engine_(0)
 {
     IMPL_CSTR(Uncompressor, para)
 }

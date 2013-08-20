@@ -71,7 +71,6 @@ public:
 private:
     Compressor(const Compressor&);
     void operator=(const Compressor&);
-    Mode mode_;
     compressor_local::CompressorIF *engine_;
 };
 
@@ -102,7 +101,6 @@ public:
 private:
     Uncompressor(const Uncompressor&);
     void operator=(const Uncompressor&);
-    Compressor::Mode mode_;
     compressor_local::UncompressorIF *engine_;
 };
 
