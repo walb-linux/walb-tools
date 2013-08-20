@@ -282,15 +282,14 @@ public:
         return getDir() + cybozu::FilePath(createDiffFileName(diff));
     }
     /**
-     * @gid must be a valid separator of wdiff file and file.
+     * @gid threshold gid. That indicates all diffs
+     * which gid1 is not greater than a specified gid.
      *
      * RETURN:
      *   a list of meta diff to apply.
      */
     std::vector<MetaDiff> diffsToApply(uint64_t gid) {
-        throw RT_ERR("%s: not yet implemented.", __func__);
-        /* now editing */
-        return {};
+        return wdiffsP_->listDiff(0, gid);
     }
     /**
      * Update the base record to be dirty to start wdiffs application.
@@ -312,8 +311,7 @@ public:
      * Add a wdiff.
      */
     void add(const MetaDiff &diff) {
-        throw RT_ERR("%s: not yet implemented.", __func__);
-        /* now editing */
+        if (!wdiffsP_->add(diff)) throw RT_ERR("diff add failed.");
     }
     /**
      * Get wdiff candidates for consolidation.
