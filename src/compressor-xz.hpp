@@ -36,7 +36,7 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
 
 struct UncompressorXz : walb::compressor_local::UncompressorIF {
     uint64_t memLimit_;
-    UncompressorXz(size_t memLimit) : memLinit_(memLimit) {}
+    UncompressorXz(size_t memLimit) : memLimit_(memLimit) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
         /* compressionLevel_ 6 requires 64MiB or a little bigger memory */
