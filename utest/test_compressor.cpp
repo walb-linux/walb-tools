@@ -1,4 +1,4 @@
-#include "../include/compressor.hpp"
+#include "compressor.hpp"
 #include <cybozu/test.hpp>
 
 void test(walb::Compressor::Mode mode)
