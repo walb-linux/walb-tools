@@ -29,7 +29,7 @@ LDLIBS = -lpthread
 endif
 
 LDLIBS_AIO = -laio
-LDLIBS_COMPRESS = -lsnappy -llzma -lzip
+LDLIBS_COMPRESS = -lsnappy -llzma -lz
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h)
 SOURCES = $(wildcard src/*.cpp)
@@ -55,7 +55,9 @@ echo_binaries:
 src/%: src/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 
-test/%: test/%.o
+utest/test_compressor: utest/test_compressor.o src/compressor.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
+utest/%: utest/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 clean:
