@@ -19,7 +19,7 @@
         engine_ = new className ## Xz(__VA_ARGS__); \
         break; \
     default: \
-        throw walb::CompressorError("invalid mode"); \
+        throw cybozu::Exception(#className ":invalid mode") << mode; \
     }
 
 walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t compressionLevel)

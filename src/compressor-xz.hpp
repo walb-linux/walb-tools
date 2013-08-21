@@ -11,7 +11,7 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
     CompressorXz(size_t maxInSize, size_t compressionLevel)
         : maxInSize_(maxInSize), compressionLevel_(compressionLevel)
     {
-        if (compressionLevel > 9) throw walb::CompressorError("bad compressionLevel");
+        if (compressionLevel > 9) throw cybozu::Exception("CompressorXz:bad compressionLevel") << compressionLevel;
     }
     size_t getMaxOutSize() const
     {
@@ -19,7 +19,7 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
     }
     size_t run(void *out, const void *in, size_t inSize)
     {
-        if (inSize > maxInSize_) throw walb::CompressorError("too large inSize");
+        if (inSize > maxInSize_) throw cybozu::Exception("CompressorXz:run:too large inSize") << inSize << maxInSize_;
         size_t out_size = getMaxOutSize();
         /* default compression level is 6 */
         const uint32_t present = compressionLevel_ == 0 ? 6 : compressionLevel_;
@@ -28,7 +28,7 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
         lzma_ret ret = lzma_easy_buffer_encode(present, LZMA_CHECK_CRC64, allocator,
             (const uint8_t*)in, inSize, (uint8_t*)out, &out_pos, out_size);
         if (ret != LZMA_OK) {
-            throw walb::CompressorError("lzma_easy_buffer_encode");
+            throw cybozu::Exception("CompressorXz:run:lzma_easy_buffer_encode") << ret;
         }
         return out_pos;
     }
@@ -48,7 +48,7 @@ struct UncompressorXz : walb::compressor_local::UncompressorIF {
         lzma_ret ret = lzma_stream_buffer_decode(&memlimit, flags, allocator,
             (const uint8_t*)in, &in_pos, inSize, (uint8_t*)out, &out_pos, maxOutSize);
         if (ret != LZMA_OK) {
-            throw walb::CompressorError("lzma_easy_buffer_encode");
+            throw cybozu::Exception("UncompressorXz:run:lzma_stream_buffer_decode") << ret;
         }
         return out_pos;
     }
