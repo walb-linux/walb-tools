@@ -55,7 +55,7 @@ echo_binaries:
 binsrc/%: binsrc/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 
-utest/test_compressor: utest/test_compressor.o src/compressor.o
+utest/compressor_test: utest/compressor_test.o src/compressor.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
 utest/%: utest/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
