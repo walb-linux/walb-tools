@@ -11,7 +11,7 @@ struct CompressorAsIs : walb::compressor_local::CompressorIF {
     }
     size_t run(void *out, const void *in, size_t inSize)
     {
-        if (inSize > maxInSize_) throw walb::CompressorError("too large inSize");
+        if (inSize > maxInSize_) throw cybozu::Exception("CompressorAsIs:run:too large inSize") << inSize << maxInSize_;
         memcpy(out, in, inSize);
         return inSize;
     }
@@ -21,7 +21,7 @@ struct UncompressorAsIs : walb::compressor_local::UncompressorIF {
     UncompressorAsIs(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-        if (inSize > maxOutSize) throw walb::CompressorError("too large inSize");
+        if (inSize > maxOutSize) throw cybozu::Exception("UncompressorAsIs:run:too large inSize") << inSize << maxOutSize;
         memcpy(out, in, inSize);
         return inSize;
     }
