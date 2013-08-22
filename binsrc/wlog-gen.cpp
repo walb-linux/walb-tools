@@ -27,6 +27,7 @@
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "walb_log.hpp"
+#include "walb_log_gen.hpp"
 
 #include "walb/walb.h"
 
@@ -51,6 +52,8 @@ private:
     std::string outPath_;
     std::vector<std::string> args_;
 
+    std::shared_ptr<cybozu::util::FileOpener> foP_;
+
 public:
     Config(int argc, char* argv[])
         : pbs_(LOGICAL_BLOCK_SIZE)
@@ -66,7 +69,8 @@ public:
         , isVerbose_(false)
         , isHelp_(false)
         , outPath_()
-        , args_() {
+        , args_()
+        , foP_() {
         parse(argc, argv);
     }
 
@@ -83,6 +87,38 @@ public:
     bool isVerbose() const { return isVerbose_; }
     bool isHelp() const { return isHelp_; }
     const std::string& outPath() const { return outPath_; }
+
+    void openOutputFileIfNeed() {
+        if (foP_) return;
+        if (outPath() == "-") return;
+        foP_ = std::make_shared<cybozu::util::FileOpener>(
+            outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+
+    walb::WalbLogGenerator::Config genConfig() const {
+        walb::WalbLogGenerator::Config cfg;
+
+        if (outPath() == "-") {
+            cfg.fd = 1;
+        } else if (foP_) {
+            cfg.fd = foP_->fd();
+        } else {
+            throw RT_ERR("The output file is not opened.");
+        }
+
+        cfg.devLb = devLb();
+        cfg.minIoLb = minIoLb();
+        cfg.maxIoLb = maxIoLb();
+        cfg.pbs = pbs();
+        cfg.maxPackPb = maxPackPb();
+        cfg.outLogPb = outLogPb();
+        cfg.lsid = lsid();
+        cfg.isPadding = isPadding();
+        cfg.isDiscard = isDiscard();
+        cfg.isAllZero = isAllZero();
+        cfg.isVerbose = isVerbose();
+        return std::move(cfg);
+    }
 
     void print() const {
         ::printf("devLb: %" PRIu64 "\n"
@@ -112,34 +148,11 @@ public:
     }
 
     void check() const {
-        if (!::is_valid_pbs(pbs())) {
-            throwError("pbs invalid.");
-        }
-        if (65535 < minIoLb()) {
-            throwError("minSize must be < 512 * 65536 bytes.");
-        }
-        if (65535 < maxIoLb()) {
-            throwError("maxSize must be < 512 * 65536 bytes.");
-        }
-        if (maxIoLb() < minIoLb()) {
-            throwError("minIoSize must be <= maxIoSize.");
-        }
-        if (maxPackPb() < 1 + ::capacity_pb(pbs(), maxIoLb())) {
-            throwError("maxPackSize must be >= pbs + maxIoSize.");
-        }
-        if (lsid() + outLogPb() < lsid()) {
-            throwError("lsid will overflow.");
-        }
+        genConfig().check();
         if (outPath().size() == 0) {
-            throwError("specify outPath.");
+            throw RT_ERR("specify outPath.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
 
 private:
     /* Option ids. */
@@ -158,17 +171,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     template <typename IntType>
     IntType str2int(const char *str) const {
@@ -244,7 +246,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -275,211 +277,8 @@ private:
     }
 };
 
-/**
- * WalbLog Generator for test.
- */
-class WalbLogGenerator
-{
-private:
-    const Config& config_;
-    uint64_t lsid_;
-
-    class Rand
-    {
-    private:
-        std::random_device rd_;
-        std::mt19937 gen_;
-        std::uniform_int_distribution<uint32_t> dist32_;
-        std::uniform_int_distribution<uint64_t> dist64_;
-        std::poisson_distribution<uint16_t> distp_;
-    public:
-        Rand()
-            : rd_()
-            , gen_(rd_())
-            , dist32_(0, UINT32_MAX)
-            , dist64_(0, UINT64_MAX)
-            , distp_(4) {}
-
-        uint32_t get32() { return dist32_(gen_); }
-        uint64_t get64() { return dist64_(gen_); }
-        uint16_t getp() { return distp_(gen_); }
-    };
-public:
-    WalbLogGenerator(const Config& config)
-        : config_(config)
-        , lsid_(config.lsid()) {}
-
-    void generate() {
-        if (config_.outPath() == "-") {
-            generateAndWrite(1);
-        } else {
-            cybozu::util::FileOpener f(
-                config_.outPath(),
-                O_WRONLY | O_CREAT | O_TRUNC, S_IREAD | S_IWRITE);
-            generateAndWrite(f.fd());
-            f.close();
-        }
-    }
-private:
-    using Block = std::shared_ptr<u8>;
-
-    void setUuid(Rand &rand, std::vector<u8> &uuid) {
-        const size_t t = sizeof(uint64_t);
-        const size_t n = uuid.size() / t;
-        const size_t m = uuid.size() % t;
-        for (size_t i = 0; i < n; i++) {
-            *reinterpret_cast<uint64_t *>(&uuid[i * t]) = rand.get64();
-        }
-        for (size_t i = 0; i < m; i++) {
-            uuid[n * t + i] = static_cast<u8>(rand.get32());
-        }
-    }
-
-    void generateAndWrite(int fd) {
-        Rand rand;
-        uint64_t writtenPb = 0;
-        walb::log::WalbLogFileHeader wlHead;
-        std::vector<u8> uuid(UUID_SIZE);
-        setUuid(rand, uuid);
-
-        const uint32_t salt = rand.get32();
-        const unsigned int pbs = config_.pbs();
-        uint64_t lsid = config_.lsid();
-        Block hBlock = cybozu::util::allocateBlocks<u8>(pbs, pbs);
-        cybozu::util::BlockAllocator<u8> ba(config_.maxPackPb(), pbs, pbs);
-
-        /* Generate and write walb log header. */
-        wlHead.init(pbs, salt, &uuid[0], lsid, uint64_t(-1));
-        if (!wlHead.isValid(false)) {
-            throw RT_ERR("WalbLogHeader invalid.");
-        }
-        wlHead.write(fd);
-        if (config_.isVerbose()) {
-            wlHead.print(::stderr);
-        }
-
-        uint64_t nPack = 0;
-        while (writtenPb < config_.outLogPb()) {
-            walb::log::WalbLogpackHeader logh(hBlock, pbs, salt);
-            generateLogpackHeader(rand, logh, lsid);
-            assert(::is_valid_logpack_header_and_records(&logh.header()));
-            uint64_t tmpLsid = lsid + 1;
-
-            /* Prepare blocks and calc checksum if necessary. */
-            std::vector<Block> blocks;
-            for (unsigned int i = 0; i < logh.nRecords(); i++) {
-                walb::log::WalbLogpackDataRef logd(logh, i);
-                if (logd.hasData()) {
-                    bool isAllZero = false;
-                    if (config_.isAllZero()) {
-                        isAllZero = rand.get32() % 100 < 10;
-                    }
-                    for (unsigned int j = 0; j < logd.ioSizePb(); j++) {
-                        Block b = ba.alloc();
-                        ::memset(b.get(), 0, pbs);
-                        if (!isAllZero) {
-                            *reinterpret_cast<uint64_t *>(b.get()) = tmpLsid;
-                        }
-                        tmpLsid++;
-                        logd.addBlock(b);
-                        blocks.push_back(b);
-                    }
-                }
-                if (logd.hasDataForChecksum()) {
-                    UNUSED bool ret = logd.setChecksum();
-                    assert(ret);
-                    assert(logd.isValid(true));
-                }
-            }
-            assert(blocks.size() == logh.totalIoSize());
-
-            /* Calculate header checksum and write. */
-            cybozu::util::FdWriter fdw(fd);
-            logh.write(fdw);
-
-            /* Write each IO data. */
-            for (Block b : blocks) {
-#if 0
-                ::printf("block data %" PRIu64 "\n",
-                         *reinterpret_cast<uint64_t *>(b.get())); /* debug */
-#endif
-                fdw.write(reinterpret_cast<const char *>(b.get()), pbs);
-            }
-
-            uint64_t w = 1 + logh.totalIoSize();
-            assert(tmpLsid == lsid + w);
-            writtenPb += w;
-            lsid += w;
-            nPack++;
-
-            if (config_.isVerbose()) {
-                ::fprintf(::stderr, ".");
-                if (nPack % 80 == 79) {
-                    ::fprintf(::stderr, "\n");
-                }
-                ::fflush(::stderr);
-            }
-        }
-        if (config_.isVerbose()) {
-            ::fprintf(::stderr,
-                      "\n"
-                      "nPack: %" PRIu64 "\n"
-                      "written %" PRIu64 " physical blocks\n",
-                      nPack, writtenPb);
-        }
-    }
-
-    /**
-     * Generate logpack header randomly.
-     */
-    void generateLogpackHeader(
-        Rand &rand, walb::log::WalbLogpackHeader &logh, uint64_t lsid) {
-        logh.init(lsid);
-        const unsigned int pbs = config_.pbs();
-        const unsigned int maxNumRecords = ::max_n_log_record_in_sector(pbs);
-        const size_t nRecords = (rand.get32() % maxNumRecords) + 1;
-        const uint64_t devLb = config_.devLb();
-
-        for (size_t i = 0; i < nRecords; i++) {
-            uint64_t offset = rand.get64() % devLb;
-            /* Decide io_size. */
-            uint16_t ioSize = config_.minIoLb();
-            uint16_t range = config_.maxIoLb() - config_.minIoLb();
-            if (0 < range) {
-                ioSize += rand.get32() % range;
-            }
-            if (devLb < offset + ioSize) {
-                ioSize = devLb - offset; /* clipping. */
-            }
-            assert(0 < ioSize);
-            /* Check total_io_size limitation. */
-            if (0 < logh.totalIoSize() && 1 < nRecords &&
-                config_.maxPackPb() <
-                logh.totalIoSize() + ::capacity_pb(pbs, ioSize)) {
-                break;
-            }
-            /* Decide IO type. */
-            unsigned int v = rand.get32() % 100;
-            if (config_.isPadding() && v < 10) {
-                uint16_t psize = capacity_lb(pbs, capacity_pb(pbs, ioSize));
-                if (v < 5) { psize = 0; } /* padding size can be 0. */
-                if (!logh.addPadding(psize)) { break; }
-                continue;
-            }
-            if (config_.isDiscard() && v < 30) {
-                if (!logh.addDiscardIo(offset, ioSize)) { break; }
-                continue;
-            }
-            if (!logh.addNormalIo(offset, ioSize)) { break; }
-        }
-        logh.isValid(false);
-    }
-};
-
 int main(int argc, char* argv[])
 {
-    int ret = 0;
-
     try {
         Config config(argc, argv);
         /* config.print(); */
@@ -487,27 +286,22 @@ int main(int argc, char* argv[])
             Config::printHelp();
             return 0;
         }
+        config.openOutputFileIfNeed();
         config.check();
-
-        WalbLogGenerator wlGen(config);
+        walb::WalbLogGenerator::Config cfg = config.genConfig();
+        walb::WalbLogGenerator wlGen(cfg);
         wlGen.generate();
-
-    } catch (Config::Error& e) {
-        ::printf("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        ret = 1;
+        return 0;
     } catch (std::runtime_error& e) {
         LOGe("Error: %s\n", e.what());
-        ret = 1;
+        return 1;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        ret = 1;
+        return 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        ret = 1;
+        return 1;
     }
-
-    return ret;
 }
 
 /* end of file. */
