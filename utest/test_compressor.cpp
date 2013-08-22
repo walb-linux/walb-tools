@@ -4,15 +4,14 @@
 void test(walb::Compressor::Mode mode)
 {
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
-    const size_t maxInSize = in.size();
-    walb::Compressor c(mode, maxInSize);
+    walb::Compressor c(mode);
     std::string enc;
-    enc.resize(c.getMaxOutSize());
-    size_t encSize = c.run(&enc[0], &in[0], in.size());
-    printf("inSize=%d, encSize=%d, maxOutSize=%d\n", (int)in.size(), (int)encSize, (int)c.getMaxOutSize());
+    enc.resize(in.size());
+    size_t encSize = c.run(&enc[0], enc.size(), &in[0], in.size());
+    printf("inSize=%d, encSize=%d\n", (int)in.size(), (int)encSize);
     std::string dec;
     walb::Uncompressor d(mode);
-    dec.resize(maxInSize);
+    dec.resize(in.size() + 10);
     size_t decSize = d.run(&dec[0], dec.size(), &enc[0], encSize);
     CYBOZU_TEST_EQUAL(decSize, in.size());
     dec.resize(decSize);

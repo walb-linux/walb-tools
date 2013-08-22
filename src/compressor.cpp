@@ -22,20 +22,15 @@
         throw cybozu::Exception(#className ":invalid mode") << mode; \
     }
 
-walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t maxInSize, size_t compressionLevel)
+walb::Compressor::Compressor(walb::Compressor::Mode mode, size_t compressionLevel)
     : engine_(0)
 {
-    IMPL_CSTR(Compressor, maxInSize, compressionLevel)
+    IMPL_CSTR(Compressor, compressionLevel)
 }
 
-size_t walb::Compressor::getMaxOutSize() const
+size_t walb::Compressor::run(void *out, size_t maxOutSize, const void *in, size_t inSize)
 {
-    return engine_->getMaxOutSize();
-}
-
-size_t walb::Compressor::run(void *out, const void *in, size_t inSize)
-{
-    return engine_->run(out, in, inSize);
+    return engine_->run(out, maxOutSize, in, inSize);
 }
 
 walb::Compressor::~Compressor() throw()
