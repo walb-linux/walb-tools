@@ -8,11 +8,13 @@
 #include <cstdio>
 #include <chrono>
 #include <thread>
+
+#include "sys_logger.hpp"
+
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
 #include "file_path.hpp"
-#include "logger.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;

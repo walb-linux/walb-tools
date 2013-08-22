@@ -1,4 +1,11 @@
-#include <stdint.h>
+/**
+ * @file
+ * @brief walb diff utiltities for files.
+ * @author HOSHINO Takashi
+ *
+ * (C) 2013 Cybozu Labs, Inc.
+ */
+#include <cstdint>
 #include "walb/util.h"
 
 #ifndef WALB_DIFF_H

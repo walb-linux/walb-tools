@@ -21,11 +21,12 @@
 
 #include "cybozu/option.hpp"
 
+#include "stdout_logger.hpp"
+
 #include "util.hpp"
 #include "walb_log.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
-#include "logger.hpp"
 
 /**
  * Converter from walb logs to a walb diff.

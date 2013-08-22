@@ -18,7 +18,7 @@
 #include "tmp_file_serializer.hpp"
 #include "meta.hpp"
 #include "time.hpp"
-#include "logger.hpp"
+#include "stdout_logger.hpp"
 
 #ifndef WALB_TOOLS_WDIFF_DATA_HPP
 #define WALB_TOOLS_WDIFF_DATA_HPP

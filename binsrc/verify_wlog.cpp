@@ -22,10 +22,11 @@
 #include <linux/fs.h>
 #include <getopt.h>
 
+#include "stdout_logger.hpp"
+
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "fileio.hpp"
-
 #include "walb_log.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"

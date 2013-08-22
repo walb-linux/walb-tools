@@ -17,11 +17,12 @@
 #include <linux/fs.h>
 #include <getopt.h>
 
+#include "stdout_logger.hpp"
+
 #include "util.hpp"
 #include "walb_log.hpp"
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
-
 #include "walb/walb.h"
 
 constexpr size_t DEFAULT_MAX_IO_SIZE = 65536;

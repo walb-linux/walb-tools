@@ -14,6 +14,8 @@
 
 #include <getopt.h>
 
+#include "stdout_logger.hpp"
+
 #include "thread_util.hpp"
 #include "util.hpp"
 #include "fileio.hpp"

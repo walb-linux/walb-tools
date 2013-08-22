@@ -22,6 +22,8 @@
 #include <linux/fs.h>
 #include <getopt.h>
 
+#include "stdout_logger.hpp"
+
 #include "checksum.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
