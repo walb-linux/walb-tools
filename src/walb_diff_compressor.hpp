@@ -10,8 +10,8 @@
 #include <memory>
 #include <vector>
 #include "walb_diff.h"
-#include "logger.hpp"
 #include "checksum.hpp"
+#include "stdout_logger.hpp"
 
 namespace walb {
 
