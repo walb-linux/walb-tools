@@ -15,7 +15,7 @@ LDEV=ldev32M
 DDEV=ddev32M
 WLOG=wlog
 CTL=../../walb/tool/walbctl
-BIN=../../src
+BIN=../../binsrc
 
 LOOP0=/dev/loop0
 LOOP1=/dev/loop1

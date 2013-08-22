@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BIN=../../src
+BIN=../../binsrc
 
 make_zero_image()
 {
