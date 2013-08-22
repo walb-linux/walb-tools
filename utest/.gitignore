@@ -10,3 +10,6 @@ test_process
 test_util
 test_proxy_data
 test_fdstream
+test_compressor
+test_aio
+test_memory_buffer

@@ -31,15 +31,15 @@ endif
 LDLIBS_AIO = -laio
 LDLIBS_COMPRESS = -lsnappy -llzma -lz
 
-HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h)
-SOURCES = $(wildcard src/*.cpp)
+HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
+BIN_SOURCES = $(wildcard binsrc/*.cpp)
+SOURCES = $(wildcard src/*.cpp) $(BIN_SOURCES)
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
-ALL_BINARIES = $(patsubst %.cpp,%,$(SOURCES))
-BINARIES = $(filter-out src/test_%,$(ALL_BINARIES))
-TEST_BINARIES = $(filter src/test_%,$(ALL_BINARIES)) $(patsubst %.cpp,%,$(wildcard utest/*.cpp))
+BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
+TEST_BINARIES = $(patsubst %.cpp,%,$(wildcard utest/*.cpp))
 
 all: build
-build: Makefile.depends $(ALL_BINARIES)
+build: Makefile.depends $(BINARIES)
 
 test: $(TEST_BINARIES)
 	@echo not yet implmenented
@@ -52,7 +52,7 @@ echo_binaries:
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $(patsubst %.cpp,%.o,$<)
 
-src/%: src/%.o
+binsrc/%: binsrc/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 
 utest/test_compressor: utest/test_compressor.o src/compressor.o
@@ -61,7 +61,7 @@ utest/%: utest/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 clean:
-	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o
+	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o binsrc/*.o utest/*.o
 
 rebuild:
 	$(MAKE) clean
@@ -72,8 +72,7 @@ install:
 
 depend: Makefile.depends
 
-Makefile.depends: $(SOURCES)
+Makefile.depends: $(SOURCES) $(HEADERS)
 	$(CXX) -MM $(SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > Makefile.depends
 
 -include Makefile.depends
-

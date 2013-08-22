@@ -1,4 +1,5 @@
 *~
+*.o
 Makefile.depends
 walb
 cybozulib
