@@ -14,7 +14,7 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
     }
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-//		const size_t requiredSize = lzma_stream_buffer_bound(inSize);
+//        const size_t requiredSize = lzma_stream_buffer_bound(inSize);
 //        if (maxOutSize < requiredSize) throw cybozu::Exception("CompressorXz:run:small maxOutSize") << requiredSize << maxOutSize;
         lzma_allocator *allocator = NULL;
         size_t out_pos = 0;

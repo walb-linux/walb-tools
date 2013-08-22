@@ -14,8 +14,8 @@ namespace walb {
 namespace compressor_local {
 
 struct CompressorIF {
-	virtual ~CompressorIF() throw() {}
-	virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
+    virtual ~CompressorIF() throw() {}
+    virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
 };
 
 struct UncompressorIF {
