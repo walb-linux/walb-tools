@@ -1,5 +1,6 @@
 #include "compressor.hpp"
 #include <cybozu/test.hpp>
+#include "walb_diff_compressor.hpp"
 
 void test(walb::Compressor::Mode mode)
 {
