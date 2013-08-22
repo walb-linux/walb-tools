@@ -1,19 +1,15 @@
 #pragma once
 #include <snappy.h>
+#include <string>
 
 struct CompressorSnappy : walb::compressor_local::CompressorIF {
-    size_t maxInSize_;
-    CompressorSnappy(size_t maxInSize, size_t)
-        : maxInSize_(maxInSize) {}
-    size_t getMaxOutSize() const
+    CompressorSnappy(size_t) {}
+    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-        return snappy::MaxCompressedLength(maxInSize_);
-    }
-    size_t run(void *out, const void *in, size_t inSize)
-    {
-        if (inSize > maxInSize_) throw cybozu::Exception("CompressorSnappy:runtoo large inSize") << inSize << maxInSize_;
-        size_t encSize;
-        snappy::RawCompress((const char*)in, inSize, (char*)out, &encSize);
+        std::string enc;
+        size_t encSize = snappy::Compress((const char*)in, inSize, &enc);
+        if (maxOutSize < encSize) throw cybozu::Exception("CompressorSnappy:run:small maxOutSize") << encSize << maxOutSize;
+        memcpy(out, &enc[0], encSize);
         return encSize;
     }
 };
@@ -27,7 +23,7 @@ struct UncompressorSnappy : walb::compressor_local::UncompressorIF {
         if (!snappy::GetUncompressedLength(p, inSize, &decSize)) {
             throw cybozu::Exception("UncompressorSnappy:run:GetUncompressedLength") << inSize;
         }
-        if (decSize > maxOutSize) {
+        if (maxOutSize < decSize) {
             throw cybozu::Exception("UncompressorSnappy:run:small maxOutSize") << decSize << maxOutSize;
         }
         if (!snappy::RawUncompress(p, inSize, (char*)out)) {

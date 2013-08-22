@@ -6,27 +6,20 @@
 #include <lzma.h>
 
 struct CompressorXz : walb::compressor_local::CompressorIF {
-    size_t maxInSize_;
-    size_t compressionLevel_;
-    CompressorXz(size_t maxInSize, size_t compressionLevel)
-        : maxInSize_(maxInSize), compressionLevel_(compressionLevel)
+    uint32_t present_;
+    /* default compression level is 6 */
+    CompressorXz(size_t compressionLevel) : present_(compressionLevel == 0 ? 6 : compressionLevel)
     {
-        if (compressionLevel > 9) throw cybozu::Exception("CompressorXz:bad compressionLevel") << compressionLevel;
+        if (present_ > 9) throw cybozu::Exception("CompressorXz:bad compressionLevel") << compressionLevel;
     }
-    size_t getMaxOutSize() const
+    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-        return lzma_stream_buffer_bound(maxInSize_);
-    }
-    size_t run(void *out, const void *in, size_t inSize)
-    {
-        if (inSize > maxInSize_) throw cybozu::Exception("CompressorXz:run:too large inSize") << inSize << maxInSize_;
-        size_t out_size = getMaxOutSize();
-        /* default compression level is 6 */
-        const uint32_t present = compressionLevel_ == 0 ? 6 : compressionLevel_;
+//        const size_t requiredSize = lzma_stream_buffer_bound(inSize);
+//        if (maxOutSize < requiredSize) throw cybozu::Exception("CompressorXz:run:small maxOutSize") << requiredSize << maxOutSize;
         lzma_allocator *allocator = NULL;
         size_t out_pos = 0;
-        lzma_ret ret = lzma_easy_buffer_encode(present, LZMA_CHECK_CRC64, allocator,
-            (const uint8_t*)in, inSize, (uint8_t*)out, &out_pos, out_size);
+        lzma_ret ret = lzma_easy_buffer_encode(present_, LZMA_CHECK_CRC64, allocator,
+            (const uint8_t*)in, inSize, (uint8_t*)out, &out_pos, maxOutSize);
         if (ret != LZMA_OK) {
             throw cybozu::Exception("CompressorXz:run:lzma_easy_buffer_encode") << ret;
         }
@@ -40,7 +33,7 @@ struct UncompressorXz : walb::compressor_local::UncompressorIF {
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
         /* compressionLevel_ 6 requires 64MiB or a little bigger memory */
-        uint64_t memlimit = memLimit_ == 0 ? 80 * 1024 * 1024 : memLimit_;
+        uint64_t memlimit = memLimit_ == 0 ? 16 * 1024 * 1024 : memLimit_;
         uint32_t flags = 0;
         lzma_allocator *allocator = NULL;
         size_t in_pos = 0;
