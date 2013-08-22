@@ -60,6 +60,16 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
     outPack.checksum = cybozu::util::calcChecksum(&outPack, outOffset, 0);
     return ret;
 }
+
+inline uint32_t calcTotalBlockNum(const walb_diff_pack& pack)
+{
+    uint32_t num = 0;
+    for (int i = 0; i < pack.n_records; i++) {
+        num += pack.record[i].io_blocks;
+    }
+    return num;
+}
+
 } // compressor
 
 class PackCompressor {
@@ -135,7 +145,8 @@ public:
     std::unique_ptr<char[]> convert(const char *inPackTop)
     {
         const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
-        return compressor::convert(*this, inPackTop, inPack.n_records * 512);
+        const size_t uncompressedSize = compressor::calcTotalBlockNum(inPack) * 512;
+        return compressor::convert(*this, inPackTop, uncompressedSize);
     }
 };
 
