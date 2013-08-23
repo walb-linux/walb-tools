@@ -160,6 +160,13 @@ public:
 
     uint16_t nRecords() const { return header().n_records; }
     uint32_t totalSize() const { return header().total_size; }
+    uint32_t uncompressedTotalSize() const {
+        uint32_t total = 0;
+        for (uint16_t i = 0; i < nRecords(); i++) {
+            total += record(i).io_blocks;
+        }
+        return total * LOGICAL_BLOCK_SIZE;
+    }
 
     bool isEnd() const {
         const uint8_t mask = 1U << WALB_DIFF_PACK_END;
