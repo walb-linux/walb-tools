@@ -247,6 +247,85 @@ private:
 };
 
 /**
+ * Manage a pack as a contiguous memory.
+ */
+class MemoryPack
+{
+private:
+    std::unique_ptr<char[]> p_;
+
+public:
+    explicit MemoryPack(std::unique_ptr<char[]> &&p)
+        : p_(std::move(p)) {}
+
+    const struct walb_diff_pack &header() const {
+        return *ptr<struct walb_diff_pack>(0);
+    }
+    struct walb_diff_pack &header() {
+        return *ptr<struct walb_diff_pack>(0);
+    }
+    const char *data(size_t i) const {
+        assert(i < header().n_records);
+        if (header().record[i].data_size == 0) return nullptr;
+        return ptr<const char>(offset(i));
+    }
+    char *data(size_t i) {
+        assert(i < header().n_records);
+        if (header().record[i].data_size == 0) return nullptr;
+        return ptr<char>(offset(i));
+    }
+private:
+    template <typename T>
+    const T *ptr(size_t off) const {
+        return reinterpret_cast<const T *>(&p_[off]);
+    }
+    template <typename T>
+    T *ptr(size_t off) {
+        return reinterpret_cast<T *>(&p_[off]);
+    }
+    size_t offset(size_t i) const {
+        return ::WALB_DIFF_PACK_SIZE + header().record[i].data_offset;
+    }
+};
+
+/**
+ * Manage a pack as a header data and multiple block diff IO data.
+ */
+class ScatterGatherPack
+{
+private:
+    WalbDiffPack pack_; /* pack header */
+    std::vector<BlockDiffIo> ios_;
+
+public:
+    /**
+     * ios_[i] must be nullptr if pack_.record(i).data_size == 0.
+     */
+    ScatterGatherPack(WalbDiffPack &&pack, std::vector<BlockDiffIo> &&ios)
+        : pack_(std::move(pack)), ios_(std::move(ios)) {
+        assert(header().n_records == ios_.size());
+    }
+
+    const struct walb_diff_pack &header() const {
+        return pack_.header();
+    }
+    struct walb_diff_pack &header() {
+        return pack_.header();
+    }
+    /**
+     * RETURN:
+     *   data pointer for normal IOs.
+     *   nullptr for non-normal IOs such as ALL_ZERO and DISCARD.
+     */
+    const char *data(size_t i) const {
+        return ios_[i].rawData();
+    }
+    char *data(size_t i) {
+        return ios_[i].rawData();
+    }
+};
+
+/**
  * Walb diff writer.
  */
 class WalbDiffWriter /* final */
