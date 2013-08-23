@@ -81,7 +81,7 @@ inline uint32_t calcTotalBlockNum(const walb_diff_pack& pack)
 }
 
 struct PackCompressorBase {
-	virtual ~PackCompressorBase() {}
+    virtual ~PackCompressorBase() {}
     virtual void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord) = 0;
     virtual std::unique_ptr<char[]> convert(const char *inPackTop) = 0;
 };
@@ -168,31 +168,46 @@ public:
 };
 
 class ConverterQueue {
-	size_t queueNum_;
-	size_t threadNum_;
-	std::vector<compressor::PackCompressorBase*> converter_;
-	std::atomic<bool> quit_;
+    size_t queueNum_;
+    size_t threadNum_;
+    std::vector<compressor::PackCompressorBase*> converter_;
+    std::atomic<bool> quit_;
 public:
-	ConverterQueue(size_t queueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
-		: queueNum_(queueNum)
-		, threadNum_(threadNum)
-		, converter_(queueNum)
-		, quit_(false)
-	{
-		for (size_t i = 0; i < queueNum; i++) {
-			if (doCompress) {
-				converter_[i] = new PackCompressor(type, para);
-			} else {
-				converter_[i] = new PackUncompressor(type, para);
-			}
-		}
-	}
-	~ConverterQueue()
-	{
-		for (size_t i = 0; i < queueNum_; i++) {
-			delete converter_[i];
-		}
-	}
+    ConverterQueue(size_t queueNum, size_t threadNum, size_t timeoutSec, bool doCompress, int type, size_t para = 0)
+        : queueNum_(queueNum)
+        , threadNum_(threadNum)
+        , converter_(queueNum)
+        , quit_(false)
+    {
+        for (size_t i = 0; i < queueNum; i++) {
+            if (doCompress) {
+                converter_[i] = new PackCompressor(type, para);
+            } else {
+                converter_[i] = new PackUncompressor(type, para);
+            }
+        }
+    }
+    ~ConverterQueue()
+    {
+        for (size_t i = 0; i < queueNum_; i++) {
+            delete converter_[i];
+        }
+    }
+    /*
+     * normal exit
+     */
+    void quit()
+    {
+    }
+    void cancel()
+    {
+    }
+    void push(std::unique_ptr<char[]>&)
+    {
+    }
+    std::unique_ptr<char[]> pop()
+    {
+    }
 };
 
 } //namespace walb
