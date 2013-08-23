@@ -78,9 +78,15 @@ inline uint32_t calcTotalBlockNum(const walb_diff_pack& pack)
     return num;
 }
 
+struct PackCompressorBase {
+	virtual ~PackCompressorBase() {}
+    virtual void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord) = 0;
+    virtual std::unique_ptr<char[]> convert(const char *inPackTop) = 0;
+};
+
 } // compressor
 
-class PackCompressor {
+class PackCompressor : public compressor::PackCompressorBase {
     int type_;
     walb::Compressor c_;
 public:
@@ -123,7 +129,7 @@ public:
     }
 };
 
-class PackUncompressor {
+class PackUncompressor : public compressor::PackCompressorBase {
     int type_;
     walb::Uncompressor d_;
 public:
