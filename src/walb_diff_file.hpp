@@ -105,10 +105,37 @@ public:
 class WalbDiffPack /* final */
 {
 private:
-    std::vector<char> buf_;
+    char *buf_;
+    bool mustDelete_;
+
 public:
-    WalbDiffPack() : buf_(::WALB_DIFF_PACK_SIZE, 0) {}
-    ~WalbDiffPack() noexcept = default;
+    WalbDiffPack() : buf_(allocStatic()), mustDelete_(true) {}
+    /**
+     * Buffer size must be ::WALB_DIFF_PACK_SIZE.
+     */
+    explicit WalbDiffPack(char *buf) : buf_(buf), mustDelete_(false) {
+        assert(buf);
+    }
+    WalbDiffPack(const WalbDiffPack &) = delete;
+    WalbDiffPack(WalbDiffPack &&rhs)
+        : buf_(nullptr), mustDelete_(false) {
+        *this = std::move(rhs);
+    }
+    ~WalbDiffPack() noexcept {
+        if (mustDelete_) ::free(buf_);
+    }
+    WalbDiffPack &operator=(const WalbDiffPack &) = delete;
+    WalbDiffPack &operator=(WalbDiffPack &&rhs) {
+        if (mustDelete_) {
+            ::free(buf_);
+            buf_ = nullptr;
+        }
+        buf_ = rhs.buf_;
+        mustDelete_ = rhs.mustDelete_;
+        rhs.buf_ = nullptr;
+        rhs.mustDelete_ = false;
+        return *this;
+    }
 
     const char *rawData() const { return &buf_[0]; }
     char *rawData() { return &buf_[0]; }
@@ -192,6 +219,15 @@ public:
     void print() const { print(::stdout); }
 
 private:
+    static char *allocStatic() {
+        void *p;
+        int ret = ::posix_memalign(
+            &p, ::WALB_DIFF_PACK_SIZE, ::WALB_DIFF_PACK_SIZE);
+        if (ret) throw std::bad_alloc();
+        assert(p);
+        return reinterpret_cast<char *>(p);
+    }
+
     void checkRange(size_t i) const {
         if (::MAX_N_RECORDS_IN_WALB_DIFF_PACK <= i) {
             throw RT_ERR("walb_diff_pack boundary error.");
