@@ -564,7 +564,7 @@ private:
     const size_t queueSize_;
     cybozu::aio::Aio aio_;
     cybozu::util::BlockAllocator<u8> ba_;
-    walb::log::WalbLogFileHeader wh_;
+    walb::log::FileHeader wh_;
 
     std::queue<IoPtr> ioQ_; /* serialized by lsid. */
     std::deque<IoPtr> readyIoQ_; /* ready to submit. */
@@ -586,9 +586,9 @@ private:
     size_t nDiscard_;
     size_t nPadding_;
 
-    using PackHeader = walb::log::WalbLogpackHeader;
-    using PackData = walb::log::WalbLogpackDataRef;
-    using PackDataPtr = std::shared_ptr<PackData>;
+    using PackHeader = walb::log::PackHeader;
+    using PackDataRef = walb::log::PackDataRef;
+    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
 
 public:
     WalbLogApplyer(
@@ -654,7 +654,7 @@ public:
                     logh.printShort();
                 }
                 for (size_t i = 0; i < logh.nRecords(); i++) {
-                    PackData logd(logh, i);
+                    PackDataRef logd(logh, i);
                     readLogpackData(logd, fdr);
                     redoPack(logd);
                     redoLsid = logd.lsid();
@@ -702,7 +702,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackData &logd, cybozu::util::FdReader &fdr) {
+    void readLogpackData(PackDataRef &logd, cybozu::util::FdReader &fdr) {
         if (!logd.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         for (size_t i = 0; i < logd.ioSizePb(); i++) {
@@ -735,7 +735,7 @@ private:
     /**
      * Redo a discard log by issuing discard command.
      */
-    void redoDiscard(PackData &logd) {
+    void redoDiscard(PackDataRef &logd) {
         assert(config_.isDiscard());
         assert(logd.isDiscard());
 
@@ -943,7 +943,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(PackData &logd) {
+    void redoNormalIo(PackDataRef &logd) {
         assert(logd.isExist());
         assert(!logd.isPadding());
         assert(config_.isZeroDiscard() || !logd.isDiscard());
@@ -1004,7 +1004,7 @@ private:
     /**
      * Redo a logpack data.
      */
-    void redoPack(PackData &logd) {
+    void redoPack(PackDataRef &logd) {
         assert(logd.isExist());
 
         if (logd.isPadding()) {

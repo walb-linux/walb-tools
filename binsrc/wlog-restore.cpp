@@ -223,11 +223,11 @@ private:
     using Block = std::shared_ptr<u8>;
     using BlockA = cybozu::util::BlockAllocator<u8>;
     using BlockDev = cybozu::util::BlockDevice;
-    using WlogHeader = walb::log::WalbLogFileHeader;
-    using PackHeader = walb::log::WalbLogpackHeader;
-    using PackData = walb::log::WalbLogpackDataRef;
+    using WlogHeader = walb::log::FileHeader;
+    using PackHeader = walb::log::PackHeader;
+    using PackDataRef = walb::log::PackDataRef;
     using FdReader = cybozu::util::FdReader;
-    using SuperBlock = walb::log::WalbSuperBlock;
+    using SuperBlock = walb::log::SuperBlock;
 
 public:
     WalbLogRestorer(const Config& config)
@@ -339,7 +339,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackData &logd, FdReader &fdr, BlockA &ba) {
+    void readLogpackData(PackDataRef &logd, FdReader &fdr, BlockA &ba) {
         if (!logd.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         for (size_t i = 0; i < logd.ioSizePb(); i++) {
@@ -423,7 +423,7 @@ private:
         std::vector<Block> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackData logd(logh, i);
+            PackDataRef logd(logh, i);
             readLogpackData(logd, fdr, ba);
             if (logd.hasData()) {
                 for (size_t j = 0; j < logd.ioSizePb(); j++) {

@@ -95,8 +95,8 @@ public:
             outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
 
-    walb::WalbLogGenerator::Config genConfig() const {
-        walb::WalbLogGenerator::Config cfg;
+    walb::log::Generator::Config genConfig() const {
+        walb::log::Generator::Config cfg;
 
         if (outPath() == "-") {
             cfg.fd = 1;
@@ -288,8 +288,8 @@ int main(int argc, char* argv[])
         }
         config.openOutputFileIfNeed();
         config.check();
-        walb::WalbLogGenerator::Config cfg = config.genConfig();
-        walb::WalbLogGenerator wlGen(cfg);
+        walb::log::Generator::Config cfg = config.genConfig();
+        walb::log::Generator wlGen(cfg);
         wlGen.generate();
         return 0;
     } catch (std::runtime_error& e) {

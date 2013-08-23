@@ -35,9 +35,9 @@ class WalbLogToDiff /* final */
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
-    using LogpackHeader = walb::log::WalbLogpackHeader;
+    using LogpackHeader = walb::log::PackHeader;
     using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
-    using LogpackData = walb::log::WalbLogpackDataRef;
+    using LogpackDataRef = walb::log::PackDataRef;
     using DiffRecord = walb::diff::WalbDiffRecord;
     using DiffRecordPtr = std::shared_ptr<DiffRecord>;
     using DiffIo = walb::diff::BlockDiffIo;
@@ -101,7 +101,7 @@ private:
         bool ret = true;
 
         /* Read walblog header. */
-        walb::log::WalbLogFileHeader wlHeader;
+        walb::log::FileHeader wlHeader;
         try {
             wlHeader.read(fdr);
         } catch (cybozu::util::EofError &e) {
@@ -152,7 +152,7 @@ private:
             }
             LogpackHeader &logh = *loghp;
             for (size_t i = 0; i < logh.nRecords(); i++) {
-                LogpackData logd(logh, i);
+                LogpackDataRef logd(logh, i);
                 readLogpackData(fdr, ba, logd);
                 //logd.print(); /* debug */
                 DiffRecordPtr diffRec;
@@ -173,7 +173,7 @@ private:
     /**
      * Convert a logpack data to a diff record.
      */
-    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(LogpackData &logd) {
+    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(LogpackDataRef &logd) {
         if (logd.isPadding()) {
             return std::make_pair(DiffRecordPtr(), DiffIoPtr());
         }
@@ -250,7 +250,7 @@ private:
 
     void readLogpackData(
         cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<uint8_t> &ba, LogpackData &logd) {
+        cybozu::util::BlockAllocator<uint8_t> &ba, LogpackDataRef &logd) {
 
         if (!logd.hasData()) { return; }
         for (size_t i = 0; i < logd.ioSizePb(); i++) {

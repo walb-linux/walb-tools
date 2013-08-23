@@ -145,7 +145,7 @@ class WalbLogInfo
 private:
     const Config& config_;
     cybozu::util::BlockDevice bd_;
-    walb::log::WalbSuperBlock super_;
+    walb::log::SuperBlock super_;
     const size_t blockSize_;
 
 public:

@@ -179,7 +179,7 @@ namespace log {
 /**
  * Walb log reader.
  */
-class WalbLogReader /* final */
+class FileReader /* final */
 {
 private:
     int fd_;
@@ -187,13 +187,13 @@ private:
     bool isReadHeader_;
     bool isEnd_;
 
-    std::shared_ptr<WalbLogFileHeader> wh_;
-    std::shared_ptr<WalbLogpackHeader> pack_;
+    std::shared_ptr<FileHeader> wh_;
+    std::shared_ptr<PackHeader> pack_;
     uint16_t recIdx_;
     uint16_t totalSize_;
 
 public:
-    explicit WalbLogReader(int fd)
+    explicit FileReader(int fd)
         : fd_(fd), fdr_(fd)
         , isReadHeader_(false)
         , isEnd_(false)
@@ -201,14 +201,14 @@ public:
         , recIdx_(0)
         , totalSize_(0) {}
 
-    ~WalbLogReader() noexcept {}
+    ~FileReader() noexcept {}
 
-    std::shared_ptr<WalbLogFileHeader> readHeader() {
+    std::shared_ptr<FileHeader> readHeader() {
         if (isReadHeader_) {
             throw RT_ERR("Log header has been called already.");
         }
         isReadHeader_ = true;
-        wh_.reset(new WalbLogFileHeader());
+        wh_.reset(new FileHeader());
         wh_->read(fdr_);
         if (!wh_->isValid(true)) {
             throw RT_ERR("invalid walb log header.");
@@ -216,17 +216,17 @@ public:
         return wh_;
     }
 
-    std::shared_ptr<WalbLogpackDataRaw> readLog() {
+    std::shared_ptr<PackDataRaw> readLog() {
         if (!isReadHeader_) {
             throw RT_ERR("readHeader");
         }
         fillPackIfNeed();
         if (!pack_) {
-            return std::shared_ptr<WalbLogpackDataRaw>();
+            return std::shared_ptr<PackDataRaw>();
         }
 
-        std::shared_ptr<WalbLogpackDataRaw> logd(
-            new WalbLogpackDataRaw(*pack_, recIdx_));
+        std::shared_ptr<PackDataRaw> logd(
+            new PackDataRaw(*pack_, recIdx_));
 
         if (logd->hasData()) {
             for (size_t i = 0; i < logd->ioSizePb(); i++) {
@@ -257,7 +257,7 @@ private:
         std::shared_ptr<uint8_t> b = allocB();
         try {
             fdr_.read(reinterpret_cast<char *>(b.get()), wh_->pbs());
-            pack_.reset(new WalbLogpackHeader(b, wh_->pbs(), wh_->salt()));
+            pack_.reset(new PackHeader(b, wh_->pbs(), wh_->salt()));
             if (!pack_->isValid()) {
                 throw RT_ERR("Invalid logpack header.");
             }
@@ -278,13 +278,13 @@ private:
 /**
  * Pretty printer of walb log.
  */
-class WalbLogPrinter
+class Printer
 {
 private:
     const Config &config_;
 
 public:
-    WalbLogPrinter(const Config &config)
+    Printer(const Config &config)
         : config_(config) {}
 
     void run() {
@@ -294,12 +294,12 @@ public:
             fo.reset(new cybozu::util::FileOpener(config_.inWlogPath(), O_RDONLY));
             fd = fo->fd();
         }
-        walb::log::WalbLogReader reader(fd);
+        FileReader reader(fd);
 
-        std::shared_ptr<WalbLogFileHeader> wh = reader.readHeader();
+        std::shared_ptr<FileHeader> wh = reader.readHeader();
         wh->print();
 
-        std::shared_ptr<WalbLogpackDataRaw> log = reader.readLog();
+        std::shared_ptr<PackDataRaw> log = reader.readLog();
         try {
             while (log) {
                 log->printOneline();
@@ -324,7 +324,7 @@ int main(int argc, char* argv[])
             return 0;
         }
         config.check();
-        walb::log::WalbLogPrinter printer(config);
+        walb::log::Printer printer(config);
         printer.run();
         return 0;
     } catch (Config::Error& e) {

@@ -172,9 +172,9 @@ private:
     /* Number of written logical blocks. */
     uint64_t writtenLb_;
 
-    using LogpackHeader = walb::log::WalbLogpackHeader;
-    using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
-    using LogpackData = walb::log::WalbLogpackDataRef;
+    using PackHeader = walb::log::PackHeader;
+    using PackHeaderPtr = std::shared_ptr<PackHeader>;
+    using PackDataRef = walb::log::PackDataRef;
     using Block = std::shared_ptr<u8>;
 
 public:
@@ -222,7 +222,7 @@ private:
         }
         cybozu::util::FdReader fdr(inFd);
 
-        walb::log::WalbLogFileHeader wh;
+        walb::log::FileHeader wh;
         try {
             wh.read(fdr);
         } catch (cybozu::util::EofError &e) {
@@ -254,8 +254,8 @@ private:
         }
         try {
             while (lsid < wh.endLsid()) {
-                LogpackHeaderPtr loghp = readLogpackHeader(fdr, ba, wh.salt());
-                LogpackHeader &logh = *loghp;
+                PackHeaderPtr loghp = readPackHeader(fdr, ba, wh.salt());
+                PackHeader &logh = *loghp;
                 if (lsid != logh.logpackLsid()) {
                     throw RT_ERR("wrong lsid.");
                 }
@@ -280,21 +280,21 @@ private:
         return b;
     }
 
-    LogpackHeaderPtr readLogpackHeader(
+    PackHeaderPtr readPackHeader(
         cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba,
         uint32_t salt) {
         Block b = readBlock(fdr, ba);
-        return LogpackHeaderPtr(new LogpackHeader(b, ba.blockSize(), salt));
+        return PackHeaderPtr(new PackHeader(b, ba.blockSize(), salt));
     }
 
     /**
      * Read, validate, and throw away logpack data.
      */
     void readLogpackData(
-        LogpackHeader &logh, cybozu::util::FdReader &fdr,
+        PackHeader &logh, cybozu::util::FdReader &fdr,
         cybozu::util::BlockAllocator<u8> &ba) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            LogpackData logd(logh, i);
+            PackDataRef logd(logh, i);
             if (!logd.hasData()) { continue; }
             for (size_t j = 0; j < logd.ioSizePb(); j++) {
                 logd.addBlock(readBlock(fdr, ba));
@@ -308,7 +308,7 @@ private:
     /**
      * Update bitmap with a logpack header.
      */
-    void updateBitmap(const LogpackHeader &logh) {
+    void updateBitmap(const PackHeader &logh) {
         const unsigned int bs = config_.blockSize();
         for (size_t i = 0; i < logh.nRecords(); i++) {
             const struct walb_log_record &rec = logh.record(i);

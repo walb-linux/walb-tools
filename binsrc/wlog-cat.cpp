@@ -192,7 +192,7 @@ private:
     const uint32_t bufferPb_; /* [physical block]. */
     const uint32_t maxIoPb_;
     std::shared_ptr<char> buffer_;
-    walb::log::WalbSuperBlock super_;
+    walb::log::SuperBlock super_;
     cybozu::aio::Aio aio_;
     uint64_t aheadLsid_;
     std::queue<std::pair<uint32_t, uint32_t> > ioQ_; /* aioKey, ioPb */
@@ -241,7 +241,7 @@ public:
     }
     uint32_t pbs() const { return pbs_; }
     uint32_t queueSize() const { return bufferPb_; }
-    walb::log::WalbSuperBlock &super() { return super_; }
+    walb::log::SuperBlock &super() { return super_; }
     /**
      * Read data.
      * @data buffer pointer to fill.
@@ -367,12 +367,12 @@ class WalbLogReader
 private:
     const Config &config_;
     WalbLdevReader ldevReader_;
-    walb::log::WalbSuperBlock &super_;
+    walb::log::SuperBlock &super_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
 
-    using PackHeader = walb::log::WalbLogpackHeader;
-    using PackData = walb::log::WalbLogpackDataRef;
-    using PackDataPtr = std::shared_ptr<PackData>;
+    using PackHeader = walb::log::PackHeader;
+    using PackDataRef = walb::log::PackDataRef;
+    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
     using Block = std::shared_ptr<uint8_t>;
 
 public:
@@ -401,7 +401,7 @@ public:
         }
 
         /* Create and write walblog header. */
-        walb::log::WalbLogFileHeader wh;
+        walb::log::FileHeader wh;
         wh.init(super_.getPhysicalBlockSize(), super_.getLogChecksumSalt(),
                 super_.getUuid(), beginLsid, config_.endLsid());
         wh.write(outFd);
@@ -428,7 +428,7 @@ public:
                 break;
             }
             PackHeader &logh = *loghP;
-            std::queue<PackDataPtr> q;
+            std::queue<PackDataRefPtr> q;
             isEnd = readAllLogpackData(logh, q);
             writeLogpack(fdw, logh, q);
             lsid = logh.nextLogpackLsid();
@@ -456,10 +456,10 @@ private:
     /**
      * Read a logpack header.
      */
-    std::unique_ptr<walb::log::WalbLogpackHeader> readLogpackHeader(uint64_t lsid) {
+    std::unique_ptr<walb::log::PackHeader> readLogpackHeader(uint64_t lsid) {
         Block block = readBlock();
-        std::unique_ptr<walb::log::WalbLogpackHeader> logh(
-            new walb::log::WalbLogpackHeader(
+        std::unique_ptr<walb::log::PackHeader> logh(
+            new walb::log::PackHeader(
                 block, super_.getPhysicalBlockSize(),
                 super_.getLogChecksumSalt()));
 #if 0
@@ -482,10 +482,10 @@ private:
      * RETURN:
      *   true if logpack has shrinked and should end.
      */
-    bool readAllLogpackData(PackHeader &logh, std::queue<PackDataPtr> &q) {
+    bool readAllLogpackData(PackHeader &logh, std::queue<PackDataRefPtr> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataPtr p(new PackData(logh, i));
+            PackDataRefPtr p(new PackDataRef(logh, i));
             try {
                 readLogpackData(*p);
                 q.push(p);
@@ -508,7 +508,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackData& logd) {
+    void readLogpackData(PackDataRef& logd) {
         if (!logd.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         readAheadLoose();
@@ -527,7 +527,7 @@ private:
      */
     void writeLogpack(
         cybozu::util::FdWriter &fdw, PackHeader &logh,
-        std::queue<PackDataPtr> &q) {
+        std::queue<PackDataRefPtr> &q) {
         if (logh.nRecords() == 0) {
             return;
         }
@@ -536,7 +536,7 @@ private:
         /* Write the IO data. */
         size_t nWritten = 0;
         while (!q.empty()) {
-            PackDataPtr logd = q.front();
+            PackDataRefPtr logd = q.front();
             q.pop();
             if (!logd->hasData()) { continue; }
             for (size_t i = 0; i < logd->ioSizePb(); i++) {

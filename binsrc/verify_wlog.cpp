@@ -169,10 +169,10 @@ private:
 class WlogVerifier
 {
 private:
-    using PackHeader = walb::log::WalbLogpackHeader;
+    using PackHeader = walb::log::PackHeader;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using PackData = walb::log::WalbLogpackDataRef;
-    using PackDataPtr = std::shared_ptr<PackData>;
+    using PackDataRef = walb::log::PackDataRef;
+    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
 
     const Config &config_;
 
@@ -200,7 +200,7 @@ public:
         cybozu::util::FdReader wlFdr(wlFd);
 
         /* Read wlog header. */
-        walb::log::WalbLogFileHeader wh;
+        walb::log::FileHeader wh;
         wh.read(wlFdr);
         if (!wh.isValid(true)) {
             throw RT_ERR("invalid wlog header.");
@@ -220,13 +220,13 @@ public:
             PackHeaderPtr loghp = readPackHeader(wlFdr, ba, salt);
             PackHeader &logh = *loghp;
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
-            std::queue<PackDataPtr> q;
+            std::queue<PackDataRefPtr> q;
             readPackData(logh, wlFdr, ba, q);
 
             while (!q.empty()) {
-                PackDataPtr logdp = q.front();
+                PackDataRefPtr logdp = q.front();
                 q.pop();
-                PackData &logd = *logdp;
+                PackDataRef &logd = *logdp;
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
                 }
@@ -276,10 +276,10 @@ private:
 
     void readPackData(
         PackHeader &logh, cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<u8> &ba, std::queue<PackDataPtr> &queue) {
+        cybozu::util::BlockAllocator<u8> &ba, std::queue<PackDataRefPtr> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataPtr logdp(new PackData(logh, i));
-            PackData &logd = *logdp;
+            PackDataRefPtr logdp(new PackDataRef(logh, i));
+            PackDataRef &logd = *logdp;
             if (!logd.hasData()) { continue; }
             for (size_t j = 0; j < logd.ioSizePb(); j++) {
                 logd.addBlock(readBlock(fdr, ba));

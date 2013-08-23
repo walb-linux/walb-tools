@@ -27,7 +27,7 @@ namespace log {
 /**
  * WalB super sector.
  */
-class WalbSuperBlock
+class SuperBlock
 {
 private:
     /* Log device. */
@@ -44,7 +44,7 @@ private:
     std::unique_ptr<u8, FreeDeleter> data_;
 
 public:
-    WalbSuperBlock(cybozu::util::BlockDevice& bd)
+    SuperBlock(cybozu::util::BlockDevice& bd)
         : bd_(bd)
         , pbs_(bd.getPhysicalBlockSize())
         , offset_(get1stSuperBlockOffsetStatic(pbs_))
@@ -316,7 +316,7 @@ static inline void printLogRecordOneline(
 /**
  * Logpack header.
  */
-class WalbLogpackHeader
+class PackHeader
 {
 private:
     using Block = std::shared_ptr<u8>;
@@ -326,7 +326,7 @@ private:
     const u32 salt_;
 
 public:
-    WalbLogpackHeader(Block block, unsigned int pbs, u32 salt)
+    PackHeader(Block block, unsigned int pbs, u32 salt)
         : block_(block)
         , pbs_(pbs)
         , salt_(salt) {
@@ -707,10 +707,10 @@ private:
 /**
  * Interface and default implementation.
  */
-class WalbLogRecord
+class Record
 {
 public:
-    virtual ~WalbLogRecord() noexcept {}
+    virtual ~Record() noexcept {}
 
     /* Interface to access a record */
     virtual size_t pos() const = 0;
@@ -775,8 +775,8 @@ public:
 /**
  * Wrapper of a raw walb log record.
  */
-class WalbLogRecordRaw
-    : public WalbLogRecord
+class RecordRaw
+    : public Record
 {
 private:
     const size_t pos_;
@@ -784,15 +784,15 @@ private:
     const uint32_t salt_;
     struct walb_log_record rec_;
 public:
-    WalbLogRecordRaw(
+    RecordRaw(
         const struct walb_log_record &rec, size_t pos,
         unsigned int pbs, uint32_t salt)
         : pos_(pos), pbs_(pbs), salt_(salt), rec_() {
         ::memcpy(&rec_, &rec, sizeof(rec_));
     }
-    WalbLogRecordRaw(WalbLogpackHeader &logh, size_t pos)
-        : WalbLogRecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
-    ~WalbLogRecordRaw() noexcept override {}
+    RecordRaw(PackHeader &logh, size_t pos)
+        : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
+    ~RecordRaw() noexcept override {}
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return pbs_; }
@@ -805,22 +805,22 @@ public:
  * Log data of an IO.
  * Log record is a reference.
  */
-class WalbLogRecordRef
-    : public WalbLogRecord
+class RecordRef
+    : public Record
 {
 private:
-    WalbLogpackHeader& logh_;
+    PackHeader& logh_;
     size_t pos_;
 
 public:
-    WalbLogRecordRef(WalbLogpackHeader& logh, size_t pos)
+    RecordRef(PackHeader& logh, size_t pos)
         : logh_(logh)
         , pos_(pos) {
         assert(pos < logh.nRecords());
     }
-    ~WalbLogRecordRef() noexcept override {}
-    DISABLE_COPY_AND_ASSIGN(WalbLogRecordRef);
-    DISABLE_MOVE(WalbLogRecordRef);
+    ~RecordRef() noexcept override {}
+    DISABLE_COPY_AND_ASSIGN(RecordRef);
+    DISABLE_MOVE(RecordRef);
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_.pbs(); }
@@ -883,20 +883,20 @@ public:
 /**
  * Logpack data.
  *
- * LogRecord: WalbLogRecordRef or WalbLogRecordRaw.
+ * LogRecord: RecordRef or RecordRaw.
  */
 template<class LogRecord>
-class WalbLogpackData
+class PackData
     : public LogRecord
     , public BlockData
 {
 public:
-    WalbLogpackData(WalbLogpackHeader &logh, size_t pos)
+    PackData(PackHeader &logh, size_t pos)
         : LogRecord(logh, pos)
         , BlockData(logh.pbs()) {}
-    virtual ~WalbLogpackData() noexcept {}
-    DISABLE_COPY_AND_ASSIGN(WalbLogpackData);
-    DISABLE_MOVE(WalbLogpackData);
+    virtual ~PackData() noexcept {}
+    DISABLE_COPY_AND_ASSIGN(PackData);
+    DISABLE_MOVE(PackData);
 
     bool isValid(bool isChecksum = true) const {
         if (!LogRecord::isValid()) { return false; }
@@ -943,19 +943,19 @@ public:
     }
 };
 
-using WalbLogpackDataRef = WalbLogpackData<WalbLogRecordRef>;
-using WalbLogpackDataRaw = WalbLogpackData<WalbLogRecordRaw>;
+using PackDataRef = PackData<RecordRef>;
+using PackDataRaw = PackData<RecordRaw>;
 
 /**
  * Walb logfile header.
  */
-class WalbLogFileHeader
+class FileHeader
 {
 private:
     std::vector<u8> data_;
 
 public:
-    WalbLogFileHeader()
+    FileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
     void init(unsigned int pbs, u32 salt, const u8 *uuid, u64 beginLsid, u64 endLsid) {

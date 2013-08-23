@@ -187,14 +187,14 @@ private:
 class WldevVerifier
 {
 private:
-    using PackHeader = walb::log::WalbLogpackHeader;
+    using PackHeader = walb::log::PackHeader;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using PackData = walb::log::WalbLogpackDataRef;
-    using PackDataPtr = std::shared_ptr<PackData>;
+    using PackDataRef = walb::log::PackDataRef; /* now editing */
+    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
-    walb::log::WalbSuperBlock super_;
+    walb::log::SuperBlock super_;
     const unsigned int pbs_;
     const uint32_t salt_;
     const unsigned int BUFFER_SIZE_;
@@ -235,13 +235,13 @@ public:
             PackHeaderPtr loghp = readPackHeader(lsid);
             PackHeader &logh = *loghp;
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
-            std::queue<PackDataPtr> q;
+            std::queue<PackDataRefPtr> q;
             readPackData(logh, q);
 
             while (!q.empty()) {
-                PackDataPtr logdp = q.front();
+                PackDataRefPtr logdp = q.front();
                 q.pop();
-                PackData &logd = *logdp;
+                PackDataRef &logd = *logdp;
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
                 }
@@ -286,10 +286,10 @@ private:
         return PackHeaderPtr(new PackHeader(b, pbs_, salt_));
     }
 
-    void readPackData(PackHeader &logh, std::queue<PackDataPtr> &queue) {
+    void readPackData(PackHeader &logh, std::queue<PackDataRefPtr> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataPtr logdp(new PackData(logh, i));
-            PackData &logd = *logdp;
+            PackDataRefPtr logdp(new PackDataRef(logh, i));
+            PackDataRef &logd = *logdp;
             if (!logd.hasData()) { continue; }
             for (uint64_t lsid = logd.lsid(); lsid < logd.lsid() + logd.ioSizePb(); lsid++) {
                 logd.addBlock(readBlock(lsid));
