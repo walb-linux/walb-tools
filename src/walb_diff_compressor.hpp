@@ -12,6 +12,8 @@
 #include "walb_diff.h"
 #include "checksum.hpp"
 #include "stdout_logger.hpp"
+#include <cybozu/thread.hpp>
+#include <atomic>
 
 namespace walb {
 
@@ -165,6 +167,33 @@ public:
     }
 };
 
+class ConverterQueue {
+	size_t queueNum_;
+	size_t threadNum_;
+	std::vector<compressor::PackCompressorBase*> converter_;
+	std::atomic<bool> quit_;
+public:
+	ConverterQueue(size_t queueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
+		: queueNum_(queueNum)
+		, threadNum_(threadNum)
+		, converter_(queueNum)
+		, quit_(false)
+	{
+		for (size_t i = 0; i < queueNum; i++) {
+			if (doCompress) {
+				converter_[i] = new PackCompressor(type, para);
+			} else {
+				converter_[i] = new PackUncompressor(type, para);
+			}
+		}
+	}
+	~ConverterQueue()
+	{
+		for (size_t i = 0; i < queueNum_; i++) {
+			delete converter_[i];
+		}
+	}
+};
 
 } //namespace walb
 
