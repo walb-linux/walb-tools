@@ -162,9 +162,9 @@ private:
     }
 };
 
-using DiffRec = walb::diff::WalbDiffRecord;
-using DiffIo = walb::diff::BlockDiffIo;
-using DiffHeader = walb::diff::WalbDiffFileHeader;
+using DiffRec = walb::diff::RecordRaw;
+using DiffIo = walb::diff::IoData;
+using DiffHeader = walb::diff::FileHeaderRef;
 using DiffRecPtr = std::shared_ptr<DiffRec>;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
@@ -357,7 +357,7 @@ public:
      */
     void run() {
         /* Read a wdiff file and redo IOs in it. */
-        walb::diff::WalbDiffReader wdiffR(0);
+        walb::diff::Reader wdiffR(0);
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 

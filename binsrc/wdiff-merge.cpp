@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
         if (!opt.parse(argc, argv)) {
             return 1;
         }
-        walb::diff::WalbDiffMerger merger;
+        walb::diff::Merger merger;
         for (std::string &path : opt.inputWdiffs) {
             merger.addWdiff(path);
         }

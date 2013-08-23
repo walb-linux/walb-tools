@@ -26,19 +26,18 @@ namespace diff {
 /**
  * To merge walb diff files.
  */
-class WalbDiffMerger /* final */
+class Merger /* final */
 {
 private:
-    using DiffRecord = walb::diff::WalbDiffRecord;
-    using DiffIo = walb::diff::BlockDiffIo;
-    using DiffRecIo = walb::diff::DiffRecIo;
+    using DiffIo = walb::diff::IoData;
+    using RecIo = walb::diff::RecIo;
 
     class Wdiff {
     private:
         std::string wdiffPath_;
-        mutable walb::diff::WalbDiffReader reader_;
-        std::shared_ptr<walb::diff::WalbDiffFileHeader> headerP_;
-        mutable DiffRecord rec_;
+        mutable walb::diff::Reader reader_;
+        std::shared_ptr<walb::diff::FileHeaderRef> headerP_;
+        mutable RecordRaw rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
@@ -52,9 +51,9 @@ private:
             , isEnd_(false) {
         }
         const std::string &path() const { return wdiffPath_; }
-        walb::diff::WalbDiffReader &reader() { return reader_; }
-        walb::diff::WalbDiffFileHeader &header() { return *headerP_; }
-        const DiffRecord &front() {
+        walb::diff::Reader &reader() { return reader_; }
+        walb::diff::FileHeaderRef &header() { return *headerP_; }
+        const RecordRaw &front() {
             fill();
             assert(isFilled_);
             return rec_;
@@ -106,19 +105,19 @@ private:
 
     std::deque<std::shared_ptr<Wdiff> > wdiffs_;
     std::deque<std::shared_ptr<Wdiff> > doneWdiffs_;
-    /* Wdiffs' lifetime must be the same as the WalbDiffMerger instance. */
+    /* Wdiffs' lifetime must be the same as the Merger instance. */
 
-    walb::diff::WalbDiffMemory wdiffMem_;
+    walb::diff::MemoryData wdiffMem_;
     struct walb_diff_file_header wdiffRawH_;
-    WalbDiffFileHeader wdiffH_;
+    FileHeaderRef wdiffH_;
     bool isHeaderPrepared_;
-    std::queue<DiffRecIo> mergedQ_;
+    std::queue<RecIo> mergedQ_;
     bool shouldValidateUuid_;
     uint16_t maxIoBlocks_;
     uint64_t doneAddr_;
 
 public:
-    WalbDiffMerger()
+    Merger()
         : wdiffs_()
         , doneWdiffs_()
         , wdiffMem_()
@@ -130,7 +129,7 @@ public:
         , maxIoBlocks_(0)
         , doneAddr_(0) {
     }
-    ~WalbDiffMerger() noexcept {
+    ~Merger() noexcept {
     }
     /**
      * @maxIoBlocks Max io blocks in the output wdiff [logical block].
@@ -169,16 +168,16 @@ public:
      */
     void mergeToFd(int outFd) {
         prepare();
-        walb::diff::WalbDiffWriter wdiffWriter(outFd);
-        wdiffWriter.writeHeader(wdiffH_);
+        walb::diff::Writer writer(outFd);
+        writer.writeHeader(wdiffH_);
 
-        DiffRecIo d;
+        RecIo d;
         while (pop(d)) {
             assert(d.isValid());
-            wdiffWriter.compressAndWriteDiff(d.record(), d.io());
+            writer.compressAndWriteDiff(d.record(), d.io());
         }
 
-        wdiffWriter.flush();
+        writer.flush();
         assert(wdiffs_.empty());
         assert(wdiffMem_.empty());
     }
@@ -207,7 +206,7 @@ public:
     /**
      * Get header.
      */
-    const WalbDiffFileHeader &header() const {
+    const FileHeaderRef &header() const {
         return wdiffH_;
     }
     /**
@@ -215,7 +214,7 @@ public:
      * RETURN:
      *   false if there is no diffIo anymore.
      */
-    bool pop(DiffRecIo &recIo) {
+    bool pop(RecIo &recIo) {
         prepare();
         while (mergedQ_.empty()) {
             if (wdiffs_.empty()) {
@@ -225,7 +224,7 @@ public:
             }
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-                DiffRecord rec(wdiffs_[i]->front());
+                RecordRaw rec(wdiffs_[i]->front());
                 assert(rec.isValid());
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
@@ -252,7 +251,7 @@ private:
         auto it = wdiffMem_.iterator();
         it.begin();
         while (it.isValid() && it.record().endIoAddress() <= maxAddr) {
-            walb::diff::DiffRecIo r = std::move(it.recIo());
+            walb::diff::RecIo r = std::move(it.recIo());
             assert(r.isValid());
             mergedQ_.push(std::move(r));
             it.erase();
@@ -278,11 +277,11 @@ private:
             }
         }
     }
-    void mergeIo(const DiffRecord &rec, DiffIo &&io) {
+    void mergeIo(const RecordRaw &rec, DiffIo &&io) {
         assert(!rec.isCompressed());
         wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
-    bool canMergeIo(size_t i, const DiffRecord &rec) {
+    bool canMergeIo(size_t i, const RecordRaw &rec) {
         if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
             if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {

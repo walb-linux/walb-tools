@@ -16,14 +16,14 @@ namespace diff {
 /**
  * Walb diff header data.
  */
-class WalbDiffFileHeader
+class FileHeaderRef
 {
 private:
     struct walb_diff_file_header &h_;
 
 public:
-    WalbDiffFileHeader(struct walb_diff_file_header &h) : h_(h) {}
-    virtual ~WalbDiffFileHeader() noexcept = default;
+    FileHeaderRef(struct walb_diff_file_header &h) : h_(h) {}
+    virtual ~FileHeaderRef() noexcept = default;
 
     uint32_t getChecksum() const { return h_.checksum; }
     uint16_t getMaxIoBlocks() const { return h_.max_io_blocks; }
@@ -87,45 +87,45 @@ public:
 /**
  * With raw data.
  */
-class WalbDiffFileHeaderWithBody
-    : public WalbDiffFileHeader
+class FileHeaderRaw
+    : public FileHeaderRef
 {
 private:
     struct walb_diff_file_header header_;
 
 public:
-    WalbDiffFileHeaderWithBody()
-        : WalbDiffFileHeader(header_), header_() {}
-    ~WalbDiffFileHeaderWithBody() noexcept = default;
+    FileHeaderRaw()
+        : FileHeaderRef(header_), header_() {}
+    ~FileHeaderRaw() noexcept = default;
 };
 
 /**
  * Walb diff pack wrapper.
  */
-class WalbDiffPack /* final */
+class PackHeader /* final */
 {
 private:
     char *buf_;
     bool mustDelete_;
 
 public:
-    WalbDiffPack() : buf_(allocStatic()), mustDelete_(true) {}
+    PackHeader() : buf_(allocStatic()), mustDelete_(true) {}
     /**
      * Buffer size must be ::WALB_DIFF_PACK_SIZE.
      */
-    explicit WalbDiffPack(char *buf) : buf_(buf), mustDelete_(false) {
+    explicit PackHeader(char *buf) : buf_(buf), mustDelete_(false) {
         assert(buf);
     }
-    WalbDiffPack(const WalbDiffPack &) = delete;
-    WalbDiffPack(WalbDiffPack &&rhs)
+    PackHeader(const PackHeader &) = delete;
+    PackHeader(PackHeader &&rhs)
         : buf_(nullptr), mustDelete_(false) {
         *this = std::move(rhs);
     }
-    ~WalbDiffPack() noexcept {
+    ~PackHeader() noexcept {
         if (mustDelete_) ::free(buf_);
     }
-    WalbDiffPack &operator=(const WalbDiffPack &) = delete;
-    WalbDiffPack &operator=(WalbDiffPack &&rhs) {
+    PackHeader &operator=(const PackHeader &) = delete;
+    PackHeader &operator=(PackHeader &&rhs) {
         if (mustDelete_) {
             ::free(buf_);
             buf_ = nullptr;
@@ -185,7 +185,7 @@ public:
      */
     bool add(const struct walb_diff_record &inRec) {
 #ifdef DEBUG
-        WalbDiffRecord r(reinterpret_cast<const char *>(&inRec), sizeof(inRec));
+        RecordRaw r(reinterpret_cast<const char *>(&inRec), sizeof(inRec));
         assert(r.isValid());
 #endif
         if (!canAdd(inRec)) { return false; }
@@ -218,7 +218,7 @@ public:
                   , h.total_size);
         for (size_t i = 0; i < h.n_records; i++) {
             ::fprintf(fp, "record %zu: ", i);
-            WalbDiffRecord rec(reinterpret_cast<const char *>(&record(i)), sizeof(record(i)));
+            RecordRaw rec(reinterpret_cast<const char *>(&record(i)), sizeof(record(i)));
             rec.printOneline(fp);
         }
     }
@@ -301,14 +301,14 @@ private:
 class ScatterGatherPack
 {
 private:
-    WalbDiffPack pack_; /* pack header */
-    std::vector<BlockDiffIo> ios_;
+    PackHeader pack_; /* pack header */
+    std::vector<IoData> ios_;
 
 public:
     /**
      * ios_[i] must be nullptr if pack_.record(i).data_size == 0.
      */
-    ScatterGatherPack(WalbDiffPack &&pack, std::vector<BlockDiffIo> &&ios)
+    ScatterGatherPack(PackHeader &&pack, std::vector<IoData> &&ios)
         : pack_(std::move(pack)), ios_(std::move(ios)) {
         assert(header().n_records == ios_.size());
     }
@@ -335,7 +335,7 @@ public:
 /**
  * Walb diff writer.
  */
-class WalbDiffWriter /* final */
+class Writer /* final */
 {
 private:
     std::shared_ptr<cybozu::util::FileOpener> opener_;
@@ -345,18 +345,18 @@ private:
     bool isClosed_;
 
     /* Buffers. */
-    WalbDiffPack pack_;
-    std::queue<std::shared_ptr<BlockDiffIo> > ioPtrQ_;
+    PackHeader pack_;
+    std::queue<std::shared_ptr<IoData> > ioPtrQ_;
 
 public:
-    explicit WalbDiffWriter(int fd)
+    explicit Writer(int fd)
         : opener_(), fd_(fd), fdw_(fd)
         , isWrittenHeader_(false)
         , isClosed_(false)
         , pack_()
         , ioPtrQ_() {}
 
-    explicit WalbDiffWriter(const std::string &diffPath, int flags, mode_t mode)
+    explicit Writer(const std::string &diffPath, int flags, mode_t mode)
         : opener_(new cybozu::util::FileOpener(diffPath, flags, mode))
         , fd_(opener_->fd())
         , fdw_(fd_)
@@ -367,7 +367,7 @@ public:
         assert(0 < fd_);
     }
 
-    ~WalbDiffWriter() noexcept {
+    ~Writer() noexcept {
         try {
             close();
         } catch (...) {}
@@ -386,7 +386,7 @@ public:
      * Write header data.
      * You must call this at first.
      */
-    void writeHeader(WalbDiffFileHeader &header) {
+    void writeHeader(FileHeaderRef &header) {
         if (isWrittenHeader_) {
             throw RT_ERR("Do not call writeHeader() more than once.");
         }
@@ -402,7 +402,7 @@ public:
      * @rec record.
      * @iop may contains nullptr.
      */
-    void writeDiff(const WalbDiffRecord &rec, const std::shared_ptr<BlockDiffIo> iop) {
+    void writeDiff(const RecordRaw &rec, const std::shared_ptr<IoData> iop) {
         checkWrittenHeader();
         assert(rec.isValid());
         if (iop) {
@@ -433,7 +433,7 @@ public:
      * @rec record.
      * @io IO data.
      */
-    void compressAndWriteDiff(const WalbDiffRecord &rec, const BlockDiffIo &io) {
+    void compressAndWriteDiff(const RecordRaw &rec, const IoData &io) {
         assert(rec.isValid());
         assert(io.isValid());
         assert(rec.compressionType() == io.compressionType());
@@ -443,13 +443,13 @@ public:
             assert(rec.checksum() == io.calcChecksum());
         }
 
-        auto iop = std::make_shared<BlockDiffIo>();
+        auto iop = std::make_shared<IoData>();
         if (!rec.isNormal()) {
             writeDiff(rec, iop);
             return;
         }
 
-        WalbDiffRecord rec0(rec);
+        RecordRaw rec0(rec);
         if (rec.isCompressed()) {
             /* copy */
             *iop = io;
@@ -481,7 +481,7 @@ private:
         pack_.updateChecksum();
         fdw_.write(pack_.rawData(), pack_.rawSize());
         while (!ioPtrQ_.empty()) {
-            std::shared_ptr<BlockDiffIo> iop0 = ioPtrQ_.front();
+            std::shared_ptr<IoData> iop0 = ioPtrQ_.front();
             ioPtrQ_.pop();
             if (!iop0 || iop0->rawSize() == 0) { continue; }
             fdw_.write(iop0->rawData(), iop0->rawSize());
@@ -508,7 +508,7 @@ private:
 /**
  * Read walb diff data from an input stream.
  */
-class WalbDiffReader
+class Reader
 {
 private:
     std::shared_ptr<cybozu::util::FileOpener> opener_;
@@ -517,19 +517,19 @@ private:
     bool isReadHeader_;
 
     /* Buffers. */
-    WalbDiffPack pack_;
+    PackHeader pack_;
     uint16_t recIdx_;
     uint32_t totalSize_;
 
 public:
-    explicit WalbDiffReader(int fd)
+    explicit Reader(int fd)
         : opener_(), fd_(fd), fdr_(fd)
         , isReadHeader_(false)
         , pack_()
         , recIdx_(0)
         , totalSize_(0) {}
 
-    explicit WalbDiffReader(const std::string &diffPath, int flags)
+    explicit Reader(const std::string &diffPath, int flags)
         : opener_(new cybozu::util::FileOpener(diffPath, flags))
         , fd_(opener_->fd())
         , fdr_(fd_)
@@ -540,7 +540,7 @@ public:
         assert(0 < fd_);
     }
 
-    ~WalbDiffReader() noexcept {
+    ~Reader() noexcept {
         try {
             close();
         } catch (...) {}
@@ -554,8 +554,8 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    std::shared_ptr<WalbDiffFileHeader> readHeader() {
-        auto p = std::make_shared<WalbDiffFileHeaderWithBody>();
+    std::shared_ptr<FileHeaderRef> readHeader() {
+        auto p = std::make_shared<FileHeaderRaw>();
         readHeader(*p);
         return p;
     }
@@ -563,7 +563,7 @@ public:
     /**
      * Read header data with another interface.
      */
-    void readHeader(WalbDiffFileHeader &head) {
+    void readHeader(FileHeaderRef &head) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
@@ -581,7 +581,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(WalbDiffRecord &rec, BlockDiffIo &io) {
+    bool readDiff(RecordRaw &rec, IoData &io) {
         if (!canRead()) return false;
         ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
         if (!rec.isValid()) {
@@ -597,9 +597,9 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(WalbDiffRecord &rec, BlockDiffIo &io) {
-        WalbDiffRecord rec0;
-        BlockDiffIo io0;
+    bool readAndUncompressDiff(RecordRaw &rec, IoData &io) {
+        RecordRaw rec0;
+        IoData io0;
         if (!readDiff(rec0, io0)) {
             rec0.clearExists();
             rec = rec0;
@@ -658,7 +658,7 @@ private:
      *
      * If rec.dataSize() == 0, io will not be changed.
      */
-    void readDiffIo(const WalbDiffRecord &rec, BlockDiffIo &io) {
+    void readDiffIo(const RecordRaw &rec, IoData &io) {
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }

@@ -38,9 +38,9 @@ private:
     using LogpackHeader = walb::log::PackHeader;
     using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
     using LogpackDataRef = walb::log::PackDataRef;
-    using DiffRecord = walb::diff::WalbDiffRecord;
+    using DiffRecord = walb::diff::RecordRaw;
     using DiffRecordPtr = std::shared_ptr<DiffRecord>;
-    using DiffIo = walb::diff::BlockDiffIo;
+    using DiffIo = walb::diff::IoData;
     using DiffIoPtr = std::shared_ptr<DiffIo>;
 
 public:
@@ -53,7 +53,7 @@ public:
         cybozu::util::FdReader fdr(inputLogFd);
 
         /* Prepare walb diff. */
-        walb::diff::WalbDiffMemory walbDiff(maxIoBlocks);
+        walb::diff::MemoryData walbDiff(maxIoBlocks);
 
         /* Loop */
         uint64_t lsid = -1;
@@ -96,7 +96,7 @@ private:
      */
     bool convertWlog(
         uint64_t &lsid, uint64_t &writtenBlocks, cybozu::util::FdReader &fdr,
-        walb::diff::WalbDiffMemory &walbDiff) {
+        walb::diff::MemoryData &walbDiff) {
 
         bool ret = true;
 

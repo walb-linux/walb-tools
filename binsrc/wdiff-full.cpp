@@ -30,9 +30,9 @@ public:
     }
     void convert(int inFd, int outFd) {
         cybozu::util::FdReader reader(inFd);
-        walb::diff::WalbDiffWriter writer(outFd);
+        walb::diff::Writer writer(outFd);
         struct walb_diff_file_header rawHead;
-        walb::diff::WalbDiffFileHeader head(rawHead);
+        walb::diff::FileHeaderRef head(rawHead);
 
         head.init();
         head.setMaxIoBlocksIfNecessary(ioBlocks_);
@@ -41,10 +41,10 @@ public:
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            auto iop = std::make_shared<walb::diff::BlockDiffIo>();
+            auto iop = std::make_shared<walb::diff::IoData>();
             iop->setIoBlocks(blks);
             iop->copyFrom(&buf0_[0], blks * LOGICAL_BLOCK_SIZE);
-            walb::diff::WalbDiffRecord rec;
+            walb::diff::RecordRaw rec;
             rec.setIoAddress(ioAddr);
             rec.setIoBlocks(blks);
             rec.setNormal();

@@ -33,7 +33,7 @@ namespace diff {
 /**
  * Class for struct walb_diff_record.
  */
-class WalbDiffRecord
+class RecordRaw
     : public block_diff::BlockDiffKey
 {
 private:
@@ -43,7 +43,7 @@ public:
     /**
      * Default.
      */
-    WalbDiffRecord()
+    RecordRaw()
         : rec_() {
         init();
     }
@@ -51,7 +51,7 @@ public:
     /**
      * Clone.
      */
-    WalbDiffRecord(const WalbDiffRecord &rec, bool isCheck = true)
+    RecordRaw(const RecordRaw &rec, bool isCheck = true)
         : rec_(rec.rec_) {
         if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
     }
@@ -59,7 +59,7 @@ public:
     /**
      * Convert.
      */
-    WalbDiffRecord(const struct walb_diff_record &rawRec, bool isCheck = true)
+    RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
         : rec_(rawRec) {
         if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
     }
@@ -67,16 +67,16 @@ public:
     /**
      * For raw data.
      */
-    WalbDiffRecord(const char *data, size_t size)
+    RecordRaw(const char *data, size_t size)
         : rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
         if (size != sizeof(rec_)) {
             throw RT_ERR("size is invalid.");
         }
     }
 
-    virtual ~WalbDiffRecord() noexcept = default;
+    virtual ~RecordRaw() noexcept = default;
 
-    WalbDiffRecord &operator=(const WalbDiffRecord &rhs) {
+    RecordRaw &operator=(const RecordRaw &rhs) {
         rec_ = rhs.rec_;
         return *this;
     }
@@ -201,14 +201,14 @@ public:
      *   The checksum of splitted records will be invalid state.
      *   Only non-compressed records can be splitted.
      */
-    std::pair<WalbDiffRecord, WalbDiffRecord> split(uint16_t ioBlocks0) const {
+    std::pair<RecordRaw, RecordRaw> split(uint16_t ioBlocks0) const {
         if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
             throw RT_ERR("split: ioBlocks0 is out or range.");
         }
         if (isCompressed()) {
             throw RT_ERR("split: compressed data can not be splitted.");
         }
-        WalbDiffRecord r0(*this), r1(*this);
+        RecordRaw r0(*this), r1(*this);
         uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
         r0.setIoBlocks(ioBlocks0);
         r1.setIoBlocks(ioBlocks1);
@@ -227,14 +227,14 @@ public:
      *   The checksum of splitted records will be invalid state.
      *   Only non-compressed records can be splitted.
      */
-    std::vector<WalbDiffRecord> splitAll(uint16_t ioBlocks0) const {
+    std::vector<RecordRaw> splitAll(uint16_t ioBlocks0) const {
         if (ioBlocks0 == 0) {
             throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
         }
         if (isCompressed()) {
             throw RT_ERR("splitAll: compressed data can not be splitted.");
         }
-        std::vector<WalbDiffRecord> v;
+        std::vector<RecordRaw> v;
         uint64_t addr = ioAddress();
         uint16_t remaining = ioBlocks();
         while (0 < remaining) {
@@ -261,7 +261,7 @@ private:
 /**
  * Block diff for an IO.
  */
-class BlockDiffIo
+class IoData
 {
 private:
     uint16_t ioBlocks_; /* [logical block]. */
@@ -269,23 +269,23 @@ private:
     std::vector<char> data_;
 
 public:
-    BlockDiffIo()
+    IoData()
         : ioBlocks_(0)
         , compressionType_(::WALB_DIFF_CMPR_NONE)
         , data_() {
     }
 
-    BlockDiffIo(const BlockDiffIo &) = default;
-    BlockDiffIo(BlockDiffIo &&) = default;
-    virtual ~BlockDiffIo() noexcept = default;
+    IoData(const IoData &) = default;
+    IoData(IoData &&) = default;
+    virtual ~IoData() noexcept = default;
 
-    BlockDiffIo &operator=(const BlockDiffIo &rhs) {
+    IoData &operator=(const IoData &rhs) {
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
         data_ = rhs.data_;
         return *this;
     }
-    BlockDiffIo &operator=(BlockDiffIo &&rhs) {
+    IoData &operator=(IoData &&rhs) {
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
         data_ = std::move(rhs.data_);
@@ -353,7 +353,7 @@ public:
      * CAUSION:
      *   Compressed IO can not be splitted.
      */
-    std::pair<BlockDiffIo, BlockDiffIo> split(uint16_t ioBlocks0) const {
+    std::pair<IoData, IoData> split(uint16_t ioBlocks0) const {
         if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
             throw RT_ERR("split: ioBlocks0 is out or range.");
         }
@@ -362,7 +362,7 @@ public:
         }
         assert(isValid());
 
-        BlockDiffIo r0, r1;
+        IoData r0, r1;
         uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
         r0.setIoBlocks(ioBlocks0);
         r1.setIoBlocks(ioBlocks1);
@@ -376,7 +376,7 @@ public:
         return std::make_pair(std::move(r0), std::move(r1));
     }
 
-    std::vector<BlockDiffIo> splitAll(uint16_t ioBlocks0) const {
+    std::vector<IoData> splitAll(uint16_t ioBlocks0) const {
         if (ioBlocks0 == 0) {
             throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
         }
@@ -385,11 +385,11 @@ public:
         }
         assert(isValid());
 
-        std::vector<BlockDiffIo> v;
+        std::vector<IoData> v;
         uint16_t remaining = ioBlocks();
         size_t off = 0;
         while (0 < remaining) {
-            BlockDiffIo io;
+            IoData io;
             uint16_t blks = std::min(remaining, ioBlocks0);
             size_t size = blks * LOGICAL_BLOCK_SIZE;
             io.setIoBlocks(blks);
@@ -422,7 +422,7 @@ public:
      * Compress an IO data.
      * Supported algorithms: snappy.
      */
-    BlockDiffIo compress(int type) const {
+    IoData compress(int type) const {
         if (isCompressed()) {
             throw RT_ERR("Could not compress already compressed diff IO.");
         }
@@ -430,10 +430,10 @@ public:
             throw RT_ERR("Currently only snappy is supported.");
         }
         if (ioBlocks() == 0) {
-            return BlockDiffIo();
+            return IoData();
         }
         assert(isValid());
-        BlockDiffIo io;
+        IoData io;
         io.setIoBlocks(ioBlocks());
         io.setCompressionType(type);
         io.data_.resize(snappy::MaxCompressedLength(rawSize()));
@@ -447,7 +447,7 @@ public:
      * Uncompress an IO data.
      * Supported algorithms: snappy.
      */
-    BlockDiffIo uncompress() const {
+    IoData uncompress() const {
         if (!isCompressed()) {
             throw RT_ERR("Need not uncompress already uncompressed diff IO.");
         }
@@ -455,9 +455,9 @@ public:
             throw RT_ERR("Currently only snappy is supported.");
         }
         if (ioBlocks() == 0) {
-            return BlockDiffIo();
+            return IoData();
         }
-        BlockDiffIo io;
+        IoData io;
         io.setIoBlocks(ioBlocks());
         io.data_.resize(ioBlocks() * LOGICAL_BLOCK_SIZE);
         size_t size;

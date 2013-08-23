@@ -35,9 +35,9 @@ private:
     cybozu::util::FdReader reader_;
     const bool isInputFdSeekable_;
     std::shared_ptr<char> bufForSkip_;
-    walb::diff::WalbDiffMerger merger_;
+    walb::diff::Merger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
-    walb::diff::DiffRecIo recIo_; /* current diff rec IO. */
+    walb::diff::RecIo recIo_; /* current diff rec IO. */
     uint16_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
 
@@ -145,8 +145,8 @@ private:
      */
     size_t readWdiff(char *data, size_t blks) {
         assert(recIo_.isValid());
-        const walb::diff::WalbDiffRecord &rec = recIo_.record();
-        const walb::diff::BlockDiffIo &io = recIo_.io();
+        const walb::diff::RecordRaw &rec = recIo_.record();
+        const walb::diff::IoData &io = recIo_.io();
         assert(offInIo_ < rec.ioBlocks());
         if (rec.isNormal()) {
             assert(!io.isCompressed());
@@ -181,14 +181,14 @@ private:
      */
     void fillDiffIo() {
         if (isEndDiff_) return;
-        walb::diff::WalbDiffRecord &rec = recIo_.record();
+        walb::diff::RecordRaw &rec = recIo_.record();
         /* At beginning time, rec.ioBlocks() returns 0. */
         assert(offInIo_ <= rec.ioBlocks());
         if (offInIo_ == rec.ioBlocks()) {
             offInIo_ = 0;
             if (!merger_.pop(recIo_)) {
                 isEndDiff_ = true;
-                recIo_ = walb::diff::DiffRecIo();
+                recIo_ = walb::diff::RecIo();
             }
         }
     }
