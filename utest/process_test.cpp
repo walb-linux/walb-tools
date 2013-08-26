@@ -9,3 +9,9 @@ CYBOZU_TEST_AUTO(call)
     ::printf("%zu '%s'\n", s.size(), s.c_str());
     CYBOZU_TEST_EQUAL(s, "test\n");
 }
+
+CYBOZU_TEST_AUTO(echo)
+{
+    std::string s = cybozu::process::call("/bin/echo", {"a", "b", "c"});
+    CYBOZU_TEST_EQUAL(s, "a b c\n");
+}
