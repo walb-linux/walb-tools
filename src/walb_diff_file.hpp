@@ -109,12 +109,15 @@ private:
     bool mustDelete_;
 
 public:
-    PackHeader() : buf_(allocStatic()), mustDelete_(true) {}
+    PackHeader() : buf_(allocStatic()), mustDelete_(true) {
+        reset();
+    }
     /**
      * Buffer size must be ::WALB_DIFF_PACK_SIZE.
      */
     explicit PackHeader(char *buf) : buf_(buf), mustDelete_(false) {
         assert(buf);
+        reset();
     }
     PackHeader(const PackHeader &) = delete;
     PackHeader(PackHeader &&rhs)
@@ -480,6 +483,8 @@ private:
         size_t total = 0;
         pack_.updateChecksum();
         fdw_.write(pack_.rawData(), pack_.rawSize());
+
+        assert(pack_.nRecords() == ioPtrQ_.size());
         while (!ioPtrQ_.empty()) {
             std::shared_ptr<IoData> iop0 = ioPtrQ_.front();
             ioPtrQ_.pop();
@@ -487,6 +492,7 @@ private:
             fdw_.write(iop0->rawData(), iop0->rawSize());
             total += iop0->rawSize();
         }
+
         assert(total == pack_.header().total_size);
         pack_.reset();
     }
