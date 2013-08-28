@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "process.hpp"
+#include "thread_util.hpp"
 #include "walb_log_gen.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_diff_converter.hpp"
@@ -44,63 +45,71 @@ public:
         /**
          * Generate wlog.
          */
-        auto worker0 = [](int outFd, const log::Generator::Config &config) {
-            struct Run {
-                int outFd_;
-                const log::Generator::Config &config_;
-                Run(int outFd, const log::Generator::Config &config)
-                    : outFd_(outFd), config_(config) {}
-                void operator()() {
+        struct Worker0 : public cybozu::thread::Runnable
+        {
+            int outFd_;
+            const log::Generator::Config &config_;
+            Worker0(int outFd, const log::Generator::Config &config)
+                : outFd_(outFd), config_(config) {}
+            void operator()() override {
+                try {
                     ::printf("start worker0.\n"); /* debug */
                     log::Generator g(config_);
                     g.generate(outFd_);
+                    done();
+                } catch (...) {
+                    throwErrorLater();
                 }
-                ~Run() noexcept {
-                    ::printf("close pipe\n"); /* debug */
-                    ::close(outFd_);
-                }
-            };
-            Run r(outFd, config);
-            r();
-            ::printf("worker0 end\n"); /* debug */
-            std::this_thread::sleep_for(std::chrono::seconds(1)); /* debug */
+                /* finally */
+                ::close(outFd_);
+            }
         };
         /**
          * Convert wlog to wdiff.
          */
-        auto worker1 = [](int inFd, int outFd) {
-            struct Run {
-                int inFd_;
-                int outFd_;
-                Run(int inFd, int outFd)
-                    : inFd_(inFd), outFd_(outFd) {}
-                void operator()() {
+        struct Worker1 : public cybozu::thread::Runnable
+        {
+            int inFd_;
+            int outFd_;
+            Worker1(int inFd, int outFd)
+                : inFd_(inFd), outFd_(outFd) {}
+            void operator()() override {
+                try {
                     ::printf("start worker1.\n"); /* debug */
                     Converter c;
                     c.convert(inFd_, outFd_);
+                    done();
+                } catch (...) {
+                    throwErrorLater();
                 }
-                ~Run() noexcept {
-                    ::close(outFd_);
+                /* finally */
+                ::close(inFd_);
+                ::close(outFd_);
+            }
+        };
+        struct Worker2 : public cybozu::thread::Runnable
+        {
+            int inFd_;
+            MemoryData &mem_;
+            Worker2(int inFd, MemoryData &mem)
+                : inFd_(inFd), mem_(mem) {}
+            void operator()() override {
+                try {
+                    mem_.clear();
+                    mem_.readFrom(inFd_);
+                    done();
+                } catch (...) {
+                    throwErrorLater();
                 }
-            };
-            Run r(inFd, outFd);
-            r();
-            ::printf("worker1 end\n"); /* debug */
+                ::close(inFd_);
+            }
         };
-        auto worker2 = [](int inFd, MemoryData &mem) {
-            mem.clear();
-            mem.readFrom(inFd);
-            ::printf("worker2 end\n"); /* debug */
-        };
-
-        /* now editing */
-
-        auto f0 = std::async(std::launch::async, worker0, pipe0.fdW(), std::ref(config_));
-        auto f1 = std::async(std::launch::async, worker1, pipe0.fdR(), pipe1.fdW());
-        auto f2 = std::async(std::launch::async, worker2, pipe1.fdR(), std::ref(mem_));
-        f0.get();
-        f1.get();
-        f2.get();
+        cybozu::thread::ThreadRunnerSet thSet;
+        thSet.add(std::make_shared<Worker0>(pipe0.fdW(), config_));
+        thSet.add(std::make_shared<Worker1>(pipe0.fdR(), pipe1.fdW()));
+        thSet.add(std::make_shared<Worker2>(pipe1.fdR(), mem_));
+        thSet.start();
+        thSet.join();
     }
 private:
 
