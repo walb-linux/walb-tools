@@ -88,24 +88,16 @@ public:
     bool isHelp() const { return isHelp_; }
     const std::string& outPath() const { return outPath_; }
 
-    void openOutputFileIfNeed() {
-        if (foP_) return;
-        if (outPath() == "-") return;
+    int getOutFd() {
+        if (foP_) return foP_->fd();
+        if (outPath() == "-") return 1;
         foP_ = std::make_shared<cybozu::util::FileOpener>(
             outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        return foP_->fd();
     }
 
     walb::log::Generator::Config genConfig() const {
         walb::log::Generator::Config cfg;
-
-        if (outPath() == "-") {
-            cfg.fd = 1;
-        } else if (foP_) {
-            cfg.fd = foP_->fd();
-        } else {
-            throw RT_ERR("The output file is not opened.");
-        }
-
         cfg.devLb = devLb();
         cfg.minIoLb = minIoLb();
         cfg.maxIoLb = maxIoLb();
@@ -286,11 +278,9 @@ int main(int argc, char* argv[])
             Config::printHelp();
             return 0;
         }
-        config.openOutputFileIfNeed();
         config.check();
-        walb::log::Generator::Config cfg = config.genConfig();
-        walb::log::Generator wlGen(cfg);
-        wlGen.generate();
+        walb::log::Generator wlGen(config.genConfig());
+        wlGen.generate(config.getOutFd());
         return 0;
     } catch (std::runtime_error& e) {
         LOGe("Error: %s\n", e.what());

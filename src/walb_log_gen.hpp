@@ -28,7 +28,6 @@ class Generator
 public:
     struct Config
     {
-        int fd;
         uint64_t devLb;
         unsigned int minIoLb;
         unsigned int maxIoLb;
@@ -91,9 +90,8 @@ public:
         : config_(config)
         , lsid_(config.lsid) {}
 
-    void generate() {
-        assert(0 < config_.fd);
-        generateAndWrite(config_.fd);
+    void generate(int outFd) {
+        generateAndWrite(outFd);
     }
 private:
     using Block = std::shared_ptr<u8>;

@@ -395,7 +395,7 @@ public:
         }
     }
     FileHeaderRef& header() { return fileH_; }
-    bool writeTo(int outFd, bool isCompressed = true) {
+    void writeTo(int outFd, bool isCompressed = true) {
         Writer writer(outFd);
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
@@ -414,7 +414,24 @@ public:
             ++it;
         }
         writer.flush();
-        return true;
+    }
+    void readFrom(int inFd) {
+        Reader reader(inFd);
+        reader.readHeader(fileH_);
+        RecordRaw rec;
+        IoData io;
+        while (reader.readAndUncompressDiff(rec, io)) {
+            add(rec, std::move(io));
+        }
+    }
+    /**
+     * Clear all data.
+     */
+    void clear() {
+        map_.clear();
+        nIos_ = 0;
+        nBlocks_ = 0;
+        fileH_.init();
     }
     void checkNoOverlappedAndSorted() const {
         auto it = map_.cbegin();

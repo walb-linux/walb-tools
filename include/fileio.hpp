@@ -43,9 +43,9 @@ private:
 public:
     explicit FdOperator(int fd) : fd_(fd) {}
     size_t readsome(void *data, size_t size) {
-        ssize_t ret = ::read(fd_, data, size);
-        if (ret < 0) throw LibcError(errno, "read failed: ");
-        return ret;
+        ssize_t r = ::read(fd_, data, size);
+        if (r < 0) throw LibcError(errno, "read failed: ");
+        return r;
     }
     void read(void *data, size_t size) {
         char *buf = reinterpret_cast<char *>(data);
@@ -60,10 +60,10 @@ public:
         const char *buf = reinterpret_cast<const char *>(data);
         size_t s = 0;
         while (s < size) {
-            ssize_t ret = ::write(fd_, &buf[s], size - s);
-            if (ret < 0) throw LibcError(errno, "write failed: ");
-            if (ret == 0) throw EofError();
-            s += ret;
+            ssize_t r = ::write(fd_, &buf[s], size - s);
+            if (r < 0) throw LibcError(errno, "write failed: ");
+            if (r == 0) throw EofError();
+            s += r;
         }
     }
     bool seekable() {
