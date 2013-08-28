@@ -78,7 +78,6 @@ public:
 
         walbDiff.writeTo(outputWdiffFd, ::WALB_DIFF_CMPR_SNAPPY);
     }
-
 private:
     /**
      * Convert a wlog.
@@ -100,9 +99,7 @@ private:
         /* Read walblog header. */
         log::FileHeader wlHeader;
         try {
-            ::printf("try to read header.\n"); /* debug */
             wlHeader.read(fdr);
-            ::printf("       read header.\n"); /* debug */
         } catch (cybozu::util::EofError &e) {
             return false;
         }
@@ -144,10 +141,7 @@ private:
         while (lsid < wlHeader.endLsid()) {
             LogpackHeaderPtr loghp;
             try {
-                //std::this_thread::sleep_for(std::chrono::milliseconds(100)); /* debug */
-                ::printf("try to read logpack %" PRIu64 "\n", lsid); /* debug */
                 loghp = readLogpackHeader(fdr, ba, wlHeader.salt());
-                ::printf("       read logpack %" PRIu64 "\n", lsid); /* debug */
             } catch (cybozu::util::EofError &e) {
                 ret = false;
                 break;
