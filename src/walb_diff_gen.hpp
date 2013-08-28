@@ -40,6 +40,11 @@ public:
     ~Generator() noexcept = default;
     MemoryData &data() { return mem_; }
     const MemoryData &data() const { return mem_; }
+    /**
+     * TODO:
+     *   * Do not convert via file descriptors with threads.
+     *     Convert wlog to wdiff directly.
+     */
     void generate() {
         cybozu::process::Pipe pipe0, pipe1;
         /**
