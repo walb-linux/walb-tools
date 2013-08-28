@@ -279,7 +279,8 @@ int main(int argc, char* argv[])
             return 0;
         }
         config.check();
-        walb::log::Generator wlGen(config.genConfig());
+        walb::log::Generator::Config cfg = config.genConfig();
+        walb::log::Generator wlGen(cfg);
         wlGen.generate(config.getOutFd());
         return 0;
     } catch (std::runtime_error& e) {
