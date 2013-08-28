@@ -6,6 +6,7 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
+
 #include <vector>
 #include <random>
 #include <memory>
@@ -193,6 +194,12 @@ private:
                 ::fflush(::stderr);
             }
         }
+
+        /* Write termination block. */
+        walb::log::PackHeader logh(hBlock, pbs, salt);
+        logh.setEnd();
+        logh.write(fd);
+
         if (config_.isVerbose) {
             ::fprintf(::stderr,
                       "\n"

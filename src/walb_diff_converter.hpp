@@ -142,7 +142,13 @@ private:
             LogpackHeaderPtr loghp;
             try {
                 loghp = readLogpackHeader(fdr, ba, wlHeader.salt());
+                if (loghp->isEnd()) {
+                    /* Terminator. */
+                    ret = false;
+                    break;
+                }
             } catch (cybozu::util::EofError &e) {
+                /* For old format without a terminator. */
                 ret = false;
                 break;
             }

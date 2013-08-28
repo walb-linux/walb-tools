@@ -540,6 +540,18 @@ public:
     }
 
     /**
+     * Make the header block terminator.
+     * Do not forget to call updateChecksum() before write it.
+     */
+    void setEnd() {
+        init(uint64_t(-1));
+    }
+
+    bool isEnd() const {
+        return nRecords() == 0 && logpackLsid() == uint64_t(-1);
+    }
+
+    /**
      * Add a normal IO.
      *
      * @offset [logical block]
