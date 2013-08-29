@@ -92,6 +92,9 @@ public:
                 ::close(outFd_);
             }
         };
+        /**
+         * Read wdiff stream and make a memory data.
+         */
         struct Worker2 : public cybozu::thread::Runnable
         {
             int inFd_;
@@ -116,9 +119,6 @@ public:
         thSet.start();
         thSet.join();
     }
-private:
-
-    /* now editing */
 };
 
 }} //namespace walb::diff

@@ -465,7 +465,7 @@ public:
             throw RT_ERR("snappy::GetUncompressedLength() failed.");
         }
         if (size != io.rawSize()) {
-            throw RT_ERR("Uncompressed data size is not invaid.");
+            throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io.rawSize());
         }
         if (!snappy::RawUncompress(rawData(), rawSize(), io.rawData())) {
             throw RT_ERR("snappy::RawUncompress() failed.");
