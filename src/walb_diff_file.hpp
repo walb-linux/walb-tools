@@ -140,6 +140,13 @@ public:
         return *this;
     }
 
+    void resetBuffer(char *buf) {
+        assert(buf);
+        if (mustDelete_) ::free(buf_);
+        mustDelete_ = false;
+        buf_ = buf;
+    }
+
     const char *rawData() const { return &buf_[0]; }
     char *rawData() { return &buf_[0]; }
     size_t rawSize() const { return ::WALB_DIFF_PACK_SIZE; }
