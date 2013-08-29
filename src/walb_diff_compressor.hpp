@@ -32,6 +32,7 @@ namespace compressor {
  * convert pack data
  * @param conv [in] PackCompressor or PackUncompressor
  * @param inPackTop [in] top address of pack data
+ * @param maxOutSize max output size excluding pack header block.
  * @return buffer of converted pack data
  */
 template<class Convertor>
@@ -41,7 +42,7 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
     std::unique_ptr<char[]> ret(new char [WALB_DIFF_PACK_SIZE + maxOutSize]);
     walb_diff_pack& outPack = *(walb_diff_pack*)ret.get();
     const char *in = inPackTop + WALB_DIFF_PACK_SIZE;
-    char *const out = ret.get() + WALB_DIFF_PACK_SIZE;
+    char *out = ret.get() + WALB_DIFF_PACK_SIZE;
 
     memset(ret.get(), 0, WALB_DIFF_PACK_SIZE);
     uint32_t outOffset = 0;
@@ -54,10 +55,13 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
         outRecord.data_offset = outOffset;
         outOffset += outRecord.data_size;
         assert(outOffset <= outOffset);
+        out += outRecord.data_size;
+        in += inRecord.data_size;
     }
+    outPack.n_records = inPack.n_records;
     outPack.total_size = outOffset;
     outPack.checksum = 0;
-    outPack.checksum = cybozu::util::calcChecksum(&outPack, outOffset, 0);
+    outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
     return ret;
 }
 
@@ -135,6 +139,7 @@ public:
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
         outRecord.compression_type = WALB_DIFF_CMPR_NONE;
         outRecord.data_size = decSize;
+        assert(decSize == outRecord.io_blocks * 512);
         outRecord.checksum = cybozu::util::calcChecksum(out, outRecord.data_size, 0);
     }
     /*
