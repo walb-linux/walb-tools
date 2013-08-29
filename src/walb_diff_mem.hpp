@@ -484,25 +484,17 @@ public:
         void upperBound(uint64_t addr) {
             it_ = mem_->map_.upper_bound(addr);
         }
-        RecordRaw &record() {
-            checkValid();
-            return it_->second.record();
-        }
         const RecordRaw &record() const {
             checkValid();
             return it_->second.record();
         }
-        char *rawData() {
-            checkValid();
-            return it_->second.rawData();
-        }
         const char *rawData() const {
             checkValid();
-            return it_->second.rawData();
+            return it_->second.io().rawData();
         }
         uint32_t rawSize() const {
             checkValid();
-            return it_->second.rawSize();
+            return it_->second.io().rawSize();
         }
     protected:
         void checkValid() const {
@@ -512,14 +504,14 @@ public:
         }
     };
     class ConstIterator
-        : public IteratorBase<const MemoryData, Map::iterator>
+        : public IteratorBase<const MemoryData, Map::const_iterator>
     {
     public:
         explicit ConstIterator(const MemoryData *mem)
-            : IteratorBase<const MemoryData, Map::iterator>(mem) {
+            : IteratorBase<const MemoryData, Map::const_iterator>(mem) {
         }
         ConstIterator(const ConstIterator &rhs)
-            : IteratorBase<const MemoryData, Map::iterator>(rhs) {
+            : IteratorBase<const MemoryData, Map::const_iterator>(rhs) {
         }
         ~ConstIterator() noexcept override = default;
 
@@ -535,6 +527,14 @@ public:
             : IteratorBase<MemoryData, Map::iterator>(rhs) {
         }
         ~Iterator() noexcept override = default;
+        RecordRaw &record() {
+            checkValid();
+            return it_->second.record();
+        }
+        char *rawData() {
+            checkValid();
+            return it_->second.io().rawData();
+        }
         /**
          * Erase the item on the iterator.
          * The iterator will indicate the next of the removed item.
