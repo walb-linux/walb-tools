@@ -48,19 +48,23 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
     uint32_t outOffset = 0;
     for (int i = 0, n = inPack.n_records; i < n; i++) {
         const walb_diff_record& inRecord = inPack.record[i];
-        // QQQ:Todo : check inRecord.flags
         walb_diff_record& outRecord = outPack.record[i];
 
-        conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);
+        assert(inRecord.flags & (1U << ::WALB_DIFF_FLAG_EXIST));
+        if (inRecord.flags & ((1U << ::WALB_DIFF_FLAG_ALLZERO) | (1U << ::WALB_DIFF_FLAG_DISCARD))) {
+            outRecord = inRecord;
+        } else {
+            conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);
+        }
         outRecord.data_offset = outOffset;
         outOffset += outRecord.data_size;
-        assert(outOffset <= outOffset);
+        assert(outOffset <= maxOutSize);
         out += outRecord.data_size;
         in += inRecord.data_size;
     }
     outPack.n_records = inPack.n_records;
     outPack.total_size = outOffset;
-    outPack.checksum = 0;
+    outPack.checksum = 0; // necessary to the following calcChecksum
     outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
     return ret;
 }
@@ -95,16 +99,16 @@ public:
             throw;
         } catch (std::exception& e) {
             LOGd("encode error %s\n", e.what());
+            // through
         }
         if (encSize < inSize) {
             outRecord.compression_type = type_;
+            outRecord.data_size = encSize;
         } else {
             // not compress
-            encSize = inSize;
             outRecord.compression_type = WALB_DIFF_CMPR_NONE;
             ::memcpy(out, in, inSize);
         }
-        outRecord.data_size = encSize;
         outRecord.checksum = cybozu::util::calcChecksum(out, outRecord.data_size, 0);
     }
     /*
@@ -133,7 +137,7 @@ public:
         const size_t inSize = inRecord.data_size;
         if (inRecord.compression_type == WALB_DIFF_CMPR_NONE) {
             if (inSize > maxOutSize) throw cybozu::Exception("PackUncompressor:convertRecord:small maxOutSize") << inSize << maxOutSize;
-            memcpy(out, in, inSize);
+            ::memcpy(out, in, inSize);
             return;
         }
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
