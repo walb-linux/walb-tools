@@ -12,6 +12,8 @@
 #include "walb_diff.h"
 #include "checksum.hpp"
 #include "stdout_logger.hpp"
+#include <cybozu/thread.hpp>
+#include <atomic>
 
 namespace walb {
 
@@ -48,19 +50,23 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
     uint32_t outOffset = 0;
     for (int i = 0, n = inPack.n_records; i < n; i++) {
         const walb_diff_record& inRecord = inPack.record[i];
-        // QQQ:Todo : check inRecord.flags
         walb_diff_record& outRecord = outPack.record[i];
 
-        conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);
+        assert(inRecord.flags & (1U << ::WALB_DIFF_FLAG_EXIST));
+        if (inRecord.flags & ((1U << ::WALB_DIFF_FLAG_ALLZERO) | (1U << ::WALB_DIFF_FLAG_DISCARD))) {
+            outRecord = inRecord;
+        } else {
+            conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);
+        }
         outRecord.data_offset = outOffset;
         outOffset += outRecord.data_size;
-        assert(outOffset <= outOffset);
+        assert(outOffset <= maxOutSize);
         out += outRecord.data_size;
         in += inRecord.data_size;
     }
     outPack.n_records = inPack.n_records;
     outPack.total_size = outOffset;
-    outPack.checksum = 0;
+    outPack.checksum = 0; // necessary to the following calcChecksum
     outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
     return ret;
 }
@@ -74,9 +80,15 @@ inline uint32_t calcTotalBlockNum(const walb_diff_pack& pack)
     return num;
 }
 
+struct PackCompressorBase {
+    virtual ~PackCompressorBase() {}
+    virtual void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord) = 0;
+    virtual std::unique_ptr<char[]> convert(const char *inPackTop) = 0;
+};
+
 } // compressor
 
-class PackCompressor {
+class PackCompressor : public compressor::PackCompressorBase {
     int type_;
     walb::Compressor c_;
 public:
@@ -95,16 +107,16 @@ public:
             throw;
         } catch (std::exception& e) {
             LOGd("encode error %s\n", e.what());
+            // through
         }
         if (encSize < inSize) {
             outRecord.compression_type = type_;
+            outRecord.data_size = encSize;
         } else {
             // not compress
-            encSize = inSize;
             outRecord.compression_type = WALB_DIFF_CMPR_NONE;
             ::memcpy(out, in, inSize);
         }
-        outRecord.data_size = encSize;
         outRecord.checksum = cybozu::util::calcChecksum(out, outRecord.data_size, 0);
     }
     /*
@@ -119,7 +131,7 @@ public:
     }
 };
 
-class PackUncompressor {
+class PackUncompressor : public compressor::PackCompressorBase {
     int type_;
     walb::Uncompressor d_;
 public:
@@ -133,7 +145,7 @@ public:
         const size_t inSize = inRecord.data_size;
         if (inRecord.compression_type == WALB_DIFF_CMPR_NONE) {
             if (inSize > maxOutSize) throw cybozu::Exception("PackUncompressor:convertRecord:small maxOutSize") << inSize << maxOutSize;
-            memcpy(out, in, inSize);
+            ::memcpy(out, in, inSize);
             return;
         }
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
@@ -155,6 +167,48 @@ public:
     }
 };
 
+class ConverterQueue {
+    size_t queueNum_;
+    size_t threadNum_;
+    std::vector<compressor::PackCompressorBase*> converter_;
+    std::atomic<bool> quit_;
+public:
+    ConverterQueue(size_t queueNum, size_t threadNum, size_t timeoutSec, bool doCompress, int type, size_t para = 0)
+        : queueNum_(queueNum)
+        , threadNum_(threadNum)
+        , converter_(queueNum)
+        , quit_(false)
+    {
+        for (size_t i = 0; i < queueNum; i++) {
+            if (doCompress) {
+                converter_[i] = new PackCompressor(type, para);
+            } else {
+                converter_[i] = new PackUncompressor(type, para);
+            }
+        }
+    }
+    ~ConverterQueue()
+    {
+        for (size_t i = 0; i < queueNum_; i++) {
+            delete converter_[i];
+        }
+    }
+    /*
+     * normal exit
+     */
+    void quit()
+    {
+    }
+    void cancel()
+    {
+    }
+    void push(std::unique_ptr<char[]>&)
+    {
+    }
+    std::unique_ptr<char[]> pop()
+    {
+    }
+};
 
 } //namespace walb
 
