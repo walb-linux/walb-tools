@@ -120,6 +120,7 @@ public:
 
         wdiffsP_->reset(gid);
 
+        /* TODO: consider remove or remaining. */
         if (lvExists()) {
             getLv().remove();
         }
@@ -149,6 +150,27 @@ public:
         return std::move(map);
     }
     /**
+     * Get the latest snapshot which may be dirty.
+     * RETURN:
+     *   meta snap of the latest snapshot.
+     */
+    MetaSnap getLatestSnapshot() const {
+#if 0
+        std::vector<MetaDiff> v = wdiffsP_->listDiff();
+        return v.empty() ? baseRecord_ : getSnapFromDiff(v.last());
+#else
+        return wdiffsP_->latest();
+#endif
+    }
+    /**
+     * Get the oldest snapshot which may be dirty.
+     * RETURN:
+     *   meta snap of the oldest snapshot.
+     */
+    MetaSnap getOldestSnapshot() const {
+        return baseRecord_;
+    }
+    /**
      * Get the latest clean snapshot.
      *
      * RETURN:
@@ -163,6 +185,7 @@ public:
             if (diff.isClean()) return diff.gid1();
             ++it;
         }
+        if (baseRecord_.isClean()) return baseRecord_.gid0();
         return uint64_t(-1);
     }
     template <typename OutputStream>
@@ -206,6 +229,8 @@ public:
     void print() const { print(::stdout); }
     /**
      * Create a restore volume as a snapshot.
+     * You must apply diff(s) by yourself.
+     *
      * @gid restored snapshot will indicates the gid.
      */
     bool restore(uint64_t gid = uint64_t(-1)) {
@@ -213,6 +238,7 @@ public:
             gid = getLatestCleanSnapshot();
             if (gid == uint64_t(-1)) return false;
         }
+        ::printf("target restore gid %" PRIu64 "\n", gid); /* debug */
         if (!canRestore(gid)) return false;
         std::string snapName = restoredSnapshotName(gid);
         if (getLv().hasSnapshot(snapName)) return false;
@@ -224,12 +250,21 @@ public:
      * That means wdiffs has the clean snaphsot for the gid.
      */
     bool canRestore(uint64_t gid) const {
+        ::printf("canRestore begin\n"); /* debug */
         MetaSnap snap = baseRecord_;
+        snap.print(); /* debug */
         for (const MetaDiff &diff : wdiffsP_->listDiff()) {
+            if (diff.gid0() < snap.gid0()) {
+                /* skip old diffs. */
+                continue;
+            }
             if (gid < diff.gid1()) break;
+            diff.print(); /* debug */
             assert(snap.canApply(diff));
             snap = snap.apply(diff);
+            snap.print(); /* debug */
         }
+        ::printf("canRestore end\n"); /* debug */
         return snap.isClean() && snap.gid0() == gid;
     }
     /**
@@ -266,13 +301,17 @@ public:
         for (MetaDiff &diff : diffV) {
             pathV.push_back(getDiffPath(diff));
         }
+
         /*
          * Try to open all files in the pathV.
          */
+
         startToApply(diff);
+
         /*
          * Apply the wdiff file indicated by the pathV.
          */
+
         finishToApply(diff);
     }
     /**
@@ -280,6 +319,12 @@ public:
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
         return getDir() + cybozu::FilePath(createDiffFileName(diff));
+    }
+    /**
+     * Wdiff directory.
+     */
+    cybozu::FilePath getDiffDir() const {
+        return getDir();
     }
     /**
      * @gid threshold gid. That indicates all diffs
@@ -304,7 +349,14 @@ public:
      */
     void finishToApply(const MetaDiff &diff) {
         baseRecord_ = baseRecord_.finishToApply(diff);
+        baseRecord_.raw().timestamp = diff.raw().timestamp;
         saveBaseRecord();
+    }
+    /**
+     * Remove old diffs which have been applied to the base lv already.
+     */
+    void removeOldDiffs() {
+        wdiffsP_->removeBeforeGid(baseRecord_.gid0());
     }
     /**
      * You must prepare wdiff file before calling this.
