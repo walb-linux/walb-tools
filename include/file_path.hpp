@@ -139,6 +139,23 @@ public:
     FilePath() : path_("."), statP_() {} /* current directly */
     explicit FilePath(const std::string &path) : path_(path), statP_() {}
     explicit FilePath(std::string &&path) : path_(std::move(path)), statP_() {}
+
+    /* Copy constructor */
+    FilePath(const FilePath &rhs) : path_(rhs.path_), statP_() {}
+    /* Move constructor */
+    FilePath(FilePath &&rhs) : path_(std::move(rhs.path_)), statP_(std::move(statP_)) {}
+    /* Copy */
+    FilePath &operator=(const FilePath &rhs) {
+        path_ = rhs.path_;
+        statP_.reset();
+        return *this;
+    }
+    /* Move */
+    FilePath &operator=(FilePath &rhs) {
+        path_ = std::move(rhs.path_);
+        statP_ = std::move(rhs.statP_);
+        return *this;
+    }
     FilePath operator+(const FilePath &rhs) const {
         if (rhs.isRoot()) {
             std::runtime_error("full path can not be added.");
