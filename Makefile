@@ -33,10 +33,12 @@ LDLIBS_COMPRESS = -lsnappy -llzma -lz
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
 BIN_SOURCES = $(wildcard binsrc/*.cpp)
-SOURCES = $(wildcard src/*.cpp) $(BIN_SOURCES)
+OTHER_SOURCES = $(wildcard src/*.cpp)
+TEST_SOURCES = $(wildcard utest/*.cpp)
+SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES)
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
-TEST_BINARIES = $(patsubst %.cpp,%,$(wildcard utest/*.cpp))
+TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 
 all: build
 build: Makefile.depends $(BINARIES)
@@ -72,7 +74,9 @@ install:
 
 depend: Makefile.depends
 
-Makefile.depends: $(SOURCES) $(HEADERS)
-	$(CXX) -MM $(SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > Makefile.depends
+Makefile.depends: $(BIN_SOURCES) $(OTHER_SOURCES) $(TEST_SOURCES)
+	$(CXX) -MM $(BIN_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > Makefile.depends
+	$(CXX) -MM $(OTHER_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' >> Makefile.depends
+	$(CXX) -MM $(TEST_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' >> Makefile.depends
 
 -include Makefile.depends
