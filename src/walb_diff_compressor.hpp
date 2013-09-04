@@ -9,11 +9,13 @@
 #include "compressor.hpp"
 #include <memory>
 #include <vector>
+#include <atomic>
+#include <queue>
 #include "walb_diff.h"
 #include "checksum.hpp"
 #include "stdout_logger.hpp"
 #include <cybozu/thread.hpp>
-#include <atomic>
+#include <cybozu/event.hpp>
 
 namespace walb {
 
@@ -167,32 +169,101 @@ public:
     }
 };
 
+namespace compressor_local {
+
+struct Engine : cybozu::ThreadBase {
+    Engine()
+		: e_(nullptr)
+		, using_(false)
+		, quit_(nullptr)
+	{
+	}
+	~Engine()
+	{
+		delete e_;
+	}
+
+	void threadEntry()
+	{
+		assert(e_);
+		assert(quit_);
+		while (!*quit_) {
+			startEv_.wait();
+			outBuf_ = e_->convert(inBuf_.get());
+			endEv_.wakeup();
+		}
+	}
+	bool tryToRun(std::unique_ptr<char[]>& buf)
+	{
+		if (using_.exchange(true)) return false;
+		inBuf_ = std::move(buf);
+		startEv_.wakeup();
+		return true;
+	}
+	std::unique_ptr<char[]> getResult()
+	{
+		endEv_.wait();
+		std::unique_ptr<char[]> ret = std::move(outBuf_);
+		using_ = false;
+		return ret;
+	}
+    void init(bool doCompress, int type, size_t para, std::atomic<bool> *quit)
+    {
+        assert(e_ == nullptr);
+        if (doCompress) {
+            e_ = new PackCompressor(type, para);
+        } else {
+            e_ = new PackUncompressor(type, para);
+        }
+		quit_ = quit;
+		beginThread();
+    }
+private:
+    compressor::PackCompressorBase *e_;
+	std::atomic<bool> using_;
+	std::atomic<bool> *quit_;
+	cybozu::Event startEv_;
+	cybozu::Event endEv_;
+	std::unique_ptr<char[]> inBuf_;
+	std::unique_ptr<char[]> outBuf_;
+	Engine(const Engine&) = delete;
+	void operator=(const Engine&) = delete;
+};
+
+} // compressor_local
+
 class ConverterQueue {
-    size_t queueNum_;
-    size_t threadNum_;
-    std::vector<compressor::PackCompressorBase*> converter_;
+    size_t maxQueueNum_;
+	typedef compressor_local::Engine Engine;
+	std::vector<Engine> enginePool_;
+	std::queue<Engine*> que_;
     std::atomic<bool> quit_;
+	Engine *getFreeEngine(std::unique_ptr<char[]>& buf)
+	{
+		while (!quit_) {
+			for (Engine& e : enginePool_) {
+				if (e.tryToRun(buf)) return &e;
+			}
+			cybozu::Sleep(1);
+		}
+		return nullptr;
+	}
 public:
-    ConverterQueue(size_t queueNum, size_t threadNum, size_t timeoutSec, bool doCompress, int type, size_t para = 0)
-        : queueNum_(queueNum)
-        , threadNum_(threadNum)
-        , converter_(queueNum)
+    ConverterQueue(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
+		: maxQueueNum_(maxQueueNum)
+        , enginePool_(threadNum)
         , quit_(false)
     {
-        for (size_t i = 0; i < queueNum; i++) {
-            if (doCompress) {
-                converter_[i] = new PackCompressor(type, para);
-            } else {
-                converter_[i] = new PackUncompressor(type, para);
-            }
-        }
+		for (Engine& e : enginePool_) {
+            e.init(doCompress, type, para, &quit_);
+		}
     }
-    ~ConverterQueue()
-    {
-        for (size_t i = 0; i < queueNum_; i++) {
-            delete converter_[i];
-        }
-    }
+	void join()
+	{
+		for (Engine& e : enginePool_) {
+			e.joinThread();
+		}
+	}
     /*
      * normal exit
      */
@@ -202,11 +273,19 @@ public:
     void cancel()
     {
     }
-    void push(std::unique_ptr<char[]>&)
+    void push(std::unique_ptr<char[]>& buf)
     {
+		compressor_local::Engine *engine = getFreeEngine(buf);
+		if (engine == nullptr) throw cybozu::Exception("ConverterQueue:push:engie is empty");
+		que_.push(engine);
     }
     std::unique_ptr<char[]> pop()
     {
+		if (que_.empty()) throw cybozu::Exception("ConverterQueue:pop:empty");
+		compressor_local::Engine *engine = que_.front();
+		std::unique_ptr<char[]> ret = engine->getResult();
+		que_.pop();
+		return ret;
     }
 };
 
