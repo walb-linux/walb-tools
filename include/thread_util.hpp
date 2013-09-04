@@ -232,209 +232,14 @@ public:
  * Manage ThreadRunners which starting/ending timing differ.
  * This is thread-safe class.
  *
- * (1) You call add() workers to start them.
- *     Retured uint32_t value is unique identifier of each worker.
- * (2) You can call cancel(uint32_t) to cancel a worker only if it has not started running.
- * (3) You should call gc() periodically to check error occurence in the workers execution.
- * (4) You can call join(uint32_t) to wait for a thread to be done.
- * (5) You call join() to wait for all threads to be done.
+ * (1) You call add() tasks to start them.
+ *     Retured uint32_t value is unique identifier of each task.
+ * (2) You can call cancel(uint32_t) to cancel a task only if it has not started running.
+ * (3) You can call waitFor(uint32_t) to wait for a task to be done.
+ * (4) You can call waitForAll() to wait for all tasks to be done.
+ * (5) You can call gc() to get results of finished tasks.
  */
 class ThreadRunnerPool /* final */
-{
-private:
-    std::list<std::pair<uint32_t, std::shared_ptr<Runnable> > > readyQ_;
-    std::map<uint32_t, std::shared_ptr<Runnable> > ready_;
-    std::map<uint32_t, ThreadRunner> running_;
-    std::map<uint32_t, ThreadRunner> done_;
-    size_t maxNumThreads_; /* 0 means unlimited. */
-    uint32_t id_;
-    mutable std::mutex mutex_;
-    mutable std::condition_variable cv_;
-
-public:
-    explicit ThreadRunnerPool(size_t maxNumThreads = 0)
-        : readyQ_(), ready_(), running_(), done_()
-        , maxNumThreads_(maxNumThreads), id_(0), mutex_() ,cv_() {}
-    ~ThreadRunnerPool() noexcept {
-        cancelAll();
-        join();
-        assert(readyQ_.empty());
-        assert(ready_.empty());
-        assert(running_.empty());
-        assert(done_.empty());
-    }
-    /**
-     * A new thread will start in the function.
-     */
-    uint32_t add(std::shared_ptr<Runnable> runnableP) {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return addNolock(runnableP);
-    }
-    /**
-     * Try to cancel a runnable if it has not started yet.
-     * RETURN:
-     *   true if succesfully canceled.
-     */
-    bool cancel(uint32_t id) {
-        std::lock_guard<std::mutex> lk(mutex_);
-        assert(readyQ_.size() == ready_.size());
-        __attribute__((unused)) bool found = false;
-        {
-            auto it = ready_.find(id);
-            if (it == ready_.end()) {
-                found = false;
-            } else {
-                found = true;
-                ready_.erase(it);
-            }
-        }
-        auto it = readyQ_.begin();
-        while (it != readyQ_.end()) {
-            if (it->first == id) {
-                readyQ_.erase(it);
-                assert(found);
-                return true;
-            }
-            ++it;
-        }
-        assert(readyQ_.size() == ready_.size());
-        assert(!found);
-        return false;
-    }
-    /**
-     * Cancel all runnables in the ready queue.
-     */
-    void cancelAll() {
-        std::lock_guard<std::mutex> lk(mutex_);
-        assert(readyQ_.size() == ready_.size());
-        readyQ_.clear();
-        ready_.clear();
-    }
-    /**
-     * Remove all ended threads and get exceptions of them if exists.
-     * RETURN:
-     *   a list of exceptions thrown from threads.
-     */
-    std::vector<std::exception_ptr> gc() {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return gcNolock();
-    }
-    /**
-     * Wait for a thread done.
-     */
-    std::vector<std::exception_ptr> join(uint32_t id) {
-        std::unique_lock<std::mutex> lk(mutex_);
-        while (isReadyOrRunning(id)) cv_.wait(lk);
-        return gcNolock(id);
-    }
-    /**
-     * Wait for all threads done.
-     * RETURN:
-     *   the same as gc().
-     */
-    std::vector<std::exception_ptr> join() {
-        std::unique_lock<std::mutex> lk(mutex_);
-        while (existsReadyOrRunning()) cv_.wait(lk);
-        return gcNolock();
-    }
-    size_t size() const {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return ready_.size() + running_.size() + done_.size();
-    }
-private:
-    /**
-     * Lock must be held.
-     */
-    bool isReadyOrRunning(uint32_t id) const {
-        return ready_.find(id) != ready_.end() ||
-            running_.find(id) != running_.end();
-    }
-    /**
-     * Lock must be held.
-     */
-    bool existsReadyOrRunning() const {
-        assert(readyQ_.size() == ready_.size());
-        return !ready_.empty() || !running_.empty();
-    }
-    /**
-     * Run a runnable.
-     */
-    void runNolock(uint32_t id, std::shared_ptr<Runnable> runnableP) {
-        auto pair = running_.insert(std::make_pair(id, ThreadRunner(runnableP)));
-        assert(pair.second);
-        /* This callback will move the runnable from running_ to done_. */
-        auto callback = [this, id]() {
-            std::lock_guard<std::mutex> lk(mutex_);
-            auto it = running_.find(id);
-            assert(it != running_.end());
-            __attribute__((unused)) auto pair = done_.insert(std::make_pair(id, std::move(it->second)));
-            assert(pair.second);
-            running_.erase(it);
-            cv_.notify_all();
-            fill();
-        };
-        runnableP->setCallback(callback);
-        ThreadRunner &runner = pair.first->second;
-        runner.start();
-    }
-    bool canRun() const {
-        return maxNumThreads_ == 0 || running_.size() < maxNumThreads_;
-    }
-    /**
-     * Make ready runnables be running.
-     * Lock must be held.
-     */
-    void fill() {
-        while (canRun() && !readyQ_.empty()) {
-            assert(readyQ_.size() == ready_.size());
-            uint32_t id;
-            std::shared_ptr<Runnable> rp;
-            std::tie(id, rp) = readyQ_.front();
-            runNolock(id, rp);
-            readyQ_.pop_front();
-
-            __attribute__((unused)) size_t i = ready_.erase(id);
-            assert(i == 1);
-        }
-    }
-    uint32_t addNolock(std::shared_ptr<Runnable> runnableP) {
-        assert(runnableP);
-        uint32_t id = id_++;
-        readyQ_.push_back(std::make_pair(id, runnableP));
-        __attribute__((unused)) auto pair = ready_.insert(std::make_pair(id, runnableP));
-        assert(pair.second);
-        fill();
-        return id;
-    }
-    std::vector<std::exception_ptr> gcNolock(uint32_t id) {
-        std::vector<std::exception_ptr> v;
-        std::map<uint32_t, ThreadRunner>::iterator it = done_.find(id);
-        if (it == done_.end()) return {}; /* already collected. */
-        ThreadRunner &r = it->second;
-        try {
-            r.join();
-        } catch (...) {
-            v.push_back(std::current_exception());
-        }
-        done_.erase(it);
-        return std::move(v);
-    }
-    std::vector<std::exception_ptr> gcNolock() {
-        std::vector<std::exception_ptr> v;
-        for (auto &p : done_) {
-            try {
-                ThreadRunner &r = p.second;
-                r.join();
-            } catch (...) {
-                v.push_back(std::current_exception());
-            }
-        }
-        done_.clear();
-        return std::move(v);
-    }
-};
-
-class ThreadRunnerPool2 /* final */
 {
 private:
     class Task
@@ -472,12 +277,13 @@ private:
     class TaskWorker : public Runnable
     {
     private:
-        std::list<Task> &readyQ_; /* shared */
+        /* All members are shared with ThreadRunnerPool instance. */
+        std::list<Task> &readyQ_;
         std::set<uint32_t> &ready_;
         std::set<uint32_t> &running_;
         std::map<uint32_t, std::exception_ptr> &done_;
-        std::mutex &mutex_; /* shared */
-        std::condition_variable &cv_; /* shared */
+        std::mutex &mutex_;
+        std::condition_variable &cv_;
     public:
         TaskWorker(std::list<Task> &readyQ, std::set<uint32_t> &ready,
                    std::set<uint32_t> &running, std::map<uint32_t, std::exception_ptr> &done,
@@ -532,17 +338,17 @@ private:
     mutable std::condition_variable cv_;
 
 public:
-    explicit ThreadRunnerPool2(size_t maxNumThreads = 0)
+    explicit ThreadRunnerPool(size_t maxNumThreads = 0)
         : runners_(), numActiveThreads_(0)
         , readyQ_(), ready_(), running_(), done_()
         , maxNumThreads_(maxNumThreads), id_(0), mutex_(), cv_() {
     }
-    ~ThreadRunnerPool2() noexcept {
+    ~ThreadRunnerPool() noexcept {
         try {
             cancelAll();
             assert(readyQ_.empty());
             assert(ready_.empty());
-            join();
+            waitForAll();
             assert(running_.empty());
             assert(done_.empty());
             gcThreadRunner();
@@ -551,7 +357,7 @@ public:
         }
     }
     /**
-     * A new thread will start in the function.
+     * Add a runnable to be executed in the pool.
      */
     uint32_t add(std::shared_ptr<Runnable> runnableP) {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -587,22 +393,44 @@ public:
         ready_.clear();
     }
     /**
-     * Wait for a thread done.
+     * RETURN:
+     *   true if a specified task has finished
+     *   and calling waitFor() will not be blocked.
      */
-    std::exception_ptr join(uint32_t id) {
+    bool finished(uint32_t id) {
         std::unique_lock<std::mutex> lk(mutex_);
-        while (isReadyOrRunning(id)) cv_.wait(lk);
-        return waitForNolock(id);
+        return !isReadyOrRunning(id);
     }
     /**
-     * Wait for all threads done.
+     * Wait for a task done.
      * RETURN:
-     *   the same as gc().
+     *    valid std::exception_ptr if the task has thrown an error.
+     *    else std::exception_ptr().
      */
-    std::vector<std::exception_ptr> join() {
+    std::exception_ptr waitFor(uint32_t id) {
+        std::unique_lock<std::mutex> lk(mutex_);
+        while (isReadyOrRunning(id)) cv_.wait(lk);
+        return getResult(id);
+    }
+    /**
+     * Wait for all tasks done.
+     * RETURN:
+     *   exception pointer list which tasks had thrown.
+     */
+    std::vector<std::exception_ptr> waitForAll() {
         std::unique_lock<std::mutex> lk(mutex_);
         while (existsReadyOrRunning()) cv_.wait(lk);
-        return waitForAllNolock();
+        return getAllResults();
+    }
+    /**
+     * Garbage collect of currently finished tasks.
+     * This does not effect current running tasks.
+     * RETURN:
+     *   the same as waitForAll().
+     */
+    std::vector<std::exception_ptr> gc() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return getAllResults();
     }
     /**
      * Number of pending tasks in the pool.
@@ -657,7 +485,7 @@ private:
         }
         return id;
     }
-    std::exception_ptr waitForNolock(uint32_t id) {
+    std::exception_ptr getResult(uint32_t id) {
         std::exception_ptr ep;
         std::map<uint32_t, std::exception_ptr>::iterator it = done_.find(id);
         if (it == done_.end()) return ep; /* already collected. */
@@ -665,7 +493,7 @@ private:
         done_.erase(it);
         return ep;
     }
-    std::vector<std::exception_ptr> waitForAllNolock() {
+    std::vector<std::exception_ptr> getAllResults() {
         std::vector<std::exception_ptr> v;
         for (auto &p : done_) {
             std::exception_ptr ep = p.second;

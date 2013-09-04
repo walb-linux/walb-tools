@@ -21,37 +21,37 @@ struct Worker : public cybozu::thread::Runnable
     }
 };
 
-CYBOZU_TEST_AUTO(pool2)
+CYBOZU_TEST_AUTO(unlimitedPool)
 {
-    cybozu::thread::ThreadRunnerPool2 pool;
+    cybozu::thread::ThreadRunnerPool pool;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
         pool.add(std::make_shared<Worker>(i, rand()));
     }
-    pool.join();
+    pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }
 
-CYBOZU_TEST_AUTO(fixedPool2)
+CYBOZU_TEST_AUTO(fixedPool)
 {
-    cybozu::thread::ThreadRunnerPool2 pool(5);
+    cybozu::thread::ThreadRunnerPool pool(5);
     std::vector<uint32_t> v;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
         uint32_t id = pool.add(std::make_shared<Worker>(i, rand()));
         v.push_back(id);
     }
-    for (uint32_t id : v) pool.join(id);
+    for (uint32_t id : v) pool.waitFor(id);
     CYBOZU_TEST_ASSERT(pool.size() == 0);
-    pool.join();
+    pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }
 
-CYBOZU_TEST_AUTO(fixedPoolCancel2)
+CYBOZU_TEST_AUTO(fixedPoolCancel)
 {
     const int POOL_SIZE = 5;
     const int N_TASKS = 15;
-    cybozu::thread::ThreadRunnerPool2 pool(POOL_SIZE);
+    cybozu::thread::ThreadRunnerPool pool(POOL_SIZE);
     std::vector<uint32_t> v;
     for (int i = 0; i < N_TASKS; i++) {
         uint32_t id = pool.add(std::make_shared<Worker>(i, 200));
@@ -63,6 +63,6 @@ CYBOZU_TEST_AUTO(fixedPoolCancel2)
         if (pool.cancel(id)) count++;
     }
     CYBOZU_TEST_EQUAL(count, N_TASKS - POOL_SIZE);
-    pool.join();
+    pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }

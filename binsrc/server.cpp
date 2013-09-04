@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
         pool.gc();
         LOGi("pool size %zu", pool.size());
     }
-    pool.join();
+    pool.waitForAll();
     return 0;
 }
 
