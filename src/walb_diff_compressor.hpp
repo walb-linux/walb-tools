@@ -171,6 +171,7 @@ public:
 
 namespace compressor_local {
 
+template<class T>
 struct Engine : cybozu::ThreadBase {
     Engine()
 		: e_(nullptr)
@@ -218,9 +219,9 @@ struct Engine : cybozu::ThreadBase {
 		quit_ = quit;
 		beginThread();
     }
-	bool isUsing() const { return useing_; }
+	bool isUsing() const { return using_; }
 private:
-    compressor::PackCompressorBase *e_;
+    T *e_;
 	std::atomic<bool> using_;
 	std::atomic<bool> *quit_;
 	cybozu::Event startEv_;
@@ -233,9 +234,10 @@ private:
 
 } // compressor_local
 
+template<class T = compressor::PackCompressorBase>
 class ConverterQueue {
     size_t maxQueueNum_;
-	typedef compressor_local::Engine Engine;
+	typedef compressor_local::Engine<T> Engine;
 	std::vector<Engine> enginePool_;
 	std::queue<Engine*> que_;
     std::atomic<bool> quit_;
@@ -298,7 +300,7 @@ public:
     void push(std::unique_ptr<char[]>& buf)
     {
 		if (isFreezing_) throw cybozu::Exception("ConverterQueue:push:now freezing");
-		compressor_local::Engine *engine = getFreeEngine(buf);
+		Engine *engine = getFreeEngine(buf);
 		if (engine == nullptr) throw cybozu::Exception("ConverterQueue:push:engie is empty");
 		que_.push(engine);
     }
