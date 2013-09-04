@@ -14,6 +14,7 @@
 #include <queue>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <exception>
 #include <vector>
@@ -430,6 +431,262 @@ private:
         }
         done_.clear();
         return std::move(v);
+    }
+};
+
+class ThreadRunnerPool2 /* final */
+{
+private:
+    class Task
+    {
+    private:
+        uint32_t id_;
+        std::shared_ptr<Runnable> runnable_;
+    public:
+        Task() : id_(uint32_t(-1)), runnable_() {}
+        Task(uint32_t id, std::shared_ptr<Runnable> runnable)
+            : id_(id), runnable_(runnable) {}
+        Task(const Task &rhs) = delete;
+        Task(Task &&rhs) : id_(rhs.id_), runnable_(std::move(rhs.runnable_)) {}
+        Task &operator=(const Task &rhs) = delete;
+        Task &operator=(Task &&rhs) {
+            id_ = rhs.id_;
+            rhs.id_ = uint32_t(-1);
+            runnable_ = std::move(rhs.runnable_);
+            return *this;
+        }
+        uint32_t id() const { return id_; }
+        std::exception_ptr run() {
+            std::exception_ptr ep;
+            /* Execute the runnable. */
+            (*runnable_)();
+            try {
+                runnable_->get();
+            } catch (...) {
+                ep = std::current_exception();
+            }
+            return ep;
+        }
+    };
+
+    class TaskWorker : public Runnable
+    {
+    private:
+        std::list<Task> &readyQ_; /* shared */
+        std::set<uint32_t> &ready_;
+        std::set<uint32_t> &running_;
+        std::map<uint32_t, std::exception_ptr> &done_;
+        std::mutex &mutex_; /* shared */
+        std::condition_variable &cv_; /* shared */
+    public:
+        TaskWorker(std::list<Task> &readyQ, std::set<uint32_t> &ready,
+                   std::set<uint32_t> &running, std::map<uint32_t, std::exception_ptr> &done,
+                   std::mutex &mutex, std::condition_variable &cv)
+            : readyQ_(readyQ), ready_(ready)
+            , running_(running), done_(done)
+            , mutex_(mutex), cv_(cv) {}
+        void operator()() override {
+            try {
+                while (tryRunTask());
+                done();
+            } catch (...) {
+                throwErrorLater();
+            }
+        }
+    private:
+        bool tryRunTask() {
+            Task task;
+            {
+                std::lock_guard<std::mutex> lk(mutex_);
+                if (readyQ_.empty()) return false;
+                task = std::move(readyQ_.front());
+                readyQ_.pop_front();
+                __attribute__((unused)) size_t i = ready_.erase(task.id());
+                assert(i == 1);
+                __attribute__((unused)) auto pair = running_.insert(task.id());
+                assert(pair.second);
+            }
+            std::exception_ptr ep = task.run();
+            {
+                std::lock_guard<std::mutex> lk(mutex_);
+                __attribute__((unused)) size_t i = running_.erase(task.id());
+                assert(i == 1);
+                __attribute__((unused)) auto pair = done_.insert(std::make_pair(task.id(), ep));
+                assert(pair.second);
+
+                cv_.notify_all();
+            }
+            return true;
+        }
+    };
+
+    std::list<ThreadRunner> runners_;
+    std::atomic<size_t> numActiveThreads_;
+    std::list<Task> readyQ_;
+    std::set<uint32_t> ready_;
+    std::set<uint32_t> running_;
+    std::map<uint32_t, std::exception_ptr> done_;
+    size_t maxNumThreads_; /* 0 means unlimited. */
+    uint32_t id_;
+    mutable std::mutex mutex_;
+    mutable std::condition_variable cv_;
+
+public:
+    explicit ThreadRunnerPool2(size_t maxNumThreads = 0)
+        : runners_(), numActiveThreads_(0)
+        , readyQ_(), ready_(), running_(), done_()
+        , maxNumThreads_(maxNumThreads), id_(0), mutex_(), cv_() {
+    }
+    ~ThreadRunnerPool2() noexcept {
+        try {
+            cancelAll();
+            assert(readyQ_.empty());
+            assert(ready_.empty());
+            join();
+            assert(running_.empty());
+            assert(done_.empty());
+            gcThreadRunner();
+            assert(runners_.empty());
+        } catch (...) {
+        }
+    }
+    /**
+     * A new thread will start in the function.
+     */
+    uint32_t add(std::shared_ptr<Runnable> runnableP) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return addNolock(runnableP);
+    }
+    /**
+     * Try to cancel a runnable if it has not started yet.
+     * RETURN:
+     *   true if succesfully canceled.
+     */
+    bool cancel(uint32_t id) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        __attribute__((unused)) size_t n = ready_.erase(id);
+        auto it = readyQ_.begin();
+        while (it != readyQ_.end()) {
+            if (it->id() == id) {
+                readyQ_.erase(it);
+                assert(n == 1);
+                return true;
+            }
+            ++it;
+        }
+        assert(n == 0);
+        return false;
+    }
+    /**
+     * Cancel all runnables in the ready queue.
+     */
+    void cancelAll() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        assert(readyQ_.size() == ready_.size());
+        readyQ_.clear();
+        ready_.clear();
+    }
+    /**
+     * Wait for a thread done.
+     */
+    std::exception_ptr join(uint32_t id) {
+        std::unique_lock<std::mutex> lk(mutex_);
+        while (isReadyOrRunning(id)) cv_.wait(lk);
+        return waitForNolock(id);
+    }
+    /**
+     * Wait for all threads done.
+     * RETURN:
+     *   the same as gc().
+     */
+    std::vector<std::exception_ptr> join() {
+        std::unique_lock<std::mutex> lk(mutex_);
+        while (existsReadyOrRunning()) cv_.wait(lk);
+        return waitForAllNolock();
+    }
+    /**
+     * Number of pending tasks in the pool.
+     */
+    size_t size() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return readyQ_.size() + running_.size() + done_.size();
+    }
+private:
+    /**
+     * Lock must be held.
+     */
+    bool isReadyOrRunning(uint32_t id) const {
+        return ready_.find(id) != ready_.end() ||
+            running_.find(id) != running_.end();
+    }
+    /**
+     * Lock must be held.
+     */
+    bool existsReadyOrRunning() const {
+        assert(readyQ_.size() == ready_.size());
+        return !ready_.empty() || !running_.empty();
+    }
+    bool canRun() const {
+        return maxNumThreads_ == 0 || numActiveThreads_.load() < maxNumThreads_;
+    }
+    bool shouldGc() const {
+        return (maxNumThreads_ == 0 ? running_.size() : maxNumThreads_) * 2 <= runners_.size();
+    }
+    /**
+     * Make ready runnables be running.
+     * Lock must be held.
+     */
+    void makeThread() {
+        auto wp = std::make_shared<TaskWorker>(readyQ_, ready_, running_, done_, mutex_, cv_);
+        auto callback = [this]() { numActiveThreads_--; };
+        wp->setCallback(callback);
+        ThreadRunner runner(wp);
+        runner.start();
+        runners_.push_back(std::move(runner));
+        numActiveThreads_++;
+    }
+    uint32_t addNolock(std::shared_ptr<Runnable> runnableP) {
+        assert(runnableP);
+        uint32_t id = id_++;
+        readyQ_.push_back(Task(id, runnableP));
+        __attribute__((unused)) auto pair = ready_.insert(id);
+        assert(pair.second);
+        if (canRun()) {
+            if (shouldGc()) gcThreadRunner();
+            makeThread();
+        }
+        return id;
+    }
+    std::exception_ptr waitForNolock(uint32_t id) {
+        std::exception_ptr ep;
+        std::map<uint32_t, std::exception_ptr>::iterator it = done_.find(id);
+        if (it == done_.end()) return ep; /* already collected. */
+        ep = it->second;
+        done_.erase(it);
+        return ep;
+    }
+    std::vector<std::exception_ptr> waitForAllNolock() {
+        std::vector<std::exception_ptr> v;
+        for (auto &p : done_) {
+            std::exception_ptr ep = p.second;
+            if (ep) v.push_back(ep);
+        }
+        done_.clear();
+        return std::move(v);
+    }
+    /**
+     * Lock must be held.
+     */
+    void gcThreadRunner() {
+        std::list<ThreadRunner>::iterator it = runners_.begin();
+        while (it != runners_.end()) {
+            if (it->canJoin()) {
+                it->join(); /* never throw an exception that is related to tasks. */
+                it = runners_.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 };
 
