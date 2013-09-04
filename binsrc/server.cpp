@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
         }
         cybozu::Socket sock;
         ssock.accept(sock);
-        pool.add(std::make_shared<RequestWorker>(std::move(sock))).start();
+        pool.add(std::make_shared<RequestWorker>(std::move(sock)));
         pool.gc();
         LOGi("pool size %zu", pool.size());
     }
