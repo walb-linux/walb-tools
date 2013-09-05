@@ -8,12 +8,12 @@
  */
 
 #include <vector>
-#include <random>
 #include <memory>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 
+#include "random.hpp"
 #include "util.hpp"
 #include "walb_log.hpp"
 #include "memory_buffer.hpp"
@@ -66,26 +66,6 @@ private:
     const Config& config_;
     uint64_t lsid_;
 
-    class Rand
-    {
-    private:
-        std::random_device rd_;
-        std::mt19937 gen_;
-        std::uniform_int_distribution<uint32_t> dist32_;
-        std::uniform_int_distribution<uint64_t> dist64_;
-        std::poisson_distribution<uint16_t> distp_;
-    public:
-        Rand()
-            : rd_()
-            , gen_(rd_())
-            , dist32_(0, UINT32_MAX)
-            , dist64_(0, UINT64_MAX)
-            , distp_(4) {}
-
-        uint32_t get32() { return dist32_(gen_); }
-        uint64_t get64() { return dist64_(gen_); }
-        uint16_t getp() { return distp_(gen_); }
-    };
 public:
     Generator(const Config& config)
         : config_(config)
@@ -96,6 +76,7 @@ public:
     }
 private:
     using Block = std::shared_ptr<u8>;
+    using Rand = cybozu::util::Random<uint64_t>;
 
     void setUuid(Rand &rand, std::vector<u8> &uuid) {
         const size_t t = sizeof(uint64_t);

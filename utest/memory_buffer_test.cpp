@@ -1,5 +1,6 @@
 #include <map>
 #include <queue>
+#include "random.hpp"
 #include "util.hpp"
 #include "memory_buffer.hpp"
 
@@ -49,7 +50,7 @@ private:
     using Map = std::multimap<size_t, std::shared_ptr<T> >;
 
     Map m_;
-    cybozu::util::Rand<size_t> rand_;
+    cybozu::util::Random<size_t> rand_;
 
 public:
     RandomQueue() : m_(), rand_() {}
@@ -57,7 +58,7 @@ public:
     DISABLE_MOVE(RandomQueue);
 
     void push(std::shared_ptr<T> ptr) {
-        m_.insert(std::make_pair(rand_.get(), ptr));
+        m_.insert(std::make_pair(rand_(), ptr));
     }
 
     void pop() {
@@ -213,16 +214,16 @@ int main()
         size_t nr = MB / LBS;
         cybozu::util::BlockMultiAllocator<char> ba(nr, LBS, LBS);
         RandomQueue<char> q;
-        cybozu::util::Rand<size_t> rand;
+        cybozu::util::Random<size_t> rand;
         size_t total = 0;
         while (total  < nr / 2) {
-            size_t s = rand.get() % 8 + 1;
+            size_t s = rand() % 8 + 1;
             q.push(ba.alloc(s));
             total += s;
         }
         for (size_t i = 0; i < 100000; i++) {
             q.pop();
-            size_t s = rand.get() % 8 + 1;
+            size_t s = rand() % 8 + 1;
             q.push(ba.alloc(s));
         }
         q.clear();

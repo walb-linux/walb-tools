@@ -1,4 +1,5 @@
 #include "cybozu/test.hpp"
+#include "random.hpp"
 #include "util.hpp"
 
 template <typename IntType>
@@ -21,16 +22,16 @@ CYBOZU_TEST_AUTO(hex)
     uint64_t x64 = 0;
     checkHex(x64);
     checkHex(~x64);
-    cybozu::util::Rand<uint64_t> rand;
+    cybozu::util::Random<uint64_t> rand;
     for (int i = 0; i < 100; i++) {
-        checkHex(rand.get());
+        checkHex(rand());
     }
 }
 
-char randomChar(cybozu::util::Rand<uint32_t> &rand)
+char randomChar(cybozu::util::Random<uint32_t> &rand)
 {
     while (true) {
-        char c = rand.get() % 128;
+        char c = rand() % 128;
         if ('0' <= c && c <= '9') return c;
         if ('a' <= c && c <= 'z') return c;
         if ('A' <= c && c <= 'Z') return c;
@@ -38,11 +39,11 @@ char randomChar(cybozu::util::Rand<uint32_t> &rand)
     }
 }
 
-std::string randomString(cybozu::util::Rand<uint32_t> &rand, size_t min, size_t max)
+std::string randomString(cybozu::util::Random<uint32_t> &rand, size_t min, size_t max)
 {
     assert(min <= max);
     size_t plus = 0;
-    if (min < max) plus = rand.get() % (max - min);
+    if (min < max) plus = rand() % (max - min);
     std::string s;
     for (size_t i = 0; i < min + plus; i++) {
         s.push_back(randomChar(rand));
@@ -50,12 +51,12 @@ std::string randomString(cybozu::util::Rand<uint32_t> &rand, size_t min, size_t 
     return std::move(s);
 }
 
-void randomStringSplitTest(cybozu::util::Rand<uint32_t> &rand)
+void randomStringSplitTest(cybozu::util::Random<uint32_t> &rand)
 {
     std::vector<std::string> v0, v1;
     std::string s1 = randomString(rand, 0, 5);
     v1.push_back(s1);
-    size_t len = rand.get() % 10;
+    size_t len = rand() % 10;
     for (size_t i = 0; i < len; i++) {
         s1.push_back(',');
         std::string s2 = randomString(rand, 0, 5);
@@ -87,7 +88,7 @@ CYBOZU_TEST_AUTO(string)
     v1 = {""};
     CYBOZU_TEST_ASSERT(v0 == v1);
 
-    cybozu::util::Rand<uint32_t> rand;
+    cybozu::util::Random<uint32_t> rand;
     for (int i = 0; i < 100; i++) {
         randomStringSplitTest(rand);
     }

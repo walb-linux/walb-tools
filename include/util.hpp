@@ -222,39 +222,6 @@ uint64_t fromUnitIntString(const std::string &valStr)
 }
 
 /**
- * Random number generator for UIntType.
- */
-template<typename UIntType>
-class Rand
-{
-private:
-    std::random_device rd_;
-    std::mt19937 gen_;
-    std::uniform_int_distribution<UIntType> dist_;
-public:
-    Rand()
-        : rd_()
-        , gen_(rd_())
-        , dist_(0, UIntType(-1)) {}
-
-    UIntType get() {
-        return dist_(gen_);
-    }
-
-    void fill(void *data, size_t size) {
-        UIntType *p = reinterpret_cast<UIntType *>(data);
-        while (sizeof(*p) <= size) {
-            *(p++) = get();
-            size -= sizeof(*p);
-        }
-        if (0 < size) {
-            UIntType i = get();
-            ::memcpy(p, &i, size);
-        }
-    }
-};
-
-/**
  * Unit suffixes:
  *   k: 2^10
  *   m: 2^20

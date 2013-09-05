@@ -17,6 +17,7 @@
 #include "stdout_logger.hpp"
 
 #include "thread_util.hpp"
+#include "random.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
@@ -262,7 +263,7 @@ private:
 class RandomIoSpecGenerator
 {
 private:
-    cybozu::util::Rand<uint64_t> rand_;
+    cybozu::util::Random<uint64_t> rand_;
     const uint64_t offsetB_;
     const uint64_t sizeB_;
 public:
@@ -277,14 +278,14 @@ public:
     DISABLE_MOVE(RandomIoSpecGenerator);
 
     void get(uint64_t &ioAddr, unsigned int &ioBlocks) {
-        ioAddr = rand_.get() % sizeB_ + offsetB_;
+        ioAddr = rand_() % sizeB_ + offsetB_;
         uint64_t sizeB = sizeB_ - (ioAddr - offsetB_);
         assert(0 < sizeB);
         ioBlocks = 1;
         if (sizeB == 1) {
             ioBlocks = 1;
         } else {
-            ioBlocks = rand_.get() % (sizeB - 1) + 1;
+            ioBlocks = rand_() % (sizeB - 1) + 1;
         }
         assert(offsetB_ <= ioAddr);
         assert(ioAddr + ioBlocks <= offsetB_ + sizeB_);
@@ -363,7 +364,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     std::shared_ptr<char> blocks0 =
         cybozu::util::allocateBlocks<char>(
             LOGICAL_BLOCK_SIZE, bs, sizeB);
-    cybozu::util::Rand<uint64_t> rand;
+    cybozu::util::Random<uint64_t> rand;
     rand.fill(blocks0.get(), sizeB * bs);
 
     /* Prepare writer threads and run concurrently. */

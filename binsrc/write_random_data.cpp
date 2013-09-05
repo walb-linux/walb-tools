@@ -25,6 +25,7 @@
 #include "stdout_logger.hpp"
 
 #include "checksum.hpp"
+#include "random.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
 #include "io_recipe.hpp"
@@ -233,7 +234,7 @@ class RandomDataWriter
 private:
     const Config &config_;
     cybozu::util::BlockDevice bd_;
-    cybozu::util::Rand<unsigned int> randUint_;
+    cybozu::util::Random<unsigned int> randUint_;
     std::shared_ptr<char> buf_;
 
 public:
@@ -290,7 +291,7 @@ private:
     unsigned int randomUInt(unsigned int min, unsigned int max) {
         assert(min <= max);
         if (min == max) { return min; }
-        return randUint_.get() % (max - min) + min;
+        return randUint_() % (max - min) + min;
     }
 
     static std::shared_ptr<char> getBufferStatic(
@@ -311,13 +312,13 @@ private:
         unsigned int r;
         assert(0 < remaining);
         while (sizeof(r) <= remaining) {
-            r = randUint_.get();
+            r = randUint_();
             *reinterpret_cast<unsigned int *>(buf_.get() + offset) = r;
             offset += sizeof(r);
             remaining -= sizeof(r);
         }
         while (0 < remaining) {
-            r = randUint_.get();
+            r = randUint_();
             *reinterpret_cast<unsigned int *>(buf_.get() + offset) = static_cast<char>(r);
             offset++;
             remaining--;

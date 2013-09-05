@@ -8,6 +8,7 @@
 #include <random>
 #include <limits>
 #include <cassert>
+#include <cstring>
 
 #ifndef RANDOM_HPP
 #define RANDOM_HPP
@@ -34,6 +35,29 @@ public:
     IntType operator()() {
         return dist_(gen_);
     }
+
+    void fill(void *data, size_t size) {
+        IntType *p = reinterpret_cast<IntType *>(data);
+        while (sizeof(*p) <= size) {
+            *(p++) = operator()();
+            size -= sizeof(*p);
+        }
+        if (0 < size) {
+            IntType i = operator()();
+            ::memcpy(p, &i, size);
+        }
+    }
+
+    template <typename T>
+    T get() {
+        T value;
+        fill(&value, sizeof(value));
+        return value;
+    }
+
+    uint16_t get16() { return get<uint16_t>(); }
+    uint32_t get32() { return get<uint32_t>(); }
+    uint64_t get64() { return get<uint64_t>(); }
 };
 
 class XorShift128
