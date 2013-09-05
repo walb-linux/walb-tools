@@ -334,7 +334,8 @@ public:
      *   a list of meta diff to apply.
      */
     std::vector<MetaDiff> diffsToApply(uint64_t gid) {
-        return wdiffsP_->listDiff(0, gid);
+        MetaSnap oldest = getOldestSnapshot();
+        return wdiffsP_->listDiff(oldest.gid0(), gid);
     }
     /**
      * Update the base record to be dirty to start wdiffs application.
