@@ -25,7 +25,9 @@ uint32_t checksumPartial(const void *data, size_t size, uint32_t csum)
 {
     const char *p = reinterpret_cast<const char *>(data);
     while (sizeof(uint32_t) <= size) {
-        csum += *reinterpret_cast<const uint32_t *>(p);
+        uint32_t v;
+        ::memcpy(&v, p, sizeof(v));
+        csum += v;
         size -= sizeof(uint32_t);
         p += sizeof(uint32_t);
     }
