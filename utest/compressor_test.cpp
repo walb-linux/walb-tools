@@ -216,3 +216,20 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_GZIP);
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
 }
+
+struct NoConveter {
+    std::unique_ptr<char[]> convert(const char *inPackTop)
+	{
+		const size_t header = 4;
+		uint32_t len;
+		memcpy(&len, inPackTop, header);
+		std::unique_ptr<char[]> ret(new char[header + len]);
+		memcpy(ret.get(), header + len);
+		return ret;
+	}
+};
+
+CYBOZU_TSET_AUTO(ConverterQueue)
+{
+}
+
