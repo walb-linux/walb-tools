@@ -83,7 +83,8 @@ private:
         const size_t n = uuid.size() / t;
         const size_t m = uuid.size() % t;
         for (size_t i = 0; i < n; i++) {
-            *reinterpret_cast<uint64_t *>(&uuid[i * t]) = rand.get64();
+            uint64_t v = rand.get64();
+            ::memcpy(&uuid[i * t], &v, sizeof(v));
         }
         for (size_t i = 0; i < m; i++) {
             uuid[n * t + i] = static_cast<u8>(rand.get32());
@@ -133,7 +134,7 @@ private:
                         Block b = ba.alloc();
                         ::memset(b.get(), 0, pbs);
                         if (!isAllZero) {
-                            *reinterpret_cast<uint64_t *>(b.get()) = tmpLsid;
+                            ::memcpy(b.get(), &tmpLsid, sizeof(tmpLsid));
                         }
                         tmpLsid++;
                         logd.addBlock(b);
@@ -155,8 +156,9 @@ private:
             /* Write each IO data. */
             for (Block b : blocks) {
 #if 0
-                ::printf("block data %" PRIu64 "\n",
-                         *reinterpret_cast<uint64_t *>(b.get())); /* debug */
+                uint64_t v;
+                ::memcpy(&v, b.get(), sizeof(v));
+                ::printf("block data %" PRIu64 "\n", v); /* debug */
 #endif
                 fdw.write(reinterpret_cast<const char *>(b.get()), pbs);
             }

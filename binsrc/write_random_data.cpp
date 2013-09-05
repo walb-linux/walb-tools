@@ -313,18 +313,16 @@ private:
         assert(0 < remaining);
         while (sizeof(r) <= remaining) {
             r = randUint_();
-            *reinterpret_cast<unsigned int *>(buf_.get() + offset) = r;
+            ::memcpy(buf_.get() + offset, &r, sizeof(r));
             offset += sizeof(r);
             remaining -= sizeof(r);
         }
-        while (0 < remaining) {
+        if (0 < remaining) {
             r = randUint_();
-            *reinterpret_cast<unsigned int *>(buf_.get() + offset) = static_cast<char>(r);
-            offset++;
-            remaining--;
+            ::memcpy(buf_.get() + offset, &r, remaining);
+            offset += remaining;
         }
         assert(offset == config_.blockSize() * sizeB);
-        assert(remaining == 0);
     }
 };
 
