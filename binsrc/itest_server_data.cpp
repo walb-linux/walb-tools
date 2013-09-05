@@ -115,6 +115,31 @@ walb::MetaDiff createWdiffFile(
     return diff;
 }
 
+/**
+ * Create wdiff files in a server data space.
+ * @sd server data.
+ * @gid0 reference. you must set this value before calling the function.
+ *   after returned, the gid0 indicates the latest gid.
+ * @logMb log size that will be converted to a diff [MiB]
+ * @nDiffs number of diff files.
+ */
+void createWdiffFiles(walb::ServerData &sd, uint64_t &gid0, size_t logMb, size_t nDiffs)
+{
+    const uint64_t lvSizeLb = sd.getLv().sizeLb();
+    cybozu::util::Random<uint32_t> rand(1, 100);
+    uint64_t gid1 = gid0 + rand();
+    for (size_t i = 0; i < nDiffs; i++) {
+        //::printf("create wdiff start %zu\n", i); /* debug */
+        //::printf("directory: %s\n", sd.getDiffDir().str().c_str()); /* debug */
+        walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, logMb, gid0, gid1);
+        ::printf("create wdiff end %zu\n", i); /* debug */
+        diff.print(); /* debug */
+        sd.add(diff);
+        gid0 = gid1;
+        gid1 = gid0 + rand();
+    }
+}
+
 std::pair<std::shared_ptr<char>, size_t> reallocateBlocksIfNeed(
     std::shared_ptr<char> blk, size_t currSize, size_t newSize)
 {
@@ -148,35 +173,68 @@ std::vector<walb::MetaDiff> mergeDiffs(const std::vector<walb::MetaDiff> &v)
     return ret;
 }
 
-/**
- * @lvPath full path of logical volume.
- *   sd.getLv().path() or sd.getRestores()[gid].path().
- * @sd server data.
- * @gid target gid.
- */
-void applyDiffsToLv(const cybozu::FilePath &lvPath, walb::ServerData &sd, uint64_t gid)
+walb::MetaSnap applyDiffs(const walb::MetaSnap &snap, const std::vector<walb::MetaDiff> &diffV)
 {
-    std::vector<walb::MetaDiff> diffV = sd.diffsToApply(gid);
+    walb::MetaSnap snap0 = snap;
+    for (const walb::MetaDiff &diff : diffV) {
+        if (!snap0.canApply(diff)) {
+            throw std::runtime_error("can not apply diff");
+        }
+        snap0 = snap0.apply(diff);
+        snap0.raw().timestamp = diff.raw().timestamp;
+    }
+    return snap0;
+}
+
+void setupMerger(walb::diff::Merger &merger, const cybozu::FilePath &dirPath,
+                 const std::vector<walb::MetaDiff> &diffV)
+{
     std::vector<std::string> fpathV;
     for (const walb::MetaDiff &diff : diffV) {
-        cybozu::FilePath fpath = sd.getDiffDir() + cybozu::FilePath(walb::createDiffFileName(diff));
+        cybozu::FilePath fpath = dirPath + cybozu::FilePath(walb::createDiffFileName(diff));
         fpathV.push_back(fpath.str());
     }
-    walb::diff::Merger merger;
     merger.addWdiffs(fpathV);
     merger.setMaxIoBlocks(-1);
     merger.setShouldValidateUuid(false);
     merger.prepare();
+}
+
+/**
+ * @sd server data.
+ * @gid target gid.
+ * @isRestore.
+ */
+void applyDiffsToLv(walb::ServerData &sd, uint64_t gid, bool isRestore)
+{
+    std::vector<walb::MetaDiff> diffV = sd.diffsToApply(gid);
+    if (diffV.empty()) return;
+    walb::MetaSnap appliedSnap = applyDiffs(sd.getOldestSnapshot(), diffV);
+    if (appliedSnap.gid0() != gid) {
+        throw RT_ERR("gid is invalid: %" PRIu64 " %" PRIu64 "", gid, appliedSnap.gid0());
+    }
+
+    cybozu::FilePath lvPath;
+    if (isRestore) {
+        /* You must create the restore snapshot before. */
+        lvPath = sd.getRestores()[gid].path();
+    } else {
+        lvPath = sd.getLv().path();
+    }
+
+    walb::diff::Merger merger;
+    setupMerger(merger, sd.getDiffDir(), diffV);
 
     cybozu::util::BlockDevice bd0(lvPath.str(), O_RDWR | O_DIRECT);
     std::vector<walb::MetaDiff> mDiffV = mergeDiffs(diffV);
     if (mDiffV.size() != 1) throw std::runtime_error("bug."); /* debug */
+    walb::MetaDiff mDiff = mDiffV[0];
 
     sd.getOldestSnapshot().print();
     sd.getLatestSnapshot().print();
     for (walb::MetaDiff &diff : diffV) diff.print();
 
-    sd.startToApply(mDiffV[0]);
+    if (!isRestore) sd.startToApply(mDiff);
     std::shared_ptr<char> blk;
     size_t blkSize = (1 << 20); /* 1 MiB */
     std::tie(blk, blkSize) = reallocateBlocksIfNeed(blk, 0, blkSize);
@@ -190,15 +248,38 @@ void applyDiffsToLv(const cybozu::FilePath &lvPath, walb::ServerData &sd, uint64
         ::memcpy(blk.get(), d.io().rawData(), s);
         bd0.write(oft, s, blk.get());
     }
-    sd.finishToApply(mDiffV[0]);
-    sd.removeOldDiffs();
+    if (!isRestore) {
+        sd.finishToApply(mDiff);
+        sd.removeOldDiffs();
+    }
     ::printf("apply all wdiffs.\n"); /* debug */
     sd.getOldestSnapshot().print();
     sd.getLatestSnapshot().print();
 
     bd0.close();
+}
 
-    /* now editing */
+void consolidateWdiffs(walb::ServerData &sd)
+{
+    /* Get candidates diffs to merge. */
+    std::vector<walb::MetaDiff> cDiffV = sd.candidatesToConsolidate(0, uint64_t(-1));
+
+    /* Merge into temporary file. */
+    walb::diff::Merger merger;
+    setupMerger(merger, sd.getDiffDir(), cDiffV);
+    cybozu::TmpFile tmpFile(sd.getDiffDir().str());
+    merger.mergeToFd(tmpFile.fd());
+
+    /* Rename the merged diff file. */
+    std::vector<walb::MetaDiff> mergedV = mergeDiffs(cDiffV);
+    if (mergedV.size() != 1) throw std::runtime_error("merged size must be 1.");
+    walb::MetaDiff mDiff = mergedV[0];
+    cybozu::FilePath mDiffPath =
+        sd.getDiffDir() + cybozu::FilePath(walb::createDiffFileName(mDiff));
+    tmpFile.save(mDiffPath.str());
+
+    /* Finish consolidation */
+    sd.finishToConsolidate(mDiff);
 }
 
 void testServerData(const Option &opt)
@@ -231,41 +312,26 @@ void testServerData(const Option &opt)
     sd.getLv().print(); /* debug */
 
     /* add wdiffs. */
-    uint64_t gid0, gid1;
-    cybozu::util::Random<uint32_t> rand(1, 100);
+    uint64_t gid0;
     gid0 = sd.getLatestCleanSnapshot();
-    gid1 = gid0 + rand();
-    ::printf("gid (%" PRIu64 ", %" PRIu64")\n", gid0, gid1);
-
-    const size_t nDiffs = 10;
-    for (size_t i = 0; i < nDiffs; i++) {
-        ::printf("create wdiff start %zu\n", i); /* debug */
-        ::printf("directory: %s\n", sd.getDiffDir().str().c_str()); /* debug */
-        walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, 10, gid0, gid1);
-        ::printf("create wdiff end %zu\n", i); /* debug */
-        diff.print(); /* debug */
-        sd.add(diff);
-        gid0 = gid1;
-        gid1 = gid0 + rand();
-    }
+    ::printf("gid0 %" PRIu64 "\n", gid0);
+    const size_t logMb = 10;
+    const size_t nDiffs = 5;
+    createWdiffFiles(sd, gid0, logMb, nDiffs);
     ::printf("create wdiffs done\n"); /* debug */
     sd.getLv().print(); /* debug */
 
     /* Apply all wdiffs. */
-    applyDiffsToLv(sd.getLv().path(), sd, gid1);
+    applyDiffsToLv(sd, gid0, false);
 
     /*
      * restore
      */
 
     /* Create more wdiff files. */
-    for (size_t i = 0; i < nDiffs; i++) {
-        walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, 10, gid0, gid1);
-        diff.print(); /* debug */
-        sd.add(diff);
-        gid0 = gid1;
-        gid1 = gid0 + rand();
-    }
+    createWdiffFiles(sd, gid0, logMb, nDiffs);
+
+    /* Create a snapshot as a restore volume. */
     uint64_t rGid = sd.getLatestCleanSnapshot();
     if (!sd.canRestore(rGid)) throw std::runtime_error("can not restore.");
     if (!sd.restore(rGid)) throw std::runtime_error("restore volume creation failed.");
@@ -274,51 +340,23 @@ void testServerData(const Option &opt)
     for (auto &p : rMap) p.second.print();
 
     /* Apply diffs to the restored lv. */
-    applyDiffsToLv(rMap[rGid].path(), sd, rGid);
+    applyDiffsToLv(sd, rGid, true);
+
+    /* Drop restore volume. */
+    {
+        bool ret = sd.drop(rGid);
+        if (!ret) throw std::runtime_error("drop restore volume failed.");
+    }
 
     /*
      * consolidate
      */
-
-    /* now editing */
-
-
-#if 0
-    uint64_t gid;
-    bool ret;
-
-    assert(sd.canRestore(0));
-    gid = 0;
-    assert(sd.getRestores().empty());
-    ret = sd.restore(gid);
-    assert(ret);
-    assert(!sd.getRestores().empty());
-    assert(sd.getRestores()[0].snapName() == "r_0_" + cybozu::itoa(gid));
-    sd.drop(gid);
-
-    MetaDiff diff;
-    sd.add(diff);
-
-    /* apply */
-    std::vector<MetaDiff> diffV;
-    gid = 0;
-    diffV = diffsToApply(gid);
-    diff = walb::consolidate(diffV);
-    startToApply(diff);
-    finishToApply(diff);
-
-    /* consolidate */
-    uint64_t ts0 = 0, ts1 = -1;
-    std::vecotr<MetaDiff> v = sd.candidatesToConsolidate(ts0, ts1);
-    diff = walb::consolidate(v);
-    sd.finishToConsolidate(diff);
-
-#endif
+    sd.print();
+    consolidateWdiffs(sd);
+    sd.print();
 
     /* remove lv. */
-#if 1
     sd.getLv().remove();
-#endif
 
     /* now editing */
 }
