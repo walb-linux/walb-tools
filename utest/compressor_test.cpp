@@ -20,6 +20,8 @@ void test(walb::Compressor::Mode mode)
     CYBOZU_TEST_EQUAL(dec, in);
 }
 
+#if 0
+
 CYBOZU_TEST_AUTO(testCompressor)
 {
     test(walb::Compressor::AsIs);
@@ -217,30 +219,55 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_GZIP);
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
 }
+#endif
+
+typedef std::unique_ptr<char[]> Buffer;
+static const uint32_t headerSize = 4;
+
+size_t size(const Buffer& b)
+{
+    uint32_t len;
+    if (!b) throw cybozu::Exception("size Buffer null");
+    memcpy(&len, b.get(), headerSize);
+    return len;
+}
+
+bool compare(const Buffer& lhs, const Buffer& rhs)
+{
+    const size_t lhsSize = size(lhs);
+    const size_t rhsSize = size(rhs);
+    printf("lhsSize=%d, rhsSize=%d\n", (int)lhsSize, (int)rhsSize); fflush(stdout);
+    if (lhsSize != rhsSize) return false;
+    return memcmp(lhs.get(), rhs.get(), lhsSize) == 0;
+}
+
+static Buffer copy(const char *buf)
+{
+    uint32_t len;
+    memcpy(&len, buf, headerSize);
+    Buffer ret(new char[headerSize + len]);
+    memcpy(ret.get(), buf, headerSize + len);
+    return ret;
+}
+static std::string create(uint32_t len)
+{
+    static cybozu::XorShift rg;
+    std::string ret(headerSize + len, '0');
+    char *p = &ret[0];
+    memcpy(p, &len, headerSize);
+    p += headerSize;
+    for (uint32_t i = 0; i < len; i++) {
+        p[i] = (char)rg();
+    }
+    return ret;
+}
 
 struct NoConverter : walb::compressor::PackCompressorBase {
-    static const int headerSize = 4;
     NoConverter(int, size_t) {}
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
     std::unique_ptr<char[]> convert(const char *buf)
     {
-        uint32_t len;
-        memcpy(&len, buf, headerSize);
-        std::unique_ptr<char[]> ret(new char[headerSize + len]);
-        memcpy(ret.get(), buf, headerSize + len);
-        return ret;
-    }
-    static std::unique_ptr<char[]> init(uint32_t len)
-    {
-        static cybozu::XorShift rg;
-        std::unique_ptr<char[]> ret(new char[headerSize + len]);
-        char *p = ret.get();
-        memcpy(p, &len, headerSize);
-        p += headerSize;
-        for (uint32_t i = 0; i < len; i++) {
-            p[i] = (char)rg();
-        }
-        return ret;
+        return copy(buf);
     }
 };
 
@@ -248,11 +275,31 @@ typedef walb::ConverterQueue<NoConverter, NoConverter> ConvQ;
 
 CYBOZU_TEST_AUTO(ConverterQueue)
 {
-    const size_t maxQueueNum = 1;
+    const size_t maxQueueNum = 10;
     const size_t threadNum = 1;
     const bool doCompress = false;
     const int type = 0;
     const size_t para = 0;
-//  ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
+    ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
+    const uint32_t len = 1000;
+    const size_t bufN = 2;
+    std::vector<std::string> inData(bufN);
+    std::vector<Buffer> inBuf(bufN);
+    puts("CREATE"); fflush(stdout);
+    for (size_t i = 0; i < bufN; i++) {
+        inData[i] = create(len);
+        inBuf[i] = copy(&inData[i][0]);
+    }
+    puts("PUSH"); fflush(stdout);
+    for (size_t i = 0; i < bufN; i++) {
+        cv.push(inBuf[i]);
+    }
+    puts("POP"); fflush(stdout);
+    for (size_t i = 0; i < bufN; i++) {
+        Buffer c = cv.pop();
+        CYBOZU_TEST_EQUAL(size(c), len);
+        CYBOZU_TEST_ASSERT(memcmp(c.get(), &inData[i][0], len) == 0);
+    }
+    puts("-end-"); fflush(stdout);
 }
 
