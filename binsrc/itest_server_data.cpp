@@ -92,14 +92,14 @@ walb::log::Generator::Config generateConfig(uint64_t lvSizeLb, unsigned int outL
  */
 walb::MetaDiff createWdiffFile(
     const cybozu::FilePath &dirPath, uint64_t lvSizeLb, unsigned int outLogMb,
-    uint64_t gid0, uint64_t gid1)
+    uint64_t gid0, uint64_t gid1, bool canMerge = true)
 {
     cybozu::TmpFile tmpFile(dirPath.str());
 
     /* Generate meta diff. */
     walb::MetaDiff diff(gid0, gid1);
     diff.raw().timestamp = ::time(0);
-    diff.raw().can_merge = 1;
+    diff.raw().can_merge = canMerge ? 1 : 0;
     std::string fName = walb::createDiffFileName(diff);
     cybozu::FilePath fPath = dirPath + cybozu::FilePath(fName);
 
@@ -131,7 +131,9 @@ void createWdiffFiles(walb::ServerData &sd, uint64_t &gid0, size_t logMb, size_t
     for (size_t i = 0; i < nDiffs; i++) {
         //::printf("create wdiff start %zu\n", i); /* debug */
         //::printf("directory: %s\n", sd.getDiffDir().str().c_str()); /* debug */
-        walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, logMb, gid0, gid1);
+        bool canMerge = true;
+        if (rand() % 3 == 0) canMerge = false;
+        walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, logMb, gid0, gid1, canMerge);
         ::printf("create wdiff end %zu\n", i); /* debug */
         diff.print(); /* debug */
         sd.add(diff);
@@ -150,7 +152,8 @@ std::pair<std::shared_ptr<char>, size_t> reallocateBlocksIfNeed(
         cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, newSize), newSize);
 }
 
-std::vector<walb::MetaDiff> mergeDiffs(const std::vector<walb::MetaDiff> &v)
+std::vector<walb::MetaDiff> mergeDiffs(
+    const std::vector<walb::MetaDiff> &v, bool ignoreCanMergeFlag)
 {
     std::vector<walb::MetaDiff> ret;
     if (v.empty()) return ret;
@@ -159,13 +162,11 @@ std::vector<walb::MetaDiff> mergeDiffs(const std::vector<walb::MetaDiff> &v)
     diff.raw().timestamp = it->raw().timestamp;
     ++it;
     while (it != v.cend()) {
-        if (diff.canMerge(*it)) {
-            diff = diff.merge(*it);
-            diff.raw().timestamp = it->raw().timestamp;
+        if (diff.canMerge(*it, ignoreCanMergeFlag)) {
+            diff = diff.merge(*it, ignoreCanMergeFlag);
         } else {
             ret.push_back(diff);
             diff = *it;
-            diff.raw().timestamp = it->raw().timestamp;
         }
         ++it;
     }
@@ -181,7 +182,6 @@ walb::MetaSnap applyDiffs(const walb::MetaSnap &snap, const std::vector<walb::Me
             throw std::runtime_error("can not apply diff");
         }
         snap0 = snap0.apply(diff);
-        snap0.raw().timestamp = diff.raw().timestamp;
     }
     return snap0;
 }
@@ -226,7 +226,7 @@ void applyDiffsToLv(walb::ServerData &sd, uint64_t gid, bool isRestore)
     setupMerger(merger, sd.getDiffDir(), diffV);
 
     cybozu::util::BlockDevice bd0(lvPath.str(), O_RDWR | O_DIRECT);
-    std::vector<walb::MetaDiff> mDiffV = mergeDiffs(diffV);
+    std::vector<walb::MetaDiff> mDiffV = mergeDiffs(diffV, true);
     if (mDiffV.size() != 1) throw std::runtime_error("bug."); /* debug */
     walb::MetaDiff mDiff = mDiffV[0];
 
@@ -271,7 +271,7 @@ void consolidateWdiffs(walb::ServerData &sd)
     merger.mergeToFd(tmpFile.fd());
 
     /* Rename the merged diff file. */
-    std::vector<walb::MetaDiff> mergedV = mergeDiffs(cDiffV);
+    std::vector<walb::MetaDiff> mergedV = mergeDiffs(cDiffV, false);
     if (mergedV.size() != 1) throw std::runtime_error("merged size must be 1.");
     walb::MetaDiff mDiff = mergedV[0];
     cybozu::FilePath mDiffPath =
