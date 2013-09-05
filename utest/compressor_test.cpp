@@ -1,5 +1,6 @@
 #include "compressor.hpp"
 #include <cybozu/test.hpp>
+#include <cybozu/xorshift.hpp>
 #include "walb_diff_compressor.hpp"
 
 void test(walb::Compressor::Mode mode)
@@ -217,19 +218,41 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
 }
 
-struct NoConveter {
-    std::unique_ptr<char[]> convert(const char *inPackTop)
+struct NoConverter : walb::compressor::PackCompressorBase {
+    static const int headerSize = 4;
+    NoConverter(int, size_t) {}
+    void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
+    std::unique_ptr<char[]> convert(const char *buf)
     {
-        const size_t header = 4;
         uint32_t len;
-        memcpy(&len, inPackTop, header);
-        std::unique_ptr<char[]> ret(new char[header + len]);
-        memcpy(ret.get(), header + len);
+        memcpy(&len, buf, headerSize);
+        std::unique_ptr<char[]> ret(new char[headerSize + len]);
+        memcpy(ret.get(), buf, headerSize + len);
+        return ret;
+    }
+    static std::unique_ptr<char[]> init(uint32_t len)
+    {
+        static cybozu::XorShift rg;
+        std::unique_ptr<char[]> ret(new char[headerSize + len]);
+        char *p = ret.get();
+        memcpy(p, &len, headerSize);
+        p += headerSize;
+        for (uint32_t i = 0; i < len; i++) {
+            p[i] = (char)rg();
+        }
         return ret;
     }
 };
 
-CYBOZU_TSET_AUTO(ConverterQueue)
+typedef walb::ConverterQueue<NoConverter, NoConverter> ConvQ;
+
+CYBOZU_TEST_AUTO(ConverterQueue)
 {
+    const size_t maxQueueNum = 1;
+    const size_t threadNum = 1;
+    const bool doCompress = false;
+    const int type = 0;
+    const size_t para = 0;
+//  ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
 }
 

@@ -171,7 +171,7 @@ public:
 
 namespace compressor_local {
 
-template<class T>
+template<class Conv, class UnConv>
 struct Engine : cybozu::ThreadBase {
     Engine()
         : e_(nullptr)
@@ -212,16 +212,16 @@ struct Engine : cybozu::ThreadBase {
     {
         assert(e_ == nullptr);
         if (doCompress) {
-            e_ = new PackCompressor(type, para);
+            e_ = new Conv(type, para);
         } else {
-            e_ = new PackUncompressor(type, para);
+            e_ = new UnConv(type, para);
         }
         quit_ = quit;
         beginThread();
     }
     bool isUsing() const { return using_; }
 private:
-    T *e_;
+    compressor::PackCompressorBase *e_;
     std::atomic<bool> using_;
     std::atomic<bool> *quit_;
     cybozu::Event startEv_;
@@ -234,10 +234,10 @@ private:
 
 } // compressor_local
 
-template<class T = compressor::PackCompressorBase>
+template<class Conv = PackCompressor, class UnConv = PackUncompressor>
 class ConverterQueue {
     size_t maxQueueNum_;
-    typedef compressor_local::Engine<T> Engine;
+    typedef compressor_local::Engine<Conv, UnConv> Engine;
     std::vector<Engine> enginePool_;
     std::queue<Engine*> que_;
     std::atomic<bool> quit_;
