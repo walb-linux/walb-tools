@@ -242,6 +242,10 @@ public:
 class ThreadRunnerPool /* final */
 {
 private:
+    /**
+     * A task contains its unique id and a runnable object.
+     * Not copyable, but movable.
+     */
     class Task
     {
     private:
@@ -261,11 +265,12 @@ private:
             return *this;
         }
         uint32_t id() const { return id_; }
+        bool isValid() const { return id_ != uint32_t(-1) && runnable_; }
         std::exception_ptr run() {
+            assert(isValid());
             std::exception_ptr ep;
-            /* Execute the runnable. */
-            (*runnable_)();
             try {
+                (*runnable_)();
                 runnable_->get();
             } catch (...) {
                 ep = std::current_exception();
@@ -274,6 +279,10 @@ private:
         }
     };
 
+    /**
+     * A thread has a TaskWorker and run its operator()().
+     * A thread will run tasks until the readyQ becomes empty.
+     */
     class TaskWorker : public Runnable
     {
     private:
@@ -326,14 +335,21 @@ private:
         }
     };
 
+    /* Threads container. You must call gcThread() to collect finished threads. */
     std::list<ThreadRunner> runners_;
     std::atomic<size_t> numActiveThreads_;
-    std::list<Task> readyQ_;
-    std::set<uint32_t> ready_;
+
+    /* Task container.
+       A task will be inserted into readyQ_ and ready_ at first,
+       next, moved to running_, and moved to done_, and collected. */
+    std::list<Task> readyQ_; /* FIFO. */
+    std::set<uint32_t> ready_; /* This is for faster cancel() and waitFor(). */
     std::set<uint32_t> running_;
     std::map<uint32_t, std::exception_ptr> done_;
+
     size_t maxNumThreads_; /* 0 means unlimited. */
-    uint32_t id_;
+    uint32_t id_; /* for id generator. */
+
     mutable std::mutex mutex_;
     mutable std::condition_variable cv_;
 
@@ -351,22 +367,23 @@ public:
             waitForAll();
             assert(running_.empty());
             assert(done_.empty());
-            gcThreadRunner();
+            gcThread();
             assert(runners_.empty());
         } catch (...) {
         }
     }
     /**
-     * Add a runnable to be executed in the pool.
+     * Add a runnable task to be executed in the pool.
      */
     uint32_t add(std::shared_ptr<Runnable> runnableP) {
         std::lock_guard<std::mutex> lk(mutex_);
         return addNolock(runnableP);
     }
     /**
-     * Try to cancel a runnable if it has not started yet.
+     * Try to cancel a task if it has not started yet.
      * RETURN:
      *   true if succesfully canceled.
+     *   false if the task has already started or done.
      */
     bool cancel(uint32_t id) {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -384,7 +401,7 @@ public:
         return false;
     }
     /**
-     * Cancel all runnables in the ready queue.
+     * Cancel all tasks in the ready queue.
      */
     void cancelAll() {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -395,7 +412,7 @@ public:
     /**
      * RETURN:
      *   true if a specified task has finished
-     *   and calling waitFor() will not be blocked.
+     *   and your calling waitFor() will not be blocked.
      */
     bool finished(uint32_t id) {
         std::unique_lock<std::mutex> lk(mutex_);
@@ -413,7 +430,7 @@ public:
         return getResult(id);
     }
     /**
-     * Wait for all tasks done.
+     * Wait for the all tasks done.
      * RETURN:
      *   exception pointer list which tasks had thrown.
      */
@@ -424,7 +441,7 @@ public:
     }
     /**
      * Garbage collect of currently finished tasks.
-     * This does not effect current running tasks.
+     * This does not effect to current running tasks.
      * RETURN:
      *   the same as waitForAll().
      */
@@ -440,34 +457,23 @@ public:
         return readyQ_.size() + running_.size() + done_.size();
     }
 private:
-    /**
-     * Lock must be held.
-     */
     bool isReadyOrRunning(uint32_t id) const {
         return ready_.find(id) != ready_.end() ||
             running_.find(id) != running_.end();
     }
-    /**
-     * Lock must be held.
-     */
     bool existsReadyOrRunning() const {
         assert(readyQ_.size() == ready_.size());
         return !ready_.empty() || !running_.empty();
     }
-    bool canRun() const {
+    bool shouldMakeThread() const {
         return maxNumThreads_ == 0 || numActiveThreads_.load() < maxNumThreads_;
     }
-    bool shouldGc() const {
+    bool shouldGcThread() const {
         return (maxNumThreads_ == 0 ? running_.size() : maxNumThreads_) * 2 <= runners_.size();
     }
-    /**
-     * Make ready runnables be running.
-     * Lock must be held.
-     */
     void makeThread() {
         auto wp = std::make_shared<TaskWorker>(readyQ_, ready_, running_, done_, mutex_, cv_);
-        auto callback = [this]() { numActiveThreads_--; };
-        wp->setCallback(callback);
+        wp->setCallback([this]() { numActiveThreads_--; });
         ThreadRunner runner(wp);
         runner.start();
         runners_.push_back(std::move(runner));
@@ -476,11 +482,12 @@ private:
     uint32_t addNolock(std::shared_ptr<Runnable> runnableP) {
         assert(runnableP);
         uint32_t id = id_++;
+        if (id_ == uint32_t(-1)) id_ = 0;
         readyQ_.push_back(Task(id, runnableP));
         __attribute__((unused)) auto pair = ready_.insert(id);
         assert(pair.second);
-        if (canRun()) {
-            if (shouldGc()) gcThreadRunner();
+        if (shouldMakeThread()) {
+            if (shouldGcThread()) gcThread();
             makeThread();
         }
         return id;
@@ -488,7 +495,7 @@ private:
     std::exception_ptr getResult(uint32_t id) {
         std::exception_ptr ep;
         std::map<uint32_t, std::exception_ptr>::iterator it = done_.find(id);
-        if (it == done_.end()) return ep; /* already collected. */
+        if (it == done_.end()) return ep; /* already got or there is no task. */
         ep = it->second;
         done_.erase(it);
         return ep;
@@ -502,10 +509,7 @@ private:
         done_.clear();
         return std::move(v);
     }
-    /**
-     * Lock must be held.
-     */
-    void gcThreadRunner() {
+    void gcThread() {
         std::list<ThreadRunner>::iterator it = runners_.begin();
         while (it != runners_.end()) {
             if (it->canJoin()) {
