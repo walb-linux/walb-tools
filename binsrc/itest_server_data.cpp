@@ -148,6 +148,59 @@ std::vector<walb::MetaDiff> mergeDiffs(const std::vector<walb::MetaDiff> &v)
     return ret;
 }
 
+/**
+ * @lvPath full path of logical volume.
+ *   sd.getLv().path() or sd.getRestores()[gid].path().
+ * @sd server data.
+ * @gid target gid.
+ */
+void applyDiffsToLv(const cybozu::FilePath &lvPath, walb::ServerData &sd, uint64_t gid)
+{
+    std::vector<walb::MetaDiff> diffV = sd.diffsToApply(gid);
+    std::vector<std::string> fpathV;
+    for (const walb::MetaDiff &diff : diffV) {
+        cybozu::FilePath fpath = sd.getDiffDir() + cybozu::FilePath(walb::createDiffFileName(diff));
+        fpathV.push_back(fpath.str());
+    }
+    walb::diff::Merger merger;
+    merger.addWdiffs(fpathV);
+    merger.setMaxIoBlocks(-1);
+    merger.setShouldValidateUuid(false);
+    merger.prepare();
+
+    cybozu::util::BlockDevice bd0(lvPath.str(), O_RDWR | O_DIRECT);
+    std::vector<walb::MetaDiff> mDiffV = mergeDiffs(diffV);
+    if (mDiffV.size() != 1) throw std::runtime_error("bug."); /* debug */
+
+    sd.getOldestSnapshot().print();
+    sd.getLatestSnapshot().print();
+    for (walb::MetaDiff &diff : diffV) diff.print();
+
+    sd.startToApply(mDiffV[0]);
+    std::shared_ptr<char> blk;
+    size_t blkSize = (1 << 20); /* 1 MiB */
+    std::tie(blk, blkSize) = reallocateBlocksIfNeed(blk, 0, blkSize);
+    walb::diff::RecIo d;
+    while (merger.pop(d)) {
+        /* Apply an IO. */
+        if (!d.isValid()) throw std::runtime_error("invalid RecIo.");
+        off_t oft = d.record().ioAddress() * LOGICAL_BLOCK_SIZE;
+        size_t s = d.io().rawSize();
+        std::tie(blk, blkSize) = reallocateBlocksIfNeed(blk, blkSize, s);
+        ::memcpy(blk.get(), d.io().rawData(), s);
+        bd0.write(oft, s, blk.get());
+    }
+    sd.finishToApply(mDiffV[0]);
+    sd.removeOldDiffs();
+    ::printf("apply all wdiffs.\n"); /* debug */
+    sd.getOldestSnapshot().print();
+    sd.getLatestSnapshot().print();
+
+    bd0.close();
+
+    /* now editing */
+}
+
 void testServerData(const Option &opt)
 {
     TmpDir tmpDir("tmpdir");
@@ -199,51 +252,13 @@ void testServerData(const Option &opt)
     sd.getLv().print(); /* debug */
 
     /* Apply all wdiffs. */
-    std::vector<walb::MetaDiff> diffV = sd.diffsToApply(gid1);
-    std::vector<std::string> fpathV;
-    for (const walb::MetaDiff &diff : diffV) {
-        cybozu::FilePath fpath = sd.getDiffDir() + cybozu::FilePath(walb::createDiffFileName(diff));
-        fpathV.push_back(fpath.str());
-    }
-    walb::diff::Merger merger;
-    merger.addWdiffs(fpathV);
-    merger.setMaxIoBlocks(-1);
-    merger.setShouldValidateUuid(false);
-    merger.prepare();
-
-    cybozu::util::BlockDevice bd(sd.getLv().path().str(), O_RDWR | O_DIRECT);
-    std::vector<walb::MetaDiff> mDiffV = mergeDiffs(diffV);
-    if (mDiffV.size() != 1) throw std::runtime_error("bug.");
-
-    sd.getOldestSnapshot().print();
-    sd.getLatestSnapshot().print();
-    for (walb::MetaDiff &diff : diffV) diff.print();
-
-    sd.startToApply(mDiffV[0]);
-    std::shared_ptr<char> blk;
-    size_t blkSize = (1 << 20); /* 1 MiB */
-    std::tie(blk, blkSize) = reallocateBlocksIfNeed(blk, 0, blkSize);
-    walb::diff::RecIo d;
-    while (merger.pop(d)) {
-        /* Apply an IO. */
-        if (!d.isValid()) throw std::runtime_error("invalid RecIo.");
-        off_t oft = d.record().ioAddress() * LOGICAL_BLOCK_SIZE;
-        size_t s = d.io().rawSize();
-        std::tie(blk, blkSize) = reallocateBlocksIfNeed(blk, blkSize, s);
-        ::memcpy(blk.get(), d.io().rawData(), s);
-        bd.write(oft, s, blk.get());
-    }
-    sd.finishToApply(mDiffV[0]);
-    sd.removeOldDiffs();
-    ::printf("apply all wdiffs.\n"); /* debug */
-
-    sd.getOldestSnapshot().print();
-    sd.getLatestSnapshot().print();
-
+    applyDiffsToLv(sd.getLv().path(), sd, gid1);
 
     /*
      * restore
      */
+
+    /* Create more wdiff files. */
     for (size_t i = 0; i < nDiffs; i++) {
         walb::MetaDiff diff = createWdiffFile(sd.getDiffDir(), lvSizeLb, 10, gid0, gid1);
         diff.print(); /* debug */
@@ -251,15 +266,15 @@ void testServerData(const Option &opt)
         gid0 = gid1;
         gid1 = gid0 + rand();
     }
-    if (!sd.restore()) throw std::runtime_error("restore volume creation failed.");
+    uint64_t rGid = sd.getLatestCleanSnapshot();
+    if (!sd.canRestore(rGid)) throw std::runtime_error("can not restore.");
+    if (!sd.restore(rGid)) throw std::runtime_error("restore volume creation failed.");
     std::map<uint64_t, cybozu::lvm::Lv> rMap = sd.getRestores();
     assert(!rMap.empty());
     for (auto &p : rMap) p.second.print();
 
-    /* apply diffs to the restored lv. */
-
-    /* now editing */
-
+    /* Apply diffs to the restored lv. */
+    applyDiffsToLv(rMap[rGid].path(), sd, rGid);
 
     /*
      * consolidate
@@ -301,8 +316,9 @@ void testServerData(const Option &opt)
 #endif
 
     /* remove lv. */
-    bd.close();
+#if 1
     sd.getLv().remove();
+#endif
 
     /* now editing */
 }
