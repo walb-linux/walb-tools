@@ -162,8 +162,8 @@ public:
     uint64_t gid0() const { return raw().gid0; }
     uint64_t gid1() const { return raw().gid1; }
     uint64_t gid2() const { return raw().gid2; }
-    bool canMerge(const MetaDiff &diff) const {
-        if (!diff.raw().can_merge) return false;
+    bool canMerge(const MetaDiff &diff, bool ignoreCanMergeFlag = false) const {
+        if (!ignoreCanMergeFlag && !diff.raw().can_merge) return false;
 #if 1
         /* This is a bit more strict check. */
         return gid1() == diff.gid0() && gid1() < diff.gid1();
@@ -171,14 +171,17 @@ public:
         return gid1() < diff.gid1();
 #endif
     }
-    MetaDiff merge(const MetaDiff &diff) const {
-        assert(canMerge(diff));
+    MetaDiff merge(const MetaDiff &diff, UNUSED bool ignoreCanMergeFlag = false) const {
+        assert(canMerge(diff, ignoreCanMergeFlag));
 #if 1
-        return MetaDiff(gid0(), diff.gid1(), std::max(gid2(), diff.gid2()));
+        MetaDiff ret(gid0(), diff.gid1(), std::max(gid2(), diff.gid2()));
 #else
-        return MetaDiff(std::min(gid0(), diff.gid0()),
-                        diff.gid1(), std::max(gid2(), diff.gid2()));
+        MetaDiff ret(std::min(gid0(), diff.gid0()),
+                     diff.gid1(), std::max(gid2(), diff.gid2()));
 #endif
+        ret.raw().can_merge = raw().can_merge;
+        ret.raw().timestamp = diff.raw().timestamp;
+        return ret;
     }
     friend inline std::ostream &operator<<(std::ostream& os, const MetaDiff &d0) {
         os << d0.gid0() << ", " << d0.gid1() << ", " << d0.gid2() << std::endl;
@@ -276,7 +279,9 @@ public:
      */
     MetaSnap apply(const MetaDiff &diff) const {
         assert(canApply(diff));
-        return MetaSnap(diff.gid1(), std::max(gid1(), diff.gid2()));
+        MetaSnap ret(diff.gid1(), std::max(gid1(), diff.gid2()));
+        ret.raw().timestamp = diff.raw().timestamp;
+        return ret;
     }
     MetaSnap startToApply(const MetaDiff &diff) const {
         assert(canApply(diff));
@@ -286,7 +291,9 @@ public:
         assert(canApply(diff));
         assert(gid1() == std::max(gid1(), diff.gid2()));
         assert(diff.gid1() <= gid1());
-        return MetaSnap(diff.gid1(), gid1());
+        MetaSnap ret(diff.gid1(), gid1());
+        ret.raw().timestamp = diff.raw().timestamp;
+        return ret;
     }
     bool isTooNew(const MetaDiff &diff) const {
         return gid0() < diff.gid0();
