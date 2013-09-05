@@ -11,6 +11,7 @@
 #include <vector>
 #include <atomic>
 #include <queue>
+#include <mutex>
 #include "walb_diff.h"
 #include "checksum.hpp"
 #include "stdout_logger.hpp"
@@ -183,6 +184,10 @@ struct Engine : cybozu::ThreadBase {
     {
         delete e_;
     }
+    void wakeup()
+    {
+        startEv_.wakeup();
+    }
 
     void threadEntry()
     {
@@ -190,6 +195,7 @@ struct Engine : cybozu::ThreadBase {
         assert(quit_);
         while (!*quit_) {
             startEv_.wait();
+            if (*quit_) break;
             outBuf_ = e_->convert(inBuf_.get());
             endEv_.wakeup();
         }
@@ -238,6 +244,7 @@ template<class Conv = PackCompressor, class UnConv = PackUncompressor>
 class ConverterQueue {
     size_t maxQueueNum_;
     typedef compressor_local::Engine<Conv, UnConv> Engine;
+    std::mutex mutex_;
     std::vector<Engine> enginePool_;
     std::queue<Engine*> que_;
     std::atomic<bool> quit_;
@@ -271,9 +278,22 @@ public:
             e.init(doCompress, type, para, &quit_);
         }
     }
+    ~ConverterQueue()
+        try
+    {
+        quit();
+    } catch (std::exception& e) {
+        printf("ConverterQueue:dstr:%s\n", e.what());
+        exit(1);
+    } catch (...) {
+        printf("ConverterQueue:dstr:unknown exception\n");
+        exit(1);
+    }
     void join()
     {
+        quit_ = true;
         for (Engine& e : enginePool_) {
+            e.wakeup();
             e.joinThread();
         }
     }
@@ -294,7 +314,6 @@ public:
     void cancel()
     {
         isFreezing_ = true;
-        quit_ = true;
         join();
     }
     void push(std::unique_ptr<char[]>& buf)
@@ -302,6 +321,7 @@ public:
         if (isFreezing_) throw cybozu::Exception("ConverterQueue:push:now freezing");
         Engine *engine = getFreeEngine(buf);
         if (engine == nullptr) throw cybozu::Exception("ConverterQueue:push:engie is empty");
+//      std::lock_guard<std::mutex> lk(mutex_);
         que_.push(engine);
     }
     std::unique_ptr<char[]> pop()
