@@ -2,6 +2,7 @@
 #include <cybozu/test.hpp>
 #include <cybozu/xorshift.hpp>
 #include "walb_diff_compressor.hpp"
+#include <thread>
 
 void test(walb::Compressor::Mode mode)
 {
@@ -223,6 +224,7 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
 
 typedef std::unique_ptr<char[]> Buffer;
 static const uint32_t headerSize = 4;
+static cybozu::XorShift g_rg;
 
 size_t size(const Buffer& b)
 {
@@ -249,15 +251,15 @@ static Buffer copy(const char *buf)
     memcpy(ret.get(), buf, headerSize + len);
     return ret;
 }
-static std::string create(uint32_t len)
+static std::string create(uint32_t len, int idx)
 {
-    static cybozu::XorShift rg;
     std::string ret(headerSize + len, '0');
     char *p = &ret[0];
     memcpy(p, &len, headerSize);
     p += headerSize;
-    for (uint32_t i = 0; i < len; i++) {
-        p[i] = (char)rg();
+    p[0] = char(idx);
+    for (uint32_t i = 1; i < len; i++) {
+        p[i] = (char)g_rg();
     }
     return ret;
 }
@@ -267,6 +269,8 @@ struct NoConverter : walb::compressor::PackCompressorBase {
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
     std::unique_ptr<char[]> convert(const char *buf)
     {
+        int wait = g_rg() % 100;
+        cybozu::Sleep(wait);
         return copy(buf);
     }
 };
@@ -275,33 +279,37 @@ typedef walb::ConverterQueue<NoConverter, NoConverter> ConvQ;
 
 CYBOZU_TEST_AUTO(ConverterQueue)
 {
-    const size_t maxQueueNum = 10;
-    const size_t threadNum = 1;
+    const size_t maxQueueNum = 100;
+    const size_t threadNum = 10;
     const bool doCompress = false;
     const int type = 0;
     const size_t para = 0;
     ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
     const uint32_t len = 1000;
-    const size_t bufN = 2;
+    const size_t bufN = 1000;
     std::vector<std::string> inData(bufN);
     std::vector<Buffer> inBuf(bufN);
     puts("CREATE"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {
-        inData[i] = create(len);
+        inData[i] = create(len, i);
         inBuf[i] = copy(&inData[i][0]);
     }
     puts("PUSH"); fflush(stdout);
-    for (size_t i = 0; i < bufN; i++) {
-printf("prev push %d\n", (int)i);
-        cv.push(inBuf[i]);
-printf("done push %d\n", (int)i);
-    }
+    std::thread pusht([&] {
+        for (size_t i = 0; i < bufN; i++) {
+            cv.push(inBuf[i]);
+        }
+    });
     puts("POP"); fflush(stdout);
-    for (size_t i = 0; i < bufN; i++) {
-        Buffer c = cv.pop();
-        CYBOZU_TEST_EQUAL(size(c), len);
-        CYBOZU_TEST_ASSERT(memcmp(c.get(), &inData[i][0], len) == 0);
-    }
+    std::thread popt([&] {
+        for (size_t i = 0; i < bufN; i++) {
+            Buffer c = cv.pop();
+            CYBOZU_TEST_EQUAL(size(c), len);
+            CYBOZU_TEST_ASSERT(memcmp(c.get(), &inData[i][0], len) == 0);
+        }
+    });
+    pusht.join();
+    popt.join();
     puts("-end-"); fflush(stdout);
 }
 
