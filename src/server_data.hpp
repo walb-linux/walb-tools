@@ -378,6 +378,7 @@ public:
      * RETURN:
      *   Consolidate candidates whose average file size is the smallest.
      *   canConsolidate(returned) must be true.
+     *   {} if there is no diffs to consolidate.
      */
     std::vector<MetaDiff> candidatesToConsolidate(uint64_t ts0, uint64_t ts1) const {
         std::vector<MetaDiff> v;
@@ -411,18 +412,37 @@ public:
         }
         assert(vv.size() == avgV.size());
 
+#if 0
+        for (std::vector<MetaDiff> &v : vv) {
+            ::printf("-----begin-----\n");
+            for (MetaDiff &diff : v) {
+                diff.print();
+            }
+            ::printf("-----end-----\n");
+        }
+#endif
+
         /*
          * Choose the wdiff list whose average size is the smallest.
          */
         size_t idx = 0;
         double min = avgV[0];
-        for (size_t i = 1; i < avgV.size(); i++) {
-            if (avgV[i] < min) {
+        while (vv[idx].size() == 1 && idx < avgV.size()) {
+            idx++;
+            min = avgV[idx];
+        }
+        if (idx == avgV.size()) return {};
+        for (size_t i = idx + 1; i < avgV.size(); i++) {
+            if (1 < vv[i].size() && avgV[i] < min) {
                 idx = i;
                 min = avgV[i];
             }
         }
-        return vv[idx];
+        if (1 < vv[idx].size()) {
+            return std::move(vv[idx]);
+        } else {
+            return {};
+        }
     }
     /**
      * Finish to consolidate.

@@ -259,10 +259,19 @@ void applyDiffsToLv(walb::ServerData &sd, uint64_t gid, bool isRestore)
     bd0.close();
 }
 
-void consolidateWdiffs(walb::ServerData &sd)
+bool consolidateWdiffs(walb::ServerData &sd)
 {
     /* Get candidates diffs to merge. */
     std::vector<walb::MetaDiff> cDiffV = sd.candidatesToConsolidate(0, uint64_t(-1));
+    if (cDiffV.empty()) return false;
+
+#if 0
+    ::printf("cDiffV:\n");
+    for (walb::MetaDiff &diff : cDiffV) {
+        diff.print();
+    }
+    ::printf("cDiffV done\n");
+#endif
 
     /* Merge into temporary file. */
     walb::diff::Merger merger;
@@ -280,6 +289,7 @@ void consolidateWdiffs(walb::ServerData &sd)
 
     /* Finish consolidation */
     sd.finishToConsolidate(mDiff);
+    return true;
 }
 
 void testServerData(const Option &opt)
@@ -316,7 +326,7 @@ void testServerData(const Option &opt)
     gid0 = sd.getLatestCleanSnapshot();
     ::printf("gid0 %" PRIu64 "\n", gid0);
     const size_t logMb = 10;
-    const size_t nDiffs = 5;
+    const size_t nDiffs = 15;
     createWdiffFiles(sd, gid0, logMb, nDiffs);
     ::printf("create wdiffs done\n"); /* debug */
     sd.getLv().print(); /* debug */
@@ -331,6 +341,7 @@ void testServerData(const Option &opt)
     /* Create more wdiff files. */
     createWdiffFiles(sd, gid0, logMb, nDiffs);
 
+#if 0
     /* Create a snapshot as a restore volume. */
     uint64_t rGid = sd.getLatestCleanSnapshot();
     if (!sd.canRestore(rGid)) throw std::runtime_error("can not restore.");
@@ -347,13 +358,16 @@ void testServerData(const Option &opt)
         bool ret = sd.drop(rGid);
         if (!ret) throw std::runtime_error("drop restore volume failed.");
     }
+#endif
 
     /*
      * consolidate
      */
     sd.print();
-    consolidateWdiffs(sd);
-    sd.print();
+    while (consolidateWdiffs(sd)) {
+        ::printf("consolidate.\n");
+        sd.print();
+    }
 
     /* remove lv. */
     sd.getLv().remove();
