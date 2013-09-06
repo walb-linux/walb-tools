@@ -292,7 +292,9 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     }
     puts("PUSH"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {
+printf("prev push %d\n", (int)i);
         cv.push(inBuf[i]);
+printf("done push %d\n", (int)i);
     }
     puts("POP"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {

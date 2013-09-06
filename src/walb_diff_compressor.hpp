@@ -12,6 +12,7 @@
 #include <atomic>
 #include <queue>
 #include <mutex>
+#include <condition_variable>
 #include "walb_diff.h"
 #include "checksum.hpp"
 #include "stdout_logger.hpp"
@@ -172,49 +173,68 @@ public:
 
 namespace compressor_local {
 
+typedef std::unique_ptr<char[]> Buffer;
+
+struct Queue {
+    size_t maxQueNum_;
+    std::queue<Buffer> q_;
+    mutable std::mutex m_;
+    std::condition_variable avail_;
+    std::condition_variable full_;
+    explicit Queue(size_t maxQueNum) : maxQueNum_(maxQueNum) {}
+    Buffer *push()
+    {
+        std::unique_lock<std::mutex> lk(m_);
+        full_.wait(lk, [this] { return q_.size() < maxQueNum_; });
+        q_.push(Buffer());
+        return &q_.back();
+    }
+    void notify()
+    {
+        avail_.notify_one();
+    }
+    Buffer pop()
+    {
+        std::unique_lock<std::mutex> lk(m_);
+        avail_.wait(lk, [this] { return !this->q_.empty() && this->q_.front(); });
+        Buffer ret = std::move(q_.front());
+        q_.pop();
+        full_.notify_one();
+        return ret;
+    }
+	bool empty() const
+	{
+        std::lock_guard<std::mutex> lk(m_);
+		return q_.empty();
+	}
+};
+
 template<class Conv, class UnConv>
 struct Engine : cybozu::ThreadBase {
+private:
+    compressor::PackCompressorBase *e_;
+    std::atomic<bool> using_;
+    std::atomic<bool> *quit_;
+	Queue *que_;
+	cybozu::Event startEv_;
+	Buffer inBuf_;
+	Buffer *outBuf_;
+    Engine(const Engine&) = delete;
+    void operator=(const Engine&) = delete;
+public:
     Engine()
         : e_(nullptr)
         , using_(false)
         , quit_(nullptr)
+		, que_(nullptr)
+		, outBuf_(nullptr)
     {
     }
     ~Engine()
     {
         delete e_;
     }
-    void wakeup()
-    {
-        startEv_.wakeup();
-    }
-
-    void threadEntry()
-    {
-        assert(e_);
-        assert(quit_);
-        while (!*quit_) {
-            startEv_.wait();
-            if (*quit_) break;
-            outBuf_ = e_->convert(inBuf_.get());
-            endEv_.wakeup();
-        }
-    }
-    bool tryToRun(std::unique_ptr<char[]>& buf)
-    {
-        if (using_.exchange(true)) return false;
-        inBuf_ = std::move(buf);
-        startEv_.wakeup();
-        return true;
-    }
-    std::unique_ptr<char[]> getResult()
-    {
-        endEv_.wait();
-        std::unique_ptr<char[]> ret = std::move(outBuf_);
-        using_ = false;
-        return ret;
-    }
-    void init(bool doCompress, int type, size_t para, std::atomic<bool> *quit)
+    void init(bool doCompress, int type, size_t para, std::atomic<bool> *quit, Queue *que)
     {
         assert(e_ == nullptr);
         if (doCompress) {
@@ -223,41 +243,56 @@ struct Engine : cybozu::ThreadBase {
             e_ = new UnConv(type, para);
         }
         quit_ = quit;
+		que_ = que;
         beginThread();
     }
+    void threadEntry()
+    {
+        assert(e_);
+        assert(quit_);
+        while (!*quit_) {
+            startEv_.wait();
+            if (*quit_) break;
+			assert(inBuf_);
+            *outBuf_ = e_->convert(inBuf_.get());
+			using_ = false;
+			que_->notify();
+        }
+    }
+	void wakeup()
+	{
+		startEv_.wakeup();
+	}
+    bool tryToRun(Buffer *outBuf, Buffer& inBuf)
+    {
+        if (using_.exchange(true)) return false;
+        inBuf_ = std::move(inBuf);
+		outBuf_ = outBuf;
+        startEv_.wakeup();
+        return true;
+    }
     bool isUsing() const { return using_; }
-private:
-    compressor::PackCompressorBase *e_;
-    std::atomic<bool> using_;
-    std::atomic<bool> *quit_;
-    cybozu::Event startEv_;
-    cybozu::Event endEv_;
-    std::unique_ptr<char[]> inBuf_;
-    std::unique_ptr<char[]> outBuf_;
-    Engine(const Engine&) = delete;
-    void operator=(const Engine&) = delete;
 };
 
 } // compressor_local
 
 template<class Conv = PackCompressor, class UnConv = PackUncompressor>
 class ConverterQueue {
-    size_t maxQueueNum_;
     typedef compressor_local::Engine<Conv, UnConv> Engine;
-    std::mutex mutex_;
+	typedef compressor_local::Buffer Buffer;
+	compressor_local::Queue que_;
     std::vector<Engine> enginePool_;
-    std::queue<Engine*> que_;
     std::atomic<bool> quit_;
+    std::mutex mutex_;
     bool isFreezing_;
-    Engine *getFreeEngine(std::unique_ptr<char[]>& buf)
+    void runEngine(Buffer *outBuf, Buffer& inBuf)
     {
         while (!quit_) {
             for (Engine& e : enginePool_) {
-                if (e.tryToRun(buf)) return &e;
+                if (e.tryToRun(outBuf, inBuf)) return;
             }
             cybozu::Sleep(1);
         }
-        return nullptr;
     }
     size_t getFreeEngineNum() const
     {
@@ -269,13 +304,13 @@ class ConverterQueue {
     }
 public:
     ConverterQueue(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
-        : maxQueueNum_(maxQueueNum)
+		: que_(maxQueueNum)
         , enginePool_(threadNum)
         , quit_(false)
         , isFreezing_(false)
     {
         for (Engine& e : enginePool_) {
-            e.init(doCompress, type, para, &quit_);
+            e.init(doCompress, type, para, &quit_, &que_);
         }
     }
     ~ConverterQueue()
@@ -316,21 +351,15 @@ public:
         isFreezing_ = true;
         join();
     }
-    void push(std::unique_ptr<char[]>& buf)
+    void push(Buffer& inBuf)
     {
         if (isFreezing_) throw cybozu::Exception("ConverterQueue:push:now freezing");
-        Engine *engine = getFreeEngine(buf);
-        if (engine == nullptr) throw cybozu::Exception("ConverterQueue:push:engie is empty");
-//      std::lock_guard<std::mutex> lk(mutex_);
-        que_.push(engine);
+		Buffer *outBuf = que_.push();
+        runEngine(outBuf, inBuf);
     }
-    std::unique_ptr<char[]> pop()
+    Buffer pop()
     {
-        if (que_.empty()) throw cybozu::Exception("ConverterQueue:pop:empty");
-        Engine *engine = que_.front();
-        std::unique_ptr<char[]> ret = engine->getResult();
-        que_.pop();
-        return ret;
+		return que_.pop();
     }
 };
 
