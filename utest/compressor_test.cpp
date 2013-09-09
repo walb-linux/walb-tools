@@ -275,7 +275,7 @@ struct NoConverter : walb::compressor::PackCompressorBase {
     }
 };
 
-typedef walb::ConverterQueue<NoConverter, NoConverter> ConvQ;
+typedef walb::compressor_local::ConverterQueueT<NoConverter, NoConverter> ConvQ;
 
 CYBOZU_TEST_AUTO(ConverterQueue)
 {

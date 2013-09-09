@@ -220,7 +220,7 @@ public:
 };
 
 template<class Conv, class UnConv>
-struct Engine : cybozu::ThreadBase {
+struct EngineT : cybozu::ThreadBase {
 private:
     compressor::PackCompressorBase *e_;
     std::atomic<bool> using_;
@@ -229,10 +229,10 @@ private:
     cybozu::Event startEv_;
     Buffer inBuf_;
     MaybeBuffer *outBuf_;
-    Engine(const Engine&) = delete;
-    void operator=(const Engine&) = delete;
+    EngineT(const EngineT&) = delete;
+    void operator=(const EngineT&) = delete;
 public:
-    Engine()
+    EngineT()
         : e_(nullptr)
         , using_(false)
         , quit_(nullptr)
@@ -240,7 +240,7 @@ public:
         , outBuf_(nullptr)
     {
     }
-    ~Engine()
+    ~EngineT()
     {
         delete e_;
     }
@@ -293,16 +293,12 @@ public:
     bool isUsing() const { return using_; }
 };
 
-} // compressor_local
-
 template<class Conv = PackCompressor, class UnConv = PackUncompressor>
-class ConverterQueue {
-    typedef compressor_local::Engine<Conv, UnConv> Engine;
-    typedef compressor_local::Buffer Buffer;
-    typedef compressor_local::MaybeBuffer MaybeBuffer;
+class ConverterQueueT {
+    typedef EngineT<Conv, UnConv> Engine;
     std::atomic<bool> quit_;
     std::atomic<bool> joined_;
-    compressor_local::Queue que_;
+    Queue que_;
     std::vector<Engine> enginePool_;
     void runEngine(MaybeBuffer *outBuf, Buffer& inBuf)
     {
@@ -321,7 +317,7 @@ class ConverterQueue {
         return true;
     }
 public:
-    ConverterQueue(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
+    ConverterQueueT(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
         : quit_(false)
         , joined_(false)
         , que_(maxQueueNum)
@@ -331,7 +327,7 @@ public:
             e.init(doCompress, type, para, &quit_, &que_);
         }
     }
-    ~ConverterQueue()
+    ~ConverterQueueT()
         try
     {
         join();
@@ -371,7 +367,7 @@ public:
     bool push(Buffer& inBuf)
     {
         if (quit_) return false;
-        compressor_local::MaybeBuffer *outBuf = que_.push();
+        MaybeBuffer *outBuf = que_.push();
         runEngine(outBuf, inBuf);
         return true;
     }
@@ -385,6 +381,10 @@ public:
         return que_.pop();
     }
 };
+
+} // compressor_local
+
+typedef compressor_local::ConverterQueueT<> ConverterQueue;
 
 } //namespace walb
 
