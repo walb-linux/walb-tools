@@ -18,6 +18,8 @@
 #include "stdout_logger.hpp"
 #include <cybozu/thread.hpp>
 #include <cybozu/event.hpp>
+#include <chrono>
+#include <thread>
 
 namespace walb {
 
@@ -306,7 +308,7 @@ class ConverterQueueT {
             for (Engine& e : enginePool_) {
                 if (e.tryToRun(outBuf, inBuf)) return;
             }
-            cybozu::Sleep(1);
+            Sleep1msec();
         }
     }
     bool isFreeEngine() const
@@ -315,6 +317,10 @@ class ConverterQueueT {
             if (e.isUsing()) return false;
         }
         return true;
+    }
+    void Sleep1msec() const
+    {
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
 public:
     ConverterQueueT(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
@@ -346,10 +352,10 @@ public:
         if (joined_.exchange(true)) return;
         quit();
         while (!isFreeEngine()) {
-            cybozu::Sleep(1);
+            Sleep1msec();
         }
         while (!que_.empty()) {
-            cybozu::Sleep(1);
+            Sleep1msec();
         }
         for (Engine& e : enginePool_) {
             e.wakeup();
