@@ -175,13 +175,18 @@ namespace compressor_local {
 
 typedef std::unique_ptr<char[]> Buffer;
 
-struct Queue {
+class Queue {
     size_t maxQueNum_;
     std::queue<Buffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable full_;
+public:
     explicit Queue(size_t maxQueNum) : maxQueNum_(maxQueNum) {}
+    /*
+        allocate reserved buffer where will be stored laster and return it
+        @note lock if queue is fill
+    */
     Buffer *push()
     {
         std::unique_lock<std::mutex> lk(m_);
@@ -189,6 +194,9 @@ struct Queue {
         q_.push(Buffer());
         return &q_.back();
     }
+    /*
+        notify to pop() that buffer is released
+    */
     void notify()
     {
         avail_.notify_one();
@@ -280,11 +288,9 @@ template<class Conv = PackCompressor, class UnConv = PackUncompressor>
 class ConverterQueue {
     typedef compressor_local::Engine<Conv, UnConv> Engine;
     typedef compressor_local::Buffer Buffer;
+    std::atomic<bool> quit_;
     compressor_local::Queue que_;
     std::vector<Engine> enginePool_;
-    std::atomic<bool> quit_;
-    std::mutex mutex_;
-    bool isFreezing_;
     void runEngine(Buffer *outBuf, Buffer& inBuf)
     {
         while (!quit_) {
@@ -294,20 +300,18 @@ class ConverterQueue {
             cybozu::Sleep(1);
         }
     }
-    size_t getFreeEngineNum() const
+    bool isFreeEngine() const
     {
-        size_t n = 0;
         for (const Engine& e : enginePool_) {
-            if (!e.isUsing()) n++;
+            if (e.isUsing()) return false;
         }
-        return n;
+        return true;
     }
 public:
     ConverterQueue(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
-        : que_(maxQueueNum)
+        : quit_(false)
+        , que_(maxQueueNum)
         , enginePool_(threadNum)
-        , quit_(false)
-        , isFreezing_(false)
     {
         for (Engine& e : enginePool_) {
             e.init(doCompress, type, para, &quit_, &que_);
@@ -316,7 +320,7 @@ public:
     ~ConverterQueue()
         try
     {
-        quit();
+        join();
     } catch (std::exception& e) {
         printf("ConverterQueue:dstr:%s\n", e.what());
         exit(1);
@@ -324,41 +328,45 @@ public:
         printf("ConverterQueue:dstr:unknown exception\n");
         exit(1);
     }
+    /*
+     * join all thread
+     */
     void join()
     {
-        quit_ = true;
+        quit();
+        while (!isFreeEngine()) {
+            cybozu::Sleep(1);
+        }
+        while (!que_.empty()) {
+            cybozu::Sleep(1);
+        }
         for (Engine& e : enginePool_) {
             e.wakeup();
             e.joinThread();
         }
     }
     /*
-     * normal exit
+     * start to quit all thread
      */
-    void quit()
+    void quit() { quit_ = true; }
+    /*
+     * push buffer and return true
+     * return false if quit_
+     */
+    bool push(Buffer& inBuf)
     {
-        isFreezing_ = true;
-        while (getFreeEngineNum() < enginePool_.size()) {
-            cybozu::Sleep(1);
-        }
-        while (!que_.empty()) {
-            cybozu::Sleep(1);
-        }
-        cancel();
-    }
-    void cancel()
-    {
-        isFreezing_ = true;
-        join();
-    }
-    void push(Buffer& inBuf)
-    {
-        if (isFreezing_) throw cybozu::Exception("ConverterQueue:push:now freezing");
+        if (quit_) return false;
         Buffer *outBuf = que_.push();
         runEngine(outBuf, inBuf);
+        return true;
     }
+    /*
+     * return nullptr if quit_ and data is empty
+     * otherwise return buffer after blocking until data comes
+     */
     Buffer pop()
     {
+        if (quit_ && que_.empty()) return nullptr;
         return que_.pop();
     }
 };
