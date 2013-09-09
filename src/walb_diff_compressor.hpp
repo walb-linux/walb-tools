@@ -180,7 +180,7 @@ class Queue {
     std::queue<Buffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
-    std::condition_variable full_;
+    std::condition_variable notFull_;
 public:
     explicit Queue(size_t maxQueSize) : maxQueSize_(maxQueSize) {}
     /*
@@ -190,7 +190,7 @@ public:
     Buffer *push()
     {
         std::unique_lock<std::mutex> lk(m_);
-        full_.wait(lk, [this] { return q_.size() < maxQueSize_; });
+        notFull_.wait(lk, [this] { return q_.size() < maxQueSize_; });
         q_.push(Buffer());
         return &q_.back();
     }
@@ -207,7 +207,7 @@ public:
         avail_.wait(lk, [this] { return !this->q_.empty() && this->q_.front(); });
         Buffer ret = std::move(q_.front());
         q_.pop();
-        full_.notify_one();
+        notFull_.notify_one();
         return ret;
     }
     bool empty() const
