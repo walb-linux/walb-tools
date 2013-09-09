@@ -368,7 +368,7 @@ public:
     {
         if (quit_) return false;
         MaybeBuffer *outBuf = que_.push();
-        runEngine(outBuf, inBuf);
+        runEngine(outBuf, inBuf); // no throw
         return true;
     }
     /*
