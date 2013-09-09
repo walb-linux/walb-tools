@@ -174,10 +174,11 @@ public:
 namespace compressor_local {
 
 typedef std::unique_ptr<char[]> Buffer;
+typedef std::pair<Buffer, std::exception_ptr> MaybeBuffer;
 
 class Queue {
     size_t maxQueSize_;
-    std::queue<Buffer> q_;
+    std::queue<MaybeBuffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable notFull_;
@@ -187,11 +188,11 @@ public:
         allocate reserved buffer where will be stored laster and return it
         @note lock if queue is fill
     */
-    Buffer *push()
+    MaybeBuffer *push()
     {
         std::unique_lock<std::mutex> lk(m_);
         notFull_.wait(lk, [this] { return q_.size() < maxQueSize_; });
-        q_.push(Buffer());
+        q_.push(MaybeBuffer());
         return &q_.back();
     }
     /*
@@ -204,11 +205,12 @@ public:
     Buffer pop()
     {
         std::unique_lock<std::mutex> lk(m_);
-        avail_.wait(lk, [this] { return !this->q_.empty() && this->q_.front(); });
-        Buffer ret = std::move(q_.front());
+        avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
+        MaybeBuffer ret = std::move(q_.front());
         q_.pop();
         notFull_.notify_one();
-        return ret;
+        if (ret.second) std::rethrow_exception(ret.second);
+        return std::move(ret.first);
     }
     bool empty() const
     {
@@ -226,7 +228,7 @@ private:
     Queue *que_;
     cybozu::Event startEv_;
     Buffer inBuf_;
-    Buffer *outBuf_;
+    MaybeBuffer *outBuf_;
     Engine(const Engine&) = delete;
     void operator=(const Engine&) = delete;
 public:
@@ -255,23 +257,32 @@ public:
         beginThread();
     }
     void threadEntry()
+        try
     {
         assert(e_);
         assert(quit_);
         while (!*quit_) {
             startEv_.wait();
-            if (*quit_) break;
-            assert(inBuf_);
-            *outBuf_ = e_->convert(inBuf_.get());
+            if (inBuf_) {
+                try {
+                    outBuf_->first = e_->convert(inBuf_.get());
+                } catch (...) {
+                    outBuf_->second = std::current_exception();
+                }
+            } else {
+                outBuf_->second = std::make_exception_ptr(cybozu::Exception("compress_local::Engine::inBuf is empty"));
+            }
             using_ = false;
             que_->notify();
         }
+    } catch (std::exception& e) {
+        printf("compress_local::Engine::threadEntry %s\n", e.what());
     }
     void wakeup()
     {
         startEv_.wakeup();
     }
-    bool tryToRun(Buffer *outBuf, Buffer& inBuf)
+    bool tryToRun(MaybeBuffer *outBuf, Buffer& inBuf)
     {
         if (using_.exchange(true)) return false;
         inBuf_ = std::move(inBuf);
@@ -288,12 +299,14 @@ template<class Conv = PackCompressor, class UnConv = PackUncompressor>
 class ConverterQueue {
     typedef compressor_local::Engine<Conv, UnConv> Engine;
     typedef compressor_local::Buffer Buffer;
+    typedef compressor_local::MaybeBuffer MaybeBuffer;
     std::atomic<bool> quit_;
+    std::atomic<bool> joined_;
     compressor_local::Queue que_;
     std::vector<Engine> enginePool_;
-    void runEngine(Buffer *outBuf, Buffer& inBuf)
+    void runEngine(MaybeBuffer *outBuf, Buffer& inBuf)
     {
-        while (!quit_) {
+        for (;;) {
             for (Engine& e : enginePool_) {
                 if (e.tryToRun(outBuf, inBuf)) return;
             }
@@ -310,6 +323,7 @@ class ConverterQueue {
 public:
     ConverterQueue(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
         : quit_(false)
+        , joined_(false)
         , que_(maxQueueNum)
         , enginePool_(threadNum)
     {
@@ -333,6 +347,7 @@ public:
      */
     void join()
     {
+        if (joined_.exchange(true)) return;
         quit();
         while (!isFreeEngine()) {
             cybozu::Sleep(1);
@@ -356,7 +371,7 @@ public:
     bool push(Buffer& inBuf)
     {
         if (quit_) return false;
-        Buffer *outBuf = que_.push();
+        compressor_local::MaybeBuffer *outBuf = que_.push();
         runEngine(outBuf, inBuf);
         return true;
     }
