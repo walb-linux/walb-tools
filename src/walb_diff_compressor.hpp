@@ -176,13 +176,13 @@ namespace compressor_local {
 typedef std::unique_ptr<char[]> Buffer;
 
 class Queue {
-    size_t maxQueNum_;
+    size_t maxQueSize_;
     std::queue<Buffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable full_;
 public:
-    explicit Queue(size_t maxQueNum) : maxQueNum_(maxQueNum) {}
+    explicit Queue(size_t maxQueSize) : maxQueSize_(maxQueSize) {}
     /*
         allocate reserved buffer where will be stored laster and return it
         @note lock if queue is fill
@@ -190,7 +190,7 @@ public:
     Buffer *push()
     {
         std::unique_lock<std::mutex> lk(m_);
-        full_.wait(lk, [this] { return q_.size() < maxQueNum_; });
+        full_.wait(lk, [this] { return q_.size() < maxQueSize_; });
         q_.push(Buffer());
         return &q_.back();
     }
