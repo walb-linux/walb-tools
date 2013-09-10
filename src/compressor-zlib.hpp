@@ -5,7 +5,7 @@
 struct CompressorZlib : walb::compressor_local::CompressorIF {
     size_t compressionLevel_;
     CompressorZlib(size_t compressionLevel)
-        : compressionLevel_(compressionLevel_ == 0 ? Z_DEFAULT_COMPRESSION : compressionLevel_)
+        : compressionLevel_(compressionLevel == 0 ? Z_DEFAULT_COMPRESSION : compressionLevel)
     {
         if (compressionLevel > 9) throw cybozu::Exception("CompressorZlib:bad compressionLevel") << compressionLevel;
     }
