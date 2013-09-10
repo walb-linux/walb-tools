@@ -76,7 +76,11 @@ std::vector<std::vector<char> > generateRawPacks()
 
     auto addIo = [&](const struct walb_diff_record &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
+#if 0
         if (10 <= packh.nRecords() || !packh.add(rec)) {
+#else
+        if (!packh.add(rec)) {
+#endif
             //::printf("packh.nRecords: %u\n", packh.nRecords()); /* debug */
             //printPackRaw(&packRaw[0]); /* debug */
             packh.updateChecksum();

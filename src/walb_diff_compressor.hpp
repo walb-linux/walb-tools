@@ -228,7 +228,6 @@ struct EngineT : cybozu::ThreadBase {
 private:
     compressor::PackCompressorBase *e_;
     std::atomic<bool> using_;
-    std::atomic<bool> *quit_;
     Queue *que_;
     cybozu::Event startEv_;
     Buffer inBuf_;
@@ -239,7 +238,6 @@ public:
     EngineT()
         : e_(nullptr)
         , using_(false)
-        , quit_(nullptr)
         , que_(nullptr)
         , outBuf_(nullptr)
     {
@@ -248,7 +246,7 @@ public:
     {
         delete e_;
     }
-    void init(bool doCompress, int type, size_t para, std::atomic<bool> *quit, Queue *que)
+    void init(bool doCompress, int type, size_t para, Queue *que)
     {
         assert(e_ == nullptr);
         if (doCompress) {
@@ -256,7 +254,6 @@ public:
         } else {
             e_ = new UnConv(type, para);
         }
-        quit_ = quit;
         que_ = que;
         beginThread();
     }
@@ -264,18 +261,16 @@ public:
         try
     {
         assert(e_);
-        assert(quit_);
-        while (!*quit_) {
+        for (;;) {
             startEv_.wait();
-            if (inBuf_) {
-                try {
-                    outBuf_->first = e_->convert(inBuf_.get());
-                } catch (...) {
-                    outBuf_->second = std::current_exception();
-                }
-            } else {
-                outBuf_->second = std::make_exception_ptr(cybozu::Exception("compress_local::Engine::inBuf is empty"));
+            if (!inBuf_ && !outBuf_) break;
+            try {
+                outBuf_->first = e_->convert(inBuf_.get());
+            } catch (...) {
+                outBuf_->second = std::current_exception();
             }
+            inBuf_.reset();
+            outBuf_ = nullptr;
             using_ = false;
             que_->notify();
         }
@@ -332,7 +327,7 @@ public:
         , enginePool_(threadNum)
     {
         for (Engine& e : enginePool_) {
-            e.init(doCompress, type, para, &quit_, &que_);
+            e.init(doCompress, type, para, &que_);
         }
     }
     ~ConverterQueueT()
