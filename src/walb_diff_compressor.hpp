@@ -153,7 +153,9 @@ public:
             if (inSize > maxOutSize) throw cybozu::Exception("PackUncompressor:convertRecord:small maxOutSize") << inSize << maxOutSize;
             ::memcpy(out, in, inSize);
             return;
-        }
+        } else if (inRecord.compression_type != type_) {
+			throw cybozu::Exception("PackUncompressor:convertRecord:type mismatch") << inRecord.compression_type << type_;
+		}
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
         outRecord.compression_type = WALB_DIFF_CMPR_NONE;
         outRecord.data_size = decSize;
