@@ -231,6 +231,7 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
 
 typedef std::unique_ptr<char[]> Buffer;
 static const uint32_t headerSize = 4;
+std::mutex g_mu;
 static cybozu::XorShift g_rg;
 
 size_t size(const Buffer& b)
@@ -265,6 +266,7 @@ static std::string create(uint32_t len, int idx)
     memcpy(p, &len, headerSize);
     p += headerSize;
     p[0] = char(idx);
+    std::lock_guard<std::mutex> lk(g_mu);
     for (uint32_t i = 1; i < len; i++) {
         p[i] = (char)g_rg();
     }
@@ -276,7 +278,9 @@ struct NoConverter : walb::compressor::PackCompressorBase {
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
     std::unique_ptr<char[]> convert(const char *buf)
     {
+        g_mu.lock();
         int wait = g_rg() % 100;
+        g_mu.unlock();
         cybozu::Sleep(wait);
         return copy(buf);
     }

@@ -208,10 +208,13 @@ public:
     }
     Buffer pop()
     {
-        std::unique_lock<std::mutex> lk(m_);
-        avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
-        MaybeBuffer ret = std::move(q_.front());
-        q_.pop();
+        MaybeBuffer ret;
+        {
+            std::unique_lock<std::mutex> lk(m_);
+            avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
+            ret = std::move(q_.front());
+            q_.pop();
+        }
         notFull_.notify_one();
         if (ret.second) std::rethrow_exception(ret.second);
         return std::move(ret.first);
