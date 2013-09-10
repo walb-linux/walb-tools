@@ -320,7 +320,7 @@ class ConverterQueueT {
     }
     void Sleep1msec() const
     {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 public:
     ConverterQueueT(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
