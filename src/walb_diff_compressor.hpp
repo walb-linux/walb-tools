@@ -277,7 +277,7 @@ public:
             } catch (...) {
                 outBuf_->second = std::current_exception();
             }
-            inBuf_.reset();
+            inBuf_ = nullptr;
             outBuf_ = nullptr;
             using_ = false;
             que_->notify();
