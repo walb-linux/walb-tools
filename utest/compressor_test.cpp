@@ -76,7 +76,7 @@ std::vector<std::vector<char> > generateRawPacks()
 
     auto addIo = [&](const struct walb_diff_record &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
-#if 0
+#if 1
         if (10 <= packh.nRecords() || !packh.add(rec)) {
 #else
         if (!packh.add(rec)) {
@@ -321,21 +321,21 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     puts("-end-"); fflush(stdout);
 }
 
-CYBOZU_TEST_AUTO(parallelCompress)
+std::vector<Buffer> parallelConverter(
+    bool isCompress, std::vector<Buffer> &&packV0,
+    size_t maxQueueSize, size_t numThreads, int type)
 {
-    std::vector<std::vector<char> > packV0 = generateRawPacks();
-
-    const size_t maxQueueSize = 8;
-    const size_t numThreads = 4;
-    const int type = ::WALB_DIFF_CMPR_SNAPPY;
-    walb::ConverterQueue cq(maxQueueSize, numThreads, true, type, 0);
+    const int level = 0;
+    walb::ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
     std::exception_ptr ep;
+    std::vector<std::unique_ptr<char []> > packV1;
 
-    std::thread popper([&cq, &ep]() {
+    std::thread popper([&cq, &ep, &packV1]() {
             try {
                 std::unique_ptr<char[]> p = cq.pop();
                 while (p) {
-                    ::printf("poped %p\n", p.get());
+                    //::printf("poped %p\n", p.get());
+                    packV1.push_back(std::move(p));
                     p = cq.pop();
                 }
             } catch (...) {
@@ -344,22 +344,59 @@ CYBOZU_TEST_AUTO(parallelCompress)
             }
         });
 
-    ::printf("number of packes: %zu\n", packV0.size()); /* debug */
-    for (std::vector<char> &v : packV0) {
-        //::printf("pack size %zu\n", v.size()); /* debug */
-        std::unique_ptr<char[]> p(new char[v.size()]);
-        ::memcpy(p.get(), &v[0], v.size());
-        bool ret = cq.push(p);
-        //::printf("push %d\n", ret); /* debug */
-        if (!ret) break;
+    //::printf("number of packes: %zu\n", packV0.size()); /* debug */
+    for (Buffer &buf : packV0) {
+        bool ret = cq.push(buf);
+        CYBOZU_TEST_ASSERT(ret);
     }
     cq.quit();
     cq.join();
     popper.join();
     if (ep) std::rethrow_exception(ep);
 
-    /* TODO:
-     * (1) uncompress.
-     * (2) verify the converted data.
-     */
+    return std::move(packV1);
+}
+
+std::vector<Buffer> parallelCompress(
+    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
+{
+    return parallelConverter(true, std::move(packV), maxQueueSize, numThreads, type);
+}
+
+std::vector<Buffer> parallelUncompress(
+    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
+{
+    return parallelConverter(false, std::move(packV), maxQueueSize, numThreads, type);
+}
+
+void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
+{
+    std::vector<std::vector<char> > packV = generateRawPacks();
+
+    /* Convert pack representation. */
+    std::vector<Buffer> packV0;
+    for (std::vector<char> &v : packV) {
+        Buffer p(new char [v.size()]);
+        ::memcpy(p.get(), &v[0], v.size());
+        packV0.push_back(std::move(p));
+    }
+
+    std::vector<Buffer> packV1 =
+        parallelCompress(std::move(packV0), maxQueueSize, numThreads, type);
+
+    std::vector<Buffer> packV2 =
+        parallelUncompress(std::move(packV1), maxQueueSize, numThreads, type);
+
+    /* Verify */
+    CYBOZU_TEST_EQUAL(packV.size(), packV2.size());
+    for (size_t i = 0; i < packV.size(); i++) {
+        CYBOZU_TEST_ASSERT(::memcmp(&packV[i][0], packV2[i].get(), packV[i].size()) == 0);
+    }
+}
+
+CYBOZU_TEST_AUTO(parallelCompress)
+{
+    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_SNAPPY);
+    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_GZIP);
+    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZMA);
 }
