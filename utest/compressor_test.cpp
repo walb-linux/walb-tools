@@ -2,7 +2,6 @@
 #include <cybozu/test.hpp>
 #include <cybozu/xorshift.hpp>
 #include "walb_diff_compressor.hpp"
-#include <thread>
 
 void test(walb::Compressor::Mode mode)
 {

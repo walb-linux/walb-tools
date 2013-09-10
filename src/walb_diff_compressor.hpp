@@ -6,20 +6,20 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include "compressor.hpp"
 #include <memory>
 #include <vector>
 #include <atomic>
 #include <queue>
 #include <mutex>
-#include <condition_variable>
-#include "walb_diff.h"
-#include "checksum.hpp"
-#include "stdout_logger.hpp"
-#include <cybozu/thread.hpp>
-#include <cybozu/event.hpp>
 #include <chrono>
 #include <thread>
+#include <condition_variable>
+#include <cybozu/thread.hpp>
+#include <cybozu/event.hpp>
+#include "walb_diff.h"
+#include "compressor.hpp"
+#include "checksum.hpp"
+#include "stdout_logger.hpp"
 
 namespace walb {
 
@@ -154,8 +154,8 @@ public:
             ::memcpy(out, in, inSize);
             return;
         } else if (inRecord.compression_type != type_) {
-			throw cybozu::Exception("PackUncompressor:convertRecord:type mismatch") << inRecord.compression_type << type_;
-		}
+            throw cybozu::Exception("PackUncompressor:convertRecord:type mismatch") << inRecord.compression_type << type_;
+        }
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
         outRecord.compression_type = WALB_DIFF_CMPR_NONE;
         outRecord.data_size = decSize;
