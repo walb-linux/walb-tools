@@ -6,20 +6,20 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include "compressor.hpp"
 #include <memory>
 #include <vector>
 #include <atomic>
 #include <queue>
 #include <mutex>
-#include <condition_variable>
-#include "walb_diff.h"
-#include "checksum.hpp"
-#include "stdout_logger.hpp"
-#include <cybozu/thread.hpp>
-#include <cybozu/event.hpp>
 #include <chrono>
 #include <thread>
+#include <condition_variable>
+#include <cybozu/thread.hpp>
+#include <cybozu/event.hpp>
+#include "walb_diff.h"
+#include "compressor.hpp"
+#include "checksum.hpp"
+#include "stdout_logger.hpp"
 
 namespace walb {
 
@@ -154,8 +154,8 @@ public:
             ::memcpy(out, in, inSize);
             return;
         } else if (inRecord.compression_type != type_) {
-			throw cybozu::Exception("PackUncompressor:convertRecord:type mismatch") << inRecord.compression_type << type_;
-		}
+            throw cybozu::Exception("PackUncompressor:convertRecord:type mismatch") << inRecord.compression_type << type_;
+        }
         size_t decSize = d_.run(out, maxOutSize, in, inSize);
         outRecord.compression_type = WALB_DIFF_CMPR_NONE;
         outRecord.data_size = decSize;
@@ -208,10 +208,13 @@ public:
     }
     Buffer pop()
     {
-        std::unique_lock<std::mutex> lk(m_);
-        avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
-        MaybeBuffer ret = std::move(q_.front());
-        q_.pop();
+        MaybeBuffer ret;
+        {
+            std::unique_lock<std::mutex> lk(m_);
+            avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
+            ret = std::move(q_.front());
+            q_.pop();
+        }
         notFull_.notify_one();
         if (ret.second) std::rethrow_exception(ret.second);
         return std::move(ret.first);
@@ -274,7 +277,7 @@ public:
             } catch (...) {
                 outBuf_->second = std::current_exception();
             }
-            inBuf_.reset();
+            inBuf_ = nullptr;
             outBuf_ = nullptr;
             using_ = false;
             que_->notify();

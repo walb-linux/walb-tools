@@ -123,7 +123,7 @@ public:
     /**
      * Set a callback function which will be called at end.
      */
-    void setCallback(std::function<void()> f) {
+    void setCallback(const std::function<void()>& f) {
         callback_ = f;
     }
 };
@@ -139,7 +139,7 @@ private:
     std::shared_ptr<std::thread> threadP_;
 
 public:
-    explicit ThreadRunner(std::shared_ptr<Runnable> runnableP)
+    explicit ThreadRunner(const std::shared_ptr<Runnable>& runnableP)
         : runnableP_(runnableP)
         , threadP_() {}
     ThreadRunner(const ThreadRunner &rhs) = delete;
@@ -201,7 +201,7 @@ public:
         v_.push_back(std::move(runner));
     }
 
-    void add(std::shared_ptr<Runnable> runnableP) {
+    void add(const std::shared_ptr<Runnable>& runnableP) {
         v_.push_back(ThreadRunner(runnableP));
     }
 
@@ -253,7 +253,7 @@ private:
         std::shared_ptr<Runnable> runnable_;
     public:
         Task() : id_(uint32_t(-1)), runnable_() {}
-        Task(uint32_t id, std::shared_ptr<Runnable> runnable)
+        Task(uint32_t id, const std::shared_ptr<Runnable>& runnable)
             : id_(id), runnable_(runnable) {}
         Task(const Task &rhs) = delete;
         Task(Task &&rhs) : id_(rhs.id_), runnable_(std::move(rhs.runnable_)) {}
@@ -375,7 +375,7 @@ public:
     /**
      * Add a runnable task to be executed in the pool.
      */
-    uint32_t add(std::shared_ptr<Runnable> runnableP) {
+    uint32_t add(const std::shared_ptr<Runnable>& runnableP) {
         std::lock_guard<std::mutex> lk(mutex_);
         return addNolock(runnableP);
     }
@@ -479,7 +479,7 @@ private:
         runners_.push_back(std::move(runner));
         numActiveThreads_++;
     }
-    uint32_t addNolock(std::shared_ptr<Runnable> runnableP) {
+    uint32_t addNolock(const std::shared_ptr<Runnable>& runnableP) {
         assert(runnableP);
         uint32_t id = id_++;
         if (id_ == uint32_t(-1)) id_ = 0;
@@ -569,7 +569,7 @@ public:
     BoundedQueue& operator=(const BoundedQueue &rhs) = delete;
     ~BoundedQueue() noexcept {}
 
-    void push(T t) {
+    void push(const T& t) {
         lock lk(mutex_);
         checkError();
         if (closed_) { throw ClosedError(); }
