@@ -263,7 +263,12 @@ public:
         assert(e_);
         for (;;) {
             startEv_.wait();
-            if (!inBuf_ && !outBuf_) break;
+            /*
+             * case 1 (process task): set inBuf_ and outBuf_ and wakeup().
+             * case 2 (quit): just call wakeup() wihtout setting inBuf_ and outBuf_.
+             */
+            if (!inBuf_) break;
+            assert(outBuf_);
             try {
                 outBuf_->first = e_->convert(inBuf_.get());
             } catch (...) {
