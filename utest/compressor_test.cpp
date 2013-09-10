@@ -21,8 +21,6 @@ void test(walb::Compressor::Mode mode)
     CYBOZU_TEST_EQUAL(dec, in);
 }
 
-#if 0
-
 CYBOZU_TEST_AUTO(testCompressor)
 {
     test(walb::Compressor::AsIs);
@@ -65,11 +63,8 @@ void printPackRaw(char *packRaw)
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
 }
 
-void testDiffCompression(int type)
+std::vector<std::vector<char> > generateRawPacks()
 {
-    walb::PackCompressor compr(type);
-    walb::PackUncompressor ucompr(type);
-
     walb::log::Generator::Config cfg = createConfig();
     walb::diff::Generator g(cfg);
     g.generate();
@@ -81,7 +76,7 @@ void testDiffCompression(int type)
 
     auto addIo = [&](const struct walb_diff_record &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
-        if (!packh.add(rec)) {
+        if (10 <= packh.nRecords() || !packh.add(rec)) {
             //::printf("packh.nRecords: %u\n", packh.nRecords()); /* debug */
             //printPackRaw(&packRaw[0]); /* debug */
             packh.updateChecksum();
@@ -145,6 +140,16 @@ void testDiffCompression(int type)
     }
     ::printf("-------------------------------\n");
 #endif
+
+    return std::move(packV0);
+}
+
+void testDiffCompression(int type)
+{
+    walb::PackCompressor compr(type);
+    walb::PackUncompressor ucompr(type);
+
+    std::vector<std::vector<char> > packV0 = generateRawPacks();
 
     /* Compress packs */
     //::printf("---COMPRESS-------------------------------------\n");
@@ -220,7 +225,6 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_GZIP);
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
 }
-#endif
 
 typedef std::unique_ptr<char[]> Buffer;
 static const uint32_t headerSize = 4;
@@ -313,3 +317,45 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     puts("-end-"); fflush(stdout);
 }
 
+CYBOZU_TEST_AUTO(parallelCompress)
+{
+    std::vector<std::vector<char> > packV0 = generateRawPacks();
+
+    const size_t maxQueueSize = 8;
+    const size_t numThreads = 4;
+    const int type = ::WALB_DIFF_CMPR_SNAPPY;
+    walb::ConverterQueue cq(maxQueueSize, numThreads, true, type, 0);
+    std::exception_ptr ep;
+
+    std::thread popper([&cq, &ep]() {
+            try {
+                std::unique_ptr<char[]> p = cq.pop();
+                while (p) {
+                    ::printf("poped %p\n", p.get());
+                    p = cq.pop();
+                }
+            } catch (...) {
+                ::printf("caught error\n"); /* debug */
+                ep = std::current_exception();
+            }
+        });
+
+    ::printf("number of packes: %zu\n", packV0.size()); /* debug */
+    for (std::vector<char> &v : packV0) {
+        //::printf("pack size %zu\n", v.size()); /* debug */
+        std::unique_ptr<char[]> p(new char[v.size()]);
+        ::memcpy(p.get(), &v[0], v.size());
+        bool ret = cq.push(p);
+        //::printf("push %d\n", ret); /* debug */
+        if (!ret) break;
+    }
+    cq.quit();
+    cq.join();
+    popper.join();
+    if (ep) std::rethrow_exception(ep);
+
+    /* TODO:
+     * (1) uncompress.
+     * (2) verify the converted data.
+     */
+}
