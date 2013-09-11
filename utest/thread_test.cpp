@@ -66,3 +66,40 @@ CYBOZU_TEST_AUTO(fixedPoolCancel)
     pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }
+
+struct FailWorker : public cybozu::thread::Runnable
+{
+    int i_;
+    size_t sleepMs_;
+    FailWorker(int i, size_t sleepMs) : i_(i), sleepMs_(sleepMs) {}
+    void operator()() override {
+        try {
+            ::printf("start %d\n", i_);
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs_));
+            ::printf("done %d\n", i_);
+            throw std::runtime_error("error exception for test.");
+            done();
+        } catch (...) {
+            throwErrorLater();
+        }
+    }
+};
+
+CYBOZU_TEST_AUTO(poolWithFailWorker)
+{
+    cybozu::thread::ThreadRunnerPool pool;
+    std::vector<uint32_t> v;
+    cybozu::util::Random<uint32_t> rand(100, 300);
+    for (int i = 0; i < 10; i++) {
+        uint32_t id = pool.add(std::make_shared<FailWorker>(i, rand()));
+        pool.gc();
+        v.push_back(id);
+    }
+    for (uint32_t id : v) {
+        std::exception_ptr ep = pool.waitFor(id);
+        CYBOZU_TEST_ASSERT(ep);
+    }
+    CYBOZU_TEST_ASSERT(pool.size() == 0);
+    pool.waitForAll();
+    CYBOZU_TEST_ASSERT(pool.size() == 0);
+}
