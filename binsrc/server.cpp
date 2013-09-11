@@ -8,13 +8,16 @@
 #include <cstdio>
 #include <chrono>
 #include <thread>
+#include <string>
 
 #include "sys_logger.hpp"
 
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
+#include "cybozu/serializer.hpp"
 #include "cybozu/option.hpp"
 #include "file_path.hpp"
+#include "protocol.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -28,9 +31,11 @@ class RequestWorker : public cybozu::thread::Runnable
 {
 private:
     cybozu::Socket sock_;
+    std::string serverId_;
 public:
-    explicit RequestWorker(cybozu::Socket &&sock)
-        : sock_(sock) /* sock will be invalid. */ {
+    RequestWorker(cybozu::Socket &&sock, const std::string &serverId)
+        : sock_(std::move(sock))
+        , serverId_(serverId) {
     }
     void operator()() noexcept override {
         try {
@@ -39,15 +44,28 @@ public:
         } catch (...) {
             throwErrorLater();
         }
+        sock_.close();
     }
+#if 0
     void run() {
-        uint32_t i;
-        sock_.read(&i, sizeof(i));
-        LOGd("recv %u", i);
-        i++;
-        sock_.write(&i, sizeof(i));
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        uint32_t val;
+        sock_.read(&val, sizeof(val));
+        ::printf("val %" PRIu64 "\n", val);
+        val++;
+        sock_.write(&val, sizeof(val));
     }
+#else
+    void run() {
+        throw std::runtime_error("error test.");
+        //::printf("run start\n"); /* debug */
+        bool ret = walb::runProtocolAsServer(sock_, serverId_);
+        if (!ret) {
+            //::printf("runProtocolAsServer failed.\n");
+            throw std::runtime_error("runProtocolAsServer failed.");
+        }
+        //::printf("run end\n"); /* debug */
+    }
+#endif
 };
 
 struct Option : cybozu::Option
@@ -87,6 +105,7 @@ int main(int argc, char *argv[])
 
     cybozu::Socket ssock;
     ssock.bind(opt.port);
+    std::string serverId("server0"); /* debug */
 
     cybozu::thread::ThreadRunnerPool pool;
     while (true) {
@@ -94,7 +113,7 @@ int main(int argc, char *argv[])
         }
         cybozu::Socket sock;
         ssock.accept(sock);
-        pool.add(std::make_shared<RequestWorker>(std::move(sock)));
+        pool.add(std::make_shared<RequestWorker>(std::move(sock), serverId));
         pool.gc();
         LOGi("pool size %zu", pool.size());
     }
