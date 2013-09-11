@@ -64,17 +64,18 @@ protected:
     std::atomic<bool> isEnd_;
     std::function<void()> callback_;
 
-    void throwErrorLater(std::exception_ptr p) {
+    void throwErrorLater(std::exception_ptr p) noexcept {
         if (isEnd_) { return; }
+        assert(p);
         promise_.set_exception(p);
         isEnd_.store(true);
-        callback_();
+        if (callback_) callback_();
     }
 
     /**
      * Call this in a catch clause.
      */
-    void throwErrorLater() {
+    void throwErrorLater() noexcept {
         throwErrorLater(std::current_exception());
     }
 
@@ -82,7 +83,7 @@ protected:
         if (isEnd_.load()) { return; }
         promise_.set_value();
         isEnd_.store(true);
-        callback_();
+        if (callback_) callback_();
     }
 
 public:
@@ -266,7 +267,7 @@ private:
         }
         uint32_t id() const { return id_; }
         bool isValid() const { return id_ != uint32_t(-1) && runnable_; }
-        std::exception_ptr run() {
+        std::exception_ptr run() noexcept {
             assert(isValid());
             std::exception_ptr ep;
             try {
