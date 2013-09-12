@@ -21,17 +21,13 @@ try {
     uint16_t port = atoi(argv[2]);
     uint32_t val = atoi(argv[3]);
     sock.connect(addr, port);
-#if 0
-    sock.write(&val, sizeof(val));
-    sock.read(&val, sizeof(val));
-    ::printf("recv %u\n", val);
-#else
+
+    cybozu::SetLogFILE(::stderr);
+
     std::string clientId("client0");
-    bool ret = walb::runProtocolAsClient(sock, clientId, "echo");
-    if (!ret) {
-        throw std::runtime_error("runProtocolAsClient failed.");
-    }
-#endif
+    std::string s0;
+    cybozu::Time(true).toString(s0);
+    walb::runProtocolAsClient(sock, clientId, "echo", { s0 });
     return 0;
 } catch (std::exception &e) {
     ::printf("error: %s\n", e.what());

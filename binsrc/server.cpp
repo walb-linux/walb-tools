@@ -46,26 +46,9 @@ public:
         }
         sock_.close();
     }
-#if 0
     void run() {
-        uint32_t val;
-        sock_.read(&val, sizeof(val));
-        ::printf("val %" PRIu64 "\n", val);
-        val++;
-        sock_.write(&val, sizeof(val));
+        walb::runProtocolAsServer(sock_, serverId_);
     }
-#else
-    void run() {
-        throw std::runtime_error("error test.");
-        //::printf("run start\n"); /* debug */
-        bool ret = walb::runProtocolAsServer(sock_, serverId_);
-        if (!ret) {
-            //::printf("runProtocolAsServer failed.\n");
-            throw std::runtime_error("runProtocolAsServer failed.");
-        }
-        //::printf("run end\n"); /* debug */
-    }
-#endif
 };
 
 struct Option : cybozu::Option
