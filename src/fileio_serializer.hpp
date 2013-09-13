@@ -20,9 +20,6 @@ namespace cybozu {
         static inline size_t readSome(type &is, void *buf, size_t size) { \
             return is.readsome(buf, size);                              \
         }                                                               \
-        static inline void read(type &is, void *buf, size_t size) {     \
-            return is.read(buf, size);                                  \
-        }                                                               \
     }
 
 DEFINE_SERIALIZE_LOADER(util::FdOperator);

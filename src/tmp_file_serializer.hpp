@@ -21,10 +21,6 @@ struct InputStreamTag<TmpFile>
         util::FdReader fdr(is.fd());
         return fdr.readsome(buf, size);
     }
-    static inline void read(TmpFile &is, void *buf, size_t size) {
-        util::FdReader fdr(is.fd());
-        return fdr.read(buf, size);
-    }
 };
 
 template <>
