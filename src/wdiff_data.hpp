@@ -19,6 +19,7 @@
 #include "meta.hpp"
 #include "time.hpp"
 #include "stdout_logger.hpp"
+#include "fileio_serializer.hpp"
 
 #ifndef WALB_TOOLS_WDIFF_DATA_HPP
 #define WALB_TOOLS_WDIFF_DATA_HPP
