@@ -268,48 +268,57 @@ public:
     }
 
     /**
-     * Read data and fill a buffer.
+     * Read data.
      */
-    void read(off_t oft, size_t size, void *data) {
-        char *buf = reinterpret_cast<char *>(data);
-        if (deviceSize_ < oft + size) { throw EofError(); }
-        ::lseek(fd_, oft, SEEK_SET);
-        size_t s = 0;
-        while (s < size) {
-#if 0
-            ::fprintf(::stderr, "read %d %p &buf[%zu], %zu\n", fd_, &buf[s], s, size - s);
-#endif
-            ssize_t ret = ::read(fd_, &buf[s], size - s);
-            if (ret < 0) {
-                throw LibcError(errno, "read failed: ");
-            }
-            if (ret == 0) {
-                throw EofError();
-            }
-            s += ret;
+    void read(void *data, size_t size) {
+        char *p = (char *)data;
+        while (0 < size) {
+            ssize_t s = ::read(fd_, p, size);
+            if (s < 0) throw LibcError(errno, "read failed: ");
+            if (s == 0) throw EofError();
+            p += s;
+            size -= s;
         }
     }
 
     /**
-     * Write data of a buffer.
+     * Write data.
+     */
+    void write(const void *data, size_t size) {
+        const char *p = (const char *)data;
+        while (0 < size) {
+            ssize_t s = ::write(fd_, p, size);
+            if (s < 0) throw LibcError(errno, "write failed: ");
+            if (s == 0) throw EofError();
+            p += s;
+            size -= s;
+        }
+    }
+
+    /**
+     * Seek and read.
+     */
+    void read(off_t oft, size_t size, void *data) {
+        if (deviceSize_ < oft + size) throw EofError();
+        seek(oft);
+        read(data, size);
+    }
+
+    /**
+     * Seek and write.
      */
     void write(off_t oft, size_t size, const void* data) {
-        const char *buf = reinterpret_cast<const char *>(data);
-        if (deviceSize_ < oft + size) { throw EofError(); }
-        ::lseek(fd_, oft, SEEK_SET);
-        size_t s = 0;
-        while (s < size) {
-#if 0
-            ::fprintf(::stderr, "write %d %p &buf[%zu], %zu\n", fd_, &buf[s], s, size - s);
-#endif
-            ssize_t ret = ::write(fd_, &buf[s], size - s);
-            if (ret < 0) {
-                throw LibcError(errno, "write failed: ");
-            }
-            if (ret == 0) {
-                throw EofError();
-            }
-            s += ret;
+        if (deviceSize_ < oft + size) throw EofError();
+        seek(oft);
+        write(data, size);
+    }
+
+    /**
+     * lseek.
+     */
+    void seek(off_t oft) {
+        if (::lseek(fd_, oft, SEEK_SET) < 0) {
+            throw LibcError(errno, "lsddk failed: ");
         }
     }
 

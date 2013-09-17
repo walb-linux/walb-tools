@@ -139,9 +139,9 @@ public:
 class MaybeCancel : public Answer
 {
 public:
-    void cancel() { ok(); }
-    void goAhead() { ng(0, ""); }
-    bool isCanceled() { return recv(); }
+    void goAhead() { ok(); }
+    void cancel() { ng(0, ""); }
+    bool isCanceled() { return !recv(); }
 };
 
 }} //namespace walb::packet

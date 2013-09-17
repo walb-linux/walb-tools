@@ -18,8 +18,13 @@
 #include "util.hpp"
 #include "sys_logger.hpp"
 #include "serializer.hpp"
+#include "fileio.hpp"
+
+#include "server_data.hpp"
 
 namespace walb {
+
+const unsigned int LBS = 512;
 
 /**
  * Logger wrapper for protocols.
@@ -173,54 +178,46 @@ public:
     }
 };
 
-#if 1
 /**
- * Full-sync.
+ * Dirty full sync.
  */
-class FullSyncProtocol : public Protocol
+class DirtyFullSyncProtocol : public Protocol
 {
 private:
     class Data : public ProtocolData
     {
     protected:
-        std::string path_; /* for client only. */
         std::string name_;
         uint64_t sizeLb_;
         uint16_t bulkLb_;
+        uint64_t gid_;
     public:
         using ProtocolData::ProtocolData;
-        void loadParams() {
-            if (params_.size() != 4) logAndThrow("Four parameters required.");
-            path_ = params_[0];
-            name_ = params_[1];
-#if 1
-            sizeLb_ = cybozu::atoi(params_[2]);
-            bulkLb_ = cybozu::atoi(params_[3]);
-#else
-            cybozu::loadFromStr(sizeLb_, params_[2]);
-            cybozu::loadFromStr(bulkLb_, params_[3]);
-#endif
-        }
         void checkParams() const {
             if (name_.empty()) logAndThrow("name param empty.");
             if (sizeLb_ == 0) logAndThrow("sizeLb param is zero.");
             if (bulkLb_ == 0) logAndThrow("bulkLb param is zero.");
+            if (gid_ == uint64_t(-1)) logAndThrow("gid param must not be uint64_t(-1).");
         }
         void sendParams() {
             packet::Packet packet(sock_);
             packet.write(name_);
             packet.write(sizeLb_);
             packet.write(bulkLb_);
+            packet.write(gid_);
         }
         void recvParams() {
             packet::Packet packet(sock_);
             packet.read(name_);
             packet.read(sizeLb_);
             packet.read(bulkLb_);
+            packet.read(gid_);
         }
     };
     class Client : public Data
     {
+    private:
+        std::string path_;
     public:
         using Data::Data;
         void run() {
@@ -229,22 +226,81 @@ private:
             readAndSend();
         }
     private:
+        void loadParams() {
+            if (params_.size() != 5) logAndThrow("Five parameters required.");
+            path_ = params_[0];
+            name_ = params_[1];
+            uint64_t size = cybozu::util::fromUnitIntString(params_[2]);
+            sizeLb_ = size / LBS;
+            uint64_t bulk = cybozu::util::fromUnitIntString(params_[3]);
+            if ((1U << 16) * LBS <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LBS);
+            bulkLb_ = bulk / LBS;
+            gid_ = cybozu::atoi(params_[4]);
+        }
         void readAndSend() {
-            /* now editing */
+            packet::Packet packet(sock_);
+            std::vector<char> buf(bulkLb_ * LBS);
+            cybozu::util::BlockDevice bd(path_, O_RDONLY);
+
+            uint64_t remainingLb = sizeLb_;
+            while (0 < remainingLb) {
+                uint16_t lb = bulkLb_;
+                if (remainingLb < bulkLb_) lb = remainingLb;
+                size_t size = lb * LBS;
+                bd.read(&buf[0], size);
+                packet.write(lb);
+                packet.write(&buf[0], size);
+                remainingLb -= lb;
+            }
         }
     };
     class Server : public Data
     {
+    private:
+        cybozu::FilePath baseDir_;
     public:
         using Data::Data;
         void run() {
+            loadParams();
             recvParams();
-            logger_.info("fullsync %s %" PRIu64 " %u", name_.c_str(), sizeLb_, bulkLb_);
+            logger_.info("dirty-full-sync %s %" PRIu64 " %u %" PRIu64 ""
+                         , name_.c_str(), sizeLb_, bulkLb_, gid_);
             recvAndWrite();
         }
     private:
+        void loadParams() {
+            if (params_.size() != 1) logAndThrow("One parameter required.");
+            baseDir_ = cybozu::FilePath(params_[0]);
+            if (!baseDir_.stat().isDirectory()) {
+                logAndThrow("Base directory %s does not exist.", baseDir_.cStr());
+            }
+        }
         void recvAndWrite() {
-            /* now editing */
+            packet::Packet packet(sock_);
+            walb::ServerData sd(baseDir_.str(), name_);
+            sd.reset(gid_);
+            sd.createLv(sizeLb_);
+            std::string lvPath = sd.getLv().path().str();
+            cybozu::util::BlockDevice bd(lvPath, O_RDWR);
+            std::vector<char> buf(bulkLb_ * LBS);
+
+            uint16_t c = 0;
+            uint64_t remainingLb = sizeLb_;
+            while (0 < remainingLb) {
+                uint16_t lb = bulkLb_;
+                if (remainingLb < bulkLb_) lb = remainingLb;
+                size_t size = lb * LBS;
+                uint16_t lb0 = 0;
+                packet.read(lb0);
+                if (lb0 != lb) logAndThrow("received lb %u is invalid. must be %u", lb0, lb);
+                packet.read(&buf[0], size);
+                bd.write(&buf[0], size);
+                remainingLb -= lb;
+                c++;
+            }
+            logger_.info("received %" PRIu64 " packets.", c);
+            bd.fdatasync();
+            logger_.info("apply done.");
         }
     };
 
@@ -255,8 +311,8 @@ public:
      * @params using cybozu::loadFromStr() to convert.
      *   [0] :: string: full path of lv.
      *   [1] :: string: lv identifier.
-     *   [2] :: uint64_t: lv size [logical block].
-     *   [3] :: uint16_t: bulk size [logical block].
+     *   [2] :: uint64_t: lv size [byte].
+     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LBS;
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
                      const std::vector<std::string> &params) override {
@@ -274,7 +330,6 @@ public:
         server.run();
     }
 };
-#endif
 
 /**
  * Protocol factory.
@@ -302,7 +357,7 @@ private:
 
     ProtocolFactory() : map_() {
         DECLARE_PROTOCOL(echo, EchoProtocol);
-        DECLARE_PROTOCOL(fullsync, FullSyncProtocol);
+        DECLARE_PROTOCOL(dirty-full-sync, DirtyFullSyncProtocol);
         /* now editing */
     }
 #undef DECLARE_PROTOCOL
@@ -346,7 +401,7 @@ static inline void runProtocolAsClient(
  * TODO: arguments for server data.
  */
 static inline void runProtocolAsServer(
-    cybozu::Socket &sock, const std::string &serverId)
+    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr)
 {
     ::printf("runProtocolAsServer start\n"); /* debug */
     packet::Packet packet(sock);
@@ -383,7 +438,7 @@ static inline void runProtocolAsServer(
 
     logger.info("initial negociation succeeded: %s", protocolName.c_str());
     try {
-        protocol->runAsServer(sock, logger, {});
+        protocol->runAsServer(sock, logger, { baseDirStr });
     } catch (std::exception &e) {
         logger.error("[%s] runProtocolAsServer failed: %s.", e.what());
     }

@@ -19,6 +19,7 @@
 #include "file_path.hpp"
 #include "protocol.hpp"
 #include "net_util.hpp"
+#include "file_path.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -33,10 +34,13 @@ class RequestWorker : public cybozu::thread::Runnable
 private:
     cybozu::Socket sock_;
     std::string serverId_;
+    cybozu::FilePath baseDir_;
 public:
-    RequestWorker(cybozu::Socket &&sock, const std::string &serverId)
+    RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
+                  const cybozu::FilePath &baseDir)
         : sock_(std::move(sock))
-        , serverId_(serverId) {
+        , serverId_(serverId)
+        , baseDir_(baseDir) {
     }
     void operator()() noexcept override {
         try {
@@ -48,7 +52,7 @@ public:
         sock_.close();
     }
     void run() {
-        walb::runProtocolAsServer(sock_, serverId_);
+        walb::runProtocolAsServer(sock_, serverId_, baseDir_.str());
     }
 };
 
@@ -93,13 +97,25 @@ int main(int argc, char *argv[]) try
     cybozu::Socket ssock;
     ssock.bind(opt.port);
 
+    cybozu::FilePath baseDir(opt.baseDirStr);
+    if (!baseDir.stat().exists()) {
+        if (!baseDir.mkdir()) {
+            LOGe("mkdir base directory %s failed.", baseDir.cStr());
+            return 1;
+        }
+    }
+    if (!baseDir.stat(true).isDirectory()) {
+        LOGe("base directory %s is not directory.", baseDir.cStr());
+        return 1;
+    }
+
     cybozu::thread::ThreadRunnerPool pool;
     while (true) {
         while (!ssock.queryAccept()) {
         }
         cybozu::Socket sock;
         ssock.accept(sock);
-        pool.add(std::make_shared<RequestWorker>(std::move(sock), opt.serverId));
+        pool.add(std::make_shared<RequestWorker>(std::move(sock), opt.serverId, baseDir));
         pool.gc();
         LOGi("pool size %zu", pool.size());
     }
