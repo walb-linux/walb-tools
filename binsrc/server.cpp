@@ -18,6 +18,7 @@
 #include "cybozu/option.hpp"
 #include "file_path.hpp"
 #include "protocol.hpp"
+#include "net_util.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -56,21 +57,24 @@ struct Option : cybozu::Option
     uint16_t port;
     std::string baseDirStr;
     std::string logFileStr;
+    std::string serverId;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-    }
-    bool parse(int argc, char *argv[]) {
-        return cybozu::Option::parse(argc, argv);
+
+        std::string hostName = cybozu::net::getHostName();
+        appendOpt(&serverId, hostName, "id", "server identifier");
+
+        appendHelp("h");
     }
     std::string logFilePath() const {
         return (cybozu::FilePath(baseDirStr) + cybozu::FilePath(logFileStr)).str();
     }
 };
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) try
 {
     Option opt;
     if (!opt.parse(argc, argv)) {
@@ -88,7 +92,6 @@ int main(int argc, char *argv[])
 
     cybozu::Socket ssock;
     ssock.bind(opt.port);
-    std::string serverId("server0"); /* debug */
 
     cybozu::thread::ThreadRunnerPool pool;
     while (true) {
@@ -96,12 +99,15 @@ int main(int argc, char *argv[])
         }
         cybozu::Socket sock;
         ssock.accept(sock);
-        pool.add(std::make_shared<RequestWorker>(std::move(sock), serverId));
+        pool.add(std::make_shared<RequestWorker>(std::move(sock), opt.serverId));
         pool.gc();
         LOGi("pool size %zu", pool.size());
     }
     pool.waitForAll();
     return 0;
+} catch (std::exception &e) {
+    ::fprintf(::stderr, "error: %s\n", e.what());
+    return 1;
 }
 
 /* end of file */

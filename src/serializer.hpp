@@ -14,6 +14,7 @@ namespace cybozu {
 template <class T>
 void saveToStr(std::string &s, const T &t)
 {
+    s.clear();
     cybozu::StringOutputStream os(s);
     cybozu::save(os, t);
 }

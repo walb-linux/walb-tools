@@ -8,26 +8,41 @@
 #include <cstdio>
 #include <string>
 #include "cybozu/socket.hpp"
+#include "cybozu/option.hpp"
 #include "protocol.hpp"
+#include "net_util.hpp"
+
+struct Option : public cybozu::Option
+{
+    std::string addr;
+    uint16_t port;
+    std::string cmd;
+    std::vector<std::string> params;
+    std::string clientId;
+    Option() {
+        appendMust(&addr, "a", "host name or address");
+        appendMust(&port, "p", "port number");
+        appendParam(&cmd, "command", "command name");
+        appendParamVec(&params, "parameters", "command parameters");
+
+        std::string hostName = cybozu::net::getHostName();
+        appendOpt(&clientId, hostName, "id", "client identfier");
+
+        appendHelp("h");
+    }
+};
 
 int main(int argc, char *argv[])
 try {
-    cybozu::Socket sock;
-    if (argc < 4) {
-        ::printf("specify address, port, and value.\n");
-        return 1;
+    Option opt;
+    if (!opt.parse(argc, argv)) {
+        opt.usage();
+        throw std::runtime_error("option error.");
     }
-    std::string addr(argv[1]);
-    uint16_t port = atoi(argv[2]);
-    uint32_t val = atoi(argv[3]);
-    sock.connect(addr, port);
-
     cybozu::SetLogFILE(::stderr);
-
-    std::string clientId("client0");
-    std::string s0;
-    cybozu::Time(true).toString(s0);
-    walb::runProtocolAsClient(sock, clientId, "echo", { s0 });
+    cybozu::Socket sock;
+    sock.connect(opt.addr, opt.port);
+    walb::runProtocolAsClient(sock, opt.clientId, opt.cmd, opt.params);
     return 0;
 } catch (std::exception &e) {
     ::printf("error: %s\n", e.what());
