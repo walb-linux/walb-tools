@@ -13,3 +13,4 @@ tmp_file_test
 util_test
 wdiff_data_test
 worker_data_test
+hash_test
