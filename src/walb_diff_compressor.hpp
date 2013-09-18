@@ -58,8 +58,8 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
         const walb_diff_record& inRecord = inPack.record[i];
         walb_diff_record& outRecord = outPack.record[i];
 
-        assert(inRecord.flags & (1U << ::WALB_DIFF_FLAG_EXIST));
-        if (inRecord.flags & ((1U << ::WALB_DIFF_FLAG_ALLZERO) | (1U << ::WALB_DIFF_FLAG_DISCARD))) {
+        assert(inRecord.flags & WALB_DIFF_FLAG(EXIST));
+        if (inRecord.flags & (WALB_DIFF_FLAG(ALLZERO) | WALB_DIFF_FLAG(DISCARD))) {
             outRecord = inRecord;
         } else {
             conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);

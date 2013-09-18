@@ -24,7 +24,7 @@
 #ifndef WALB_DIFF_BASE_HPP
 #define WALB_DIFF_BASE_HPP
 
-static_assert(::WALB_DIFF_FLAGS_MAX <= 8, "Too many walb diff flags.");
+static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 
 namespace walb {
@@ -128,13 +128,13 @@ public:
     uint32_t checksum() const { return rec_.checksum; }
 
     bool exists() const {
-        return (rec_.flags & (1U << ::WALB_DIFF_FLAG_EXIST)) != 0;
+        return (rec_.flags & WALB_DIFF_FLAG(EXIST)) != 0;
     }
     bool isAllZero() const {
-        return (rec_.flags & (1U << ::WALB_DIFF_FLAG_ALLZERO)) != 0;
+        return (rec_.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
     }
     bool isDiscard() const {
-        return (rec_.flags & (1U << ::WALB_DIFF_FLAG_DISCARD)) != 0;
+        return (rec_.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
     }
     bool isNormal() const {
         return !isAllZero() && !isDiscard();
@@ -175,23 +175,23 @@ public:
     void setChecksum(uint32_t csum) { rec_.checksum = csum; }
 
     void setExists() {
-        rec_.flags |= (1U << ::WALB_DIFF_FLAG_EXIST);
+        rec_.flags |= WALB_DIFF_FLAG(EXIST);
     }
     void clearExists() {
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_EXIST);
+        rec_.flags &= ~WALB_DIFF_FLAG(EXIST);
     }
 
     void setNormal() {
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
+        rec_.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        rec_.flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setAllZero() {
-        rec_.flags |= (1U << ::WALB_DIFF_FLAG_ALLZERO);
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_DISCARD);
+        rec_.flags |= WALB_DIFF_FLAG(ALLZERO);
+        rec_.flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setDiscard() {
-        rec_.flags &= ~(1U << ::WALB_DIFF_FLAG_ALLZERO);
-        rec_.flags |= (1U << ::WALB_DIFF_FLAG_DISCARD);
+        rec_.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        rec_.flags |= WALB_DIFF_FLAG(DISCARD);
     }
     /**
      * Split a record into two records

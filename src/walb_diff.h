@@ -33,11 +33,13 @@ extern "C" {
  * ALLZERO and DISCARD is exclusive.
  */
 enum {
-    WALB_DIFF_FLAG_EXIST = 0,
-    WALB_DIFF_FLAG_ALLZERO,
-    WALB_DIFF_FLAG_DISCARD,
-    WALB_DIFF_FLAGS_MAX,
+    WALB_DIFF_FLAG_EXIST_SHIFT = 0,
+    WALB_DIFF_FLAG_ALLZERO_SHIFT,
+    WALB_DIFF_FLAG_DISCARD_SHIFT,
+    WALB_DIFF_FLAGS_SHIFT_MAX,
 };
+
+#define WALB_DIFF_FLAG(name) (1U << WALB_DIFF_FLAG_ ## name ## _SHIFT)
 
 /**
  * Walb diff compression type.
