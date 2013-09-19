@@ -25,6 +25,8 @@ DEFINE_SERIALIZE_LOADER(util::FdReader);
 DEFINE_SERIALIZE_LOADER(util::FileOperator);
 DEFINE_SERIALIZE_LOADER(util::FileReader);
 
+#undef DEFINE_SERIALIZE_LOADER
+
 #define DEFINE_SERIALIZE_SAVER(type)                                    \
     template <>                                                         \
     struct OutputStreamTag<type>                                        \
@@ -38,5 +40,7 @@ DEFINE_SERIALIZE_SAVER(util::FdOperator);
 DEFINE_SERIALIZE_SAVER(util::FdWriter);
 DEFINE_SERIALIZE_SAVER(util::FileOperator);
 DEFINE_SERIALIZE_SAVER(util::FileWriter);
+
+#undef DEFINE_SERIALIZE_SAVER
 
 } //namespace cybozu
