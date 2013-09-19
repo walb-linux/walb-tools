@@ -34,14 +34,32 @@ public:
 /**
  * File descriptor operations wrapper.
  */
-class FdOperator
+template <class HasFd>
+class FdBaseT : public HasFd
 {
-private:
-    int fd_;
 public:
-    explicit FdOperator(int fd) : fd_(fd) {}
+    using HasFd :: HasFd;
+
+    bool seekable() {
+        return ::lseek(HasFd::fd(), 0, SEEK_CUR) != -1;
+    }
+    void lseek(off_t oft, int whence) {
+        if (::lseek(HasFd::fd(), oft, whence) == off_t(-1))
+            throw LibcError(errno, "lseek failed: ");
+    }
+};
+
+/**
+ * File descriptor wrapper. Read only.
+ */
+template <class HasFd>
+class FdReaderT : public HasFd
+{
+public:
+    using HasFd :: HasFd;
+
     size_t readsome(void *data, size_t size) {
-        ssize_t r = ::read(fd_, data, size);
+        ssize_t r = ::read(HasFd::fd(), data, size);
         if (r < 0) throw LibcError(errno, "read failed: ");
         return r;
     }
@@ -54,51 +72,35 @@ public:
             s += r;
         }
     }
-    void write(const void *data, size_t size) {
-        const char *buf = reinterpret_cast<const char *>(data);
-        size_t s = 0;
-        while (s < size) {
-            ssize_t r = ::write(fd_, &buf[s], size - s);
-            if (r < 0) throw LibcError(errno, "write failed: ");
-            if (r == 0) throw EofError();
-            s += r;
-        }
-    }
-    bool seekable() {
-        return ::lseek(fd_, 0, SEEK_CUR) != -1;
-    }
-    void lseek(off_t oft, int whence) {
-        if (::lseek(fd_, oft, whence) == off_t(-1)) throw LibcError(errno, "lseek failed: ");
-    }
-    void fdatasync() {
-        if (::fdatasync(fd_) < 0) throw LibcError(errno, "fdsync failed: ");
-    }
-    void fsync() {
-        if (::fsync(fd_) < 0) throw LibcError(errno, "fsync failed: ");
-    }
-};
-
-/**
- * File descriptor wrapper. Read only.
- */
-class FdReader : public FdOperator
-{
-public:
-    explicit FdReader(int fd) : FdOperator(fd) {}
-    void write(const void *, size_t) = delete;
-    void fdatasync() = delete;
-    void fsync() = delete;
 };
 
 /**
  * File descriptor wrapper. Write only.
  */
-class FdWriter : public FdOperator
+template <class HasFd>
+class FdWriterT : public HasFd
 {
 public:
-    explicit FdWriter(int fd) : FdOperator(fd) {}
-    size_t readsome(void *, size_t) = delete;
-    void read(void *, size_t) = delete;
+    using HasFd :: HasFd;
+
+    void write(const void *data, size_t size) {
+        const char *buf = reinterpret_cast<const char *>(data);
+        size_t s = 0;
+        while (s < size) {
+            ssize_t r = ::write(HasFd::fd(), &buf[s], size - s);
+            if (r < 0) throw LibcError(errno, "write failed: ");
+            if (r == 0) throw EofError();
+            s += r;
+        }
+    }
+    void fdatasync() {
+        if (::fdatasync(HasFd::fd()) < 0)
+            throw LibcError(errno, "fdsync failed: ");
+    }
+    void fsync() {
+        if (::fsync(HasFd::fd()) < 0)
+            throw LibcError(errno, "fsync failed: ");
+    }
 };
 
 /**
@@ -107,7 +109,7 @@ public:
  */
 class FileOpener
 {
-private:
+protected:
     int fd_;
     bool isClosed_;
 public:
@@ -119,7 +121,7 @@ public:
         : fd_(staticOpen(filePath, flags, mode))
         , isClosed_(false) {
     }
-    virtual ~FileOpener() noexcept {
+    ~FileOpener() noexcept {
         try {
             close();
         } catch (...) {
@@ -150,41 +152,24 @@ private:
     }
 };
 
-class FileOperator
-    : public FileOpener, public FdOperator
+class FdHolder
 {
+protected:
+    int fd_;
 public:
-    FileOperator(const std::string& filePath, int flags)
-        : FileOpener(filePath, flags), FdOperator(fd()) {
-    }
-    FileOperator(const std::string& filePath, int flags, mode_t mode)
-        : FileOpener(filePath, flags, mode), FdOperator(fd()) {
+    explicit FdHolder(int fd) : fd_(fd) {}
+    int fd() const {
+        if (fd_ < 0) throw RT_ERR("fd < 0.");
+        return fd_;
     }
 };
 
-class FileReader : public FileOperator
-{
-public:
-    FileReader(const std::string &path, int flags)
-        : FileOperator(path, flags) {
-    }
-    void write(const void *, size_t) = delete;
-    void fdatasync() = delete;
-    void fsync() = delete;
-};
-
-class FileWriter : public FileOperator
-{
-public:
-    FileWriter(const std::string &path, int flags)
-        : FileOperator(path, flags) {
-    }
-    FileWriter(const std::string &path, int flags, mode_t mode)
-        : FileOperator(path, flags, mode) {
-    }
-    size_t readsome(void *, size_t) = delete;
-    void read(void *, size_t) = delete;
-};
+using FdReader = FdReaderT<FdBaseT<FdHolder> >;
+using FdWriter = FdWriterT<FdBaseT<FdHolder> >;
+using FdOperator = FdWriterT<FdReaderT<FdBaseT<FdHolder> > >;
+using FileReader = FdReaderT<FdBaseT<FileOpener> >;
+using FileWriter = FdWriterT<FdBaseT<FileOpener> >;
+using FileOperator = FdWriterT<FdReaderT<FdBaseT<FileOpener> > >;
 
 /**
  * Block device manager.
