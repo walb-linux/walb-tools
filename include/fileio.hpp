@@ -8,6 +8,7 @@
  */
 #include <mutex>
 #include <stdexcept>
+#include <atomic>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -191,7 +192,7 @@ private:
     unsigned int lbs_; // logical block size [bytes].
     unsigned int pbs_; // physical block size [bytes].
 
-    std::once_flag closeFlag_;
+    std::atomic_flag closeFlag_;
 
 public:
     BlockDevice(const std::string& name, int flags)
@@ -201,7 +202,8 @@ public:
         , isBlockDevice_(isBlockDeviceStatic(fd_))
         , deviceSize_(getDeviceSizeStatic(fd_))
         , lbs_(getLogicalBlockSizeStatic(fd_))
-        , pbs_(getPhysicalBlockSizeStatic(fd_)) {
+        , pbs_(getPhysicalBlockSizeStatic(fd_))
+        , closeFlag_(ATOMIC_FLAG_INIT) {
 #if 0
         ::printf("device %s size %zu isWrite %d isDirect %d isBlockDevice %d "
                  "lbs %u pbs %u\n",
@@ -243,14 +245,13 @@ public:
     }
 
     void close() {
-        std::call_once(closeFlag_, [&]() {
-                if (fd_ > 0) {
-                    if (::close(fd_) < 0) {
-                        throw LibcError(errno, "close failed: ");
-                    }
-                    fd_ = -1;
-                }
-            });
+        if (closeFlag_.test_and_set()) return;
+        if (fd_ > 0) {
+            if (::close(fd_) < 0) {
+                throw LibcError(errno, "close failed: ");
+            }
+            fd_ = -1;
+        }
     }
 
     /**
