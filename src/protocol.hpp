@@ -180,6 +180,8 @@ public:
 
 /**
  * Dirty full sync.
+ *
+ * TODO: exclusive access control.
  */
 class DirtyFullSyncProtocol : public Protocol
 {
@@ -300,7 +302,7 @@ private:
             }
             logger_.info("received %" PRIu64 " packets.", c);
             bd.fdatasync();
-            logger_.info("apply done.");
+            logger_.info("dirty-full-sync %s done.", name_.c_str());
         }
     };
 
@@ -330,6 +332,251 @@ public:
         server.run();
     }
 };
+
+#if 0
+/**
+ * Hash sync
+ */
+class DirtyHashSyncProtocol : public Protocol
+{
+    class Data : public ProtocolData
+    {
+    protected:
+        std::string name_;
+        uint64_t sizeLb_;
+        uint16_t maxPackLb_;
+        uint32_t seed_; /* murmurhash3 seed */
+        uint64_t gid_;
+    public:
+        using ProtocolData::ProtocolData;
+        void checkParams() const {
+            if (name_.empty()) logAndThrow("name param empty.");
+            if (sizeLb_ == 0) logAndThrow("sizeLb param is zero.");
+            if (bulkLb_ == 0) logAndThrow("bulkLb param is zero.");
+            if (gid_ == uint64_t(-1)) logAndThrow("gid param must not be uint64_t(-1).");
+        }
+    };
+    class Client : public Data
+    {
+    private:
+        std::string path_;
+    public:
+        using Data::Data;
+        void run() {
+            loadParams();
+            negotiate();
+            readAndSendDiffData();
+            sendMetaDiff();
+        }
+    private:
+        void loadParams() {
+            if (params_.size() != 5) logAndThrow("Five parameters required.");
+            path_ = params_[0];
+            name_ = params_[1];
+            uint64_t size = cybozu::util::fromUnitIntString(params_[2]);
+            sizeLb_ = size / LBS;
+            uint64_t bulk = cybozu::util::fromUnitIntString(params_[3]);
+            if ((1U << 16) * LBS <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LBS);
+            bulkLb_ = bulk / LBS;
+            seed_ = cybozu::atoi(params_[4]);
+        }
+        void negotiate() {
+            packet::Packet packet(sock_);
+            packet.write(name_);
+            packet.write(sizeLb_);
+            packet.write(bulkLb_);
+            packet.write(seed_);
+            packet::Answer ans(sock_);
+            int err; std::string msg;
+            if (!ans.recv(&err, &msg)) {
+                logAndThrow("negotiation failed: %d %s", err, msg.c_str());
+            }
+            packet.read(gid_);
+        }
+        void readAndSendDiffData() {
+            packet::Packet packet(sock_);
+            cybozu::util::BoundedQueue<Hash> queue;
+            std::vector<char> buf(bulkLb_ * LBS);
+            cybozu::util::BlockDevice bd(path_, O_RDONLY);
+            cybozu::murmurhash3::Hasher hasher(seed_);
+
+            /* Read hash data */
+            auto hashReceiver = [&packet, &queue](uint64_t num) {
+                try {
+                    for (uint64_t i = 0; i < num; i++) {
+                        Hash h;
+                        packet.read(h.ptr(), h.size());
+                        queue.push(h);
+                    }
+                    queue.sync();
+                } catch (...) {
+                    queue.error();
+                }
+            };
+
+            /* Invoke hash receiver. */
+            uint64_t num = (sizeLb_ - 1) / bulkLb_ + 1;
+            std::thread th(hashReceiver, num);
+
+            /* Send updated bulk. */
+            auto sendDiffBulk = [&pacet, &queue, &buf, &bd, &hasher](
+                uint64_t &offLb, uint64_t &remainingLb) {
+
+                uint16_t lb = bulkLb_;
+                if (remainingLb < bulkLb_) lb = remainingLb;
+                size_t size = lb * LBS;
+                bd.read(&buf[0], size);
+                cybozu::murmurhash3::Hash h0, h1;
+                h0 = hasher(&buf[0], size);
+                h1 = queue.pop();
+                if (h0 != h1) {
+                    packet.write(offLb);
+                    packet.write(lb);
+                    packet.write(&buf[0], size);
+                }
+                offLb += lb;
+                remainingLb -= lb;
+            };
+
+            try {
+                uint64_t offLb = 0;
+                uint64_t remainingLb = sizeLb_;
+                uint64_t c = 0;
+                while (0 < remainingLb) {
+                    sendDiffBulk(offLb, remainingLb);
+                    c++;
+                }
+                assert(num == c);
+                assert(offLb == sizeLb_);
+                assert(queue.isEnd());
+            } catch (...) {
+                queue.error();
+            }
+            th.join();
+        }
+        void sendMetaDiff() {
+            packet::Packet packet(sock_);
+            MetaDiff diff(gid_, gid_ + 1, gid_ + 2);
+            diff.raw().can_merge = false; /* TODO: Is this true? */
+            diff.raw().timestamp = ::time(0);
+            packet.write(diff);
+        }
+    };
+    class Server : public Data
+    {
+    private:
+        cybozu::FilePath baseDir_;
+    public:
+        using Data::Data;
+        void run() {
+            /* now editing */
+            loadParams();
+            negotiate();
+            logger_.info("dirty-hash-sync %s %" PRIu64 " %u %u %" PRIu64 ""
+                         , name_.c_str(), sizeLb_, bulkLb_, seed_, gid_);
+            recvAndWriteDiffData();
+            recvMetaDiff();
+        }
+    private:
+        void loadParams() {
+            /* now editing */
+            if (params_.size() != 1) logAndThrow("One parameter required.");
+            baseDir_ = cybozu::FilePath(params_[0]);
+            if (!baseDir_.stat().isDirectory()) {
+                logAndThrow("Base directory %s does not exist.", baseDir_.cStr());
+            }
+        }
+        void negotiate() {
+            packet::Packet packet(sock_);
+            packet.read(name_);
+            packet.read(sizeLb_);
+            packet.read(bulkLb_);
+
+            /* Check */
+            packet::Answer ans(sock_);
+
+            walb::ServerData sd(baseDir_.str(), name_);
+            if (!sd.lvExists()) {
+                std::string msg = cybozu::util::formatString(
+                    "Lv does not exist for %s. Try full-sync."
+                    , name_.c_str());
+                ans.ng(1, msg);
+                logAndThrow(msg);
+            }
+            sd.getLatestSnapshot();
+            /* now editing */
+
+
+            if (true) {
+                ans.ng();
+                logAndThrow("");
+            }
+            ans.ok();
+
+            /* now editing */
+
+            gid_ = set();
+
+            packet.write(gid_);
+        }
+        void recvAndWrite() {
+            /* now editing */
+            packet::Packet packet(sock_);
+            walb::ServerData sd(baseDir_.str(), name_);
+            sd.reset(gid_);
+            sd.createLv(sizeLb_);
+            std::string lvPath = sd.getLv().path().str();
+            cybozu::util::BlockDevice bd(lvPath, O_RDWR);
+            std::vector<char> buf(bulkLb_ * LBS);
+
+            uint16_t c = 0;
+            uint64_t remainingLb = sizeLb_;
+            while (0 < remainingLb) {
+                uint16_t lb = bulkLb_;
+                if (remainingLb < bulkLb_) lb = remainingLb;
+                size_t size = lb * LBS;
+                uint16_t lb0 = 0;
+                packet.read(lb0);
+                if (lb0 != lb) logAndThrow("received lb %u is invalid. must be %u", lb0, lb);
+                packet.read(&buf[0], size);
+                bd.write(&buf[0], size);
+                remainingLb -= lb;
+                c++;
+            }
+            logger_.info("received %" PRIu64 " packets.", c);
+            bd.fdatasync();
+            logger_.info("dirty-full-sync %s done.", name_.c_str());
+        }
+    };
+
+public:
+    using Protocol :: Protocol;
+
+    /**
+     * @params using cybozu::loadFromStr() to convert.
+     *   [0] :: string: full path of lv.
+     *   [1] :: string: lv identifier.
+     *   [2] :: uint64_t: lv size [byte].
+     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LBS;
+     */
+    void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::vector<std::string> &params) override {
+        Client client(sock, logger, params);
+        client.run();
+    }
+    /**
+     *
+     * @params using cybozu::loadFromStr() to convert;
+     *   [0] :: string:
+     */
+    void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::vector<std::string> &params) override {
+        Server server(sock, logger, params);
+        server.run();
+    }
+    /* now editing */
+};
+#endif
 
 /**
  * Protocol factory.
@@ -392,6 +639,7 @@ static inline void runProtocolAsClient(
     if (!protocol) {
         throw std::runtime_error("receive OK but protocol not found.");
     }
+    /* Client can throw an error. */
     protocol->runAsClient(sock, logger, params);
 }
 
@@ -440,6 +688,7 @@ static inline void runProtocolAsServer(
     try {
         protocol->runAsServer(sock, logger, { baseDirStr });
     } catch (std::exception &e) {
+        /* Server must not throw an error. */
         logger.error("[%s] runProtocolAsServer failed: %s.", e.what());
     }
 }
