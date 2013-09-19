@@ -130,27 +130,36 @@ class FilePath
 {
 private:
     std::string path_;
+    bool normalized_;
     mutable std::shared_ptr<FileStat> statP_;
 
 public:
     static const char SEPARATOR = '/';
-    FilePath() : path_("."), statP_() {} /* current directly */
-    explicit FilePath(const std::string &path) : path_(path), statP_() {}
-    explicit FilePath(std::string &&path) : path_(std::move(path)), statP_() {}
+    FilePath() : path_("."), normalized_(true), statP_() {} /* current directly */
+    explicit FilePath(const std::string &path)
+        : path_(path), normalized_(false), statP_() {}
+    explicit FilePath(std::string &&path)
+        : path_(std::move(path)), normalized_(false), statP_() {}
 
     /* Copy constructor */
-    FilePath(const FilePath &rhs) : path_(rhs.path_), statP_() {}
+    FilePath(const FilePath &rhs)
+        : path_(rhs.path_), normalized_(rhs.normalized_)
+        , statP_() {}
     /* Move constructor */
-    FilePath(FilePath &&rhs) : path_(std::move(rhs.path_)), statP_(std::move(statP_)) {}
+    FilePath(FilePath &&rhs)
+        : path_(std::move(rhs.path_)), normalized_(rhs.normalized_)
+        , statP_(std::move(statP_)) {}
     /* Copy */
     FilePath &operator=(const FilePath &rhs) {
         path_ = rhs.path_;
+        normalized_ = rhs.normalized_;
         statP_.reset();
         return *this;
     }
     /* Move */
     FilePath &operator=(FilePath &rhs) {
         path_ = std::move(rhs.path_);
+        normalized_ = rhs.normalized_;
         statP_ = std::move(rhs.statP_);
         return *this;
     }
@@ -204,11 +213,15 @@ public:
         return li.size();
     }
     FilePath removeRedundancy() const {
+        if (normalized_) return *this;
         std::list<std::string> li;
         const bool isFull0 = isFull();
         li = split();
         eliminateRelativeParents(li);
-        return FilePath(join(li, isFull0));
+        std::string path = join(li, isFull0);
+        FilePath fp(std::move(path));
+        fp.normalized_ = true;
+        return fp;
     }
     FilePath parent() const {
         if (isRoot()) return *this;
