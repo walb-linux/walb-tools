@@ -164,6 +164,9 @@ public:
     }
 };
 
+/*
+ * Do not use them with upcast.
+ */
 using FdReader = FdReaderT<FdBaseT<FdHolder> >;
 using FdWriter = FdWriterT<FdBaseT<FdHolder> >;
 using FdOperator = FdWriterT<FdReaderT<FdBaseT<FdHolder> > >;
