@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief IO recipe.
@@ -5,9 +6,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#ifndef IO_RECIPE_HPP
-#define IO_RECIPE_HPP
-
 #include "util.hpp"
 
 namespace walb {
@@ -107,5 +105,3 @@ private:
 };
 
 }} //namespace walb::util
-
-#endif /* IO_RECIPE_HPP */

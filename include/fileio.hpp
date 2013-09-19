@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief File IO utilities.
@@ -16,9 +17,6 @@
 #include <linux/fs.h>
 
 #include "util.hpp"
-
-#ifndef FILEIO_HPP
-#define FILEIO_HPP
 
 namespace cybozu {
 namespace util {
@@ -463,5 +461,3 @@ void createEmptyFile(const std::string &path, mode_t mode = 0644)
 }
 
 }} //namespace cybozu::util
-
-#endif /* FILEIO_HPP */

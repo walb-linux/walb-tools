@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief process wrapper.
@@ -5,9 +6,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#ifndef CYBOZU_PROCESS_HPP
-#define CYBOZU_PROCESS_HPP
-
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -152,5 +150,3 @@ std::string call(const std::string& cmd, const std::vector<std::string> &args)
 }
 
 }} //namespace cybozu::process
-
-#endif /* CYBOZU_PROCESS */

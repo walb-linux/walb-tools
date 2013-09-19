@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Walb log utilities.
@@ -5,9 +6,6 @@
  *
  * (C) 2012 Cybozu Labs, Inc.
  */
-#ifndef WALB_LOG_HPP
-#define WALB_LOG_HPP
-
 #include <cassert>
 #include <memory>
 #include <cstdlib>
@@ -1080,5 +1078,3 @@ private:
 };
 
 }} //namespace walb::log
-
-#endif /* WALB_LOG_HPP */

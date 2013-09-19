@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Temporary file.
@@ -14,9 +15,6 @@
 #include <sys/stat.h>
 #include "file_path.hpp"
 #include "fileio.hpp"
-
-#ifndef CYBOZU_TMP_FILE_HPP
-#define CYBOZU_TMP_FILE_HPP
 
 namespace cybozu {
 
@@ -78,5 +76,3 @@ private:
 };
 
 } //namespace cybozu
-
-#endif /* CYBOZU_TMP_FILE_HPP */

@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief File path utility
@@ -15,9 +16,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
-
-#ifndef CYBOZU_FILE_PATH_HPP
-#define CYBOZU_FILE_PATH_HPP
 
 namespace cybozu {
 
@@ -413,5 +411,3 @@ private:
 };
 
 }; //namespace cybozu
-
-#endif /* CYBOZU_FILE_PATH_HPP */

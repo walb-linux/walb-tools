@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Mmaped file wrapper.
@@ -13,9 +14,6 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <sys/types.h>
-
-#ifndef MMAP_FILE_HPP
-#define MMAP_FILE_HPP
 
 namespace cybozu {
 namespace util {
@@ -189,5 +187,3 @@ private:
 };
 
 }} //namespace cybozu::util
-
-#endif /* MMAP_FILE_HPP */

@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Walb diff files management.
@@ -20,9 +21,6 @@
 #include "time.hpp"
 #include "stdout_logger.hpp"
 #include "fileio_serializer.hpp"
-
-#ifndef WALB_TOOLS_WDIFF_DATA_HPP
-#define WALB_TOOLS_WDIFF_DATA_HPP
 
 namespace walb {
 
@@ -559,5 +557,3 @@ private:
 };
 
 } //namespace walb
-
-#endif /* WALB_TOOLS_WDIFF_DATA_HPP */

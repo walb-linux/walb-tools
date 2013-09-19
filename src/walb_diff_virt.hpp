@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff virtual full image scanner.
@@ -16,9 +17,6 @@
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_diff_merge.hpp"
-
-#ifndef WALB_DIFF_VIRT_HPP
-#define WALB_DIFF_VIRT_HPP
 
 namespace walb {
 namespace diff {
@@ -211,5 +209,3 @@ private:
 };
 
 }} //namespace walb::diff
-
-#endif /* WALB_DIFF_VIRT_HPP */

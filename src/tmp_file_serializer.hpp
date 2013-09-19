@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Temporary file serializer.
@@ -8,9 +9,6 @@
 #include "cybozu/stream_fwd.hpp"
 #include "tmp_file.hpp"
 #include "fileio.hpp"
-
-#ifndef WALB_TOOLS_TMP_FILE_SERIALIZER_HPP
-#define WALB_TOOLS_TMP_FILE_SERIALIZER_HPP
 
 namespace cybozu {
 
@@ -33,5 +31,3 @@ struct OutputStreamTag<TmpFile>
 };
 
 } //namespace cybozu
-
-#endif /* WALB_TOOLS_TMP_FILE_SERIALIZER_HPP */

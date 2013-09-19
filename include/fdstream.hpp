@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief iostream for file descriptors.
@@ -14,9 +15,6 @@
 #include <vector>
 #include <cassert>
 #include <unistd.h>
-
-#ifndef CYBOZU_FDSTREAM_HPP
-#define CYBOZU_FDSTREAM_HPP
 
 namespace cybozu {
 
@@ -161,5 +159,3 @@ public:
 };
 
 } //namespace cybozu
-
-#endif /* CYBOZU_FDSTREAM_HPP */

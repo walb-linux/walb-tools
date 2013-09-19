@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief lvm manager.
@@ -21,9 +22,6 @@
 #include "fileio.hpp"
 #include "file_path.hpp"
 #include "process.hpp"
-
-#ifndef CYBOZU_LVM_HPP
-#define CYBOZU_LVM_HPP
 
 namespace cybozu {
 namespace lvm {
@@ -573,5 +571,3 @@ bool vgExists(const std::string &vgName)
 }
 
 }} //namespace cybozu::lvm
-
-#endif /* CYBOZU_LVM_HPP */

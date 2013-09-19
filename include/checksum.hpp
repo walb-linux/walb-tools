@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Checksum utilities.
@@ -6,9 +7,6 @@
  * (C) 2012 Cybozu Labs, Inc.
  */
 #include <cstring>
-
-#ifndef CHECKSUM_HPP
-#define CHECKSUM_HPP
 
 namespace cybozu {
 namespace util {
@@ -56,5 +54,3 @@ uint32_t calcChecksum(const void *data, size_t size, uint32_t salt)
 }
 
 }} //namespace cybozu::util
-
-#endif /* CHECKSUM_HPP */

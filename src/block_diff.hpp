@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief block diff utilities.
@@ -5,9 +6,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#ifndef BLOCK_DIFF_UTIL_HPP
-#define BLOCK_DIFF_UTIL_HPP
-
 #include <memory>
 #include <cinttypes>
 
@@ -105,5 +103,3 @@ struct BlockDiffHeader
 };
 
 } //namespace block_diff
-
-#endif /* BLOCK_DIFF_UTIL_HPP */

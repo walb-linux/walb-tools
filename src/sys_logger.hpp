@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief wrapper of cybozu logger (for syslog).
@@ -6,9 +7,6 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/log.hpp"
-
-#ifndef WALB_TOOLS_SYS_LOGGER_HPP
-#define WALB_TOOLS_SYS_LOGGER_HPP
 
 #ifndef LOGd
 #ifdef DEBUG
@@ -41,5 +39,3 @@
 #ifndef LOGe_
 #define LOGe_(fmt, args...)
 #endif
-
-#endif /* WALB_TOOLS_SYS_LOGGER_HPP */

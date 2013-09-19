@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff utiltities for files.
@@ -7,9 +8,6 @@
  */
 #include <cstdint>
 #include "walb/util.h"
-
-#ifndef WALB_DIFF_H
-#define WALB_DIFF_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,5 +113,3 @@ const unsigned int WALB_DIFF_PACK_MAX_SIZE = 32 * 1024 * 1024; /* 32MiB */
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* WALB_DIFF_H */

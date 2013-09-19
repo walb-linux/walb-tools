@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief flock wrapper
@@ -5,9 +6,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#ifndef FLOCK_HPP
-#define FLOCK_HPP
-
 #include <string>
 #include <stdexcept>
 
@@ -107,5 +105,3 @@ public:
 };
 
 }} //namespace cybozu::file
-
-#endif /* FLOCK_HPP */

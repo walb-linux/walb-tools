@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Proxy data management.
@@ -22,9 +23,6 @@
 #include "fileio_serializer.hpp"
 #include "meta.hpp"
 #include "wdiff_data.hpp"
-
-#ifndef WALB_TOOLS_PROXY_DATA_HPP
-#define WALB_TOOLS_PROXY_DATA_HPP
 
 namespace walb {
 
@@ -272,5 +270,3 @@ private:
 };
 
 } //namespace walb.
-
-#endif /* WALB_TOOLS_PROXY_DATA_HPP */

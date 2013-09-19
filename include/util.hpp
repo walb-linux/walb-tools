@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Utilities.
@@ -5,9 +6,6 @@
  *
  * (C) 2012 Cybozu Labs, Inc.
  */
-#ifndef CYBOZU_UTIL_HPP
-#define CYBOZU_UTIL_HPP
-
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -453,5 +451,3 @@ void printList(const C &container)
 
 } //namespace util
 } //namespace cybozu
-
-#endif /* CYBOZU_UTIL_HPP */

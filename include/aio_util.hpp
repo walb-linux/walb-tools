@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Linux Aio Utilities.
@@ -5,9 +6,6 @@
  *
  * (C) 2012 Cybozu Labs, Inc.
  */
-#ifndef AIO_UTIL_HPP
-#define AIO_UTIL_HPP
-
 #define _FILE_OFFSET_BITS 64
 
 #include <vector>
@@ -540,5 +538,3 @@ private:
 
 } // namespace aio
 } // namespace walb
-
-#endif /* AIO_UTIL_HPP */

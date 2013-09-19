@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb log device polling.
@@ -18,9 +19,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
-#ifndef WALB_LOG_POLL_HPP
-#define WALB_LOG_POLL_HPP
 
 namespace walb {
 namespace log {
@@ -235,5 +233,3 @@ private:
 };
 
 }} //namespace walb::log
-
-#endif /* WALB_LOG_POLL_HPP */

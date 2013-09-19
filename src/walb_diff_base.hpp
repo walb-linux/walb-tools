@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff base utilities.
@@ -20,9 +21,6 @@
 #include "stdout_logger.hpp"
 
 #include "walb/block_size.h"
-
-#ifndef WALB_DIFF_BASE_HPP
-#define WALB_DIFF_BASE_HPP
 
 static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
@@ -496,5 +494,3 @@ public:
 };
 
 }} //namesapce walb::diff
-
-#endif /* WALB_DIFF_BASE_HPP */

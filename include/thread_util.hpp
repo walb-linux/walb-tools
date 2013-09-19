@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Thread utilities.
@@ -5,9 +6,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#ifndef THREAD_UTIL_HPP
-#define THREAD_UTIL_HPP
-
 #include <future>
 #include <thread>
 #include <memory>
@@ -770,5 +768,3 @@ public:
 };
 
 }} // namespace cybozu::thread
-
-#endif /* THREAD_UTIL_HPP */

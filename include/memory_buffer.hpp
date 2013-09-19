@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Memory buffer utilities.
@@ -10,9 +11,6 @@
 #include <set>
 
 #include "util.hpp"
-
-#ifndef MEMORY_BUFFER_HPP
-#define MEMORY_BUFFER_HPP
 
 /**
  * Block (aligned memory) allocators using posix_memalign().
@@ -420,5 +418,3 @@ std::shared_ptr<T> allocateMemory(size_t size)
 }
 
 }} //namespace cybozu::util
-
-#endif /* MEMORY_BUFFER_HPP */

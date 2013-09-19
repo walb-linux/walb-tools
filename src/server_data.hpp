@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Server data.
@@ -18,9 +19,6 @@
 #include "file_path.hpp"
 #include "wdiff_data.hpp"
 #include "meta.hpp"
-
-#ifndef WALB_TOOLS_SERVER_DATA_HPP
-#define WALB_TOOLS_SERVER_DATA_HPP
 
 namespace walb {
 
@@ -493,5 +491,3 @@ private:
 };
 
 } //namespace walb
-
-#endif /* WALB_TOOLS_SERVER_DATA_HPP */

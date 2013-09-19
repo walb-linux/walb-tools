@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Temporary file serializer.
@@ -7,9 +8,6 @@
  */
 #include "cybozu/stream_fwd.hpp"
 #include "fileio.hpp"
-
-#ifndef WALB_TOOLS_FILE_IO_SERIALIZER_HPP
-#define WALB_TOOLS_FILE_IO_SERIALIZER_HPP
 
 namespace cybozu {
 
@@ -42,5 +40,3 @@ DEFINE_SERIALIZE_SAVER(util::FileOperator);
 DEFINE_SERIALIZE_SAVER(util::FileWriter);
 
 } //namespace cybozu
-
-#endif /* WALB_TOOLS_FILE_IO_SERIALIZER_HPP */

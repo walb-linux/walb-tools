@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff in main memory.
@@ -10,9 +11,6 @@
 #include <map>
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
-
-#ifndef WALB_DIFF_MEM_HPP
-#define WALB_DIFF_MEM_HPP
 
 namespace walb {
 namespace diff {
@@ -561,5 +559,3 @@ public:
 };
 
 }} //namespace walb::diff
-
-#endif /* WALB_DIFF_MEM_HPP */

@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Time utility header.
@@ -11,9 +12,6 @@
 #include <stdexcept>
 #include <limits>
 #include <time.h>
-
-#ifndef CYBOZU_TIME_HPP
-#define CYBOZU_TIME_HPP
 
 namespace cybozu {
 
@@ -115,5 +113,3 @@ time_t strToUnixTime(const std::string &ts)
 }
 
 } //namespace cybozu
-
-#endif /* CYBOZU_TIME_HPP */

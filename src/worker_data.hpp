@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Worker data management.
@@ -13,9 +14,6 @@
 #include "tmp_file.hpp"
 #include "tmp_file_serializer.hpp"
 #include "meta.hpp"
-
-#ifndef WALB_TOOLS_WORKER_DATA_HPP
-#define WALB_TOOLS_WORKER_DATA_HPP
 
 namespace walb {
 
@@ -255,5 +253,3 @@ private:
 };
 
 } //namespace walb
-
-#endif /* WALB_TOOLS_WORKER_DATA_HPP */

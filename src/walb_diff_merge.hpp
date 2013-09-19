@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff merger.
@@ -16,9 +17,6 @@
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
-
-#ifndef WALB_DIFF_MERGE_HPP
-#define WALB_DIFF_MERGE_HPP
 
 namespace walb {
 namespace diff {
@@ -308,5 +306,3 @@ private:
 };
 
 }} //namespace walb::diff
-
-#endif /* WALB_DIFF_MERGE_HPP */

@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Mmaped file wrapper.
@@ -9,9 +10,6 @@
 #include <limits>
 #include <cassert>
 #include <cstring>
-
-#ifndef RANDOM_HPP
-#define RANDOM_HPP
 
 namespace cybozu {
 namespace util {
@@ -101,5 +99,3 @@ public:
 };
 
 }} //namespace cybozu::util
-
-#endif /* RANDOM_HPP */

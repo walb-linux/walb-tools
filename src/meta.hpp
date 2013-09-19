@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Meta snapshot and diff.
@@ -15,9 +16,6 @@
 #include "cybozu/serializer.hpp"
 #include "util.hpp"
 #include "time.hpp"
-
-#ifndef WALB_TOOLS_META_HPP
-#define WALB_TOOLS_META_HPP
 
 /**
  * Wdiff file name format:
@@ -453,5 +451,3 @@ static inline MetaDiff consolidate(const std::vector<MetaDiff> &diffV) {
 }
 
 } //namespace walb
-
-#endif /* WALB_TOOLS_META_HPP */

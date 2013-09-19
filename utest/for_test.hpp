@@ -1,11 +1,10 @@
+#pragma once
+
 #include <string>
 #include <stdexcept>
 #include "file_path.hpp"
 #include "meta.hpp"
 #include "wdiff_data.hpp"
-
-#ifndef WALB_FOR_TEST_HPP
-#define WALB_FOR_TEST_HPP
 
 class TestDirectory
 {
@@ -49,5 +48,3 @@ void createDiffFile(const walb::WalbDiffFiles &diffFiles, walb::MetaDiff &diff)
         + cybozu::FilePath(walb::createDiffFileName(diff));
     cybozu::util::createEmptyFile(fp.str());
 }
-
-#endif /* WALB_FOR_TEST_HPP */

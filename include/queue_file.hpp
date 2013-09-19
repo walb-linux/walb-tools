@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief Simple permanent queue.
@@ -18,9 +19,6 @@
 #include "checksum.hpp"
 #include "random.hpp"
 #include "flock.hpp"
-
-#ifndef QUEUE_FILE_HPP
-#define QUEUE_FILE_HPP
 
 namespace cybozu {
 namespace util {
@@ -498,5 +496,3 @@ private:
 };
 
 }} //namespace cybozu::util
-
-#endif /* QUEUE_FILE_HPP */

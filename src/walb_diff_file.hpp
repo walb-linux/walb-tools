@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief walb diff utiltities for files.
@@ -6,9 +7,6 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include "walb_diff_base.hpp"
-
-#ifndef WALB_DIFF_FILE_HPP
-#define WALB_DIFF_FILE_HPP
 
 namespace walb {
 namespace diff {
@@ -692,5 +690,3 @@ private:
 };
 
 }} //namespace walb::diff
-
-#endif /* WALB_DIFF_FILE_HPP */

@@ -1,3 +1,4 @@
+#pragma once
 /**
  * @file
  * @brief wrapper of stdout logger.
@@ -6,9 +7,6 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/log.hpp"
-
-#ifndef WALB_TOOLS_STDOUT_LOGGER_HPP
-#define WALB_TOOLS_STDOUT_LOGGER_HPP
 
 #ifndef LOG_INTERNAL
 #define LOG_INTERNAL(level, fmt, args...)                               \
@@ -45,5 +43,3 @@
 #ifndef LOGe_
 #define LOGe_(fmt, args...)
 #endif
-
-#endif /* WALB_TOOLS_STDOUT_LOGGER_HPP */
