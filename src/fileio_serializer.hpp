@@ -11,7 +11,7 @@
 
 namespace cybozu {
 
-#define DEFINE_SERIALIZE_LOADER(type)                                   \
+#define WALB_FILEIO_DEFINE_SERIALIZE_LOADER(type)                       \
     template <>                                                         \
     struct InputStreamTag<type>                                         \
     {                                                                   \
@@ -20,14 +20,14 @@ namespace cybozu {
         }                                                               \
     }
 
-DEFINE_SERIALIZE_LOADER(util::FdOperator);
-DEFINE_SERIALIZE_LOADER(util::FdReader);
-DEFINE_SERIALIZE_LOADER(util::FileOperator);
-DEFINE_SERIALIZE_LOADER(util::FileReader);
+WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FdOperator);
+WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FdReader);
+WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FileOperator);
+WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FileReader);
 
-#undef DEFINE_SERIALIZE_LOADER
+#undef WALB_FILEIO_DEFINE_SERIALIZE_LOADER
 
-#define DEFINE_SERIALIZE_SAVER(type)                                    \
+#define WALB_FILEIO_DEFINE_SERIALIZE_SAVER(type)                        \
     template <>                                                         \
     struct OutputStreamTag<type>                                        \
     {                                                                   \
@@ -36,11 +36,11 @@ DEFINE_SERIALIZE_LOADER(util::FileReader);
         }                                                               \
     }
 
-DEFINE_SERIALIZE_SAVER(util::FdOperator);
-DEFINE_SERIALIZE_SAVER(util::FdWriter);
-DEFINE_SERIALIZE_SAVER(util::FileOperator);
-DEFINE_SERIALIZE_SAVER(util::FileWriter);
+WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FdOperator);
+WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FdWriter);
+WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FileOperator);
+WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FileWriter);
 
-#undef DEFINE_SERIALIZE_SAVER
+#undef WALB_FILEIO_DEFINE_SERIALIZE_SAVER
 
 } //namespace cybozu
