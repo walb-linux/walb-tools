@@ -133,7 +133,7 @@ private:
     mutable std::shared_ptr<FileStat> statP_;
 
 public:
-    static const int SEPARATOR = '/';
+    static const char SEPARATOR = '/';
     FilePath() : path_("."), statP_() {} /* current directly */
     explicit FilePath(const std::string &path) : path_(path), statP_() {}
     explicit FilePath(std::string &&path) : path_(std::move(path)), statP_() {}
@@ -155,19 +155,9 @@ public:
         return *this;
     }
     FilePath operator+(const FilePath &rhs) const {
-        if (rhs.isRoot()) {
-            std::runtime_error("full path can not be added.");
-        }
-        if (path_.empty()) {
-            return rhs;
-        }
-        if (isRoot()) {
-            return FilePath(path_ + rhs.path_);
-        }
-        std::string path(path_);
-        path.push_back(SEPARATOR);
-        path.append(rhs.path_);
-        return FilePath(std::move(path)).removeRedundancy();
+        if (rhs.isRoot()) std::runtime_error("full path can not be added.");
+        if (path_.empty()) return rhs;
+        return FilePath(path_ + SEPARATOR + rhs.path_).removeRedundancy();
     }
     FilePath operator+(const std::string &rhs) const {
         return *this + cybozu::FilePath(rhs);

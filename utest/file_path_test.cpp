@@ -19,6 +19,10 @@ CYBOZU_TEST_AUTO(removeRedundancy)
     checkRedundancy("/a/b/../b/c", "/a/b/c");
     checkRedundancy("/a/b/../../", "/");
     checkRedundancy("././././a/./././././.", "a");
+    checkRedundancy("/////", "/");
+    checkRedundancy("a///////b", "a/b");
+    std::string s = (cybozu::FilePath("/a/b/c") + cybozu::FilePath("d/e/f")).str();
+    checkRedundancy(s, "/a/b/c/d/e/f");
 }
 
 void checkName(const std::string &path, const std::string &dirName, const std::string &baseName)
