@@ -38,10 +38,13 @@ public:
     Logger(const std::string &selfId, const std::string &remoteId)
         : selfId_(selfId), remoteId_(remoteId) {}
 
-    void write(cybozu::LogPriority pri, const std::string &msg) const noexcept {
-        cybozu::PutLog(pri, "[%s][%s] %s", selfId_.c_str(), remoteId_.c_str(), msg.c_str());
+    void write(cybozu::LogPriority pri, const char *msg) const noexcept {
+        cybozu::PutLog(pri, "[%s][%s] %s", selfId_.c_str(), remoteId_.c_str(), msg);
     }
-    void write(cybozu::LogPriority pri, const char *format, va_list args) const noexcept {
+    void write(cybozu::LogPriority pri, const std::string &msg) const noexcept {
+        write(pri, msg.c_str());
+    }
+    void writeV(cybozu::LogPriority pri, const char *format, va_list args) const noexcept {
         try {
             std::string msg;
             cybozu::vformat(msg, format, args);
@@ -50,11 +53,11 @@ public:
             write(pri, "Logger::write() error.");
         }
     }
-    void write(cybozu::LogPriority pri, const char *format, ...) const noexcept {
+    void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept {
         try {
             va_list args;
             va_start(args, format);
-            write(pri, format, args);
+            writeV(pri, format, args);
             va_end(args);
         } catch (...) {
             write(pri, "Logger::write() error.");
@@ -74,26 +77,26 @@ public:
 #ifdef DEBUG
         va_list args;
         va_start(args, format);
-        write(cybozu::LogDebug, format, args);
+        writeV(cybozu::LogDebug, format, args);
         va_end(args);
 #endif
     }
     void info(const char *format, ...) const noexcept {
         va_list args;
         va_start(args, format);
-        write(cybozu::LogInfo, format, args);
+        writeV(cybozu::LogInfo, format, args);
         va_end(args);
     }
     void warn(const char *format, ...) const noexcept {
         va_list args;
         va_start(args, format);
-        write(cybozu::LogWarning, format, args);
+        writeV(cybozu::LogWarning, format, args);
         va_end(args);
     }
     void error(const char *format, ...) const noexcept {
         va_list args;
         va_start(args, format);
-        write(cybozu::LogError, format, args);
+        writeV(cybozu::LogError, format, args);
         va_end(args);
     }
 };
