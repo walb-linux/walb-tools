@@ -143,8 +143,7 @@ std::vector<std::vector<char> > generateRawPacks()
     }
     ::printf("-------------------------------\n");
 #endif
-
-    return std::move(packV0);
+    return packV0;
 }
 
 void testDiffCompression(int type)
@@ -357,7 +356,7 @@ std::vector<Buffer> parallelConverter(
     popper.join();
     if (ep) std::rethrow_exception(ep);
 
-    return std::move(packV1);
+    return packV1;
 }
 
 std::vector<Buffer> parallelCompress(

@@ -167,7 +167,7 @@ public:
             v.push_back(rec);
             ++it;
         }
-        return std::move(v);
+        return v;
     }
 private:
     cybozu::FilePath doneRecordPath() const {

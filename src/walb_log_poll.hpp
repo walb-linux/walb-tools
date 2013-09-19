@@ -92,7 +92,7 @@ public:
         int nfds = ::epoll_wait(efd_, &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
             /* TODO: logging. */
-            return std::move(v);
+            return v;
         }
         std::lock_guard<std::mutex> lk(mutex_);
         for (int i = 0; i < nfds; i++) {
@@ -108,7 +108,7 @@ public:
 #endif
             }
         }
-        return std::move(v);
+        return v;
     }
     /**
      * If already exists, call del() and add().
@@ -142,7 +142,7 @@ public:
         for (const auto &p : fdMap_) {
             v.push_back(p);
         }
-        return std::move(v);
+        return v;
     }
 private:
     bool addName(const std::string &wdevName, int fd) {

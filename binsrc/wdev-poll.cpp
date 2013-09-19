@@ -72,7 +72,7 @@ std::vector<std::string> commandReader(FILE *fp)
     if (!s.empty()) {
         v.push_back(s);
     }
-    return std::move(v);
+    return v;
 }
 
 bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogPoller &poller)

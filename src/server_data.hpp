@@ -145,7 +145,7 @@ public:
                 map.insert(std::make_pair(gid, lv));
             }
         }
-        return std::move(map);
+        return map;
     }
     /**
      * Get the latest snapshot which may be dirty.

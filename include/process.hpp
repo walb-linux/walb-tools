@@ -99,7 +99,7 @@ std::vector<char *> prepareArgv(const std::string &cmd, const std::vector<std::s
         argv.push_back(const_cast<char *>(arg.c_str()));
     }
     argv.push_back(nullptr);
-    return std::move(argv);
+    return argv;
 }
 
 /**

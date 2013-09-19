@@ -318,7 +318,7 @@ std::string intToHexStr(IntType i)
         i /= 16;
     }
     std::reverse(s.begin(), s.end());
-    return std::move(s);
+    return s;
 }
 
 /**
@@ -402,7 +402,7 @@ std::vector<std::string> splitString(
     if (isTrimSpace) {
         for (std::string &s : v) s = trimSpace(s);
     }
-    return std::move(v);
+    return v;
 }
 
 bool hasPrefix(const std::string &name, const std::string &prefix)

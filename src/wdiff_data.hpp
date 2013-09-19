@@ -181,7 +181,7 @@ public:
             }
         }
         if (!q.empty()) insert();
-        return std::move(v);
+        return v;
     }
     /**
      * Get transfer candidates.
@@ -201,7 +201,7 @@ public:
             diffV.push_back(diff);
             total += size0;
         }
-        return std::move(diffV);
+        return diffV;
     }
     /**
      * Remove wdiffs before a specified gid.
@@ -249,7 +249,7 @@ public:
             v.push_back(diff);
             it = skipOverlapped(it, diff.gid1());
         }
-        return std::move(v);
+        return v;
     }
     std::vector<MetaDiff> listDiff() const {
         return listDiff(0, uint64_t(-1));
@@ -552,7 +552,7 @@ private:
         for (const MetaDiff &diff : diffV) {
             v.push_back(createDiffFileName(diff));
         }
-        return std::move(v);
+        return v;
     }
 };
 

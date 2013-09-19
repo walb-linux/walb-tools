@@ -474,7 +474,7 @@ private:
                     "logpack %" PRIu64 " is not the expected one %" PRIu64 ".",
                     logh->header().logpack_lsid, lsid));
         }
-        return std::move(logh);
+        return logh;
     }
     /**
      * Read all IOs data of a logpack.

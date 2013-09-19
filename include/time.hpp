@@ -57,7 +57,7 @@ std::string unixTimeToStr(time_t ts)
     }
     s.resize(s.size() - 1);
     assert(s.size() == 14);
-    return std::move(s);
+    return s;
 }
 
 /**

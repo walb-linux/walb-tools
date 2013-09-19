@@ -69,9 +69,7 @@ private:
         if (!FilePath(dirPath).stat().isDirectory()) {
             throw std::runtime_error("dirPath not found.");
         }
-        std::string s = (FilePath(dirPath) + FilePath(prefix)).str();
-        s += "XXXXXX";
-        return std::move(s);
+        return (FilePath(dirPath) + FilePath(prefix)).str() + "XXXXXX";
     }
 };
 

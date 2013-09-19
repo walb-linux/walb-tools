@@ -421,7 +421,7 @@ static inline std::string createDiffFileName(const MetaDiff &diff) {
         s += cybozu::util::intToHexStr(diff.gid2());
     }
     s += ".wdiff";
-    return std::move(s);
+    return s;
 }
 
 /**

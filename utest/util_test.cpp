@@ -48,7 +48,7 @@ std::string randomString(cybozu::util::Random<uint32_t> &rand, size_t min, size_
     for (size_t i = 0; i < min + plus; i++) {
         s.push_back(randomChar(rand));
     }
-    return std::move(s);
+    return s;
 }
 
 void randomStringSplitTest(cybozu::util::Random<uint32_t> &rand)

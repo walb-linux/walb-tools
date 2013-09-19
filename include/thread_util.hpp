@@ -223,7 +223,7 @@ public:
             }
         }
         v_.clear();
-        return std::move(v);
+        return v;
     }
 };
 
@@ -506,7 +506,7 @@ private:
             if (ep) v.push_back(ep);
         }
         done_.clear();
-        return std::move(v);
+        return v;
     }
     void gcThread() {
         std::list<ThreadRunner>::iterator it = runners_.begin();

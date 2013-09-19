@@ -247,7 +247,7 @@ public:
             remaining -= blks;
         }
         assert(!v.empty());
-        return std::move(v);
+        return v;
     }
 private:
     void init() {
@@ -400,7 +400,7 @@ public:
         assert(off == data_.size());
         assert(!v.empty());
 
-        return std::move(v);
+        return v;
     }
 
     /**
@@ -438,7 +438,7 @@ public:
         size_t size;
         snappy::RawCompress(rawData(), rawSize(), io.rawData(), &size);
         io.data_.resize(size);
-        return std::move(io);
+        return io;
     }
 
     /**
@@ -468,7 +468,7 @@ public:
         if (!snappy::RawUncompress(rawData(), rawSize(), io.rawData())) {
             throw RT_ERR("snappy::RawUncompress() failed.");
         }
-        return std::move(io);
+        return io;
     }
 
     void print(::FILE *fp) const {

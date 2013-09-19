@@ -109,7 +109,7 @@ public:
         cfg.isDiscard = isDiscard();
         cfg.isAllZero = isAllZero();
         cfg.isVerbose = isVerbose();
-        return std::move(cfg);
+        return cfg;
     }
 
     void print() const {

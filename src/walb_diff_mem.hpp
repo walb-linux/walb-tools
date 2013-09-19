@@ -136,7 +136,7 @@ public:
             ++it0;
             ++it1;
         }
-        return std::move(v);
+        return v;
     }
 
     /**
@@ -158,7 +158,7 @@ public:
          */
         if (rec_.isOverwrittenBy(rhs.rec_)) {
             /* Empty */
-            return std::move(v);
+            return v;
         }
         /*
          * Pattern 2:
@@ -207,7 +207,7 @@ public:
                 assert(r.isValid());
                 v.push_back(std::move(r));
             }
-            return std::move(v);
+            return v;
         }
         /*
          * Pattern 3:
@@ -239,7 +239,7 @@ public:
             r.updateChecksum();
             assert(r.isValid());
             v.push_back(std::move(r));
-            return std::move(v);
+            return v;
         }
         /*
          * Pattern 4:
@@ -270,7 +270,7 @@ public:
         r.updateChecksum();
         assert(r.isValid());
         v.push_back(std::move(r));
-        return std::move(v);
+        return v;
     }
 };
 
