@@ -52,21 +52,13 @@ static std::vector<std::string> splitAndTrim(const std::string &str, char sep)
     std::vector<std::string> v;
     cybozu::Split(v, str, sep);
     for (std::string &s : v) trim(s);
-    return std::move(v);
+    return v;
 }
 
 static bool isDeviceAvailable(const cybozu::FilePath &path) {
     if (!path.stat().exists()) return false;
-
-    std::vector<std::string> args;
-    args.push_back("info");
-    args.push_back("-c");
-    args.push_back("--noheadings");
-    args.push_back("-o");
-    args.push_back("Open");
-    args.push_back(path.str());
-
-    std::string s = cybozu::process::call("/sbin/dmsetup", args);
+    std::string s = cybozu::process::call("/sbin/dmsetup", {
+            "info", "-c", "--noheadings", "-o", "Open", path.str() });
     trim(s);
     uint64_t i = cybozu::atoi(s);
     return i == 0;
@@ -115,10 +107,7 @@ uint64_t parseSizeLb(const std::string &s) {
  * Create lvm size option.
  */
 std::string getSizeOpt(uint64_t sizeLb) {
-    std::string opt("--size=");
-    opt += cybozu::itoa(sizeLb * LBS);
-    opt += "b";
-    return std::move(opt);
+    return std::string("--size=") + cybozu::itoa(sizeLb * LBS) + "b";
 }
 
 /**
@@ -224,7 +213,7 @@ public:
                 v.push_back(lv);
             }
         }
-        return std::move(v);
+        return v;
     }
     Lv getSnapshot(const std::string &snapName) const {
         for (Lv &lv : snapshotList()) {
@@ -428,7 +417,7 @@ LvList listLv(const std::string &arg = "")
 
         list.push_back(Lv(vgName, lvName, snapName, sizeLb, isSnapshot));
     }
-    return std::move(list);
+    return list;
 }
 
 /**
@@ -444,7 +433,7 @@ LvMap getLvMap(const std::string &arg)
         auto pair = map.insert(std::make_pair(lv.name(), lv));
         if (!pair.second) assert(false);
     }
-    return std::move(map);
+    return map;
 }
 
 /**
@@ -480,7 +469,7 @@ LvList find(const std::string &vgName, const std::string &name)
     for (Lv &lv : listLv(vgName)) {
         if (lv.name() == name) list.push_back(lv);
     }
-    return std::move(list);
+    return list;
 }
 
 /**
@@ -494,7 +483,7 @@ LvList findLv(const std::string &vgName, const std::string &lvName)
             list.push_back(lv);
         }
     }
-    return std::move(list);
+    return list;
 }
 
 /**
@@ -508,7 +497,7 @@ LvList findSnap(const std::string &vgName, const std::string &snapName)
             list.push_back(lv);
         }
     }
-    return std::move(list);
+    return list;
 }
 
 /**
@@ -548,7 +537,7 @@ VgList listVg()
         uint64_t freeLb = local::parseSizeLb(v[2]);
         list.push_back(Vg(vgName, sizeLb, freeLb));
     }
-    return std::move(list);
+    return list;
 }
 
 /**
