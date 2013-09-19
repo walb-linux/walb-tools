@@ -43,22 +43,6 @@ namespace cybozu {
 namespace util {
 
 /**
- * Create a std::string using printf() like formatting.
- */
-std::string formatString(const char * format, ...)
-{
-    char *p = nullptr;
-    va_list args;
-    va_start(args, format);
-    int ret = ::vasprintf(&p, format, args);
-    va_end(args);
-    if (ret < 0) throw std::runtime_error("vasprintf failed.");
-    std::string st(p, ret);
-    ::free(p);
-    return st;
-}
-
-/**
  * Formst string with va_list.
  */
 std::string formatStringV(const char *format, va_list ap)
@@ -66,9 +50,33 @@ std::string formatStringV(const char *format, va_list ap)
     char *p = nullptr;
     int ret = ::vasprintf(&p, format, ap);
     if (ret < 0) throw std::runtime_error("vasprintf failed.");
-    std::string st(p, ret);
-    ::free(p);
-    return st;
+    try {
+        std::string s(p, ret);
+        ::free(p);
+        return s;
+    } catch (...) {
+        ::free(p);
+        throw;
+    }
+}
+
+/**
+ * Create a std::string using printf() like formatting.
+ */
+std::string formatString(const char * format, ...)
+{
+    std::string s;
+    std::exception_ptr ep;
+    va_list args;
+    va_start(args, format);
+    try {
+        s = formatStringV(format, args);
+    } catch (...) {
+        ep = std::current_exception();
+    }
+    va_end(args);
+    if (ep) std::rethrow_exception(ep);
+    return s;
 }
 
 /**
