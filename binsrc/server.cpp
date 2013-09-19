@@ -78,6 +78,19 @@ struct Option : cybozu::Option
     }
 };
 
+void logErrors(std::vector<std::exception_ptr> &&v)
+{
+    for (std::exception_ptr ep : v) {
+        try {
+            std::rethrow_exception(ep);
+        } catch (std::exception &e) {
+            LOGe("RequestWorker caught an error: %s.", e.what());
+        } catch (...) {
+            LOGe("RequestWokrer caught an unknown error.");
+        }
+    }
+}
+
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -116,7 +129,7 @@ int main(int argc, char *argv[]) try
         cybozu::Socket sock;
         ssock.accept(sock);
         pool.add(std::make_shared<RequestWorker>(std::move(sock), opt.serverId, baseDir));
-        pool.gc();
+        logErrors(pool.gc());
         LOGi("pool size %zu", pool.size());
     }
     pool.waitForAll();
