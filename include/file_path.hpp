@@ -106,7 +106,7 @@ public:
         assert(!q_.empty());
         std::string s = std::move(q_.front());
         q_.pop();
-        return std::move(s);
+        return s;
     }
 private:
     /**
@@ -354,7 +354,7 @@ private:
                 ++it;
             }
         }
-        return std::move(li);
+        return li;
     }
     /**
      * eliminate "xxx/.." pattern.
@@ -406,7 +406,7 @@ private:
         }
         if (!li.empty()) s1.resize(s1.size() - 1);
         if (s1.empty()) s1.push_back('.');
-        return std::move(s1);
+        return s1;
     }
 };
 
