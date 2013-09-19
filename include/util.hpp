@@ -52,10 +52,7 @@ std::string formatString(const char * format, ...)
     va_start(args, format);
     int ret = ::vasprintf(&p, format, args);
     va_end(args);
-    if (ret < 0) {
-        ::free(p);
-        throw std::runtime_error("vasprintf failed.");
-    }
+    if (ret < 0) throw std::runtime_error("vasprintf failed.");
     std::string st(p, ret);
     ::free(p);
     return st;
@@ -68,10 +65,7 @@ std::string formatStringV(const char *format, va_list ap)
 {
     char *p = nullptr;
     int ret = ::vasprintf(&p, format, ap);
-    if (ret < 0) {
-        ::free(p);
-        throw std::runtime_error("vasprintf failed.");
-    }
+    if (ret < 0) throw std::runtime_error("vasprintf failed.");
     std::string st(p, ret);
     ::free(p);
     return st;
