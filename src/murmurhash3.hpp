@@ -8,6 +8,7 @@
  */
 #include "MurmurHash3.h"
 #include "cybozu/serializer.hpp"
+#include "util.hpp"
 #include <cstdio>
 #include <cassert>
 #include <string>
@@ -43,7 +44,7 @@ public:
         std::string s;
         s.resize(HASH_SIZE * 2 + 1);
         for (size_t i = 0; i < HASH_SIZE; i++) {
-            int r = ::snprintf(&s[i * 2], 3, "%02x", data_[i]);
+            UNUSED int r = ::snprintf(&s[i * 2], 3, "%02x", data_[i]);
             assert(r == 2);
         }
         s.resize(HASH_SIZE * 2);
