@@ -68,7 +68,7 @@ public:
         std::shared_ptr<char> buf =
             cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, bufSize);
         size_t rSize;
-        while (0 < (rSize = read(buf.get(), bufSize))) {
+        while (0 < (rSize = readSome(buf.get(), bufSize))) {
             writer.write(buf.get(), rSize);
         }
         writer.fdatasync();
@@ -83,7 +83,7 @@ public:
      *   Read size really [byte].
      *   0 means that the input reached the end.
      */
-    size_t read(char *data, size_t size) {
+    size_t readSome(void *data, size_t size) {
         assert(size % LOGICAL_BLOCK_SIZE == 0);
         /* Read up to 65535 blocks at once. */
         uint16_t blks = uint16_t(-1);
@@ -112,6 +112,21 @@ public:
         }
         return readBase(data, blks0);
     }
+    /**
+     * Try to read sized value.
+     *
+     * @data buffer to be filled.
+     * @size size to read [byte].
+     */
+    void read(void *data, size_t size) {
+        char *p = (char *)data;
+        while (0 < size) {
+            size_t r = readSome(p, size);
+            if (r == 0) throw cybozu::util::EofError();
+            p += r;
+            size -= r;
+        }
+    }
 private:
     /**
      * Read from the base full image.
@@ -120,19 +135,22 @@ private:
      * RETURN:
      *   really read size [byte].
      */
-    size_t readBase(char *data, size_t blks) {
+    size_t readBase(void *data, size_t blks) {
+        char *p = (char *)data;
         size_t size = blks * LOGICAL_BLOCK_SIZE;
-        size_t rSize = 0;
-        while (rSize < size) {
-            try {
-                reader_.read(data + rSize, LOGICAL_BLOCK_SIZE);
-            } catch (cybozu::util::EofError &e) {
-                break;
-            }
-            rSize += LOGICAL_BLOCK_SIZE;
-            addr_++;
+        while (0 < size) {
+            size_t r = reader_.readsome(p, size);
+            if (r == 0) break;
+            p += r;
+            size -= r;
         }
-        return rSize;
+        if (size % LOGICAL_BLOCK_SIZE != 0) {
+            throw std::runtime_error(
+                "input data is not a multiples of LOGICAL_BLOCK_SIZE.");
+        }
+        size_t readLb = blks - size / LOGICAL_BLOCK_SIZE;
+        addr_ += readLb;
+        return readLb * LOGICAL_BLOCK_SIZE;
     }
     /**
      * Read from the current diff IO.
@@ -141,7 +159,7 @@ private:
      * RETURN:
      *   really read size [byte].
      */
-    size_t readWdiff(char *data, size_t blks) {
+    size_t readWdiff(void *data, size_t blks) {
         assert(recIo_.isValid());
         const walb::diff::RecordRaw &rec = recIo_.record();
         const walb::diff::IoData &io = recIo_.io();

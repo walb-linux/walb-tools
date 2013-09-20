@@ -410,7 +410,7 @@ public:
      * @rec record.
      * @iop may contains nullptr.
      */
-    void writeDiff(const RecordRaw &rec, const std::shared_ptr<IoData> iop) {
+    void writeDiff(const RecordRaw &rec, const std::shared_ptr<IoData> &iop) {
         checkWrittenHeader();
         assert(rec.isValid());
         if (iop) {
