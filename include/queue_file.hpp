@@ -311,7 +311,7 @@ public:
         It &operator++() {
             QueueRecordHeaderOp recOp(&qf_->record(offset_));
             offset_ += recOp.totalSize();
-            return *reinterpret_cast<It *>(this);
+            return static_cast<It&>(*this);
         }
         It operator++(int) {
             QueueRecordHeaderOp recOp(&qf_->record(offset_));
