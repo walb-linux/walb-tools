@@ -158,9 +158,11 @@ class FdHolder
 protected:
     int fd_;
 public:
-    explicit FdHolder(int fd) : fd_(fd) {}
-    int fd() const {
+    explicit FdHolder(int fd) : fd_(fd) {
         if (fd_ < 0) throw RT_ERR("fd < 0.");
+    }
+    int fd() const {
+        assert(0 <= fd_);
         return fd_;
     }
 };
