@@ -181,7 +181,7 @@ private:
      */
     void initScanQueue(cybozu::util::QueueFile &qf) {
         qf.gc();
-        cybozu::util::QueueFile::ConstIterator it = qf.begin();
+        cybozu::util::QueueFile::ConstIterator it = qf.cbegin();
         MetaSnap prev;
         while (!it.isEndMark()) {
             std::vector<uint8_t> v;
@@ -191,7 +191,7 @@ private:
                 if (!rec.isValid()) {
                     throw std::runtime_error("queue broken.");
                 }
-                if (it != qf.begin()) {
+                if (it != qf.cbegin()) {
                     if (!(prev.raw().gid1 == rec.raw().gid0)) {
                         throw std::runtime_error("queue broken.");
                     }

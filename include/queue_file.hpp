@@ -291,106 +291,99 @@ public:
         sync();
     }
 
-    class ConstIterator {
+    template <class It, class Qf>
+    class IteratorT
+    {
     protected:
-        const QueueFile& qf_;
+        Qf *qf_;
         uint64_t offset_;
     public:
-        ConstIterator(const QueueFile& qf, uint64_t offset)
-            : qf_(qf), offset_(offset) {}
-        virtual ~ConstIterator() noexcept {}
-        ConstIterator& operator++() {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
-            offset_ += recOp.totalSize();
-            return *this;
+        IteratorT(Qf *qf, uint64_t offset)
+            : qf_(qf), offset_(offset) {
+            assert(qf);
         }
-        ConstIterator operator++(int) {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
-            ConstIterator ret(qf_, offset_);
+        IteratorT(const It &rhs)
+            : qf_(rhs.qf_), offset_(rhs.offset_) {}
+        It &operator=(const It &rhs) const {
+            qf_ = rhs.qf_;
+            offset_ = rhs.offset_;
+        }
+        It &operator++() {
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
+            offset_ += recOp.totalSize();
+            return *reinterpret_cast<It *>(this);
+        }
+        It operator++(int) {
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
+            It ret(qf_, offset_);
             offset_ += recOp.totalSize();
             return ret;
         }
-        bool operator==(const ConstIterator& rhs) const {
+        bool operator==(const It &rhs) const {
             return offset_ == rhs.offset_;
         }
-        bool operator!=(const ConstIterator& rhs) const {
+        bool operator!=(const It &rhs) const {
             return offset_ != rhs.offset_;
         }
         bool isValid() const {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             if (!recOp.isValid()) {
                 return false;
             }
-            if (calcChecksum(recOp.dataPtr<void>(), recOp.dataSize(), qf_.header_.salt)
-                != recOp.checksum()) {
+            uint32_t csum = calcChecksum(
+                recOp.dataPtr<void>(), recOp.dataSize(), qf_->header_.salt);
+            if (csum != recOp.checksum()) {
                 return false;
             }
             return true;
         }
         template <typename CharT>
         void get(std::vector<CharT>& v) const {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             assert(isValid());
             v.resize(recOp.dataSize());
             ::memcpy(&v[0], recOp.dataPtr<void>(), recOp.dataSize());
         }
         void get(std::string& s) const {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             assert(isValid());
             s.resize(recOp.dataSize());
             ::memcpy(&s[0], recOp.dataPtr<void>(), recOp.dataSize());
         }
         bool isEndMark() const {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             return recOp.isEndMark();
         }
         bool isDeleted() const {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             return recOp.isDeleted();
         }
     };
 
-    class Iterator : public ConstIterator {
-    protected:
-        QueueFile& qfw_;
-    public:
-        Iterator(QueueFile& qf, uint64_t offset)
-            : ConstIterator(qf, offset)
-            , qfw_(qf) {}
-        ~Iterator() noexcept {}
-        Iterator& operator++() {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
-            offset_ += recOp.totalSize();
-            return *this;
-        }
-        Iterator operator++(int) {
-            QueueRecordHeaderOp recOp(&qf_.record(offset_));
-            Iterator ret(qfw_, offset_);
-            offset_ += recOp.totalSize();
-            return ret;
-        }
+    struct ConstIterator : public IteratorT<ConstIterator, const QueueFile>
+    {
+        using IteratorT :: IteratorT;
+    };
+    struct Iterator : public IteratorT<Iterator, QueueFile>
+    {
+        using IteratorT :: IteratorT;
+
         /**
          * After calling this functions,
          * You must call gc() for readers not to see the deleted records.
          */
         void setDeleted() {
-            QueueRecordHeaderOp recOp(&qfw_.record(offset_));
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             recOp.setDeleted();
         }
     };
 
-    ConstIterator cbegin() const {
-        return ConstIterator(*this, header_.beginOffset);
-    }
-    ConstIterator cend() const {
-        return ConstIterator(*this, header_.endOffset);
-    }
-    Iterator begin() {
-        return Iterator(*this, header_.beginOffset);
-    }
-    Iterator end() {
-        return Iterator(*this, header_.endOffset);
-    }
+    ConstIterator cbegin() const { return ConstIterator(this, header_.beginOffset); }
+    ConstIterator cend() const { return ConstIterator(this, header_.endOffset); }
+    Iterator begin() { return Iterator(this, header_.beginOffset); }
+    Iterator end() { return Iterator(this, header_.endOffset); }
+    ConstIterator begin() const { return cbegin(); }
+    ConstIterator end() const { return cend(); }
 
 private:
     template <typename T>
