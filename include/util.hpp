@@ -164,60 +164,22 @@ private:
  */
 uint64_t fromUnitIntString(const std::string &valStr)
 {
+    if (valStr.empty()) throw RT_ERR("Invalid argument.");
+    char *endp;
+    uint64_t val = ::strtoll(valStr.c_str(), &endp, 10);
     int shift = 0;
-    std::string s(valStr);
-    const size_t sz = s.size();
-
-    if (sz == 0) { throw RT_ERR("Invalid argument."); }
-    switch (s[sz - 1]) {
-    case 'e':
-    case 'E':
-        shift += 10;
-    case 'p':
-    case 'P':
-        shift += 10;
-    case 't':
-    case 'T':
-        shift += 10;
-    case 'g':
-    case 'G':
-        shift += 10;
-    case 'm':
-    case 'M':
-        shift += 10;
-    case 'k':
-    case 'K':
-        shift += 10;
-        s.resize(sz - 1);
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-        break;
+    switch (*endp) {
+    case 'e': case 'E': shift = 60; break;
+    case 'p': case 'P': shift = 50; break;
+    case 't': case 'T': shift = 40; break;
+    case 'g': case 'G': shift = 30; break;
+    case 'm': case 'M': shift = 20; break;
+    case 'k': case 'K': shift = 10; break;
+    case '\0': break;
     default:
         throw RT_ERR("Invalid suffix charactor.");
     }
-    assert(shift < 64);
-
-    for (size_t i = 0; i < sz - 1; i++) {
-        if (!('0' <= valStr[i] && valStr[i] <= '9')) {
-            throw RT_ERR("Not numeric charactor.");
-        }
-    }
-    uint64_t val = ::atoll(s.c_str());
-    uint64_t mask = uint64_t(-1);
-    if (0 < shift) {
-        mask = (1ULL << (64 - shift)) - 1;
-    }
-    if ((val & mask) != val) {
-        throw RT_ERR("fromUnitIntString: overflow.");
-    }
+    if (((val << shift) >> shift) != val) throw RT_ERR("fromUnitIntString: overflow.");
     return val << shift;
 }
 
