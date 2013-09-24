@@ -102,3 +102,26 @@ CYBOZU_TEST_AUTO(trim)
     CYBOZU_TEST_EQUAL(cybozu::util::trimSpace(" abc"), "abc");
     CYBOZU_TEST_EQUAL(cybozu::util::trimSpace("abc   "), "abc");
 }
+
+CYBOZU_TEST_AUTO(UnitIntString)
+{
+    using namespace cybozu::util;
+    auto check = [](const std::string &s, uint64_t v) {
+        CYBOZU_TEST_EQUAL(fromUnitIntString(s), v);
+        CYBOZU_TEST_EQUAL(toUnitIntString(v), s);
+    };
+    check("12345", 12345);
+    check("1k", 1ULL << 10);
+    check("2m", 2ULL << 20);
+    check("3g", 3ULL << 30);
+    check("4t", 4ULL << 40);
+    check("5p", 5ULL << 50);
+    check("6e", 6ULL << 60);
+
+    /* Overflow check. */
+    CYBOZU_TEST_EQUAL(fromUnitIntString("15e"), uint64_t(15) << 60);
+    CYBOZU_TEST_EXCEPTION(fromUnitIntString("16e"), std::exception);
+	CYBOZU_TEST_EQUAL(fromUnitIntString("16383p"), uint64_t(16383) << 50);
+	CYBOZU_TEST_EXCEPTION(fromUnitIntString("16384p"), std::exception);
+}
+
