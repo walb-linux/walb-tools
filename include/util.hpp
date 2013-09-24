@@ -195,11 +195,11 @@ uint64_t fromUnitIntString(const std::string &valStr)
 std::string toUnitIntString(uint64_t val)
 {
     uint64_t mask = (1ULL << 10) - 1;
-    char units[] = " kmgtpezy";
+    const char units[] = " kmgtpezy";
 
     size_t i = 0;
     while (i < sizeof(units)) {
-        if ((val & mask) != val) { break; }
+        if ((val & ~mask) != val) { break; }
         i++;
         val >>= 10;
     }
