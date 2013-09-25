@@ -94,8 +94,8 @@ public:
         removeBeforeGid(uint64_t(-1));
 
         latestRecord_.init();
-        latestRecord_.raw().gid0 = gid;
-        latestRecord_.raw().gid1 = gid;
+        latestRecord_.raw.gid0 = gid;
+        latestRecord_.raw.gid1 = gid;
         saveLatestRecord();
     }
     /**
@@ -110,7 +110,7 @@ public:
             if (diff.gid0() < latestRecord_.gid0()) return false;
             latestRecord_ = getSnapFromDiff(diff);
         }
-        latestRecord_.raw().timestamp = diff.raw().timestamp;
+        latestRecord_.raw.timestamp = diff.raw.timestamp;
         saveLatestRecord();
         mmap_.insert(std::make_pair(diff.gid0(), diff));
         return true;
@@ -144,7 +144,7 @@ public:
             if (gid1 < diff.gid1()) break;
             if (!merged.canMerge(diff)) return false;
             merged = merged.merge(diff);
-            merged.raw().timestamp = diff.raw().timestamp;
+            merged.raw.timestamp = diff.raw.timestamp;
             it = skipOverlapped(it, diff.gid1());
         }
         assert(merged.gid0() == gid0);
@@ -172,7 +172,7 @@ public:
         };
         for (const MetaDiff &diff : listDiff()) {
             bool canMerge = q.empty() ||
-                (diff.raw().can_merge != 0 && q.back().canMerge(diff));
+                (diff.raw.can_merge != 0 && q.back().canMerge(diff));
             if (canMerge) {
                 q.push_back(diff);
             } else {
@@ -348,7 +348,7 @@ public:
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
-            if (diff.raw().timestamp <= timestamp && gid1 < diff.gid1()) {
+            if (diff.raw.timestamp <= timestamp && gid1 < diff.gid1()) {
                 gid1 = diff.gid1();
             }
             ++it;
@@ -364,7 +364,7 @@ public:
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
-            if (timestamp <= diff.raw().timestamp && diff.gid0() < gid0) {
+            if (timestamp <= diff.raw.timestamp && diff.gid0() < gid0) {
                 gid0 = diff.gid0();
             }
             ++it;

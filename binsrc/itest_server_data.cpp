@@ -98,8 +98,8 @@ walb::MetaDiff createWdiffFile(
 
     /* Generate meta diff. */
     walb::MetaDiff diff(gid0, gid1);
-    diff.raw().timestamp = ::time(0);
-    diff.raw().can_merge = canMerge ? 1 : 0;
+    diff.raw.timestamp = ::time(0);
+    diff.raw.can_merge = canMerge ? 1 : 0;
     std::string fName = walb::createDiffFileName(diff);
     cybozu::FilePath fPath = dirPath + cybozu::FilePath(fName);
 
@@ -159,7 +159,7 @@ std::vector<walb::MetaDiff> mergeDiffs(
     if (v.empty()) return ret;
     std::vector<walb::MetaDiff>::const_iterator it = v.cbegin();
     walb::MetaDiff diff = *it;
-    diff.raw().timestamp = it->raw().timestamp;
+    diff.raw.timestamp = it->raw.timestamp;
     ++it;
     while (it != v.cend()) {
         if (diff.canMerge(*it, ignoreCanMergeFlag)) {

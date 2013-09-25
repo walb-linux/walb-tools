@@ -61,41 +61,36 @@ struct meta_record
  */
 class MetaRecord
 {
-private:
-    struct meta_record rec_;
 public:
+    struct meta_record raw;
     MetaRecord() {
         init();
     }
-    MetaRecord(const MetaRecord &rhs) : rec_() {
-        raw() = rhs.raw();
-    }
+    MetaRecord(const MetaRecord &rhs) : raw(rhs.raw) {}
     MetaRecord &operator=(const MetaRecord &rhs) {
-        raw() = rhs.raw();
+        raw = rhs.raw;
         return *this;
     }
     virtual void init() {
-        ::memset(&rec_, 0, sizeof(rec_));
-        raw().preamble = META_RECORD_PREAMBLE;
+        ::memset(&raw, 0, sizeof(raw));
+        raw.preamble = META_RECORD_PREAMBLE;
     }
-    struct meta_record &raw() { return rec_; }
-    const struct meta_record &raw() const { return rec_; }
-    void *rawData() { return &rec_; }
-    const void *rawData() const { return &rec_; }
-    size_t rawSize() const { return sizeof(rec_); }
+    void *rawData() { return &raw; }
+    const void *rawData() const { return &raw; }
+    size_t rawSize() const { return sizeof(raw); }
     void load(const void *data, size_t size) {
-        if (size != sizeof(rec_)) {
+        if (size != sizeof(raw)) {
             throw std::runtime_error("bad size.");
         }
-        ::memcpy(&rec_, data, sizeof(rec_));
+        ::memcpy(&raw, data, sizeof(raw));
     }
     template <typename InputStream>
     void load(InputStream &is) {
-        cybozu::loadPod(rec_, is);
+        cybozu::loadPod(raw, is);
     }
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::savePod(os, rec_);
+        cybozu::savePod(os, raw);
     }
 };
 
@@ -110,17 +105,17 @@ class MetaDiff : public MetaRecord
 {
 public:
     MetaDiff() : MetaRecord() {
-        raw().is_snapshot = false;
+        raw.is_snapshot = false;
     }
     /**
      * Dirty diff.
      */
     MetaDiff(uint64_t gid0, uint64_t gid1, uint64_t gid2)
         : MetaRecord() {
-        raw().is_snapshot = false;
-        raw().gid0 = gid0;
-        raw().gid1 = gid1;
-        raw().gid2 = gid2;
+        raw.is_snapshot = false;
+        raw.gid0 = gid0;
+        raw.gid1 = gid1;
+        raw.gid2 = gid2;
         check();
     }
     /**
@@ -137,7 +132,7 @@ public:
     }
     void init() override {
         MetaRecord::init();
-        raw().is_snapshot = false;
+        raw.is_snapshot = false;
     }
     bool operator==(const MetaDiff &rhs) const {
         return gid0() == rhs.gid0()
@@ -157,11 +152,11 @@ public:
     }
     bool isClean() const { return gid1() == gid2(); }
     bool isDirty() const { return gid1() != gid2(); }
-    uint64_t gid0() const { return raw().gid0; }
-    uint64_t gid1() const { return raw().gid1; }
-    uint64_t gid2() const { return raw().gid2; }
+    uint64_t gid0() const { return raw.gid0; }
+    uint64_t gid1() const { return raw.gid1; }
+    uint64_t gid2() const { return raw.gid2; }
     bool canMerge(const MetaDiff &diff, bool ignoreCanMergeFlag = false) const {
-        if (!ignoreCanMergeFlag && !diff.raw().can_merge) return false;
+        if (!ignoreCanMergeFlag && !diff.raw.can_merge) return false;
 #if 1
         /* This is a bit more strict check. */
         return gid1() == diff.gid0() && gid1() < diff.gid1();
@@ -177,8 +172,8 @@ public:
         MetaDiff ret(std::min(gid0(), diff.gid0()),
                      diff.gid1(), std::max(gid2(), diff.gid2()));
 #endif
-        ret.raw().can_merge = raw().can_merge;
-        ret.raw().timestamp = diff.raw().timestamp;
+        ret.raw.can_merge = raw.can_merge;
+        ret.raw.timestamp = diff.raw.timestamp;
         return ret;
     }
     friend inline std::ostream &operator<<(std::ostream& os, const MetaDiff &d0) {
@@ -190,15 +185,15 @@ public:
             fp,
             "MetaDiff ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " %" PRIu64 " "
             "can_merge %d lsid %" PRIu64 "\n"
-            , raw().timestamp, gid0(), gid1(), gid2()
-            , raw().can_merge, raw().lsid);
+            , raw.timestamp, gid0(), gid1(), gid2()
+            , raw.can_merge, raw.lsid);
     }
     void print() const {
         print(::stdout);
     }
 private:
     void check() const {
-        if (raw().is_snapshot) {
+        if (raw.is_snapshot) {
             throw std::runtime_error("is_snapshot must be false.");
         }
         if (!(gid0() < gid1() && gid1() <= gid2())) {
@@ -218,16 +213,16 @@ class MetaSnap : public MetaRecord
 {
 public:
     MetaSnap() : MetaRecord() {
-        raw().is_snapshot = true;
+        raw.is_snapshot = true;
     }
     /**
      * Dirty snapshot.
      */
     MetaSnap(uint64_t gid0, uint64_t gid1)
         : MetaRecord() {
-        raw().is_snapshot = true;
-        raw().gid0 = gid0;
-        raw().gid1 = gid1;
+        raw.is_snapshot = true;
+        raw.gid0 = gid0;
+        raw.gid1 = gid1;
         check();
     }
     /**
@@ -244,10 +239,10 @@ public:
     }
     void init() override {
         MetaRecord::init();
-        raw().is_snapshot = true;
+        raw.is_snapshot = true;
     }
-    uint64_t gid0() const { return raw().gid0; }
-    uint64_t gid1() const { return raw().gid1; }
+    uint64_t gid0() const { return raw.gid0; }
+    uint64_t gid1() const { return raw.gid1; }
     bool operator==(const MetaSnap &rhs) const {
         return gid0() == rhs.gid0()
             && gid1() == rhs.gid1();
@@ -278,7 +273,7 @@ public:
     MetaSnap apply(const MetaDiff &diff) const {
         assert(canApply(diff));
         MetaSnap ret(diff.gid1(), std::max(gid1(), diff.gid2()));
-        ret.raw().timestamp = diff.raw().timestamp;
+        ret.raw.timestamp = diff.raw.timestamp;
         return ret;
     }
     MetaSnap startToApply(const MetaDiff &diff) const {
@@ -290,7 +285,7 @@ public:
         assert(gid1() == std::max(gid1(), diff.gid2()));
         assert(diff.gid1() <= gid1());
         MetaSnap ret(diff.gid1(), gid1());
-        ret.raw().timestamp = diff.raw().timestamp;
+        ret.raw.timestamp = diff.raw.timestamp;
         return ret;
     }
     bool isTooNew(const MetaDiff &diff) const {
@@ -308,15 +303,15 @@ public:
             fp,
             "MetaSnap ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " "
             "can_merge %d lsid %" PRIu64 "\n"
-            , raw().timestamp, gid0(), gid1()
-            , raw().can_merge, raw().lsid);
+            , raw.timestamp, gid0(), gid1()
+            , raw.can_merge, raw.lsid);
     }
     void print() const {
         print(::stdout);
     }
 private:
     void check() const {
-        if (!raw().is_snapshot) {
+        if (!raw.is_snapshot) {
             throw std::runtime_error("is_snapshot must be true.");
         }
         if (!(gid0() <= gid1())) {
@@ -333,10 +328,10 @@ static inline MetaSnap getSnapFromDiff(const MetaDiff &diff)
 {
     MetaSnap snap;
     snap.init();
-    snap.raw().gid0 = diff.gid1();
-    snap.raw().gid1 = diff.gid2();
-    snap.raw().timestamp = diff.raw().timestamp;
-    snap.raw().lsid = diff.raw().lsid;
+    snap.raw.gid0 = diff.gid1();
+    snap.raw.gid1 = diff.gid2();
+    snap.raw.timestamp = diff.raw.timestamp;
+    snap.raw.lsid = diff.raw.lsid;
     return snap;
 }
 
@@ -355,13 +350,13 @@ static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff) {
     }
     /* timestamp */
     std::string ts = s.substr(0, 14);
-    diff.raw().timestamp = cybozu::strToUnixTime(ts);
+    diff.raw.timestamp = cybozu::strToUnixTime(ts);
     if (s[14] != '-') return false;
     /* can_merge */
     if (s[15] == '0') {
-        diff.raw().can_merge = 0;
+        diff.raw.can_merge = 0;
     } else if (s[15] == '1') {
-        diff.raw().can_merge = 1;
+        diff.raw.can_merge = 1;
     } else {
         return false;
     }
@@ -388,14 +383,14 @@ static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff) {
     gidV.push_back(gid);
     switch (gidV.size()) {
     case 2:
-        diff.raw().gid0 = gidV[0];
-        diff.raw().gid1 = gidV[1];
-        diff.raw().gid2 = gidV[1];
+        diff.raw.gid0 = gidV[0];
+        diff.raw.gid1 = gidV[1];
+        diff.raw.gid2 = gidV[1];
         break;
     case 3:
-        diff.raw().gid0 = gidV[0];
-        diff.raw().gid1 = gidV[1];
-        diff.raw().gid2 = gidV[2];
+        diff.raw.gid0 = gidV[0];
+        diff.raw.gid1 = gidV[1];
+        diff.raw.gid2 = gidV[2];
         break;
     default:
         return false;
@@ -409,9 +404,9 @@ static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff) {
 static inline std::string createDiffFileName(const MetaDiff &diff) {
     assert(diff.isValid());
     std::string s;
-    s += cybozu::unixTimeToStr(diff.raw().timestamp);
+    s += cybozu::unixTimeToStr(diff.raw.timestamp);
     s.push_back('-');
-    s.push_back(diff.raw().can_merge ? '1' : '0');
+    s.push_back(diff.raw.can_merge ? '1' : '0');
     s.push_back('-');
     s += cybozu::util::intToHexStr(diff.gid0());
     s.push_back('-');

@@ -101,11 +101,11 @@ public:
 
         /* Generate a record. */
         MetaSnap rec;
-        rec.raw().gid0 = gid0;
-        rec.raw().gid1 = gid1;
-        rec.raw().lsid = lsid;
-        rec.raw().timestamp = ts;
-        rec.raw().can_merge = canMerge;
+        rec.raw.gid0 = gid0;
+        rec.raw.gid1 = gid1;
+        rec.raw.lsid = lsid;
+        rec.raw.timestamp = ts;
+        rec.raw.can_merge = canMerge;
 
         addRecord(rec);
         return std::make_pair(gid0, gid1);
@@ -120,12 +120,12 @@ public:
     MetaSnap front() const {
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         MetaSnap rec;
-        qf.front(rec.raw());
+        qf.front(rec.raw);
         return rec;
     }
     void pop() {
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        qf.front(doneRec_.raw());
+        qf.front(doneRec_.raw);
         qf.pop();
         saveDoneRecord();
     }
@@ -142,7 +142,7 @@ public:
             }
             MetaSnap rec;
             getRecordFromIterator(rec, it);
-            if (gid <= rec.raw().gid0) break;
+            if (gid <= rec.raw.gid0) break;
             it.setDeleted();
             doneRec_ = rec;
             ++it;
@@ -192,16 +192,16 @@ private:
                     throw std::runtime_error("queue broken.");
                 }
                 if (it != qf.cbegin()) {
-                    if (!(prev.raw().gid1 == rec.raw().gid0)) {
+                    if (!(prev.raw.gid1 == rec.raw.gid0)) {
                         throw std::runtime_error("queue broken.");
                     }
-                    if (!(prev.raw().lsid <= rec.raw().lsid)) {
+                    if (!(prev.raw.lsid <= rec.raw.lsid)) {
                         throw std::runtime_error("queue broken.");
                     }
                 }
-                assert(rec.raw().gid0 < rec.raw().gid1);
-                nextGid_ = std::max(nextGid_, rec.raw().gid1);
-                nextLsid_ = std::max(nextLsid_, rec.raw().lsid);
+                assert(rec.raw.gid0 < rec.raw.gid1);
+                nextGid_ = std::max(nextGid_, rec.raw.gid1);
+                nextLsid_ = std::max(nextLsid_, rec.raw.lsid);
             }
             ++it;
             prev = rec;
@@ -209,11 +209,11 @@ private:
     }
     void initDoneRecord(uint64_t lsid) {
         doneRec_.init();
-        doneRec_.raw().gid0 = 0;
-        doneRec_.raw().gid1 = 0;
-        doneRec_.raw().timestamp = ::time(nullptr);
-        doneRec_.raw().lsid = lsid;
-        doneRec_.raw().can_merge = true;
+        doneRec_.raw.gid0 = 0;
+        doneRec_.raw.gid1 = 0;
+        doneRec_.raw.timestamp = ::time(nullptr);
+        doneRec_.raw.lsid = lsid;
+        doneRec_.raw.can_merge = true;
         saveDoneRecord();
         nextGid_ = 0;
         nextLsid_ = lsid;
@@ -232,16 +232,16 @@ private:
     }
     void addRecord(const MetaSnap &rec) {
         assert(rec.isValid());
-        if (nextGid_ != rec.raw().gid0) {
+        if (nextGid_ != rec.raw.gid0) {
             throw std::runtime_error("addRecord: gid0 invalid.");
         }
-        if (rec.raw().lsid < nextLsid_) {
+        if (rec.raw.lsid < nextLsid_) {
             throw std::runtime_error("addREcord: lsid invalid.");
         }
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         qf.push(rec.rawData(), rec.rawSize());
-        nextGid_ = rec.raw().gid1;
-        nextLsid_ = rec.raw().lsid;
+        nextGid_ = rec.raw.gid1;
+        nextLsid_ = rec.raw.lsid;
     }
     template <class QueueIterator>
     void getRecordFromIterator(MetaSnap &rec, QueueIterator &it) const {

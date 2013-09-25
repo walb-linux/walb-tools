@@ -36,10 +36,10 @@ public:
 void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool canMerge)
 {
     diff.init();
-    diff.raw().gid0 = gid0;
-    diff.raw().gid1 = gid1;
-    diff.raw().gid2 = gid1;
-    diff.raw().can_merge = canMerge;
+    diff.raw.gid0 = gid0;
+    diff.raw.gid1 = gid1;
+    diff.raw.gid2 = gid1;
+    diff.raw.can_merge = canMerge;
 };
 
 void createDiffFile(const walb::WalbDiffFiles &diffFiles, walb::MetaDiff &diff)

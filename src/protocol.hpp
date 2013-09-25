@@ -466,11 +466,11 @@ class DirtyHashSyncProtocol : public Protocol
             packet::Packet packet(sock_);
             MetaDiff diff(snap_.gid0(), snap_.gid1() + 1, snap_.gid1() + 2);
             if (snap_.isDirect()) {
-                diff.raw().can_merge = true;
+                diff.raw.can_merge = true;
             } else {
-                diff.raw().can_merge = false; /* TODO: Is this true? */
+                diff.raw.can_merge = false; /* TODO: Is this true? */
             }
-            diff.raw().timestamp = ::time(0);
+            diff.raw.timestamp = ::time(0);
             packet.write(diff);
         }
     };

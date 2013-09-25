@@ -5,7 +5,7 @@
 CYBOZU_TEST_AUTO(diff)
 {
     walb::MetaDiff d0(0, 1, 2), d1(1, 2, 3);
-    d1.raw().can_merge = 1;
+    d1.raw.can_merge = 1;
     CYBOZU_TEST_ASSERT(d0.canMerge(d1));
     walb::MetaDiff d2 = d0.merge(d1);
     CYBOZU_TEST_ASSERT(d2 == walb::MetaDiff(0, 2, 3));

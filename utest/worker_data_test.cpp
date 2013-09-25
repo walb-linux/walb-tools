@@ -41,13 +41,13 @@ CYBOZU_TEST_AUTO(data)
 
     walb::MetaSnap rec0 = wData.front();
     CYBOZU_TEST_EQUAL(rec0.gid1() - rec0.gid0(), 1);
-    CYBOZU_TEST_EQUAL(rec0.raw().lsid, 200);
+    CYBOZU_TEST_EQUAL(rec0.raw.lsid, 200);
     wData.pop();
     CYBOZU_TEST_EQUAL(wData.getAllRecords().size(), 11);
 
     walb::MetaSnap rec1 = wData.front();
     CYBOZU_TEST_EQUAL(rec1.gid1() - rec1.gid0(), 1);
-    CYBOZU_TEST_EQUAL(rec1.raw().lsid, 300);
+    CYBOZU_TEST_EQUAL(rec1.raw.lsid, 300);
     wData.pop();
     CYBOZU_TEST_EQUAL(wData.getAllRecords().size(), 10);
 

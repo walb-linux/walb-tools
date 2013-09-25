@@ -111,9 +111,9 @@ public:
      */
     void reset(uint64_t gid) {
         baseRecord_.init();
-        baseRecord_.raw().gid0 = gid;
-        baseRecord_.raw().gid1 = gid;
-        baseRecord_.raw().timestamp = ::time(0);
+        baseRecord_.raw.gid0 = gid;
+        baseRecord_.raw.gid1 = gid;
+        baseRecord_.raw.timestamp = ::time(0);
         saveBaseRecord();
 
         wdiffsP_->reset(gid);
@@ -348,7 +348,7 @@ public:
      */
     void finishToApply(const MetaDiff &diff) {
         baseRecord_ = baseRecord_.finishToApply(diff);
-        baseRecord_.raw().timestamp = diff.raw().timestamp;
+        baseRecord_.raw.timestamp = diff.raw.timestamp;
         saveBaseRecord();
     }
     /**
