@@ -8,6 +8,7 @@
  */
 #include "MurmurHash3.h"
 #include "cybozu/serializer.hpp"
+#include "cybozu/itoa.hpp"
 #include "util.hpp"
 #include <cstdio>
 #include <cassert>
@@ -42,12 +43,10 @@ public:
      */
     std::string str() const {
         std::string s;
-        s.resize(HASH_SIZE * 2 + 1);
-        for (size_t i = 0; i < HASH_SIZE; i++) {
-            UNUSED int r = ::snprintf(&s[i * 2], 3, "%02x", data_[i]);
-            assert(r == 2);
-        }
         s.resize(HASH_SIZE * 2);
+        for (size_t i = 0; i < HASH_SIZE; i++) {
+            cybozu::itohex(&s[i * 2], 2, data_[i], false);
+        }
         return s;
     }
     size_t size() const { return HASH_SIZE; }

@@ -180,16 +180,13 @@ public:
         os << d0.gid0() << ", " << d0.gid1() << ", " << d0.gid2() << std::endl;
         return os;
     }
-    void print(FILE *fp) const {
+    void print(FILE *fp = ::stdout) const {
         ::fprintf(
             fp,
             "MetaDiff ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " %" PRIu64 " "
             "can_merge %d lsid %" PRIu64 "\n"
             , raw.timestamp, gid0(), gid1(), gid2()
             , raw.can_merge, raw.lsid);
-    }
-    void print() const {
-        print(::stdout);
     }
 private:
     void check() const {
@@ -298,16 +295,13 @@ public:
         os << s0.gid0() << ", " << s0.gid1() << std::endl;
         return os;
     }
-    void print(FILE *fp) const {
+    void print(FILE *fp = ::stdout) const {
         ::fprintf(
             fp,
             "MetaSnap ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " "
             "can_merge %d lsid %" PRIu64 "\n"
             , raw.timestamp, gid0(), gid1()
             , raw.can_merge, raw.lsid);
-    }
-    void print() const {
-        print(::stdout);
     }
 private:
     void check() const {
@@ -405,14 +399,14 @@ static inline std::string createDiffFileName(const MetaDiff &diff) {
     assert(diff.isValid());
     std::string s;
     s += cybozu::unixTimeToStr(diff.raw.timestamp);
-    s.push_back('-');
-    s.push_back(diff.raw.can_merge ? '1' : '0');
-    s.push_back('-');
+    s += '-';
+    s += diff.raw.can_merge ? '1' : '0';
+    s += '-';
     s += cybozu::util::intToHexStr(diff.gid0());
-    s.push_back('-');
+    s += '-';
     s += cybozu::util::intToHexStr(diff.gid1());
     if (diff.isDirty()) {
-        s.push_back('-');
+        s += '-';
         s += cybozu::util::intToHexStr(diff.gid2());
     }
     s += ".wdiff";

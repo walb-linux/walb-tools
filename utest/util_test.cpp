@@ -121,8 +121,8 @@ CYBOZU_TEST_AUTO(UnitIntString)
     /* Overflow check. */
     CYBOZU_TEST_EQUAL(fromUnitIntString("15e"), uint64_t(15) << 60);
     CYBOZU_TEST_EXCEPTION(fromUnitIntString("16e"), std::exception);
-	CYBOZU_TEST_EQUAL(fromUnitIntString("16383p"), uint64_t(16383) << 50);
-	CYBOZU_TEST_EXCEPTION(fromUnitIntString("16384p"), std::exception);
+    CYBOZU_TEST_EQUAL(fromUnitIntString("16383p"), uint64_t(16383) << 50);
+    CYBOZU_TEST_EXCEPTION(fromUnitIntString("16384p"), std::exception);
 }
 
 CYBOZU_TEST_AUTO(formatString)

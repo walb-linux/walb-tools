@@ -294,7 +294,7 @@ public:
         isCompleted_ = true;
     }
 
-    void print(::FILE *p) const {
+    void print(::FILE *p = ::stdout) const {
         ::fprintf(p, "IO offset: %zu size: %zu aioKey: %u "
                   "submitted: %d completed: %d\n",
                   offset_, size_, aioKey_,
@@ -303,8 +303,6 @@ public:
             ::fprintf(p, "  block %p\n", b.get());
         }
     }
-
-    void print() const { print(::stdout); }
 
     /**
      * Can an IO be merged to this.

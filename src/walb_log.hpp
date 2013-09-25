@@ -155,7 +155,7 @@ public:
         bd_.write(offset_ * pbs_, pbs_, ptr<char>());
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp,
                   "sectorType: %u\n"
                   "version: %u\n"
@@ -188,10 +188,6 @@ public:
             ::fprintf(fp, "%02x", getUuid()[i]);
         }
         ::fprintf(fp, "\n");
-    }
-
-    void print() const {
-        print(::stdout);
     }
 
 private:
@@ -405,7 +401,7 @@ public:
         printLogRecordOneline(fp, pos, rec);
     }
 
-    void printHeader(::FILE *fp) const {
+    void printHeader(::FILE *fp = ::stdout) const {
         const struct walb_logpack_header &logh = header();
         ::fprintf(fp,
                   "*****logpack header*****\n"
@@ -421,7 +417,7 @@ public:
                   logh.logpack_lsid);
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         printHeader(fp);
         for (size_t i = 0; i < nRecords(); i++) {
             printRecord(fp, i);
@@ -432,8 +428,6 @@ public:
     void printRecordOneline(size_t pos) const {
         printRecordOneline(::stdout, pos);
     }
-    void printHeader() const { printHeader(::stdout); }
-    void print() const { print(::stdout); }
 
     /**
      * Print each IO oneline.
@@ -917,7 +911,7 @@ public:
         return true;
     }
 
-    void print(::FILE *fp) const override {
+    void print(::FILE *fp = ::stdout) const override {
         LogRecord::print(fp);
         if (this->hasDataForChecksum() && this->ioSizePb() == this->nBlocks()) {
             ::fprintf(fp, "record_checksum: %08x\n"
@@ -929,8 +923,6 @@ public:
             }
         }
     }
-
-    void print() const override { print(::stdout); }
 
     bool setChecksum() {
         if (!this->hasDataForChecksum()) { return false; }
@@ -1036,7 +1028,7 @@ public:
         return false;
     }
 
-    void print(FILE *fp) const {
+    void print(FILE *fp = ::stdout) const {
         ::fprintf(
             fp,
             "sector_type %d\n"
@@ -1063,10 +1055,6 @@ public:
             "end_lsid %" PRIu64 "\n",
             header().begin_lsid,
             header().end_lsid);
-    }
-
-    void print() {
-        print(::stdout);
     }
 
 private:
