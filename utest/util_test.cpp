@@ -125,3 +125,34 @@ CYBOZU_TEST_AUTO(UnitIntString)
 	CYBOZU_TEST_EXCEPTION(fromUnitIntString("16384p"), std::exception);
 }
 
+CYBOZU_TEST_AUTO(formatString)
+{
+    {
+        std::string st(cybozu::util::formatString("%s%c%s", "012", (char)0, "345"));
+#if 0
+        for (size_t i = 0; i < st.size(); i++) {
+            printf("%0x ", st[i]);
+        }
+        ::printf("\n size %zu\n", st.size());
+#endif
+        CYBOZU_TEST_EQUAL(st.size(), 7);
+    }
+
+    {
+        std::string st(cybozu::util::formatString(""));
+        CYBOZU_TEST_EQUAL(st, "");
+    }
+
+    {
+        try {
+            std::string st(cybozu::util::formatString(nullptr));
+            CYBOZU_TEST_ASSERT(false);
+        } catch (std::runtime_error& e) {
+        }
+    }
+
+    {
+        std::string st(cybozu::util::formatString("%s%s", "0123456789", "0123456789"));
+        CYBOZU_TEST_EQUAL(st.size(), 20);
+    }
+}

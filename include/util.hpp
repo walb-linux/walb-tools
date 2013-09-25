@@ -79,40 +79,6 @@ std::string formatString(const char * format, ...)
     return s;
 }
 
-/**
- * formatString() test.
- */
-void testFormatString()
-{
-    {
-        std::string st(formatString("%s%c%s", "012", (char)0, "345"));
-        for (size_t i = 0; i < st.size(); i++) {
-            printf("%0x ", st[i]);
-        }
-        ::printf("\n size %zu\n", st.size());
-        assert(st.size() == 7);
-    }
-
-    {
-        std::string st(formatString(""));
-        ::printf("%s %zu\n", st.c_str(), st.size());
-    }
-
-    {
-        try {
-            std::string st(formatString(nullptr));
-            assert(false);
-        } catch (std::runtime_error& e) {
-        }
-    }
-
-    {
-        std::string st(formatString("%s%s", "0123456789", "0123456789"));
-        ::printf("%s %zu\n", st.c_str(), st.size());
-        assert(st.size() == 20);
-    }
-}
-
 static inline void checkCond(bool cond, const char *name, int line)
 {
     if (!cond) {
@@ -211,37 +177,6 @@ std::string toUnitIntString(uint64_t val)
         return formatString("%" PRIu64 "%c", val, units[i]);
     } else {
         return formatString("%" PRIu64 "", val);
-    }
-}
-
-void testUnitIntString()
-{
-    auto check = [](const std::string &s, uint64_t v) {
-        CHECKx(fromUnitIntString(s) == v);
-        CHECKx(toUnitIntString(v) == s);
-    };
-    check("12345", 12345);
-    check("1k", 1ULL << 10);
-    check("2m", 2ULL << 20);
-    check("3g", 3ULL << 30);
-    check("4t", 4ULL << 40);
-    check("5p", 5ULL << 50);
-    check("6e", 6ULL << 60);
-
-    /* Overflow check. */
-    try {
-        fromUnitIntString("7e");
-        CHECKx(true);
-        fromUnitIntString("8e");
-        CHECKx(false);
-    } catch (std::runtime_error &e) {
-    }
-    try {
-        fromUnitIntString("16383p");
-        CHECKx(true);
-        fromUnitIntString("16384p");
-        CHECKx(false);
-    } catch (std::runtime_error &e) {
     }
 }
 
