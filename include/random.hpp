@@ -35,10 +35,13 @@ public:
     }
 
     void fill(void *data, size_t size) {
-        IntType *p = reinterpret_cast<IntType *>(data);
-        while (sizeof(*p) <= size) {
-            *(p++) = operator()();
-            size -= sizeof(*p);
+        char *p = reinterpret_cast<char *>(data);
+        const size_t s = sizeof(IntType);
+        while (s <= size) {
+            IntType i = operator()();
+            ::memcpy(p, &i, s);
+            p += s;
+            size -= s;
         }
         if (0 < size) {
             IntType i = operator()();
