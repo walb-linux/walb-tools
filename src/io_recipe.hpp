@@ -31,11 +31,8 @@ public:
             "%" PRIu64 "\t%u\t%08x", offsetB(), ioSizeB(), csum());
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "%s\n", toString().c_str());
-    }
-    void print() const {
-        print(::stdout);
     }
 
     static IoRecipe parse(const std::string& line) {
