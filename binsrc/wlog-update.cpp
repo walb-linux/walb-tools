@@ -23,6 +23,7 @@
 #include "walb_log.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
+#include "cybozu/atoi.hpp"
 
 /**
  * Command line configuration.
@@ -111,28 +112,13 @@ public:
     };
 
 private:
-    uint8_t hexchar2uint8(u8 c) const {
-        if ('0' <= c && c <= '9') {
-            return c - '0';
-        }
-        if ('a' <= c && c <= 'f') {
-            return c - 'a' + 10;
-        }
-        if ('A' <= c && c <= 'F') {
-            return c - 'A' + 10;
-        }
-        throwError("wrong UUID charactor: %c.", c);
-        return 0;
-    }
-
     void setUuid(const std::string &uuidStr) {
         if (uuidStr.size() != 32) {
             throwError("Invalid UUID string.");
         }
         for (size_t i = 0; i < UUID_SIZE; i++) {
             /* ex. "ff" -> 255 */
-            uuid_[i] = hexchar2uint8(uuidStr[i * 2]) * 16 +
-                hexchar2uint8(uuidStr[i * 2 + 1]);
+            uuid_[i] = cybozu::hextoi(&uuidStr[i * 2], 2);
         }
     }
 
