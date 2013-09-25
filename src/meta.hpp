@@ -405,14 +405,14 @@ static inline std::string createDiffFileName(const MetaDiff &diff) {
     assert(diff.isValid());
     std::string s;
     s += cybozu::unixTimeToStr(diff.raw.timestamp);
-    s.push_back('-');
-    s.push_back(diff.raw.can_merge ? '1' : '0');
-    s.push_back('-');
+    s += '-';
+    s += diff.raw.can_merge ? '1' : '0';
+    s += '-';
     s += cybozu::util::intToHexStr(diff.gid0());
-    s.push_back('-');
+    s += '-';
     s += cybozu::util::intToHexStr(diff.gid1());
     if (diff.isDirty()) {
-        s.push_back('-');
+        s += '-';
         s += cybozu::util::intToHexStr(diff.gid2());
     }
     s += ".wdiff";
