@@ -153,6 +153,9 @@ private:
         std::string s(msg);
         const size_t BUF_SIZE = 1024;
         char buf[BUF_SIZE];
+#ifndef _GNU_SOURCE
+#error "We use GNU strerror_r()."
+#endif
         char *c = ::strerror_r(errnum, buf, BUF_SIZE);
         s += c;
         return s;
