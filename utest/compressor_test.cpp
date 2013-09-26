@@ -55,8 +55,7 @@ walb::log::Generator::Config createConfig()
 
 void printPackRaw(char *packRaw)
 {
-    walb::diff::PackHeader packh;
-    packh.resetBuffer(packRaw);
+    walb::diff::PackHeader packh(packRaw);
     ::printf("<<<<<<<<<<<<<<<<<<<<<\n");
     packh.print();
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
@@ -72,14 +71,12 @@ std::vector<std::vector<char> > generateRawPacks()
     std::vector<std::vector<char> > packV0;
     std::vector<char> packRaw(::WALB_DIFF_PACK_SIZE);
     walb::diff::PackHeader packh(&packRaw[0]);
+    packh.reset();
 
     auto addIo = [&](const struct walb_diff_record &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
-#if 1
+        //if (!packh.add(rec)) {
         if (10 <= packh.nRecords() || !packh.add(rec)) {
-#else
-        if (!packh.add(rec)) {
-#endif
             //::printf("packh.nRecords: %u\n", packh.nRecords()); /* debug */
             //printPackRaw(&packRaw[0]); /* debug */
             packh.updateChecksum();
@@ -146,78 +143,33 @@ std::vector<std::vector<char> > generateRawPacks()
     return packV0;
 }
 
-void testDiffCompression(int type)
+void testPackCompression(int type, const char *rawPack)
 {
     walb::PackCompressor compr(type);
     walb::PackUncompressor ucompr(type);
 
-    std::vector<std::vector<char> > packV0 = generateRawPacks();
+    walb::diff::MemoryPack mpack0(rawPack);
+    CYBOZU_TEST_ASSERT(mpack0.isValid());
 
-    /* Compress packs */
-    //::printf("---COMPRESS-------------------------------------\n");
-    std::vector<std::unique_ptr<char[]> > packV1;
-    for (std::vector<char> &pk : packV0) {
-        packV1.push_back(compr.convert(&pk[0]));
-    }
+    walb::diff::MemoryPack mpack1(compr.convert(mpack0.rawPtr()));
+    CYBOZU_TEST_ASSERT(mpack1.isValid());
+    walb::diff::MemoryPack mpack2(ucompr.convert(mpack1.rawPtr()));
+    CYBOZU_TEST_ASSERT(mpack2.isValid());
 
-    /* Check compressed packs. */
-    for (const std::unique_ptr<char[]> &pk : packV1) {
-        walb::diff::PackHeader packh0;
-        packh0.resetBuffer(pk.get());
-        CYBOZU_TEST_ASSERT(packh0.isValid());
-
-        for (size_t i = 0; i < packh0.nRecords(); i++) {
-            walb::diff::RecordRaw rec(packh0.record(i));
-            CYBOZU_TEST_ASSERT(rec.isValid());
-            const char *rawData = &pk[::WALB_DIFF_PACK_SIZE + rec.dataOffset()];
-            uint32_t csum = cybozu::util::calcChecksum(rawData, rec.dataSize(), 0);
-            //::printf("calculated %08x record %08x\n", csum, rec.checksum());
-            CYBOZU_TEST_EQUAL(csum, rec.checksum());
-
+    CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
+    int ret = ::memcmp(mpack0.rawPtr(), mpack2.rawPtr(), mpack0.size());
+    CYBOZU_TEST_ASSERT(ret == 0);
 #if 0
-            if (rec.compressionType() == ::WALB_DIFF_CMPR_SNAPPY) {
-                walb::diff::IoData io0;
-                if (rec.isNormal()) {
-                    rec.printOneline();
-                    io0.setIoBlocks(rec.ioBlocks());
-                    io0.setCompressionType(rec.compressionType());
-                    io0.copyFrom(rawData, rec.dataSize());
-                    io0.printOneline();
-                }
-                walb::diff::IoData io1;
-                if (io0.isCompressed()) {
-                    io1 = io0.uncompress();
-                } else {
-                    io1 = io0;
-                }
-                if (rec.isNormal()) {
-                    io1.printOneline();
-                }
-            }
+    printPackRaw(mpack0.rawPtr());
+    printPackRaw(mpack1.rawPtr());
+    printPackRaw(mpack2.rawPtr());
 #endif
-        }
-    }
+}
 
-    /* Uncompress packes. */
-    //::printf("---UNCOMPRESS-------------------------------------\n"); /* debug */
-    std::vector<std::unique_ptr<char[]> > packV2;
-    for (const std::unique_ptr<char[]> &pk : packV1) {
-        packV2.push_back(ucompr.convert(pk.get()));
-    }
-
-    CYBOZU_TEST_EQUAL(packV0.size(), packV1.size());
-    CYBOZU_TEST_EQUAL(packV0.size(), packV2.size());
-
-    /* Check the original data and uncompressed data are equal. */
-    for (size_t i = 0; i < packV0.size(); i++) {
-        int ret = ::memcmp(&packV0[i][0], packV2[i].get(), packV0[i].size());
-        CYBOZU_TEST_ASSERT(ret == 0);
-#if 0
-        printPackRaw(&packV0[i][0]);
-        printPackRaw(packV1[i].get());
-        printPackRaw(packV2[i].get());
-#endif
-        if (ret != 0) throw std::runtime_error("error"); /* debug */
+void testDiffCompression(int type)
+{
+    for (std::vector<char> &pk : generateRawPacks()) {
+        testPackCompression(type, &pk[0]);
     }
 }
 

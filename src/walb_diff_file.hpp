@@ -7,6 +7,7 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include "walb_diff_base.hpp"
+#include <exception>
 
 namespace walb {
 namespace diff {
@@ -112,10 +113,10 @@ public:
     }
     /**
      * Buffer size must be ::WALB_DIFF_PACK_SIZE.
+     * You must call reset() to initialize.
      */
     explicit PackHeader(char *buf) : buf_(buf), mustDelete_(false) {
         assert(buf);
-        reset();
     }
     PackHeader(const PackHeader &) = delete;
     PackHeader(PackHeader &&rhs)
@@ -262,32 +263,100 @@ private:
 };
 
 /**
+ * Pack interface.
+ */
+class PackBase
+{
+public:
+    virtual ~PackBase() noexcept {}
+    virtual const struct walb_diff_pack &header() const = 0;
+    virtual struct walb_diff_pack &header() = 0;
+    virtual const char *data(size_t i) const = 0;
+    virtual char *data(size_t i) = 0;
+    size_t size() const {
+        return ::WALB_DIFF_PACK_SIZE + header().total_size;
+    }
+    bool isValid(std::string *errMsg = nullptr) const {
+        auto err = [&errMsg](const char *fmt, ...) {
+            if (!errMsg) throw std::exception();
+            std::string msg;
+            va_list args;
+            va_start(args, fmt);
+            try { msg = cybozu::util::formatStringV(fmt, args); } catch (...) {}
+            va_end(args);
+            *errMsg = msg;
+            throw std::exception();
+        };
+        try {
+            PackHeader packh((char *)&header());
+            if (!packh.isValid()) err("pack header invalid.");
+            for (size_t i = 0; i < packh.nRecords(); i++) {
+                walb::diff::RecordRaw rec(packh.record(i));
+                if (!rec.isValid()) err("record invalid: %zu.", i);
+                uint32_t csum = cybozu::util::calcChecksum(data(i), rec.dataSize(), 0);
+                if (csum != rec.checksum()) err("checksum of %zu differ %08x %08x."
+                                                , i, rec.checksum(), csum);
+            }
+            return true;
+        } catch (std::exception &) {
+            return false;
+        }
+    }
+};
+
+/**
  * Manage a pack as a contiguous memory.
  */
-class MemoryPack
+class MemoryPack : public PackBase
 {
 private:
     std::unique_ptr<char[]> p_;
 
 public:
+    explicit MemoryPack(const void *p) : p_() {
+        const struct walb_diff_pack &packh = *reinterpret_cast<const struct walb_diff_pack *>(p);
+        size_t size = WALB_DIFF_PACK_SIZE + packh.total_size;
+        p_ = std::unique_ptr<char[]>(new char[size]);
+        ::memcpy(p_.get(), p, size);
+    }
     explicit MemoryPack(std::unique_ptr<char[]> &&p)
         : p_(std::move(p)) {}
+    MemoryPack(const MemoryPack &rhs) : p_() {
+        p_ = std::unique_ptr<char[]>(new char[rhs.size()]);
+        ::memcpy(p_.get(), rhs.p_.get(), rhs.size());
+    }
+    MemoryPack(MemoryPack &&rhs) : p_(std::move(rhs.p_)) {}
+    MemoryPack &operator=(const MemoryPack &rhs) {
+        MemoryPack pack(rhs);
+        p_ = std::move(pack.p_);
+        return *this;
+    }
+    MemoryPack &operator=(MemoryPack &&rhs) {
+        p_ = std::move(rhs.p_);
+        return *this;
+    }
 
-    const struct walb_diff_pack &header() const {
+    const struct walb_diff_pack &header() const override {
         return *ptr<struct walb_diff_pack>(0);
     }
-    struct walb_diff_pack &header() {
+    struct walb_diff_pack &header() override {
         return *ptr<struct walb_diff_pack>(0);
     }
-    const char *data(size_t i) const {
+    const char *data(size_t i) const override {
         assert(i < header().n_records);
         if (header().record[i].data_size == 0) return nullptr;
         return ptr<const char>(offset(i));
     }
-    char *data(size_t i) {
+    char *data(size_t i) override {
         assert(i < header().n_records);
         if (header().record[i].data_size == 0) return nullptr;
         return ptr<char>(offset(i));
+    }
+    const char *rawPtr() const {
+        return p_.get();
+    }
+    std::unique_ptr<char[]> &&forMove() {
+        return std::move(p_);
     }
 private:
     template <typename T>
@@ -306,7 +375,7 @@ private:
 /**
  * Manage a pack as a header data and multiple block diff IO data.
  */
-class ScatterGatherPack
+class ScatterGatherPack : public PackBase
 {
 private:
     PackHeader pack_; /* pack header */
@@ -321,10 +390,10 @@ public:
         assert(header().n_records == ios_.size());
     }
 
-    const struct walb_diff_pack &header() const {
+    const struct walb_diff_pack &header() const override {
         return pack_.header();
     }
-    struct walb_diff_pack &header() {
+    struct walb_diff_pack &header() override {
         return pack_.header();
     }
     /**
@@ -332,10 +401,10 @@ public:
      *   data pointer for normal IOs.
      *   nullptr for non-normal IOs such as ALL_ZERO and DISCARD.
      */
-    const char *data(size_t i) const {
+    const char *data(size_t i) const override {
         return ios_[i].rawData();
     }
-    char *data(size_t i) {
+    char *data(size_t i) override {
         return ios_[i].rawData();
     }
 };
