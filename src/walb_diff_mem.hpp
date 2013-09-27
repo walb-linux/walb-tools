@@ -38,7 +38,7 @@ public:
         if (rec.isNormal()) {
             io_.setIoBlocks(io.ioBlocks());
             io_.setCompressionType(io.compressionType());
-            io_.data().resize(io.data().size());
+            io_.resizeData(io.rawSize());
             ::memcpy(io_.rawData(), io.rawData(), io.rawSize());
         } else {
             io_ = IoData();
@@ -57,7 +57,7 @@ public:
         if (rec.isNormal()) {
             io_.setIoBlocks(rec.ioBlocks());
             io_.setCompressionType(rec.compressionType());
-            io_.data() = std::move(data);
+            io_.moveFrom(std::move(data));
         } else {
             io_ = IoData();
         }
@@ -120,7 +120,7 @@ public:
         std::vector<RecordRaw> recV = rec_.splitAll(ioBlocks);
         std::vector<IoData> ioV;
         if (rec_.isNormal()) {
-            ioV = io_.splitAll(ioBlocks);
+            ioV = splitIoDataAll(io_, ioBlocks);
         } else {
             ioV.resize(recV.size());
         }

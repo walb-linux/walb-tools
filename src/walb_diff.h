@@ -105,10 +105,10 @@ struct walb_diff_pack
     struct walb_diff_record record[0];
 } __attribute__((packed));
 
-const unsigned int WALB_DIFF_PACK_SIZE = 4096; /* 4KiB */
-const unsigned int MAX_N_RECORDS_IN_WALB_DIFF_PACK =
+const size_t WALB_DIFF_PACK_SIZE = 4096; /* 4KiB */
+const size_t MAX_N_RECORDS_IN_WALB_DIFF_PACK =
     (WALB_DIFF_PACK_SIZE - sizeof(struct walb_diff_pack)) / sizeof(struct walb_diff_record);
-const unsigned int WALB_DIFF_PACK_MAX_SIZE = 32 * 1024 * 1024; /* 32MiB */
+const size_t WALB_DIFF_PACK_MAX_SIZE = 32 * 1024 * 1024; /* 32MiB */
 
 #ifdef __cplusplus
 }

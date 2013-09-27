@@ -100,22 +100,30 @@ public:
 
 /**
  * Walb diff pack wrapper.
+ * This can be a wrapper or a manager of 4KiB memory image.
  */
 class PackHeader /* final */
 {
 private:
     char *buf_;
     bool mustDelete_;
-
+    size_t maxNumRecords_;
+    size_t maxPackSize_; /* [byte] */
 public:
-    PackHeader() : buf_(allocStatic()), mustDelete_(true) {
+    PackHeader()
+        : buf_(allocStatic()), mustDelete_(true)
+        , maxNumRecords_(::MAX_N_RECORDS_IN_WALB_DIFF_PACK)
+        , maxPackSize_(::WALB_DIFF_PACK_MAX_SIZE) {
         reset();
     }
     /**
      * Buffer size must be ::WALB_DIFF_PACK_SIZE.
      * You must call reset() to initialize.
      */
-    explicit PackHeader(char *buf) : buf_(buf), mustDelete_(false) {
+    explicit PackHeader(char *buf)
+        : buf_(buf), mustDelete_(false)
+        , maxNumRecords_(::MAX_N_RECORDS_IN_WALB_DIFF_PACK)
+        , maxPackSize_(::WALB_DIFF_PACK_MAX_SIZE) {
         assert(buf);
     }
     PackHeader(const PackHeader &) = delete;
@@ -136,6 +144,8 @@ public:
         mustDelete_ = rhs.mustDelete_;
         rhs.buf_ = nullptr;
         rhs.mustDelete_ = false;
+        maxNumRecords_ = rhs.maxNumRecords_;
+        maxPackSize_ = rhs.maxPackSize_;
         return *this;
     }
 
@@ -187,6 +197,17 @@ public:
         header().flags |= mask;
     }
 
+    bool canAdd(uint32_t dataSize) const {
+        uint16_t nRec = header().n_records;
+        if (maxNumRecords_ <= nRec) {
+            return false;
+        }
+        if (0 < nRec && maxPackSize_ < header().total_size + dataSize) {
+            return false;
+        }
+        return true;
+    }
+
     /**
      * RETURN:
      *   true when added successfully.
@@ -197,7 +218,7 @@ public:
         RecordRaw r(reinterpret_cast<const char *>(&inRec), sizeof(inRec));
         assert(r.isValid());
 #endif
-        if (!canAdd(inRec)) { return false; }
+        if (!canAdd(inRec.data_size)) { return false; }
         struct walb_diff_record &outRec = record(header().n_records);
         outRec = inRec;
         outRec.data_offset = header().total_size;
@@ -217,7 +238,7 @@ public:
         return cybozu::util::calcChecksum(rawData(), rawSize(), 0) == 0;
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         const struct walb_diff_pack &h = header();
         ::fprintf(fp, "checksum %u\n"
                   "n_records: %u\n"
@@ -232,8 +253,12 @@ public:
         }
     }
 
-    void print() const { print(::stdout); }
-
+    void setMaxNumRecords(size_t value) {
+        maxNumRecords_ = std::min(value, ::MAX_N_RECORDS_IN_WALB_DIFF_PACK);
+    }
+    void setMaxPackSize(size_t value) {
+        maxPackSize_ = std::min(value, ::WALB_DIFF_PACK_MAX_SIZE);
+    }
 private:
     static char *allocStatic() {
         void *p;
@@ -248,17 +273,6 @@ private:
         if (::MAX_N_RECORDS_IN_WALB_DIFF_PACK <= i) {
             throw RT_ERR("walb_diff_pack boundary error.");
         }
-    }
-
-    bool canAdd(const struct walb_diff_record &rec) {
-        uint16_t n_rec = header().n_records;
-        if (::MAX_N_RECORDS_IN_WALB_DIFF_PACK <= n_rec) {
-            return false;
-        }
-        if (0 < n_rec && ::WALB_DIFF_PACK_MAX_SIZE < header().total_size + rec.data_size) {
-            return false;
-        }
-        return true;
     }
 };
 
@@ -313,12 +327,14 @@ private:
     std::unique_ptr<char[]> p_;
 
 public:
+    /* Copy data */
     explicit MemoryPack(const void *p) : p_() {
         const struct walb_diff_pack &packh = *reinterpret_cast<const struct walb_diff_pack *>(p);
         size_t size = WALB_DIFF_PACK_SIZE + packh.total_size;
         p_ = std::unique_ptr<char[]>(new char[size]);
         ::memcpy(p_.get(), p, size);
     }
+    /* Move data */
     explicit MemoryPack(std::unique_ptr<char[]> &&p)
         : p_(std::move(p)) {}
     MemoryPack(const MemoryPack &rhs) : p_() {
@@ -406,6 +422,35 @@ public:
     }
     char *data(size_t i) override {
         return ios_[i].rawData();
+    }
+    /**
+     * Generate memory pack.
+     */
+    MemoryPack generateMemoryPack() const {
+        assert(isValid());
+        std::unique_ptr<char[]> up(new char[size()]);
+        char *p = up.get();
+        /* Copy pack header. */
+        ::memcpy(p, pack_.rawData(), pack_.rawSize());
+        p += pack_.rawSize();
+        assert(pack_.nRecords() == ios_.size());
+        uint32_t dataOffset = 0;
+        for (size_t i = 0; i < pack_.nRecords(); i++) {
+            /* Copy each IO data. */
+            RecordWrapConst rec(&pack_.record(i));
+            uint32_t dataSize = rec.dataSize();
+            assert(rec.dataOffset() == dataOffset);
+            if (rec.isNormal()) {
+                assert(0 < dataSize);
+                ::memcpy(p, data(i), dataSize);
+                p += dataSize;
+                dataOffset += dataSize;
+            }
+        }
+        assert(pack_.rawSize() + dataOffset == size());
+        MemoryPack mpack(std::move(up));
+        assert(mpack.isValid());
+        return mpack;
     }
 };
 
@@ -531,7 +576,7 @@ public:
             /* copy */
             *iop = io;
         } else {
-            *iop = io.compress(::WALB_DIFF_CMPR_SNAPPY);
+            *iop = compressIoData(io, ::WALB_DIFF_CMPR_SNAPPY);
             rec0.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
             rec0.setDataSize(iop->rawSize());
             rec0.setChecksum(iop->calcChecksum());
@@ -692,7 +737,7 @@ public:
             return true;
         }
         rec = rec0;
-        io = io0.uncompress();
+        io = uncompressIoData(io0);
         rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
         rec.setDataSize(io.rawSize());
         rec.setChecksum(io.calcChecksum());
@@ -743,7 +788,7 @@ private:
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }
         if (0 < rec.dataSize()) {
-            io.data().resize(rec.dataSize());
+            io.resizeData(rec.dataSize());
             io.setIoBlocks(rec.ioBlocks());
             io.setCompressionType(rec.compressionType());
 

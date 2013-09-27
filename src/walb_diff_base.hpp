@@ -28,55 +28,60 @@ static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 namespace walb {
 namespace diff {
 
-/**
- * Class for struct walb_diff_record.
- */
-class RecordRaw
-    : public block_diff::BlockDiffKey
+template <class RecT>
+class RecordWrapT : public block_diff::BlockDiffKey
 {
 private:
-    struct walb_diff_record rec_;
+    RecT *recP_; /* must not be nullptr. */
 
 public:
-    /**
-     * Default.
-     */
-    RecordRaw()
-        : rec_() {
-        init();
+    explicit RecordWrapT(RecT *recP) : recP_(recP) {
+        assert(recP);
     }
-
-    /**
-     * Clone.
-     */
-    RecordRaw(const RecordRaw &rec, bool isCheck = true)
-        : rec_(rec.rec_) {
-        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
-    }
-
-    /**
-     * Convert.
-     */
-    RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
-        : rec_(rawRec) {
-        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
-    }
-
-    /**
-     * For raw data.
-     */
-    RecordRaw(const char *data, size_t size)
-        : rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
-        if (size != sizeof(rec_)) {
-            throw RT_ERR("size is invalid.");
-        }
-    }
-
-    virtual ~RecordRaw() noexcept = default;
-
-    RecordRaw &operator=(const RecordRaw &rhs) {
-        rec_ = rhs.rec_;
+    RecordWrapT(const RecordWrapT &rhs) : recP_(rhs.recP_) {}
+    RecordWrapT(RecordWrapT &&rhs) = delete;
+    RecordWrapT &operator=(const RecordWrapT &rhs) {
+        *recP_ = *rhs.recP_;
         return *this;
+    }
+    RecordWrapT &operator=(RecordWrapT &&rhs) = delete;
+
+    void init() {
+        ::memset(recP_, 0, sizeof(RecT));
+        setExists();
+    }
+
+    template <typename T>
+    const T *ptr() const { return reinterpret_cast<const T *>(recP_); }
+    template <typename T>
+    T *ptr() { return reinterpret_cast<T *>(recP_); }
+
+    uint64_t ioAddress() const override { return recP_->io_address; }
+    uint16_t ioBlocks() const override { return recP_->io_blocks; }
+    uint64_t endIoAddress() const { return ioAddress() + ioBlocks(); }
+    size_t rawSize() const override { return sizeof(*recP_); }
+    const char *rawData() const override { return ptr<char>(); }
+    char *rawData() { return ptr<char>(); }
+    struct walb_diff_record *rawRecord() { return recP_; }
+    const struct walb_diff_record *rawRecord() const { return recP_; }
+
+    uint8_t compressionType() const { return recP_->compression_type; }
+    bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
+    uint32_t dataOffset() const { return recP_->data_offset; }
+    uint32_t dataSize() const { return recP_->data_size; }
+    uint32_t checksum() const { return recP_->checksum; }
+
+    bool exists() const {
+        return (recP_->flags & WALB_DIFF_FLAG(EXIST)) != 0;
+    }
+    bool isAllZero() const {
+        return (recP_->flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
+    }
+    bool isDiscard() const {
+        return (recP_->flags & WALB_DIFF_FLAG(DISCARD)) != 0;
+    }
+    bool isNormal() const {
+        return !isAllZero() && !isDiscard();
     }
 
     bool isValid() const {
@@ -105,40 +110,7 @@ public:
         return true;
     }
 
-    template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(&rec_); }
-    template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(&rec_); }
-
-    uint64_t ioAddress() const override { return rec_.io_address; }
-    uint16_t ioBlocks() const override { return rec_.io_blocks; }
-    uint64_t endIoAddress() const { return ioAddress() + ioBlocks(); }
-    size_t rawSize() const override { return sizeof(rec_); }
-    const char *rawData() const override { return ptr<char>(); }
-    char *rawData() { return ptr<char>(); }
-    struct walb_diff_record *rawRecord() { return &rec_; }
-    const struct walb_diff_record *rawRecord() const { return &rec_; }
-
-    uint8_t compressionType() const { return rec_.compression_type; }
-    bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
-    uint32_t dataOffset() const { return rec_.data_offset; }
-    uint32_t dataSize() const { return rec_.data_size; }
-    uint32_t checksum() const { return rec_.checksum; }
-
-    bool exists() const {
-        return (rec_.flags & WALB_DIFF_FLAG(EXIST)) != 0;
-    }
-    bool isAllZero() const {
-        return (rec_.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
-    }
-    bool isDiscard() const {
-        return (rec_.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
-    }
-    bool isNormal() const {
-        return !isAllZero() && !isDiscard();
-    }
-
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "----------\n"
                   "ioAddress: %" PRIu64 "\n"
                   "ioBlocks: %u\n"
@@ -153,44 +125,85 @@ public:
                   compressionType(), dataOffset(), dataSize(),
                   checksum(), exists(), isAllZero(), isDiscard());
     }
-
-    void print() const { print(::stdout); }
-
-    void printOneline(::FILE *fp) const {
+    void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
                   ioAddress(), ioBlocks(),
                   compressionType(), dataOffset(), dataSize(),
                   checksum(), exists(), isAllZero(), isDiscard());
     }
 
-    void printOneline() const { printOneline(::stdout); }
-
-    void setIoAddress(uint64_t ioAddress) { rec_.io_address = ioAddress; }
-    void setIoBlocks(uint16_t ioBlocks) { rec_.io_blocks = ioBlocks; }
-    void setCompressionType(uint8_t type) { rec_.compression_type = type; }
-    void setDataOffset(uint32_t offset) { rec_.data_offset = offset; }
-    void setDataSize(uint32_t size) { rec_.data_size = size; }
-    void setChecksum(uint32_t csum) { rec_.checksum = csum; }
+    void setIoAddress(uint64_t ioAddress) { recP_->io_address = ioAddress; }
+    void setIoBlocks(uint16_t ioBlocks) { recP_->io_blocks = ioBlocks; }
+    void setCompressionType(uint8_t type) { recP_->compression_type = type; }
+    void setDataOffset(uint32_t offset) { recP_->data_offset = offset; }
+    void setDataSize(uint32_t size) { recP_->data_size = size; }
+    void setChecksum(uint32_t csum) { recP_->checksum = csum; }
 
     void setExists() {
-        rec_.flags |= WALB_DIFF_FLAG(EXIST);
+        recP_->flags |= WALB_DIFF_FLAG(EXIST);
     }
     void clearExists() {
-        rec_.flags &= ~WALB_DIFF_FLAG(EXIST);
+        recP_->flags &= ~WALB_DIFF_FLAG(EXIST);
     }
-
     void setNormal() {
-        rec_.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        rec_.flags &= ~WALB_DIFF_FLAG(DISCARD);
+        recP_->flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        recP_->flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setAllZero() {
-        rec_.flags |= WALB_DIFF_FLAG(ALLZERO);
-        rec_.flags &= ~WALB_DIFF_FLAG(DISCARD);
+        recP_->flags |= WALB_DIFF_FLAG(ALLZERO);
+        recP_->flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setDiscard() {
-        rec_.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        rec_.flags |= WALB_DIFF_FLAG(DISCARD);
+        recP_->flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        recP_->flags |= WALB_DIFF_FLAG(DISCARD);
     }
+};
+
+using RecordWrap = RecordWrapT<struct walb_diff_record>;
+using RecordWrapConst = RecordWrapT<const struct walb_diff_record>;
+
+/**
+ * Class for struct walb_diff_record.
+ */
+class RecordRaw : public RecordWrap
+{
+private:
+    struct walb_diff_record rec_;
+
+public:
+    /**
+     * Default.
+     */
+    RecordRaw() : RecordWrap(&rec_), rec_() {
+        init();
+    }
+
+    /**
+     * Clone.
+     */
+    RecordRaw(const RecordRaw &rec, bool isCheck = true)
+        : RecordWrap(&rec_), rec_(rec.rec_) {
+        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
+    }
+
+    /**
+     * Convert.
+     */
+    RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
+        : RecordWrap(&rec_), rec_(rawRec) {
+        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
+    }
+
+    /**
+     * For raw data.
+     */
+    RecordRaw(const char *data, size_t size)
+        : RecordWrap(&rec_), rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
+        if (size != sizeof(rec_)) {
+            throw RT_ERR("size is invalid.");
+        }
+    }
+
     /**
      * Split a record into two records
      * where the first record's ioBlocks will be a specified one.
@@ -249,46 +262,40 @@ public:
         assert(!v.empty());
         return v;
     }
-private:
-    void init() {
-        ::memset(&rec_, 0, sizeof(rec_));
-        setExists();
-    }
 };
 
 /**
- * Block diff for an IO.
+ * Io data.
+ * This does not manage data array.
  */
-class IoData
+class IoWrap
 {
-private:
+protected:
     uint16_t ioBlocks_; /* [logical block]. */
     int compressionType_;
-    std::vector<char> data_;
+    const char *dataP_;
+    size_t dataSize_;
 
 public:
-    IoData()
-        : ioBlocks_(0)
-        , compressionType_(::WALB_DIFF_CMPR_NONE)
-        , data_() {
-    }
+    IoWrap()
+        : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
+        , dataP_(nullptr), dataSize_(0) {}
+    IoWrap(uint16_t ioBlocks, int compressionType, const char *data, size_t size)
+        : ioBlocks_(ioBlocks), compressionType_(compressionType)
+        , dataP_(data), dataSize_(size) {}
+    IoWrap(const IoWrap &rhs)
+        : IoWrap(rhs.ioBlocks_, rhs.compressionType_, rhs.dataP_, rhs.dataSize_) {}
+    IoWrap(IoWrap &&) = delete;
+    virtual ~IoWrap() noexcept = default;
 
-    IoData(const IoData &) = default;
-    IoData(IoData &&) = default;
-    virtual ~IoData() noexcept = default;
-
-    IoData &operator=(const IoData &rhs) {
+    IoWrap &operator=(const IoWrap &rhs) {
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
-        data_ = rhs.data_;
+        dataP_ = rhs.dataP_;
+        dataSize_ = rhs.dataSize_;
         return *this;
     }
-    IoData &operator=(IoData &&rhs) {
-        ioBlocks_ = rhs.ioBlocks_;
-        compressionType_ = rhs.compressionType_;
-        data_ = std::move(rhs.data_);
-        return *this;
-    }
+    IoWrap &operator=(IoWrap &&rhs) = delete;
 
     uint16_t ioBlocks() const { return ioBlocks_; }
     void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
@@ -298,22 +305,26 @@ public:
 
     bool isValid() const {
         if (ioBlocks_ == 0) {
-            if (!data_.empty()) {
+            if (dataP_ != nullptr || dataSize_ != 0) {
                 LOGd("Data is not empty.\n");
                 return false;
             }
             return true;
         } else {
             if (isCompressed()) {
-                if (data_.size() == 0) {
-                    LOGd("data size is not 0: %zu\n", data_.size());
+                if (dataP_ == nullptr) {
+                    LOGd("data pointer is null\n");
+                    return false;
+                }
+                if (dataSize_ == 0) {
+                    LOGd("data size is not 0: %zu\n", dataSize_);
                     return false;
                 }
                 return true;
             } else {
-                if (data_.size() != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
+                if (dataSize_ != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , data_.size(), ioBlocks_ * LOGICAL_BLOCK_SIZE);
+                         , dataSize_, ioBlocks_ * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -321,20 +332,8 @@ public:
         }
     }
 
-    void copyFrom(const void *data, size_t size) {
-        data_.resize(size);
-        ::memcpy(&data_[0], data, size);
-    }
-    void moveFrom(std::vector<char> &&data) {
-        data_ = std::move(data);
-    }
-    const std::vector<char> &data() const { return data_; }
-    std::vector<char> &data() { return data_; }
-    std::vector<char> &&forMove() { return std::move(data_); }
-
-    const char *rawData() const { return &data_[0]; }
-    char *rawData() { return &data_[0]; }
-    size_t rawSize() const { return data_.size(); }
+    const char *rawData(size_t offset = 0) const { return dataP_ + offset; }
+    size_t rawSize() const { return dataSize_; }
 
     /**
      * Calculate checksum.
@@ -342,65 +341,6 @@ public:
     uint32_t calcChecksum() const {
         if (!rawData()) { return 0; }
         return cybozu::util::calcChecksum(rawData(), rawSize(), 0);
-    }
-
-    /**
-     * Split the IO into two IOs
-     * where the first IO's ioBlocks will be a specified one.
-     *
-     * CAUSION:
-     *   Compressed IO can not be splitted.
-     */
-    std::pair<IoData, IoData> split(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
-            throw RT_ERR("split: ioBlocks0 is out or range.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("split: compressed IO can not be splitted.");
-        }
-        assert(isValid());
-
-        IoData r0, r1;
-        uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
-        r0.setIoBlocks(ioBlocks0);
-        r1.setIoBlocks(ioBlocks1);
-        size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
-        size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
-        r0.data_.resize(size0);
-        r1.data_.resize(size1);
-        ::memcpy(&r0.data_[0], &data_[0], size0);
-        ::memcpy(&r1.data_[0], &data_[size0], size1);
-
-        return std::make_pair(std::move(r0), std::move(r1));
-    }
-
-    std::vector<IoData> splitAll(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0) {
-            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("splitAll: compressed IO can not be splitted.");
-        }
-        assert(isValid());
-
-        std::vector<IoData> v;
-        uint16_t remaining = ioBlocks();
-        size_t off = 0;
-        while (0 < remaining) {
-            IoData io;
-            uint16_t blks = std::min(remaining, ioBlocks0);
-            size_t size = blks * LOGICAL_BLOCK_SIZE;
-            io.setIoBlocks(blks);
-            io.data_.resize(size);
-            ::memcpy(&io.data_[0], &data_[off], size);
-            v.push_back(std::move(io));
-            remaining -= blks;
-            off += size;
-        }
-        assert(off == data_.size());
-        assert(!v.empty());
-
-        return v;
     }
 
     /**
@@ -416,62 +356,7 @@ public:
         return true;
     }
 
-    /**
-     * Compress an IO data.
-     * Supported algorithms: snappy.
-     */
-    IoData compress(int type) const {
-        if (isCompressed()) {
-            throw RT_ERR("Could not compress already compressed diff IO.");
-        }
-        if (type != ::WALB_DIFF_CMPR_SNAPPY) {
-            throw RT_ERR("Currently only snappy is supported.");
-        }
-        if (ioBlocks() == 0) {
-            return IoData();
-        }
-        assert(isValid());
-        IoData io;
-        io.setIoBlocks(ioBlocks());
-        io.setCompressionType(type);
-        io.data_.resize(snappy::MaxCompressedLength(rawSize()));
-        size_t size;
-        snappy::RawCompress(rawData(), rawSize(), io.rawData(), &size);
-        io.data_.resize(size);
-        return io;
-    }
-
-    /**
-     * Uncompress an IO data.
-     * Supported algorithms: snappy.
-     */
-    IoData uncompress() const {
-        if (!isCompressed()) {
-            throw RT_ERR("Need not uncompress already uncompressed diff IO.");
-        }
-        if (compressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
-            throw RT_ERR("Currently only snappy is supported.");
-        }
-        if (ioBlocks() == 0) {
-            return IoData();
-        }
-        IoData io;
-        io.setIoBlocks(ioBlocks());
-        io.data_.resize(ioBlocks() * LOGICAL_BLOCK_SIZE);
-        size_t size;
-        if (!snappy::GetUncompressedLength(rawData(), rawSize(), &size)) {
-            throw RT_ERR("snappy::GetUncompressedLength() failed.");
-        }
-        if (size != io.rawSize()) {
-            throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io.rawSize());
-        }
-        if (!snappy::RawUncompress(rawData(), rawSize(), io.rawData())) {
-            throw RT_ERR("snappy::RawUncompress() failed.");
-        }
-        return io;
-    }
-
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp,
                   "ioBlocks %u\n"
                   "type %d\n"
@@ -482,15 +367,215 @@ public:
                   , rawSize()
                   , calcChecksum());
     }
-    void print() const { print(::stdout); }
-    void printOneline(::FILE *fp) const {
+    void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks()
                   , compressionType()
                   , rawSize()
                   , calcChecksum());
     }
-    void printOneline() const { printOneline(::stdout); }
 };
+
+/**
+ * Block diff for an IO.
+ */
+class IoData : public IoWrap
+{
+private:
+    /* You must call resetData() for consistency of
+       dataP_ and dataSize_ after changing data_. */
+    std::vector<char> data_;
+
+public:
+    IoData()
+        : IoWrap()
+        , data_() {}
+
+    IoData(const IoData &rhs) : IoWrap(rhs), data_(rhs.data_) {
+        resetData();
+    }
+    IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
+        resetData();
+    }
+    ~IoData() noexcept = default;
+
+    IoData &operator=(const IoData &rhs) {
+        ioBlocks_ = rhs.ioBlocks_;
+        compressionType_ = rhs.compressionType_;
+        data_ = rhs.data_;
+        resetData();
+        return *this;
+    }
+    IoData &operator=(IoData &&rhs) {
+        ioBlocks_ = rhs.ioBlocks_;
+        compressionType_ = rhs.compressionType_;
+        data_ = std::move(rhs.data_);
+        resetData();
+        return *this;
+    }
+
+    bool isValid() const {
+        if (!IoWrap::isValid()) return false;
+        if (dataP_ != &data_[0] || dataSize_ != data_.size()) {
+            LOGd("resetData() must be called.\n");
+            return false;
+        }
+        return true;
+    }
+
+    void copyFrom(const void *data, size_t size) {
+        data_.resize(size);
+        ::memcpy(&data_[0], data, size);
+        resetData();
+    }
+    void moveFrom(std::vector<char> &&data) {
+        data_ = std::move(data);
+        resetData();
+    }
+    const char *rawData(size_t offset = 0) const { return &data_[offset]; }
+    char *rawData(size_t offset = 0) { return &data_[offset]; }
+    std::vector<char> forMove() {
+        std::vector<char> v = std::move(data_);
+        resetData();
+        return v;
+    }
+    void resizeData(size_t size) {
+        data_.resize(size);
+        resetData();
+    }
+private:
+    /**
+     * You must call this after changing data_.
+     */
+    void resetData() {
+        dataP_ = &data_[0];
+        dataSize_ = data_.size();
+    }
+};
+
+/**
+ * Compress an IO data.
+ * Supported algorithms: snappy.
+ */
+static inline IoData compressIoData(const IoWrap &io0, int type)
+{
+    if (io0.isCompressed()) {
+        throw RT_ERR("Could not compress already compressed diff IO.");
+    }
+    if (type != ::WALB_DIFF_CMPR_SNAPPY) {
+        throw RT_ERR("Currently only snappy is supported.");
+    }
+    if (io0.ioBlocks() == 0) {
+        return IoData();
+    }
+    assert(io0.isValid());
+    IoData io1;
+    io1.setIoBlocks(io0.ioBlocks());
+    io1.setCompressionType(type);
+    io1.resizeData(snappy::MaxCompressedLength(io0.rawSize()));
+    size_t size;
+    snappy::RawCompress(io0.rawData(), io0.rawSize(), io1.rawData(), &size);
+    io1.resizeData(size);
+    return io1;
+}
+
+/**
+ * Uncompress an IO data.
+ * Supported algorithms: snappy.
+ */
+static inline IoData uncompressIoData(const IoWrap &io0)
+{
+    if (!io0.isCompressed()) {
+        throw RT_ERR("Need not uncompress already uncompressed diff IO.");
+    }
+    if (io0.compressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
+        throw RT_ERR("Currently only snappy is supported.");
+    }
+    if (io0.ioBlocks() == 0) {
+        return IoData();
+    }
+    IoData io1;
+    io1.setIoBlocks(io0.ioBlocks());
+    io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
+    size_t size;
+    if (!snappy::GetUncompressedLength(io0.rawData(), io0.rawSize(), &size)) {
+        throw RT_ERR("snappy::GetUncompressedLength() failed.");
+    }
+    if (size != io1.rawSize()) {
+        throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.rawSize());
+    }
+    if (!snappy::RawUncompress(io0.rawData(), io0.rawSize(), io1.rawData())) {
+        throw RT_ERR("snappy::RawUncompress() failed.");
+    }
+    return io1;
+}
+
+/**
+ * Split an IO into two IOs
+ * where the first IO's ioBlocks will be a specified one.
+ *
+ * CAUSION:
+ *   Compressed IO can not be splitted.
+ */
+static inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlocks0)
+{
+    if (ioBlocks0 == 0 || io0.ioBlocks() <= ioBlocks0) {
+        throw RT_ERR("split: ioBlocks0 is out or range.");
+    }
+    if (io0.isCompressed()) {
+        throw RT_ERR("split: compressed IO can not be splitted.");
+    }
+    assert(io0.isValid());
+
+    IoData r0, r1;
+    uint16_t ioBlocks1 = io0.ioBlocks() - ioBlocks0;
+    r0.setIoBlocks(ioBlocks0);
+    r1.setIoBlocks(ioBlocks1);
+    size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
+    size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
+    r0.resizeData(size0);
+    r1.resizeData(size1);
+    ::memcpy(r0.rawData(), io0.rawData(), size0);
+    ::memcpy(r1.rawData(), io0.rawData(size0), size1);
+
+    return std::make_pair(std::move(r0), std::move(r1));
+}
+
+/**
+ * Split an IO into multiple IOs
+ * each of which io size is not more than a specified one.
+ *
+ * CAUSION:
+ *   Compressed IO can not be splitted.
+ */
+static inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
+{
+    if (ioBlocks0 == 0) {
+        throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+    }
+    if (io0.isCompressed()) {
+        throw RT_ERR("splitAll: compressed IO can not be splitted.");
+    }
+    assert(io0.isValid());
+
+    std::vector<IoData> v;
+    uint16_t remaining = io0.ioBlocks();
+    size_t off = 0;
+    while (0 < remaining) {
+        IoData io;
+        uint16_t blks = std::min(remaining, ioBlocks0);
+        size_t size = blks * LOGICAL_BLOCK_SIZE;
+        io.setIoBlocks(blks);
+        io.resizeData(size);
+        ::memcpy(io.rawData(), io0.rawData(off), size);
+        v.push_back(std::move(io));
+        remaining -= blks;
+        off += size;
+    }
+    assert(off == io0.rawSize());
+    assert(!v.empty());
+
+    return v;
+}
 
 }} //namesapce walb::diff
