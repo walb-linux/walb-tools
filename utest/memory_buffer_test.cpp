@@ -1,17 +1,9 @@
+#include "cybozu/test.hpp"
 #include <map>
 #include <queue>
 #include "random.hpp"
 #include "util.hpp"
 #include "memory_buffer.hpp"
-
-struct A
-{
-    size_t a;
-    size_t b;
-    size_t c;
-    size_t d;
-    size_t e;
-};
 
 template <typename T>
 class SequentialQueue
@@ -188,7 +180,7 @@ void runAllocateManagerBenchmark(size_t initFillB, size_t numIter, size_t allocB
              , t1 - t0, numIter);
 }
 
-int main()
+void test()
 {
     const size_t KB = 1024;
     const size_t MB = 1024 * KB;
@@ -234,7 +226,7 @@ int main()
 
     size_t preallocated = 32U * MB;
     size_t initFilled = 256 * KB;
-    size_t nIter = 10000000;
+    size_t nIter = 100000;
     size_t nAlloc = 32;
     size_t bs = 4096;
 
@@ -251,6 +243,9 @@ int main()
 
     runBlockMultiBenchmark<RQ>(preallocated, initFilled, nIter, nAlloc);
     runBlockMultiBenchmark<RQ>(0, initFilled, nIter, nAlloc);
+}
 
-    return 0;
+CYBOZU_TEST_AUTO(test)
+{
+    test();
 }
