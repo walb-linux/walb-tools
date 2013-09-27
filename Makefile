@@ -1,4 +1,4 @@
-.PHONY: all test echo_binaries build clean rebuild install depend
+.PHONY: all test test_all echo_binaries build clean rebuild install depend
 
 CXX = g++-4.8.1
 CC = gcc-4.8.1
@@ -44,7 +44,10 @@ all: build
 build: Makefile.depends $(BINARIES)
 
 test: $(TEST_BINARIES)
-	@echo not yet implmenented
+test_all: $(TEST_BINARIES)
+	@for t in $(TEST_BINARIES); do \
+	    ./$$t; \
+	done 2>&1 |tee test.log |grep ^ctest:name
 
 echo_binaries:
 	@echo $(BINARIES)
