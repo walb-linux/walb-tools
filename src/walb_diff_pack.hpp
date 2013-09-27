@@ -368,4 +368,80 @@ public:
     }
 };
 
+/**
+ * Generator of a pack as a memory image.
+ */
+class Packer
+{
+private:
+    std::vector<char> data_;
+    diff::PackHeader packh;
+
+public:
+    Packer() : data_(::WALB_DIFF_PACK_SIZE) , packh(&data_[0]) {
+        packh.reset();
+    }
+
+    void setMaxNumRecords(size_t value) { packh.setMaxNumRecords(value); }
+    void setMaxPackSize(size_t value) { packh.setMaxPackSize(value); }
+
+    /**
+     * You must care about IO insertion order and overlap.
+     *
+     * RETURN:
+     *   false: failed. You need to create another pack.
+     */
+    bool add(uint64_t ioAddr, uint16_t ioBlocks, const std::vector<char> &data) {
+        assert(ioBlocks != 0);
+        uint32_t dataSize = ioBlocks * LOGICAL_BLOCK_SIZE;
+        assert(data.size() == dataSize);
+        if (!packh.canAdd(dataSize)) return false;
+
+        bool isZero = isAllZero(data);
+        diff::RecordRaw rec;
+        rec.setIoAddress(ioAddr);
+        rec.setIoBlocks(ioBlocks);
+        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
+        if (isZero) {
+            rec.setAllZero();
+            rec.setDataSize(0);
+            rec.setChecksum(0);
+        } else {
+            rec.setNormal();
+            rec.setDataSize(dataSize);
+            rec.setChecksum(cybozu::util::calcChecksum(&data[0], data.size(), 0));
+        }
+        /* r must be true because we called canAdd() before. */
+        bool r = packh.add(*rec.rawRecord());
+        if (r && !isZero) extendAndCopy(data);
+        return r;
+    }
+    /**
+     * Get created pack image.
+     */
+    std::vector<char> getPack() {
+        packh.updateChecksum();
+        std::vector<char> ret = std::move(data_);
+        data_.resize(::WALB_DIFF_PACK_SIZE);
+        packh.resetBuffer(&data_[0]);
+        packh.reset();
+        return ret;
+    }
+private:
+    static bool isAllZero(const std::vector<char> &data) {
+        for (char c : data) {
+            if (c != 0) return false;
+        }
+        return true;
+    }
+    void extendAndCopy(const std::vector<char> &data) {
+        assert(!data.empty());
+        size_t s0 = data_.size();
+        size_t s1 = data.size();
+        data_.resize(s0 + s1);
+        ::memcpy(&data_[s0], &data[0], s1);
+        packh.resetBuffer(&data_[0]);
+    }
+};
+
 }} //namespace walb::diff
