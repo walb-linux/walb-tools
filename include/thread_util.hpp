@@ -555,7 +555,7 @@ public:
     /**
      * @size queue size.
      */
-    BoundedQueue(size_t size)
+    explicit BoundedQueue(size_t size)
         : size_(size)
         , queue_()
         , mutex_()
