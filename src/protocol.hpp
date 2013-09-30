@@ -21,10 +21,12 @@
 #include "fileio.hpp"
 #include "walb_diff_virt.hpp"
 #include "server_data.hpp"
+#include "walb_diff_pack.hpp"
+#include "walb_diff_compressor.hpp"
+#include "thread_util.hpp"
+#include "murmurhash3.hpp"
 
 namespace walb {
-
-const unsigned int LBS = 512;
 
 /**
  * Logger wrapper for protocols.
@@ -236,22 +238,22 @@ private:
             path_ = params_[0];
             name_ = params_[1];
             uint64_t size = cybozu::util::fromUnitIntString(params_[2]);
-            sizeLb_ = size / LBS;
+            sizeLb_ = size / LOGICAL_BLOCK_SIZE;
             uint64_t bulk = cybozu::util::fromUnitIntString(params_[3]);
-            if ((1U << 16) * LBS <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LBS);
-            bulkLb_ = bulk / LBS;
+            if ((1U << 16) * LOGICAL_BLOCK_SIZE <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LOGICAL_BLOCK_SIZE);
+            bulkLb_ = bulk / LOGICAL_BLOCK_SIZE;
             gid_ = cybozu::atoi(params_[4]);
         }
         void readAndSend() {
             packet::Packet packet(sock_);
-            std::vector<char> buf(bulkLb_ * LBS);
+            std::vector<char> buf(bulkLb_ * LOGICAL_BLOCK_SIZE);
             cybozu::util::BlockDevice bd(path_, O_RDONLY);
 
             uint64_t remainingLb = sizeLb_;
             while (0 < remainingLb) {
                 uint16_t lb = bulkLb_;
                 if (remainingLb < bulkLb_) lb = remainingLb;
-                size_t size = lb * LBS;
+                size_t size = lb * LOGICAL_BLOCK_SIZE;
                 bd.read(&buf[0], size);
                 packet.write(lb);
                 packet.write(&buf[0], size);
@@ -287,14 +289,14 @@ private:
             sd.createLv(sizeLb_);
             std::string lvPath = sd.getLv().path().str();
             cybozu::util::BlockDevice bd(lvPath, O_RDWR);
-            std::vector<char> buf(bulkLb_ * LBS);
+            std::vector<char> buf(bulkLb_ * LOGICAL_BLOCK_SIZE);
 
             uint16_t c = 0;
             uint64_t remainingLb = sizeLb_;
             while (0 < remainingLb) {
                 uint16_t lb = bulkLb_;
                 if (remainingLb < bulkLb_) lb = remainingLb;
-                size_t size = lb * LBS;
+                size_t size = lb * LOGICAL_BLOCK_SIZE;
                 uint16_t lb0 = 0;
                 packet.read(lb0);
                 if (lb0 != lb) logAndThrow("received lb %u is invalid. must be %u", lb0, lb);
@@ -317,7 +319,7 @@ public:
      *   [0] :: string: full path of lv.
      *   [1] :: string: lv identifier.
      *   [2] :: uint64_t: lv size [byte].
-     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LBS;
+     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LOGICAL_BLOCK_SIZE;
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
                      const std::vector<std::string> &params) override {
@@ -336,7 +338,7 @@ public:
     }
 };
 
-#if 0
+#if 1
 /**
  * Hash sync
  */
@@ -347,7 +349,7 @@ class DirtyHashSyncProtocol : public Protocol
     protected:
         std::string name_;
         uint64_t sizeLb_;
-        uint16_t maxPackLb_;
+        uint16_t bulkLb_;
         uint32_t seed_; /* murmurhash3 seed */
         MetaSnap snap_;
     public:
@@ -356,8 +358,10 @@ class DirtyHashSyncProtocol : public Protocol
             if (name_.empty()) logAndThrow("name param empty.");
             if (sizeLb_ == 0) logAndThrow("sizeLb param is zero.");
             if (bulkLb_ == 0) logAndThrow("bulkLb param is zero.");
-            if (gid_ == uint64_t(-1)) logAndThrow("gid param must not be uint64_t(-1).");
         }
+        enum class CtrlMsg : uint8_t {
+            Continue = 0, End = 1, Error = 2,
+        };
     };
     class Client : public Data
     {
@@ -377,10 +381,10 @@ class DirtyHashSyncProtocol : public Protocol
             path_ = params_[0];
             name_ = params_[1];
             uint64_t size = cybozu::util::fromUnitIntString(params_[2]);
-            sizeLb_ = size / LBS;
+            sizeLb_ = size / LOGICAL_BLOCK_SIZE;
             uint64_t bulk = cybozu::util::fromUnitIntString(params_[3]);
-            if ((1U << 16) * LBS <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LBS);
-            bulkLb_ = bulk / LBS;
+            if ((1U << 16) * LOGICAL_BLOCK_SIZE <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LOGICAL_BLOCK_SIZE);
+            bulkLb_ = bulk / LOGICAL_BLOCK_SIZE;
             seed_ = cybozu::atoi(params_[4]);
         }
         void negotiate() {
@@ -401,71 +405,112 @@ class DirtyHashSyncProtocol : public Protocol
          */
         void readAndSendDiffData() {
             packet::Packet packet(sock_);
-            cybozu::util::BoundedQueue<Hash> queue;
-            std::vector<char> buf(bulkLb_ * LBS);
+            cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash> hashQ(32); /* TODO: do not hardcode. */
+            std::vector<char> buf(bulkLb_ * LOGICAL_BLOCK_SIZE);
             cybozu::util::BlockDevice bd(path_, O_RDONLY);
             cybozu::murmurhash3::Hasher hasher(seed_);
+            walb::ConverterQueue convQ(4, 2, true, ::WALB_DIFF_CMPR_SNAPPY); /* TODO: do not hardcode. */
+            walb::diff::Packer packer;
+            packer.setMaxPackSize(2U << 20); /* 2MiB. TODO: do not hardcode. */
+            std::atomic<bool> isError(false);
 
             /* Read hash data */
-            auto receiveHash = [&packet, &queue](uint64_t num) {
+            auto receiveHash = [&packet, &hashQ](uint64_t num) {
                 try {
                     for (uint64_t i = 0; i < num; i++) {
-                        Hash h;
+                        cybozu::murmurhash3::Hash h;
                         packet.read(h.ptr(), h.size());
-                        queue.push(h);
+                        hashQ.push(h);
                     }
-                    queue.sync();
+                    hashQ.sync();
                 } catch (...) {
-                    queue.error();
+                    hashQ.error();
                 }
             };
 
-            /* Invoke hash receiver. */
-            uint64_t num = (sizeLb_ - 1) / bulkLb_ + 1;
-            std::thread th(receiveHash, num);
-
             /* Send updated bulk. */
-            auto sendDiffBulk = [&pacet, &queue, &buf, &bd, &hasher](
+            auto addToPack = [this, &hashQ, &packer, &buf, &bd, &hasher, &convQ](
                 uint64_t &offLb, uint64_t &remainingLb) {
 
                 uint16_t lb = bulkLb_;
                 if (remainingLb < bulkLb_) lb = remainingLb;
-                size_t size = lb * LBS;
+                size_t size = lb * LOGICAL_BLOCK_SIZE;
                 bd.read(&buf[0], size);
                 cybozu::murmurhash3::Hash h0, h1;
                 h0 = hasher(&buf[0], size);
-                h1 = queue.pop();
+                h1 = hashQ.pop();
                 if (h0 != h1) {
-                    packet.write(true);
-                    packet.write(offLb);
-                    packet.write(lb);
-                    packet.write(&buf[0], size);
+                    if (!packer.canAddLb(lb)) {
+                        std::unique_ptr<char[]> up = packer.getPackAsUniquePtr();
+                        if (!convQ.push(up)) {
+                            throw std::runtime_error("convQ push failed.");
+                        }
+                    }
+                    UNUSED bool r = packer.add(offLb, lb, &buf[0]);
+                    assert(r);
                 }
                 offLb += lb;
                 remainingLb -= lb;
             };
 
-            try {
-                uint64_t offLb = 0;
-                uint64_t remainingLb = sizeLb_;
-                uint64_t c = 0;
-                while (0 < remainingLb) {
-                    sendDiffBulk(offLb, remainingLb);
-                    c++;
+            /* Read block device and create pack. */
+            auto createPack = [this, &isError, &hashQ, &addToPack, &convQ](UNUSED uint64_t num) {
+                try {
+                    uint64_t offLb = 0;
+                    uint64_t remainingLb = sizeLb_;
+                    uint64_t c = 0;
+                    while (0 < remainingLb) {
+                        addToPack(offLb, remainingLb);
+                        c++;
+                    }
+                    assert(num == c);
+                    assert(offLb == sizeLb_);
+                    assert(hashQ.isEnd());
+                } catch (...) {
+                    isError = true;
+                    hashQ.error();
                 }
-                packet.write(false);
-                assert(num == c);
-                assert(offLb == sizeLb_);
-                assert(queue.isEnd());
-            } catch (...) {
-                queue.error();
-            }
-            th.join();
+                convQ.quit();
+            };
+
+            /* Send compressed pack. */
+            auto sendPack = [this, &packet, &convQ, &isError]() {
+                try {
+                    uint8_t ctrl = static_cast<uint8_t>(CtrlMsg::Continue);
+                    std::unique_ptr<char[]> up = convQ.pop();
+                    while (up) {
+                        packet.write(ctrl);
+                        diff::MemoryPack mpack(up.get());
+                        uint32_t packSize = mpack.size();
+                        packet.write(packSize);
+                        packet.write(mpack.rawPtr(), packSize);
+                        up = convQ.pop();
+                    }
+                    ctrl = static_cast<uint8_t>(isError ? CtrlMsg::Error : CtrlMsg::End);
+                    packet.write(ctrl);
+                } catch (...) {
+                    convQ.quit();
+                    while (convQ.pop());
+                    isError = true;
+                }
+                assert(convQ.pop() == nullptr);
+            };
+
+            /* Invoke threads. */
+            uint64_t num = (sizeLb_ - 1) / bulkLb_ + 1;
+            std::thread th0(receiveHash, num);
+            std::thread th1(createPack, num);
+            std::thread th2(sendPack);
+            th0.join();
+            th1.join();
+            th2.join();
+
+            if (isError) logAndThrow("readAndSendDiffData failed.");
         }
         void sendMetaDiff() {
             packet::Packet packet(sock_);
             MetaDiff diff(snap_.gid0(), snap_.gid1() + 1, snap_.gid1() + 2);
-            if (snap_.isDirect()) {
+            if (snap_.isDirty()) {
                 diff.raw.can_merge = true;
             } else {
                 diff.raw.can_merge = false; /* TODO: Is this true? */
@@ -484,8 +529,8 @@ class DirtyHashSyncProtocol : public Protocol
             /* now editing */
             loadParams();
             negotiate();
-            logger_.info("dirty-hash-sync %s %" PRIu64 " %u %u %" PRIu64 ""
-                         , name_.c_str(), sizeLb_, bulkLb_, seed_, gid_);
+            logger_.info("dirty-hash-sync %s %" PRIu64 " %u %u (%" PRIu64 " %" PRIu64")"
+                         , name_.c_str(), sizeLb_, bulkLb_, seed_, snap_.gid0(), snap_.gid1());
             recvAndWriteDiffData();
         }
     private:
@@ -508,7 +553,7 @@ class DirtyHashSyncProtocol : public Protocol
                     "Lv does not exist for %s. Try full-sync."
                     , name_.c_str());
                 ans.ng(1, msg);
-                logAndThrow(msg);
+                logAndThrow(msg.c_str());
             }
             ans.ok();
             MetaSnap snap = sd.getLatestSnapshot();
@@ -519,7 +564,8 @@ class DirtyHashSyncProtocol : public Protocol
             walb::ServerData sd(baseDir_.str(), name_);
             std::string lvPath = sd.getLv().path().str();
             cybozu::util::BlockDevice bd(lvPath, O_RDWR);
-            cybozu::murmurhash3::Hasher hahser(seed_);
+            cybozu::murmurhash3::Hasher hasher(seed_);
+            std::atomic<bool> isError(false);
 
             /* Prepare virtual full lv */
             std::vector<MetaDiff> diffs = sd.diffsToApply(snap_.gid0());
@@ -529,22 +575,22 @@ class DirtyHashSyncProtocol : public Protocol
                 diffPaths.push_back(fp.str());
             }
             walb::diff::VirtualFullScanner virtLv(bd.getFd(), diffPaths);
+            std::vector<char> buf0(bulkLb_ * LOGICAL_BLOCK_SIZE);
 
-            auto readBulkAndSendHash = [&virtLv, &packet](
+            auto readBulkAndSendHash = [this, &virtLv, &packet, &buf0, &hasher](
                 uint64_t &offLb, uint64_t &remainingLb) {
 
-                std::vector<char> buf(bulkLb_ * LBS);
                 uint16_t lb = bulkLb_;
                 if (remainingLb < bulkLb_) lb = remainingLb;
-                size_t size = lb * LBS;
-                virtLv.read(&buf[0], size);
-                cybozu::murmurhash3::Hash h0 = hasher(&buf[0], size);
-                packet.write(h0.ptr(), h.size());
+                size_t size = lb * LOGICAL_BLOCK_SIZE;
+                virtLv.read(&buf0[0], size);
+                cybozu::murmurhash3::Hash h0 = hasher(&buf0[0], size);
+                packet.write(h0.ptr(), h0.size());
                 offLb += lb;
                 remainingLb -= lb;
             };
 
-            auto hashSender = [&readBulkAndSendHash]() {
+            auto hashSender = [this, &readBulkAndSendHash, &isError]() {
                 try {
                     uint64_t offLb = 0;
                     uint64_t remainingLb = sizeLb_;
@@ -554,10 +600,8 @@ class DirtyHashSyncProtocol : public Protocol
                         c++;
                     }
                     assert(offLb = sizeLb_);
-                } catch (std::exception &e) {
-                    /* now editing */
                 } catch (...) {
-                    /* now editing */
+                    isError = true;
                 }
             };
 
@@ -568,39 +612,37 @@ class DirtyHashSyncProtocol : public Protocol
             cybozu::TmpFile tmpFile(sd.getDiffDir().str());
             diff::Writer writer(tmpFile.fd());
             writer.writeHeader(wdiffH);
+            cybozu::util::FdWriter fdw(tmpFile.fd());
 
-            auto bulkReceiver = [&packet, &writer]() {
+            auto bulkReceiver = [&packet, &writer, &fdw, &isError]() {
                 try {
+                    auto readCtrl = [&](CtrlMsg &ctrl) {
+                        uint8_t v;
+                        packet.read(v);
+                        ctrl = static_cast<CtrlMsg>(v);
+                    };
+
+                    CtrlMsg ctrl;
                     std::vector<char> buf;
-                    bool hasNext;
-                    packet.read(hasNext);
-                    while (hasNext) {
-                        uint64_t offLb;
-                        uint16_t lb;
-                        packet.read(offLb);
-                        packet.read(lb);
-                        if (bulkLb_ < lb) logAndThrow("lb must be <= bulkLb_.");
-                        buf.resize(lb * LBS);
-                        packet.read(&buf[0], lb * LBS);
-
-                        diff::RecordRaw rec;
-                        rec.setIoAddress(offLb);
-                        rec.setIoBlocks(lb);
-                        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-                        rec.setDataSize(lb * LBS);
-                        rec.setChecksum(cybozu::util::calcChecksum(&buf[0], lb * LBS, 0));
-                        rec.setNormal();
-
-                        auto iop = std::make_shared<diff::IoData>();
-                        iop->moveFrom(std::move(buf));
-                        writer.write(rec, iop);
-
-                        packet.read(hasNext);
+                    readCtrl(ctrl);
+                    while (ctrl == CtrlMsg::Continue) {
+                        uint32_t packSize; /* now editing */
+                        packet.read(packSize);
+                        buf.resize(packSize);
+                        packet.read(&buf[0], packSize);
+                        diff::MemoryPack mpack(&buf[0]);
+                        if (mpack.size() != packSize) {
+                            throw std::runtime_error("pack size invalid.");
+                        }
+                        if (!mpack.isValid()) {
+                            throw std::runtime_error("received pack invalid.");
+                        }
+                        fdw.write(mpack.rawPtr(), packSize);
+                        readCtrl(ctrl);
                     }
-                } catch (std::exception &e) {
-                    /* now editing */
+                    if (ctrl == CtrlMsg::Error) isError = true;
                 } catch (...) {
-                    /* now editing */
+                    isError = true;
                 }
             };
 
@@ -609,12 +651,12 @@ class DirtyHashSyncProtocol : public Protocol
             th0.join();
             th1.join();
 
-            /* TODO: error handling. */
+            if (isError) logAndThrow("recvAndWriteDiffData failed.");
 
             writer.close();
             MetaDiff diff;
             packet.read(diff);
-            cybozu::FilePath fp = getDiffPath(diff);
+            cybozu::FilePath fp = sd.getDiffPath(diff);
             assert(fp.isFull());
             tmpFile.save(fp.str());
             sd.add(diff);
@@ -631,7 +673,7 @@ public:
      *   [0] :: string: full path of lv.
      *   [1] :: string: lv identifier.
      *   [2] :: uint64_t: lv size [byte].
-     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LBS;
+     *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LOGICAL_BLOCK_SIZE;
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
                      const std::vector<std::string> &params) override {
