@@ -62,7 +62,7 @@ public:
     size_t rawSize() const override { return sizeof(*recP_); }
     const char *rawData() const override { return ptr<char>(); }
     char *rawData() { return ptr<char>(); }
-    struct walb_diff_record *rawRecord() { return recP_; }
+    RecT *rawRecord() { return recP_; }
     const struct walb_diff_record *rawRecord() const { return recP_; }
 
     uint8_t compressionType() const { return recP_->compression_type; }
@@ -280,11 +280,9 @@ public:
     IoWrap()
         : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
         , dataP_(nullptr), dataSize_(0) {}
-    IoWrap(uint16_t ioBlocks, int compressionType, const char *data, size_t size)
-        : ioBlocks_(ioBlocks), compressionType_(compressionType)
-        , dataP_(data), dataSize_(size) {}
     IoWrap(const IoWrap &rhs)
-        : IoWrap(rhs.ioBlocks_, rhs.compressionType_, rhs.dataP_, rhs.dataSize_) {}
+        : ioBlocks_(rhs.ioBlocks_), compressionType_(rhs.compressionType_)
+        , dataP_(rhs.dataP_), dataSize_(rhs.dataSize_) {}
     IoWrap(IoWrap &&) = delete;
     virtual ~IoWrap() noexcept = default;
 
@@ -303,8 +301,31 @@ public:
     void setCompressionType(int type) { compressionType_ = type; }
     bool isCompressed() const { return compressionType_ != ::WALB_DIFF_CMPR_NONE; }
 
+    bool empty() const {
+        return ioBlocks_ == 0;
+    }
+
+    void set(const walb_diff_record &rec0) {
+        RecordWrapConst rec(&rec0);
+        if (rec.isNormal()) {
+            setIoBlocks(rec.ioBlocks());
+            setCompressionType(rec.compressionType());
+        } else {
+            setIoBlocks(0);
+            setCompressionType(::WALB_DIFF_CMPR_NONE);
+        }
+    }
+    void resetData(const char *data, size_t size) {
+        dataP_ = data;
+        dataSize_ = size;
+    }
+    void set(const walb_diff_record &rec0, const char *data, size_t size) {
+        set(rec0);
+        resetData(data, size);
+    }
+
     bool isValid() const {
-        if (ioBlocks_ == 0) {
+        if (empty()) {
             if (dataP_ != nullptr || dataSize_ != 0) {
                 LOGd("Data is not empty.\n");
                 return false;
@@ -339,7 +360,9 @@ public:
      * Calculate checksum.
      */
     uint32_t calcChecksum() const {
-        if (!rawData()) { return 0; }
+        if (empty()) { return 0; }
+        assert(rawData());
+        assert(0 < rawSize());
         return cybozu::util::calcChecksum(rawData(), rawSize(), 0);
     }
 
@@ -390,7 +413,6 @@ public:
     IoData()
         : IoWrap()
         , data_() {}
-
     IoData(const IoData &rhs) : IoWrap(rhs), data_(rhs.data_) {
         resetData();
     }
@@ -412,6 +434,16 @@ public:
         data_ = std::move(rhs.data_);
         resetData();
         return *this;
+    }
+
+    void set(const struct walb_diff_record &rec0, std::vector<char> &&data0) {
+        IoWrap::set(rec0);
+        moveFrom(std::move(data0));
+    }
+
+    void set(const struct walb_diff_record &rec0, const std::vector<char> &data0) {
+        IoWrap::set(rec0);
+        copyFrom(&data0[0], data0.size());
     }
 
     bool isValid() const {
@@ -448,8 +480,7 @@ private:
      * You must call this after changing data_.
      */
     void resetData() {
-        dataP_ = &data_[0];
-        dataSize_ = data_.size();
+        IoWrap::resetData(&data_[0], data_.size());
     }
 };
 

@@ -401,13 +401,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record(), r.io());
+                writer.compressAndWriteDiff(*r.record().rawRecord(), r.io().rawData());
             } else {
-                auto iop = std::make_shared<IoData>();
-                if (r.record().isNormal()) {
-                    *iop = r.io();
-                }
-                writer.writeDiff(r.record(), iop);
+                writer.writeDiff(*r.record().rawRecord(), r.io().rawData());
             }
             ++it;
         }

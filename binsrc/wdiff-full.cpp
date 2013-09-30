@@ -41,17 +41,16 @@ public:
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            auto iop = std::make_shared<walb::diff::IoData>();
-            iop->setIoBlocks(blks);
-            iop->copyFrom(&buf0_[0], blks * LOGICAL_BLOCK_SIZE);
             walb::diff::RecordRaw rec;
             rec.setIoAddress(ioAddr);
             rec.setIoBlocks(blks);
             rec.setNormal();
             rec.setDataSize(blks * LOGICAL_BLOCK_SIZE);
-            rec.setChecksum(iop->calcChecksum());
+            uint32_t csum = cybozu::util::calcChecksum(
+                &buf0_[0], blks * LOGICAL_BLOCK_SIZE, 0);
+            rec.setChecksum(csum);
 
-            writer.writeDiff(rec, iop);
+            writer.compressAndWriteDiff(*rec.rawRecord(), &buf0_[0]);
 
             ioAddr += blks;
             blks = readChunk(reader);
