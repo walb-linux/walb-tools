@@ -198,9 +198,7 @@ class PackBase
 public:
     virtual ~PackBase() noexcept {}
     virtual const struct walb_diff_pack &header() const = 0;
-    virtual struct walb_diff_pack &header() = 0;
     virtual const char *data(size_t i) const = 0;
-    virtual char *data(size_t i) = 0;
     size_t size() const {
         return ::WALB_DIFF_PACK_SIZE + header().total_size;
     }
@@ -238,38 +236,21 @@ public:
 class MemoryPack : public PackBase
 {
 private:
-    std::unique_ptr<char[]> p_;
+    const char *p_;
 
 public:
-    /* Copy data */
-    explicit MemoryPack(const void *p) : p_() {
-        const struct walb_diff_pack &packh = *reinterpret_cast<const struct walb_diff_pack *>(p);
-        size_t size = WALB_DIFF_PACK_SIZE + packh.total_size;
-        p_ = std::unique_ptr<char[]>(new char[size]);
-        ::memcpy(p_.get(), p, size);
+    explicit MemoryPack(const char *p) : p_() {
+        reset(p);
     }
-    /* Move data */
-    explicit MemoryPack(std::unique_ptr<char[]> &&p)
-        : p_(std::move(p)) {}
-    MemoryPack(const MemoryPack &rhs) : p_() {
-        p_ = std::unique_ptr<char[]>(new char[rhs.size()]);
-        ::memcpy(p_.get(), rhs.p_.get(), rhs.size());
-    }
-    MemoryPack(MemoryPack &&rhs) : p_(std::move(rhs.p_)) {}
+    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
+    MemoryPack(MemoryPack &&) = delete;
     MemoryPack &operator=(const MemoryPack &rhs) {
-        MemoryPack pack(rhs);
-        p_ = std::move(pack.p_);
+        reset(rhs.p_);
         return *this;
     }
-    MemoryPack &operator=(MemoryPack &&rhs) {
-        p_ = std::move(rhs.p_);
-        return *this;
-    }
+    MemoryPack &operator=(MemoryPack &&) = delete;
 
     const struct walb_diff_pack &header() const override {
-        return *ptr<struct walb_diff_pack>(0);
-    }
-    struct walb_diff_pack &header() override {
         return *ptr<struct walb_diff_pack>(0);
     }
     const char *data(size_t i) const override {
@@ -277,16 +258,12 @@ public:
         if (header().record[i].data_size == 0) return nullptr;
         return ptr<const char>(offset(i));
     }
-    char *data(size_t i) override {
-        assert(i < header().n_records);
-        if (header().record[i].data_size == 0) return nullptr;
-        return ptr<char>(offset(i));
-    }
     const char *rawPtr() const {
-        return p_.get();
+        return p_;
     }
-    std::unique_ptr<char[]> &&forMove() {
-        return std::move(p_);
+    void reset(const char *p) {
+        if (!p) throw std::runtime_error("The pointer must not be null.");
+        p_ = p;
     }
 private:
     template <typename T>
@@ -319,11 +296,12 @@ public:
         : pack_(std::move(pack)), ios_(std::move(ios)) {
         assert(header().n_records == ios_.size());
     }
+    ScatterGatherPack(const ScatterGatherPack &) = delete;
+    ScatterGatherPack(ScatterGatherPack &&) = default;
+    ScatterGatherPack &operator=(const ScatterGatherPack &) = delete;
+    ScatterGatherPack &operator=(ScatterGatherPack &&) = default;
 
     const struct walb_diff_pack &header() const override {
-        return pack_.header();
-    }
-    struct walb_diff_pack &header() override {
         return pack_.header();
     }
     /**
@@ -334,16 +312,21 @@ public:
     const char *data(size_t i) const override {
         return ios_[i].rawData();
     }
-    char *data(size_t i) override {
-        return ios_[i].rawData();
-    }
     /**
      * Generate memory pack.
      */
-    MemoryPack generateMemoryPack() const {
+    std::unique_ptr<char[]> generateMemoryPack() const {
         assert(isValid());
         std::unique_ptr<char[]> up(new char[size()]);
-        char *p = up.get();
+        copyTo(up.get());
+        MemoryPack mpack(up.get());
+        assert(mpack.isValid());
+        return up;
+    }
+    /**
+     * @p a pointer that has at least size() bytes space.
+     */
+    void copyTo(char *p) const {
         /* Copy pack header. */
         ::memcpy(p, pack_.rawData(), pack_.rawSize());
         p += pack_.rawSize();
@@ -362,9 +345,6 @@ public:
             }
         }
         assert(pack_.rawSize() + dataOffset == size());
-        MemoryPack mpack(std::move(up));
-        assert(mpack.isValid());
-        return mpack;
     }
 };
 
@@ -386,18 +366,24 @@ public:
     void setMaxPackSize(size_t value) { packh.setMaxPackSize(value); }
 
     /**
+     * @lb [logical block]
+     */
+    bool canAddLb(uint16_t lb) const {
+        return packh.canAdd(lb * LOGICAL_BLOCK_SIZE);
+    }
+
+    /**
      * You must care about IO insertion order and overlap.
      *
      * RETURN:
      *   false: failed. You need to create another pack.
      */
-    bool add(uint64_t ioAddr, uint16_t ioBlocks, const std::vector<char> &data) {
+    bool add(uint64_t ioAddr, uint16_t ioBlocks, const char *data) {
         assert(ioBlocks != 0);
-        uint32_t dataSize = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(data.size() == dataSize);
-        if (!packh.canAdd(dataSize)) return false;
+        uint32_t dSize = ioBlocks * LOGICAL_BLOCK_SIZE;
+        if (!packh.canAdd(dSize)) return false;
 
-        bool isZero = isAllZero(data);
+        bool isZero = isAllZero(data, dSize);
         diff::RecordRaw rec;
         rec.setIoAddress(ioAddr);
         rec.setIoBlocks(ioBlocks);
@@ -408,39 +394,70 @@ public:
             rec.setChecksum(0);
         } else {
             rec.setNormal();
-            rec.setDataSize(dataSize);
-            rec.setChecksum(cybozu::util::calcChecksum(&data[0], data.size(), 0));
+            rec.setDataSize(dSize);
+            rec.setChecksum(cybozu::util::calcChecksum(data, dSize, 0));
         }
+        return add(*rec.rawRecord(), data);
+    }
+    bool add(const struct walb_diff_record &rec0, const char *data) {
+        RecordWrapConst rec(&rec0);
+        assert(rec.isValid());
+        size_t dSize = rec.dataSize();
+        if (!packh.canAdd(dSize)) return false;
+
+        bool isNormal = rec.isNormal();
+#ifdef WALB_DEBUG
+        if (isNormal) {
+            assert(rec.checksum() == cybozu::util::calcChecksum(data, dSize, 0));
+        }
+#endif
         /* r must be true because we called canAdd() before. */
-        bool r = packh.add(*rec.rawRecord());
-        if (r && !isZero) extendAndCopy(data);
+        bool r = packh.add(rec0);
+        if (r && isNormal) extendAndCopy(data, dSize);
         return r;
     }
+
+    bool isValid() const {
+        MemoryPack mpack(&data_[0]);
+        return mpack.isValid();
+    }
+
     /**
      * Get created pack image.
      */
-    std::vector<char> getPack() {
+    std::vector<char> getPackAsVector() {
+        assert(isValid());
         packh.updateChecksum();
         std::vector<char> ret = std::move(data_);
+        reset();
+        return ret;
+    }
+    std::unique_ptr<char[]> getPackAsUniquePtr() {
+        assert(isValid());
+        std::unique_ptr<char[]> up(new char[data_.size()]);
+        ::memcpy(up.get(), &data_[0], data_.size());
+        reset();
+        return up;
+    }
+    void reset() {
         data_.resize(::WALB_DIFF_PACK_SIZE);
         packh.resetBuffer(&data_[0]);
         packh.reset();
-        return ret;
     }
 private:
-    static bool isAllZero(const std::vector<char> &data) {
-        for (char c : data) {
-            if (c != 0) return false;
+    static bool isAllZero(const char *data, size_t size) {
+        for (size_t i = 0; i < size; i++) {
+            if (data[i] != 0) return false;
         }
         return true;
     }
-    void extendAndCopy(const std::vector<char> &data) {
-        assert(!data.empty());
+    void extendAndCopy(const char *data, size_t size) {
+        assert(data);
         size_t s0 = data_.size();
-        size_t s1 = data.size();
+        size_t s1 = size;
         data_.resize(s0 + s1);
-        ::memcpy(&data_[s0], &data[0], s1);
         packh.resetBuffer(&data_[0]);
+        ::memcpy(&data_[s0], data, s1);
     }
 };
 

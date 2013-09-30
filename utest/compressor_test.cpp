@@ -151,9 +151,11 @@ void testPackCompression(int type, const char *rawPack)
     walb::diff::MemoryPack mpack0(rawPack);
     CYBOZU_TEST_ASSERT(mpack0.isValid());
 
-    walb::diff::MemoryPack mpack1(compr.convert(mpack0.rawPtr()));
+    std::unique_ptr<char[]> p1 = compr.convert(mpack0.rawPtr());
+    walb::diff::MemoryPack mpack1(p1.get());
     CYBOZU_TEST_ASSERT(mpack1.isValid());
-    walb::diff::MemoryPack mpack2(ucompr.convert(mpack1.rawPtr()));
+    std::unique_ptr<char[]> p2 = ucompr.convert(mpack1.rawPtr());
+    walb::diff::MemoryPack mpack2(p2.get());
     CYBOZU_TEST_ASSERT(mpack2.isValid());
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
