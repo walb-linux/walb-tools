@@ -358,21 +358,21 @@ class Packer
 {
 private:
     std::vector<char> data_;
-    diff::PackHeader packh;
+    diff::PackHeader packh_;
 
 public:
-    Packer() : data_(::WALB_DIFF_PACK_SIZE) , packh(&data_[0]) {
-        packh.reset();
+    Packer() : data_(::WALB_DIFF_PACK_SIZE) , packh_(&data_[0]) {
+        packh_.reset();
     }
 
-    void setMaxNumRecords(size_t value) { packh.setMaxNumRecords(value); }
-    void setMaxPackSize(size_t value) { packh.setMaxPackSize(value); }
+    void setMaxNumRecords(size_t value) { packh_.setMaxNumRecords(value); }
+    void setMaxPackSize(size_t value) { packh_.setMaxPackSize(value); }
 
     /**
      * @ioBlocks [logical block]
      */
     bool canAddLb(uint16_t ioBlocks) const {
-        return packh.canAdd(ioBlocks * LOGICAL_BLOCK_SIZE);
+        return packh_.canAdd(ioBlocks * LOGICAL_BLOCK_SIZE);
     }
 
     /**
@@ -384,7 +384,7 @@ public:
     bool add(uint64_t ioAddr, uint16_t ioBlocks, const char *data) {
         assert(ioBlocks != 0);
         uint32_t dSize = ioBlocks * LOGICAL_BLOCK_SIZE;
-        if (!packh.canAdd(dSize)) return false;
+        if (!packh_.canAdd(dSize)) return false;
 
         bool isZero = isAllZero(data, dSize);
         diff::RecordRaw rec;
@@ -406,7 +406,7 @@ public:
         RecordWrapConst rec(&rec0);
         assert(rec.isValid());
         size_t dSize = rec.dataSize();
-        if (!packh.canAdd(dSize)) return false;
+        if (!packh_.canAdd(dSize)) return false;
 
         bool isNormal = rec.isNormal();
 #ifdef WALB_DEBUG
@@ -415,13 +415,13 @@ public:
         }
 #endif
         /* r must be true because we called canAdd() before. */
-        bool r = packh.add(rec0);
+        bool r = packh_.add(rec0);
         if (r && isNormal) extendAndCopy(data, dSize);
         return r;
     }
 
     bool empty() const {
-        bool ret = packh.nRecords() == 0;
+        bool ret = packh_.nRecords() == 0;
         if (ret) assert(data_.size() == ::WALB_DIFF_PACK_SIZE);
         return ret;
     }
@@ -430,7 +430,7 @@ public:
         return mpack.isValid(checkHeaderCsum, errMsg);
     }
     void print(FILE *fp = ::stdout) const {
-        packh.print(fp);
+        packh_.print(fp);
         ::fprintf(fp, "pack size: %zu\n", data_.size());
     }
 
@@ -438,14 +438,14 @@ public:
      * Get created pack image.
      */
     std::vector<char> getPackAsVector() {
-        packh.updateChecksum();
+        packh_.updateChecksum();
         assert(isValid());
         std::vector<char> ret = std::move(data_);
         reset();
         return ret;
     }
     std::unique_ptr<char[]> getPackAsUniquePtr() {
-        packh.updateChecksum();
+        packh_.updateChecksum();
         assert(isValid());
         std::unique_ptr<char[]> up(new char[data_.size()]);
         ::memcpy(up.get(), &data_[0], data_.size());
@@ -454,8 +454,8 @@ public:
     }
     void reset() {
         data_.resize(::WALB_DIFF_PACK_SIZE);
-        packh.resetBuffer(&data_[0]);
-        packh.reset();
+        packh_.resetBuffer(&data_[0]);
+        packh_.reset();
     }
 private:
     static bool isAllZero(const char *data, size_t size) {
@@ -469,7 +469,7 @@ private:
         size_t s0 = data_.size();
         size_t s1 = size;
         data_.resize(s0 + s1);
-        packh.resetBuffer(&data_[0]);
+        packh_.resetBuffer(&data_[0]);
         ::memcpy(&data_[s0], data, s1);
     }
 };
