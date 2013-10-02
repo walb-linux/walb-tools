@@ -103,3 +103,72 @@ CYBOZU_TEST_AUTO(poolWithFailWorker)
     pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }
+
+CYBOZU_TEST_AUTO(BoundedQueue)
+{
+    cybozu::thread::BoundedQueue<int> q(10);
+    std::exception_ptr ep0, ep1;
+    int total = 0;
+
+    std::thread th0([&q, &ep0]() {
+            try {
+                for (size_t i = 0; i < 100; i++) {
+                    q.push(1);
+                }
+                q.sync();
+            } catch (...) {
+                ep0 = std::current_exception();
+            }
+        });
+    std::thread th1([&q, &ep1, &total]() {
+            try {
+                for (size_t i = 0; i < 100; i++) {
+                    total += q.pop();
+                }
+            } catch (...) {
+                ep1 = std::current_exception();
+            }
+        });
+
+    th0.join();
+    th1.join();
+
+    CYBOZU_TEST_ASSERT(!ep0);
+    CYBOZU_TEST_ASSERT(!ep1);
+    CYBOZU_TEST_EQUAL(total, 100);
+}
+
+CYBOZU_TEST_AUTO(BoundedQueueMove)
+{
+    cybozu::thread::BoundedQueue<std::unique_ptr<int>, true> q(10);
+    std::exception_ptr ep0, ep1;
+    int total = 0;
+
+    std::thread th0([&q, &ep0]() {
+            try {
+                for (size_t i = 0; i < 100; i++) {
+                    q.push(std::unique_ptr<int>(new int(1)));
+                }
+                q.sync();
+            } catch (...) {
+                ep0 = std::current_exception();
+            }
+        });
+    std::thread th1([&q, &ep1, &total]() {
+            try {
+                for (size_t i = 0; i < 100; i++) {
+                    std::unique_ptr<int> ip = q.pop();
+                    total += *ip;
+                }
+            } catch (...) {
+                ep1 = std::current_exception();
+            }
+        });
+
+    th0.join();
+    th1.join();
+
+    CYBOZU_TEST_ASSERT(!ep0);
+    CYBOZU_TEST_ASSERT(!ep1);
+    CYBOZU_TEST_EQUAL(total, 100);
+}

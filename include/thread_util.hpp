@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cassert>
 #include <functional>
+#include <type_traits>
 
 /**
  * Thread utilities.
@@ -526,8 +527,9 @@ private:
  *
  * T is type of items.
  *   You should use integer types or copyable classes, or shared pointers.
+ * Movable: specify non-zero if T must be movable instead of copyable.
  */
-template <typename T>
+template <typename T, bool Movable = false>
 class BoundedQueue /* final */
 {
 private:
@@ -540,16 +542,19 @@ private:
     bool isError_;
 
     using lock = std::unique_lock<std::mutex>;
+    using TRef = typename std::conditional<Movable, T&&, const T&>::type;
 
 public:
     class ClosedError : public std::exception {
     public:
         ClosedError() : std::exception() {}
+        const char *what() const noexcept override { return "ClosedError"; }
     };
 
     class OtherError : public std::exception {
     public:
         OtherError() : std::exception() {}
+        const char *what() const noexcept override { return "OtherError"; }
     };
 
     /**
@@ -568,7 +573,7 @@ public:
     BoundedQueue& operator=(const BoundedQueue &rhs) = delete;
     ~BoundedQueue() noexcept {}
 
-    void push(const T& t) {
+    void push(TRef t) {
         lock lk(mutex_);
         checkError();
         if (closed_) { throw ClosedError(); }
@@ -577,7 +582,7 @@ public:
         if (closed_) { throw ClosedError(); }
 
         bool isEmpty0 = isEmpty();
-        queue_.push(t);
+        queue_.push(static_cast<TRef>(t));
         if (isEmpty0) { condEmpty_.notify_all(); }
     }
 
@@ -590,7 +595,7 @@ public:
         if (closed_ && isEmpty()) { throw ClosedError(); }
 
         bool isFull0 = isFull();
-        T t = queue_.front();
+        T t = static_cast<TRef>(queue_.front());
         queue_.pop();
         if (isFull0) { condFull_.notify_all(); }
         return t;
