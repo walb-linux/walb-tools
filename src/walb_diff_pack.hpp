@@ -203,6 +203,9 @@ public:
         return ::WALB_DIFF_PACK_SIZE + header().total_size;
     }
     bool isValid(std::string *errMsg = nullptr) const {
+        return isValid(true, errMsg);
+    }
+    bool isValid(bool checkHeaderCsum, std::string *errMsg = nullptr) const {
         auto err = [&errMsg](const char *fmt, ...) {
             if (!errMsg) throw std::exception();
             std::string msg;
@@ -215,7 +218,7 @@ public:
         };
         try {
             PackHeader packh((char *)&header());
-            if (!packh.isValid()) err("pack header invalid.");
+            if (checkHeaderCsum && !packh.isValid()) err("pack header invalid.");
             for (size_t i = 0; i < packh.nRecords(); i++) {
                 walb::diff::RecordRaw rec(packh.record(i));
                 if (!rec.isValid()) err("record invalid: %zu.", i);
@@ -417,14 +420,14 @@ public:
         return r;
     }
 
-    bool isValid() const {
     bool empty() const {
         bool ret = packh.nRecords() == 0;
         if (ret) assert(data_.size() == ::WALB_DIFF_PACK_SIZE);
         return ret;
     }
+    bool isValid(bool checkHeaderCsum = true, std::string *errMsg = nullptr) const {
         MemoryPack mpack(&data_[0]);
-        return mpack.isValid();
+        return mpack.isValid(checkHeaderCsum, errMsg);
     }
     void print(FILE *fp = ::stdout) const {
         packh.print(fp);
