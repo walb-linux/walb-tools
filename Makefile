@@ -57,6 +57,12 @@ echo_binaries:
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $(patsubst %.cpp,%.o,$<)
 
+binsrc/client: binsrc/client.o src/compressor.o src/MurmurHash3.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
+src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
+binsrc/server: binsrc/server.o src/compressor.o src/MurmurHash3.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
+src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 binsrc/%: binsrc/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 

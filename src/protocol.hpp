@@ -376,6 +376,13 @@ class DirtyHashSyncProtocol : public Protocol
             sendMetaDiff();
         }
     private:
+        /**
+         * path
+         * name
+         * lv size [bytes]
+         * bulk size [bytes]
+         * seed
+         */
         void loadParams() {
             if (params_.size() != 5) logAndThrow("Five parameters required.");
             path_ = params_[0];
@@ -383,7 +390,9 @@ class DirtyHashSyncProtocol : public Protocol
             uint64_t size = cybozu::util::fromUnitIntString(params_[2]);
             sizeLb_ = size / LOGICAL_BLOCK_SIZE;
             uint64_t bulk = cybozu::util::fromUnitIntString(params_[3]);
-            if ((1U << 16) * LOGICAL_BLOCK_SIZE <= bulk) logAndThrow("bulk size too large. < %u\n", (1U << 16) * LOGICAL_BLOCK_SIZE);
+            if ((1U << 16) * LOGICAL_BLOCK_SIZE <= bulk) {
+                logAndThrow("bulk size too large. < %u\n", (1U << 16) * LOGICAL_BLOCK_SIZE);
+            }
             bulkLb_ = bulk / LOGICAL_BLOCK_SIZE;
             seed_ = cybozu::atoi(params_[4]);
         }
@@ -412,10 +421,11 @@ class DirtyHashSyncProtocol : public Protocol
             walb::ConverterQueue convQ(4, 2, true, ::WALB_DIFF_CMPR_SNAPPY); /* TODO: do not hardcode. */
             walb::diff::Packer packer;
             packer.setMaxPackSize(2U << 20); /* 2MiB. TODO: do not hardcode. */
+            packer.setMaxNumRecords(10); /* TODO: do not hardcode. */
             std::atomic<bool> isError(false);
 
             /* Read hash data */
-            auto receiveHash = [&packet, &hashQ](uint64_t num) {
+            auto receiveHash = [this, &packet, &hashQ](uint64_t num) {
                 try {
                     for (uint64_t i = 0; i < num; i++) {
                         cybozu::murmurhash3::Hash h;
@@ -424,12 +434,25 @@ class DirtyHashSyncProtocol : public Protocol
                     }
                     hashQ.sync();
                 } catch (...) {
+                    logger_.error("receiveHash failed.");
                     hashQ.error();
                 }
+                logger_.info("receiveHash end");
+            };
+
+            size_t nPack = 0;
+            auto pushPackToQueue = [this, &nPack, &packer, &convQ]() {
+                std::unique_ptr<char[]> up = packer.getPackAsUniquePtr();
+                logger_.info("try to push pack %zu", nPack);
+                if (!convQ.push(up)) {
+                    throw std::runtime_error("convQ push failed.");
+                }
+                logger_.info("push pack %zu", nPack++);
+                assert(packer.empty());
             };
 
             /* Send updated bulk. */
-            auto addToPack = [this, &hashQ, &packer, &buf, &bd, &hasher, &convQ](
+            auto addToPack = [this, &hashQ, &packer, &buf, &bd, &hasher, &convQ, &pushPackToQueue](
                 uint64_t &offLb, uint64_t &remainingLb) {
 
                 uint16_t lb = bulkLb_;
@@ -440,21 +463,23 @@ class DirtyHashSyncProtocol : public Protocol
                 h0 = hasher(&buf[0], size);
                 h1 = hashQ.pop();
                 if (h0 != h1) {
-                    if (!packer.canAddLb(lb)) {
-                        std::unique_ptr<char[]> up = packer.getPackAsUniquePtr();
-                        if (!convQ.push(up)) {
-                            throw std::runtime_error("convQ push failed.");
-                        }
-                    }
+                    //logger_.info("Hash differ %s %s", h0.str().c_str(), h1.str().c_str());
+                    if (!packer.canAddLb(lb)) pushPackToQueue();
                     UNUSED bool r = packer.add(offLb, lb, &buf[0]);
                     assert(r);
+                    //packer.print(); /* debug */
+                    assert(packer.isValid(false)); /* debug */
+                } else {
+                    //logger_.info("Hash same %s %s", h0.str().c_str(), h1.str().c_str());
                 }
                 offLb += lb;
                 remainingLb -= lb;
             };
 
             /* Read block device and create pack. */
-            auto createPack = [this, &isError, &hashQ, &addToPack, &convQ](UNUSED uint64_t num) {
+            auto createPack = [this, &isError, &hashQ, &addToPack, &packer, &convQ, &pushPackToQueue](
+                UNUSED uint64_t num) {
+
                 try {
                     uint64_t offLb = 0;
                     uint64_t remainingLb = sizeLb_;
@@ -463,37 +488,53 @@ class DirtyHashSyncProtocol : public Protocol
                         addToPack(offLb, remainingLb);
                         c++;
                     }
+                    if (!packer.empty()) pushPackToQueue();
                     assert(num == c);
                     assert(offLb == sizeLb_);
                     assert(hashQ.isEnd());
                 } catch (...) {
+                    logger_.error("createPack failed.");
                     isError = true;
                     hashQ.error();
                 }
                 convQ.quit();
+                convQ.join();
+                logger_.info("createPack end");
             };
 
             /* Send compressed pack. */
             auto sendPack = [this, &packet, &convQ, &isError]() {
                 try {
                     uint8_t ctrl = static_cast<uint8_t>(CtrlMsg::Continue);
+                    size_t c = 0;
+                    logger_.info("try to pop from convQ"); /* debug */
                     std::unique_ptr<char[]> up = convQ.pop();
+                    logger_.info("popped from convQ"); /* debug */
                     while (up) {
                         packet.write(ctrl);
                         diff::MemoryPack mpack(up.get());
                         uint32_t packSize = mpack.size();
                         packet.write(packSize);
                         packet.write(mpack.rawPtr(), packSize);
+                        logger_.info("send pack %zu", c++);
                         up = convQ.pop();
                     }
                     ctrl = static_cast<uint8_t>(isError ? CtrlMsg::Error : CtrlMsg::End);
                     packet.write(ctrl);
+                    logger_.info("sendPack: end (%d)", isError.load());
+                } catch (std::exception &e) {
+                    logger_.error("sendPack failed: %s", e.what());
+                    convQ.quit();
+                    while (convQ.pop());
+                    isError = true;
                 } catch (...) {
+                    logger_.error("sendPack failed.");
                     convQ.quit();
                     while (convQ.pop());
                     isError = true;
                 }
                 assert(convQ.pop() == nullptr);
+                logger_.info("sendPack end");
             };
 
             /* Invoke threads. */
@@ -526,7 +567,6 @@ class DirtyHashSyncProtocol : public Protocol
     public:
         using Data::Data;
         void run() {
-            /* now editing */
             loadParams();
             negotiate();
             logger_.info("dirty-hash-sync %s %" PRIu64 " %u %u (%" PRIu64 " %" PRIu64")"
@@ -546,6 +586,7 @@ class DirtyHashSyncProtocol : public Protocol
             packet.read(name_);
             packet.read(sizeLb_);
             packet.read(bulkLb_);
+            packet.read(seed_);
             packet::Answer ans(sock_);
             walb::ServerData sd(baseDir_.str(), name_);
             if (!sd.lvExists()) {
@@ -567,6 +608,8 @@ class DirtyHashSyncProtocol : public Protocol
             cybozu::murmurhash3::Hasher hasher(seed_);
             std::atomic<bool> isError(false);
 
+            logger_.info("hoge1");
+
             /* Prepare virtual full lv */
             std::vector<MetaDiff> diffs = sd.diffsToApply(snap_.gid0());
             std::vector<std::string> diffPaths;
@@ -576,6 +619,8 @@ class DirtyHashSyncProtocol : public Protocol
             }
             walb::diff::VirtualFullScanner virtLv(bd.getFd(), diffPaths);
             std::vector<char> buf0(bulkLb_ * LOGICAL_BLOCK_SIZE);
+
+            logger_.info("hoge2");
 
             auto readBulkAndSendHash = [this, &virtLv, &packet, &buf0, &hasher](
                 uint64_t &offLb, uint64_t &remainingLb) {
@@ -596,13 +641,22 @@ class DirtyHashSyncProtocol : public Protocol
                     uint64_t remainingLb = sizeLb_;
                     uint64_t c = 0;
                     while (0 < remainingLb) {
+#if 0
+                        logger_.info("c %" PRIu64 " offLb %" PRIu64 "", c, offLb); /* debug */
+#endif
                         readBulkAndSendHash(offLb, remainingLb);
                         c++;
                     }
+                    logger_.info("remainingLb 0"); /* debug */
                     assert(offLb = sizeLb_);
+                } catch (std::exception &e) {
+                    logger_.error("hashSender error: %s", e.what());
+                    isError = true;
                 } catch (...) {
+                    logger_.error("bulkReceiver unknown error");
                     isError = true;
                 }
+                logger_.info("hashSender end");
             };
 
             diff::FileHeaderRaw wdiffH;
@@ -614,7 +668,9 @@ class DirtyHashSyncProtocol : public Protocol
             writer.writeHeader(wdiffH);
             cybozu::util::FdWriter fdw(tmpFile.fd());
 
-            auto bulkReceiver = [&packet, &writer, &fdw, &isError]() {
+            logger_.info("hoge3");
+
+            auto bulkReceiver = [this, &packet, &writer, &fdw, &isError]() {
                 try {
                     auto readCtrl = [&](CtrlMsg &ctrl) {
                         uint8_t v;
@@ -625,11 +681,13 @@ class DirtyHashSyncProtocol : public Protocol
                     CtrlMsg ctrl;
                     std::vector<char> buf;
                     readCtrl(ctrl);
+                    size_t c = 0;
                     while (ctrl == CtrlMsg::Continue) {
-                        uint32_t packSize; /* now editing */
+                        uint32_t packSize;
                         packet.read(packSize);
                         buf.resize(packSize);
                         packet.read(&buf[0], packSize);
+                        logger_.info("received pack %zu", c++);
                         diff::MemoryPack mpack(&buf[0]);
                         if (mpack.size() != packSize) {
                             throw std::runtime_error("pack size invalid.");
@@ -640,22 +698,37 @@ class DirtyHashSyncProtocol : public Protocol
                         fdw.write(mpack.rawPtr(), packSize);
                         readCtrl(ctrl);
                     }
-                    if (ctrl == CtrlMsg::Error) isError = true;
+                    if (ctrl == CtrlMsg::Error) {
+                        logger_.error("CtrlMsg error");
+                        isError = true;
+                    } else {
+                        logger_.info("CtrlMsg end");
+                    }
+                    logger_.info("bulkRecriver end.");
+                } catch (std::exception &e) {
+                    logger_.error("bulkReceiver error: %s", e.what());
+                    isError = true;
                 } catch (...) {
+                    logger_.error("bulkReceiver unknown error");
                     isError = true;
                 }
+                logger_.info("bulkReceiver end");
             };
 
             std::thread th0(hashSender);
+            logger_.info("hoge4");
             std::thread th1(bulkReceiver);
+            logger_.info("hoge5");
             th0.join();
             th1.join();
+            logger_.info("joined: %d", isError.load());
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); /* debug */
             if (isError) logAndThrow("recvAndWriteDiffData failed.");
 
             writer.close();
             MetaDiff diff;
-            packet.read(diff);
+            packet.read(diff); /* get diff information from the client. */
             cybozu::FilePath fp = sd.getDiffPath(diff);
             assert(fp.isFull());
             tmpFile.save(fp.str());
@@ -721,6 +794,7 @@ private:
     ProtocolFactory() : map_() {
         DECLARE_PROTOCOL(echo, EchoProtocol);
         DECLARE_PROTOCOL(dirty-full-sync, DirtyFullSyncProtocol);
+        DECLARE_PROTOCOL(dirty-hash-sync, DirtyHashSyncProtocol);
         /* now editing */
     }
 #undef DECLARE_PROTOCOL
