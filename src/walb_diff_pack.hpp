@@ -426,13 +426,14 @@ public:
      * Get created pack image.
      */
     std::vector<char> getPackAsVector() {
-        assert(isValid());
         packh.updateChecksum();
+        assert(isValid());
         std::vector<char> ret = std::move(data_);
         reset();
         return ret;
     }
     std::unique_ptr<char[]> getPackAsUniquePtr() {
+        packh.updateChecksum();
         assert(isValid());
         std::unique_ptr<char[]> up(new char[data_.size()]);
         ::memcpy(up.get(), &data_[0], data_.size());
