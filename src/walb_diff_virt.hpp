@@ -38,6 +38,7 @@ private:
     walb::diff::RecIo recIo_; /* current diff rec IO. */
     uint16_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
+    const bool emptyWdiff_;
 
 public:
     /**
@@ -53,9 +54,12 @@ public:
         , addr_(0)
         , recIo_()
         , offInIo_(0)
-        , isEndDiff_(false) {
-        merger_.addWdiffs(wdiffPaths);
-        merger_.prepare();
+        , isEndDiff_(false)
+        , emptyWdiff_(wdiffPaths.empty()) {
+        if (!emptyWdiff_) {
+            merger_.addWdiffs(wdiffPaths);
+            merger_.prepare();
+        }
     }
     /**
      * Write all data to a specified fd.
@@ -92,7 +96,7 @@ public:
         }
 
         fillDiffIo();
-        if (isEndDiff_) {
+        if (emptyWdiff_ || isEndDiff_) {
             /* There is no remaining diff IOs. */
             return readBase(data, blks);
         }
@@ -196,7 +200,7 @@ private:
      * Set recIo_ approximately.
      */
     void fillDiffIo() {
-        if (isEndDiff_) return;
+        if (emptyWdiff_ || isEndDiff_) return;
         walb::diff::RecordRaw &rec = recIo_.record();
         /* At beginning time, rec.ioBlocks() returns 0. */
         assert(offInIo_ <= rec.ioBlocks());
