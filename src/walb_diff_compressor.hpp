@@ -211,7 +211,8 @@ public:
         MaybeBuffer ret;
         {
             std::unique_lock<std::mutex> lk(m_);
-            avail_.wait(lk, [this] { return !this->q_.empty() && (this->q_.front().first || this->q_.front().second); });
+            avail_.wait(lk, [this] { return this->q_.empty() || (this->q_.front().first || this->q_.front().second); });
+            if (q_.empty()) return nullptr;
             ret = std::move(q_.front());
             q_.pop();
         }
@@ -270,7 +271,10 @@ public:
              * case 1 (process task): set inBuf_ and outBuf_ and wakeup().
              * case 2 (quit): just call wakeup() wihtout setting inBuf_ and outBuf_.
              */
-            if (!inBuf_) break;
+            if (!inBuf_) {
+                que_->notify();
+                break;
+            }
             assert(outBuf_);
             try {
                 outBuf_->first = e_->convert(inBuf_.get());
