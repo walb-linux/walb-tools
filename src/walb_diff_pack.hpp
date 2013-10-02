@@ -418,8 +418,17 @@ public:
     }
 
     bool isValid() const {
+    bool empty() const {
+        bool ret = packh.nRecords() == 0;
+        if (ret) assert(data_.size() == ::WALB_DIFF_PACK_SIZE);
+        return ret;
+    }
         MemoryPack mpack(&data_[0]);
         return mpack.isValid();
+    }
+    void print(FILE *fp = ::stdout) const {
+        packh.print(fp);
+        ::fprintf(fp, "pack size: %zu\n", data_.size());
     }
 
     /**
