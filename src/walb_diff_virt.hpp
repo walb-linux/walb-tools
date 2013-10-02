@@ -94,7 +94,7 @@ public:
         fillDiffIo();
         if (isEndDiff_) {
             /* There is no remaining diff IOs. */
-            return readBase(data, size);
+            return readBase(data, blks);
         }
 
         uint64_t diffAddr = currentDiffAddr();
