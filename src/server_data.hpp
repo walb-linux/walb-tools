@@ -333,6 +333,7 @@ public:
      */
     std::vector<MetaDiff> diffsToApply(uint64_t gid) {
         MetaSnap oldest = getOldestSnapshot();
+        if (gid <= oldest.gid0()) return {};
         return wdiffsP_->listDiff(oldest.gid0(), gid);
     }
     /**
