@@ -366,10 +366,10 @@ public:
     void setMaxPackSize(size_t value) { packh.setMaxPackSize(value); }
 
     /**
-     * @lb [logical block]
+     * @ioBlocks [logical block]
      */
-    bool canAddLb(uint16_t lb) const {
-        return packh.canAdd(lb * LOGICAL_BLOCK_SIZE);
+    bool canAddLb(uint16_t ioBlocks) const {
+        return packh.canAdd(ioBlocks * LOGICAL_BLOCK_SIZE);
     }
 
     /**
