@@ -313,6 +313,30 @@ std::vector<Buffer> parallelConverter(
     return packV1;
 }
 
+CYBOZU_TEST_AUTO(convertNothing)
+{
+    walb::ConverterQueue cq(4, 2, true, WALB_DIFF_CMPR_SNAPPY, 0);
+    std::exception_ptr ep;
+
+    std::thread popper([&cq, &ep]() {
+            try {
+                std::unique_ptr<char[]> p = cq.pop();
+                while (p) {
+                    /* do nothing */
+                    p = cq.pop();
+                }
+            } catch (...) {
+                ep = std::current_exception();
+            }
+        });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    cq.quit();
+    cq.join();
+    popper.join();
+    if (ep) std::rethrow_exception(ep);
+}
+
 std::vector<Buffer> parallelCompress(
     std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
 {
@@ -323,6 +347,13 @@ std::vector<Buffer> parallelUncompress(
     std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
 {
     return parallelConverter(false, std::move(packV), maxQueueSize, numThreads, type);
+}
+
+void testParallelCompressNothing(size_t maxQueueSize, size_t numThreads, int type)
+{
+    std::vector<Buffer> v1 = parallelCompress({}, maxQueueSize, numThreads, type);
+    std::vector<Buffer> v2 = parallelUncompress(std::move(v1), maxQueueSize, numThreads, type);
+    CYBOZU_TEST_ASSERT(v2.empty());
 }
 
 void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
@@ -352,6 +383,7 @@ void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
 
 CYBOZU_TEST_AUTO(parallelCompress)
 {
+    testParallelCompressNothing(8, 4, ::WALB_DIFF_CMPR_NONE);
     testParallelCompress(8, 4, ::WALB_DIFF_CMPR_SNAPPY);
     testParallelCompress(8, 4, ::WALB_DIFF_CMPR_GZIP);
     testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZMA);
