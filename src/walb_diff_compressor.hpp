@@ -181,13 +181,14 @@ typedef std::unique_ptr<char[]> Buffer;
 typedef std::pair<Buffer, std::exception_ptr> MaybeBuffer;
 
 class Queue {
+    const std::atomic<bool> *pq_;
     size_t maxQueSize_;
     std::queue<MaybeBuffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable notFull_;
 public:
-    explicit Queue(size_t maxQueSize) : maxQueSize_(maxQueSize) {}
+    explicit Queue(const std::atomic<bool> *pq, size_t maxQueSize) : pq_(pq), maxQueSize_(maxQueSize) {}
     /*
         allocate reserved buffer where will be stored laster and return it
         @note lock if queue is fill
@@ -211,8 +212,11 @@ public:
         MaybeBuffer ret;
         {
             std::unique_lock<std::mutex> lk(m_);
-            avail_.wait(lk, [this] { return this->q_.empty() || (this->q_.front().first || this->q_.front().second); });
-            if (q_.empty()) return nullptr;
+            avail_.wait(lk, [this] {
+                return (!this->q_.empty() && (this->q_.front().first || this->q_.front().second))
+                    || (*this->pq_ && this->q_.empty());
+            });
+            if (*pq_ && q_.empty()) return nullptr;
             ret = std::move(q_.front());
             q_.pop();
         }
@@ -335,7 +339,7 @@ public:
     ConverterQueueT(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
         : quit_(false)
         , joined_(false)
-        , que_(maxQueueNum)
+        , que_(&quit_, maxQueueNum)
         , enginePool_(threadNum)
     {
         for (Engine& e : enginePool_) {
@@ -378,16 +382,18 @@ public:
     /*
      * push buffer and return true
      * return false if quit_
+     * @param inBuf [in] not nullptr
      */
     bool push(Buffer& inBuf)
     {
+        if (!inBuf) throw cybozu::Exception("walb:ConverterQueueT:push:inBuf is empty");
         if (quit_) return false;
         MaybeBuffer *outBuf = que_.push();
         runEngine(outBuf, inBuf); // no throw
         return true;
     }
     /*
-     * return nullptr if quit_ and data is empty
+     * return nullptr if quit_ and queue is empty
      * otherwise return buffer after blocking until data comes
      */
     Buffer pop()
