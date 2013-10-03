@@ -279,15 +279,18 @@ CYBOZU_TEST_AUTO(ConverterQueue)
 
 std::vector<Buffer> parallelConverter(
     bool isCompress, std::vector<Buffer> &&packV0,
-    size_t maxQueueSize, size_t numThreads, int type)
+    size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     const int level = 0;
     walb::ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
     std::exception_ptr ep;
     std::vector<std::unique_ptr<char []> > packV1;
 
-    std::thread popper([&cq, &ep, &packV1]() {
+    std::thread popper([&cq, &ep, &packV1, isFirstDelay]() {
             try {
+                if (!isFirstDelay) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
                 std::unique_ptr<char[]> p = cq.pop();
                 while (p) {
                     //::printf("poped %p\n", p.get());
@@ -299,6 +302,15 @@ std::vector<Buffer> parallelConverter(
                 ep = std::current_exception();
             }
         });
+
+    /*
+     * isFirstDelay value is
+     *   true:  init -> pop() -> push().
+     *   false: init -> push() -> pop().
+     */
+    if (isFirstDelay) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     //::printf("number of packes: %zu\n", packV0.size()); /* debug */
     for (Buffer &buf : packV0) {
@@ -338,25 +350,25 @@ CYBOZU_TEST_AUTO(convertNothing)
 }
 
 std::vector<Buffer> parallelCompress(
-    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
+    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    return parallelConverter(true, std::move(packV), maxQueueSize, numThreads, type);
+    return parallelConverter(true, std::move(packV), maxQueueSize, numThreads, type, isFirstDelay);
 }
 
 std::vector<Buffer> parallelUncompress(
-    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type)
+    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    return parallelConverter(false, std::move(packV), maxQueueSize, numThreads, type);
+    return parallelConverter(false, std::move(packV), maxQueueSize, numThreads, type, isFirstDelay);
 }
 
-void testParallelCompressNothing(size_t maxQueueSize, size_t numThreads, int type)
+void testParallelCompressNothing(size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    std::vector<Buffer> v1 = parallelCompress({}, maxQueueSize, numThreads, type);
-    std::vector<Buffer> v2 = parallelUncompress(std::move(v1), maxQueueSize, numThreads, type);
+    std::vector<Buffer> v1 = parallelCompress({}, maxQueueSize, numThreads, type, isFirstDelay);
+    std::vector<Buffer> v2 = parallelUncompress(std::move(v1), maxQueueSize, numThreads, type, isFirstDelay);
     CYBOZU_TEST_ASSERT(v2.empty());
 }
 
-void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
+void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     std::vector<std::vector<char> > packV = generateRawPacks();
 
@@ -369,10 +381,10 @@ void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
     }
 
     std::vector<Buffer> packV1 =
-        parallelCompress(std::move(packV0), maxQueueSize, numThreads, type);
+        parallelCompress(std::move(packV0), maxQueueSize, numThreads, type, isFirstDelay);
 
     std::vector<Buffer> packV2 =
-        parallelUncompress(std::move(packV1), maxQueueSize, numThreads, type);
+        parallelUncompress(std::move(packV1), maxQueueSize, numThreads, type, isFirstDelay);
 
     /* Verify */
     CYBOZU_TEST_EQUAL(packV.size(), packV2.size());
@@ -383,8 +395,10 @@ void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type)
 
 CYBOZU_TEST_AUTO(parallelCompress)
 {
-    testParallelCompressNothing(8, 4, ::WALB_DIFF_CMPR_NONE);
-    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_SNAPPY);
-    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_GZIP);
-    testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZMA);
+    for (bool isFirstDelay : {true, false}) {
+        testParallelCompressNothing(8, 4, ::WALB_DIFF_CMPR_NONE, isFirstDelay);
+        testParallelCompress(8, 4, ::WALB_DIFF_CMPR_SNAPPY, isFirstDelay);
+        testParallelCompress(8, 4, ::WALB_DIFF_CMPR_GZIP, isFirstDelay);
+        testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZMA, isFirstDelay);
+    }
 }
