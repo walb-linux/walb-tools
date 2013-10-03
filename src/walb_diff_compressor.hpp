@@ -382,16 +382,18 @@ public:
     /*
      * push buffer and return true
      * return false if quit_
+     * @param inBuf [in] not nullptr
      */
     bool push(Buffer& inBuf)
     {
+        if (!inBuf) throw cybozu::Exception("walb:ConverterQueueT:push:inBuf is empty");
         if (quit_) return false;
         MaybeBuffer *outBuf = que_.push();
         runEngine(outBuf, inBuf); // no throw
         return true;
     }
     /*
-     * return nullptr if quit_ and data is empty
+     * return nullptr if quit_ and queue is empty
      * otherwise return buffer after blocking until data comes
      */
     Buffer pop()
