@@ -181,14 +181,14 @@ typedef std::unique_ptr<char[]> Buffer;
 typedef std::pair<Buffer, std::exception_ptr> MaybeBuffer;
 
 class Queue {
-    std::atomic<bool> *pq_;
+    const std::atomic<bool> *pq_;
     size_t maxQueSize_;
     std::queue<MaybeBuffer> q_;
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable notFull_;
 public:
-    explicit Queue(std::atomic<bool> *pq, size_t maxQueSize) : pq_(pq), maxQueSize_(maxQueSize) {}
+    explicit Queue(const std::atomic<bool> *pq, size_t maxQueSize) : pq_(pq), maxQueSize_(maxQueSize) {}
     /*
         allocate reserved buffer where will be stored laster and return it
         @note lock if queue is fill
