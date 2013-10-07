@@ -443,7 +443,8 @@ class DirtyHashSyncProtocol : public Protocol
             size_t nPack = 0;
             auto pushPackToQueue = [this, &nPack, &packer, &convQ]() {
                 std::unique_ptr<char[]> up = packer.getPackAsUniquePtr();
-                logger_.info("try to push pack %zu", nPack);
+                diff::MemoryPack mpack(up.get());
+                logger_.info("try to push pack %zu %p %zu", nPack, up.get(), mpack.size());
                 if (!convQ.push(up)) {
                     throw std::runtime_error("convQ push failed.");
                 }
@@ -509,8 +510,9 @@ class DirtyHashSyncProtocol : public Protocol
                     size_t c = 0;
                     logger_.info("try to pop from convQ"); /* debug */
                     std::unique_ptr<char[]> up = convQ.pop();
-                    logger_.info("popped from convQ"); /* debug */
+                    logger_.info("popped from convQ: %p", up.get()); /* debug */
                     while (up) {
+                        logger_.info("try to send pack %zu", c);
                         ctrl.next();
                         diff::MemoryPack mpack(up.get());
                         uint32_t packSize = mpack.size();
