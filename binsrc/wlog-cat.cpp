@@ -522,9 +522,11 @@ private:
             logd.addBlock(readBlock());
         }
         if (!logd.isValid()) {
+#if 0
             if (config_.isVerbose()) {
                 logd.print(::stderr);
             }
+#endif
             throw walb::log::InvalidLogpackData();
         }
     }
