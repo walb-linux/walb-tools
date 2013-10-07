@@ -33,13 +33,13 @@ private:
     /* Physical block size */
     const unsigned int pbs_;
     /* Super block offset in the log device [physical block]. */
-    const u64 offset_;
+    const uint64_t offset_;
 
     /* Super block data. */
     struct FreeDeleter {
-        void operator()(u8 *p) { ::free(p); }
+        void operator()(uint8_t *p) { ::free(p); }
     };
-    std::unique_ptr<u8, FreeDeleter> data_;
+    std::unique_ptr<uint8_t, FreeDeleter> data_;
 
 public:
     SuperBlock(cybozu::util::BlockDevice& bd)
@@ -57,33 +57,33 @@ public:
 #endif
     }
 
-    u16 getSectorType() const { return super()->sector_type; }
-    u16 getVersion() const { return super()->version; }
-    u32 getChecksum() const { return super()->checksum; }
-    u32 getLogicalBlockSize() const { return super()->logical_bs; }
-    u32 getPhysicalBlockSize() const { return super()->physical_bs; }
-    u32 getMetadataSize() const { return super()->snapshot_metadata_size; }
-    u32 getLogChecksumSalt() const { return super()->log_checksum_salt; }
-    const u8* getUuid() const { return super()->uuid; }
+    uint16_t getSectorType() const { return super()->sector_type; }
+    uint16_t getVersion() const { return super()->version; }
+    uint32_t getChecksum() const { return super()->checksum; }
+    uint32_t getLogicalBlockSize() const { return super()->logical_bs; }
+    uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
+    uint32_t getMetadataSize() const { return super()->snapshot_metadata_size; }
+    uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
+    const uint8_t* getUuid() const { return super()->uuid; }
     const char* getName() const { return super()->name; }
-    u64 getRingBufferSize() const { return super()->ring_buffer_size; }
-    u64 getOldestLsid() const { return super()->oldest_lsid; }
-    u64 getWrittenLsid() const { return super()->written_lsid; }
-    u64 getDeviceSize() const { return super()->device_size; }
+    uint64_t getRingBufferSize() const { return super()->ring_buffer_size; }
+    uint64_t getOldestLsid() const { return super()->oldest_lsid; }
+    uint64_t getWrittenLsid() const { return super()->written_lsid; }
+    uint64_t getDeviceSize() const { return super()->device_size; }
 
-    void setOldestLsid(u64 oldestLsid) {
+    void setOldestLsid(uint64_t oldestLsid) {
         super()->oldest_lsid = oldestLsid;
     }
-    void setWrittenLsid(u64 writtenLsid) {
+    void setWrittenLsid(uint64_t writtenLsid) {
         super()->written_lsid = writtenLsid;
     }
-    void setDeviceSize(u64 deviceSize) {
+    void setDeviceSize(uint64_t deviceSize) {
         super()->device_size = deviceSize;
     }
-    void setLogChecksumSalt(u32 salt) {
+    void setLogChecksumSalt(uint32_t salt) {
         super()->log_checksum_salt = salt;
     }
-    void setUuid(const u8 *uuid) {
+    void setUuid(const uint8_t *uuid) {
         ::memcpy(super()->uuid, uuid, UUID_SIZE);
     }
     void updateChecksum() {
@@ -95,22 +95,22 @@ public:
      * Offset and size.
      */
 
-    u64 get1stSuperBlockOffset() const {
+    uint64_t get1stSuperBlockOffset() const {
         return offset_;
     }
 
-    u64 getMetadataOffset() const {
+    uint64_t getMetadataOffset() const {
         return ::get_metadata_offset_2(super());
     }
 
-    u64 get2ndSuperBlockOffset() const {
-        UNUSED u64 oft = ::get_super_sector1_offset_2(super());
+    uint64_t get2ndSuperBlockOffset() const {
+        UNUSED uint64_t oft = ::get_super_sector1_offset_2(super());
         assert(oft == getMetadataOffset() + getMetadataSize());
         return ::get_super_sector1_offset_2(super());
     }
 
-    u64 getRingBufferOffset() const {
-        u64 oft = ::get_ring_buffer_offset_2(super());
+    uint64_t getRingBufferOffset() const {
+        uint64_t oft = ::get_ring_buffer_offset_2(super());
         assert(oft == get2ndSuperBlockOffset() + 1);
         return oft;
     }
@@ -123,11 +123,11 @@ public:
      * RETURN:
      *   Offset in the log device [physical block].
      */
-    u64 getOffsetFromLsid(u64 lsid) const {
+    uint64_t getOffsetFromLsid(uint64_t lsid) const {
         if (lsid == INVALID_LSID) {
             throw RT_ERR("Invalid lsid.");
         }
-        u64 s = getRingBufferSize();
+        uint64_t s = getRingBufferSize();
         if (s == 0) {
             throw RT_ERR("Ring buffer size must not be 0.");
         }
@@ -191,12 +191,12 @@ public:
     }
 
 private:
-    static u64 get1stSuperBlockOffsetStatic(unsigned int pbs) {
+    static uint64_t get1stSuperBlockOffsetStatic(unsigned int pbs) {
         return ::get_super_sector0_offset(pbs);
     }
 
-    static u8* allocAlignedBufferStatic(unsigned int pbs) {
-        u8 *p;
+    static uint8_t* allocAlignedBufferStatic(unsigned int pbs) {
+        uint8_t *p;
         int ret = ::posix_memalign((void **)&p, pbs, pbs);
         if (ret) {
             throw std::bad_alloc();
@@ -313,14 +313,14 @@ static inline void printLogRecordOneline(
 class PackHeader
 {
 private:
-    using Block = std::shared_ptr<u8>;
+    using Block = std::shared_ptr<uint8_t>;
 
     Block block_;
     const unsigned int pbs_;
-    const u32 salt_;
+    const uint32_t salt_;
 
 public:
-    PackHeader(Block block, unsigned int pbs, u32 salt)
+    PackHeader(Block block, unsigned int pbs, uint32_t salt)
         : block_(block)
         , pbs_(pbs)
         , salt_(salt) {
@@ -350,17 +350,17 @@ public:
     }
 
     unsigned int pbs() const { return pbs_; }
-    u32 salt() const { return salt_; }
+    uint32_t salt() const { return salt_; }
 
     /*
      * Fields.
      */
-    u32 checksum() const { return header().checksum; }
-    u16 sectorType() const { return header().sector_type; }
-    u16 totalIoSize() const { return header().total_io_size; }
-    u64 logpackLsid() const { return header().logpack_lsid; }
-    u16 nRecords() const { return header().n_records; }
-    u16 nPadding() const { return header().n_padding; }
+    uint32_t checksum() const { return header().checksum; }
+    uint16_t sectorType() const { return header().sector_type; }
+    uint16_t totalIoSize() const { return header().total_io_size; }
+    uint64_t logpackLsid() const { return header().logpack_lsid; }
+    uint16_t nRecords() const { return header().n_records; }
+    uint16_t nPadding() const { return header().n_padding; }
 
     /*
      * N'th log record.
@@ -483,7 +483,7 @@ public:
     }
 
     /* Get next logpack lsid. */
-    u64 nextLogpackLsid() const {
+    uint64_t nextLogpackLsid() const {
         if (nRecords() > 0) {
             return logpackLsid() + 1 + totalIoSize();
         } else {
@@ -494,7 +494,7 @@ public:
     /* Update checksum field. */
     void updateChecksum() {
         header().checksum = 0;
-        header().checksum = ::checksum(ptr<u8>(), pbs(), salt());
+        header().checksum = ::checksum(ptr<uint8_t>(), pbs(), salt());
     }
 
     /**
@@ -519,7 +519,7 @@ public:
     /**
      * Initialize logpack header block.
      */
-    void init(u64 lsid) {
+    void init(uint64_t lsid) {
         ::memset(&header(), 0, pbs());
         header().logpack_lsid = lsid;
         header().sector_type = SECTOR_TYPE_LOGPACK;
@@ -552,7 +552,7 @@ public:
      * RETURN:
      *   true in success, or false (you must create a new header).
      */
-    bool addNormalIo(u64 offset, u16 size) {
+    bool addNormalIo(uint64_t offset, uint16_t size) {
         if (::max_n_log_record_in_sector(pbs()) <= nRecords()) {
             return false;
         }
@@ -588,7 +588,7 @@ public:
      * RETURN:
      *   true in success, or false (you must create a new header).
      */
-    bool addDiscardIo(u64 offset, u16 size) {
+    bool addDiscardIo(uint64_t offset, uint16_t size) {
         if (::max_n_log_record_in_sector(pbs()) <= nRecords()) {
             return false;
         }
@@ -620,7 +620,7 @@ public:
      * RETURN:
      *   true in success, or false (you must create a new header).
      */
-    bool addPadding(u16 size) {
+    bool addPadding(uint16_t size) {
         if (::max_n_log_record_in_sector(pbs()) <= nRecords()) {
             return false;
         }
@@ -663,9 +663,9 @@ public:
      *   true in success.
      *   false if lsid overlap ocurred.
      */
-    bool updateLsid(u64 newLsid) {
+    bool updateLsid(uint64_t newLsid) {
         assert(isValid(false));
-        if (newLsid == u64(-1)) {
+        if (newLsid == uint64_t(-1)) {
             return true;
         }
         if (header().logpack_lsid == newLsid) {
@@ -864,7 +864,7 @@ public:
     size_t nBlocks() const { return data_.size(); }
 
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
-        u32 csum = salt;
+        uint32_t csum = salt;
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
         while (0 < remaining) {
@@ -954,13 +954,13 @@ using PackDataRaw = PackData<RecordRaw>;
 class FileHeader
 {
 private:
-    std::vector<u8> data_;
+    std::vector<uint8_t> data_;
 
 public:
     FileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
-    void init(unsigned int pbs, u32 salt, const u8 *uuid, u64 beginLsid, u64 endLsid) {
+    void init(unsigned int pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
         ::memset(&data_[0], 0, WALBLOG_HEADER_SIZE);
         header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
         header().version = WALB_LOG_VERSION;
@@ -1005,16 +1005,16 @@ public:
         return *ptr<struct walblog_header>();
     }
 
-    u32 checksum() const { return header().checksum; }
-    u32 salt() const { return header().log_checksum_salt; }
+    uint32_t checksum() const { return header().checksum; }
+    uint32_t salt() const { return header().log_checksum_salt; }
     unsigned int lbs() const { return header().logical_bs; }
     unsigned int pbs() const { return header().physical_bs; }
-    u64 beginLsid() const { return header().begin_lsid; }
-    u64 endLsid() const { return header().end_lsid; }
-    const u8* uuid() const { return &header().uuid[0]; }
-    u16 sectorType() const { return header().sector_type; }
-    u16 headerSize() const { return header().header_size; }
-    u16 version() const { return header().version; }
+    uint64_t beginLsid() const { return header().begin_lsid; }
+    uint64_t endLsid() const { return header().end_lsid; }
+    const uint8_t* uuid() const { return &header().uuid[0]; }
+    uint16_t sectorType() const { return header().sector_type; }
+    uint16_t headerSize() const { return header().header_size; }
+    uint16_t version() const { return header().version; }
 
     bool isValid(bool isChecksum = true) const {
         CHECKd(header().sector_type == SECTOR_TYPE_WALBLOG_HEADER);
