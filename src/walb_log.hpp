@@ -310,33 +310,33 @@ static inline void printLogRecordOneline(
 /**
  * Logpack header.
  */
-class PackHeader
+class PackHeaderRef
 {
-private:
-    using Block = std::shared_ptr<uint8_t>;
-
-    Block block_;
+protected:
+    uint8_t *data_;
     const unsigned int pbs_;
     const uint32_t salt_;
 
 public:
-    PackHeader(Block block, unsigned int pbs, uint32_t salt)
-        : block_(block)
+    PackHeaderRef(uint8_t *data, unsigned int pbs, uint32_t salt)
+        : data_(data)
         , pbs_(pbs)
         , salt_(salt) {
         ASSERT_PBS(pbs);
     }
+    ~PackHeaderRef() noexcept = default;
 
-    Block getBlock() { return block_; }
+    uint8_t *data() { return data_; }
+    const uint8_t *data() const { return data_; }
 
     template <typename T>
     T* ptr() {
-        return reinterpret_cast<T *>(block_.get());
+        return reinterpret_cast<T *>(data_);
     }
 
     template <typename T>
     const T* ptr() const {
-        return reinterpret_cast<const T *>(block_.get());
+        return reinterpret_cast<const T *>(data_);
     }
 
     struct walb_logpack_header& header() {
@@ -477,7 +477,7 @@ public:
 
         /* Calculate checksum. */
         header().checksum = 0;
-        header().checksum = ::checksum(block_.get(), pbs(), salt());
+        header().checksum = ::checksum(data_, pbs(), salt());
 
         assert(isValid());
     }
@@ -696,7 +696,7 @@ public:
 
 private:
     void checkBlock() const {
-        if (block_.get() == nullptr) {
+        if (data_ == nullptr) {
             throw RT_ERR("Header is null.");
         }
     }
@@ -705,6 +705,25 @@ private:
         if (pos >= nRecords()) {
             throw RT_ERR("index out of range.");
         }
+    }
+
+protected:
+    void resetData(uint8_t *data) {
+        data_ = data;
+    }
+};
+
+class PackHeaderRaw : public PackHeaderRef
+{
+protected:
+    using Block = std::shared_ptr<uint8_t>;
+    Block block_;
+
+public:
+    PackHeaderRaw(Block block, unsigned int pbs, uint32_t salt)
+        : PackHeaderRef(nullptr, pbs, salt)
+        , block_(block) {
+        resetData(block_.get());
     }
 };
 
@@ -794,7 +813,7 @@ public:
         : pos_(pos), pbs_(pbs), salt_(salt), rec_() {
         ::memcpy(&rec_, &rec, sizeof(rec_));
     }
-    RecordRaw(PackHeader &logh, size_t pos)
+    RecordRaw(PackHeaderRef &logh, size_t pos)
         : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
     ~RecordRaw() noexcept override {}
 
@@ -813,11 +832,11 @@ class RecordRef
     : public Record
 {
 private:
-    PackHeader& logh_;
+    PackHeaderRef& logh_;
     size_t pos_;
 
 public:
-    RecordRef(PackHeader& logh, size_t pos)
+    RecordRef(PackHeaderRef& logh, size_t pos)
         : logh_(logh)
         , pos_(pos) {
         assert(pos < logh.nRecords());
@@ -895,7 +914,7 @@ class PackData
     , public BlockData
 {
 public:
-    PackData(PackHeader &logh, size_t pos)
+    PackData(PackHeaderRef &logh, size_t pos)
         : LogRecord(logh, pos)
         , BlockData(logh.pbs()) {}
     virtual ~PackData() noexcept {}

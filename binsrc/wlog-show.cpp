@@ -188,7 +188,7 @@ private:
     bool isEnd_;
 
     std::shared_ptr<FileHeader> wh_;
-    std::shared_ptr<PackHeader> pack_;
+    std::shared_ptr<PackHeaderRaw> pack_;
     uint16_t recIdx_;
     uint16_t totalSize_;
 
@@ -257,7 +257,7 @@ private:
         std::shared_ptr<uint8_t> b = allocB();
         try {
             fdr_.read(reinterpret_cast<char *>(b.get()), wh_->pbs());
-            pack_.reset(new PackHeader(b, wh_->pbs(), wh_->salt()));
+            pack_.reset(new PackHeaderRaw(b, wh_->pbs(), wh_->salt()));
             if (!pack_->isValid()) {
                 throw RT_ERR("Invalid logpack header.");
             }

@@ -32,7 +32,7 @@ class Converter /* final */
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
-    using LogpackHeader = log::PackHeader;
+    using LogpackHeader = log::PackHeaderRaw;
     using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
     using LogpackDataRef = log::PackDataRef;
     using DiffRecord = RecordRaw;

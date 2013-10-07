@@ -370,7 +370,7 @@ private:
     walb::log::SuperBlock &super_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
 
-    using PackHeader = walb::log::PackHeader;
+    using PackHeader = walb::log::PackHeaderRaw;
     using PackDataRef = walb::log::PackDataRef;
     using PackDataRefPtr = std::shared_ptr<PackDataRef>;
     using Block = std::shared_ptr<uint8_t>;
@@ -421,7 +421,7 @@ public:
             readAheadLoose();
             std::unique_ptr<PackHeader> loghP;
             try {
-                loghP = std::move(readLogpackHeader(lsid));
+                loghP = readLogpackHeader(lsid);
             } catch (walb::log::InvalidLogpackHeader& e) {
                 if (config_.isVerbose()) {
                     ::fprintf(::stderr, "Caught invalid logpack header error.\n");
@@ -462,10 +462,10 @@ private:
     /**
      * Read a logpack header.
      */
-    std::unique_ptr<walb::log::PackHeader> readLogpackHeader(uint64_t lsid) {
+    std::unique_ptr<PackHeader> readLogpackHeader(uint64_t lsid) {
         Block block = readBlock();
-        std::unique_ptr<walb::log::PackHeader> logh(
-            new walb::log::PackHeader(
+        std::unique_ptr<PackHeader> logh(
+            new PackHeader(
                 block, super_.getPhysicalBlockSize(),
                 super_.getLogChecksumSalt()));
 #if 0

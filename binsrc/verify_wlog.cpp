@@ -169,7 +169,7 @@ private:
 class WlogVerifier
 {
 private:
-    using PackHeader = walb::log::PackHeader;
+    using PackHeader = walb::log::PackHeaderRaw;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
     using PackDataRef = walb::log::PackDataRef;
     using PackDataRefPtr = std::shared_ptr<PackDataRef>;

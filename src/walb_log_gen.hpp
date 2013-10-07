@@ -116,7 +116,7 @@ private:
 
         uint64_t nPack = 0;
         while (writtenPb < config_.outLogPb) {
-            walb::log::PackHeader logh(hBlock, pbs, salt);
+            walb::log::PackHeaderRef logh(hBlock.get(), pbs, salt);
             generateLogpackHeader(rand, logh, lsid);
             assert(::is_valid_logpack_header_and_records(&logh.header()));
             uint64_t tmpLsid = lsid + 1;
@@ -179,7 +179,7 @@ private:
         }
 
         /* Write termination block. */
-        walb::log::PackHeader logh(hBlock, pbs, salt);
+        walb::log::PackHeaderRef logh(hBlock.get(), pbs, salt);
         logh.setEnd();
         logh.write(fd);
 
@@ -196,7 +196,7 @@ private:
      * Generate logpack header randomly.
      */
     void generateLogpackHeader(
-        Rand &rand, walb::log::PackHeader &logh, uint64_t lsid) {
+        Rand &rand, walb::log::PackHeaderRef &logh, uint64_t lsid) {
         logh.init(lsid);
         const unsigned int pbs = config_.pbs;
         const unsigned int maxNumRecords = ::max_n_log_record_in_sector(pbs);

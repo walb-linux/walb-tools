@@ -224,7 +224,7 @@ private:
     using BlockA = cybozu::util::BlockAllocator<u8>;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
-    using PackHeader = walb::log::PackHeader;
+    using PackHeader = walb::log::PackHeaderRaw;
     using PackDataRef = walb::log::PackDataRef;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::log::SuperBlock;

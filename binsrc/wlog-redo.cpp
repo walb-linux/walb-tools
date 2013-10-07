@@ -584,7 +584,7 @@ private:
     size_t nDiscard_;
     size_t nPadding_;
 
-    using PackHeader = walb::log::PackHeader;
+    using PackHeader = walb::log::PackHeaderRef;
     using PackDataRef = walb::log::PackDataRef;
     using PackDataRefPtr = std::shared_ptr<PackDataRef>;
 
@@ -644,7 +644,7 @@ public:
         try {
             while (true) {
                 Block b = readBlock(fdr);
-                PackHeader logh(b, blockSize_, salt());
+                PackHeader logh(b.get(), blockSize_, salt());
                 if (logh.isEnd()) {
                     ::printf("Reach EOF log header block.\n");
                     break;

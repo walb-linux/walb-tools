@@ -172,7 +172,7 @@ private:
     /* Number of written logical blocks. */
     uint64_t writtenLb_;
 
-    using PackHeader = walb::log::PackHeader;
+    using PackHeader = walb::log::PackHeaderRaw;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
     using PackDataRef = walb::log::PackDataRef;
     using Block = std::shared_ptr<u8>;
