@@ -14,6 +14,7 @@
 #include "util.hpp"
 #include "checksum.hpp"
 #include "fileio.hpp"
+#include "memory_buffer.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"
 #include "walb/log_record.h"
@@ -36,17 +37,14 @@ private:
     const uint64_t offset_;
 
     /* Super block data. */
-    struct FreeDeleter {
-        void operator()(uint8_t *p) { ::free(p); }
-    };
-    std::unique_ptr<uint8_t, FreeDeleter> data_;
+    std::shared_ptr<uint8_t> data_;
 
 public:
     SuperBlock(cybozu::util::BlockDevice& bd)
         : bd_(bd)
         , pbs_(bd.getPhysicalBlockSize())
         , offset_(get1stSuperBlockOffsetStatic(pbs_))
-        , data_(allocAlignedBufferStatic(pbs_)) {
+        , data_(cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_)) {
 #if 0
         ::printf("offset %" PRIu64 " pbs %u\n", offset_ * pbs_, pbs_);
 #endif
@@ -193,15 +191,6 @@ public:
 private:
     static uint64_t get1stSuperBlockOffsetStatic(unsigned int pbs) {
         return ::get_super_sector0_offset(pbs);
-    }
-
-    static uint8_t* allocAlignedBufferStatic(unsigned int pbs) {
-        uint8_t *p;
-        int ret = ::posix_memalign((void **)&p, pbs, pbs);
-        if (ret) {
-            throw std::bad_alloc();
-        }
-        return p;
     }
 
     template <typename T>
