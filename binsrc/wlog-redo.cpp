@@ -645,7 +645,12 @@ public:
             while (true) {
                 Block b = readBlock(fdr);
                 PackHeader logh(b, blockSize_, salt());
+                if (logh.isEnd()) {
+                    ::printf("Reach EOF log header block.\n");
+                    break;
+                }
                 if (!logh.isValid()) {
+                    ::printf("Detect invalid log header block.\n");
                     break;
                 }
                 if (config_.isVerbose()) {

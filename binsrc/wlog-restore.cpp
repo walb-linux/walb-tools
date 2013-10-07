@@ -373,6 +373,9 @@ private:
 
         /* Read logpack header. */
         PackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
+        if (logh.isEnd()) {
+            return true;
+        }
         if (!logh.isValid()) {
             return false;
         }

@@ -261,6 +261,11 @@ private:
             if (!pack_->isValid()) {
                 throw RT_ERR("Invalid logpack header.");
             }
+            if (pack_->isEnd()) {
+                pack_.reset();
+                isEnd_ = true;
+                return;
+            }
             recIdx_ = 0;
             // pack_->print();
         } catch (cybozu::util::EofError &e) {

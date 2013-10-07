@@ -400,10 +400,12 @@ public:
             beginLsid = super_.getOldestLsid();
         }
 
+        u32 salt = super_.getLogChecksumSalt();
+        u32 pbs = super_.getPhysicalBlockSize();
+
         /* Create and write walblog header. */
         walb::log::FileHeader wh;
-        wh.init(super_.getPhysicalBlockSize(), super_.getLogChecksumSalt(),
-                super_.getUuid(), beginLsid, config_.endLsid());
+        wh.init(pbs, salt, super_.getUuid(), beginLsid, config_.endLsid());
         wh.write(outFd);
 
         /* Read and write each logpack. */
@@ -443,6 +445,10 @@ public:
                       "nPacks: %" PRIu64 "\n",
                       lsid, config_.endLsid() - lsid, totalPaddingPb, nPacks);
         }
+        /* Write termination block. */
+        PackHeader logh(ba_.alloc(), pbs, salt);
+        logh.setEnd();
+        logh.write(fdw);
     }
 private:
     void readAheadLoose() {

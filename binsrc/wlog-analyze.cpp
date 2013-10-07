@@ -256,6 +256,7 @@ private:
             while (lsid < wh.endLsid()) {
                 PackHeaderPtr loghp = readPackHeader(fdr, ba, wh.salt());
                 PackHeader &logh = *loghp;
+                if (logh.isEnd()) break;
                 if (lsid != logh.logpackLsid()) {
                     throw RT_ERR("wrong lsid.");
                 }
