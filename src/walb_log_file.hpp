@@ -172,7 +172,7 @@ public:
      * ReadLog
      */
     bool readLog(PackIoRef<RecordRaw> &packIo) {
-        if (!isReadHeader_) throw RT_ERR("readHeader");
+        checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
 
@@ -217,6 +217,30 @@ public:
         PackIoRef<RecordRaw> packIo(&rec, &blockD);
         return readLog(packIo);
     }
+    /**
+     * RETURN:
+     *   true if there are one or more log data remaining.
+     */
+    bool isEnd() {
+        checkReadHeader();
+        fillPackIfNeed();
+        return !pack_;
+    }
+    /**
+     * RETURN:
+     *   true if the cursor indicates the first record in a pack.
+     */
+    bool isFirstInPack() {
+        return isEnd() && recIdx_ == 0;
+    }
+    /**
+     * Get pack header reference.
+     */
+    PackHeaderRaw &pack() {
+        checkReadHeader();
+        fillPackIfNeed();
+        return *pack_;
+    }
 private:
     void fillPackIfNeed() {
         assert(isReadHeader_);
@@ -244,6 +268,11 @@ private:
     std::shared_ptr<uint8_t> allocPb() {
         assert(isReadHeader_);
         return cybozu::util::allocateBlocks<uint8_t>(LOGICAL_BLOCK_SIZE, pbs_);
+    }
+    void checkReadHeader() const {
+        if (!isReadHeader_) {
+            throw RT_ERR("You have not called readHeader() yet.");
+        }
     }
 };
 

@@ -740,6 +740,7 @@ public:
     /* default implementation. */
     uint64_t lsid() const { return record().lsid; }
     uint16_t lsidLocal() const { return record().lsid_local; }
+    uint64_t packLsid() const { return lsid() - lsidLocal(); }
     bool isExist() const {
         return ::test_bit_u32(LOG_RECORD_EXIST, &record().flags);
     }

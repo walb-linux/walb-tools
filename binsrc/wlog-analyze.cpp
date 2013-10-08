@@ -172,14 +172,9 @@ private:
     /* Number of written logical blocks. */
     uint64_t writtenLb_;
 
-    using PackHeader = walb::log::PackHeaderRaw;
-    using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using Block = std::shared_ptr<u8>;
-
 public:
     WalbLogAnalyzer(const Config &config)
         : config_(config), bits_(), writtenLb_(0) {}
-
     void analyze() {
         uint64_t lsid = -1;
         u8 uuid[UUID_SIZE];
@@ -198,7 +193,6 @@ public:
         }
         printResult();
     }
-
 private:
     /**
      * Try to read wlog data.
@@ -213,27 +207,24 @@ private:
      * RETURN:
      *   end lsid of the wlog data.
      */
-    uint64_t analyzeWlog(
-        int inFd, uint64_t beginLsid, u8 *uuid) {
-
+    uint64_t analyzeWlog(int inFd, uint64_t beginLsid, u8 *uuid) {
         if (inFd < 0) {
             throw RT_ERR("inFd is not valid");
         }
-        cybozu::util::FdReader fdr(inFd);
+        walb::log::Reader reader(inFd);
 
+        /* Read header. */
         walb::log::FileHeader wh;
         try {
-            wh.read(fdr);
+            reader.readHeader(wh);
         } catch (cybozu::util::EofError &e) {
             return beginLsid;
-        }
-        if (!wh.isValid(true)) {
-            throw RT_ERR("invalid wlog header.");
         }
         if (config_.isVerbose()) {
             wh.print(::stderr);
         }
 
+        /* Check uuid if required. */
         if (beginLsid == uint64_t(-1)) {
             /* First call. */
             ::memcpy(uuid, wh.uuid(), UUID_SIZE);
@@ -243,89 +234,37 @@ private:
             }
         }
 
-        const unsigned int pbs = wh.pbs();
-        const unsigned int bufferSize = 16 * 1024 * 1024;
-        cybozu::util::BlockAllocator<u8> ba(bufferSize / pbs, pbs, pbs);
-
         uint64_t lsid = wh.beginLsid();
         if (beginLsid != uint64_t(-1) && lsid != beginLsid) {
             throw RT_ERR("wrong lsid.");
         }
-        try {
-            while (lsid < wh.endLsid()) {
-                PackHeaderPtr loghp = readPackHeader(fdr, ba, wh.salt());
-                PackHeader &logh = *loghp;
-                if (logh.isEnd()) break;
-                if (lsid != logh.logpackLsid()) {
-                    throw RT_ERR("wrong lsid.");
-                }
-                readLogpackData(logh, fdr, ba);
-                updateBitmap(logh);
-                lsid = logh.nextLogpackLsid();
+        /* Read pack IO. */
+        while (!reader.isEnd()) {
+            walb::log::PackIoRaw packIo;
+            uint64_t nextLsid = lsid;
+            if (reader.isFirstInPack()) {
+                nextLsid = reader.pack().nextLogpackLsid();
             }
-        } catch (cybozu::util::EofError &e) {
-        }
-        if (lsid != wh.endLsid()) {
-            throw RT_ERR("the wlog lacks logs from %" PRIu64 ". endLsid is %" PRIu64 "",
-                         lsid, wh.endLsid());
+            reader.readLog(packIo);
+            updateBitmap(packIo.record());
+            lsid = nextLsid;
         }
         return lsid;
     }
-
-    Block readBlock(
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba) {
-        Block b = ba.alloc();
-        unsigned int bs = ba.blockSize();
-        fdr.read(reinterpret_cast<char *>(b.get()), bs);
-        return b;
-    }
-
-    PackHeaderPtr readPackHeader(
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba,
-        uint32_t salt) {
-        Block b = readBlock(fdr, ba);
-        return PackHeaderPtr(new PackHeader(b, ba.blockSize(), salt));
-    }
-
     /**
-     * Read, validate, and throw away logpack data.
+     * Update bitmap with a log record.
      */
-    void readLogpackData(
-        PackHeader &logh, cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<u8> &ba) {
-        for (size_t i = 0; i < logh.nRecords(); i++) {
-            walb::log::PackIoRaw packIo(logh, i);
-            walb::log::RecordRaw &rec = packIo.record();
-            if (!rec.hasData()) { continue; }
-            for (size_t j = 0; j < rec.ioSizePb(); j++) {
-                packIo.blockData().addBlock(readBlock(fdr, ba));
-            }
-            if (!packIo.isValid()) {
-                throw walb::log::InvalidLogpackData();
-            }
-        }
+    void updateBitmap(const walb::log::Record &rec) {
+        if (rec.isPadding()) return;
+        const unsigned int pbs = config_.blockSize();
+        uint64_t offLb = rec.offset();
+        unsigned int sizeLb = rec.ioSizeLb();
+        uint64_t offPb0 = ::addr_pb(pbs, offLb);
+        uint64_t offPb1 = ::capacity_pb(pbs, offLb + sizeLb);
+        setRange(offPb0, offPb1);
+
+        writtenLb_ += sizeLb;
     }
-
-    /**
-     * Update bitmap with a logpack header.
-     */
-    void updateBitmap(const PackHeader &logh) {
-        const unsigned int bs = config_.blockSize();
-        for (size_t i = 0; i < logh.nRecords(); i++) {
-            const struct walb_log_record &rec = logh.record(i);
-            if (::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)) {
-                continue;
-            }
-            uint64_t offLb = rec.offset;
-            unsigned int sizeLb = rec.io_size;
-            uint64_t offPb0 = ::addr_pb(bs, offLb);
-            uint64_t offPb1 = ::capacity_pb(bs, offLb + sizeLb);
-            setRange(offPb0, offPb1);
-
-            writtenLb_ += sizeLb;
-        }
-    }
-
     void resize(size_t size) {
         const size_t s = bits_.size();
         if (size <= s) { return; }
@@ -334,7 +273,6 @@ private:
             bits_[i] = false;
         }
     }
-
     void setRange(size_t off0, size_t off1) {
         resize(off1);
         assert(off0 <= off1);
@@ -342,7 +280,6 @@ private:
             bits_[i] = true;
         }
     }
-
     uint64_t rank(size_t offset) const {
         uint64_t c = 0;
         for (size_t i = 0; i < offset && i < bits_.size(); i++) {
@@ -350,11 +287,9 @@ private:
         }
         return c;
     }
-
     uint64_t count() const {
         return rank(bits_.size());
     }
-
     void printResult() const {
         unsigned int bs = config_.blockSize();
 
