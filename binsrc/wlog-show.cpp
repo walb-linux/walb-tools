@@ -21,7 +21,7 @@
 
 #include "util.hpp"
 #include "fileio.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
@@ -173,152 +173,23 @@ private:
     }
 };
 
-namespace walb {
-namespace log {
-
-/**
- * Walb log reader.
- */
-class FileReader /* final */
+class FileOrFd
 {
 private:
     int fd_;
-    cybozu::util::FdReader fdr_;
-    bool isReadHeader_;
-    bool isEnd_;
-
-    std::shared_ptr<FileHeader> wh_;
-    std::shared_ptr<PackHeaderRaw> pack_;
-    uint16_t recIdx_;
-    uint16_t totalSize_;
-
+    std::shared_ptr<cybozu::util::FileOpener> fo_;
 public:
-    explicit FileReader(int fd)
-        : fd_(fd), fdr_(fd)
-        , isReadHeader_(false)
-        , isEnd_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {}
-
-    ~FileReader() noexcept {}
-
-    std::shared_ptr<FileHeader> readHeader() {
-        if (isReadHeader_) {
-            throw RT_ERR("Log header has been called already.");
-        }
-        isReadHeader_ = true;
-        wh_.reset(new FileHeader());
-        wh_->read(fdr_);
-        if (!wh_->isValid(true)) {
-            throw RT_ERR("invalid walb log header.");
-        }
-        return wh_;
+    FileOrFd() : fd_(-1), fo_() {}
+    void setFd(int fd) { fd_ = fd; }
+    void open(const std::string &path, int flags) {
+        fo_.reset(new cybozu::util::FileOpener(path, flags));
     }
-
-    std::shared_ptr<PackDataRaw> readLog() {
-        if (!isReadHeader_) {
-            throw RT_ERR("readHeader");
-        }
-        fillPackIfNeed();
-        if (!pack_) {
-            return std::shared_ptr<PackDataRaw>();
-        }
-
-        std::shared_ptr<PackDataRaw> logd(
-            new PackDataRaw(*pack_, recIdx_));
-
-        if (logd->hasData()) {
-            for (size_t i = 0; i < logd->ioSizePb(); i++) {
-                try {
-                    std::shared_ptr<uint8_t> b = allocB();
-                    fdr_.read(reinterpret_cast<char *>(b.get()), wh_->pbs());
-                    logd->addBlock(b);
-                } catch (cybozu::util::EofError &e) {
-                    throw InvalidLogpackData();
-                }
-            }
-        }
-        if (!logd->isValid()) {
-            logd->print();
-            ::printf("invalid....\n"); /* debug */
-            throw InvalidLogpackData();
-        }
-
-        recIdx_++;
-        return logd;
+    void open(const std::string &path, int flags, mode_t mode) {
+        fo_.reset(new cybozu::util::FileOpener(path, flags, mode));
     }
-
-private:
-    void fillPackIfNeed() {
-        assert(isReadHeader_);
-        if (isEnd_ || (pack_ && recIdx_ < pack_->nRecords())) { return; }
-
-        std::shared_ptr<uint8_t> b = allocB();
-        try {
-            fdr_.read(reinterpret_cast<char *>(b.get()), wh_->pbs());
-            pack_.reset(new PackHeaderRaw(b, wh_->pbs(), wh_->salt()));
-            if (!pack_->isValid()) {
-                throw RT_ERR("Invalid logpack header.");
-            }
-            if (pack_->isEnd()) {
-                pack_.reset();
-                isEnd_ = true;
-                return;
-            }
-            recIdx_ = 0;
-            // pack_->print();
-        } catch (cybozu::util::EofError &e) {
-            pack_.reset();
-            isEnd_ = true;
-        }
-    }
-
-    std::shared_ptr<uint8_t> allocB() {
-        assert(isReadHeader_);
-        return cybozu::util::allocateBlocks<uint8_t>(LOGICAL_BLOCK_SIZE, wh_->pbs());
-    }
+    void close() { if (fo_) fo_.reset(); }
+    int fd() const { return fo_ ? fo_->fd() : fd_; }
 };
-
-/**
- * Pretty printer of walb log.
- */
-class Printer
-{
-private:
-    const Config &config_;
-
-public:
-    Printer(const Config &config)
-        : config_(config) {}
-
-    void run() {
-        int fd = 0;
-        std::shared_ptr<cybozu::util::FileOpener> fo;
-        if (!config_.isInputStdin()) {
-            fo.reset(new cybozu::util::FileOpener(config_.inWlogPath(), O_RDONLY));
-            fd = fo->fd();
-        }
-        FileReader reader(fd);
-
-        std::shared_ptr<FileHeader> wh = reader.readHeader();
-        wh->print();
-
-        std::shared_ptr<PackDataRaw> log = reader.readLog();
-        try {
-            while (log) {
-                log->printOneline();
-                log = reader.readLog();
-            }
-        } catch (InvalidLogpackData &e) {
-            /* now editing */
-            throw;
-        }
-        if (fo) { fo->close(); }
-    }
-};
-
-}} //namespace walb::log
 
 int main(int argc, char* argv[])
 {
@@ -329,8 +200,15 @@ int main(int argc, char* argv[])
             return 0;
         }
         config.check();
-        walb::log::Printer printer(config);
-        printer.run();
+
+        FileOrFd fof;
+        if (!config.isInputStdin()) {
+            fof.open(config.inWlogPath(), O_RDONLY);
+        } else {
+            fof.setFd(0); /* stdin */
+        }
+        walb::log::Printer printer(fof.fd());
+        printer();
         return 0;
     } catch (Config::Error& e) {
         LOGe("Command line error: %s\n\n", e.what());

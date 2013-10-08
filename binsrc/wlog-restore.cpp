@@ -26,7 +26,7 @@
 
 #include "util.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 
 /**
  * Command line configuration.
@@ -225,7 +225,7 @@ private:
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using PackHeader = walb::log::PackHeaderRaw;
-    using PackDataRef = walb::log::PackDataRef;
+    using PackIo = walb::log::PackIoRaw;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::log::SuperBlock;
 
@@ -339,13 +339,14 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackDataRef &logd, FdReader &fdr, BlockA &ba) {
-        if (!logd.hasData()) { return; }
+    void readLogpackData(PackIo &packIo, FdReader &fdr, BlockA &ba) {
+        walb::log::RecordRaw &rec = packIo.record();
+        if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
-            logd.addBlock(readBlock(fdr, ba, logd.pbs()));
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+            packIo.blockData().addBlock(readBlock(fdr, ba, rec.pbs()));
         }
-        if (!logd.isValid()) {
+        if (!packIo.isValid()) {
             throw walb::log::InvalidLogpackData();
         }
     }
@@ -426,19 +427,20 @@ private:
         std::vector<Block> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataRef logd(logh, i);
-            readLogpackData(logd, fdr, ba);
-            if (logd.hasData()) {
-                for (size_t j = 0; j < logd.ioSizePb(); j++) {
-                    blocks.push_back(logd.getBlock(j));
+            PackIo packIo(logh, i);
+            readLogpackData(packIo, fdr, ba);
+            walb::log::RecordRaw &rec = packIo.record();
+            if (rec.hasData()) {
+                for (size_t j = 0; j < rec.ioSizePb(); j++) {
+                    blocks.push_back(packIo.blockData().getBlock(j));
                 }
             }
             if (0 < config_.ddevLb() &&
-                config_.ddevLb() < logd.offset() + logd.ioSizeLb()) {
+                config_.ddevLb() < rec.offset() + rec.ioSizeLb()) {
                 /* This IO should be clipped. */
-                logd.setPadding();
-                logd.record().offset = 0;
-                logd.record().checksum = 0;
+                rec.setPadding();
+                rec.record().offset = 0;
+                rec.record().checksum = 0;
             }
         }
         assert(blocks.size() == logh.totalIoSize());

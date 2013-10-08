@@ -10,7 +10,7 @@
 
 #ifndef LOG_INTERNAL
 #define LOG_INTERNAL(level, fmt, args...)                               \
-    ::fprintf(::stderr, level "(%s:%d)" fmt, __func__, __LINE__, ##args)
+    ::fprintf(::stderr, level "(%s:%d)" fmt "\n", __func__, __LINE__, ##args)
 #endif
 
 #ifndef LOGd

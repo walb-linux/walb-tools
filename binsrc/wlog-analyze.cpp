@@ -22,7 +22,7 @@
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
 
@@ -174,7 +174,6 @@ private:
 
     using PackHeader = walb::log::PackHeaderRaw;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using PackDataRef = walb::log::PackDataRef;
     using Block = std::shared_ptr<u8>;
 
 public:
@@ -295,12 +294,13 @@ private:
         PackHeader &logh, cybozu::util::FdReader &fdr,
         cybozu::util::BlockAllocator<u8> &ba) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataRef logd(logh, i);
-            if (!logd.hasData()) { continue; }
-            for (size_t j = 0; j < logd.ioSizePb(); j++) {
-                logd.addBlock(readBlock(fdr, ba));
+            walb::log::PackIoRaw packIo(logh, i);
+            walb::log::RecordRaw &rec = packIo.record();
+            if (!rec.hasData()) { continue; }
+            for (size_t j = 0; j < rec.ioSizePb(); j++) {
+                packIo.blockData().addBlock(readBlock(fdr, ba));
             }
-            if (!logd.isValid()) {
+            if (!packIo.isValid()) {
                 throw walb::log::InvalidLogpackData();
             }
         }

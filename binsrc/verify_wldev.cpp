@@ -26,7 +26,7 @@
 
 #include "util.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
@@ -189,8 +189,7 @@ class WldevVerifier
 private:
     using PackHeader = walb::log::PackHeaderRaw;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using PackDataRef = walb::log::PackDataRef; /* now editing */
-    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
+    using PackIo = walb::log::PackIoRaw;
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
@@ -235,28 +234,27 @@ public:
             PackHeaderPtr loghp = readPackHeader(lsid);
             PackHeader &logh = *loghp;
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
-            std::queue<PackDataRefPtr> q;
-            readPackData(logh, q);
+            std::queue<PackIo> q;
+            readPackIo(logh, q);
 
             while (!q.empty()) {
-                PackDataRefPtr logdp = q.front();
+                PackIo packIo = std::move(q.front());
                 q.pop();
-                PackDataRef &logd = *logdp;
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
                 }
                 walb::util::IoRecipe recipe = recipeParser.get();
-                if (recipe.offsetB() != logd.record().offset) {
+                if (recipe.offsetB() != packIo.record().offset()) {
                     RT_ERR("offset mismatch.");
                 }
-                if (recipe.ioSizeB() != logd.record().io_size) {
+                if (recipe.ioSizeB() != packIo.record().ioSizeLb()) {
                     RT_ERR("io_size mismatch.");
                 }
                 /* Validate the log and confirm checksum equality. */
-                const uint32_t csum0 = logd.calcIoChecksum(0);
-                const uint32_t csum1 = logd.record().checksum;
-                const uint32_t csum2 = logd.calcIoChecksum();
-                const bool isValid = logd.isValid(false) &&
+                const uint32_t csum0 = packIo.calcIoChecksum(0);
+                const uint32_t csum1 = packIo.record().checksum();
+                const uint32_t csum2 = packIo.calcIoChecksum();
+                const bool isValid = packIo.isValid(false) &&
                     recipe.csum() == csum0 && csum1 == csum2;
 
                 /* Print result. */
@@ -286,17 +284,18 @@ private:
         return PackHeaderPtr(new PackHeader(b, pbs_, salt_));
     }
 
-    void readPackData(PackHeader &logh, std::queue<PackDataRefPtr> &queue) {
+    void readPackIo(PackHeader &logh, std::queue<PackIo> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataRefPtr logdp(new PackDataRef(logh, i));
-            PackDataRef &logd = *logdp;
-            if (!logd.hasData()) { continue; }
-            for (uint64_t lsid = logd.lsid(); lsid < logd.lsid() + logd.ioSizePb(); lsid++) {
-                logd.addBlock(readBlock(lsid));
+            PackIo packIo(logh, i);
+            walb::log::RecordRaw &rec = packIo.record();
+            if (!rec.hasData()) { continue; }
+            const uint64_t endLsid = rec.lsid() + rec.ioSizePb();
+            for (uint64_t lsid = rec.lsid(); lsid < endLsid; lsid++) {
+                packIo.blockData().addBlock(readBlock(lsid));
             }
-            if (!logd.hasDataForChecksum()) { continue; }
+            if (!rec.hasDataForChecksum()) continue;
             /* Only normal IOs will be inserted. */
-            queue.push(logdp);
+            queue.push(std::move(packIo));
         }
     }
 };

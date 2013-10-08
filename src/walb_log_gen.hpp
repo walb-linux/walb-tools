@@ -15,7 +15,8 @@
 
 #include "random.hpp"
 #include "util.hpp"
-#include "walb_log.hpp"
+#include "walb_log_base.hpp"
+#include "walb_log_file.hpp"
 #include "memory_buffer.hpp"
 
 namespace walb {
@@ -124,27 +125,30 @@ private:
             /* Prepare blocks and calc checksum if necessary. */
             std::vector<Block> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
-                walb::log::PackDataRef logd(logh, i);
-                if (logd.hasData()) {
+                RecordRef rec(logh, i);
+                BlockData blockD(pbs);
+                PackIoRef<RecordRef> packIo(&rec, &blockD);
+
+                if (rec.hasData()) {
                     bool isAllZero = false;
                     if (config_.isAllZero) {
                         isAllZero = rand.get32() % 100 < 10;
                     }
-                    for (unsigned int j = 0; j < logd.ioSizePb(); j++) {
+                    for (unsigned int j = 0; j < rec.ioSizePb(); j++) {
                         Block b = ba.alloc();
                         ::memset(b.get(), 0, pbs);
                         if (!isAllZero) {
                             ::memcpy(b.get(), &tmpLsid, sizeof(tmpLsid));
                         }
                         tmpLsid++;
-                        logd.addBlock(b);
+                        blockD.addBlock(b);
                         blocks.push_back(b);
                     }
                 }
-                if (logd.hasDataForChecksum()) {
-                    UNUSED bool ret = logd.setChecksum();
+                if (rec.hasDataForChecksum()) {
+                    UNUSED bool ret = packIo.setChecksum();
                     assert(ret);
-                    assert(logd.isValid(true));
+                    assert(packIo.isValid(true));
                 }
             }
             assert(blocks.size() == logh.totalIoSize());

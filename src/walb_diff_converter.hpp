@@ -17,7 +17,8 @@
 
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log.hpp"
+#include "walb_log_base.hpp"
+#include "walb_log_file.hpp"
 #include "walb_diff_base.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_diff_file.hpp"
@@ -34,7 +35,6 @@ private:
     using Block = std::shared_ptr<uint8_t>;
     using LogpackHeader = log::PackHeaderRaw;
     using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
-    using LogpackDataRef = log::PackDataRef;
     using DiffRecord = RecordRaw;
     using DiffRecordPtr = std::shared_ptr<DiffRecord>;
     using DiffIo = IoData;
@@ -154,12 +154,14 @@ private:
             }
             LogpackHeader &logh = *loghp;
             for (size_t i = 0; i < logh.nRecords(); i++) {
-                LogpackDataRef logd(logh, i);
-                readLogpackData(fdr, ba, logd);
-                //logd.print(); /* debug */
+                log::RecordRef rec(logh, i);
+                log::BlockData blockD(rec.pbs());
+                log::PackIoRef<log::RecordRef> packIo(&rec, &blockD);
+                readLogpackData(fdr, ba, packIo);
+                //packIo.print(); /* debug */
                 DiffRecordPtr diffRec;
                 DiffIoPtr diffIo;
-                std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(logd);
+                std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(packIo);
                 if (diffRec) {
                     walbDiff.add(*diffRec, std::move(*diffIo));
                     writtenBlocks += diffRec->ioBlocks();
@@ -175,37 +177,40 @@ private:
     /**
      * Convert a logpack data to a diff record.
      */
-    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(LogpackDataRef &logd) {
-        if (logd.isPadding()) {
+    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(log::PackIoRef<log::RecordRef> &packIo) {
+        const log::RecordRef &rec = packIo.record();
+        log::BlockData &blockD = packIo.blockData();
+
+        if (rec.isPadding()) {
             return std::make_pair(DiffRecordPtr(), DiffIoPtr());
         }
 
         std::shared_ptr<DiffRecord> p(new DiffRecord());
         DiffRecord &mrec = *p;
-        mrec.setIoAddress(logd.record().offset);
-        mrec.setIoBlocks(logd.record().io_size);
+        mrec.setIoAddress(rec.record().offset);
+        mrec.setIoBlocks(rec.record().io_size);
 
-        if (logd.isDiscard()) {
+        if (rec.isDiscard()) {
             mrec.setDiscard();
             return std::make_pair(p, DiffIoPtr(new DiffIo()));
         }
 
         /* Copy data from logpack data to diff io data. */
-        assert(0 < logd.ioSizeLb());
-        const size_t ioSizeB = logd.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+        assert(0 < rec.ioSizeLb());
+        const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         auto iop = std::make_shared<DiffIo>();
-        iop->setIoBlocks(logd.ioSizeLb());
+        iop->setIoBlocks(rec.ioSizeLb());
         std::vector<char> buf(ioSizeB);
         size_t remaining = ioSizeB;
         size_t off = 0;
-        const unsigned int pbs = logd.pbs();
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
+        const unsigned int pbs = rec.pbs();
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
             if (pbs <= remaining) {
-                ::memcpy(&buf[off], logd.rawData<char>(i), pbs);
+                ::memcpy(&buf[off], blockD.rawData<char>(i), pbs);
                 off += pbs;
                 remaining -= pbs;
             } else {
-                ::memcpy(&buf[off], logd.rawData<char>(i), remaining);
+                ::memcpy(&buf[off], blockD.rawData<char>(i), remaining);
                 off += remaining;
                 remaining = 0;
             }
@@ -251,14 +256,16 @@ private:
 
     void readLogpackData(
         cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<uint8_t> &ba, LogpackDataRef &logd) {
+        cybozu::util::BlockAllocator<uint8_t> &ba, log::PackIoRef<log::RecordRef> &packIo) {
 
-        if (!logd.hasData()) { return; }
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
-            logd.addBlock(readBlock(fdr, ba));
+        const log::RecordRef &rec = packIo.record();
+        log::BlockData &blockD = packIo.blockData();
+        if (!rec.hasData()) { return; }
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+            blockD.addBlock(readBlock(fdr, ba));
         }
-        if (!logd.isValid()) {
-            logd.print(::stderr); /* debug */
+        if (!packIo.isValid()) {
+            packIo.print(::stderr); /* debug */
             throw log::InvalidLogpackData();
         }
     }

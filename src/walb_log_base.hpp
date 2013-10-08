@@ -258,7 +258,7 @@ public:
         : ExceptionWithMessage(msg) {}
 };
 
-static inline void printLogRecord(
+static inline void printRecord(
     ::FILE *fp, size_t idx, const struct walb_log_record &rec)
 {
     ::fprintf(fp,
@@ -280,7 +280,7 @@ static inline void printLogRecord(
               , rec.offset, rec.io_size);
 }
 
-static inline void printLogRecordOneline(
+static inline void printRecordOneline(
     ::FILE *fp, size_t idx, const struct walb_log_record &rec)
 {
     ::fprintf(fp,
@@ -303,8 +303,8 @@ class PackHeaderRef
 {
 protected:
     uint8_t *data_;
-    const unsigned int pbs_;
-    const uint32_t salt_;
+    unsigned int pbs_;
+    uint32_t salt_;
 
 public:
     PackHeaderRef(uint8_t *data, unsigned int pbs, uint32_t salt)
@@ -340,6 +340,8 @@ public:
 
     unsigned int pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
+    void setPbs(unsigned int pbs0) { pbs_ = pbs0; };
+    void setSalt(uint32_t salt0) { salt_ = salt0; };
 
     /*
      * Fields.
@@ -382,12 +384,12 @@ public:
 
     void printRecord(::FILE *fp, size_t pos) const {
         const struct walb_log_record &rec = record(pos);
-        printLogRecord(fp, pos, rec);
+        log::printRecord(fp, pos, rec);
     }
 
     void printRecordOneline(::FILE *fp, size_t pos) const {
         const struct walb_log_record &rec = record(pos);
-        printLogRecordOneline(fp, pos, rec);
+        log::printRecordOneline(fp, pos, rec);
     }
 
     void printHeader(::FILE *fp = ::stdout) const {
@@ -729,6 +731,10 @@ public:
     virtual unsigned int pbs() const = 0;
     virtual uint32_t salt() const = 0;
     virtual const struct walb_log_record &record() const = 0;
+
+    virtual void setPos(size_t) = 0;
+    virtual void setPbs(unsigned int) = 0;
+    virtual void setSalt(uint32_t) = 0;
     virtual struct walb_log_record &record() = 0;
 
     /* default implementation. */
@@ -771,44 +777,67 @@ public:
     unsigned int ioSizePb() const { return ::capacity_pb(pbs(), ioSizeLb()); }
     uint64_t offset() const { return record().offset; }
     bool isValid() const { return ::is_valid_log_record_const(&record()); }
+    uint32_t checksum() const { return record().checksum; }
 
-    virtual void print(::FILE *fp) const {
-        printLogRecord(fp, pos(), record());
+    virtual void print(::FILE *fp = ::stdout) const {
+        printRecord(fp, pos(), record());
     }
 
-    virtual void printOneline(::FILE *fp) const {
-        printLogRecordOneline(fp, pos(), record());
+    virtual void printOneline(::FILE *fp = ::stdout) const {
+        printRecordOneline(fp, pos(), record());
     }
-
-    virtual void print() const { print(::stdout); }
-    virtual void printOneline() const { printOneline(::stdout); }
 };
 
 /**
  * Wrapper of a raw walb log record.
  */
-class RecordRaw
-    : public Record
+class RecordRaw : public Record
 {
 private:
-    const size_t pos_;
-    const unsigned int pbs_;
-    const uint32_t salt_;
+    size_t pos_;
+    unsigned int pbs_;
+    uint32_t salt_;
     struct walb_log_record rec_;
 public:
+    RecordRaw() : Record(), pos_(0), pbs_(0), salt_(0), rec_() {}
     RecordRaw(
         const struct walb_log_record &rec, size_t pos,
         unsigned int pbs, uint32_t salt)
-        : pos_(pos), pbs_(pbs), salt_(salt), rec_() {
-        ::memcpy(&rec_, &rec, sizeof(rec_));
-    }
+        : Record(), pos_(pos), pbs_(pbs), salt_(salt), rec_(rec) {}
     RecordRaw(PackHeaderRef &logh, size_t pos)
         : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
-    ~RecordRaw() noexcept override {}
+    ~RecordRaw() noexcept override = default;
+    RecordRaw(const RecordRaw &rhs)
+        : RecordRaw(static_cast<const Record &>(rhs)) {}
+    RecordRaw(const Record &rhs)
+        : Record(), pos_(rhs.pos()), pbs_(rhs.pbs()), salt_(rhs.salt()), rec_(rhs.record()) {}
+    RecordRaw &operator=(const RecordRaw &rhs) {
+        return operator=(static_cast<const Record &>(rhs));
+    }
+    RecordRaw &operator=(const Record &rhs) {
+        setPos(rhs.pos());
+        setPbs(rhs.pbs());
+        setSalt(rhs.salt());
+        record() = rhs.record();
+        return *this;
+    }
+    DISABLE_MOVE(RecordRaw);
+
+    void copyFrom(PackHeaderRef &logh, size_t pos) {
+        setPos(pos);
+        setPbs(logh.pbs());
+        setSalt(logh.salt());
+        record() = logh.record(pos);
+    }
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return pbs_; }
     uint32_t salt() const override { return salt_; }
+
+    void setPos(size_t pos0) override { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) override { pbs_ = pbs0; }
+    void setSalt(uint32_t salt0) override { salt_ = salt0; }
+
     const struct walb_log_record &record() const override { return rec_; }
     struct walb_log_record &record() override { return rec_; }
 };
@@ -817,8 +846,7 @@ public:
  * Log data of an IO.
  * Log record is a reference.
  */
-class RecordRef
-    : public Record
+class RecordRef : public Record
 {
 private:
     PackHeaderRef& logh_;
@@ -826,8 +854,7 @@ private:
 
 public:
     RecordRef(PackHeaderRef& logh, size_t pos)
-        : logh_(logh)
-        , pos_(pos) {
+        : logh_(logh) , pos_(pos) {
         assert(pos < logh.nRecords());
     }
     ~RecordRef() noexcept override {}
@@ -837,28 +864,42 @@ public:
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_.pbs(); }
     uint32_t salt() const override { return logh_.salt(); }
-    struct walb_log_record& record() override { return logh_.record(pos_); }
+
+    void setPos(size_t pos0) override { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) override { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
+    void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
+
     const struct walb_log_record& record() const override { return logh_.record(pos_); }
+    struct walb_log_record& record() override { return logh_.record(pos_); }
 };
 
 /**
  * Helper class to manage multiple IO blocks.
+ * This is copyable and movable.
  */
-class BlockData
+class BlockData /* final */
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
 
-    const unsigned int pbs_; /* physical block size [byte]. */
+    unsigned int pbs_; /* physical block size [byte]. */
     std::vector<Block> data_; /* Each block's size must be pbs_. */
 
 public:
-    BlockData(unsigned int pbs) : pbs_(pbs), data_() {}
-    virtual ~BlockData() noexcept {}
+    BlockData() : pbs_(0), data_() {}
+    explicit BlockData(unsigned int pbs) : pbs_(pbs), data_() {}
+    ~BlockData() noexcept = default;
+    BlockData(const BlockData &) = default;
+    BlockData(BlockData &&) = default;
+    BlockData &operator=(const BlockData &) = default;
+    BlockData &operator=(BlockData &&) = default;
 
     void addBlock(Block block) { data_.push_back(block); }
     Block getBlock(size_t idx) { return data_[idx]; }
     const Block getBlock(size_t idx) const { return data_[idx]; }
+
+    void setPbs(unsigned int pbs) { pbs_ = pbs; }
+    void clear() { data_.clear(); }
 
     template<typename T>
     T* rawData(size_t idx) {
@@ -872,205 +913,131 @@ public:
     size_t nBlocks() const { return data_.size(); }
 
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
+        if (pbs_ == 0) throw RT_ERR("pbs must not be zero.");
         uint32_t csum = salt;
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
         while (0 < remaining) {
-            if (data_.size() <= i) {
-                throw RT_ERR("Index out of range.");
-            }
-            if (pbs_ <= remaining) {
-                csum = cybozu::util::checksumPartial(getBlock(i).get(), pbs_, csum);
-                remaining -= pbs_;
-            } else {
-                csum = cybozu::util::checksumPartial(getBlock(i).get(), remaining, csum);
-                remaining = 0;
-            }
+            if (data_.size() <= i) throw RT_ERR("Index out of range.");
+            size_t s = pbs_;
+            if (remaining < pbs_) s = remaining;
+            csum = cybozu::util::checksumPartial(getBlock(i).get(), s, csum);
+            remaining -= s;
             i++;
         }
+        assert(remaining == 0);
         return cybozu::util::checksumFinish(csum);
     }
 };
 
 /**
- * Logpack data.
- *
- * LogRecord: RecordRef or RecordRaw.
+ * Logpack record and IO data.
+ * This is just a wrapper of a record and a block data.
  */
-template<class LogRecord>
-class PackData
-    : public LogRecord
-    , public BlockData
+template <typename RecordT>
+class PackIoRef
 {
+private:
+    RecordT *recP_;
+    BlockData *blockD_;
+
 public:
-    PackData(PackHeaderRef &logh, size_t pos)
-        : LogRecord(logh, pos)
-        , BlockData(logh.pbs()) {}
-    virtual ~PackData() noexcept {}
-    DISABLE_COPY_AND_ASSIGN(PackData);
-    DISABLE_MOVE(PackData);
+    PackIoRef(RecordT *rec, BlockData *blockD)
+        : recP_(rec), blockD_(blockD) {
+        assert(recP_);
+        assert(blockD_);
+    }
+    virtual ~PackIoRef() noexcept {}
+    PackIoRef(const PackIoRef &rhs)
+        : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
+    PackIoRef &operator=(const PackIoRef &rhs) {
+        recP_ = rhs.recP_;
+        blockD_ = rhs.blockD_;
+    }
+    DISABLE_MOVE(PackIoRef);
+
+    const RecordT &record() const { return *recP_; }
+    RecordT &record() { return *recP_; }
+    const BlockData &blockData() const { return *blockD_; }
+    BlockData &blockData() { return *blockD_; }
 
     bool isValid(bool isChecksum = true) const {
-        if (!LogRecord::isValid()) { return false; }
-        if (isChecksum && this->hasDataForChecksum() &&
-            this->calcIoChecksum() != this->record().checksum) {
+        if (!recP_->isValid()) { return false; }
+        if (isChecksum && recP_->hasDataForChecksum() &&
+            calcIoChecksum() != recP_->record().checksum) {
             return false;
         }
         return true;
     }
 
-    void print(::FILE *fp = ::stdout) const override {
-        LogRecord::print(fp);
-        if (this->hasDataForChecksum() && this->ioSizePb() == this->nBlocks()) {
+    void print(::FILE *fp = ::stdout) const {
+        recP_->print(fp);
+        if (recP_->hasDataForChecksum() && recP_->ioSizePb() == blockD_->nBlocks()) {
             ::fprintf(fp, "record_checksum: %08x\n"
                       "calculated_checksum: %08x\n",
-                      this->record().checksum, this->calcIoChecksum());
-            for (size_t i = 0; i < this->ioSizePb(); i++) {
+                      recP_->record().checksum, calcIoChecksum());
+            for (size_t i = 0; i < recP_->ioSizePb(); i++) {
                 ::fprintf(fp, "----------block %zu----------\n", i);
-                cybozu::util::printByteArray(fp, this->getBlock(i).get(), this->pbs());
+                cybozu::util::printByteArray(fp, blockD_->getBlock(i).get(), recP_->pbs());
             }
         }
     }
+    void printOneline(::FILE *fp = ::stdout) const {
+        recP_->printOneline(fp);
+    }
 
     bool setChecksum() {
-        if (!this->hasDataForChecksum()) { return false; }
-        if (this->ioSizePb() != this->nBlocks()) { return false; }
-        this->record().checksum = this->calcIoChecksum();
+        if (!recP_->hasDataForChecksum()) { return false; }
+        if (recP_->ioSizePb() != blockD_->nBlocks()) { return false; }
+        recP_->record().checksum = calcIoChecksum();
         return true;
     }
 
     uint32_t calcIoChecksum() const {
-        return this->calcIoChecksum(this->salt());
+        return calcIoChecksum(recP_->salt());
     }
 
     uint32_t calcIoChecksum(uint32_t salt) const {
-        assert(this->hasDataForChecksum());
-        assert(0 < this->ioSizeLb());
-        if (this->nBlocks() < this->ioSizePb()) {
+        assert(recP_->hasDataForChecksum());
+        assert(0 < recP_->ioSizeLb());
+        if (blockD_->nBlocks() < recP_->ioSizePb()) {
             throw RT_ERR("There is not sufficient data block.");
         }
-        return calcChecksum(this->ioSizeLb(), salt);
+        return blockD_->calcChecksum(recP_->ioSizeLb(), salt);
     }
 };
 
-using PackDataRef = PackData<RecordRef>;
-using PackDataRaw = PackData<RecordRaw>;
-
 /**
- * Walb logfile header.
+ * Logpack record and IO data.
+ * This is copyable and movable.
  */
-class FileHeader
+class PackIoRaw : public PackIoRef<RecordRaw>
 {
 private:
-    std::vector<uint8_t> data_;
-
+    RecordRaw rec_;
+    BlockData blockD_;
 public:
-    FileHeader()
-        : data_(WALBLOG_HEADER_SIZE, 0) {}
-
-    void init(unsigned int pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
-        ::memset(&data_[0], 0, WALBLOG_HEADER_SIZE);
-        header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
-        header().version = WALB_LOG_VERSION;
-        header().header_size = WALBLOG_HEADER_SIZE;
-        header().log_checksum_salt = salt;
-        header().logical_bs = LOGICAL_BLOCK_SIZE;
-        header().physical_bs = pbs;
-        ::memcpy(header().uuid, uuid, UUID_SIZE);
-        header().begin_lsid = beginLsid;
-        header().end_lsid = endLsid;
+    PackIoRaw() : PackIoRef(&rec_, &blockD_) {}
+    PackIoRaw(const RecordRaw &rec, BlockData &&blockD)
+        : PackIoRef(&rec_, &blockD_)
+        , rec_(rec), blockD_(std::move(blockD)) {}
+    PackIoRaw(PackHeaderRef &logh, size_t pos)
+        : PackIoRef(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
+    ~PackIoRaw() noexcept override = default;
+    PackIoRaw(const PackIoRaw &rhs)
+        : PackIoRef(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+    PackIoRaw(PackIoRaw &&rhs)
+        : PackIoRaw(rhs.rec_, std::move(rhs.blockD_)) {}
+    PackIoRaw &operator=(const PackIoRaw &rhs) {
+        rec_ = rhs.rec_;
+        blockD_ = rhs.blockD_;
+        return *this;
     }
-
-    void read(int fd) {
-        cybozu::util::FdReader fdr(fd);
-        read(fdr);
+    PackIoRaw &operator=(PackIoRaw &&rhs) {
+        rec_ = rhs.rec_;
+        blockD_ = std::move(rhs.blockD_);
+        return *this;
     }
-
-    void read(cybozu::util::FdReader& fdr) {
-        fdr.read(ptr<char>(), WALBLOG_HEADER_SIZE);
-    }
-
-    void write(int fd) {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
-    }
-
-    void write(cybozu::util::FdWriter& fdw) {
-        updateChecksum();
-        fdw.write(ptr<char>(), WALBLOG_HEADER_SIZE);
-    }
-
-    void updateChecksum() {
-        header().checksum = 0;
-        header().checksum = ::checksum(&data_[0], WALBLOG_HEADER_SIZE, 0);
-    }
-
-    struct walblog_header& header() {
-        return *ptr<struct walblog_header>();
-    }
-
-    const struct walblog_header& header() const {
-        return *ptr<struct walblog_header>();
-    }
-
-    uint32_t checksum() const { return header().checksum; }
-    uint32_t salt() const { return header().log_checksum_salt; }
-    unsigned int lbs() const { return header().logical_bs; }
-    unsigned int pbs() const { return header().physical_bs; }
-    uint64_t beginLsid() const { return header().begin_lsid; }
-    uint64_t endLsid() const { return header().end_lsid; }
-    const uint8_t* uuid() const { return &header().uuid[0]; }
-    uint16_t sectorType() const { return header().sector_type; }
-    uint16_t headerSize() const { return header().header_size; }
-    uint16_t version() const { return header().version; }
-
-    bool isValid(bool isChecksum = true) const {
-        CHECKd(header().sector_type == SECTOR_TYPE_WALBLOG_HEADER);
-        CHECKd(header().version == WALB_LOG_VERSION);
-        CHECKd(header().begin_lsid < header().end_lsid);
-        if (isChecksum) {
-            CHECKd(::checksum(&data_[0], WALBLOG_HEADER_SIZE, 0) == 0);
-        }
-        return true;
-      error:
-        return false;
-    }
-
-    void print(FILE *fp = ::stdout) const {
-        ::fprintf(
-            fp,
-            "sector_type %d\n"
-            "version %u\n"
-            "header_size %u\n"
-            "log_checksum_salt %" PRIu32 " (%08x)\n"
-            "logical_bs %u\n"
-            "physical_bs %u\n"
-            "uuid ",
-            header().sector_type,
-            header().version,
-            header().header_size,
-            header().log_checksum_salt,
-            header().log_checksum_salt,
-            header().logical_bs,
-            header().physical_bs);
-        for (size_t i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", header().uuid[i]);
-        }
-        ::fprintf(
-            fp,
-            "\n"
-            "begin_lsid %" PRIu64 "\n"
-            "end_lsid %" PRIu64 "\n",
-            header().begin_lsid,
-            header().end_lsid);
-    }
-
-private:
-    template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(&data_[0]); }
-
-    template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(&data_[0]); }
 };
 
 }} //namespace walb::log

@@ -20,7 +20,7 @@
 #include "stdout_logger.hpp"
 
 #include "util.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
@@ -371,8 +371,7 @@ private:
     cybozu::util::BlockAllocator<uint8_t> ba_;
 
     using PackHeader = walb::log::PackHeaderRaw;
-    using PackDataRef = walb::log::PackDataRef;
-    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
+    using PackIo = walb::log::PackIoRaw;
     using Block = std::shared_ptr<uint8_t>;
 
 public:
@@ -430,7 +429,7 @@ public:
                 break;
             }
             PackHeader &logh = *loghP;
-            std::queue<PackDataRefPtr> q;
+            std::queue<PackIo> q;
             isEnd = readAllLogpackData(logh, q);
             writeLogpack(fdw, logh, q);
             lsid = logh.nextLogpackLsid();
@@ -488,13 +487,13 @@ private:
      * RETURN:
      *   true if logpack has shrinked and should end.
      */
-    bool readAllLogpackData(PackHeader &logh, std::queue<PackDataRefPtr> &q) {
+    bool readAllLogpackData(PackHeader &logh, std::queue<PackIo> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackDataRefPtr p(new PackDataRef(logh, i));
+            PackIo packIo(logh, i);
             try {
-                readLogpackData(*p);
-                q.push(p);
+                readLogpackData(packIo);
+                q.push(std::move(packIo));
             } catch (walb::log::InvalidLogpackData& e) {
                 if (config_.isVerbose()) { logh.print(::stderr); }
                 uint64_t prevLsid = logh.nextLogpackLsid();
@@ -514,19 +513,16 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackDataRef& logd) {
-        if (!logd.hasData()) { return; }
+    void readLogpackData(PackIo& packIo) {
+        walb::log::RecordRaw &rec = packIo.record();
+        if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         readAheadLoose();
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
-            logd.addBlock(readBlock());
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+            packIo.blockData().addBlock(readBlock());
         }
-        if (!logd.isValid()) {
-#if 0
-            if (config_.isVerbose()) {
-                logd.print(::stderr);
-            }
-#endif
+        if (!packIo.isValid()) {
+            //if (config_.isVerbose()) packIo.print(::stderr);
             throw walb::log::InvalidLogpackData();
         }
     }
@@ -535,7 +531,7 @@ private:
      */
     void writeLogpack(
         cybozu::util::FdWriter &fdw, PackHeader &logh,
-        std::queue<PackDataRefPtr> &q) {
+        std::queue<PackIo> &q) {
         if (logh.nRecords() == 0) {
             return;
         }
@@ -544,11 +540,12 @@ private:
         /* Write the IO data. */
         size_t nWritten = 0;
         while (!q.empty()) {
-            PackDataRefPtr logd = q.front();
+            PackIo packIo = std::move(q.front());
             q.pop();
-            if (!logd->hasData()) { continue; }
-            for (size_t i = 0; i < logd->ioSizePb(); i++) {
-                fdw.write(logd->rawData<const char>(i), logh.pbs());
+            walb::log::RecordRaw &rec = packIo.record();
+            if (!rec.hasData()) { continue; }
+            for (size_t i = 0; i < rec.ioSizePb(); i++) {
+                fdw.write(packIo.blockData().rawData<const char>(i), logh.pbs());
                 nWritten++;
             }
         }

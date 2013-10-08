@@ -25,7 +25,7 @@
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log.hpp"
+#include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
 
@@ -585,8 +585,7 @@ private:
     size_t nPadding_;
 
     using PackHeader = walb::log::PackHeaderRef;
-    using PackDataRef = walb::log::PackDataRef;
-    using PackDataRefPtr = std::shared_ptr<PackDataRef>;
+    using PackIo = walb::log::PackIoRaw;
 
 public:
     WalbLogApplyer(
@@ -657,10 +656,10 @@ public:
                     logh.printShort();
                 }
                 for (size_t i = 0; i < logh.nRecords(); i++) {
-                    PackDataRef logd(logh, i);
-                    readLogpackData(logd, fdr);
-                    redoPack(logd);
-                    redoLsid = logd.lsid();
+                    PackIo packIo(logh, i);
+                    readLogpackData(packIo, fdr);
+                    redoPack(packIo);
+                    redoLsid = packIo.record().lsid();
                 }
             }
         } catch (cybozu::util::EofError &e) {
@@ -705,13 +704,14 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackDataRef &logd, cybozu::util::FdReader &fdr) {
-        if (!logd.hasData()) { return; }
-        //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
-            logd.addBlock(readBlock(fdr));
+    void readLogpackData(PackIo &packIo, cybozu::util::FdReader &fdr) {
+        walb::log::RecordRaw &rec = packIo.record();
+        if (!rec.hasData()) { return; }
+        //::printf("ioSizePb: %u\n", rec.ioSizePb()); //debug
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+            packIo.blockData().addBlock(readBlock(fdr));
         }
-        if (!logd.isValid()) {
+        if (!packIo.isValid()) {
             throw walb::log::InvalidLogpackData();
         }
     }
@@ -738,22 +738,23 @@ private:
     /**
      * Redo a discard log by issuing discard command.
      */
-    void redoDiscard(PackDataRef &logd) {
+    void redoDiscard(PackIo &packIo) {
+        walb::log::RecordRaw &rec = packIo.record();
         assert(config_.isDiscard());
-        assert(logd.isDiscard());
+        assert(rec.isDiscard());
 
         /* Wait for all IO done. */
         waitForAllPendingIos();
 
         /* Issue the corresponding discard IOs. */
         uint64_t offsetAndSize[2];
-        offsetAndSize[0] = logd.offset() * LOGICAL_BLOCK_SIZE;
-        offsetAndSize[1] = logd.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+        offsetAndSize[0] = rec.offset() * LOGICAL_BLOCK_SIZE;
+        offsetAndSize[1] = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         int ret = ::ioctl(bd_.getFd(), BLKDISCARD, &offsetAndSize);
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
-        nDiscard_ += logd.ioSizePb();
+        nDiscard_ += rec.ioSizePb();
     }
 
     /**
@@ -946,24 +947,25 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(PackDataRef &logd) {
-        assert(logd.isExist());
-        assert(!logd.isPadding());
-        assert(config_.isZeroDiscard() || !logd.isDiscard());
+    void redoNormalIo(PackIo &packIo) {
+        walb::log::RecordRaw &rec = packIo.record();
+        assert(rec.isExist());
+        assert(!rec.isPadding());
+        assert(config_.isZeroDiscard() || !rec.isDiscard());
 
         /* Create IOs. */
         IoQueue tmpIoQ;
-        size_t remaining = logd.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        off_t off = static_cast<off_t>(logd.offset()) * LOGICAL_BLOCK_SIZE;
+        size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+        off_t off = static_cast<off_t>(rec.offset()) * LOGICAL_BLOCK_SIZE;
         size_t nBlocks = 0;
-        for (size_t i = 0; i < logd.ioSizePb(); i++) {
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
             Block block;
-            if (logd.isDiscard()) {
+            if (rec.isDiscard()) {
                 assert(config_.isZeroDiscard());
                 block = ba_.alloc();
                 ::memset(block.get(), 0, blockSize_);
             } else {
-                block = logd.getBlock(i);
+                block = packIo.blockData().getBlock(i);
             }
             IoPtr iop;
             if (blockSize_ <= remaining) {
@@ -980,7 +982,7 @@ private:
             if (iop->offset() + iop->size() <= bd_.getDeviceSize()) {
                 tmpIoQ.add(iop);
                 nBlocks++;
-                if (logd.isDiscard()) { nDiscard_++; }
+                if (rec.isDiscard()) { nDiscard_++; }
             } else {
                 if (config_.isVerbose()) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
@@ -1000,36 +1002,37 @@ private:
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
-                     logd.offset(), logd.ioSizeLb());
+                     rec.offset(), rec.ioSizeLb());
         }
     }
 
     /**
      * Redo a logpack data.
      */
-    void redoPack(PackDataRef &logd) {
-        assert(logd.isExist());
+    void redoPack(PackIo &packIo) {
+        walb::log::RecordRaw &rec = packIo.record();
+        assert(rec.isExist());
 
-        if (logd.isPadding()) {
+        if (rec.isPadding()) {
             /* Do nothing. */
-            nPadding_ += logd.ioSizePb();
+            nPadding_ += rec.ioSizePb();
             return;
         }
 
-        if (logd.isDiscard()) {
+        if (rec.isDiscard()) {
             if (config_.isDiscard()) {
-                redoDiscard(logd);
+                redoDiscard(packIo);
                 return;
             }
             if (!config_.isZeroDiscard()) {
                 /* Ignore discard logs. */
-                nDiscard_ += logd.ioSizePb();
+                nDiscard_ += rec.ioSizePb();
                 return;
             }
             /* zero-discard will use redoNormalIo(). */
         }
 
-        redoNormalIo(logd);
+        redoNormalIo(packIo);
     }
 
     static size_t getQueueSizeStatic(size_t bufferSize, size_t blockSize) {
