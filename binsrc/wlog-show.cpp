@@ -25,6 +25,7 @@
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
+#include "fileorfd.hpp"
 
 /**
  * Command line configuration.
@@ -171,24 +172,6 @@ private:
             "  -v, --verbose:         verbose messages to stderr.\n"
             "  -h, --help:            show this message.\n");
     }
-};
-
-class FileOrFd
-{
-private:
-    int fd_;
-    std::shared_ptr<cybozu::util::FileOpener> fo_;
-public:
-    FileOrFd() : fd_(-1), fo_() {}
-    void setFd(int fd) { fd_ = fd; }
-    void open(const std::string &path, int flags) {
-        fo_.reset(new cybozu::util::FileOpener(path, flags));
-    }
-    void open(const std::string &path, int flags, mode_t mode) {
-        fo_.reset(new cybozu::util::FileOpener(path, flags, mode));
-    }
-    void close() { if (fo_) fo_.reset(); }
-    int fd() const { return fo_ ? fo_->fd() : fd_; }
 };
 
 int main(int argc, char* argv[])
