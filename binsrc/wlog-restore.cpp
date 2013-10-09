@@ -267,8 +267,6 @@ public:
                        fdr, blkdev, super, ba, wlHead, restoredLsid)) {}
         } catch (cybozu::util::EofError &e) {
             ::printf("Reached input EOF.\n");
-        } catch (walb::log::InvalidLogpackData &e) {
-            throw RT_ERR("InvalidLogpackData");
         }
 
         /* Create and write superblock finally. */
@@ -330,7 +328,7 @@ private:
             packIo.blockData().addBlock(readBlock(fdr, ba, rec.pbs()));
         }
         if (!packIo.isValid()) {
-            throw walb::log::InvalidLogpackData();
+            throw walb::log::InvalidIo();
         }
     }
 
@@ -345,7 +343,7 @@ private:
      * @restoresLsid lsid of the next logpack will be set if restored.
      *
      * RETURN:
-     *   true in normal termination, or false.
+     *   true in success, or false.
      */
     bool readLogpackAndRestore(
         FdReader &fdr, BlockDev &blkdev,
@@ -357,7 +355,7 @@ private:
 
         /* Read logpack header. */
         PackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
-        if (logh.isEnd()) return true;
+        if (logh.isEnd()) return false;
         if (!logh.isValid()) return false;
         if (config_.isVerbose()) logh.printShort();
         const uint64_t originalLsid = logh.logpackLsid();

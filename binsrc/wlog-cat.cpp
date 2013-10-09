@@ -302,7 +302,7 @@ private:
             try {
                 readLogpackData(packIo);
                 q.push(std::move(packIo));
-            } catch (walb::log::InvalidLogpackData& e) {
+            } catch (walb::log::InvalidIo& e) {
                 if (isVerbose_) { logh.print(::stderr); }
                 uint64_t prevLsid = logh.nextLogpackLsid();
                 logh.shrink(i);
@@ -331,7 +331,7 @@ private:
         }
         if (!packIo.isValid()) {
             //if (isVerbose_) packIo.print(::stderr);
-            throw walb::log::InvalidLogpackData();
+            throw walb::log::InvalidIo();
         }
     }
 };

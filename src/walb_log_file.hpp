@@ -200,7 +200,7 @@ public:
                     fdr_.read(reinterpret_cast<char *>(b.get()), pbs_);
                     blockD.addBlock(b);
                 } catch (cybozu::util::EofError &e) {
-                    throw InvalidLogpackData();
+                    throw InvalidIo();
                 }
             }
         }
@@ -209,7 +209,7 @@ public:
         if (!packIo.isValid()) {
             packIo.print();
             LOGd("invalid...");
-            throw InvalidLogpackData();
+            throw InvalidIo();
         }
 
         recIdx_++;
@@ -439,7 +439,7 @@ public:
             packIo.printOneline(fp);
         }
         /*
-         * reader.readLog() may throw InvalidLogpackData.
+         * reader.readLog() may throw InvalidIo.
          * We need not shrink the invalid packs. Wlog file must be valid.
          */
     }

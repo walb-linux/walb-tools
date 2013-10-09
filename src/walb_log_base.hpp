@@ -24,39 +24,16 @@
 namespace walb {
 namespace log {
 
-class ExceptionWithMessage
-    : public std::exception
+class InvalidIo : public std::exception
 {
+public:
 private:
     std::string msg_;
 public:
-    ExceptionWithMessage(const std::string &msg)
-        : msg_(msg) {}
-
-    virtual const char *what() const noexcept override {
-        return msg_.c_str();
-    }
-};
-
-class InvalidLogpackHeader
-    : public ExceptionWithMessage
-{
-public:
-    InvalidLogpackHeader()
-        : ExceptionWithMessage("invalid logpack header.") {}
-    InvalidLogpackHeader(const std::string &msg)
-        : ExceptionWithMessage(msg) {}
-    virtual ~InvalidLogpackHeader() noexcept {}
-};
-
-class InvalidLogpackData
-    : public ExceptionWithMessage
-{
-public:
-    InvalidLogpackData()
-        : ExceptionWithMessage("invalid logpack data.") {}
-    InvalidLogpackData(const std::string &msg)
-        : ExceptionWithMessage(msg) {}
+    InvalidIo()
+        : std::exception()
+        , msg_("invalid logpack IO.") {}
+    const char *what() const noexcept override { return msg_.c_str(); }
 };
 
 static inline void printRecord(
