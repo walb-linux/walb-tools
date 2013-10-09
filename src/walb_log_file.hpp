@@ -6,6 +6,7 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
+#include <queue>
 #include "walb_log_base.hpp"
 
 namespace walb {
@@ -144,6 +145,7 @@ private:
     std::shared_ptr<PackHeaderRaw> pack_;
     uint16_t recIdx_;
     uint16_t totalSize_;
+    uint64_t endLsid_;
 
 public:
     explicit Reader(int fd)
@@ -154,22 +156,28 @@ public:
         , isEnd_(false)
         , pack_()
         , recIdx_(0)
-        , totalSize_(0) {}
+        , totalSize_(0)
+        , endLsid_(0) {}
 
     ~Reader() noexcept {}
     /**
      * Read log file header.
+     * This will throw EofError.
      */
     void readHeader(FileHeader &fileH) {
-        if (isReadHeader_) throw RT_ERR("Log header has been called already.");
+        if (isReadHeader_) throw RT_ERR("Wlog file header has been read already.");
         isReadHeader_ = true;
         fileH.read(fdr_);
-        if (!fileH.isValid(true)) throw RT_ERR("invalid walb log header.");
+        if (!fileH.isValid(true)) throw RT_ERR("invalid wlog file header.");
         pbs_ = fileH.pbs();
         salt_ = fileH.salt();
+        endLsid_ = fileH.beginLsid();
     }
     /**
-     * ReadLog
+     * ReadLog.
+     * This does not throw EofError.
+     * RETURN:
+     *   false when the input reached the end or end pack header was found.
      */
     bool readLog(PackIoRef<RecordRaw> &packIo) {
         checkReadHeader();
@@ -236,10 +244,17 @@ public:
     /**
      * Get pack header reference.
      */
-    PackHeaderRaw &pack() {
+    PackHeaderRaw &packHeader() {
         checkReadHeader();
         fillPackIfNeed();
         return *pack_;
+    }
+    /**
+     * Get the end lsid.
+     */
+    uint64_t endLsid() {
+        if (!isEnd()) throw RT_ERR("Must be reached to the wlog end.");
+        return endLsid_;
     }
 private:
     void fillPackIfNeed() {
@@ -259,6 +274,7 @@ private:
                 return;
             }
             recIdx_ = 0;
+            endLsid_ = pack_->nextLogpackLsid();
             // pack_->print();
         } catch (cybozu::util::EofError &e) {
             pack_.reset();
@@ -277,17 +293,142 @@ private:
 };
 
 /**
+ * Walb log writer.
+ */
+class Writer
+{
+private:
+    using Block = std::shared_ptr<uint8_t>;
+
+    int fd_;
+    cybozu::util::FdWriter fdw_;
+    bool isWrittenHeader_;
+    bool isClosed_;
+
+    /* These members will be set in writeHeader(). */
+    unsigned int pbs_;
+    uint32_t salt_;
+    uint64_t beginLsid_;
+    uint64_t lsid_;
+public:
+    explicit Writer(int fd)
+        : fd_(fd), fdw_(fd), isWrittenHeader_(false), isClosed_(false)
+        , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1) {}
+    ~Writer() noexcept {
+        try {
+            close();
+        } catch (...) {}
+    }
+    /**
+     * Finalize the output stream.
+     *
+     * fdatasync() will not be called.
+     * You can call this multiple times.
+     */
+    void close() {
+        if (!isClosed_) {
+            writeEof();
+            isClosed_ = true;
+        }
+    }
+    /**
+     * Write a file header.
+     *
+     * You must call this just once.
+     * You need not call fileH.updateChecksum() by yourself before.
+     */
+    void writeHeader(FileHeader &fileH) {
+        if (isWrittenHeader_) throw RT_ERR("Wlog file header has been written already.");
+        if (!fileH.isValid(false)) throw RT_ERR("Wlog file header is invalid.");
+        fileH.write(fdw_);
+        isWrittenHeader_ = true;
+        pbs_ = fileH.pbs();
+        salt_ = fileH.salt();
+        beginLsid_ = fileH.beginLsid();
+        lsid_ = beginLsid_;
+    }
+    /**
+     * Write a pack.
+     */
+    void writePack(const PackHeaderRef &header, std::queue<Block> &&blocks) {
+        if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
+        if (header.nRecords() == 0) return;
+        /* Validate. */
+        checkHeader(header);
+        if (header.totalIoSize() != blocks.size()) {
+            throw RT_ERR("blocks.size() must be %u but %zu."
+                         , header.totalIoSize(), blocks.size());
+        }
+        std::vector<BlockData> v;
+        for (size_t i = 0; i < header.nRecords(); i++) {
+            RecordRefConst rec(header, i);
+            BlockData blockD(pbs_);
+            if (rec.hasData()) {
+                for (size_t j = 0; j < rec.ioSizePb(); j++) {
+                    blockD.addBlock(std::move(blocks.front()));
+                    blocks.pop();
+                }
+            }
+            PackIoRef<RecordRefConst> packIo(&rec, &blockD);
+            if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
+            v.push_back(std::move(blockD));
+        }
+        assert(v.size() == header.nRecords());
+        assert(blocks.empty());
+
+        /* Write */
+        fdw_.write(header.rawData(), pbs_);
+        for (BlockData &blockD : v) {
+            blockD.write(fdw_);
+        }
+
+        lsid_ = header.nextLogpackLsid();
+    }
+    /**
+     * Get the end lsid that is next lsid of the latest written logpack.
+     * Header's begenLsid will be returned if writePack() was not called at all.
+     */
+    uint64_t endLsid() const { return lsid_; }
+private:
+    /**
+     * Check a pack header block.
+     */
+    void checkHeader(const PackHeaderRef &header) const {
+        if (!header.isValid()) {
+            throw RT_ERR("Logpack header invalid.");
+        }
+        if (pbs_ != header.pbs()) {
+            throw RT_ERR("pbs differs %u %u.", pbs_, header.pbs());
+        }
+        if (salt_ != header.salt()) {
+            throw RT_ERR("salt differs %" PRIu32 " %" PRIu32 "."
+                         , salt_, header.salt());
+        }
+        if (lsid_ != header.logpackLsid()) {
+            throw RT_ERR("logpack lsid differs %" PRIu64 " %" PRIu64 "."
+                         , lsid_, header.logpackLsid());
+        }
+    }
+    /**
+     * Write the end block.
+     */
+    void writeEof() {
+        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
+        PackHeaderRaw h(b, pbs_, salt_);
+        h.setEnd();
+        h.write(fdw_);
+    }
+};
+
+/**
  * Pretty printer of walb log.
  */
 class Printer
 {
-private:
-    int inFd_;
 public:
-    explicit Printer(int inFd) : inFd_(inFd) {}
-    void operator()(::FILE *fp = ::stdout) {
-        if (inFd_ < 0) throw RT_ERR("inFd_ invalid.");
-        Reader reader(inFd_);
+    void operator()(int inFd, ::FILE *fp = ::stdout) {
+        if (inFd < 0) throw RT_ERR("inFd_ invalid.");
+        Reader reader(inFd);
 
         FileHeader wh;
         reader.readHeader(wh);

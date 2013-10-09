@@ -172,8 +172,8 @@ int main(int argc, char* argv[])
         } else {
             fof.setFd(0); /* stdin */
         }
-        walb::log::Printer printer(fof.fd());
-        printer();
+        walb::log::Printer printer;
+        printer(fof.fd());
         return 0;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());

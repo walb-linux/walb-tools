@@ -46,16 +46,13 @@ public:
 
     void convert(int inputLogFd, int outputWdiffFd,
                  uint16_t maxIoBlocks = uint16_t(-1)) {
-        /* Wrap input. */
-        cybozu::util::FdReader fdr(inputLogFd);
-
         /* Prepare walb diff. */
         MemoryData walbDiff(maxIoBlocks);
 
         /* Loop */
         uint64_t lsid = -1;
         uint64_t writtenBlocks = 0;
-        while (convertWlog(lsid, writtenBlocks, fdr, walbDiff)) {}
+        while (convertWlog(lsid, writtenBlocks, inputLogFd, walbDiff)) {}
 
 #ifdef DEBUG
         /* finalize */
@@ -84,32 +81,28 @@ private:
      *
      * @lsid begin lsid.
      * @writtenBlocks written logical blocks.
-     * @fdr input wlog reader.
+     * @fd input wlog file descriptor.
      * @walbDiff walb diff memory manager.
      *
      * RETURN:
      *   true if wlog is remaining, or false.
      */
-    bool convertWlog(
-        uint64_t &lsid, uint64_t &writtenBlocks, cybozu::util::FdReader &fdr,
-        MemoryData &walbDiff) {
-
-        bool ret = true;
+    bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd, MemoryData &walbDiff) {
+        log::Reader reader(fd);
 
         /* Read walblog header. */
         log::FileHeader wlHeader;
         try {
-            wlHeader.read(fdr);
+            reader.readHeader(wlHeader);
         } catch (cybozu::util::EofError &e) {
             return false;
         }
-        if (!wlHeader.isValid()) {
-            throw RT_ERR("walb log header invalid.");
-        }
+#if 0
         wlHeader.print(::stderr); /* debug */
+#endif
 
         /* Block buffer. */
-        const unsigned int BUF_SIZE = 4 * 1024 * 1024;
+        const unsigned int BUF_SIZE = 4U << 20;
         const unsigned int pbs = wlHeader.pbs();
         cybozu::util::BlockAllocator<uint8_t> ba(BUF_SIZE / pbs, pbs, pbs);
 
@@ -138,47 +131,32 @@ private:
         }
 
         /* Convert each log. */
-        while (lsid < wlHeader.endLsid()) {
-            LogpackHeaderPtr loghp;
-            try {
-                loghp = readLogpackHeader(fdr, ba, wlHeader.salt());
-                if (loghp->isEnd()) {
-                    /* Terminator. */
-                    ret = false;
-                    break;
-                }
-            } catch (cybozu::util::EofError &e) {
-                /* For old format without a terminator. */
-                ret = false;
-                break;
+        while (!reader.isEnd()) {
+            log::PackIoRaw packIo;
+            if (reader.isFirstInPack()) {
+                lsid = reader.packHeader().nextLogpackLsid();
             }
-            LogpackHeader &logh = *loghp;
-            for (size_t i = 0; i < logh.nRecords(); i++) {
-                log::RecordRef rec(logh, i);
-                log::BlockData blockD(rec.pbs());
-                log::PackIoRef<log::RecordRef> packIo(&rec, &blockD);
-                readLogpackData(fdr, ba, packIo);
-                //packIo.print(); /* debug */
-                DiffRecordPtr diffRec;
-                DiffIoPtr diffIo;
-                std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(packIo);
-                if (diffRec) {
-                    walbDiff.add(*diffRec, std::move(*diffIo));
-                    writtenBlocks += diffRec->ioBlocks();
-                }
+            reader.readLog(packIo);
+
+            DiffRecordPtr diffRec;
+            DiffIoPtr diffIo;
+            std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(packIo);
+            if (diffRec) {
+                walbDiff.add(*diffRec, std::move(*diffIo));
+                writtenBlocks += diffRec->ioBlocks();
             }
-            lsid = logh.nextLogpackLsid();
         }
 
-        ::printf("converted until lsid %" PRIu64 "\n", lsid);
-        return ret;
+        lsid = reader.endLsid();
+        ::fprintf(::stderr, "converted until lsid %" PRIu64 "\n", lsid);
+        return true;
     }
 
     /**
      * Convert a logpack data to a diff record.
      */
-    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(log::PackIoRef<log::RecordRef> &packIo) {
-        const log::RecordRef &rec = packIo.record();
+    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(log::PackIoRef<log::RecordRaw> &packIo) {
+        const log::RecordRaw &rec = packIo.record();
         log::BlockData &blockD = packIo.blockData();
 
         if (rec.isPadding()) {
@@ -236,38 +214,6 @@ private:
         mrec.setDataSize(ioSizeB);
 
         return std::make_pair(p, iop);
-    }
-
-    Block readBlock(
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<uint8_t> &ba) {
-        Block b = ba.alloc();
-        unsigned int bs = ba.blockSize();
-        fdr.read(reinterpret_cast<char *>(b.get()), bs);
-        return b;
-    }
-
-    LogpackHeaderPtr readLogpackHeader(
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<uint8_t> &ba,
-        uint32_t salt) {
-
-        Block b = readBlock(fdr, ba);
-        return LogpackHeaderPtr(new LogpackHeader(b, ba.blockSize(), salt));
-    }
-
-    void readLogpackData(
-        cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<uint8_t> &ba, log::PackIoRef<log::RecordRef> &packIo) {
-
-        const log::RecordRef &rec = packIo.record();
-        log::BlockData &blockD = packIo.blockData();
-        if (!rec.hasData()) { return; }
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            blockD.addBlock(readBlock(fdr, ba));
-        }
-        if (!packIo.isValid()) {
-            packIo.print(::stderr); /* debug */
-            throw log::InvalidLogpackData();
-        }
     }
 };
 

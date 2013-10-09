@@ -27,6 +27,7 @@
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
+#include "walb_log_dev.hpp"
 
 /**
  * Command line configuration.
@@ -202,8 +203,8 @@ private:
     const Config& config_;
     int64_t lsidDiff_;
 
-    using Block = std::shared_ptr<u8>;
-    using BlockA = cybozu::util::BlockAllocator<u8>;
+    using Block = std::shared_ptr<uint8_t>;
+    using BlockA = cybozu::util::BlockAllocator<uint8_t>;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using PackHeader = walb::log::PackHeaderRaw;
@@ -351,24 +352,16 @@ private:
         SuperBlock &super, BlockA &ba, WlogHeader &wlHead,
         uint64_t &restoredLsid) {
 
-        u32 salt = wlHead.salt();
+        uint32_t salt = wlHead.salt();
         unsigned int pbs = wlHead.pbs();
 
         /* Read logpack header. */
         PackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
-        if (logh.isEnd()) {
-            return true;
-        }
-        if (!logh.isValid()) {
-            return false;
-        }
-        if (config_.isVerbose()) {
-            logh.printShort();
-        }
-        const u64 originalLsid = logh.logpackLsid();
-        if (config_.endLsid() <= originalLsid) {
-            return false;
-        }
+        if (logh.isEnd()) return true;
+        if (!logh.isValid()) return false;
+        if (config_.isVerbose()) logh.printShort();
+        const uint64_t originalLsid = logh.logpackLsid();
+        if (config_.endLsid() <= originalLsid) return false;
         /* Update lsid if necessary. */
         if (lsidDiff_ != 0) {
             if (!logh.updateLsid(logh.logpackLsid() + lsidDiff_)) {
@@ -378,8 +371,8 @@ private:
         }
 
         /* Padding check. */
-        u64 offPb = super.getOffsetFromLsid(logh.logpackLsid());
-        const u64 endOffPb = super.getRingBufferOffset() +
+        uint64_t offPb = super.getOffsetFromLsid(logh.logpackLsid());
+        const uint64_t endOffPb = super.getRingBufferOffset() +
             super.getRingBufferSize();
         if (endOffPb < offPb + 1 + logh.totalIoSize()) {
             /* Create and write padding logpack. */

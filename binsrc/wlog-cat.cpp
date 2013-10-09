@@ -8,7 +8,6 @@
 #include <string>
 #include <cstdio>
 #include <stdexcept>
-#include <queue>
 #include <memory>
 #include <deque>
 
@@ -20,12 +19,11 @@
 #include "stdout_logger.hpp"
 
 #include "util.hpp"
-#include "walb_log_file.hpp"
+#include "walb_log_dev.hpp"
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
-
-constexpr size_t DEFAULT_MAX_IO_SIZE = 65536;
+#include "fileorfd.hpp"
 
 /**
  * Wlcat configuration.
@@ -164,273 +162,88 @@ private:
     }
 };
 
-/**
- * Walb log device reader using aio.
- */
-class WalbLdevReader
+class WlogExtractor
 {
 private:
-    cybozu::util::BlockDevice bd_;
-    const uint32_t pbs_;
-    const uint32_t bufferPb_; /* [physical block]. */
-    const uint32_t maxIoPb_;
-    std::shared_ptr<char> buffer_;
-    walb::log::SuperBlock super_;
-    cybozu::aio::Aio aio_;
-    uint64_t aheadLsid_;
-    std::queue<std::pair<uint32_t, uint32_t> > ioQ_; /* aioKey, ioPb */
-    uint32_t aheadIdx_;
-    uint32_t readIdx_;
-    uint32_t pendingPb_;
-    uint32_t remainingPb_;
-public:
-    /**
-     * @wldevPath walb log device path.
-     * @bufferSize buffer size to read ahead [byte].
-     * @maxIoSize max IO size [byte].
-     */
-    WalbLdevReader(const std::string &wldevPath, uint32_t bufferSize,
-                   uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
-        : bd_(wldevPath.c_str(), O_RDONLY | O_DIRECT)
-        , pbs_(bd_.getPhysicalBlockSize())
-        , bufferPb_(bufferSize / pbs_)
-        , maxIoPb_(maxIoSize / pbs_)
-        , buffer_(cybozu::util::allocateBlocks<char>(pbs_, pbs_, bufferPb_))
-        , super_(bd_)
-        , aio_(bd_.getFd(), bufferPb_)
-        , aheadLsid_(0)
-        , ioQ_()
-        , aheadIdx_(0)
-        , readIdx_(0)
-        , pendingPb_(0)
-        , remainingPb_(0) {
-        if (bufferPb_ == 0) {
-            throw RT_ERR("bufferSize must be more than physical block size.");
-        }
-        if (maxIoPb_ == 0) {
-            throw RT_ERR("maxIoSize must be more than physical block size.");
-        }
-    }
-    ~WalbLdevReader() noexcept {
-        while (!ioQ_.empty()) {
-            try {
-                uint32_t aioKey, ioPb;
-                std::tie(aioKey, ioPb) = ioQ_.front();
-                aio_.waitFor(aioKey);
-            } catch (...) {
-            }
-            ioQ_.pop();
-        }
-    }
-    uint32_t pbs() const { return pbs_; }
-    uint32_t queueSize() const { return bufferPb_; }
-    walb::log::SuperBlock &super() { return super_; }
-    /**
-     * Read data.
-     * @data buffer pointer to fill.
-     * @pb size [physical block].
-     */
-    void read(char *data, size_t pb) {
-        while (0 < pb) {
-            readBlock(data);
-            data += pbs_;
-            pb--;
-        }
-    }
-    /**
-     * Invoke asynchronous read IOs to fill the buffer.
-     */
-    void readAhead() {
-        size_t n = 0;
-        while (remainingPb_ + pendingPb_ < bufferPb_) {
-            prepareAheadIo();
-            n++;
-        }
-        if (0 < n) {
-            aio_.submit();
-        }
-    }
-    /**
-     * Invoke readAhead() if the buffer usage is less than a specified ratio.
-     * @ratio 0.0 <= ratio <= 1.0
-     */
-    void readAhead(float ratio) {
-        float used = remainingPb_ + pendingPb_;
-        float total = bufferPb_;
-        if (used / total < ratio) {
-            readAhead();
-        }
-    }
-    /**
-     * Reset current IOs and start read from a lsid.
-     */
-    void reset(uint64_t lsid) {
-        /* Wait for all pending aio(s). */
-        while (!ioQ_.empty()) {
-            uint32_t aioKey, ioPb;
-            std::tie(aioKey, ioPb) = ioQ_.front();
-            aio_.waitFor(aioKey);
-            ioQ_.pop();
-        }
-        /* Reset indicators. */
-        aheadLsid_ = lsid;
-        readIdx_ = 0;
-        aheadIdx_ = 0;
-        pendingPb_ = 0;
-        remainingPb_ = 0;
-    }
-private:
-    char *getBuffer(size_t idx) {
-        return buffer_.get() + idx * pbs_;
-    }
-    void plusIdx(uint32_t &idx, size_t diff) {
-        idx += diff;
-        assert(idx <= bufferPb_);
-        if (idx == bufferPb_) {
-            idx = 0;
-        }
-    }
-    uint32_t decideIoPb() const {
-        uint64_t ioPb = maxIoPb_;
-        /* available buffer size. */
-        uint64_t availBufferPb0 = bufferPb_ - (remainingPb_ + pendingPb_);
-        ioPb = std::min(ioPb, availBufferPb0);
-        /* Internal ring buffer edge. */
-        uint64_t availBufferPb1 = bufferPb_ - aheadIdx_;
-        ioPb = std::min(ioPb, availBufferPb1);
-        /* Log device ring buffer edge. */
-        uint64_t s = super_.getRingBufferSize();
-        ioPb = std::min(ioPb, s - aheadLsid_ % s);
-        assert(ioPb <= std::numeric_limits<uint32_t>::max());
-        return ioPb;
-    }
-    void prepareAheadIo() {
-        /* Decide IO size. */
-        uint32_t ioPb = decideIoPb();
-        assert(aheadIdx_ + ioPb <= bufferPb_);
-        uint64_t off = super_.getOffsetFromLsid(aheadLsid_);
-#ifdef DEBUG
-        uint64_t off1 = super_.getOffsetFromLsid(aheadLsid_ + ioPb);
-        assert(off < off1 || off1 == super_.getRingBufferOffset());
-#endif
-
-        /* Prepare an IO. */
-        char *buf = getBuffer(aheadIdx_);
-        uint32_t aioKey = aio_.prepareRead(off * pbs_, ioPb * pbs_, buf);
-        assert(aioKey != 0);
-        ioQ_.push(std::make_pair(aioKey, ioPb));
-        aheadLsid_ += ioPb;
-        pendingPb_ += ioPb;
-        plusIdx(aheadIdx_, ioPb);
-    }
-    void readBlock(char *data) {
-        if (remainingPb_ == 0 && pendingPb_ == 0) {
-            readAhead();
-        }
-        if (remainingPb_ == 0) {
-            assert(0 < pendingPb_);
-            assert(!ioQ_.empty());
-            uint32_t aioKey, ioPb;
-            std::tie(aioKey, ioPb) = ioQ_.front();
-            ioQ_.pop();
-            aio_.waitFor(aioKey);
-            remainingPb_ = ioPb;
-            assert(ioPb <= pendingPb_);
-            pendingPb_ -= ioPb;
-        }
-        assert(0 < remainingPb_);
-        ::memcpy(data, getBuffer(readIdx_), pbs_);
-        remainingPb_--;
-        plusIdx(readIdx_, 1);
-    }
-};
-
-class WalbLogReader
-{
-private:
-    const Config &config_;
-    WalbLdevReader ldevReader_;
+    const uint64_t beginLsid_, endLsid_;
+    walb::log::AsyncDevReader ldevReader_;
     walb::log::SuperBlock &super_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
+    bool isVerbose_;
 
     using PackHeader = walb::log::PackHeaderRaw;
     using PackIo = walb::log::PackIoRaw;
     using Block = std::shared_ptr<uint8_t>;
 
 public:
-    WalbLogReader(const Config &config, size_t bufferSize,
-                   size_t maxIoSize = DEFAULT_MAX_IO_SIZE)
-        : config_(config)
-        , ldevReader_(config.ldevPath(), bufferSize, maxIoSize)
+    WlogExtractor(const std::string &ldevPath,
+                  uint64_t beginLsid, uint64_t endLsid,
+                  bool isVerbose = false)
+        : beginLsid_(beginLsid), endLsid_(endLsid)
+        , ldevReader_(ldevPath)
         , super_(ldevReader_.super())
-        , ba_(ldevReader_.queueSize() * 2, ldevReader_.pbs(), ldevReader_.pbs()) {
+        , ba_(ldevReader_.queueSize() * 2, ldevReader_.pbs(), ldevReader_.pbs())
+        , isVerbose_(isVerbose) {
     }
-    DISABLE_COPY_AND_ASSIGN(WalbLogReader);
-    DISABLE_MOVE(WalbLogReader);
+    DISABLE_COPY_AND_ASSIGN(WlogExtractor);
+    DISABLE_MOVE(WlogExtractor);
     /**
      * Read walb log from the device and write to outFd with wl header.
      */
-    void catLog(int outFd) {
-        if (outFd <= 0) {
-            throw RT_ERR("outFd is not valid.");
-        }
-        cybozu::util::FdWriter fdw(outFd);
+    void operator()(int outFd) {
+        if (outFd <= 0) throw RT_ERR("outFd is not valid.");
+        walb::log::Writer writer(outFd);
 
         /* Set lsids. */
-        u64 beginLsid = config_.beginLsid();
+        uint64_t beginLsid = beginLsid_;
         if (beginLsid < super_.getOldestLsid()) {
             beginLsid = super_.getOldestLsid();
         }
 
-        u32 salt = super_.getLogChecksumSalt();
-        u32 pbs = super_.getPhysicalBlockSize();
+        uint32_t salt = super_.getLogChecksumSalt();
+        uint32_t pbs = super_.getPhysicalBlockSize();
 
         /* Create and write walblog header. */
         walb::log::FileHeader wh;
-        wh.init(pbs, salt, super_.getUuid(), beginLsid, config_.endLsid());
-        wh.write(outFd);
+        wh.init(pbs, salt, super_.getUuid(), beginLsid, endLsid_);
+        writer.writeHeader(wh);
 
         /* Read and write each logpack. */
-        if (config_.isVerbose()) {
+        if (isVerbose_) {
             ::fprintf(::stderr, "beginLsid: %" PRIu64 "\n", beginLsid);
         }
         ldevReader_.reset(beginLsid);
-        u64 lsid = beginLsid;
-        u64 totalPaddingPb = 0;
-        u64 nPacks = 0;
-        while (lsid < config_.endLsid()) {
+        uint64_t lsid = beginLsid;
+        uint64_t totalPaddingPb = 0;
+        uint64_t nPacks = 0;
+        PackHeader packH(nullptr, super_.getPhysicalBlockSize(),
+                         super_.getLogChecksumSalt());
+        while (lsid < endLsid_) {
             bool isEnd = false;
             readAheadLoose();
-            std::unique_ptr<PackHeader> loghP;
-            try {
-                loghP = readLogpackHeader(lsid);
-            } catch (walb::log::InvalidLogpackHeader& e) {
-                if (config_.isVerbose()) {
+            if (!readLogpackHeader(packH, lsid)) {
+                if (isVerbose_) {
                     ::fprintf(::stderr, "Caught invalid logpack header error.\n");
                 }
                 isEnd = true;
                 break;
             }
-            PackHeader &logh = *loghP;
             std::queue<PackIo> q;
-            isEnd = readAllLogpackData(logh, q);
-            writeLogpack(fdw, logh, q);
-            lsid = logh.nextLogpackLsid();
-            totalPaddingPb += logh.totalPaddingPb();
+            isEnd = readAllLogpackData(packH, q);
+            writer.writePack(packH, toBlocks(q));
+            lsid = packH.nextLogpackLsid();
+            totalPaddingPb += packH.totalPaddingPb();
             nPacks++;
-            if (isEnd) { break; }
+            if (isEnd) break;
         }
-        if (config_.isVerbose()) {
+        if (isVerbose_) {
             ::fprintf(::stderr, "endLsid: %" PRIu64 "\n"
                       "lackOfLogPb: %" PRIu64 "\n"
                       "totalPaddingPb: %" PRIu64 "\n"
                       "nPacks: %" PRIu64 "\n",
-                      lsid, config_.endLsid() - lsid, totalPaddingPb, nPacks);
+                      lsid, endLsid_ - lsid, totalPaddingPb, nPacks);
         }
-        /* Write termination block. */
-        PackHeader logh(ba_.alloc(), pbs, salt);
-        logh.setEnd();
-        logh.write(fdw);
+        writer.close();
     }
 private:
     void readAheadLoose() {
@@ -442,27 +255,39 @@ private:
         return b;
     }
     /**
-     * Read a logpack header.
+     * Get block list from packIo list.
      */
-    std::unique_ptr<PackHeader> readLogpackHeader(uint64_t lsid) {
-        Block block = readBlock();
-        std::unique_ptr<PackHeader> logh(
-            new PackHeader(
-                block, super_.getPhysicalBlockSize(),
-                super_.getLogChecksumSalt()));
+    static std::queue<Block> toBlocks(std::queue<PackIo> &src) {
+        std::queue<Block> dst;
+        while (!src.empty()) {
+            PackIo packIo = std::move(src.front());
+            src.pop();
+            walb::log::BlockData &blockD = packIo.blockData();
+            for (size_t i = 0; i < blockD.nBlocks(); i++) {
+                dst.push(blockD.getBlock(i));
+            }
+        }
+        assert(src.empty());
+        return dst;
+    }
+
+    /**
+     * Read a logpack header.
+     * RETURN:
+     *   false if got invalid logpack header.
+     */
+    bool readLogpackHeader(PackHeader &packH, uint64_t lsid) {
+        packH.reset(readBlock());
 #if 0
-        logh->print(::stderr);
+        packH.print(::stderr);
 #endif
-        if (!logh->isValid()) {
-            throw walb::log::InvalidLogpackHeader();
+        if (!packH.isValid()) return false;
+        if (packH.header().logpack_lsid != lsid) {
+            ::fprintf(::stderr, "logpack %" PRIu64 " is not the expected one %" PRIu64 "."
+                      , packH.header().logpack_lsid, lsid);
+            return false;
         }
-        if (logh->header().logpack_lsid != lsid) {
-            throw walb::log::InvalidLogpackHeader(
-                cybozu::util::formatString(
-                    "logpack %" PRIu64 " is not the expected one %" PRIu64 ".",
-                    logh->header().logpack_lsid, lsid));
-        }
-        return logh;
+        return true;
     }
     /**
      * Read all IOs data of a logpack.
@@ -478,13 +303,13 @@ private:
                 readLogpackData(packIo);
                 q.push(std::move(packIo));
             } catch (walb::log::InvalidLogpackData& e) {
-                if (config_.isVerbose()) { logh.print(::stderr); }
+                if (isVerbose_) { logh.print(::stderr); }
                 uint64_t prevLsid = logh.nextLogpackLsid();
                 logh.shrink(i);
                 uint64_t currentLsid = logh.nextLogpackLsid();
-                if (config_.isVerbose()) { logh.print(::stderr); }
+                if (isVerbose_) { logh.print(::stderr); }
                 isEnd = true;
-                if (config_.isVerbose()) {
+                if (isVerbose_) {
                     ::fprintf(::stderr, "Logpack shrink from %" PRIu64 " to %" PRIu64 "\n",
                               prevLsid, currentLsid);
                 }
@@ -505,41 +330,14 @@ private:
             packIo.blockData().addBlock(readBlock());
         }
         if (!packIo.isValid()) {
-            //if (config_.isVerbose()) packIo.print(::stderr);
+            //if (isVerbose_) packIo.print(::stderr);
             throw walb::log::InvalidLogpackData();
         }
-    }
-    /**
-     * Write a logpack.
-     */
-    void writeLogpack(
-        cybozu::util::FdWriter &fdw, PackHeader &logh,
-        std::queue<PackIo> &q) {
-        if (logh.nRecords() == 0) {
-            return;
-        }
-        /* Write the header. */
-        fdw.write(logh.ptr<char>(), logh.pbs());
-        /* Write the IO data. */
-        size_t nWritten = 0;
-        while (!q.empty()) {
-            PackIo packIo = std::move(q.front());
-            q.pop();
-            walb::log::RecordRaw &rec = packIo.record();
-            if (!rec.hasData()) { continue; }
-            for (size_t i = 0; i < rec.ioSizePb(); i++) {
-                fdw.write(packIo.blockData().rawData<const char>(i), logh.pbs());
-                nWritten++;
-            }
-        }
-        assert(nWritten == logh.totalIoSize());
     }
 };
 
 int main(int argc, char* argv[])
 {
-    const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB */
-
     try {
         Config config(argc, argv);
         if (config.isHelp()) {
@@ -548,18 +346,18 @@ int main(int argc, char* argv[])
         }
         config.check();
 
-        WalbLogReader wlReader(config, BUFFER_SIZE);
+        WlogExtractor extractor(
+            config.ldevPath(), config.beginLsid(), config.endLsid(),
+            config.isVerbose());
+        FileOrFd fof;
         if (config.isOutStdout()) {
-            wlReader.catLog(1);
+            fof.setFd(1);
         } else {
-            cybozu::util::FileOpener fo(
-                config.outPath(),
-                O_WRONLY | O_CREAT | O_TRUNC,
-                S_IRWXU | S_IRGRP | S_IROTH);
-            wlReader.catLog(fo.fd());
-            cybozu::util::FdWriter(fo.fd()).fdatasync();
-            fo.close();
+            fof.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         }
+        extractor(fof.fd());
+        fof.close();
+
         return 0;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());

@@ -20,7 +20,7 @@
 #include "stdout_logger.hpp"
 
 #include "util.hpp"
-#include "walb_log_file.hpp"
+#include "walb_log_dev.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
 

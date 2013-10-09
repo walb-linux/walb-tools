@@ -10,6 +10,7 @@
 #include <memory>
 #include <cstdlib>
 #include <functional>
+#include <type_traits>
 
 #include "util.hpp"
 #include "checksum.hpp"
@@ -22,206 +23,6 @@
 
 namespace walb {
 namespace log {
-
-/**
- * WalB super sector.
- */
-class SuperBlock
-{
-private:
-    /* Log device. */
-    cybozu::util::BlockDevice& bd_;
-    /* Physical block size */
-    const unsigned int pbs_;
-    /* Super block offset in the log device [physical block]. */
-    const uint64_t offset_;
-
-    /* Super block data. */
-    std::shared_ptr<uint8_t> data_;
-
-public:
-    SuperBlock(cybozu::util::BlockDevice& bd)
-        : bd_(bd)
-        , pbs_(bd.getPhysicalBlockSize())
-        , offset_(get1stSuperBlockOffsetStatic(pbs_))
-        , data_(cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_)) {
-#if 0
-        ::printf("offset %" PRIu64 " pbs %u\n", offset_ * pbs_, pbs_);
-#endif
-        /* Read the superblock. */
-        read();
-#if 0
-        print(); //debug
-#endif
-    }
-
-    uint16_t getSectorType() const { return super()->sector_type; }
-    uint16_t getVersion() const { return super()->version; }
-    uint32_t getChecksum() const { return super()->checksum; }
-    uint32_t getLogicalBlockSize() const { return super()->logical_bs; }
-    uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
-    uint32_t getMetadataSize() const { return super()->snapshot_metadata_size; }
-    uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
-    const uint8_t* getUuid() const { return super()->uuid; }
-    const char* getName() const { return super()->name; }
-    uint64_t getRingBufferSize() const { return super()->ring_buffer_size; }
-    uint64_t getOldestLsid() const { return super()->oldest_lsid; }
-    uint64_t getWrittenLsid() const { return super()->written_lsid; }
-    uint64_t getDeviceSize() const { return super()->device_size; }
-
-    void setOldestLsid(uint64_t oldestLsid) {
-        super()->oldest_lsid = oldestLsid;
-    }
-    void setWrittenLsid(uint64_t writtenLsid) {
-        super()->written_lsid = writtenLsid;
-    }
-    void setDeviceSize(uint64_t deviceSize) {
-        super()->device_size = deviceSize;
-    }
-    void setLogChecksumSalt(uint32_t salt) {
-        super()->log_checksum_salt = salt;
-    }
-    void setUuid(const uint8_t *uuid) {
-        ::memcpy(super()->uuid, uuid, UUID_SIZE);
-    }
-    void updateChecksum() {
-        super()->checksum = 0;
-        super()->checksum = ::checksum(data_.get(), pbs_, 0);
-    }
-
-    /*
-     * Offset and size.
-     */
-
-    uint64_t get1stSuperBlockOffset() const {
-        return offset_;
-    }
-
-    uint64_t getMetadataOffset() const {
-        return ::get_metadata_offset_2(super());
-    }
-
-    uint64_t get2ndSuperBlockOffset() const {
-        UNUSED uint64_t oft = ::get_super_sector1_offset_2(super());
-        assert(oft == getMetadataOffset() + getMetadataSize());
-        return ::get_super_sector1_offset_2(super());
-    }
-
-    uint64_t getRingBufferOffset() const {
-        uint64_t oft = ::get_ring_buffer_offset_2(super());
-        assert(oft == get2ndSuperBlockOffset() + 1);
-        return oft;
-    }
-
-    /**
-     * Convert lsid to the position in the log device.
-     *
-     * @lsid target log sequence id.
-     *
-     * RETURN:
-     *   Offset in the log device [physical block].
-     */
-    uint64_t getOffsetFromLsid(uint64_t lsid) const {
-        if (lsid == INVALID_LSID) {
-            throw RT_ERR("Invalid lsid.");
-        }
-        uint64_t s = getRingBufferSize();
-        if (s == 0) {
-            throw RT_ERR("Ring buffer size must not be 0.");
-        }
-        return (lsid % s) + getRingBufferOffset();
-    }
-
-    /**
-     * Read super block from the log device.
-     */
-    void read() {
-        bd_.read(offset_ * pbs_, pbs_, ptr<char>());
-        if (!isValid()) {
-            throw RT_ERR("super block is invalid.");
-        }
-    }
-
-    /**
-     * Write super block to the log device.
-     */
-    void write() {
-        updateChecksum();
-        if (!isValid()) {
-            throw RT_ERR("super block is invalid.");
-        }
-        bd_.write(offset_ * pbs_, pbs_, ptr<char>());
-    }
-
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp,
-                  "sectorType: %u\n"
-                  "version: %u\n"
-                  "checksum: %u\n"
-                  "lbs: %u\n"
-                  "pbs: %u\n"
-                  "metadataSize: %u\n"
-                  "logChecksumSalt: %u\n"
-                  "name: %s\n"
-                  "ringBufferSize: %" PRIu64 "\n"
-                  "oldestLsid: %" PRIu64 "\n"
-                  "writtenLsid: %" PRIu64 "\n"
-                  "deviceSize: %" PRIu64 "\n"
-                  "ringBufferOffset: %" PRIu64 "\n",
-                  getSectorType(),
-                  getVersion(),
-                  getChecksum(),
-                  getLogicalBlockSize(),
-                  getPhysicalBlockSize(),
-                  getMetadataSize(),
-                  getLogChecksumSalt(),
-                  getName(),
-                  getRingBufferSize(),
-                  getOldestLsid(),
-                  getWrittenLsid(),
-                  getDeviceSize(),
-                  getRingBufferOffset());
-        ::fprintf(fp, "uuid: ");
-        for (int i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", getUuid()[i]);
-        }
-        ::fprintf(fp, "\n");
-    }
-
-private:
-    static uint64_t get1stSuperBlockOffsetStatic(unsigned int pbs) {
-        return ::get_super_sector0_offset(pbs);
-    }
-
-    template <typename T>
-    T *ptr() {
-        return reinterpret_cast<T *>(data_.get());
-    }
-
-    template <typename T>
-    const T *ptr() const {
-        return reinterpret_cast<const T *>(data_.get());
-    }
-
-    struct walb_super_sector* super() {
-        return ptr<struct walb_super_sector>();
-    }
-
-    const struct walb_super_sector* super() const {
-        return ptr<const struct walb_super_sector>();
-    }
-
-    bool isValid(bool isChecksum = true) const {
-        if (::is_valid_super_sector_raw(super(), pbs_) == 0) {
-            return false;
-        }
-        if (isChecksum) {
-            return true;
-        } else {
-            return ::checksum(data_.get(), pbs_, 0) == 0;
-        }
-    }
-};
 
 class ExceptionWithMessage
     : public std::exception
@@ -315,8 +116,8 @@ public:
     }
     ~PackHeaderRef() noexcept = default;
 
-    uint8_t *data() { return data_; }
-    const uint8_t *data() const { return data_; }
+    uint8_t *rawData() { return data_; }
+    const uint8_t *rawData() const { return data_; }
 
     template <typename T>
     T* ptr() {
@@ -684,7 +485,9 @@ public:
         }
         return t;
     }
-
+    void resetData(uint8_t *data) {
+        data_ = data;
+    }
 private:
     void checkBlock() const {
         if (data_ == nullptr) {
@@ -697,11 +500,6 @@ private:
             throw RT_ERR("index out of range.");
         }
     }
-
-protected:
-    void resetData(uint8_t *data) {
-        data_ = data;
-    }
 };
 
 class PackHeaderRaw : public PackHeaderRef
@@ -711,9 +509,13 @@ protected:
     Block block_;
 
 public:
-    PackHeaderRaw(Block block, unsigned int pbs, uint32_t salt)
+    PackHeaderRaw(const Block &block, unsigned int pbs, uint32_t salt)
         : PackHeaderRef(nullptr, pbs, salt)
         , block_(block) {
+        resetData(block_.get());
+    }
+    void reset(const Block &block) {
+        block_ = block;
         resetData(block_.get());
     }
 };
@@ -847,20 +649,21 @@ public:
  * Log data of an IO.
  * Log record is a reference.
  */
-class RecordRef : public Record
+template <class PackHeaderRefT>
+class RecordRefT : public Record
 {
 private:
-    PackHeaderRef& logh_;
+    PackHeaderRefT& logh_;
     size_t pos_;
 
 public:
-    RecordRef(PackHeaderRef& logh, size_t pos)
+    RecordRefT(PackHeaderRefT& logh, size_t pos)
         : logh_(logh) , pos_(pos) {
         assert(pos < logh.nRecords());
     }
-    ~RecordRef() noexcept override {}
-    DISABLE_COPY_AND_ASSIGN(RecordRef);
-    DISABLE_MOVE(RecordRef);
+    ~RecordRefT() noexcept override {}
+    DISABLE_COPY_AND_ASSIGN(RecordRefT);
+    DISABLE_MOVE(RecordRefT);
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_.pbs(); }
@@ -870,9 +673,14 @@ public:
     void setPbs(unsigned int pbs0) override { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
     void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
-    const struct walb_log_record& record() const override { return logh_.record(pos_); }
-    struct walb_log_record& record() override { return logh_.record(pos_); }
+    const struct walb_log_record &record() const override { return logh_.record(pos_); }
+    struct walb_log_record &record() override {
+        return const_cast<struct walb_log_record &>(logh_.record(pos_));
+    }
 };
+
+using RecordRef = RecordRefT<PackHeaderRef>;
+using RecordRefConst = RecordRefT<const PackHeaderRef>;
 
 /**
  * Helper class to manage multiple IO blocks.
@@ -895,7 +703,7 @@ public:
     BlockData &operator=(const BlockData &) = default;
     BlockData &operator=(BlockData &&) = default;
 
-    void addBlock(Block block) { data_.push_back(block); }
+    void addBlock(const Block &block) { data_.push_back(block); }
     Block getBlock(size_t idx) { return data_[idx]; }
     const Block getBlock(size_t idx) const { return data_[idx]; }
 
@@ -914,7 +722,7 @@ public:
     size_t nBlocks() const { return data_.size(); }
 
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
-        if (pbs_ == 0) throw RT_ERR("pbs must not be zero.");
+        checkPbs();
         uint32_t csum = salt;
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
@@ -928,6 +736,22 @@ public:
         }
         assert(remaining == 0);
         return cybozu::util::checksumFinish(csum);
+    }
+
+    void write(int fd) const {
+        cybozu::util::FdWriter fdw(fd);
+        write(fdw);
+    }
+    void write(cybozu::util::FdWriter &fdw) const {
+        checkPbs();
+        for (const Block &blk : data_) {
+            fdw.write(blk.get(), pbs_);
+        }
+    }
+
+private:
+    void checkPbs() const {
+        if (pbs_ == 0) throw RT_ERR("pbs must not be zero.");
     }
 };
 

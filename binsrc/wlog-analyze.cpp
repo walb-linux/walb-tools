@@ -223,15 +223,10 @@ private:
         /* Read pack IO. */
         while (!reader.isEnd()) {
             walb::log::PackIoRaw packIo;
-            uint64_t nextLsid = lsid;
-            if (reader.isFirstInPack()) {
-                nextLsid = reader.pack().nextLogpackLsid();
-            }
             reader.readLog(packIo);
             updateBitmap(packIo.record());
-            lsid = nextLsid;
         }
-        return lsid;
+        return reader.endLsid();
     }
     /**
      * Update bitmap with a log record.

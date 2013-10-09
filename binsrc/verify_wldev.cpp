@@ -26,7 +26,7 @@
 
 #include "util.hpp"
 #include "memory_buffer.hpp"
-#include "walb_log_file.hpp"
+#include "walb_log_dev.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"

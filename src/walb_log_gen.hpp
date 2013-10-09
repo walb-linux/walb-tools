@@ -79,7 +79,7 @@ private:
     using Block = std::shared_ptr<u8>;
     using Rand = cybozu::util::Random<uint64_t>;
 
-    void setUuid(Rand &rand, std::vector<u8> &uuid) {
+    static void setUuid(Rand &rand, std::vector<u8> &uuid) {
         const size_t t = sizeof(uint64_t);
         const size_t n = uuid.size() / t;
         const size_t m = uuid.size() % t;
@@ -93,6 +93,7 @@ private:
     }
 
     void generateAndWrite(int fd) {
+        Writer writer(fd);
         Rand rand;
         uint64_t writtenPb = 0;
         walb::log::FileHeader wlHead;
@@ -107,10 +108,7 @@ private:
 
         /* Generate and write walb log header. */
         wlHead.init(pbs, salt, &uuid[0], lsid, uint64_t(-1));
-        if (!wlHead.isValid(false)) {
-            throw RT_ERR("WalbLogHeader invalid.");
-        }
-        wlHead.write(fd);
+        writer.writeHeader(wlHead);
         if (config_.isVerbose) {
             wlHead.print(::stderr);
         }
@@ -123,7 +121,7 @@ private:
             uint64_t tmpLsid = lsid + 1;
 
             /* Prepare blocks and calc checksum if necessary. */
-            std::vector<Block> blocks;
+            std::queue<Block> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordRef rec(logh, i);
                 BlockData blockD(pbs);
@@ -142,7 +140,7 @@ private:
                         }
                         tmpLsid++;
                         blockD.addBlock(b);
-                        blocks.push_back(b);
+                        blocks.push(b);
                     }
                 }
                 if (rec.hasDataForChecksum()) {
@@ -154,18 +152,8 @@ private:
             assert(blocks.size() == logh.totalIoSize());
 
             /* Calculate header checksum and write. */
-            cybozu::util::FdWriter fdw(fd);
-            logh.write(fdw);
-
-            /* Write each IO data. */
-            for (Block b : blocks) {
-#if 0
-                uint64_t v;
-                ::memcpy(&v, b.get(), sizeof(v));
-                ::printf("block data %" PRIu64 "\n", v); /* debug */
-#endif
-                fdw.write(reinterpret_cast<const char *>(b.get()), pbs);
-            }
+            logh.updateChecksum();
+            writer.writePack(logh, std::move(blocks));
 
             uint64_t w = 1 + logh.totalIoSize();
             assert(tmpLsid == lsid + w);
@@ -181,11 +169,7 @@ private:
                 ::fflush(::stderr);
             }
         }
-
-        /* Write termination block. */
-        walb::log::PackHeaderRef logh(hBlock.get(), pbs, salt);
-        logh.setEnd();
-        logh.write(fd);
+        writer.close();
 
         if (config_.isVerbose) {
             ::fprintf(::stderr,

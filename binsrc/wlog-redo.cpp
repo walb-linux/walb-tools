@@ -609,46 +609,26 @@ public:
         if (inFd < 0) {
             throw RT_ERR("inFd is not valid.");
         }
-        cybozu::util::FdReader fdr(inFd);
 
         /* Read walblog header. */
-        wh_.read(inFd);
-        if (!wh_.isValid()) {
-            throw RT_ERR("WalbLog header invalid.");
-        }
+        walb::log::Reader reader(inFd);
+        reader.readHeader(wh_);
         if (!canApply()) {
             throw RT_ERR("This walblog can not be applied to the device.");
         }
 
         uint64_t beginLsid = wh_.beginLsid();
         uint64_t redoLsid = beginLsid;
-        try {
-            while (true) {
-                Block b = readBlock(fdr);
-                PackHeader logh(b.get(), blockSize_, salt());
-                if (logh.isEnd()) {
-                    ::printf("Reach EOF log header block.\n");
-                    break;
-                }
-                if (!logh.isValid()) {
-                    ::printf("Detect invalid log header block.\n");
-                    break;
-                }
-                if (config_.isVerbose()) {
-                    logh.printShort();
-                }
-                for (size_t i = 0; i < logh.nRecords(); i++) {
-                    PackIo packIo(logh, i);
-                    readLogpackData(packIo, fdr);
-                    redoPack(packIo);
-                    redoLsid = packIo.record().lsid();
-                }
+
+        while (!reader.isEnd()) {
+            PackIo packIo;
+            if (config_.isVerbose() && reader.isFirstInPack()) {
+                reader.packHeader().printShort();
             }
-        } catch (cybozu::util::EofError &e) {
-            ::printf("Reach input EOF.\n");
-        } catch (walb::log::InvalidLogpackData &e) {
-            throw RT_ERR("InalidLogpackData");
+            reader.readLog(packIo);
+            redoPack(packIo);
         }
+        redoLsid = reader.endLsid();
 
         /* Wait for all pending IOs. */
         submitIos();
@@ -681,33 +661,6 @@ private:
 
     u32 salt() const {
         return wh_.header().log_checksum_salt;
-    }
-
-    /**
-     * Read a logpack data.
-     */
-    void readLogpackData(PackIo &packIo, cybozu::util::FdReader &fdr) {
-        walb::log::RecordRaw &rec = packIo.record();
-        if (!rec.hasData()) { return; }
-        //::printf("ioSizePb: %u\n", rec.ioSizePb()); //debug
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockData().addBlock(readBlock(fdr));
-        }
-        if (!packIo.isValid()) {
-            throw walb::log::InvalidLogpackData();
-        }
-    }
-
-    /**
-     * Read a block data from a fd reader.
-     */
-    Block readBlock(cybozu::util::FdReader& fdr) {
-        Block b = ba_.alloc();
-        if (b.get() == nullptr) {
-            throw RT_ERR("allocate failed.");
-        }
-        fdr.read(reinterpret_cast<char *>(b.get()), blockSize_);
-        return b;
     }
 
     /**
