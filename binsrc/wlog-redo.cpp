@@ -167,7 +167,7 @@ private:
     }
 };
 
-using Block = std::shared_ptr<u8>;
+using Block = std::shared_ptr<uint8_t>;
 
 /**
  * Sequence id generator.
@@ -240,17 +240,17 @@ public:
     bool isSubmitted() const { return isSubmitted_; }
     bool isCompleted() const { return isCompleted_; }
     bool isOverwritten() const { return isOverwritten_; }
-    const std::deque<std::shared_ptr<u8> >& blocks() const { return blocks_; }
+    const std::deque<std::shared_ptr<uint8_t> >& blocks() const { return blocks_; }
     unsigned int& nOverlapped() { return nOverlapped_; }
     unsigned int& aioKey() { return aioKey_; }
-    std::shared_ptr<u8> ptr() { return blocks_.front(); }
+    std::shared_ptr<uint8_t> ptr() { return blocks_.front(); }
     Block block() { return ptr(); } /* This is just alias of ptr(). */
     bool empty() const { return blocks().empty(); }
     u64 sequenceId() const { return sequenceId_; }
 
     template<typename T>
     T* rawPtr() { return reinterpret_cast<T*>(ptr().get()); }
-    u8* rawPtr() { return ptr().get(); }
+    uint8_t* rawPtr() { return ptr().get(); }
 
     void setBlock(Block b) {
         assert(blocks_.empty());
@@ -304,8 +304,8 @@ public:
         }
 
         /* Check buffers are contiguous. */
-        u8 *p0 = blocks_.front().get();
-        u8 *p1 = rhs->blocks_.front().get();
+        uint8_t *p0 = blocks_.front().get();
+        uint8_t *p1 = rhs->blocks_.front().get();
         return p0 + size_ == p1;
     }
 
@@ -321,7 +321,7 @@ public:
         }
         size_ += rhs->size_;
         while (!rhs->empty()) {
-            std::shared_ptr<u8> p = rhs->blocks_.front();
+            std::shared_ptr<uint8_t> p = rhs->blocks_.front();
             blocks_.push_back(p);
             rhs->blocks_.pop_front();
         }
@@ -543,7 +543,7 @@ private:
     const size_t blockSize_;
     const size_t queueSize_;
     cybozu::aio::Aio aio_;
-    cybozu::util::BlockAllocator<u8> ba_;
+    cybozu::util::BlockAllocator<uint8_t> ba_;
     walb::log::FileHeader wh_;
 
     std::queue<IoPtr> ioQ_; /* serialized by lsid. */

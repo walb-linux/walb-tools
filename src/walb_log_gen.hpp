@@ -76,10 +76,10 @@ public:
         generateAndWrite(outFd);
     }
 private:
-    using Block = std::shared_ptr<u8>;
+    using Block = std::shared_ptr<uint8_t>;
     using Rand = cybozu::util::Random<uint64_t>;
 
-    static void setUuid(Rand &rand, std::vector<u8> &uuid) {
+    static void setUuid(Rand &rand, std::vector<uint8_t> &uuid) {
         const size_t t = sizeof(uint64_t);
         const size_t n = uuid.size() / t;
         const size_t m = uuid.size() % t;
@@ -88,7 +88,7 @@ private:
             ::memcpy(&uuid[i * t], &v, sizeof(v));
         }
         for (size_t i = 0; i < m; i++) {
-            uuid[n * t + i] = static_cast<u8>(rand.get32());
+            uuid[n * t + i] = static_cast<uint8_t>(rand.get32());
         }
     }
 
@@ -97,14 +97,14 @@ private:
         Rand rand;
         uint64_t writtenPb = 0;
         walb::log::FileHeader wlHead;
-        std::vector<u8> uuid(UUID_SIZE);
+        std::vector<uint8_t> uuid(UUID_SIZE);
         setUuid(rand, uuid);
 
         const uint32_t salt = rand.get32();
         const unsigned int pbs = config_.pbs;
         uint64_t lsid = config_.lsid;
-        Block hBlock = cybozu::util::allocateBlocks<u8>(pbs, pbs);
-        cybozu::util::BlockAllocator<u8> ba(config_.maxPackPb, pbs, pbs);
+        Block hBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+        cybozu::util::BlockAllocator<uint8_t> ba(config_.maxPackPb, pbs, pbs);
 
         /* Generate and write walb log header. */
         wlHead.init(pbs, salt, &uuid[0], lsid, uint64_t(-1));
