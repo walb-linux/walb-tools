@@ -92,19 +92,12 @@ public:
 
     void check() const {
         if (blockSize() == 0) {
-            throwError("blockSize must be non-zero.");
+            throw RT_ERR("blockSize must be non-zero.");
         }
         if (targetPath().size() == 0) {
-            throwError("specify target device or file.");
+            throw RT_ERR("specify target device or file.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
-
 private:
     /* Option ids. */
     enum Opt {
@@ -113,17 +106,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     template <typename IntType>
     IntType str2int(const char *str) const {
@@ -161,7 +143,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -265,21 +247,12 @@ int main(int argc, char* argv[])
         IoDataVerifier v(config);
         v.run();
         return 0;
-
-    } catch (Config::Error& e) {
-        ::printf("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        return 1;
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
-        return 1;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        return 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end file. */

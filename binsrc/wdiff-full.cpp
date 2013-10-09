@@ -89,16 +89,12 @@ int main(int argc, UNUSED char *argv[])
         FullImageToWalbDiffConverter c(64 * 1024 / LOGICAL_BLOCK_SIZE);
         c.convert(0, 1);
         return 0;
-    } catch (std::runtime_error &e) {
-        ::fprintf(::stderr, "%s\n", e.what());
-        return 1;
     } catch (std::exception &e) {
         ::fprintf(::stderr, "%s\n", e.what());
-        return 1;
     } catch (...) {
         ::fprintf(::stderr, "caught other error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end of file. */

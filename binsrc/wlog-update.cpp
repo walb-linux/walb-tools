@@ -101,20 +101,14 @@ public:
 
     void check() const {
         if (args_.empty()) {
-            throwError("Specify input wlog path.");
+            throw RT_ERR("Specify input wlog path.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
 
 private:
     void setUuid(const std::string &uuidStr) {
         if (uuidStr.size() != 32) {
-            throwError("Invalid UUID string.");
+            throw RT_ERR("Invalid UUID string.");
         }
         for (size_t i = 0; i < UUID_SIZE; i++) {
             /* ex. "ff" -> 255 */
@@ -131,17 +125,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -188,7 +171,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -273,8 +256,6 @@ public:
 
 int main(int argc, char* argv[])
 {
-    int ret = 0;
-
     try {
         Config config(argc, argv);
         if (config.isHelp()) {
@@ -285,23 +266,13 @@ int main(int argc, char* argv[])
 
         WalbLogUpdater wlUpdater(config);
         wlUpdater.update();
-
-    } catch (Config::Error& e) {
-        ::printf("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        ret = 1;
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
-        ret = 1;
+        return 0;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        ret = 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        ret = 1;
     }
-
-    return ret;
+    return 1;
 }
 
 /* end of file. */

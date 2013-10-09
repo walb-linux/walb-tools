@@ -96,19 +96,12 @@ public:
 
     void check() const {
         if (beginLsid() >= endLsid()) {
-            throwError("beginLsid must be < endLsid.");
+            throw RT_ERR("beginLsid must be < endLsid.");
         }
         if (ldevPath_.empty()) {
-            throwError("Specify log device path.");
+            throw RT_ERR("Specify log device path.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
-
 private:
     /* Option ids. */
     enum Opt {
@@ -121,17 +114,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -183,7 +165,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -492,8 +474,6 @@ private:
 
 int main(int argc, char* argv[])
 {
-    int ret = 0;
-
     try {
         Config config(argc, argv);
         if (config.isHelp()) {
@@ -504,23 +484,13 @@ int main(int argc, char* argv[])
 
         WalbLogRestorer wlRes(config);
         wlRes.restore(0);
-
-    } catch (Config::Error& e) {
-        ::printf("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        ret = 1;
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
-        ret = 1;
+        return 0;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        ret = 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        ret = 1;
     }
-
-    return ret;
+    return 1;
 }
 
 /* end of file. */

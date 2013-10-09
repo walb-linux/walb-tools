@@ -45,7 +45,10 @@ try {
     walb::runProtocolAsClient(sock, opt.clientId, opt.cmd, opt.params);
     return 0;
 } catch (std::exception &e) {
-    ::printf("error: %s\n", e.what());
+    ::fprintf(::stderr, "exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    ::fprintf(::stderr, "caught other error.\n");
     return 1;
 }
 

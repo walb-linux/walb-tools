@@ -385,12 +385,10 @@ int main(int argc, char *argv[])
         }
         testServerData(opt);
         return 0;
-    } catch (std::runtime_error &e) {
-        ::printf("runtime error: %s\n", e.what());
     } catch (std::exception &e) {
-        ::printf("exception: %s\n", e.what());
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
-        ::printf("other error caught.\n");
+        ::fprintf(::stderr, "other error caught.\n");
     }
     return 1;
 }

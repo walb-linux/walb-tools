@@ -30,16 +30,12 @@ int main(UNUSED int argc, UNUSED char *argv[])
             rec.printOneline();
         }
         return 0;
-    } catch (std::runtime_error &e) {
-        ::printf("%s\n", e.what());
-        return 1;
     } catch (std::exception &e) {
-        ::printf("%s\n", e.what());
-        return 1;
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
-        ::printf("caught other error.\n");
-        return 1;
+        ::fprintf(::stderr, "caught other error.\n");
     }
+    return 1;
 }
 
 /* end of file. */

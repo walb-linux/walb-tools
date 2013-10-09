@@ -67,19 +67,12 @@ public:
 
     void check() const {
         if (devPath_.empty()) {
-            throwError("Specify a block device path.");
+            throw RT_ERR("Specify a block device path.");
         }
         if (inWdiffPath_.empty()) {
-            throwError("Specify input wdiff.");
+            throw RT_ERR("Specify input wdiff.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
-
 private:
     /* Option ids. */
     enum Opt {
@@ -89,17 +82,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -137,7 +119,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -413,20 +395,12 @@ int main(int argc, char *argv[])
         WdiffRedoManger m(config);
         m.run();
         return 0;
-    } catch (Config::Error &e) {
-        ::printf("Comman line error: %s\n\n", e.what());
-        Config::printHelp();
-        return 1;
-    } catch (std::runtime_error &e) {
-        ::printf("%s\n", e.what());
-        return 1;
     } catch (std::exception &e) {
-        ::printf("%s\n", e.what());
-        return 1;
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
-        ::printf("caught other error.\n");
-        return 1;
+        ::fprintf(::stderr, "caught other error.\n");
     }
+    return 1;
 }
 
 /* end of file. */

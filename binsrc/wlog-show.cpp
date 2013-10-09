@@ -79,19 +79,12 @@ public:
 
     void check() const {
         if (endLsid() <= beginLsid()) {
-            throwError("beginLsid must be < endLsid.");
+            throw RT_ERR("beginLsid must be < endLsid.");
         }
         if (inWlogPath_.empty()) {
-            throwError("Specify walb log path.");
+            throw RT_ERR("Specify walb log path.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
-
 private:
     /* Option ids. */
     enum Opt {
@@ -101,17 +94,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -149,7 +131,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -193,20 +175,12 @@ int main(int argc, char* argv[])
         walb::log::Printer printer(fof.fd());
         printer();
         return 0;
-    } catch (Config::Error& e) {
-        LOGe("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        return 1;
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
-        return 1;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        return 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end of file. */

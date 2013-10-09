@@ -47,16 +47,12 @@ int main(int argc, UNUSED char *argv[])
         walb::diff::Converter c;
         c.convert(0, 1, opt.maxIoSize);
         return 0;
-    } catch (std::runtime_error &e) {
-        LOGe("%s\n", e.what());
-        return 1;
     } catch (std::exception &e) {
-        LOGe("%s\n", e.what());
-        return 1;
+        LOGe("exception: %s\n", e.what());
     } catch (...) {
         LOGe("caught other error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end of file. */

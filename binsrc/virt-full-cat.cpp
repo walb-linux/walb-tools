@@ -73,17 +73,12 @@ int main(int argc, char *argv[])
         scanner.readAndWriteTo(outFd, opt.bufferSize);
         if (outFo) outFo->close();
         return 0;
-    } catch (std::runtime_error &e) {
-        ::fprintf(::stderr, "%s\n", e.what());
-        return 1;
     } catch (std::exception &e) {
-        ::fprintf(::stderr, "%s\n", e.what());
-        return 1;
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
         ::fprintf(::stderr, "caught other error.\n");
-        return 1;
     }
-    return 0;
+    return 1;
 }
 
 /* end of file. */

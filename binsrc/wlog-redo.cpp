@@ -85,22 +85,15 @@ public:
 
     void check() const {
         if (ddevPath_.empty()) {
-            throwError("Specify device path.");
+            throw RT_ERR("Specify device path.");
         }
         if (inWlogPath_.empty()) {
-            throwError("Specify input wlog path.");
+            throw RT_ERR("Specify input wlog path.");
         }
         if (isDiscard() && isZeroDiscard()) {
-            throwError("Do not specify both -d and -z together.");
+            throw RT_ERR("Do not specify both -d and -z together.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
-
 private:
     /* Option ids. */
     enum Opt {
@@ -110,17 +103,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -159,7 +141,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -1068,12 +1050,6 @@ int main(int argc, char* argv[])
             fo.close();
         }
         return 0;
-
-    } catch (Config::Error& e) {
-        ::printf("Command line error: %s\n\n", e.what());
-        Config::printHelp();
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
     } catch (...) {

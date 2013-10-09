@@ -128,11 +128,12 @@ int main(int argc, char *argv[])
         }
         flag.store(true);
         th.join();
-
         return 0;
+    } catch (std::exception &e) {
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
-        ::printf("caught an error.");
-        return 1;
+        ::fprintf(::stderr, "caught an error.");
     }
+    return 1;
 }
 /* end of file. */

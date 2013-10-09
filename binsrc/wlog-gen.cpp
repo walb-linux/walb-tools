@@ -284,16 +284,12 @@ int main(int argc, char* argv[])
         walb::log::Generator wlGen(cfg);
         wlGen.generate(config.getOutFd());
         return 0;
-    } catch (std::runtime_error& e) {
-        LOGe("Error: %s\n", e.what());
-        return 1;
     } catch (std::exception& e) {
         LOGe("Exception: %s\n", e.what());
-        return 1;
     } catch (...) {
         LOGe("Caught other error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end of file. */

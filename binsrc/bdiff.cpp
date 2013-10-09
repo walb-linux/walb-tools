@@ -45,18 +45,12 @@ public:
 
     void check() const {
         if (args_.size() < 2) {
-            throwError("Specify two files.");
+            throw RT_ERR("Specify two files.");
         }
         if (blockSize_ == 0) {
-            throwError("Block size must be positive integer.");
+            throw RT_ERR("Block size must be positive integer.");
         }
     }
-
-    class Error : public std::runtime_error {
-    public:
-        explicit Error(const std::string &msg)
-            : std::runtime_error(msg) {}
-    };
 
 private:
     /* Option ids. */
@@ -65,17 +59,6 @@ private:
         VERBOSE,
         HELP,
     };
-
-    void throwError(const char *format, ...) const {
-        va_list args;
-        std::string msg;
-        va_start(args, format);
-        try {
-            msg = cybozu::util::formatStringV(format, args);
-        } catch (...) {}
-        va_end(args);
-        throw Error(msg);
-    }
 
     void parse(int argc, char* argv[]) {
         while (1) {
@@ -103,7 +86,7 @@ private:
                 isHelp_ = true;
                 break;
             default:
-                throwError("Unknown option.");
+                throw RT_ERR("Unknown option.");
             }
         }
 
@@ -170,8 +153,6 @@ uint64_t checkBlockDiff(Config& config)
 
 int main(int argc, char* argv[])
 {
-    int ret = 1;
-
     try {
         Config config(argc, argv);
         if (config.isHelp()) {
@@ -179,23 +160,12 @@ int main(int argc, char* argv[])
             return 0;
         }
         config.check();
+        return checkBlockDiff(config) != 0;
 
-        if (checkBlockDiff(config) == 0) {
-            ret = 0;
-        }
-    } catch (Config::Error& e) {
-        ::fprintf(::stderr, "Command line error: %s\n\n", e.what());
-        Config::printHelp();
-        ret = 1;
-    } catch (std::runtime_error& e) {
-        ::fprintf(::stderr, "Error: %s\n", e.what());
-        ret = 1;
     } catch (std::exception& e) {
         ::fprintf(::stderr, "Exception: %s\n", e.what());
-        ret = 1;
     } catch (...) {
         ::fprintf(::stderr, "Caught other error.\n");
-        ret = 1;
     }
-    return ret;
+    return 1;
 }

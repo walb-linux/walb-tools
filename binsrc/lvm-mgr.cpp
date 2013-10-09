@@ -158,13 +158,12 @@ int main(int argc, char *argv[])
         opt.parse(argc, argv);
         dispatch(opt);
         return 0;
-    } catch (std::runtime_error &e) {
-        ::fprintf(::stderr, "runtime_error: %s\n", e.what());
-        return 1;
+    } catch (std::exception &e) {
+        ::fprintf(::stderr, "exception: %s\n", e.what());
     } catch (...) {
         ::fprintf(::stderr, "caugut another error.\n");
-        return 1;
     }
+    return 1;
 }
 
 /* end of file */
