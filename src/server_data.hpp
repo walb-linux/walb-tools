@@ -111,9 +111,8 @@ public:
      */
     void reset(uint64_t gid) {
         baseRecord_.init();
-        baseRecord_.raw.gid0 = gid;
-        baseRecord_.raw.gid1 = gid;
-        baseRecord_.raw.timestamp = ::time(0);
+        baseRecord_.setSnap(gid);
+        baseRecord_.setTimestamp(::time(0));
         saveBaseRecord();
 
         wdiffsP_->reset(gid);
@@ -180,7 +179,7 @@ public:
         auto it = v.crbegin();
         while (it != v.crend()) {
             const MetaDiff &diff = *it;
-            if (diff.isClean()) return diff.gid1();
+            if (diff.isClean()) return diff.snap1().gid0();
             ++it;
         }
         if (baseRecord_.isClean()) return baseRecord_.gid0();
@@ -252,14 +251,14 @@ public:
         MetaSnap snap = baseRecord_;
         snap.print(); /* debug */
         for (const MetaDiff &diff : wdiffsP_->listDiff()) {
-            if (diff.gid0() < snap.gid0()) {
+            if (diff.snap0().gid0() < snap.gid0()) {
                 /* skip old diffs. */
                 continue;
             }
-            if (gid < diff.gid1()) break;
+            if (gid < diff.snap1().gid0()) break;
             diff.print(); /* debug */
-            assert(snap.canApply(diff));
-            snap = snap.apply(diff);
+            assert(canApply(snap, diff));
+            snap = walb::apply(snap, diff);
             snap.print(); /* debug */
         }
         ::printf("canRestore end\n"); /* debug */
@@ -290,10 +289,10 @@ public:
         if (diffV.empty()) return;
         MetaDiff diff = diffV[0];
         for (size_t i = 1; i < diffV.size(); i++) {
-            if (!diff.canMerge(diffV[i])) {
+            if (!canMerge(diff, diffV[i])) {
                 throw std::runtime_error("could not merge.");
             }
-            diff = diff.merge(diffV[i]);
+            diff = merge(diff, diffV[i]);
         }
         std::vector<cybozu::FilePath> pathV;
         for (MetaDiff &diff : diffV) {
@@ -340,7 +339,7 @@ public:
      * Update the base record to be dirty to start wdiffs application.
      */
     void startToApply(const MetaDiff &diff) {
-        baseRecord_ = baseRecord_.startToApply(diff);
+        baseRecord_ = walb::startToApply(baseRecord_, diff);
         saveBaseRecord();
     }
     /**
@@ -348,8 +347,7 @@ public:
      * And remove old wdiffs.
      */
     void finishToApply(const MetaDiff &diff) {
-        baseRecord_ = baseRecord_.finishToApply(diff);
-        baseRecord_.raw.timestamp = diff.raw.timestamp;
+        baseRecord_ = walb::finishToApply(baseRecord_, diff);
         saveBaseRecord();
     }
     /**
@@ -398,7 +396,7 @@ public:
          * Split wdiff file list where each list can be consolidated.
          */
         for (MetaDiff &diff : wdiffsP_->listDiffInTimeRange(ts0, ts1)) {
-            if (!v.empty() && !v.back().canMerge(diff)) insert();
+            if (!v.empty() && !canMerge(v.back(), diff)) insert();
             v.push_back(diff);
             total += wdiffsP_->getDiffFileSize(diff);
         }
@@ -449,7 +447,7 @@ public:
      * (2) delete dangling diffs.
      */
     void finishToConsolidate(const MetaDiff &diff) {
-        if (!wdiffsP_->consolidate(diff.gid0(), diff.gid1())) {
+        if (!wdiffsP_->consolidate(diff.snap0().gid0(), diff.snap1().gid0())) {
             throw std::runtime_error("Consolidate failed.");
         }
         wdiffsP_->cleanup();

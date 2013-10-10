@@ -550,13 +550,8 @@ class DirtyHashSyncProtocol : public Protocol
         }
         void sendMetaDiff() {
             packet::Packet packet(sock_);
-            MetaDiff diff(snap_.gid0(), snap_.gid1() + 1, snap_.gid1() + 2);
-            if (snap_.isDirty()) {
-                diff.raw.can_merge = true;
-            } else {
-                diff.raw.can_merge = false; /* TODO: Is this true? */
-            }
-            diff.raw.timestamp = ::time(0);
+            MetaDiff diff(snap_.gid0(), snap_.gid1(), snap_.gid1() + 1, snap_.gid1() + 2);
+            diff.setTimestamp(::time(0));
             packet.write(diff);
         }
     };

@@ -98,8 +98,8 @@ walb::MetaDiff createWdiffFile(
 
     /* Generate meta diff. */
     walb::MetaDiff diff(gid0, gid1);
-    diff.raw.timestamp = ::time(0);
-    diff.raw.can_merge = canMerge ? 1 : 0;
+    diff.setTimestamp(::time(0));
+    diff.setCanMerge(canMerge);
     std::string fName = walb::createDiffFileName(diff);
     cybozu::FilePath fPath = dirPath + cybozu::FilePath(fName);
 
@@ -159,11 +159,11 @@ std::vector<walb::MetaDiff> mergeDiffs(
     if (v.empty()) return ret;
     std::vector<walb::MetaDiff>::const_iterator it = v.cbegin();
     walb::MetaDiff diff = *it;
-    diff.raw.timestamp = it->raw.timestamp;
+    diff.setTimestamp(it->timestamp());
     ++it;
     while (it != v.cend()) {
-        if (diff.canMerge(*it, ignoreCanMergeFlag)) {
-            diff = diff.merge(*it, ignoreCanMergeFlag);
+        if (walb::canMerge(diff, *it, ignoreCanMergeFlag)) {
+            diff = walb::merge(diff, *it, ignoreCanMergeFlag);
         } else {
             ret.push_back(diff);
             diff = *it;
@@ -178,10 +178,10 @@ walb::MetaSnap applyDiffs(const walb::MetaSnap &snap, const std::vector<walb::Me
 {
     walb::MetaSnap snap0 = snap;
     for (const walb::MetaDiff &diff : diffV) {
-        if (!snap0.canApply(diff)) {
+        if (!walb::canApply(snap0, diff)) {
             throw std::runtime_error("can not apply diff");
         }
-        snap0 = snap0.apply(diff);
+        snap0 = walb::apply(snap0, diff);
     }
     return snap0;
 }

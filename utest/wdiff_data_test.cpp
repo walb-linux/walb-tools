@@ -51,8 +51,8 @@ CYBOZU_TEST_AUTO(consolidate)
     CYBOZU_TEST_EQUAL(diffFiles.latestGid(), 127);
     std::vector<walb::MetaDiff> diffV = diffFiles.listDiff();
     CYBOZU_TEST_EQUAL(diffV.size(), 1);
-    CYBOZU_TEST_EQUAL(diffV[0].gid0(), 5);
-    CYBOZU_TEST_EQUAL(diffV[0].gid1(), 127);
+    CYBOZU_TEST_EQUAL(diffV[0].snap0().gid0(), 5);
+    CYBOZU_TEST_EQUAL(diffV[0].snap1().gid0(), 127);
 
     diffFiles.reset(10000);
     setDiff(diff, 10000, 10001, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);

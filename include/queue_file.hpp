@@ -202,6 +202,13 @@ public:
         if (!recOp.goNext()) assert(false);
         recOp.init(); /* end mark. */
     }
+    /**
+     * T must be copyable.
+     */
+    template <typename T>
+    void push(const T& t) {
+        push(&t, sizeof(t));
+    }
     void push(const std::string& s) {
         if (s.empty()) {
             std::runtime_error("can not push empty strings.");
@@ -211,17 +218,6 @@ public:
     bool empty() const {
         gcFront();
         return header_.beginOffset == header_.endOffset;
-    }
-    template <typename T>
-    void front(T& data) const {
-        gcFront();
-        assert(!empty());
-        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        assert(!recOp.isEndMark());
-        if (recOp.dataSize() != sizeof(data)) {
-            throw std::runtime_error("front(): data size differs.");
-        }
-        ::memcpy(&data, recOp.dataPtr<void>(), sizeof(data));
     }
     template <typename CharT>
     void front(std::vector<CharT>& v) const {
@@ -239,6 +235,23 @@ public:
         assert(!recOp.isEndMark());
         s.resize(recOp.dataSize());
         ::memcpy(&s[0], recOp.dataPtr<void>(), recOp.dataSize());
+    }
+    void front(void *data, uint32_t size) const {
+        gcFront();
+        assert(!empty());
+        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
+        assert(!recOp.isEndMark());
+        if (recOp.dataSize() != size) {
+            throw std::runtime_error("front(): data size differs.");
+        }
+        ::memcpy(data, recOp.dataPtr<void>(), size);
+    }
+    /**
+     * T must be copyable.
+     */
+    template <typename T>
+    void front(T& data) const {
+        front(&data, sizeof(data));
     }
     void pop() {
         QueueRecordHeaderOp recOp(&record(header_.beginOffset));
@@ -350,6 +363,17 @@ public:
             s.resize(recOp.dataSize());
             ::memcpy(&s[0], recOp.dataPtr<void>(), recOp.dataSize());
         }
+        void get(void *data, uint32_t size) const {
+            QueueRecordHeaderOp recOp(&qf_->record(offset_));
+            assert(isValid());
+            if (recOp.dataSize() != size) {
+                throw std::runtime_error("QueueIterator::get(): invalid size.");
+            }
+            ::memcpy(data, recOp.dataPtr<void>(), size);
+        }
+        /* T must be copyable. */
+        template <typename T>
+        void get(T& t) const { get(&t, sizeof(t)); }
         bool isEndMark() const {
             QueueRecordHeaderOp recOp(&qf_->record(offset_));
             return recOp.isEndMark();

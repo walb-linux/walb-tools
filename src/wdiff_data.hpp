@@ -94,8 +94,7 @@ public:
         removeBeforeGid(uint64_t(-1));
 
         latestRecord_.init();
-        latestRecord_.raw.gid0 = gid;
-        latestRecord_.raw.gid1 = gid;
+        latestRecord_.setSnap(gid);
         saveLatestRecord();
     }
     /**
@@ -104,15 +103,18 @@ public:
      */
     bool add(const MetaDiff &diff) {
         if (isContiguous_) {
-            if (!latestRecord_.canApply(diff)) return false;
-            latestRecord_ = latestRecord_.apply(diff);
+            if (!walb::canApply(latestRecord_, diff)) return false;
+            latestRecord_ = walb::apply(latestRecord_, diff);
         } else {
-            if (diff.gid0() < latestRecord_.gid0()) return false;
+            if (diff.snap0().gid0() < latestRecord_.gid0()) {
+                /* Reject old diffs. */
+                return false;
+            }
             latestRecord_ = getSnapFromDiff(diff);
         }
-        latestRecord_.raw.timestamp = diff.raw.timestamp;
+        latestRecord_.setTimestamp(diff.timestamp());
         saveLatestRecord();
-        mmap_.insert(std::make_pair(diff.gid0(), diff));
+        mmap_.insert(std::make_pair(diff.snap0().gid0(), diff));
         return true;
     }
     /**
@@ -137,19 +139,19 @@ public:
         MetaDiff merged, diff;
         it = nextKey(it, diff);
         merged = diff;
-        if (diff.gid0() != gid0) return false;
-        it = skipOverlapped(it, diff.gid1());
+        if (diff.snap0().gid0() != gid0) return false;
+        it = skipOverlapped(it, diff.snap1().gid0());
         while (it != mmap_.cend()) {
             it = nextKey(it, diff);
-            if (gid1 < diff.gid1()) break;
-            if (!merged.canMerge(diff)) return false;
-            merged = merged.merge(diff);
-            merged.raw.timestamp = diff.raw.timestamp;
-            it = skipOverlapped(it, diff.gid1());
+            if (gid1 < diff.snap1().gid0()) break;
+            if (!canMerge(merged, diff)) return false;
+            merged = merge(merged, diff);
+            merged.setTimestamp(diff.timestamp());
+            it = skipOverlapped(it, diff.snap1().gid0());
         }
-        assert(merged.gid0() == gid0);
-        assert(merged.gid1() == gid1);
-        mmap_.insert(std::make_pair(merged.gid0(), merged));
+        assert(merged.snap0().gid0() == gid0);
+        assert(merged.snap1().gid0() == gid1);
+        mmap_.insert(std::make_pair(merged.snap0().gid0(), merged));
         return true;
     }
     /**
@@ -163,17 +165,17 @@ public:
         auto insert = [&]() {
             uint64_t bgn = 0, end = 0;
             assert(!q.empty());
-            bgn = q.front().gid0();
+            bgn = q.front().snap0().gid0();
             while (!q.empty()) {
-                end = q.front().gid1();
+                end = q.front().snap1().gid0();
                 q.pop_front();
             }
             v.push_back(std::make_pair(bgn, end));
         };
         for (const MetaDiff &diff : listDiff()) {
-            bool canMerge = q.empty() ||
-                (diff.raw.can_merge != 0 && q.back().canMerge(diff));
-            if (canMerge) {
+            bool canM = q.empty() ||
+                (diff.canMerge() && canMerge(q.back(), diff));
+            if (canM) {
                 q.push_back(diff);
             } else {
                 insert();
@@ -211,7 +213,7 @@ public:
         Mmap::iterator it = mmap_.begin();
         while (it != mmap_.end()) {
             MetaDiff &diff = it->second;
-            if (diff.gid1() <= gid1) {
+            if (diff.snap1().gid0() <= gid1) {
                 it = mmap_.erase(it);
                 v.push_back(createDiffFileName(diff));
             } else {
@@ -245,9 +247,9 @@ public:
         MetaDiff diff;
         while (it != mmap_.cend()) {
             it = nextKey(it, diff);
-            if (gid1 < diff.gid1()) break;
+            if (gid1 < diff.snap1().gid0()) break;
             v.push_back(diff);
-            it = skipOverlapped(it, diff.gid1());
+            it = skipOverlapped(it, diff.snap1().gid0());
         }
         return v;
     }
@@ -297,7 +299,7 @@ public:
         } else {
             MetaDiff diff;
             nextKey(mmap_.begin(), diff);
-            return diff.gid0();
+            return diff.snap0().gid0();
         }
     }
     /**
@@ -324,7 +326,7 @@ public:
                 continue;
             MetaDiff diff;
             if (!parseDiffFileName(info.name, diff)) continue;
-            mmap_.insert(std::make_pair(diff.gid0(), diff));
+            mmap_.insert(std::make_pair(diff.snap0().gid0(), diff));
         }
         check();
         if (mmap_.empty()) {
@@ -348,8 +350,8 @@ public:
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
-            if (diff.raw.timestamp <= timestamp && gid1 < diff.gid1()) {
-                gid1 = diff.gid1();
+            if (diff.timestamp() <= timestamp && gid1 < diff.snap1().gid0()) {
+                gid1 = diff.snap1().gid0();
             }
             ++it;
         }
@@ -364,8 +366,8 @@ public:
         Mmap::const_iterator it = mmap_.cbegin();
         while (it != mmap_.cend()) {
             const MetaDiff &diff = it->second;
-            if (timestamp <= diff.raw.timestamp && diff.gid0() < gid0) {
-                gid0 = diff.gid0();
+            if (timestamp <= diff.timestamp() && diff.snap0().gid0() < gid0) {
+                gid0 = diff.snap0().gid0();
             }
             ++it;
         }
@@ -390,7 +392,7 @@ private:
         auto curr = diffV.cbegin();
         auto prev = curr;
         while (curr != diffV.cend()) {
-            if (prev->gid1() != curr->gid0()) return false;
+            if (prev->snap1().gid0() != curr->snap0().gid0()) return false;
             prev = curr;
             ++curr;
         }
@@ -405,15 +407,16 @@ private:
         Mmap::const_iterator it = mmap_.cbegin();
         MetaDiff diff;
         it = nextKey(it, diff);
-        it = skipOverlapped(it, diff.gid1());
+        it = skipOverlapped(it, diff.snap1().gid0());
         while (it != mmap_.end()) {
-            assert(diff.gid0() < it->first);
-            if (diff.gid1() < it->first) {
-                LOGw("There are a hole between gid %" PRIu64 " and %" PRIu64 ".", diff.gid1(), it->first);
+            assert(diff.snap0().gid0() < it->first);
+            if (diff.snap1().gid0() < it->first) {
+                LOGw("There are a hole between gid %" PRIu64 " and %" PRIu64 "."
+                     , diff.snap1().gid0(), it->first);
                 return false;
             }
             it = nextKey(it, diff);
-            it = skipOverlapped(it, diff.gid1());
+            it = skipOverlapped(it, diff.snap1().gid0());
         }
         return true;
     }
@@ -428,8 +431,8 @@ private:
         assert(it != mmap_.end());
         diff = it->second;
         ++it;
-        while (it != mmap_.end() && diff.gid0() == it->first) {
-            if (diff.gid1() < it->second.gid1()) {
+        while (it != mmap_.end() && diff.snap0().gid0() == it->first) {
+            if (diff.snap1().gid0() < it->second.snap1().gid0()) {
                 diff = it->second;
             }
             ++it;
@@ -444,8 +447,8 @@ private:
         assert(it != mmap_.rend());
         diff = it->second;
         ++it;
-        while (it != mmap_.rend() && diff.gid0() == it->first) {
-            if (diff.gid1() < it->second.gid1()) {
+        while (it != mmap_.rend() && diff.snap0().gid0() == it->first) {
+            if (diff.snap1().gid0() < it->second.snap1().gid0()) {
                 diff = it->second;
             }
             ++it;
@@ -457,7 +460,7 @@ private:
      */
     template <typename Iterator>
     Iterator skipOverlapped(Iterator it, uint64_t gid1) const {
-        while (it != mmap_.end() && it->second.gid1() <= gid1) {
+        while (it != mmap_.end() && it->second.snap1().gid0() <= gid1) {
             ++it;
         }
         return it;
@@ -519,8 +522,8 @@ private:
         std::vector<std::string> v;
         while (it != mmap_.end()) {
             MetaDiff &diff0 = it->second;
-            assert(diff.gid0() <= diff0.gid0());
-            if (diff.gid1() < diff0.gid1()) {
+            assert(diff.snap0().gid0() <= diff0.snap0().gid0());
+            if (diff.snap1().gid0() < diff0.snap1().gid0()) {
                 break;
             }
             if (diff0 == diff) {
@@ -535,9 +538,9 @@ private:
         if (it != mmap_.end()) {
             MetaDiff &diff0 = it->second;
             if (isContiguous_) {
-                assert(diff.gid1() == diff0.gid0());
+                assert(diff.snap1().gid0() == diff0.snap0().gid0());
             } else {
-                assert(diff.gid1() <= diff0.gid0());
+                assert(diff.snap1().gid0() <= diff0.snap0().gid0());
             }
         }
 #endif
