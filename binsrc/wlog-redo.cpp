@@ -115,7 +115,7 @@ private:
                 {0, 0, 0, 0}
             };
             int option_index = 0;
-            int c = ::getopt_long(argc, argv, "i:d:z:vh",
+            int c = ::getopt_long(argc, argv, "i:d:zvh",
                                   long_options, &option_index);
             if (c == -1) { break; }
 
