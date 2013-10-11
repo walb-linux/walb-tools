@@ -68,6 +68,8 @@ binsrc/%: binsrc/%.o
 
 utest/compressor_test: utest/compressor_test.o src/compressor.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
+utest/wlog_compressor_test: utest/wlog_compressor_test.o src/compressor.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
 utest/hash_test: utest/hash_test.o src/MurmurHash3.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/MurmurHash3.o
 utest/%: utest/%.o

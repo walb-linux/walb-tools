@@ -14,3 +14,4 @@ util_test
 wdiff_data_test
 worker_data_test
 hash_test
+wlog_compressor_test
