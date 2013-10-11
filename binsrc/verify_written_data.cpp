@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -44,7 +44,6 @@ private:
     bool isHelp_;
     std::string recipePath_; /* recipe file path. */
     std::string targetPath_; /* device or file path. */
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
@@ -52,8 +51,7 @@ public:
         , isVerbose_(false)
         , isHelp_(false)
         , recipePath_("-")
-        , targetPath_()
-        , args_() {
+        , targetPath_() {
         parse(argc, argv);
     }
 
@@ -80,10 +78,6 @@ public:
                   "targetPath: %s\n",
                   blockSize(), isVerbose(), isHelp(),
                   recipePath_.c_str(), targetPath().c_str());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::fprintf(fp, "arg%d: %s\n", i++, s.c_str());
-        }
     }
 
     static void printHelp() {
@@ -94,66 +88,16 @@ public:
         if (blockSize() == 0) {
             throw RT_ERR("blockSize must be non-zero.");
         }
-        if (targetPath().size() == 0) {
-            throw RT_ERR("specify target device or file.");
-        }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        BLOCKSIZE = 1,
-        RECIPEPATH,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"blockSize", 1, 0, Opt::BLOCKSIZE},
-                {"recipe", 1, 0, Opt::RECIPEPATH},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:i:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BLOCKSIZE:
-            case 'b':
-                bs_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::RECIPEPATH:
-            case 'i':
-                recipePath_ = optarg;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-
-        if (!args_.empty()) {
-            targetPath_ = args_[0];
-        }
+        cybozu::Option opt;
+        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", "blockSize");
+        opt.appendOpt(&recipePath_, "-", "i", "recipe file path");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose");
+        opt.appendHelp("h");
+        opt.appendParam(&targetPath_, "DEVICE|FILE");
+        opt.parse(argc, argv, true);
     }
 
     static std::string generateHelpString() {

@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -43,7 +43,6 @@ private:
     bool isHelp_;
     std::string recipePath_; /* recipe path or "-" for stdin. */
     std::string wldevPath_; /* walb log devcie path. */
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
@@ -52,8 +51,7 @@ public:
         , isVerbose_(false)
         , isHelp_(false)
         , recipePath_("-")
-        , wldevPath_()
-        , args_() {
+        , wldevPath_() {
         parse(argc, argv);
     }
 
@@ -75,83 +73,22 @@ public:
                   "wldev: %s\n",
                   beginLsid(), endLsid(), isVerbose(), isHelp(),
                   recipePath_.c_str(), wldevPath().c_str());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::fprintf(fp, "arg%d: %s\n", i++, s.c_str());
-        }
     }
 
     static void printHelp() {
         ::printf("%s", generateHelpString().c_str());
     }
 
-    void check() const {
-        if (wldevPath_.empty()) {
-            throw RT_ERR("Specify walb log device.");
-        }
-    }
-
 private:
-    /* Option ids. */
-    enum Opt {
-        BEGIN_LSID = 1,
-        END_LSID,
-        RECIPEPATH,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"beginLsid", 1, 0, Opt::BEGIN_LSID},
-                {"endLsid", 1, 0, Opt::END_LSID},
-                {"recipe", 1, 0, Opt::RECIPEPATH},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:e:r:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BEGIN_LSID:
-            case 'b':
-                beginLsid_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::END_LSID:
-            case 'e':
-                endLsid_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::RECIPEPATH:
-            case 'r':
-                recipePath_ = optarg;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-        if (!args_.empty()) {
-            wldevPath_ = args_[0];
-        }
+        cybozu::Option opt;
+        opt.appendOpt(&beginLsid_, -1, "b", "beginLsid LSID");
+        opt.appendOpt(&endLsid_, -1, "e", "endLsid LSID");
+        opt.appendOpt(&recipePath_, "-", "r", "recipe PATH");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose");
+        opt.appendHelp("h");
+        opt.appendParam(&wldevPath_, "WALB_LOG_DEVICE");
+        opt.parse(argc, argv, true);
     }
 
     static std::string generateHelpString() {
@@ -292,7 +229,6 @@ int main(int argc, char* argv[])
             Config::printHelp();
             return 0;
         }
-        config.check();
 
         WldevVerifier v(config);
         v.run();
