@@ -42,8 +42,8 @@ log_diff_equality_test()
   local i
   for i in 1 2 3 4; do
     make_zero_image 0 1
-    $BIN/wlog-redo --zerodiscard ddev32M.0 < ${i}.wlog
-    $BIN/wdiff-redo --zerodiscard ddev32M.1 < ${i}.wdiff
+    $BIN/wlog-redo -z ddev32M.0 < ${i}.wlog
+    $BIN/wdiff-redo -z ddev32M.1 < ${i}.wdiff
     $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
     check_result $? "log/diff equality test ${i}th wlog/wdiff."
   done
@@ -55,7 +55,7 @@ full_image_test()
   echo "#################### Full image test ####################"
   $BIN/wdiff-full < ddev32M > 0.wdiff
   make_zero_image 0
-  $BIN/wdiff-redo --zerodiscard ddev32M.0 < 0.wdiff
+  $BIN/wdiff-redo -z ddev32M.0 < 0.wdiff
   $BIN/bdiff -b 512 ddev32M ddev32M.0
   check_result $? "full image test"
 }
@@ -66,11 +66,11 @@ consolidation_test1()
   make_zero_image 0 1 2
   local i
   for i in 1 2 3 4; do
-    $BIN/wdiff-redo --zerodiscard ddev32M.0 < ${i}.wdiff
-    $BIN/wlog-redo --zerodiscard ddev32M.1 < ${i}.wlog
+    $BIN/wdiff-redo -z ddev32M.0 < ${i}.wdiff
+    $BIN/wlog-redo -z ddev32M.1 < ${i}.wlog
   done
   $BIN/wdiff-merge -x 16K -i 1.wdiff 2.wdiff 3.wdiff 4.wdiff -o all.wdiff
-  $BIN/wdiff-redo --zerodiscard ddev32M.2 < all.wdiff
+  $BIN/wdiff-redo -z ddev32M.2 < all.wdiff
   sha1sum ddev32M.0 ddev32M.1 ddev32M.2
   $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
   check_result $? "consolidation test 1a."
@@ -84,7 +84,7 @@ consolidation_test2()
   cp ddev32M ddev32M.0
   local i
   for i in 1 2 3 4; do
-    $BIN/wdiff-redo --zerodiscard ddev32M.0 < ${i}.wdiff
+    $BIN/wdiff-redo -z ddev32M.0 < ${i}.wdiff
   done
   $BIN/virt-full-cat -i ddev32M -o ddev32M.1 -d 1.wdiff 2.wdiff 3.wdiff 4.wdiff
   $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
@@ -99,9 +99,9 @@ max_io_blocks_test()
   for i in 1 2 3 4; do
     $BIN/wlog-to-wdiff -x  4K < ${i}.wlog > ${i}-4K.wdiff
     $BIN/wlog-to-wdiff -x 16K < ${i}.wlog > ${i}-16K.wdiff
-    $BIN/wdiff-redo --zerodiscard ddev32M.0 < ${i}.wdiff
-    $BIN/wdiff-redo --zerodiscard ddev32M.1 < ${i}-4K.wdiff
-    $BIN/wdiff-redo --zerodiscard ddev32M.2 < ${i}-16K.wdiff
+    $BIN/wdiff-redo -z ddev32M.0 < ${i}.wdiff
+    $BIN/wdiff-redo -z ddev32M.1 < ${i}-4K.wdiff
+    $BIN/wdiff-redo -z ddev32M.2 < ${i}-16K.wdiff
     $BIN/bdiff -b 512 ddev32M.0 ddev32M.1
     check_result $? "maxIoBlocks test ${i}th wdiff 4K"
     $BIN/bdiff -b 512 ddev32M.0 ddev32M.2

@@ -7,8 +7,7 @@
  */
 #include <memory>
 #include <cstdio>
-
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "util.hpp"
 #include "walb_diff_file.hpp"
@@ -24,8 +23,6 @@ private:
     bool isDiscard_; /* issue discard IO for discard diffs. */
     bool isZeroDiscard_; /* issue all-zero IOs for discard diffs. */
     bool isVerbose_;
-    bool isHelp_;
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
@@ -33,9 +30,7 @@ public:
         , inWdiffPath_("-")
         , isDiscard_(false)
         , isZeroDiscard_(false)
-        , isVerbose_(false)
-        , isHelp_(false)
-        , args_() {
+        , isVerbose_(false) {
         parse(argc, argv);
     }
 
@@ -44,103 +39,20 @@ public:
     bool isDiscard() const { return isDiscard_; }
     bool isZeroDiscard() const { return isZeroDiscard_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print() const {
-        ::printf("devPath: %s\n"
-                 "discard: %d\n"
-                 "zerodiscard: %d\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 devPath().c_str(),
-                 isDiscard(), isZeroDiscard(),
-                 isVerbose(), isHelp());
-        int i = 0;
-        for (const auto &s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
-
-    void check() const {
-        if (devPath_.empty()) {
-            throw RT_ERR("Specify a block device path.");
-        }
-        if (inWdiffPath_.empty()) {
-            throw RT_ERR("Specify input wdiff.");
-        }
-    }
 private:
-    /* Option ids. */
-    enum Opt {
-        INPUT_WDIFF_PATH = 1,
-        DISCARD,
-        ZERO_DISCARD,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"inWdiff", 1, 0, Opt::INPUT_WDIFF_PATH},
-                {"discard", 0, 0, Opt::DISCARD},
-                {"zerodiscard", 0, 0, Opt::ZERO_DISCARD},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "i:d:z:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::INPUT_WDIFF_PATH:
-            case 'i':
-                inWdiffPath_ = std::string(optarg);
-                break;
-            case Opt::DISCARD:
-            case 'd':
-                isDiscard_ = true;
-                break;
-            case Opt::ZERO_DISCARD:
-            case 'z':
-                isZeroDiscard_ = true;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-        if (!args_.empty()) {
-            devPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "wdiff-redo: redo wdiff file on a block device.\n"
-            "Usage: wdiff-redo [options] DEVICE_PATH\n"
-            "Options:\n"
-            "  -i, --inWdiff PATH:   input wdiff path. '-' for stdin. (default: '-')\n"
-            "  -d, --discard:        issue discard IOs for discard diffs.\n"
-            "  -z, --zerodiscard:    issue all-zero IOs for discard diffs.\n"
-            "  -v, --verbose:        verbose messages to stderr.\n"
-            "  -h, --help:           show this message.\n");
+		cybozu::Option opt;
+		opt.setDescription("wdiff-redo: redo wdiff file on a block device.");
+		opt.appendOpt(&inWdiffPath_, "-", "i", "PATH: input wdiff path. '-' for stdin. (default: '-')");
+		opt.appendOpt(&isDiscard_, false, "d", "issue discard IOs for discard diffs.");
+		opt.appendOpt(&isZeroDiscard_, false, "z", "issue all-zero IOs for discard diffs.");
+		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+		opt.appendHelp("h");
+		opt.appendParam(&devPath_, "DEVICE_PATH");
+		if (!opt.parse(argc, argv)) {
+			opt.usage();
+			exit(1);
+		}
     }
 };
 
@@ -383,24 +295,18 @@ private:
 };
 
 int main(int argc, char *argv[])
+	try
 {
-    try{
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
 
-        WdiffRedoManger m(config);
-        m.run();
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caught other error.\n");
-    }
-    return 1;
+    WdiffRedoManger m(config);
+    m.run();
+} catch (std::exception &e) {
+    ::fprintf(::stderr, "exception: %s\n", e.what());
+	return 1;
+} catch (...) {
+    ::fprintf(::stderr, "caught other error.\n");
+	return 1;
 }
 
 /* end of file. */
