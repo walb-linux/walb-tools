@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "util.hpp"
 #include "fileio.hpp"
@@ -22,87 +22,57 @@ class Config
 private:
     unsigned int blockSize_;
     bool isVerbose_;
-    bool isHelp_;
-    std::vector<std::string> args_;
+    std::string file1_;
+    std::string file2_;
 public:
     Config(int argc, char* argv[])
         : blockSize_(512)
         , isVerbose_(false)
-        , isHelp_(false)
-        , args_() {
-        parse(argc, argv);
+        , file1_()
+        , file2_() {
+        cybozu::Option opt;
+        opt.appendOpt(&blockSize_, 512, "b", "SIZE: block size in bytes (default: 512)");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParam(&file1_, "FILE1");
+        opt.appendParam(&file2_, "FILE2");
+        opt.setDescription("bdiff: Show block diff.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
+        check();
     }
 
-    const std::string& filePath1() const { return args_[0]; }
-    const std::string& filePath2() const { return args_[1]; }
+    const std::string& filePath1() const { return file1_; }
+    const std::string& filePath2() const { return file2_; }
     unsigned int blockSize() const { return blockSize_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
-        if (args_.size() < 2) {
-            throw RT_ERR("Specify two files.");
-        }
         if (blockSize_ == 0) {
             throw RT_ERR("Block size must be positive integer.");
         }
     }
 
 private:
-    /* Option ids. */
-    enum Opt {
-        BLK_SIZE = 1,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"blockSize", 1, 0, Opt::BLK_SIZE},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BLK_SIZE:
-            case 'b':
-                blockSize_ = ::atoll(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
+        cybozu::Option opt;
+        opt.appendOpt(&blockSize_, 512, "b", "blockSize");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose");
+        opt.appendHelp("h");
+        opt.appendParam(&file1_, "FILE1");
+        opt.appendParam(&file2_, "FILE2");
+        opt.parse(argc, argv, true);
     }
-
     static std::string generateHelpString() {
         return cybozu::util::formatString(
             "bdiff: Show block diff.\n"
             "Usage: bdiff [options] FILE1 FILE2\n"
             "Options:\n"
-            "  -b, --blockSize SIZE:  block size in bytes (default: 512)\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n");
+            "  -b, --blockSize \n"
+            "  -v, --verbose:         \n"
+            "  -h, --help:            \n");
     }
 };
 
@@ -152,20 +122,16 @@ uint64_t checkBlockDiff(Config& config)
 }
 
 int main(int argc, char* argv[])
+    try
 {
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
-        return checkBlockDiff(config) != 0;
+    Config config(argc, argv);
 
-    } catch (std::exception& e) {
-        ::fprintf(::stderr, "Exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "Caught other error.\n");
-    }
+    return checkBlockDiff(config) != 0;
+} catch (std::exception& e) {
+    ::fprintf(::stderr, "Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    ::fprintf(::stderr, "Caught other error.\n");
     return 1;
 }
+

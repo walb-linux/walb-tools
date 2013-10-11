@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -42,15 +42,13 @@ private:
     bool isHelp_;
     std::string wlogPath_; /* walb log path or "-" for stdin. */
     std::string recipePath_; /* recipe path or "-" for stdin. */
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
         : isVerbose_(false)
         , isHelp_(false)
         , wlogPath_("-")
-        , recipePath_("-")
-        , args_() {
+        , recipePath_("-") {
         parse(argc, argv);
     }
 
@@ -67,10 +65,6 @@ public:
                   "wlog: %s\n",
                    isVerbose(), isHelp(),
                   recipePath_.c_str(), wlogPath().c_str());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::fprintf(fp, "arg%d: %s\n", i++, s.c_str());
-        }
     }
 
     static void printHelp() {
@@ -84,57 +78,13 @@ public:
     }
 
 private:
-    /* Option ids. */
-    enum Opt {
-        RECIPEPATH = 1,
-        WLOGPATH,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"recipe", 1, 0, Opt::RECIPEPATH},
-                {"wlog", 1, 0, Opt::WLOGPATH},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "r:w:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::RECIPEPATH:
-            case 'r':
-                recipePath_ = optarg;
-                break;
-            case Opt::WLOGPATH:
-            case 'w':
-                wlogPath_ = optarg;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
+        cybozu::Option opt;
+        opt.appendOpt(&recipePath_, "-", "r", "recipe file path");
+        opt.appendOpt(&wlogPath_, "-", "w", "wlog file path");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose");
+        opt.appendHelp("h");
+        opt.parse(argc, argv, true);
     }
 
     static std::string generateHelpString() {
