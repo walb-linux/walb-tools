@@ -25,6 +25,7 @@
 #include "walb_diff_compressor.hpp"
 #include "thread_util.hpp"
 #include "murmurhash3.hpp"
+#include "uuid.hpp"
 
 namespace walb {
 
@@ -359,9 +360,6 @@ class DirtyHashSyncProtocol : public Protocol
             if (sizeLb_ == 0) logAndThrow("sizeLb param is zero.");
             if (bulkLb_ == 0) logAndThrow("bulkLb param is zero.");
         }
-        enum class CtrlMsg : uint8_t {
-            Continue = 0, End = 1, Error = 2,
-        };
     };
     class Client : public Data
     {
@@ -429,7 +427,7 @@ class DirtyHashSyncProtocol : public Protocol
                 try {
                     for (uint64_t i = 0; i < num; i++) {
                         cybozu::murmurhash3::Hash h;
-                        packet.read(h.ptr(), h.size());
+                        packet.read(h.rawData(), h.rawSize());
                         hashQ.push(h);
                     }
                     hashQ.sync();
@@ -505,13 +503,13 @@ class DirtyHashSyncProtocol : public Protocol
             /* Send compressed pack. */
             auto sendPack = [this, &packet, &convQ, &isError]() {
                 try {
-                    uint8_t ctrl = static_cast<uint8_t>(CtrlMsg::Continue);
+                    packet::StreamControl ctrl(packet.sock());
                     size_t c = 0;
                     logger_.info("try to pop from convQ"); /* debug */
                     std::unique_ptr<char[]> up = convQ.pop();
                     logger_.info("popped from convQ"); /* debug */
                     while (up) {
-                        packet.write(ctrl);
+                        ctrl.next();
                         diff::MemoryPack mpack(up.get());
                         uint32_t packSize = mpack.size();
                         packet.write(packSize);
@@ -519,8 +517,7 @@ class DirtyHashSyncProtocol : public Protocol
                         logger_.info("send pack %zu", c++);
                         up = convQ.pop();
                     }
-                    ctrl = static_cast<uint8_t>(isError ? CtrlMsg::Error : CtrlMsg::End);
-                    packet.write(ctrl);
+                    if (isError) ctrl.error(); else ctrl.end();
                     logger_.info("sendPack: end (%d)", isError.load());
                 } catch (std::exception &e) {
                     logger_.error("sendPack failed: %s", e.what());
@@ -625,7 +622,7 @@ class DirtyHashSyncProtocol : public Protocol
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 virtLv.read(&buf0[0], size);
                 cybozu::murmurhash3::Hash h0 = hasher(&buf0[0], size);
-                packet.write(h0.ptr(), h0.size());
+                packet.write(h0.rawData(), h0.rawSize());
                 offLb += lb;
                 remainingLb -= lb;
             };
@@ -667,17 +664,10 @@ class DirtyHashSyncProtocol : public Protocol
 
             auto bulkReceiver = [this, &packet, &writer, &fdw, &isError]() {
                 try {
-                    auto readCtrl = [&](CtrlMsg &ctrl) {
-                        uint8_t v;
-                        packet.read(v);
-                        ctrl = static_cast<CtrlMsg>(v);
-                    };
-
-                    CtrlMsg ctrl;
                     std::vector<char> buf;
-                    readCtrl(ctrl);
+                    packet::StreamControl ctrl(sock_);
                     size_t c = 0;
-                    while (ctrl == CtrlMsg::Continue) {
+                    while (ctrl.isNext()) {
                         uint32_t packSize;
                         packet.read(packSize);
                         buf.resize(packSize);
@@ -691,9 +681,9 @@ class DirtyHashSyncProtocol : public Protocol
                             throw std::runtime_error("received pack invalid.");
                         }
                         fdw.write(mpack.rawPtr(), packSize);
-                        readCtrl(ctrl);
+                        ctrl.reset();
                     }
-                    if (ctrl == CtrlMsg::Error) {
+                    if (ctrl.isError()) {
                         logger_.error("CtrlMsg error");
                         isError = true;
                     } else {
