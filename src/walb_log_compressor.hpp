@@ -40,7 +40,7 @@ public:
         data_ = std::move(data);
         check();
     }
-    void copyFrom(uint32_t cmprSize, uint32_t origSize, const char *data) {
+    void copyFrom(uint32_t cmprSize, uint32_t origSize, const void *data) {
         setSizes(cmprSize, origSize);
         data_.resize(dataSize());
         ::memcpy(&data_[0], data, data_.size());
@@ -48,7 +48,7 @@ public:
     }
     std::vector<char> moveTo() { return std::move(data_); }
     std::vector<char> copyTo() const { return data_; }
-    void copyTo(char *data, size_t size) const {
+    void copyTo(void *data, size_t size) const {
         if (data_.size() != size) {
             throw RT_ERR("size differs %zu %zu.", data_.size(), size);
         }
