@@ -23,53 +23,9 @@
 #include "fileio_serializer.hpp"
 #include "meta.hpp"
 #include "wdiff_data.hpp"
+#include "server_info.hpp"
 
 namespace walb {
-
-/**
- * Server identifier for connection.
- */
-class Server
-{
-private:
-    std::string name_; /* must be unique in the system. */
-    std::string addr_; /* what cybozu::SocketAddr can treat. */
-    uint16_t port_;
-public:
-    Server() : name_(), addr_(), port_(0) {}
-    Server(const std::string &name, const std::string &addr, uint16_t port)
-        : name_(name), addr_(addr), port_(port) {
-    }
-    const std::string &name() const { return name_; }
-    const std::string &addr() const { return addr_; }
-    uint16_t port() const { return port_; }
-    bool operator==(const Server &rhs) const {
-        return name_ == rhs.name_
-            && addr_ == rhs.addr_
-            && port_ == rhs.port_;
-    }
-    bool operator!=(const Server &rhs) const {
-        return name_ != rhs.name_
-            || addr_ != rhs.addr_
-            || port_ != rhs.port_;
-    }
-    template <typename OutputStream>
-    void save(OutputStream &os) const {
-        cybozu::save(os, name_);
-        cybozu::save(os, addr_);
-        cybozu::save(os, port_);
-    }
-    template <typename InputStream>
-    void load(InputStream &is) {
-        cybozu::load(name_, is);
-        cybozu::load(addr_, is);
-        cybozu::load(port_, is);
-    }
-    friend inline std::ostream &operator<<(std::ostream &os, const Server &server) {
-        os << server.name_ << "(" << server.addr_ << ":" << server.port_ << ")";
-        return os;
-    }
-};
 
 /**
  * Data manager for a volume in a proxy.
@@ -92,7 +48,7 @@ private:
     cybozu::FilePath baseDir_; /* base directory. */
     std::string name_; /* volume identifier. */
     std::shared_ptr<WalbDiffFiles> wdiffsP_; /* primary wdiff data. */
-    std::map<std::string, Server> serverMap_;
+    std::map<std::string, ServerInfo> serverMap_;
     std::map<std::string, WalbDiffFiles> wdiffsMap_; /* server wdiff data. */
     std::mutex mutex_;
 
@@ -167,10 +123,10 @@ public:
         return serverMap_.find(name) != serverMap_.end()
             && wdiffsMap_.find(name) != wdiffsMap_.end();
     }
-    const Server &getServer(const std::string &name) const {
+    const ServerInfo &getServer(const std::string &name) const {
         return serverMap_.at(name);
     }
-    void addServer(const Server &server) {
+    void addServer(const ServerInfo &server) {
         const std::string &name = server.name();
         assert(!existsServer(name));
         emplace(name, server);
@@ -186,6 +142,13 @@ public:
         if (!dp.rmdirRecursive()) {
             throw std::runtime_error("failed to remove directory: " + dp.str());
         }
+    }
+    std::vector<std::string> getServerNameList() const {
+        std::vector<std::string> ret;
+        for (const auto &p : serverMap_) {
+            ret.push_back(p.first);
+        }
+        return ret;
     }
 private:
     static std::string removeSuffix(const std::string &str, const std::string &suffix) {
@@ -225,7 +188,7 @@ private:
     }
     void saveServerRecord(const std::string &name) const {
         assert(existsServer(name));
-        const Server &server = getServer(name);
+        const ServerInfo &server = getServer(name);
         cybozu::FilePath fp = serverRecordPath(name);
         cybozu::TmpFile tmpFile(fp.parent().str());
         cybozu::save(tmpFile, server);
@@ -245,7 +208,7 @@ private:
             ::printf("hoge: [%s]\n", info.name.c_str()); /* debug */
             cybozu::FilePath fp = getDir() + cybozu::FilePath(info.name);
             cybozu::util::FileReader reader(fp.str(), O_RDONLY);
-            Server server;
+            ServerInfo server;
             cybozu::load(server, reader);
             if (removeSuffix(info.name, ".server") != server.name()) {
                 throw std::runtime_error("server name invalid.");
@@ -253,7 +216,7 @@ private:
             emplace(server.name(), server);
         }
     }
-    void emplace(const std::string &name, const Server &server) {
+    void emplace(const std::string &name, const ServerInfo &server) {
         cybozu::FilePath dp = getServerDir(name);
         auto res0 = serverMap_.emplace(name, server);
         auto res1 = wdiffsMap_.emplace(

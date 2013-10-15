@@ -8,9 +8,9 @@ CYBOZU_TEST_AUTO(server)
     std::string testDirStr("proxy_data0");
     TestDirectory testDir(testDirStr, true);
 
-    walb::Server server1("server1", "192.168.1.1", 5678);
-    walb::Server server2("server2", "192.168.1.2", 5678);
-    walb::Server server3("server3", "192.168.1.3", 5678);
+    walb::ServerInfo server1("server1", "192.168.1.1", 5678);
+    walb::ServerInfo server2("server2", "192.168.1.2", 5678);
+    walb::ServerInfo server3("server3", "192.168.1.3", 5678);
 
     {
         walb::ProxyData proxyData(testDirStr, "0");
@@ -39,8 +39,8 @@ CYBOZU_TEST_AUTO(wdiff)
     TestDirectory testDir(testDirStr, true);
 
     walb::ProxyData proxyData(testDirStr, "0");
-    walb::Server server1("server1", "192.168.1.1", 5678);
-    walb::Server server2("server2", "192.168.1.2", 5678);
+    walb::ServerInfo server1("server1", "192.168.1.1", 5678);
+    walb::ServerInfo server2("server2", "192.168.1.2", 5678);
     proxyData.addServer(server1);
     proxyData.addServer(server2);
 
