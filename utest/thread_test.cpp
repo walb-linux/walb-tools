@@ -172,3 +172,29 @@ CYBOZU_TEST_AUTO(BoundedQueueMove)
     CYBOZU_TEST_ASSERT(!ep1);
     CYBOZU_TEST_EQUAL(total, 100);
 }
+
+CYBOZU_TEST_AUTO(BoundedQueueResize)
+{
+    cybozu::thread::BoundedQueue<size_t> q;
+    size_t n = 100000;
+    size_t total = 0;
+
+    std::thread th0([&q, &total] {
+            try {
+                while (!q.isEnd()) {
+                    total += q.pop();
+                }
+            } catch (...) {
+                q.error();
+            }
+        });
+
+    for (size_t i = 0; i < n; i++) {
+        if (i % 100 == 0) q.resize(i % 10 + 10);
+        q.push(1);
+    }
+    q.sync();
+    th0.join();
+
+    CYBOZU_TEST_EQUAL(total, n);
+}

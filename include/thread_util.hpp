@@ -139,6 +139,7 @@ private:
     std::shared_ptr<std::thread> threadP_;
 
 public:
+    ThreadRunner() : ThreadRunner(nullptr) {}
     explicit ThreadRunner(const std::shared_ptr<Runnable>& runnableP)
         : runnableP_(runnableP)
         , threadP_() {}
@@ -157,6 +158,14 @@ public:
         threadP_ = std::move(rhs.threadP_);
         return *this;
     }
+    /**
+     * You must join() before calling this
+     * when you try to reuse the instance.
+     */
+    void set(const std::shared_ptr<Runnable>& runnableP) {
+        if (threadP_) throw std::runtime_error("threadP must be null.");
+        runnableP_ = runnableP;
+    }
 
     /**
      * Start a thread.
@@ -167,7 +176,7 @@ public:
     }
 
     /**
-     * Wait for thread done.
+     * Wait for the thread done.
      * You will get an exception thrown in the thread running.
      */
     void join() {
@@ -175,6 +184,20 @@ public:
         threadP_->join();
         threadP_.reset();
         runnableP_->get();
+    }
+    /**
+     * Wait for the thread done.
+     * This is nothrow version.
+     * Instead, you will get an exception pointer.
+     */
+    std::exception_ptr joinNoThrow() noexcept {
+        std::exception_ptr ep;
+        try {
+            join();
+        } catch (...) {
+            ep = std::current_exception();
+        }
+        return ep;
     }
 
     /**
@@ -533,7 +556,7 @@ template <typename T, bool Movable = false>
 class BoundedQueue /* final */
 {
 private:
-    const size_t size_;
+    size_t size_;
     std::queue<T> queue_;
     mutable std::mutex mutex_;
     std::condition_variable condEmpty_;
@@ -551,12 +574,6 @@ public:
         const char *what() const noexcept override { return "ClosedError"; }
     };
 
-    class OtherError : public std::exception {
-    public:
-        OtherError() : std::exception() {}
-        const char *what() const noexcept override { return "OtherError"; }
-    };
-
     /**
      * @size queue size.
      */
@@ -567,12 +584,31 @@ public:
         , condEmpty_()
         , condFull_()
         , closed_(false)
-        , isError_(false) {}
+        , isError_(false) {
+        checkSize();
+    }
+    /**
+     * Default constructor.
+     */
+    BoundedQueue() : BoundedQueue(1) {}
 
     BoundedQueue(const BoundedQueue &rhs) = delete;
     BoundedQueue& operator=(const BoundedQueue &rhs) = delete;
     ~BoundedQueue() noexcept {}
 
+    /**
+     * Change bounded size.
+     */
+    void resize(size_t size) {
+        lock lk(mutex_);
+        size_ = size;
+        checkSize();
+    }
+    /**
+     * Push an item.
+     * This may block if the queue is full.
+     * The item will be moved if Movable is true, or copied.
+     */
     void push(TRef t) {
         lock lk(mutex_);
         checkError();
@@ -585,7 +621,12 @@ public:
         queue_.push(static_cast<TRef>(t));
         if (isEmpty0) { condEmpty_.notify_all(); }
     }
-
+    /**
+     * Pop an item.
+     * This may block if the queue is empty.
+     * RETURN:
+     *   popped value. (moved if Movable is true, or copied).
+     */
     T pop() {
         lock lk(mutex_);
         checkError();
@@ -653,13 +694,14 @@ private:
     bool isFull() const {
         return size_ <= queue_.size();
     }
-
     bool isEmpty() const {
         return queue_.empty();
     }
-
     void checkError() const {
-        if (isError_) { throw OtherError(); }
+        if (isError_) throw std::runtime_error("queue error.");
+    }
+    void checkSize() const {
+        if (size_ == 0) throw std::runtime_error("queue size must not be 0");
     }
 };
 
