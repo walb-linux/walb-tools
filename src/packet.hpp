@@ -136,12 +136,48 @@ public:
     }
 };
 
-class MaybeCancel : public Answer
+class StreamControl : public Packet
 {
+private:
+    bool received_;
+    enum class Msg : uint8_t {
+        Next = 0, End = 1, Error = 2,
+    };
+    Msg msg_;
+
 public:
-    void goAhead() { ok(); }
-    void cancel() { ng(0, ""); }
-    bool isCanceled() { return !recv(); }
+    explicit StreamControl(cybozu::Socket &sock)
+        : Packet(sock), received_(false), msg_(Msg::Next) {}
+    /**
+     * For sender.
+     */
+    void next() { write(toInt(Msg::Next)); }
+    void end() { write(toInt(Msg::End)); }
+    void error() { write(toInt(Msg::Error)); }
+
+    /**
+     * For receiver.
+     */
+    bool isNext() { return getAndEquals(Msg::Next); }
+    bool isEnd() { return getAndEquals(Msg::End); }
+    bool isError() { return getAndEquals(Msg::Error); }
+    void reset() { received_ = false; }
+private:
+    static Msg fromInt(uint8_t v) {
+        return static_cast<Msg>(v);
+    }
+    static uint8_t toInt(const Msg &msg) {
+        return static_cast<uint8_t>(msg);
+    }
+    bool getAndEquals(const Msg &msg) {
+        if (!received_) {
+            uint8_t v;
+            read(v);
+            msg_ = fromInt(v);
+            received_ = true;
+        }
+        return msg_ == msg;
+    }
 };
 
 }} //namespace walb::packet
