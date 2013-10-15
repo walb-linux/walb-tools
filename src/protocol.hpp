@@ -25,6 +25,8 @@
 #include "walb_diff_compressor.hpp"
 #include "thread_util.hpp"
 #include "murmurhash3.hpp"
+#include "walb_log_compressor.hpp"
+#include "walb_log_file.hpp"
 #include "uuid.hpp"
 
 namespace walb {
@@ -752,6 +754,282 @@ public:
 };
 #endif
 
+#if 0
+/**
+ * Wlog-send protocol.
+ *
+ * Client: walb-worker.
+ * Server: walb-proxy.
+ */
+class LogSendProtocol : public Protocol
+{
+private:
+    using Block = std::shared_ptr<uint8_t>;
+    using BoundedQ = cybozu::thread::BoundedQueue<log::CompressedData, true>;
+    const size_t Q_SIZE = 10;
+
+    class Data : public ProtocolData
+    {
+    protected:
+        std::string name_;
+        /* Server will check hash-sync occurrence with the uuid. */
+        cybozu::Uuid uuid_;
+        MetaDiff diff_;
+        uint32_t pbs_; /* physical block size */
+        uint32_t salt_; /* checksum salt. */
+        uint64_t sizePb_; /* Number of physical blocks (lsid range). */
+    public:
+        using ProtocolData::ProtocolData;
+        void checkParams() const {
+            if (name_.empty()) logAndThrow("name param empty.");
+            if (!diff_.isValid()) logAndThrow("Invalid meta diff.");
+            if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
+            if (sizePb_ == 0) logAndThrow("Invalid sizePb.");
+        }
+        std::string str() const {
+            return cybozu::util::formatString(
+                "name %s uuid %s diff (%s) pbs %" PRIu32 " salt %08x %" PRIu64 ""
+                , name_.c_str(), uuid_.str().c_str(), diff.str().c_str()
+                , pbs_, salt_, sizePb_);
+        }
+    };
+    /**
+     * Client must call
+     * (1) setParams().
+     * (2) prepare().
+     * (3) push() multiple times.
+     * (4) sync() or error().
+     */
+    class Client : public Data
+    {
+    private:
+        BoundedQ q0_; /* uncompressed data. */
+        BoundedQ q1_; /* compressed data. */
+        cybozu::thread::ThreadRunner compressor_;
+        cybozu::thread::ThreadRunner sender_;
+        std::atomic<bool> isError_;
+
+        class Sender : public cybozu::thread::Runnable
+        {
+        private:
+            BoundedQ &inQ_;
+            packet::Packet packet_;
+            Logger &logger_;
+            const std::atomic<bool> &isError_;
+        public:
+            Sender(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger,
+                   const std::atomic<bool> &isError)
+                : inQ_(inQ), packet_(sock), logger_(logger)
+                , isError_(isError) {}
+            void operator()() noexcept override try {
+                packet::StreamControl ctrl(packet_.sock());
+                while (!inQ_.isEnd()) {
+                    CompressedData cd = inQ_.pop();
+                    ctrl.next();
+                    cd.send(packet_);
+                }
+                if (isError) ctrl.error(); else ctrl.end();
+            } catch (...) {
+                throwErrorLater();
+                inQ_.error();
+            }
+        };
+    public:
+        Client(cybozu::Socket &sock, Logger &logger, const std::vector<std::string> &params)
+            : Data(sock, logger, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
+        void setParams(const std::string &name, const uint8_t *uuid, const MetaDiff &diff,
+                       uint32_t pbs, uint32_t salt, uint64_t sizePb_)
+            name_ = name;
+            uuid_.resize(UUID_SIZE);
+            ::memcpy(&uuid_[0], uuid, UUID_SIZE);
+            diff_ = diff;
+            pbs_ = pbs;
+            salt_ = salt;
+            checkParam();
+        }
+        /**
+         * Prepare worker threads.
+         */
+        void prepare() {
+            isError_ = false;
+            negotiate();
+            compressor_.set(std::make_shared<wlab::log::CompressWorker>(q0_, q1_));
+            sender_.set(std::make_shared<Sender>(q1_, sock_, logger_, isError_));
+            compressor_.start();
+            sender_.start();
+        }
+        /**
+         * Push a log pack.
+         * TODO: use better interface.
+         */
+        void push(const log::PackHeaderRef &header, std::queue<Block> &&blocks) {
+            assert(header.totalIoSize() == blocks.size());
+            /* Header */
+            log::CompressedData cd;
+            cd.copyFrom(0, header.pbs(), header.rawData());
+            q0_.push(std::move(cd));
+
+            /* IO data */
+            size_t total = 0;
+            for (size_t i = 0; i < header.nRecords(); i++) {
+                total += pushIo(header, i, blocks);
+            }
+            assert(total == header.totalIoSize());
+        }
+        /**
+         * Notify the input has reached the end and finalize the protocol.
+         *
+         */
+        void sync() {
+            q0_.push(generateEndHeaderBlock());
+            q0_.sync();
+            joinWorkers();
+            packet::Ack ack;
+            ack.recv();
+        }
+        /**
+         * Notify an error and finalize the protocol.
+         */
+        void error() {
+            isError_ = true;
+            q0_.error();
+            joinWorkers();
+        }
+    private:
+        /**
+         * RETURN:
+         *   Number of consumed physical blocks.
+         */
+        size_t pushIo(const log::PackHeaderRef &header, size_t idx,
+                    std::queue<Block> &blocks) {
+
+            log::RecordRefConst rec(header, idx);
+            if (!rec.hasData()) return 0;
+
+            size_t s = header.pbs() * rec.ioSizePb();
+            std::vector<char> v;
+            v.resize(s);
+            size_t n = rec.ioSizePb();
+            size_t off = 0;
+            while (0 < n && !blocks.empty()) {
+                Block b = std::move(blocks.front());
+                blocks.pop();
+                ::memcpy(&v[off], b.get(), header.pbs());
+                off += header.pbs();
+                n--;
+            }
+            assert(n == 0);
+            assert(off == s);
+            CompressedData cd;
+            cd.moveFrom(0, s, std::move(v));
+            q0_.push(std::move(cd));
+            return rec.ioSizePb();
+        }
+        CompressedData generateEndHeaderBlock() const {
+            Block b = cybozu::util::allocateBlocks(pbs_, pbs_);
+            log::PackHeaderRaw header(b, pbs_, salt_);
+            header.setEnd();
+            header.updateChecksum();
+            CompressedData cd;
+            cd.copyFrom(0, pbs_, b.get());
+            return cd;
+        }
+        void joinWorkers() {
+            std::exception_ptr ep0, ep1;
+            ep0 = compressor_.joinNoThrow();
+            ep1 = sender_.joinNoThrow();
+            if (ep0) std::rethrow_exception(ep0);
+            if (ep1) std::rethrow_exception(ep1);
+        }
+        void negotiate() {
+            packet::Packet packet(sock_);
+            packet.write(name_);
+            packet.write(uuid_);
+            packet.write(diff_);
+            packet.write(pbs_);
+            packet.write(salt_);
+            packet.write(sizePb_);
+            packet::Answer ans(sock_);
+            int err; std::string msg;
+            if (!ans.recv(&err, &msg)) {
+                logAndThrow("negotiation failed: %d %s", err, msg.c_str());
+            }
+        }
+    };
+    class Server : public Data
+    {
+    private:
+        cybozu::FilePath baseDir_;
+    public:
+        using Data::Data;
+        void run() {
+            loadParams();
+            negotiate();
+            logger_.info("wlog-send %s %" PRIu64 " %u %u (%" PRIu64 " %" PRIu64")"
+                         , name_.c_str(), sizeLb_, bulkLb_, seed_, snap_.gid0(), snap_.gid1());
+            recvAndWriteDiffData();
+        }
+    private:
+        void loadParams() {
+            if (params_.size() != 1) logAndThrow("One parameter required.");
+            baseDir_ = cybozu::FilePath(params_[0]);
+            if (!baseDir_.stat().isDirectory()) {
+                logAndThrow("Base directory %s does not exist.", baseDir_.cStr());
+            }
+        }
+        void negotiate() {
+            packet::Packet packet(sock_);
+            packet.read(name_);
+            packet.read(uuid_);
+            packet.read(diff_);
+            packet.read(pbs_);
+            packet.read(salt_);
+            packet.read(sizePb_);
+
+            packet::Answer ans(sock_);
+            walb::ProxyData pd(baseDir_.str(), name_);
+            if (pd.getServerNameList().empty()) {
+                std::string msg("There is no server registered.");
+                ans.ng(1, msg);
+                logAndThrow(msg.c_str());
+            }
+            ans.ok();
+        }
+        void recvAndWriteDiffData() {
+            packet::Packet packet(sock_);
+
+            /* now editing */
+        }
+    };
+
+public:
+    using Protocol :: Protocol;
+
+    /**
+     * @params using cybozu::loadFromStr() to convert.
+     */
+    void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::vector<std::string> &params) override {
+        Client client(sock, logger, params);
+#if 0
+        client.run();
+#endif
+        /* now editing */
+    }
+    /**
+     *
+     * @params using cybozu::loadFromStr() to convert;
+     *   [0] :: string:
+     */
+    void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::vector<std::string> &params) override {
+        Server server(sock, logger, params);
+        server.run();
+    }
+    /* now editing */
+};
+#endif
+
 /**
  * Protocol factory.
  */
@@ -780,6 +1058,8 @@ private:
         DECLARE_PROTOCOL(echo, EchoProtocol);
         DECLARE_PROTOCOL(dirty-full-sync, DirtyFullSyncProtocol);
         DECLARE_PROTOCOL(dirty-hash-sync, DirtyHashSyncProtocol);
+        //DECLARE_PROTOCOL(wlog-send, LogSendProtocol);
+        //DECLARE_PROTOCOL(wdiff-send, DiffSendProtocol);
         /* now editing */
     }
 #undef DECLARE_PROTOCOL
