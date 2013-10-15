@@ -18,6 +18,9 @@ namespace walb {
 namespace log {
 
 /**
+ * Compressed and uncompressed data.
+ * This uses snappy only.
+ *
  * Checksum is not required here
  * because wlog itself can validate itself.
  */
@@ -134,8 +137,8 @@ class CompressWorker : public cybozu::thread::Runnable
 {
 private:
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
-    BoundedQ &inQ_;
-    BoundedQ &outQ_;
+    BoundedQ &inQ_; /* Uncompressed data. */
+    BoundedQ &outQ_; /* Compressed data (may include uncompressed data). */
 public:
     CompressWorker(BoundedQ &inQ, BoundedQ &outQ)
         : inQ_(inQ), outQ_(outQ) {}
@@ -167,8 +170,8 @@ class UncompressWorker : public cybozu::thread::Runnable
 {
 private:
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
-    BoundedQ &inQ_;
-    BoundedQ &outQ_;
+    BoundedQ &inQ_; /* Compressed data (may include uncompressed data). */
+    BoundedQ &outQ_; /* Uncompressed data. */
 public:
     UncompressWorker(BoundedQ &inQ, BoundedQ &outQ)
         : inQ_(inQ), outQ_(outQ) {}
