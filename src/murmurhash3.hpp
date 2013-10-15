@@ -10,60 +10,18 @@
 #include "cybozu/serializer.hpp"
 #include "cybozu/itoa.hpp"
 #include "util.hpp"
+#include "util.hpp"
 #include <cstdio>
 #include <cassert>
 #include <string>
 #include <cstring>
+#include "hex_byte_array.hpp"
 
 namespace cybozu {
 namespace murmurhash3 {
 
 const size_t HASH_SIZE = 16; /* 128 bits */
-
-/**
- * 128bits hash data.
- *   str() for pretty printer.
- *   load(), save() for serializer.
- */
-class Hash
-{
-private:
-    uint8_t data_[HASH_SIZE];
-public:
-    bool operator==(const Hash &rhs) const {
-        return ::memcmp(&data_[0], &rhs.data_[0], HASH_SIZE) == 0;
-    }
-    bool operator!=(const Hash &rhs) const {
-        return ::memcmp(&data_[0], &rhs.data_[0], HASH_SIZE) != 0;
-    }
-    void *ptr() { return &data_[0]; }
-    const void *ptr() const { return &data_[0]; }
-    /**
-     * hex string.
-     */
-    std::string str() const {
-        std::string s;
-        s.resize(HASH_SIZE * 2);
-        for (size_t i = 0; i < HASH_SIZE; i++) {
-            cybozu::itohex(&s[i * 2], 2, data_[i], false);
-        }
-        return s;
-    }
-    size_t size() const { return HASH_SIZE; }
-
-    template <class InputStream>
-    void load(InputStream &is) {
-        cybozu::loadRange(&data_[0], HASH_SIZE, is);
-    }
-    template <class OutputStream>
-    void save(OutputStream& os) const {
-        cybozu::saveRange(os, &data_[0], HASH_SIZE);
-    }
-    friend inline std::ostream &operator<<(std::ostream &os, const Hash &hash) {
-        os << hash.str();
-        return os;
-    }
-};
+class Hash : public HexByteArrayT<HASH_SIZE, Hash> {};
 
 /**
  * Hash calclator.
@@ -78,7 +36,7 @@ public:
 
     Hash operator()(const void *key, size_t len) const {
         Hash h;
-        ::MurmurHash3_x64_128(key, len, seed_, h.ptr());
+        ::MurmurHash3_x64_128(key, len, seed_, h.rawData());
         return h;
     }
 };
