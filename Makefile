@@ -1,4 +1,4 @@
-.PHONY: all test test_all echo_binaries build clean rebuild install depend
+.PHONY: all test test_all echo_binaries build clean rebuild install
 
 CXX = g++-4.8.1
 CC = gcc-4.8.1
@@ -35,13 +35,13 @@ HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
 BIN_SOURCES = $(wildcard binsrc/*.cpp)
 OTHER_SOURCES = $(wildcard src/*.cpp)
 TEST_SOURCES = $(wildcard utest/*.cpp)
-SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES)
-OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
+SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES) $(TEST_SOURCES)
+DEPENDS = $(patsubst %.cpp,%.depend,$(SOURCES))
 BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 
 all: build
-build: Makefile.depends $(BINARIES)
+build: $(BINARIES)
 
 test: $(TEST_BINARIES)
 test_all: $(TEST_BINARIES)
@@ -85,11 +85,13 @@ rebuild:
 install:
 	@echo not yet implemented
 
-depend: Makefile.depends
+binsrc/%.depend: binsrc/%.cpp
+	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > $@
+src/%.depend: src/%.cpp
+	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > $@
+utest/%.depend: utest/%.cpp
+	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
-Makefile.depends: $(BIN_SOURCES) $(OTHER_SOURCES) $(TEST_SOURCES)
-	$(CXX) -MM $(BIN_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > Makefile.depends
-	$(CXX) -MM $(OTHER_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' >> Makefile.depends
-	$(CXX) -MM $(TEST_SOURCES) $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' >> Makefile.depends
-
--include Makefile.depends
+ifneq "$(MAKECMDGOALS)" "clean"
+-include $(DEPENDS)
+endif

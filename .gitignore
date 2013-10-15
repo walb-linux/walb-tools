@@ -9,4 +9,4 @@ GSYMS
 GTAGS
 *.wdiff
 *wlog
-
+*.depend
