@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -36,7 +36,6 @@ private:
     uint64_t beginLsid_;
     uint64_t endLsid_;
     bool isVerbose_;
-    bool isHelp_;
     std::vector<std::string> args_;
 
 public:
@@ -46,7 +45,6 @@ public:
         , beginLsid_(0)
         , endLsid_(-1)
         , isVerbose_(false)
-        , isHelp_(false)
         , args_() {
         parse(argc, argv);
     }
@@ -57,108 +55,27 @@ public:
     const std::string& outPath() const { return outPath_; }
     bool isOutStdout() const { return outPath_ == "-"; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print() const {
-        ::printf("ldevPath: %s\n"
-                 "outPath: %s\n"
-                 "beginLsid: %" PRIu64 "\n"
-                 "endLsid: %" PRIu64 "\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 ldevPath().c_str(), outPath().c_str(),
-                 beginLsid(), endLsid(),
-                 isVerbose(), isHelp());
-        int i = 0;
-        for (const auto &s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
         if (beginLsid() >= endLsid()) {
             throw RT_ERR("beginLsid must be < endLsid.");
         }
-        if (ldevPath_.empty()) {
-            throw RT_ERR("Specify log device path.");
-        }
-        if (outPath_.empty()) {
-            throw RT_ERR("Specify output wlog path.");
-        }
     }
 
 private:
-    /* Option ids. */
-    enum Opt {
-        OUT_PATH = 1,
-        BEGIN_LSID,
-        END_LSID,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"outPath", 1, 0, Opt::OUT_PATH},
-                {"beginLsid", 1, 0, Opt::BEGIN_LSID},
-                {"endLsid", 1, 0, Opt::END_LSID},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "o:b:e:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::OUT_PATH:
-            case 'o':
-                outPath_ = std::string(optarg);
-                break;
-            case Opt::BEGIN_LSID:
-            case 'b':
-                beginLsid_ = ::atoll(optarg);
-                break;
-            case Opt::END_LSID:
-            case 'e':
-                endLsid_ = ::atoll(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-        if (!args_.empty()) {
-            ldevPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlcat: extract wlog from a log device.\n"
-            "Usage: wlcat [options] LOG_DEVICE_PATH\n"
-            "Options:\n"
-            "  -o, --outPath PATH:   output wlog path. '-' for stdout. (default: '-')\n"
-            "  -b, --beginLsid LSID: begin lsid to restore. (default: 0)\n"
-            "  -e, --endLsid LSID:   end lsid to restore. (default: -1)\n"
-            "  -v, --verbose:        verbose messages to stderr.\n"
-            "  -h, --help:           show this message.\n");
+		cybozu::Option opt;
+		opt.setDescription("Wlcat: extract wlog from a log device.");
+		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        opt.appendOpt(&outPath_, "-", "o", "PATH: output wlog path. '-' for stdout. (default: '-')");
+		opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
+		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+		opt.appendHelp("h", "show this message.");
+		opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
+		if (!opt.parse(argc, argv)) {
+			opt.usage();
+			exit(1);
+		}
     }
 };
 
@@ -337,34 +254,27 @@ private:
 };
 
 int main(int argc, char* argv[])
-{
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+try {
+    Config config(argc, argv);
+    config.check();
 
-        WlogExtractor extractor(
-            config.ldevPath(), config.beginLsid(), config.endLsid(),
-            config.isVerbose());
-        FileOrFd fof;
-        if (config.isOutStdout()) {
-            fof.setFd(1);
-        } else {
-            fof.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        }
-        extractor(fof.fd());
-        fof.close();
-
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
+    WlogExtractor extractor(
+        config.ldevPath(), config.beginLsid(), config.endLsid(),
+        config.isVerbose());
+    FileOrFd fof;
+    if (config.isOutStdout()) {
+        fof.setFd(1);
+    } else {
+        fof.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
-    return 1;
+    extractor(fof.fd());
+    fof.close();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+	return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
+	return 1;
 }
 
 /* end of file. */

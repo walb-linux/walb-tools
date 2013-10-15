@@ -63,16 +63,16 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlanalyze: analyze wlog.");
-		opt.appendOpt(&blockSize_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size in bytes. (default: %u)", LOGICAL_BLOCK_SIZE).c_str());
-		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-		opt.appendHelp("h", "show this message.");
-		opt.appendParamVec(&args_, "WLOG_PATH [WLOG_PATH...]");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("Wlanalyze: analyze wlog.");
+        opt.appendOpt(&blockSize_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size in bytes. (default: %u)", LOGICAL_BLOCK_SIZE).c_str());
+        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParamVec(&args_, "WLOG_PATH [WLOG_PATH...]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
         if (args_.empty() || args_[0] == "-") {
             isFromStdin_ = true;
         }
@@ -232,10 +232,10 @@ try {
     wlAnalyzer.analyze();
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
-	return 1;
+    return 1;
 } catch (...) {
     LOGe("Caught other error.\n");
-	return 1;
+    return 1;
 }
 
 /* end of file. */
