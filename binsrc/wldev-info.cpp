@@ -43,15 +43,15 @@ public:
     bool isVerbose() const { return isVerbose_; }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlinfo: show superblock information of a log device.");
-		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-		opt.appendHelp("h", "show this message.");
-		opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("Wlinfo: show superblock information of a log device.");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -87,10 +87,10 @@ try {
     wlInfo.show();
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
-	return 1;
+    return 1;
 } catch (...) {
     LOGe("Caught other error.\n");
-	return 1;
+    return 1;
 }
 
 /* end of file. */
