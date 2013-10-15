@@ -158,10 +158,12 @@ public:
         return os;
     }
     void print(FILE *fp = ::stdout) const {
-        ::fprintf(
-            fp,
+        ::fprintf(fp, "%s\n", str().c_str());
+    }
+    std::string str() const {
+        return cybozu::util::formatString(
             "MetaSnap ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " "
-            "lsid %" PRIu64 " can_merge %d\n"
+            "lsid %" PRIu64 " can_merge %d"
             , timestamp(), gid0(), gid1(), lsid(), canMerge());
     }
 
@@ -268,10 +270,12 @@ public:
         return os;
     }
     void print(FILE *fp = ::stdout) const {
-        ::fprintf(
-            fp,
+        ::fprintf(fp, "%s\n", str().c_str());
+    }
+    std::string str() const {
+        return cybozu::util::formatString(
             "MetaDiff ts %" PRIu64 " gid %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " "
-            "can_merge %d\n"
+            "can_merge %d"
             , timestamp()
             , snap0().gid0(), snap0().gid1()
             , snap1().gid0(), snap1().gid1()
