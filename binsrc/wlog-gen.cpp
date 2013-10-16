@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -45,13 +45,11 @@ private:
     unsigned int maxPackSize_; /* [byte]. */
     uint64_t outLogSize_; /* Approximately output log size [byte]. */
     uint64_t lsid_; /* start lsid [physical block]. */
-    bool isPadding_;
-    bool isDiscard_;
-    bool isAllZero_;
+    bool isNotPadding_;
+    bool isNotDiscard_;
+    bool isNotAllZero_;
     bool isVerbose_;
-    bool isHelp_;
     std::string outPath_;
-    std::vector<std::string> args_;
 
     std::shared_ptr<cybozu::util::FileOpener> foP_;
 
@@ -64,13 +62,11 @@ public:
         , maxPackSize_(16 * 1024 * 1024) /* default 16MB. */
         , outLogSize_(1024 * 1024) /* default 1MB. */
         , lsid_(0)
-        , isPadding_(true)
-        , isDiscard_(true)
-        , isAllZero_(true)
+        , isNotPadding_(false)
+        , isNotDiscard_(false)
+        , isNotAllZero_(false)
         , isVerbose_(false)
-        , isHelp_(false)
         , outPath_()
-        , args_()
         , foP_() {
         parse(argc, argv);
     }
@@ -82,11 +78,10 @@ public:
     unsigned int maxPackPb() const { return maxPackSize_ / pbs(); }
     uint64_t outLogPb() const { return outLogSize_ / pbs(); }
     uint64_t lsid() const { return lsid_; }
-    bool isPadding() const { return isPadding_; }
-    bool isDiscard() const { return isDiscard_; }
-    bool isAllZero() const { return isAllZero_; }
+    bool isPadding() const { return !isNotPadding_; }
+    bool isDiscard() const { return !isNotDiscard_; }
+    bool isAllZero() const { return !isNotAllZero_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& outPath() const { return outPath_; }
 
     int getOutFd() {
@@ -113,182 +108,46 @@ public:
         return cfg;
     }
 
-    void print() const {
-        ::printf("devLb: %" PRIu64 "\n"
-                 "minIoLb: %u\n"
-                 "maxIoLb: %u\n"
-                 "pbs: %u\n"
-                 "maxPackPb: %u\n"
-                 "outLogPb: %" PRIu64 "\n"
-                 "lsid: %" PRIu64 "\n"
-                 "outPath: %s\n"
-                 "isPadding: %d\n"
-                 "isDiscard: %d\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 devLb(), minIoLb(), maxIoLb(),
-                 pbs(), maxPackPb(), outLogPb(),
-                 lsid(), outPath().c_str(),
-                 isPadding(), isDiscard(), isVerbose(), isHelp());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
-
     void check() const {
         genConfig().check();
-        if (outPath().size() == 0) {
-            throw RT_ERR("specify outPath.");
-        }
     }
 
 private:
-    /* Option ids. */
-    enum Opt {
-        DEVSIZE = 1,
-        MINIOSIZE,
-        MAXIOSIZE,
-        PBS,
-        MAXPACKSIZE,
-        OUTLOGSIZE,
-        LSID,
-        NOPADDING,
-        NODISCARD,
-        NOALLZERO,
-        OUTPATH,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"devSize", 1, 0, Opt::DEVSIZE},
-                {"minIoSize", 1, 0, Opt::MINIOSIZE},
-                {"maxIoSize", 1, 0, Opt::MAXIOSIZE},
-                {"pbs", 1, 0, Opt::PBS},
-                {"maxPackSize", 1, 0, Opt::MAXPACKSIZE},
-                {"outLogSize", 1, 0, Opt::OUTLOGSIZE},
-                {"lsid", 1, 0, Opt::LSID},
-                {"nopadding", 0, 0, Opt::NOPADDING},
-                {"nodiscard", 0, 0, Opt::NODISCARD},
-                {"noallzero", 0, 0, Opt::NOALLZERO},
-                {"outPath", 1, 0, Opt::OUTPATH},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "s:b:o:z:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::DEVSIZE:
-            case 's':
-                devSize_ = cybozu::util::fromUnitIntString(optarg);
-                break;
-            case Opt::MINIOSIZE:
-                minIoSize_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::MAXIOSIZE:
-                maxIoSize_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::PBS:
-            case 'b':
-                pbs_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::MAXPACKSIZE:
-                maxPackSize_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::OUTLOGSIZE:
-            case 'z':
-                outLogSize_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::LSID:
-                lsid_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::NOPADDING:
-                isPadding_ = false;
-                break;
-            case Opt::NODISCARD:
-                isDiscard_ = false;
-                break;
-            case Opt::NOALLZERO:
-                isAllZero_ = false;
-                break;
-            case Opt::OUTPATH:
-            case 'o':
-                outPath_ = std::string(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
+        cybozu::Option opt;
+        opt.setDescription("Wlog-gen: generate walb log randomly.");
+        opt.appendOpt(&devSize_, 16 * 1024 * 1024, "s", "SIZE: device size [byte]. (default: 16M)");
+        opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "-minIoSize", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxIoSize_, 32 * 1024, "-maxIoSize", "SIZE: maximum IO size [byte]. (default: 32K)");
+        opt.appendOpt(&pbs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: physical block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxPackSize_, 16 * 1024 * 1024, "-maxPackSize", "SIZE: maximum logpack size [byte]. (default: 16M)");
+        opt.appendOpt(&outLogSize_, 1024 * 1024, "z", "SIZE: total log size to generate [byte]. (default: 1M)");
+        opt.appendOpt(&lsid_, 0, "-lsid", "LSID: lsid of the first log. (default: 0)");
+        opt.appendBoolOpt(&isNotPadding_, "-nopadding", "no padding. (default: randomly inserted)");
+        opt.appendBoolOpt(&isNotDiscard_, "-nodiscard", "no discard. (default: randomly inserted)");
+        opt.appendBoolOpt(&isNotAllZero_, "-noallzero", "no all-zero. (default: randomly inserted)");
+        opt.appendOpt(&outPath_, "-", "o", "PATH: output file path or '-' for stdout.");
+        opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
         }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlog-gen: generate walb log randomly.\n"
-            "Usage: wlog-gen [options]\n"
-            "Options:\n"
-            "  -o, --outPath PATH:    output file path or '-' for stdout.\n"
-            "  -b, --pbs SIZE:        physical block size [byte]. (default: %u)\n"
-            "  -s, --devSize SIZE:    device size [byte]. (default: 16M)\n"
-            "  -z, --outLogSize SIZE: total log size to generate [byte]. (default: 1M)\n"
-            "  --minIoSize SIZE:      minimum IO size [byte]. (default: pbs)\n"
-            "  --maxIoSize SIZE:      maximum IO size [byte]. (default: 32K)\n"
-            "  --maxPackSize SIZE:    maximum logpack size [byte]. (default: 16M)\n"
-            "  --lsid LSID:           lsid of the first log. (default: 0)\n"
-            "  --nopadding:           no padding. (default: randomly inserted)\n"
-            "  --nodiscard:           no discard. (default: randomly inserted)\n"
-            "  --noallzero:           no all-zero. (default: randomly inserted)\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n",
-            LOGICAL_BLOCK_SIZE);
     }
 };
 
 int main(int argc, char* argv[])
-{
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
-        walb::log::Generator::Config cfg = config.genConfig();
-        walb::log::Generator wlGen(cfg);
-        wlGen.generate(config.getOutFd());
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+try {
+    Config config(argc, argv);
+    config.check();
+    walb::log::Generator::Config cfg = config.genConfig();
+    walb::log::Generator wlGen(cfg);
+    wlGen.generate(config.getOutFd());
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

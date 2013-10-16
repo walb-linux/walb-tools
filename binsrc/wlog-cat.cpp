@@ -64,18 +64,18 @@ public:
 
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlcat: extract wlog from a log device.");
-		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        cybozu::Option opt;
+        opt.setDescription("Wlcat: extract wlog from a log device.");
+        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
         opt.appendOpt(&outPath_, "-", "o", "PATH: output wlog path. '-' for stdout. (default: '-')");
-		opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
-		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-		opt.appendHelp("h", "show this message.");
-		opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -271,10 +271,10 @@ try {
     fof.close();
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
-	return 1;
+    return 1;
 } catch (...) {
     LOGe("Caught other error.\n");
-	return 1;
+    return 1;
 }
 
 /* end of file. */
