@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -40,8 +40,6 @@ private:
     bool isDiscard_;
     bool isZeroDiscard_;
     bool isVerbose_;
-    bool isHelp_;
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
@@ -49,9 +47,7 @@ public:
         , inWlogPath_("-")
         , isDiscard_(false)
         , isZeroDiscard_(false)
-        , isVerbose_(false)
-        , isHelp_(false)
-        , args_() {
+        , isVerbose_(false) {
         parse(argc, argv);
     }
 
@@ -61,109 +57,26 @@ public:
     bool isDiscard() const { return isDiscard_; }
     bool isZeroDiscard() const { return isZeroDiscard_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print() const {
-        ::printf("ddevPath: %s\n"
-                 "inWlogPath: %s\n"
-                 "discard: %d\n"
-                 "zerodiscard: %d\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 ddevPath().c_str(), inWlogPath().c_str(),
-                 isDiscard(), isZeroDiscard(),
-                 isVerbose(), isHelp());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
-        if (ddevPath_.empty()) {
-            throw RT_ERR("Specify device path.");
-        }
-        if (inWlogPath_.empty()) {
-            throw RT_ERR("Specify input wlog path.");
-        }
         if (isDiscard() && isZeroDiscard()) {
             throw RT_ERR("Do not specify both -d and -z together.");
         }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        IN_WLOG_PATH = 1,
-        DISCARD,
-        ZERO_DISCARD,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"inWlogPath", 1, 0, Opt::IN_WLOG_PATH},
-                {"discard", 0, 0, Opt::DISCARD},
-                {"zerodiscard", 0, 0, Opt::ZERO_DISCARD},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "i:d:zvh",
-                                  long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::IN_WLOG_PATH:
-            case 'i':
-                inWlogPath_ = std::string(optarg);
-                break;
-            case Opt::DISCARD:
-            case 'd':
-                isDiscard_ = true;
-                break;
-            case Opt::ZERO_DISCARD:
-            case 'z':
-                isZeroDiscard_ = true;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-        if (!args_.empty()) {
-            ddevPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlredo: redo wlog on a block device.\n"
-            "Usage: wlcat [options] DEVICE_PATH\n"
-            "Options:\n"
-            "  -i, --inWlogPath PATH: input wlog path. '-' for stdin. (default: '-')\n"
-            "  -d, --discard:         issue discard for discard logs.\n"
-            "  -z, --zerodiscard:     zero-clear for discard logs.\n"
-            "                         -d and -z are exclusive.\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n");
+		cybozu::Option opt;
+		opt.setDescription("Wlredo: redo wlog on a block device.");
+		opt.appendOpt(&inWlogPath_, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
+		opt.appendBoolOpt(&isDiscard_, "d", "issue discard for discard logs.");
+		opt.appendBoolOpt(&isZeroDiscard_, "z", "zero-clear for discard logs.");
+		opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
+		opt.appendHelp("h", "show this message.");
+		opt.appendParam(&ddevPath_, "DEVICE_PATH");
+		if (!opt.parse(argc, argv)) {
+			opt.usage();
+			exit(1);
+		}
     }
 };
 
@@ -983,31 +896,25 @@ private:
 };
 
 int main(int argc, char* argv[])
+	try
 {
-    const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
+	const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
+    Config config(argc, argv);
+    config.check();
 
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
-
-        WalbLogApplyer wlApp(config, BUFFER_SIZE);
-        if (config.isFromStdin()) {
-            wlApp.readAndApply(0);
-        } else {
-            cybozu::util::FileOpener fo(config.inWlogPath(), O_RDONLY);
-            wlApp.readAndApply(fo.fd());
-            fo.close();
-        }
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
+    WalbLogApplyer wlApp(config, BUFFER_SIZE);
+    if (config.isFromStdin()) {
+        wlApp.readAndApply(0);
+    } else {
+        cybozu::util::FileOpener fo(config.inWlogPath(), O_RDONLY);
+        wlApp.readAndApply(fo.fd());
+        fo.close();
     }
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 
