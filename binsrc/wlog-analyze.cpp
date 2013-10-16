@@ -15,7 +15,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -35,7 +35,6 @@ private:
     bool isFromStdin_;
     unsigned int blockSize_;
     bool isVerbose_;
-    bool isHelp_;
     std::vector<std::string> args_;
 
 public:
@@ -43,7 +42,6 @@ public:
         : isFromStdin_(false)
         , blockSize_(LOGICAL_BLOCK_SIZE)
         , isVerbose_(false)
-        , isHelp_(false)
         , args_() {
         parse(argc, argv);
     }
@@ -53,25 +51,6 @@ public:
     bool isFromStdin() const { return isFromStdin_; }
     unsigned int blockSize() const { return blockSize_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print() const {
-        ::printf("numWlogs: %zu\n"
-                 "isFromStdin: %d\n"
-                 "blockSize: %u\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 numWlogs(), isFromStdin(), blockSize(),
-                 isVerbose(), isHelp());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
         if (numWlogs() == 0) {
@@ -83,62 +62,20 @@ public:
         }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        BLK_SIZE = 1,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"blockSize", 1, 0, Opt::BLK_SIZE},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BLK_SIZE:
-            case 'b':
-                blockSize_ = cybozu::util::fromUnitIntString(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
+        cybozu::Option opt;
+        opt.setDescription("Wlanalyze: analyze wlog.");
+        opt.appendOpt(&blockSize_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size in bytes. (default: %u)", LOGICAL_BLOCK_SIZE).c_str());
+        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParamVec(&args_, "WLOG_PATH [WLOG_PATH...]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
         }
         if (args_.empty() || args_[0] == "-") {
             isFromStdin_ = true;
         }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlanalyze: analyze wlog.\n"
-            "Usage: wlanalyze [options] WLOG_PATH [WLOG_PATH...]\n"
-            "  WLOG_PATH: walb log path. '-' for stdin. (default: '-')\n"
-            "             wlog files must be linkable each other in line.\n"
-            "Options:\n"
-            "  -b, --blockSize SIZE: block size in bytes. (default: %u)\n"
-            "  -v, --verbose:        verbose messages to stderr.\n"
-            "  -h, --help:           show this message.\n",
-            LOGICAL_BLOCK_SIZE);
     }
 };
 
@@ -287,23 +224,17 @@ private:
 };
 
 int main(int argc, char* argv[])
-{
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+try {
+    Config config(argc, argv);
+    config.check();
 
-        WalbLogAnalyzer wlAnalyzer(config);
-        wlAnalyzer.analyze();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    WalbLogAnalyzer wlAnalyzer(config);
+    wlAnalyzer.analyze();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 
