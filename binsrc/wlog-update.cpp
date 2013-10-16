@@ -15,7 +15,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -31,167 +31,63 @@
 class Config
 {
 private:
-    bool isBeginLsid_;
-    bool isEndLsid_;
-    bool isSalt_;
-    bool isUuid_;
     uint64_t beginLsid_;
     uint64_t endLsid_;
     uint32_t salt_;
     std::vector<u8> uuid_;
     bool isVerbose_;
-    bool isHelp_;
+	std::string inWlogPath_;
     std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
-        : isBeginLsid_(false)
-        , isEndLsid_(false)
-        , isSalt_(false)
-        , isUuid_(false)
-        , beginLsid_(0)
+        : beginLsid_(0)
         , endLsid_(-1)
         , salt_(0)
-        , uuid_(UUID_SIZE)
+        , uuid_()
         , isVerbose_(false)
-        , isHelp_(false)
         , args_() {
         parse(argc, argv);
     }
 
     const std::string& inWlogPath() const { return args_[0]; }
-    bool isBeginLsid() const { return isBeginLsid_; }
-    bool isEndLsid() const { return isEndLsid_; }
-    bool isSalt() const { return isSalt_; }
-    bool isUuid() const { return isUuid_; }
+    bool isUuid() const { return !uuid_.empty(); }
     uint64_t beginLsid() const { return beginLsid_; }
     uint64_t endLsid() const { return endLsid_; }
     uint32_t salt() const { return salt_; }
     const std::vector<u8>& uuid() const { return uuid_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print(::FILE *fp) const {
-        ::fprintf(fp,
-                  "beginLsid: %" PRIu64 "\n"
-                  "endLsid: %" PRIu64 "\n"
-                  "salt: %u\n"
-                  "uuid: ",
-                  beginLsid(), endLsid(), salt());
-
-        for (size_t i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", uuid()[i]);
-        }
-        ::fprintf(fp,
-                  "\n"
-                  "verbose: %d\n"
-                  "isHelp: %d\n",
-                  isVerbose(), isHelp());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    void print() const { print(::stdout); }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
-
-    void check() const {
-        if (args_.empty()) {
-            throw RT_ERR("Specify input wlog path.");
-        }
-    }
 
 private:
     void setUuid(const std::string &uuidStr) {
         if (uuidStr.size() != 32) {
             throw RT_ERR("Invalid UUID string.");
         }
+		uuid_.resize(UUID_SIZE);
         for (size_t i = 0; i < UUID_SIZE; i++) {
             /* ex. "ff" -> 255 */
             uuid_[i] = cybozu::hextoi(&uuidStr[i * 2], 2);
         }
     }
 
-    /* Option ids. */
-    enum Opt {
-        BEGIN_LSID = 1,
-        END_LSID,
-        SALT,
-        UUID,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"beginLsid", 1, 0, Opt::BEGIN_LSID},
-                {"endLsid", 1, 0, Opt::END_LSID},
-                {"uuid", 1, 0, Opt::UUID},
-                {"salt", 1, 0, Opt::SALT},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:e:u:s:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BEGIN_LSID:
-            case 'b':
-                isBeginLsid_ = true;
-                beginLsid_ = ::atoll(optarg);
-                break;
-            case Opt::END_LSID:
-            case 'e':
-                isEndLsid_ = true;
-                endLsid_ = ::atoll(optarg);
-                break;
-            case Opt::SALT:
-            case 's':
-                isSalt_ = true;
-                salt_ = ::atoll(optarg);
-                break;
-            case Opt::UUID:
-            case 'u':
-                isUuid_ = true;
-                setUuid(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlupdate: update wlog file header.\n"
-            "Usage: wlupdate [options] WLOG_PATH\n"
-            "  WLOG_PATH: walb log path. must be seekable.\n"
-            "Options:\n"
-            "  -b, --beginLsid LSID: begin lsid.\n"
-            "  -e, --endLsid LSID:   end lsid.\n"
-            "  -s, --salt SALT:      logpack salt.\n"
-            "  -u, --uuid UUID:      uuid in hex string.\n"
-            "  -v, --verbose:        verbose messages to stderr.\n"
-            "  -h, --help:           show this message.\n");
+		std::string uuidStr;
+		cybozu::Option opt;
+		opt.setDescription("Wlupdate: update wlog file header.");
+		opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid.");
+		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid.");
+		opt.appendOpt(&salt_, 0, "s", "SALT: logpack salt.");
+		opt.appendOpt(&uuidStr, "", "u", "UUID: uuid in hex string.");
+		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+		opt.appendHelp("h", ": show this message.");
+		opt.appendParam(&inWlogPath_, "WLOG_PATH", ": walb log path. must be seekable.");
+		if (!opt.parse(argc, argv)) {
+			opt.usage();
+			exit(1);
+		}
+		if (!uuidStr.empty()) {
+			setUuid(uuidStr);
+		}
     }
 };
 
@@ -221,21 +117,23 @@ public:
 
         /* Update */
         bool updated = false;
-        if (config_.isBeginLsid()) {
+		struct walblog_header& h = wh.header();
+
+		if (h.begin_lsid != config_.beginLsid()) {
             updated = true;
-            wh.header().begin_lsid = config_.beginLsid();
+            h.begin_lsid = config_.beginLsid();
+		}
+        if (h.end_lsid != config_.endLsid()) {
+            updated = true;
+            h.end_lsid = config_.endLsid();
         }
-        if (config_.isEndLsid()) {
+        if (h.log_checksum_salt != config_.salt()) {
             updated = true;
-            wh.header().end_lsid = config_.endLsid();
-        }
-        if (config_.isSalt()) {
-            updated = true;
-            wh.header().log_checksum_salt = config_.salt();
+            h.log_checksum_salt = config_.salt();
         }
         if (config_.isUuid()) {
             updated = true;
-            ::memcpy(wh.header().uuid, &config_.uuid()[0], UUID_SIZE);
+            ::memcpy(h.uuid, &config_.uuid()[0], UUID_SIZE);
         }
 
         /* Write header if necessary. */
@@ -255,23 +153,17 @@ public:
 };
 
 int main(int argc, char* argv[])
+	try
 {
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
 
-        WalbLogUpdater wlUpdater(config);
-        wlUpdater.update();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    WalbLogUpdater wlUpdater(config);
+    wlUpdater.update();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

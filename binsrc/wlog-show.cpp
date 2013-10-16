@@ -59,22 +59,22 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlog-show: pretty-print wlog input.");
-		opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
-		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-		opt.appendParamOpt(&inWlogPath_, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
-		opt.appendHelp("h", ": show this message.");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("Wlog-show: pretty-print wlog input.");
+        opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendParamOpt(&inWlogPath_, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
     config.check();
