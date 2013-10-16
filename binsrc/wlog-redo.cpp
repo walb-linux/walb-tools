@@ -65,18 +65,18 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlredo: redo wlog on a block device.");
-		opt.appendOpt(&inWlogPath_, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
-		opt.appendBoolOpt(&isDiscard_, "d", "issue discard for discard logs.");
-		opt.appendBoolOpt(&isZeroDiscard_, "z", "zero-clear for discard logs.");
-		opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
-		opt.appendHelp("h", "show this message.");
-		opt.appendParam(&ddevPath_, "DEVICE_PATH");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("Wlredo: redo wlog on a block device.");
+        opt.appendOpt(&inWlogPath_, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isDiscard_, "d", "issue discard for discard logs.");
+        opt.appendBoolOpt(&isZeroDiscard_, "z", "zero-clear for discard logs.");
+        opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
+        opt.appendHelp("h", "show this message.");
+        opt.appendParam(&ddevPath_, "DEVICE_PATH");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -896,9 +896,9 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
-	const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
+    const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
     Config config(argc, argv);
     config.check();
 
