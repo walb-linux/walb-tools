@@ -90,20 +90,20 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("write_random_data: generate random data and write them.");
-		opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-		opt.appendOpt(&offsetB_, 0, "o", "OFFSET: start offset [block]. (default: 0)");
-		opt.appendOpt(&sizeB_, 0, "s", "SIZE: written size [block]. (default: device size)");
-		opt.appendOpt(&minIoB_, 1, "n", "SIZE: minimum IO size [block]. (default: 1)");
-		opt.appendOpt(&maxIoB_, 64, "x", "SIZE: maximum IO size [block]. (default: 64)");
-		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-		opt.appendHelp("h", ": show this message.");
-		opt.appendParam(&targetPath_, "[DEVICE|FILE]");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("write_random_data: generate random data and write them.");
+        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&offsetB_, 0, "o", "OFFSET: start offset [block]. (default: 0)");
+        opt.appendOpt(&sizeB_, 0, "s", "SIZE: written size [block]. (default: device size)");
+        opt.appendOpt(&minIoB_, 1, "n", "SIZE: minimum IO size [block]. (default: 1)");
+        opt.appendOpt(&maxIoB_, 64, "x", "SIZE: maximum IO size [block]. (default: 64)");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&targetPath_, "[DEVICE|FILE]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -205,7 +205,7 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
     config.check();

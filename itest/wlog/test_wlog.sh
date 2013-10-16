@@ -77,7 +77,7 @@ nPacks0=$(echo_wlog_value ${WLOG}.0 n_packs:)
 totalPadding0=$(echo_wlog_value ${WLOG}.0 total_padding_size:)
 cp ${DDEV}.0 ${DDEV}.0z
 ${BIN}/wlog-redo ${DDEV}.0 < ${WLOG}.0
-${BIN}/wlog-redo ${DDEV}.0z --zerodiscard < ${WLOG}.0
+${BIN}/wlog-redo ${DDEV}.0z -z < ${WLOG}.0
 
 #
 # Simple test.
@@ -138,7 +138,7 @@ restore_test()
   fi
 
   ${BIN}/wlog-redo ${DDEV}.1 < ${WLOG}.1
-  ${BIN}/wlog-redo ${DDEV}.1z --zerodiscard < ${WLOG}.1
+  ${BIN}/wlog-redo ${DDEV}.1z -z < ${WLOG}.1
   prepare_bdev $LOOP1 ${DDEV}.2
   $CTL redo_wlog --ddev $LOOP1 < ${WLOG}.1
   sleep 1
