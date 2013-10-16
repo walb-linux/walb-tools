@@ -100,22 +100,22 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
-		opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-		opt.appendOpt(&offset_, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
-		opt.appendOpt(&size_, 0, "s", "SIZE: target size [byte]. (default: device size)");
-		opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-		opt.appendOpt(&maxIoSize_, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
-		opt.appendOpt(&counts_, 100, "c", "N: number of write IOs per threads (default: 100)");
-		opt.appendOpt(&numThreads_, 2, "t", "N: number of threads (default: 2)");
-		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-		opt.appendHelp("h", ": show this message.");
-		opt.appendParam(&targetPath_, "[DEVICE|FILE]");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
+        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&offset_, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
+        opt.appendOpt(&size_, 0, "s", "SIZE: target size [byte]. (default: device size)");
+        opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxIoSize_, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
+        opt.appendOpt(&counts_, 100, "c", "N: number of write IOs per threads (default: 100)");
+        opt.appendOpt(&numThreads_, 2, "t", "N: number of threads (default: 2)");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&targetPath_, "[DEVICE|FILE]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
