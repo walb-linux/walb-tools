@@ -36,7 +36,7 @@ private:
     uint32_t salt_;
     std::vector<u8> uuid_;
     bool isVerbose_;
-	std::string inWlogPath_;
+    std::string inWlogPath_;
     std::vector<std::string> args_;
 
 public:
@@ -63,7 +63,7 @@ private:
         if (uuidStr.size() != 32) {
             throw RT_ERR("Invalid UUID string.");
         }
-		uuid_.resize(UUID_SIZE);
+        uuid_.resize(UUID_SIZE);
         for (size_t i = 0; i < UUID_SIZE; i++) {
             /* ex. "ff" -> 255 */
             uuid_[i] = cybozu::hextoi(&uuidStr[i * 2], 2);
@@ -71,23 +71,23 @@ private:
     }
 
     void parse(int argc, char* argv[]) {
-		std::string uuidStr;
-		cybozu::Option opt;
-		opt.setDescription("Wlupdate: update wlog file header.");
-		opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid.");
-		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid.");
-		opt.appendOpt(&salt_, 0, "s", "SALT: logpack salt.");
-		opt.appendOpt(&uuidStr, "", "u", "UUID: uuid in hex string.");
-		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-		opt.appendHelp("h", ": show this message.");
-		opt.appendParam(&inWlogPath_, "WLOG_PATH", ": walb log path. must be seekable.");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
-		if (!uuidStr.empty()) {
-			setUuid(uuidStr);
-		}
+        std::string uuidStr;
+        cybozu::Option opt;
+        opt.setDescription("Wlupdate: update wlog file header.");
+        opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid.");
+        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid.");
+        opt.appendOpt(&salt_, 0, "s", "SALT: logpack salt.");
+        opt.appendOpt(&uuidStr, "", "u", "UUID: uuid in hex string.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&inWlogPath_, "WLOG_PATH", ": walb log path. must be seekable.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
+        if (!uuidStr.empty()) {
+            setUuid(uuidStr);
+        }
     }
 };
 
@@ -117,12 +117,12 @@ public:
 
         /* Update */
         bool updated = false;
-		struct walblog_header& h = wh.header();
+        struct walblog_header& h = wh.header();
 
-		if (h.begin_lsid != config_.beginLsid()) {
+        if (h.begin_lsid != config_.beginLsid()) {
             updated = true;
             h.begin_lsid = config_.beginLsid();
-		}
+        }
         if (h.end_lsid != config_.endLsid()) {
             updated = true;
             h.end_lsid = config_.endLsid();
@@ -153,7 +153,7 @@ public:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
 

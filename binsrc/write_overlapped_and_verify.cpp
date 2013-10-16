@@ -12,7 +12,7 @@
 #include <vector>
 #include <memory>
 
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -38,10 +38,7 @@ private:
     unsigned int counts_; /* The number of write IOs per thread. */
     unsigned int numThreads_; /* The number of threads. */
     bool isVerbose_;
-    bool isHelp_;
     std::string targetPath_; /* device or file path. */
-    std::vector<std::string> args_;
-
 public:
     Config(int argc, char* argv[])
         : bs_(LOGICAL_BLOCK_SIZE)
@@ -52,9 +49,7 @@ public:
         , counts_(100)
         , numThreads_(2)
         , isVerbose_(false)
-        , isHelp_(false)
-        , targetPath_()
-        , args_() {
+        , targetPath_() {
         parse(argc, argv);
     }
 
@@ -66,7 +61,6 @@ public:
     unsigned int counts() const { return counts_; }
     unsigned int numThreads() const { return numThreads_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& targetPath() const { return targetPath_; }
 
     void setSizeB(uint64_t sizeB) {
@@ -79,31 +73,6 @@ public:
 #else
         return blockSize() % LOGICAL_BLOCK_SIZE == 0;
 #endif
-    }
-
-    void print() const {
-        FILE *fp = ::stderr;
-        ::fprintf(fp, "blockSize: %u\n"
-                  "offsetB: %" PRIu64 "\n"
-                  "sizeB: %" PRIu64 "\n"
-                  "minIoB: %u\n"
-                  "maxIoB: %u\n"
-                  "counts: %u\n"
-                  "numThreads: %u\n"
-                  "verbose: %d\n"
-                  "isHelp: %d\n"
-                  "targetPath: %s\n"
-                  , blockSize(), offsetB(), sizeB()
-                  , minIoB(), maxIoB(), counts(), numThreads()
-                  , isVerbose(), isHelp(), targetPath().c_str());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::fprintf(fp, "arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
     }
 
     void check() const {
@@ -128,114 +97,25 @@ public:
         if (numThreads() == 0) {
             throw RT_ERR("numThreads must be > 0.");
         }
-        if (targetPath().size() == 0) {
-            throw RT_ERR("specify target device or file.");
-        }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        BLOCKSIZE = 1,
-        OFFSET,
-        SIZE,
-        MINIOSIZE,
-        MAXIOSIZE,
-        COUNTS,
-        NUM_THREADS,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"blockSize", 1, 0, Opt::BLOCKSIZE},
-                {"offset", 1, 0, Opt::OFFSET},
-                {"size", 1, 0, Opt::SIZE},
-                {"minIoSize", 1, 0, Opt::MINIOSIZE},
-                {"maxIoSize", 1, 0, Opt::MAXIOSIZE},
-                {"counts", 1, 0, Opt::COUNTS},
-                {"numThreads", 1, 0, Opt::NUM_THREADS},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:o:s:n:x:c:t:vh",
-                                  long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BLOCKSIZE:
-            case 'b':
-                bs_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::OFFSET:
-            case 'o':
-                offset_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::SIZE:
-            case 's':
-                size_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::MINIOSIZE:
-            case 'n':
-                minIoSize_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::MAXIOSIZE:
-            case 'x':
-                maxIoSize_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::COUNTS:
-            case 'c':
-                counts_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::NUM_THREADS:
-            case 't':
-                numThreads_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
-        }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-
-        if (!args_.empty()) {
-            targetPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "write_overlapped_and_verify: issud overlapped write IOs and verify the written data.\n"
-            "Usage: write_overlapped_and_verify [options] [DEVICE|FILE]\n"
-            "Options:\n"
-            "  -b, --blockSize SIZE:  block size [byte]. (default: %u)\n"
-            "  -o, --offset OFFSET:   start offset [byte]. (default: 0)\n"
-            "  -s, --size SIZE:       target size [byte]. (default: device size)\n"
-            "  -n, --minIoSize SIZE:  minimum IO size [byte]. (default: %u)\n"
-            "  -x, --maxIoSize SIZE:  maximum IO size [byte]. (default: %u)\n"
-            "  -c, --counts N:        number of write IOs per threads (default: 100)\n"
-            "  -t, --numThreads N:    number of threads (default: 2)\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n",
-            LOGICAL_BLOCK_SIZE, LOGICAL_BLOCK_SIZE, LOGICAL_BLOCK_SIZE * 64);
+		cybozu::Option opt;
+		opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
+		opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+		opt.appendOpt(&offset_, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
+		opt.appendOpt(&size_, 0, "s", "SIZE: target size [byte]. (default: device size)");
+		opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+		opt.appendOpt(&maxIoSize_, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
+		opt.appendOpt(&counts_, 100, "c", "N: number of write IOs per threads (default: 100)");
+		opt.appendOpt(&numThreads_, 2, "t", "N: number of threads (default: 2)");
+		opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+		opt.appendHelp("h", ": show this message.");
+		opt.appendParam(&targetPath_, "[DEVICE|FILE]");
+		if (!opt.parse(argc, argv)) {
+			opt.usage();
+			exit(1);
+		}
     }
 };
 
@@ -389,24 +269,18 @@ static bool writeConcurrentlyAndVerify(Config &config)
 };
 
 int main(int argc, char* argv[])
+    try
 {
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
-        if (!writeConcurrentlyAndVerify(config)) {
-            throw std::runtime_error("The written data could not be read.");
-        }
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
+    Config config(argc, argv);
+    config.check();
+    if (!writeConcurrentlyAndVerify(config)) {
+        throw std::runtime_error("The written data could not be read.");
     }
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 
