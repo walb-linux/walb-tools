@@ -40,7 +40,6 @@ private:
     uint64_t beginLsid_;
     uint64_t endLsid_;
     bool isVerbose_;
-    bool isHelp_;
     std::string recipePath_; /* recipe path or "-" for stdin. */
     std::string wldevPath_; /* walb log devcie path. */
 
@@ -49,7 +48,6 @@ public:
         : beginLsid_(-1)
         , endLsid_(-1)
         , isVerbose_(false)
-        , isHelp_(false)
         , recipePath_("-")
         , wldevPath_() {
         parse(argc, argv);
@@ -58,49 +56,23 @@ public:
     uint64_t beginLsid() const { return beginLsid_; }
     uint64_t endLsid() const { return endLsid_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& recipePath() const { return recipePath_; }
     const std::string& wldevPath() const { return wldevPath_; }
-
-    void print() const {
-        FILE *fp = ::stderr;
-        ::fprintf(fp,
-                  "beginLsid: %" PRIu64 "\n"
-                  "endLsid: %" PRIu64 "\n"
-                  "verbose: %d\n"
-                  "isHelp: %d\n"
-                  "recipe: %s\n"
-                  "wldev: %s\n",
-                  beginLsid(), endLsid(), isVerbose(), isHelp(),
-                  recipePath_.c_str(), wldevPath().c_str());
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-        opt.appendOpt(&beginLsid_, -1, "b", "beginLsid LSID");
-        opt.appendOpt(&endLsid_, -1, "e", "endLsid LSID");
-        opt.appendOpt(&recipePath_, "-", "r", "recipe PATH");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose");
-        opt.appendHelp("h");
+		opt.setDescription("verify_wldev: verify logs on a walb log device with an IO recipe.");
+        opt.appendOpt(&beginLsid_, -1, "b", "LSID: begin lsid. (default: oldest lsid)");
+        opt.appendOpt(&endLsid_, -1, "e", "LSID: end lsid. (default: written lsid)");
+        opt.appendOpt(&recipePath_, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
         opt.appendParam(&wldevPath_, "WALB_LOG_DEVICE");
-        opt.parse(argc, argv, true);
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "verify_wldev: verify logs on a walb log device with an IO recipe.\n"
-            "Usage: verify_wldev [options] WALB_LOG_DEVICE\n"
-            "Options:\n"
-            "  -b, --beginLsid LSID: begin lsid. (default: oldest lsid)\n"
-            "  -e, --endLsid LSID:   end lsid. (default: written lsid)\n"
-            "  -r, --recipe PATH:    recipe file path. '-' for stdin. (default: '-')\n"
-            "  -v, --verbose:     verbose messages to stderr.\n"
-            "  -h, --help:        show this message.\n");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -221,23 +193,17 @@ private:
 };
 
 int main(int argc, char* argv[])
+	try
 {
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
+    Config config(argc, argv);
 
-        WldevVerifier v(config);
-        v.run();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    WldevVerifier v(config);
+    v.run();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

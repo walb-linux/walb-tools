@@ -45,8 +45,8 @@ private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Wlinfo: show superblock information of a log device.");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-        opt.appendHelp("h", "show this message.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
         opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
         if (!opt.parse(argc, argv)) {
             opt.usage();

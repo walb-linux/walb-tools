@@ -44,10 +44,10 @@ private:
 		cybozu::Option opt;
 		opt.setDescription("wdiff-redo: redo wdiff file on a block device.");
 		opt.appendOpt(&inWdiffPath_, "-", "i", "PATH: input wdiff path. '-' for stdin. (default: '-')");
-		opt.appendOpt(&isDiscard_, false, "d", "issue discard IOs for discard diffs.");
-		opt.appendOpt(&isZeroDiscard_, false, "z", "issue all-zero IOs for discard diffs.");
-		opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-		opt.appendHelp("h");
+		opt.appendBoolOpt(&isDiscard_, "d", ": issue discard IOs for discard diffs.");
+		opt.appendBoolOpt(&isZeroDiscard_, "z", ": issue all-zero IOs for discard diffs.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
 		opt.appendParam(&devPath_, "DEVICE_PATH");
 		if (!opt.parse(argc, argv)) {
 			opt.usage();

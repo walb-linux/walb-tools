@@ -127,8 +127,8 @@ private:
         opt.appendBoolOpt(&isNotDiscard_, "-nodiscard", "no discard. (default: randomly inserted)");
         opt.appendBoolOpt(&isNotAllZero_, "-noallzero", "no all-zero. (default: randomly inserted)");
         opt.appendOpt(&outPath_, "-", "o", "PATH: output file path or '-' for stdout.");
-        opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
-        opt.appendHelp("h", "show this message.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
             exit(1);

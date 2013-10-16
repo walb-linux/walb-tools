@@ -70,8 +70,8 @@ private:
         opt.appendOpt(&inWlogPath_, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
         opt.appendBoolOpt(&isDiscard_, "d", "issue discard for discard logs.");
         opt.appendBoolOpt(&isZeroDiscard_, "z", "zero-clear for discard logs.");
-        opt.appendBoolOpt(&isVerbose_, "v", "verbose messages to stderr.");
-        opt.appendHelp("h", "show this message.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
         opt.appendParam(&ddevPath_, "DEVICE_PATH");
         if (!opt.parse(argc, argv)) {
             opt.usage();

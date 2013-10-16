@@ -63,8 +63,8 @@ private:
         opt.setDescription("Wlog-show: pretty-print wlog input.");
         opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
         opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendParamOpt(&inWlogPath_, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();

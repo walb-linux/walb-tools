@@ -80,7 +80,7 @@ private:
         opt.appendOpt(&invalidLsid_, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
         opt.appendOpt(&ddevLb_, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
         opt.appendBoolOpt(&isVerify_, "-verify", ": verify written logpack (default: no)");
-        opt.appendBoolOpt(&isVerbose_, "v", ":verbose messages to stderr.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH < WLOG_FILE");
         if (!opt.parse(argc, argv)) {
