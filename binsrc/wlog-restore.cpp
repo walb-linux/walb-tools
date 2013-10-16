@@ -72,21 +72,21 @@ public:
     }
 private:
     void parse(int argc, char* argv[]) {
-		cybozu::Option opt;
-		opt.setDescription("Wlresotre: restore walb log to a log device.");
-		opt.appendOpt(&beginLsid_, 0, "b", "LSID:  begin lsid to restore. (default: 0)");
-		opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-		opt.appendOpt(&lsidDiff_, 0, "d", "DIFF: lsid diff. (default: 0)");
-		opt.appendOpt(&invalidLsid_, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
-		opt.appendOpt(&ddevLb_, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
-		opt.appendBoolOpt(&isVerify_, "-verify", ": verify written logpack (default: no)");
-		opt.appendBoolOpt(&isVerbose_, "v", ":verbose messages to stderr.");
-		opt.appendHelp("h", ": show this message.");
-		opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH < WLOG_FILE");
-		if (!opt.parse(argc, argv)) {
-			opt.usage();
-			exit(1);
-		}
+        cybozu::Option opt;
+        opt.setDescription("Wlresotre: restore walb log to a log device.");
+        opt.appendOpt(&beginLsid_, 0, "b", "LSID:  begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendOpt(&lsidDiff_, 0, "d", "DIFF: lsid diff. (default: 0)");
+        opt.appendOpt(&invalidLsid_, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
+        opt.appendOpt(&ddevLb_, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
+        opt.appendBoolOpt(&isVerify_, "-verify", ": verify written logpack (default: no)");
+        opt.appendBoolOpt(&isVerbose_, "v", ":verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH < WLOG_FILE");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -360,7 +360,7 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
     config.check();
