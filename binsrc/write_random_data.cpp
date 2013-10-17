@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -45,9 +45,7 @@ private:
     unsigned int minIoB_; /* [block]. */
     unsigned int maxIoB_; /* [block]. */
     bool isVerbose_;
-    bool isHelp_;
     std::string targetPath_; /* device or file path. */
-    std::vector<std::string> args_;
 
 public:
     Config(int argc, char* argv[])
@@ -57,9 +55,7 @@ public:
         , minIoB_(1)
         , maxIoB_(64)
         , isVerbose_(false)
-        , isHelp_(false)
-        , targetPath_()
-        , args_() {
+        , targetPath_() {
         parse(argc, argv);
     }
 
@@ -69,7 +65,6 @@ public:
     unsigned int minIoB() const { return minIoB_; }
     unsigned int maxIoB() const { return maxIoB_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& targetPath() const { return targetPath_; }
 
     bool isDirect() const {
@@ -79,29 +74,6 @@ public:
         return blockSize() % LOGICAL_BLOCK_SIZE == 0;
 #endif
     }
-
-    void print() const {
-        FILE *fp = ::stderr;
-        ::fprintf(fp, "blockSize: %u\n"
-                  "offsetB: %" PRIu64 "\n"
-                  "sizeB: %" PRIu64 "\n"
-                  "minIoB: %u\n"
-                  "maxIoB: %u\n"
-                  "verbose: %d\n"
-                  "isHelp: %d\n"
-                  "targetPath: %s\n",
-                  blockSize(), offsetB(), sizeB(), minIoB(), maxIoB(),
-                  isVerbose(), isHelp(), targetPath().c_str());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::fprintf(fp, "arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
-
     void check() const {
         if (blockSize() == 0) {
             throw RT_ERR("blockSize must be non-zero.");
@@ -115,99 +87,23 @@ public:
         if (maxIoB() < minIoB()) {
             throw RT_ERR("minIoSize must be <= maxIoSize.");
         }
-        if (targetPath().size() == 0) {
-            throw RT_ERR("specify target device or file.");
-        }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        BLOCKSIZE = 1,
-        OFFSET,
-        SIZE,
-        MINIOSIZE,
-        MAXIOSIZE,
-        VERBOSE,
-        HELP,
-    };
-
-    template <typename IntType>
-    IntType str2int(const char *str) const {
-        return static_cast<IntType>(cybozu::util::fromUnitIntString(str));
-    }
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"blockSize", 1, 0, Opt::BLOCKSIZE},
-                {"offset", 1, 0, Opt::OFFSET},
-                {"size", 1, 0, Opt::SIZE},
-                {"minIoSize", 1, 0, Opt::MINIOSIZE},
-                {"maxIoSize", 1, 0, Opt::MAXIOSIZE},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:o:s:n:x:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BLOCKSIZE:
-            case 'b':
-                bs_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::OFFSET:
-            case 'o':
-                offsetB_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::SIZE:
-            case 's':
-                sizeB_ = str2int<uint64_t>(optarg);
-                break;
-            case Opt::MINIOSIZE:
-            case 'n':
-                minIoB_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::MAXIOSIZE:
-            case 'x':
-                maxIoB_ = str2int<unsigned int>(optarg);
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
+        cybozu::Option opt;
+        opt.setDescription("write_random_data: generate random data and write them.");
+        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&offsetB_, 0, "o", "OFFSET: start offset [block]. (default: 0)");
+        opt.appendOpt(&sizeB_, 0, "s", "SIZE: written size [block]. (default: device size)");
+        opt.appendOpt(&minIoB_, 1, "n", "SIZE: minimum IO size [block]. (default: 1)");
+        opt.appendOpt(&maxIoB_, 64, "x", "SIZE: maximum IO size [block]. (default: 64)");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&targetPath_, "[DEVICE|FILE]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
         }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-
-        if (!args_.empty()) {
-            targetPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "write_random_data: generate random data and write them.\n"
-            "Usage: write_random_data [options] [DEVICE|FILE]\n"
-            "Options:\n"
-            "  -b, --blockSize SIZE:  block size [byte]. (default: %u)\n"
-            "  -o, --offset OFFSET:   start offset [block]. (default: 0)\n"
-            "  -s, --size SIZE:       written size [block]. (default: device size)\n"
-            "  -n, --minIoSize SIZE:  minimum IO size [block]. (default: 1)\n"
-            "  -x, --maxIoSize SIZE:  maximum IO size [block]. (default: 64)\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n",
-            LOGICAL_BLOCK_SIZE);
     }
 };
 
@@ -309,24 +205,18 @@ private:
 };
 
 int main(int argc, char* argv[])
+    try
 {
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
+    config.check();
 
-        RandomDataWriter rdw(config);
-        rdw.run();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    RandomDataWriter rdw(config);
+    rdw.run();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

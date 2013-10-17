@@ -66,8 +66,8 @@ private:
         cybozu::Option opt;
         opt.setDescription("Wlanalyze: analyze wlog.");
         opt.appendOpt(&blockSize_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size in bytes. (default: %u)", LOGICAL_BLOCK_SIZE).c_str());
-        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-        opt.appendHelp("h", "show this message.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
         opt.appendParamVec(&args_, "WLOG_PATH [WLOG_PATH...]");
         if (!opt.parse(argc, argv)) {
             opt.usage();

@@ -39,37 +39,20 @@ class Config
 {
 private:
     bool isVerbose_;
-    bool isHelp_;
     std::string wlogPath_; /* walb log path or "-" for stdin. */
     std::string recipePath_; /* recipe path or "-" for stdin. */
 
 public:
     Config(int argc, char* argv[])
         : isVerbose_(false)
-        , isHelp_(false)
         , wlogPath_("-")
         , recipePath_("-") {
         parse(argc, argv);
     }
 
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& recipePath() const { return recipePath_; }
     const std::string& wlogPath() const { return wlogPath_; }
-
-    void print() const {
-        FILE *fp = ::stderr;
-        ::fprintf(fp, "verbose: %d\n"
-                  "isHelp: %d\n"
-                  "recipe: %s\n"
-                  "wlog: %s\n",
-                   isVerbose(), isHelp(),
-                  recipePath_.c_str(), wlogPath().c_str());
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
         if (recipePath_ == "-" && wlogPath_ == "-") {
@@ -80,22 +63,16 @@ public:
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-        opt.appendOpt(&recipePath_, "-", "r", "recipe file path");
-        opt.appendOpt(&wlogPath_, "-", "w", "wlog file path");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose");
-        opt.appendHelp("h");
-        opt.parse(argc, argv, true);
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "verify_wlog: verify a walb log with an IO recipe.\n"
-            "Usage: verify_wlog [options]\n"
-            "Options:\n"
-            "  -r, --recipe PATH: recipe file path. '-' for stdin. (default: '-')\n"
-            "  -w, --wlog PATH:   wlog file path. '-' for stdin. (default: '-')\n"
-            "  -v, --verbose:     verbose messages to stderr.\n"
-            "  -h, --help:        show this message.\n");
+		opt.setDescription("verify_wlog: verify a walb log with an IO recipe.");
+        opt.appendOpt(&recipePath_, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
+        opt.appendOpt(&wlogPath_, "-", "w", "PATH: wlog file path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
+		check();
     }
 };
 
@@ -223,24 +200,17 @@ private:
 };
 
 int main(int argc, char* argv[])
+	try
 {
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
 
-        WlogVerifier v(config);
-        v.run();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    WlogVerifier v(config);
+    v.run();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

@@ -31,12 +31,12 @@ public:
         , file1_()
         , file2_() {
         cybozu::Option opt;
+        opt.setDescription("bdiff: Show block diff.");
         opt.appendOpt(&blockSize_, 512, "b", "SIZE: block size in bytes (default: 512)");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose messages to stderr.");
-        opt.appendHelp("h", "show this message.");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
         opt.appendParam(&file1_, "FILE1");
         opt.appendParam(&file2_, "FILE2");
-        opt.setDescription("bdiff: Show block diff.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
             exit(1);

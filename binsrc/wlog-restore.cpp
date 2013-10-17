@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <getopt.h>
+#include "cybozu/option.hpp"
 
 #include "stdout_logger.hpp"
 
@@ -43,9 +43,6 @@ private:
     uint64_t ddevLb_; /* 0 means no clipping. */
     bool isVerify_;
     bool isVerbose_;
-    bool isHelp_;
-    std::vector<std::string> args_;
-
 public:
     Config(int argc, char* argv[])
         : ldevPath_()
@@ -55,9 +52,7 @@ public:
         , invalidLsid_(-1)
         , ddevLb_(0)
         , isVerify_(false)
-        , isVerbose_(false)
-        , isHelp_(false)
-        , args_() {
+        , isVerbose_(false) {
         parse(argc, argv);
     }
 
@@ -69,128 +64,29 @@ public:
     uint64_t ddevLb() const { return ddevLb_; }
     bool isVerify() const { return isVerify_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
-
-    void print() const {
-        ::printf("ldevPath: %s\n"
-                 "beginLsid: %" PRIu64 "\n"
-                 "endLsid: %" PRIu64 "\n"
-                 "lsidDiff: %" PRIi64 "\n"
-                 "invalidLsid: %" PRIu64 "\n"
-                 "ddevLb: %" PRIu64 "\n"
-                 "verify: %d\n"
-                 "verbose: %d\n"
-                 "isHelp: %d\n",
-                 ldevPath().c_str(),
-                 beginLsid(), endLsid(), lsidDiff(),
-                 invalidLsid(), ddevLb(),
-                 isVerify(), isVerbose(), isHelp());
-        int i = 0;
-        for (const auto& s : args_) {
-            ::printf("arg%d: %s\n", i++, s.c_str());
-        }
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
 
     void check() const {
         if (beginLsid() >= endLsid()) {
             throw RT_ERR("beginLsid must be < endLsid.");
         }
-        if (ldevPath_.empty()) {
-            throw RT_ERR("Specify log device path.");
-        }
     }
 private:
-    /* Option ids. */
-    enum Opt {
-        BEGIN_LSID = 1,
-        END_LSID,
-        LSID_DIFF,
-        LSID_INVALID,
-        DDEV_SIZE,
-        VERIFY,
-        VERBOSE,
-        HELP,
-    };
-
     void parse(int argc, char* argv[]) {
-        while (1) {
-            const struct option long_options[] = {
-                {"beginLsid", 1, 0, Opt::BEGIN_LSID},
-                {"endLsid", 1, 0, Opt::END_LSID},
-                {"lsidDiff", 1, 0, Opt::LSID_DIFF},
-                {"invalidLsid", 1, 0, Opt::LSID_INVALID},
-                {"ddevSize", 1, 0, Opt::DDEV_SIZE},
-                {"verify", 0, 0, Opt::VERIFY},
-                {"verbose", 0, 0, Opt::VERBOSE},
-                {"help", 0, 0, Opt::HELP},
-                {0, 0, 0, 0}
-            };
-            int option_index = 0;
-            int c = ::getopt_long(argc, argv, "b:e:d:i:s:vh", long_options, &option_index);
-            if (c == -1) { break; }
-
-            switch (c) {
-            case Opt::BEGIN_LSID:
-            case 'b':
-                beginLsid_ = ::atoll(optarg);
-                break;
-            case Opt::END_LSID:
-            case 'e':
-                endLsid_ = ::atoll(optarg);
-                break;
-            case Opt::LSID_DIFF:
-            case 'd':
-                lsidDiff_ = ::atoll(optarg);
-                break;
-            case Opt::LSID_INVALID:
-            case 'i':
-                invalidLsid_ = ::atoll(optarg);
-                break;
-            case Opt::DDEV_SIZE:
-            case 's':
-                ddevLb_ = cybozu::util::fromUnitIntString(optarg);
-                break;
-            case Opt::VERIFY:
-                isVerify_ = true;
-                break;
-            case Opt::VERBOSE:
-            case 'v':
-                isVerbose_ = true;
-                break;
-            case Opt::HELP:
-            case 'h':
-                isHelp_ = true;
-                break;
-            default:
-                throw RT_ERR("Unknown option.");
-            }
+        cybozu::Option opt;
+        opt.setDescription("Wlresotre: restore walb log to a log device.");
+        opt.appendOpt(&beginLsid_, 0, "b", "LSID:  begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendOpt(&lsidDiff_, 0, "d", "DIFF: lsid diff. (default: 0)");
+        opt.appendOpt(&invalidLsid_, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
+        opt.appendOpt(&ddevLb_, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
+        opt.appendBoolOpt(&isVerify_, "-verify", ": verify written logpack (default: no)");
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH < WLOG_FILE");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
         }
-
-        while(optind < argc) {
-            args_.push_back(std::string(argv[optind++]));
-        }
-        if (!args_.empty()) {
-            ldevPath_ = args_[0];
-        }
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "Wlresotre: restore walb log to a log device.\n"
-            "Usage: wlrestore [options] LOG_DEVICE_PATH < WLOG_FILE\n"
-            "Options:\n"
-            "  -b, --beginLsid LSID:  begin lsid to restore. (default: 0)\n"
-            "  -e, --endLsid LSID:    end lsid to restore. (default: -1)\n"
-            "  -d, --lsidDiff DIFF:   lsid diff. (default: 0)\n"
-            "  -i, --invalidLsid LSID:invalidate lsid after restore. (default: no invalidation)\n"
-            "  -s, --ddevSize SIZE:   data device size for clipping. (default: no clipping)\n"
-            "      --verify:          verify written logpack (default: no)\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n");
     }
 };
 
@@ -464,23 +360,18 @@ private:
 };
 
 int main(int argc, char* argv[])
+    try
 {
-    try {
-        Config config(argc, argv);
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
+    config.check();
 
-        WalbLogRestorer wlRes(config);
-        wlRes.restore(0);
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    WalbLogRestorer wlRes(config);
+    wlRes.restore(0);
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

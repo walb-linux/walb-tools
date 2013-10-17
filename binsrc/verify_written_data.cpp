@@ -41,7 +41,6 @@ class Config
 private:
     unsigned int bs_; /* block size [byte] */
     bool isVerbose_;
-    bool isHelp_;
     std::string recipePath_; /* recipe file path. */
     std::string targetPath_; /* device or file path. */
 
@@ -49,7 +48,6 @@ public:
     Config(int argc, char* argv[])
         : bs_(LOGICAL_BLOCK_SIZE)
         , isVerbose_(false)
-        , isHelp_(false)
         , recipePath_("-")
         , targetPath_() {
         parse(argc, argv);
@@ -57,7 +55,6 @@ public:
 
     unsigned int blockSize() const { return bs_; }
     bool isVerbose() const { return isVerbose_; }
-    bool isHelp() const { return isHelp_; }
     const std::string& targetPath() const { return targetPath_; }
     const std::string& recipePath() const { return recipePath_; }
 
@@ -69,21 +66,6 @@ public:
 #endif
     }
 
-    void print() const {
-        FILE *fp = ::stderr;
-        ::fprintf(fp, "blockSize: %u\n"
-                  "verbose: %d\n"
-                  "isHelp: %d\n"
-                  "recipe: %s\n"
-                  "targetPath: %s\n",
-                  blockSize(), isVerbose(), isHelp(),
-                  recipePath_.c_str(), targetPath().c_str());
-    }
-
-    static void printHelp() {
-        ::printf("%s", generateHelpString().c_str());
-    }
-
     void check() const {
         if (blockSize() == 0) {
             throw RT_ERR("blockSize must be non-zero.");
@@ -92,24 +74,17 @@ public:
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", "blockSize");
-        opt.appendOpt(&recipePath_, "-", "i", "recipe file path");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose");
-        opt.appendHelp("h");
+		opt.setDescription("verify_written_data: verify data written by write_random_data.");
+        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&recipePath_, "-", "i", "PATH: recipe file path. '-' for stdin. (default: '-')");
         opt.appendParam(&targetPath_, "DEVICE|FILE");
-        opt.parse(argc, argv, true);
-    }
-
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "verify_written_data: verify data written by write_random_data.\n"
-            "Usage: verify_written_data [options] [DEVICE|FILE]\n"
-            "Options:\n"
-            "  -b, --blockSize SIZE:  block size [byte]. (default: %u)\n"
-            "  -i, --recipe PATH:     recipe file path. '-' for stdin. (default: '-')\n"
-            "  -v, --verbose:         verbose messages to stderr.\n"
-            "  -h, --help:            show this message.\n",
-            LOGICAL_BLOCK_SIZE);
+        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
+        check();
     }
 };
 
@@ -178,24 +153,17 @@ private:
 };
 
 int main(int argc, char* argv[])
+	try
 {
-    try {
-        Config config(argc, argv);
-        /* config.print(); */
-        if (config.isHelp()) {
-            Config::printHelp();
-            return 0;
-        }
-        config.check();
+    Config config(argc, argv);
 
-        IoDataVerifier v(config);
-        v.run();
-        return 0;
-    } catch (std::exception& e) {
-        LOGe("Exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("Caught other error.\n");
-    }
+    IoDataVerifier v(config);
+    v.run();
+} catch (std::exception& e) {
+    LOGe("Exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("Caught other error.\n");
     return 1;
 }
 

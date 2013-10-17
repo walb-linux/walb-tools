@@ -77,7 +77,7 @@ nPacks0=$(echo_wlog_value ${WLOG}.0 n_packs:)
 totalPadding0=$(echo_wlog_value ${WLOG}.0 total_padding_size:)
 cp ${DDEV}.0 ${DDEV}.0z
 ${BIN}/wlog-redo ${DDEV}.0 < ${WLOG}.0
-${BIN}/wlog-redo ${DDEV}.0z --zerodiscard < ${WLOG}.0
+${BIN}/wlog-redo ${DDEV}.0z -z < ${WLOG}.0
 
 #
 # Simple test.
@@ -103,7 +103,7 @@ restore_test()
   dd if=/dev/zero of=${DDEV}.1z bs=1M count=32
   dd if=/dev/zero of=${DDEV}.2 bs=1M count=32
   dd if=/dev/zero of=${DDEV}.3 bs=1M count=32
-  ${BIN}/wlog-restore $LDEV --verify --lsidDiff $lsidDiff --invalidLsid $invalidLsid < ${WLOG}.0
+  ${BIN}/wlog-restore $LDEV --verify -d $lsidDiff -i $invalidLsid < ${WLOG}.0
   ${BIN}/wlog-cat $LDEV -v -o ${WLOG}.1
   prepare_bdev $LOOP0 ${LDEV}
   $CTL cat_wldev --wldev $LOOP0 > ${WLOG}.2
@@ -138,7 +138,7 @@ restore_test()
   fi
 
   ${BIN}/wlog-redo ${DDEV}.1 < ${WLOG}.1
-  ${BIN}/wlog-redo ${DDEV}.1z --zerodiscard < ${WLOG}.1
+  ${BIN}/wlog-redo ${DDEV}.1z -z < ${WLOG}.1
   prepare_bdev $LOOP1 ${DDEV}.2
   $CTL redo_wlog --ddev $LOOP1 < ${WLOG}.1
   sleep 1
@@ -191,9 +191,9 @@ restore_test()
   fi
 }
 
-restore_test 3 $(expr $RING_BUFFER_SIZE - 1) -1
-restore_test 4 $(expr $RING_BUFFER_SIZE - 2) -1
-restore_test 5 $(expr $RING_BUFFER_SIZE - 1024) -1
+restore_test 3 $(expr $RING_BUFFER_SIZE - 1) 0xffffffffffffffff
+restore_test 4 $(expr $RING_BUFFER_SIZE - 2) 0xffffffffffffffff
+restore_test 5 $(expr $RING_BUFFER_SIZE - 1024) 0xffffffffffffffff
 restore_test 6 0 1024 #512KB
 restore_test 7 0 8192 #4MB
 
