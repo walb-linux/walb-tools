@@ -62,7 +62,7 @@ public:
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-		opt.setDescription("verify_wldev: verify logs on a walb log device with an IO recipe.");
+        opt.setDescription("verify_wldev: verify logs on a walb log device with an IO recipe.");
         opt.appendOpt(&beginLsid_, -1, "b", "LSID: begin lsid. (default: oldest lsid)");
         opt.appendOpt(&endLsid_, -1, "e", "LSID: end lsid. (default: written lsid)");
         opt.appendOpt(&recipePath_, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
@@ -193,7 +193,7 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
 
