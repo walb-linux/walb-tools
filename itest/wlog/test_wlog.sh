@@ -109,7 +109,7 @@ restore_test()
   $CTL cat_wldev --wldev $LOOP0 > ${WLOG}.2
   sleep 1
   finalize_bdev $LOOP0 ${LDEV}
-  if [ "$invalidLsid" != "0" ]; then
+  if [ "$invalidLsid" = "0xffffffffffffffff" ]; then
     local endLsid0a=$(expr $endLsid0 + $lsidDiff - $nPacks0 - $totalPadding0)
     local endLsid1=$(echo_wlog_value ${WLOG}.1 end_lsid_really:)
     local endLsid2=$(echo_wlog_value ${WLOG}.2 end_lsid_really:)
