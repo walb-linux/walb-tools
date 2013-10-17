@@ -109,7 +109,7 @@ restore_test()
   $CTL cat_wldev --wldev $LOOP0 > ${WLOG}.2
   sleep 1
   finalize_bdev $LOOP0 ${LDEV}
-  if [ $invalidLsid -lt 0 ]; then
+  if [ "$invalidLsid" != "0" ]; then
     local endLsid0a=$(expr $endLsid0 + $lsidDiff - $nPacks0 - $totalPadding0)
     local endLsid1=$(echo_wlog_value ${WLOG}.1 end_lsid_really:)
     local endLsid2=$(echo_wlog_value ${WLOG}.2 end_lsid_really:)
@@ -150,7 +150,7 @@ restore_test()
   sleep 1
   finalize_bdev $LOOP0 ${LDEV}
   finalize_bdev $LOOP1 ${DDEV}.3
-  if [ $invalidLsid -eq -1 ]; then
+  if [ "$invalidLsid" = "0xffffffffffffffff" ]; then
     ${BIN}/bdiff -b 512 ${DDEV}.0 ${DDEV}.1
     if [ $? -ne 0 ]; then
       echo "failed: ${BIN}/bdiff -b 512 ${DDEV}.0 ${DDEV}.1"
