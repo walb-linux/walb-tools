@@ -63,7 +63,7 @@ public:
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-		opt.setDescription("verify_wlog: verify a walb log with an IO recipe.");
+        opt.setDescription("verify_wlog: verify a walb log with an IO recipe.");
         opt.appendOpt(&recipePath_, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
         opt.appendOpt(&wlogPath_, "-", "w", "PATH: wlog file path. '-' for stdin. (default: '-')");
         opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
@@ -72,7 +72,7 @@ private:
             opt.usage();
             exit(1);
         }
-		check();
+        check();
     }
 };
 
@@ -200,7 +200,7 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
 

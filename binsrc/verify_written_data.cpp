@@ -74,7 +74,7 @@ public:
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
-		opt.setDescription("verify_written_data: verify data written by write_random_data.");
+        opt.setDescription("verify_written_data: verify data written by write_random_data.");
         opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
         opt.appendOpt(&recipePath_, "-", "i", "PATH: recipe file path. '-' for stdin. (default: '-')");
         opt.appendParam(&targetPath_, "DEVICE|FILE");
@@ -153,7 +153,7 @@ private:
 };
 
 int main(int argc, char* argv[])
-	try
+    try
 {
     Config config(argc, argv);
 

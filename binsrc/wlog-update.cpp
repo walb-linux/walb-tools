@@ -38,6 +38,7 @@ private:
     bool isVerbose_;
     std::string inWlogPath_;
     std::vector<std::string> args_;
+    cybozu::Option opt;
 
 public:
     Config(int argc, char* argv[])
@@ -51,12 +52,15 @@ public:
     }
 
     const std::string& inWlogPath() const { return args_[0]; }
-    bool isUuid() const { return !uuid_.empty(); }
     uint64_t beginLsid() const { return beginLsid_; }
     uint64_t endLsid() const { return endLsid_; }
     uint32_t salt() const { return salt_; }
     const std::vector<u8>& uuid() const { return uuid_; }
     bool isVerbose() const { return isVerbose_; }
+    bool isSetBeginLsid() const { return opt.isSet(&beginLsid_); }
+    bool isSetEndLsid() const { return opt.isSet(&endLsid_); }
+    bool isSetSalt() const { return opt.isSet(&salt_); }
+    bool isSetUuid() const { return !uuid_.empty(); }
 
 private:
     void setUuid(const std::string &uuidStr) {
@@ -72,7 +76,6 @@ private:
 
     void parse(int argc, char* argv[]) {
         std::string uuidStr;
-        cybozu::Option opt;
         opt.setDescription("Wlupdate: update wlog file header.");
         opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid.");
         opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid.");
@@ -119,19 +122,19 @@ public:
         bool updated = false;
         struct walblog_header& h = wh.header();
 
-        if (h.begin_lsid != config_.beginLsid()) {
+        if (config_.isSetBeginLsid()) {
             updated = true;
             h.begin_lsid = config_.beginLsid();
         }
-        if (h.end_lsid != config_.endLsid()) {
+        if (config_.isSetEndLsid()) {
             updated = true;
             h.end_lsid = config_.endLsid();
         }
-        if (h.log_checksum_salt != config_.salt()) {
+        if (config_.isSetSalt()) {
             updated = true;
             h.log_checksum_salt = config_.salt();
         }
-        if (config_.isUuid()) {
+        if (config_.isSetUuid()) {
             updated = true;
             ::memcpy(h.uuid, &config_.uuid()[0], UUID_SIZE);
         }
