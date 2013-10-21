@@ -48,7 +48,7 @@ def log_diff_equality_test():
         run(BIN + ("/wlog-redo -z ddev32M.0 < %d.wlog" % i))
         run(BIN + ("/wdiff-redo -z ddev32M.1 < %d.wdiff" % i))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-        check_result("log/diff equality test ${i}th wlog/wdiff.")
+        check_result("log/diff equality test %dth wlog/wdiff." % i)
 
 def full_image_test():
     print "#################### Full image test ####################"
