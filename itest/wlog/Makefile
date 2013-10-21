@@ -4,7 +4,7 @@ default:
 
 
 test:
-	sh test_wlog.sh
+	python test_wlog.py
 clean:
 	rm -f wlog.* ddev* ldev*
 
