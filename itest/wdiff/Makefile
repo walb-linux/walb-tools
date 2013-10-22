@@ -3,7 +3,7 @@ default:
 	$(MAKE) test
 
 test:
-	sh test_wdiff.sh
+	python test_wdiff.py
 clean:
 	rm -f *.wlog *.wdiff ddev* ldev*
 	rm -rf *.warc
