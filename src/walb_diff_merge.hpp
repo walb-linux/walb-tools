@@ -34,7 +34,7 @@ private:
     private:
         std::string wdiffPath_;
         mutable walb::diff::Reader reader_;
-        std::shared_ptr<walb::diff::FileHeaderRef> headerP_;
+        std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
         mutable RecordRaw rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
@@ -50,7 +50,7 @@ private:
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
-        walb::diff::FileHeaderRef &header() { return *headerP_; }
+        walb::diff::FileHeaderWrap &header() { return *headerP_; }
         const RecordRaw &front() {
             fill();
             assert(isFilled_);
@@ -107,7 +107,7 @@ private:
 
     walb::diff::MemoryData wdiffMem_;
     struct walb_diff_file_header wdiffRawH_;
-    FileHeaderRef wdiffH_;
+    FileHeaderWrap wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
     bool shouldValidateUuid_;
@@ -204,7 +204,7 @@ public:
     /**
      * Get header.
      */
-    const FileHeaderRef &header() const {
+    const FileHeaderWrap &header() const {
         return wdiffH_;
     }
     /**

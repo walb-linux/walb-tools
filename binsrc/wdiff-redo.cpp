@@ -58,7 +58,7 @@ private:
 
 using DiffRec = walb::diff::RecordRaw;
 using DiffIo = walb::diff::IoData;
-using DiffHeader = walb::diff::FileHeaderRef;
+using DiffHeader = walb::diff::FileHeaderWrap;
 using DiffRecPtr = std::shared_ptr<DiffRec>;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 using DiffHeaderPtr = std::shared_ptr<DiffHeader>;

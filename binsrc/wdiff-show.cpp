@@ -16,7 +16,7 @@ int main(UNUSED int argc, UNUSED char *argv[])
     try{
         /* Read a wdiff file and show the contents. */
         walb::diff::Reader wdiffR(0);
-        std::shared_ptr<walb::diff::FileHeaderRef> wdiffH
+        std::shared_ptr<walb::diff::FileHeaderWrap> wdiffH
             = wdiffR.readHeader();
         wdiffH->print();
 

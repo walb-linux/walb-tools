@@ -14,14 +14,14 @@ namespace diff {
 /**
  * Walb diff header data.
  */
-class FileHeaderRef
+class FileHeaderWrap
 {
 private:
     struct walb_diff_file_header &h_;
 
 public:
-    FileHeaderRef(struct walb_diff_file_header &h) : h_(h) {}
-    virtual ~FileHeaderRef() noexcept = default;
+    FileHeaderWrap(struct walb_diff_file_header &h) : h_(h) {}
+    virtual ~FileHeaderWrap() noexcept = default;
 
     uint32_t getChecksum() const { return h_.checksum; }
     uint16_t getMaxIoBlocks() const { return h_.max_io_blocks; }
@@ -86,14 +86,14 @@ public:
  * With raw data.
  */
 class FileHeaderRaw
-    : public FileHeaderRef
+    : public FileHeaderWrap
 {
 private:
     struct walb_diff_file_header header_;
 
 public:
     FileHeaderRaw()
-        : FileHeaderRef(header_), header_() {}
+        : FileHeaderWrap(header_), header_() {}
     ~FileHeaderRaw() noexcept = default;
 };
 
@@ -151,7 +151,7 @@ public:
      * Write header data.
      * You must call this at first.
      */
-    void writeHeader(FileHeaderRef &header) {
+    void writeHeader(FileHeaderWrap &header) {
         if (isWrittenHeader_) {
             throw RT_ERR("Do not call writeHeader() more than once.");
         }
@@ -333,7 +333,7 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    std::shared_ptr<FileHeaderRef> readHeader() {
+    std::shared_ptr<FileHeaderWrap> readHeader() {
         auto p = std::make_shared<FileHeaderRaw>();
         readHeader(*p);
         return p;
@@ -342,7 +342,7 @@ public:
     /**
      * Read header data with another interface.
      */
-    void readHeader(FileHeaderRef &head) {
+    void readHeader(FileHeaderWrap &head) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }

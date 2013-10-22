@@ -284,7 +284,7 @@ private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
     std::map<uint64_t, RecIo> map_;
     struct walb_diff_file_header h_;
-    FileHeaderRef fileH_;
+    FileHeaderWrap fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
@@ -383,7 +383,7 @@ public:
                          nIos_, nIos);
         }
     }
-    FileHeaderRef& header() { return fileH_; }
+    FileHeaderWrap& header() { return fileH_; }
     void writeTo(int outFd, bool isCompressed = true) {
         Writer writer(outFd);
         writer.writeHeader(fileH_);
