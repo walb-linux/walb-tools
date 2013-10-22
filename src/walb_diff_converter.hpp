@@ -114,13 +114,8 @@ private:
         };
         if (lsid == uint64_t(-1)) {
             /* First time. */
-            if (walbDiff.init()) {
-                checkUuid();
-            } else {
-                /* Initialize uuid. */
-                walbDiff.header().setUuid(wlHeader.uuid());
-                walbDiff.sync();
-            }
+            /* Initialize uuid. */
+            walbDiff.header().setUuid(wlHeader.uuid());
             lsid = wlHeader.beginLsid();
         } else {
             /* Second or more. */

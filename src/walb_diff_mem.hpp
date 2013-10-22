@@ -294,10 +294,6 @@ public:
         fileH_.init();
     }
     ~MemoryData() noexcept = default;
-    bool init() {
-        /* Initialize always. */
-        return false;
-    }
     bool empty() const { return map_.empty(); }
 
     void add(const RecordRaw &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
@@ -358,11 +354,7 @@ public:
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
     }
-    bool sync() {
-        /* do nothing. */
-        return true;
-    }
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
             const RecordRaw &rec = it->second.record();
@@ -370,7 +362,6 @@ public:
             ++it;
         }
     }
-    void print() const { print(::stdout); }
     uint64_t getNBlocks() const { return nBlocks_; }
     uint64_t getNIos() const { return nIos_; }
     void checkStatistics() const {
@@ -407,7 +398,7 @@ public:
             }
             ++it;
         }
-        writer.flush();
+        writer.close();
     }
     void readFrom(int inFd) {
         Reader reader(inFd);

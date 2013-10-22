@@ -186,7 +186,7 @@ public:
 
         /* Copy to the record. */
         RecordRaw &rec = packIo.record();
-        RecordRef srcRec(*pack_, recIdx_);
+        RecordRef srcRec(pack_.get(), recIdx_);
         rec = srcRec;
 
         /* Read to the blockD. */
@@ -350,7 +350,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const PackHeaderRef &header, std::queue<Block> &&blocks) {
+    void writePack(const PackHeaderConst &header, std::queue<Block> &&blocks) {
         if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
         if (header.nRecords() == 0) return;
         /* Validate. */
@@ -361,7 +361,7 @@ public:
         }
         std::vector<BlockData> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
-            RecordRefConst rec(header, i);
+            const RecordRefConst rec(&header, i);
             BlockData blockD(pbs_);
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {
@@ -369,7 +369,7 @@ public:
                     blocks.pop();
                 }
             }
-            PackIoRef<RecordRefConst> packIo(&rec, &blockD);
+            const PackIoRef<const RecordRefConst> packIo(&rec, &blockD);
             if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
             v.push_back(std::move(blockD));
         }
@@ -393,7 +393,7 @@ private:
     /**
      * Check a pack header block.
      */
-    void checkHeader(const PackHeaderRef &header) const {
+    void checkHeader(const PackHeaderConst &header) const {
         if (!header.isValid()) {
             throw RT_ERR("Logpack header invalid.");
         }

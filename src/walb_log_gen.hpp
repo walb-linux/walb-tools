@@ -123,7 +123,7 @@ private:
             /* Prepare blocks and calc checksum if necessary. */
             std::queue<Block> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
-                RecordRef rec(logh, i);
+                RecordRef rec(&logh, i);
                 BlockData blockD(pbs);
                 PackIoRef<RecordRef> packIo(&rec, &blockD);
 
