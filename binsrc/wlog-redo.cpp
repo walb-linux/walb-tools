@@ -479,7 +479,6 @@ private:
     size_t nDiscard_;
     size_t nPadding_;
 
-    using PackHeader = walb::log::PackHeaderRef;
     using PackIo = walb::log::PackIoRaw;
 
 public:

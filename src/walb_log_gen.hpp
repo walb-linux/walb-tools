@@ -115,7 +115,7 @@ private:
 
         uint64_t nPack = 0;
         while (writtenPb < config_.outLogPb) {
-            walb::log::PackHeaderRef logh(hBlock.get(), pbs, salt);
+            walb::log::PackHeaderWrap logh(hBlock.get(), pbs, salt);
             generateLogpackHeader(rand, logh, lsid);
             assert(::is_valid_logpack_header_and_records(&logh.header()));
             uint64_t tmpLsid = lsid + 1;
@@ -123,9 +123,9 @@ private:
             /* Prepare blocks and calc checksum if necessary. */
             std::queue<Block> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
-                RecordRef rec(&logh, i);
+                RecordWrap rec(&logh, i);
                 BlockData blockD(pbs);
-                PackIoRef<RecordRef> packIo(&rec, &blockD);
+                PackIoWrap<RecordWrap> packIo(&rec, &blockD);
 
                 if (rec.hasData()) {
                     bool isAllZero = false;
@@ -184,7 +184,7 @@ private:
      * Generate logpack header randomly.
      */
     void generateLogpackHeader(
-        Rand &rand, walb::log::PackHeaderRef &logh, uint64_t lsid) {
+        Rand &rand, walb::log::PackHeaderWrap &logh, uint64_t lsid) {
         logh.init(lsid);
         const unsigned int pbs = config_.pbs;
         const unsigned int maxNumRecords = ::max_n_log_record_in_sector(pbs);

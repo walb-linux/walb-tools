@@ -439,7 +439,7 @@ public:
  * Logpack wrapper implementation.
  */
 template <typename CharT>
-class PackHeaderRefT : public PackHeader
+class PackHeaderWrapT : public PackHeader
 {
 protected:
     using CharTT = typename std::remove_const<CharT>::type;
@@ -447,13 +447,13 @@ protected:
     unsigned int pbs_;
     uint32_t salt_;
 public:
-    PackHeaderRefT(CharT *data, unsigned int pbs, uint32_t salt)
+    PackHeaderWrapT(CharT *data, unsigned int pbs, uint32_t salt)
         : data_(const_cast<CharTT *>(data))
         , pbs_(pbs)
         , salt_(salt) {
         ASSERT_PBS(pbs);
     }
-    ~PackHeaderRefT() noexcept = default;
+    ~PackHeaderWrapT() noexcept = default;
     const struct walb_logpack_header &header() const override {
         checkBlock();
         return *reinterpret_cast<const struct walb_logpack_header *>(data_);
@@ -485,10 +485,10 @@ protected:
     }
 };
 
-using PackHeaderRefConst = PackHeaderRefT<const uint8_t>;
-using PackHeaderRef = PackHeaderRefT<uint8_t>;
+using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>;
+using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
 
-class PackHeaderRaw : public PackHeaderRef
+class PackHeaderRaw : public PackHeaderWrap
 {
 protected:
     using Block = std::shared_ptr<uint8_t>;
@@ -496,7 +496,7 @@ protected:
 
 public:
     PackHeaderRaw(const Block &block, unsigned int pbs, uint32_t salt)
-        : PackHeaderRef(nullptr, pbs, salt)
+        : PackHeaderWrap(nullptr, pbs, salt)
         , block_(block) {
         resetData(block_.get());
     }
@@ -640,7 +640,7 @@ public:
  * Log record is a reference.
  */
 template <class PackHeaderT>
-class RecordRefT : public Record
+class RecordWrapT : public Record
 {
 protected:
     using PackHeaderTT = typename std::remove_const<PackHeaderT>::type;
@@ -648,13 +648,13 @@ protected:
     size_t pos_;
 
 public:
-    RecordRefT(PackHeaderT *logh, size_t pos)
+    RecordWrapT(PackHeaderT *logh, size_t pos)
         : Record(), logh_(const_cast<PackHeaderTT *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
-    ~RecordRefT() noexcept override {}
-    DISABLE_COPY_AND_ASSIGN(RecordRefT);
-    DISABLE_MOVE(RecordRefT);
+    ~RecordWrapT() noexcept override {}
+    DISABLE_COPY_AND_ASSIGN(RecordWrapT);
+    DISABLE_MOVE(RecordWrapT);
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_->pbs(); }
@@ -670,8 +670,8 @@ public:
     }
 };
 
-using RecordRef = RecordRefT<PackHeader>;
-using RecordRefConst = RecordRefT<const PackHeaderConst>;
+using RecordWrap = RecordWrapT<PackHeader>;
+using RecordWrapConst = RecordWrapT<const PackHeaderConst>;
 
 /**
  * Helper class to manage multiple IO blocks.
@@ -751,26 +751,26 @@ private:
  * This is just a wrapper of a record and a block data.
  */
 template <typename RecordT>
-class PackIoRef
+class PackIoWrap
 {
 private:
     RecordT *recP_;
     BlockData *blockD_;
 
 public:
-    PackIoRef(RecordT *rec, BlockData *blockD)
+    PackIoWrap(RecordT *rec, BlockData *blockD)
         : recP_(rec), blockD_(blockD) {
         assert(recP_);
         assert(blockD_);
     }
-    virtual ~PackIoRef() noexcept {}
-    PackIoRef(const PackIoRef &rhs)
+    virtual ~PackIoWrap() noexcept {}
+    PackIoWrap(const PackIoWrap &rhs)
         : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
-    PackIoRef &operator=(const PackIoRef &rhs) {
+    PackIoWrap &operator=(const PackIoWrap &rhs) {
         recP_ = rhs.recP_;
         blockD_ = rhs.blockD_;
     }
-    DISABLE_MOVE(PackIoRef);
+    DISABLE_MOVE(PackIoWrap);
 
     const RecordT &record() const { return *recP_; }
     RecordT &record() { return *recP_; }
@@ -827,21 +827,21 @@ public:
  * Logpack record and IO data.
  * This is copyable and movable.
  */
-class PackIoRaw : public PackIoRef<RecordRaw>
+class PackIoRaw : public PackIoWrap<RecordRaw>
 {
 private:
     RecordRaw rec_;
     BlockData blockD_;
 public:
-    PackIoRaw() : PackIoRef(&rec_, &blockD_) {}
+    PackIoRaw() : PackIoWrap(&rec_, &blockD_) {}
     PackIoRaw(const RecordRaw &rec, BlockData &&blockD)
-        : PackIoRef(&rec_, &blockD_)
+        : PackIoWrap(&rec_, &blockD_)
         , rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const PackHeaderConst &logh, size_t pos)
-        : PackIoRef(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
+        : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
     ~PackIoRaw() noexcept override = default;
     PackIoRaw(const PackIoRaw &rhs)
-        : PackIoRef(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+        : PackIoWrap(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
     PackIoRaw(PackIoRaw &&rhs)
         : PackIoRaw(rhs.rec_, std::move(rhs.blockD_)) {}
     PackIoRaw &operator=(const PackIoRaw &rhs) {
