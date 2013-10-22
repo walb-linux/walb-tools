@@ -768,7 +768,7 @@ class LogSendProtocol : public Protocol
 private:
     using Block = std::shared_ptr<uint8_t>;
     using BoundedQ = cybozu::thread::BoundedQueue<log::CompressedData, true>;
-    const size_t Q_SIZE = 10;
+    const size_t Q_SIZE = 10; /* TODO: do not hard cord. */
 
     class Data : public ProtocolData
     {
@@ -779,14 +779,13 @@ private:
         MetaDiff diff_;
         uint32_t pbs_; /* physical block size */
         uint32_t salt_; /* checksum salt. */
-        uint64_t sizePb_; /* Number of physical blocks (lsid range). */
+        uint64_t sizePb_; /* Number of physical blocks (lsid range) 0 is allowed. */
     public:
         using ProtocolData::ProtocolData;
         void checkParams() const {
             if (name_.empty()) logAndThrow("name param empty.");
             if (!diff_.isValid()) logAndThrow("Invalid meta diff.");
             if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
-            if (sizePb_ == 0) logAndThrow("Invalid sizePb.");
         }
         std::string str() const {
             return cybozu::util::formatString(
@@ -840,13 +839,13 @@ private:
         Client(cybozu::Socket &sock, Logger &logger, const std::vector<std::string> &params)
             : Data(sock, logger, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
         void setParams(const std::string &name, const uint8_t *uuid, const MetaDiff &diff,
-                       uint32_t pbs, uint32_t salt, uint64_t sizePb_)
+                       uint32_t pbs, uint32_t salt, uint64_t sizePb) {
             name_ = name;
-            uuid_.resize(UUID_SIZE);
-            ::memcpy(&uuid_[0], uuid, UUID_SIZE);
+            ::memcpy(uuid_.rawData(), uuid, uuid_.rawSize());
             diff_ = diff;
             pbs_ = pbs;
             salt_ = salt;
+            sizePb_ = sizePb;
             checkParam();
         }
         /**
@@ -862,9 +861,10 @@ private:
         }
         /**
          * Push a log pack.
+         * Do not send end logpack header by yourself. Use sync() instead.
          * TODO: use better interface.
          */
-        void push(const log::PackHeaderRef &header, std::queue<Block> &&blocks) {
+        void push(const log::PackHeaderWrapConst &header, std::queue<Block> &&blocks) {
             assert(header.totalIoSize() == blocks.size());
             /* Header */
             log::CompressedData cd;
@@ -902,10 +902,10 @@ private:
          * RETURN:
          *   Number of consumed physical blocks.
          */
-        size_t pushIo(const log::PackHeaderRef &header, size_t idx,
+        size_t pushIo(const log::PackHeaderWrapConst &header, size_t idx,
                     std::queue<Block> &blocks) {
 
-            log::RecordRefConst rec(header, idx);
+            log::RecordWrapConst rec(header, idx);
             if (!rec.hasData()) return 0;
 
             size_t s = header.pbs() * rec.ioSizePb();
@@ -987,7 +987,7 @@ private:
             packet.read(pbs_);
             packet.read(salt_);
             packet.read(sizePb_);
-
+            checkParams();
             packet::Answer ans(sock_);
             walb::ProxyData pd(baseDir_.str(), name_);
             if (pd.getServerNameList().empty()) {
@@ -999,6 +999,48 @@ private:
         }
         void recvAndWriteDiffData() {
             packet::Packet packet(sock_);
+
+            /* TODO: proxy data instance must be shared among threads. */
+            walb::ProxyData pd(baseDir_.str(), name_);
+            cybozu::TmpFile tmpFile(pd.getDiffDirToAdd().str());
+            const uint16_t maxIoBlocks = 64 * 1024 / LOGICAL_BLOCK_SIZE; /* TODO: */
+            walb::diff::MemoryData wdiffM(maxIoBlocks);
+            wdiffM.header().setUuid(uuid_.rawData());
+
+            while (readLogpackAndAdd(packet, wdiffM)) {}
+            wdiffM.writeTo(tmpFile.fd());
+            tmpFile.save(pd.getDiffDirToAdd(diff_).str());
+            pd.add(diff_);
+
+            /* TODO: notify wdiff-sender threads. */
+        }
+    private:
+        bool readLogpackAndAdd(packet::Packet &packet, walb::diff::Memorydata &wdiffM) {
+            walb::log::CompressedData cdHead, cdIo;
+            cdHead.read(packet);
+            if (cdHead.isCompressed()) cdHead = cdHead.uncompress();
+            const uint8_t *raw = reinterpret_cast<const uint8_t *>(cdHead.rawData());
+            const walb::log::PackHeaderWrapConst packH(raw, pbs_, salt_);
+            if (!packH.isValid()) {
+                logAndThrow("invalid logpack header: lsid %" PRIu64 "", packH.logpackLsid());
+            }
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                const walb::log::RecordWrapConst rec(&packH, i);
+                if (!rec.hasData()) continue;
+
+                /* now editing. */
+#if 0
+                walb::log::PackIoRaw packIo(packH,
+#endif
+
+
+
+
+                /* now editing */
+            }
+
+
+
 
             /* now editing */
         }
@@ -1028,7 +1070,6 @@ public:
         Server server(sock, logger, params);
         server.run();
     }
-    /* now editing */
 };
 #endif
 
@@ -1106,7 +1147,7 @@ static inline void runProtocolAsClient(
  * TODO: arguments for server data.
  */
 static inline void runProtocolAsServer(
-    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr)
+    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr) noexcept
 {
     ::printf("runProtocolAsServer start\n"); /* debug */
     packet::Packet packet(sock);
@@ -1141,12 +1182,13 @@ static inline void runProtocolAsServer(
     }
     ans.ok();
 
-    logger.info("initial negociation succeeded: %s", protocolName.c_str());
+    logger.info("initial negotiation succeeded: %s", protocolName.c_str());
     try {
         protocol->runAsServer(sock, logger, { baseDirStr });
     } catch (std::exception &e) {
-        /* Server must not throw an error. */
         logger.error("[%s] runProtocolAsServer failed: %s.", e.what());
+    } catch (...) {
+        logger.error("[%s] runProtocolAsServer failed: unknown error.");
     }
 }
 

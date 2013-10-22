@@ -23,8 +23,8 @@ private:
     std::string name_; /* must be unique in the system. */
     std::string addr_; /* what cybozu::SocketAddr can treat. */
     uint16_t port_;
-    uint8_t compressionType_;
-    uint8_t compressionLevel_;
+    uint8_t compressionType_; /* wdiff compression type. */
+    uint8_t compressionLevel_; /* wdiff compression level. */
 public:
     ServerInfo()
         : name_(), addr_(), port_(0)

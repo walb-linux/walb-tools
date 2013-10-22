@@ -73,6 +73,15 @@ public:
         return *wdiffsP_;
     }
     /**
+     * For temporary file.
+     */
+    cybozu::FilePath getDiffDirToAdd() const {
+        return getMasterDir();
+    }
+    cybozu::FilePath getDiffPathToAdd(const MetaDiff &diff) const {
+        return getMasterDir() + cybozu::FilePath(createDiffFileName(diff));
+    }
+    /**
      * Before calling this, you must create a wdiff file in a master directory
      * that is corresponding to a given metadiff.
      *
