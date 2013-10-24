@@ -350,7 +350,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const PackHeaderConst &header, std::queue<Block> &&blocks) {
+    void writePack(const PackHeader &header, std::queue<Block> &&blocks) {
         if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
         if (header.nRecords() == 0) return;
         /* Validate. */
@@ -393,7 +393,7 @@ private:
     /**
      * Check a pack header block.
      */
-    void checkHeader(const PackHeaderConst &header) const {
+    void checkHeader(const PackHeader &header) const {
         if (!header.isValid()) {
             throw RT_ERR("Logpack header invalid.");
         }

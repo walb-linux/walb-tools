@@ -77,9 +77,10 @@ static inline void printRecordOneline(
 /**
  * Interface.
  */
-class PackHeaderConst
+class PackHeader
 {
 public:
+    virtual struct walb_logpack_header &header() = 0;
     virtual const struct walb_logpack_header& header() const = 0;
 
     virtual unsigned int pbs() const = 0;
@@ -106,11 +107,23 @@ public:
     const T *ptr() const {
         return reinterpret_cast<const T *>(&header());
     }
+    template <typename T>
+    T *ptr() {
+        return reinterpret_cast<T *>(&header());
+    }
     const uint8_t *rawData() const { return ptr<const uint8_t>(); }
+    uint8_t *rawData() { return ptr<uint8_t>(); }
     const struct walb_log_record &recordUnsafe(size_t pos) const {
         return header().record[pos];
     }
+    struct walb_log_record& recordUnsafe(size_t pos) {
+        return header().record[pos];
+    }
     const struct walb_log_record &record(size_t pos) const {
+        checkIndexRange(pos);
+        return recordUnsafe(pos);
+    }
+    struct walb_log_record& record(size_t pos) {
         checkIndexRange(pos);
         return recordUnsafe(pos);
     }
@@ -190,38 +203,6 @@ public:
                       header().logpack_lsid,
                       mode, rec.offset, rec.io_size);
         }
-    }
-protected:
-    void checkIndexRange(size_t pos) const {
-        if (pos >= nRecords()) {
-            throw RT_ERR("index out of range.");
-        }
-    }
-};
-
-/**
- * Interface.
- */
-class PackHeader : public PackHeaderConst
-{
-public:
-    virtual struct walb_logpack_header &header() = 0;
-
-    /*
-     * Utilities.
-     */
-
-    template <typename T>
-    T *ptr() {
-        return reinterpret_cast<T *>(&header());
-    }
-    uint8_t *rawData() { return ptr<uint8_t>(); }
-    struct walb_log_record& recordUnsafe(size_t pos) {
-        return header().record[pos];
-    }
-    struct walb_log_record& record(size_t pos) {
-        checkIndexRange(pos);
-        return recordUnsafe(pos);
     }
     /**
      * Update checksum field.
@@ -433,6 +414,12 @@ public:
 
         assert(isValid());
     }
+protected:
+    void checkIndexRange(size_t pos) const {
+        if (pos >= nRecords()) {
+            throw RT_ERR("index out of range.");
+        }
+    }
 };
 
 /**
@@ -448,9 +435,7 @@ protected:
     uint32_t salt_;
 public:
     PackHeaderWrapT(CharT *data, unsigned int pbs, uint32_t salt)
-        : data_(const_cast<CharTT *>(data))
-        , pbs_(pbs)
-        , salt_(salt) {
+        : data_(const_cast<CharTT *>(data)), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
     ~PackHeaderWrapT() noexcept = default;
@@ -485,8 +470,8 @@ protected:
     }
 };
 
-using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>;
 using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
+using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>;
 
 class PackHeaderRaw : public PackHeaderWrap
 {
@@ -507,18 +492,23 @@ public:
 };
 
 /**
- * Interface and default implementation.
+ * Interface.
  */
-class RecordConst
+class Record
 {
 public:
-    virtual ~RecordConst() noexcept {}
+    virtual ~Record() noexcept {}
 
     /* Interface to access a record */
+    virtual struct walb_log_record &record() = 0;
+    virtual const struct walb_log_record &record() const = 0;
+
     virtual size_t pos() const = 0;
     virtual unsigned int pbs() const = 0;
     virtual uint32_t salt() const = 0;
-    virtual const struct walb_log_record &record() const = 0;
+    virtual void setPos(size_t) = 0;
+    virtual void setPbs(unsigned int) = 0;
+    virtual void setSalt(uint32_t) = 0;
 
     /* default implementation. */
     uint64_t lsid() const { return record().lsid; }
@@ -551,15 +541,6 @@ public:
     virtual void printOneline(::FILE *fp = ::stdout) const {
         printRecordOneline(fp, pos(), record());
     }
-};
-
-class Record : public RecordConst
-{
-public:
-    virtual void setPos(size_t) = 0;
-    virtual void setPbs(unsigned int) = 0;
-    virtual void setSalt(uint32_t) = 0;
-    virtual struct walb_log_record &record() = 0;
 
     void setExist() {
         ::set_bit_u32(LOG_RECORD_EXIST, &record().flags);
@@ -597,17 +578,17 @@ public:
         const struct walb_log_record &rec, size_t pos,
         unsigned int pbs, uint32_t salt)
         : Record(), pos_(pos), pbs_(pbs), salt_(salt), rec_(rec) {}
-    RecordRaw(const PackHeaderConst &logh, size_t pos)
+    RecordRaw(const PackHeader &logh, size_t pos)
         : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
     ~RecordRaw() noexcept override = default;
     RecordRaw(const RecordRaw &rhs)
         : RecordRaw(static_cast<const Record &>(rhs)) {}
-    RecordRaw(const RecordConst &rhs)
+    RecordRaw(const Record &rhs)
         : Record(), pos_(rhs.pos()), pbs_(rhs.pbs()), salt_(rhs.salt()), rec_(rhs.record()) {}
     RecordRaw &operator=(const RecordRaw &rhs) {
         return operator=(static_cast<const Record &>(rhs));
     }
-    RecordRaw &operator=(const RecordConst &rhs) {
+    RecordRaw &operator=(const Record &rhs) {
         setPos(rhs.pos());
         setPbs(rhs.pbs());
         setSalt(rhs.salt());
@@ -616,7 +597,7 @@ public:
     }
     DISABLE_MOVE(RecordRaw);
 
-    void copyFrom(const PackHeaderConst &logh, size_t pos) {
+    void copyFrom(const PackHeader &logh, size_t pos) {
         setPos(pos);
         setPbs(logh.pbs());
         setSalt(logh.salt());
@@ -646,7 +627,6 @@ protected:
     using PackHeaderTT = typename std::remove_const<PackHeaderT>::type;
     PackHeaderTT *logh_;
     size_t pos_;
-
 public:
     RecordWrapT(PackHeaderT *logh, size_t pos)
         : Record(), logh_(const_cast<PackHeaderTT *>(logh)) , pos_(pos) {
@@ -665,13 +645,11 @@ public:
     void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
     const struct walb_log_record &record() const override { return logh_->record(pos_); }
-    struct walb_log_record &record() override {
-        return const_cast<struct walb_log_record &>(logh_->record(pos_));
-    }
+    struct walb_log_record &record() override { return logh_->record(pos_); }
 };
 
 using RecordWrap = RecordWrapT<PackHeader>;
-using RecordWrapConst = RecordWrapT<const PackHeaderConst>;
+using RecordWrapConst = RecordWrapT<const PackHeader>; /* must use with const. */
 
 /**
  * Helper class to manage multiple IO blocks.
@@ -837,7 +815,7 @@ public:
     PackIoRaw(const RecordRaw &rec, BlockData &&blockD)
         : PackIoWrap(&rec_, &blockD_)
         , rec_(rec), blockD_(std::move(blockD)) {}
-    PackIoRaw(const PackHeaderConst &logh, size_t pos)
+    PackIoRaw(const PackHeader &logh, size_t pos)
         : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
     ~PackIoRaw() noexcept override = default;
     PackIoRaw(const PackIoRaw &rhs)
