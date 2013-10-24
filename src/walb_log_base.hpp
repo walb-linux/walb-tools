@@ -471,7 +471,7 @@ protected:
 };
 
 using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
-using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>;
+using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>; // must use with const. */
 
 class PackHeaderRaw : public PackHeaderWrap
 {
@@ -727,31 +727,34 @@ private:
 /**
  * Logpack record and IO data.
  * This is just a wrapper of a record and a block data.
+ *
+ * RecordT: Record or const Record.
  */
-template <typename RecordT>
-class PackIoWrap
+template <class RecordT>
+class PackIoWrapT
 {
 private:
-    RecordT *recP_;
+    Record *recP_;
     BlockData *blockD_;
 
 public:
-    PackIoWrap(RecordT *rec, BlockData *blockD)
-        : recP_(rec), blockD_(blockD) {
+    PackIoWrapT(RecordT *rec, BlockData *blockD)
+        : recP_(const_cast<Record *>(rec)), blockD_(blockD) {
         assert(recP_);
         assert(blockD_);
     }
-    virtual ~PackIoWrap() noexcept {}
-    PackIoWrap(const PackIoWrap &rhs)
+    virtual ~PackIoWrapT() noexcept {}
+    PackIoWrapT(const PackIoWrapT &rhs)
         : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
-    PackIoWrap &operator=(const PackIoWrap &rhs) {
+    PackIoWrapT &operator=(const PackIoWrapT &rhs) {
         recP_ = rhs.recP_;
         blockD_ = rhs.blockD_;
+        return *this;
     }
-    DISABLE_MOVE(PackIoWrap);
+    DISABLE_MOVE(PackIoWrapT);
 
-    const RecordT &record() const { return *recP_; }
-    RecordT &record() { return *recP_; }
+    const Record &record() const { return *recP_; }
+    Record &record() { return *recP_; }
     const BlockData &blockData() const { return *blockD_; }
     BlockData &blockData() { return *blockD_; }
 
@@ -801,11 +804,14 @@ public:
     }
 };
 
+using PackIoWrap = PackIoWrapT<Record>;
+using PackIoWrapConst = PackIoWrapT<const Record>; // use this with const.
+
 /**
  * Logpack record and IO data.
  * This is copyable and movable.
  */
-class PackIoRaw : public PackIoWrap<RecordRaw>
+class PackIoRaw : public PackIoWrap
 {
 private:
     RecordRaw rec_;

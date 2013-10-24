@@ -150,9 +150,9 @@ private:
     /**
      * Convert a logpack data to a diff record.
      */
-    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(log::PackIoWrap<log::RecordRaw> &packIo) {
+    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(const log::PackIoWrap &packIo) {
         const log::RecordRaw &rec = packIo.record();
-        log::BlockData &blockD = packIo.blockData();
+        const log::BlockData &blockD = packIo.blockData();
 
         if (rec.isPadding()) {
             return std::make_pair(DiffRecordPtr(), DiffIoPtr());

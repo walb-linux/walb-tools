@@ -217,7 +217,7 @@ private:
      * Read a logpack data.
      */
     void readLogpackData(PackIo &packIo, FdReader &fdr, BlockA &ba) {
-        walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::Record &rec = packIo.record();
         if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
@@ -298,7 +298,7 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIo packIo(logh, i);
             readLogpackData(packIo, fdr, ba);
-            walb::log::RecordRaw &rec = packIo.record();
+            walb::log::Record &rec = packIo.record();
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {
                     blocks.push_back(packIo.blockData().getBlock(j));

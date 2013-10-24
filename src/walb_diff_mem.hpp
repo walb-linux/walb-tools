@@ -25,8 +25,6 @@ private:
     RecordRaw rec_;
     IoData io_;
 public:
-    struct walb_diff_record &rawRecord() { return *rec_.rawRecord(); }
-    const struct walb_diff_record &rawRecord() const { return *rec_.rawRecord(); }
     RecordRaw &record() { return rec_; }
     const RecordRaw &record() const { return rec_; }
 
@@ -296,10 +294,10 @@ public:
     ~MemoryData() noexcept = default;
     bool empty() const { return map_.empty(); }
 
-    void add(const RecordRaw &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
+    void add(const Record &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
         add(rec, IoData(io), maxIoBlocks);
     }
-    void add(const RecordRaw &rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+    void add(const Record &rec, IoData &&io, uint16_t maxIoBlocks = 0) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.ioAddress();
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -392,9 +390,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(*r.record().rawRecord(), r.io().rawData());
+                writer.compressAndWriteDiff(r.record().record(), r.io().rawData());
             } else {
-                writer.writeDiff(*r.record().rawRecord(), r.io().rawData());
+                writer.writeDiff(r.record().record(), r.io().rawData());
             }
             ++it;
         }

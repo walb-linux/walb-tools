@@ -181,14 +181,14 @@ public:
         check(rec, io);
 
         /* Try to add. */
-        if (pack_.add(*rec.rawRecord())) {
+        if (pack_.add(rec.record())) {
             ioQ_.push(std::move(io));
             return;
         }
 
         /* Flush and add. */
         writePack();
-        UNUSED bool ret = pack_.add(*rec.rawRecord());
+        UNUSED bool ret = pack_.add(rec.record());
         assert(ret);
         ioQ_.push(std::move(io));
     }
@@ -220,7 +220,7 @@ public:
         rec1.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
         rec1.setDataSize(io1.rawSize());
         rec1.setChecksum(io1.calcChecksum());
-        writeDiff(*rec1.rawRecord(), io1.forMove());
+        writeDiff(rec1.record(), io1.forMove());
     }
 
     /**
@@ -360,7 +360,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(RecordWrap &rec, IoData &io) {
+    bool readDiff(Record &rec, IoData &io) {
         if (!canRead()) return false;
         ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
         if (!rec.isValid()) {
@@ -376,7 +376,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(RecordWrap &rec, IoData &io) {
+    bool readAndUncompressDiff(Record &rec, IoData &io) {
         RecordRaw rec0;
         IoData io0;
         if (!readDiff(rec0, io0)) {
@@ -437,7 +437,7 @@ private:
      *
      * If rec.dataSize() == 0, io will not be changed.
      */
-    void readDiffIo(const RecordWrap &rec, IoData &io) {
+    void readDiffIo(const Record &rec, IoData &io) {
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }

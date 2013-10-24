@@ -400,7 +400,7 @@ public:
             rec.setDataSize(dSize);
             rec.setChecksum(cybozu::util::calcChecksum(data, dSize, 0));
         }
-        return add(*rec.rawRecord(), data);
+        return add(rec.record(), data);
     }
     bool add(const struct walb_diff_record &rec0, const char *data) {
         RecordWrapConst rec(&rec0);

@@ -28,57 +28,58 @@ static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 namespace walb {
 namespace diff {
 
-template <class RecT>
-class RecordWrapT : public block_diff::BlockDiffKey
+/**
+ * Interface.
+ */
+class Record : public block_diff::BlockDiffKey
 {
-private:
-    RecT *recP_; /* must not be nullptr. */
-
 public:
-    explicit RecordWrapT(RecT *recP) : recP_(recP) {
-        assert(recP);
-    }
-    RecordWrapT(const RecordWrapT &rhs) : recP_(rhs.recP_) {}
-    RecordWrapT(RecordWrapT &&rhs) = delete;
-    RecordWrapT &operator=(const RecordWrapT &rhs) {
-        *recP_ = *rhs.recP_;
-        return *this;
-    }
-    RecordWrapT &operator=(RecordWrapT &&rhs) = delete;
+    virtual ~Record() noexcept = default;
 
+    /*
+     * You must implement these member functions.
+     */
+    virtual const struct walb_diff_record &record() const = 0;
+    virtual struct walb_diff_record &record() = 0;
+
+    /*
+     * Utilities.
+     */
     void init() {
-        ::memset(recP_, 0, sizeof(RecT));
+        ::memset(&record(), 0, sizeof(struct walb_diff_record));
         setExists();
     }
-
     template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(recP_); }
+    const T *ptr() const { return reinterpret_cast<const T *>(&record()); }
     template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(recP_); }
+    T *ptr() { return reinterpret_cast<T *>(&record()); }
 
-    uint64_t ioAddress() const override { return recP_->io_address; }
-    uint16_t ioBlocks() const override { return recP_->io_blocks; }
+    uint64_t ioAddress() const override { return record().io_address; }
+    uint16_t ioBlocks() const override { return record().io_blocks; }
     uint64_t endIoAddress() const { return ioAddress() + ioBlocks(); }
-    size_t rawSize() const override { return sizeof(*recP_); }
+    size_t rawSize() const override { return sizeof(struct walb_diff_record); }
     const char *rawData() const override { return ptr<char>(); }
     char *rawData() { return ptr<char>(); }
-    RecT *rawRecord() { return recP_; }
-    const struct walb_diff_record *rawRecord() const { return recP_; }
 
-    uint8_t compressionType() const { return recP_->compression_type; }
+    DEPRECATED
+    struct walb_diff_record *rawRecord() { return &record(); }
+    DEPRECATED
+    const struct walb_diff_record *rawRecord() const { return &record(); }
+
+    uint8_t compressionType() const { return record().compression_type; }
     bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
-    uint32_t dataOffset() const { return recP_->data_offset; }
-    uint32_t dataSize() const { return recP_->data_size; }
-    uint32_t checksum() const { return recP_->checksum; }
+    uint32_t dataOffset() const { return record().data_offset; }
+    uint32_t dataSize() const { return record().data_size; }
+    uint32_t checksum() const { return record().checksum; }
 
     bool exists() const {
-        return (recP_->flags & WALB_DIFF_FLAG(EXIST)) != 0;
+        return (record().flags & WALB_DIFF_FLAG(EXIST)) != 0;
     }
     bool isAllZero() const {
-        return (recP_->flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
+        return (record().flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
     }
     bool isDiscard() const {
-        return (recP_->flags & WALB_DIFF_FLAG(DISCARD)) != 0;
+        return (record().flags & WALB_DIFF_FLAG(DISCARD)) != 0;
     }
     bool isNormal() const {
         return !isAllZero() && !isDiscard();
@@ -132,31 +133,55 @@ public:
                   checksum(), exists(), isAllZero(), isDiscard());
     }
 
-    void setIoAddress(uint64_t ioAddress) { recP_->io_address = ioAddress; }
-    void setIoBlocks(uint16_t ioBlocks) { recP_->io_blocks = ioBlocks; }
-    void setCompressionType(uint8_t type) { recP_->compression_type = type; }
-    void setDataOffset(uint32_t offset) { recP_->data_offset = offset; }
-    void setDataSize(uint32_t size) { recP_->data_size = size; }
-    void setChecksum(uint32_t csum) { recP_->checksum = csum; }
+    void setIoAddress(uint64_t ioAddress) { record().io_address = ioAddress; }
+    void setIoBlocks(uint16_t ioBlocks) { record().io_blocks = ioBlocks; }
+    void setCompressionType(uint8_t type) { record().compression_type = type; }
+    void setDataOffset(uint32_t offset) { record().data_offset = offset; }
+    void setDataSize(uint32_t size) { record().data_size = size; }
+    void setChecksum(uint32_t csum) { record().checksum = csum; }
 
     void setExists() {
-        recP_->flags |= WALB_DIFF_FLAG(EXIST);
+        record().flags |= WALB_DIFF_FLAG(EXIST);
     }
     void clearExists() {
-        recP_->flags &= ~WALB_DIFF_FLAG(EXIST);
+        record().flags &= ~WALB_DIFF_FLAG(EXIST);
     }
     void setNormal() {
-        recP_->flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        recP_->flags &= ~WALB_DIFF_FLAG(DISCARD);
+        record().flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        record().flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setAllZero() {
-        recP_->flags |= WALB_DIFF_FLAG(ALLZERO);
-        recP_->flags &= ~WALB_DIFF_FLAG(DISCARD);
+        record().flags |= WALB_DIFF_FLAG(ALLZERO);
+        record().flags &= ~WALB_DIFF_FLAG(DISCARD);
     }
     void setDiscard() {
-        recP_->flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        recP_->flags |= WALB_DIFF_FLAG(DISCARD);
+        record().flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        record().flags |= WALB_DIFF_FLAG(DISCARD);
     }
+};
+
+template <class RecT>
+class RecordWrapT : public Record
+{
+private:
+    using RecTT = typename std::remove_const<RecT>::type;
+    RecTT *recP_; /* must not be nullptr. */
+
+public:
+    explicit RecordWrapT(RecT *recP)
+        : recP_(const_cast<RecTT *>(recP)) {
+        assert(recP);
+    }
+    RecordWrapT(const RecordWrapT &rhs) : recP_(rhs.recP_) {}
+    RecordWrapT(RecordWrapT &&rhs) = delete;
+    RecordWrapT &operator=(const RecordWrapT &rhs) {
+        *recP_ = *rhs.recP_;
+        return *this;
+    }
+    RecordWrapT &operator=(RecordWrapT &&rhs) = delete;
+
+    struct walb_diff_record &record() override { return *recP_; }
+    const struct walb_diff_record &record() const override { return *recP_; }
 };
 
 using RecordWrap = RecordWrapT<struct walb_diff_record>;
@@ -165,40 +190,45 @@ using RecordWrapConst = RecordWrapT<const struct walb_diff_record>;
 /**
  * Class for struct walb_diff_record.
  */
-class RecordRaw : public RecordWrap
+class RecordRaw : public Record
 {
 private:
     struct walb_diff_record rec_;
 
 public:
+    struct walb_diff_record &record() override { return rec_; }
+    const struct walb_diff_record &record() const override { return rec_; }
+
     /**
      * Default.
      */
-    RecordRaw() : RecordWrap(&rec_), rec_() {
-        init();
-    }
-
+    RecordRaw() : rec_() { init(); }
     /**
      * Clone.
      */
     RecordRaw(const RecordRaw &rec, bool isCheck = true)
-        : RecordWrap(&rec_), rec_(rec.rec_) {
-        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
+        : rec_(rec.rec_) {
+        if (isCheck) check();
     }
-
     /**
      * Convert.
      */
     RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
-        : RecordWrap(&rec_), rec_(rawRec) {
-        if (isCheck && !isValid()) { throw RT_ERR("invalid record."); }
+        : rec_(rawRec) {
+        if (isCheck) check();
     }
-
+    /**
+     * Convert.
+     */
+    RecordRaw(const Record &rec, bool isCheck = true)
+        : rec_(rec.record()) {
+        if (isCheck) check();
+    }
     /**
      * For raw data.
      */
     RecordRaw(const char *data, size_t size)
-        : RecordWrap(&rec_), rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
+        : rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
         if (size != sizeof(rec_)) {
             throw RT_ERR("size is invalid.");
         }
@@ -261,6 +291,10 @@ public:
         }
         assert(!v.empty());
         return v;
+    }
+private:
+    void check() const {
+        if (!isValid()) throw RT_ERR("invalid record.");
     }
 };
 

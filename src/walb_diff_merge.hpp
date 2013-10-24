@@ -172,7 +172,7 @@ public:
         RecIo d;
         while (pop(d)) {
             assert(d.isValid());
-            writer.compressAndWriteDiff(*d.record().rawRecord(), d.io().rawData());
+            writer.compressAndWriteDiff(d.record().record(), d.io().rawData());
         }
 
         writer.flush();

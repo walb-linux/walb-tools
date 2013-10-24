@@ -50,7 +50,7 @@ public:
                 &buf0_[0], blks * LOGICAL_BLOCK_SIZE, 0);
             rec.setChecksum(csum);
 
-            writer.compressAndWriteDiff(*rec.rawRecord(), &buf0_[0]);
+            writer.compressAndWriteDiff(rec.record(), &buf0_[0]);
 
             ioAddr += blks;
             blks = readChunk(reader);

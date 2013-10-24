@@ -125,7 +125,7 @@ private:
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
                 BlockData blockD(pbs);
-                PackIoWrap<RecordWrap> packIo(&rec, &blockD);
+                PackIoWrap packIo(&rec, &blockD);
 
                 if (rec.hasData()) {
                     bool isAllZero = false;

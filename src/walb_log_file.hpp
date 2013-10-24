@@ -179,13 +179,13 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(PackIoWrap<RecordRaw> &packIo) {
+    bool readLog(PackIoWrap &packIo) {
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
 
         /* Copy to the record. */
-        RecordRaw &rec = packIo.record();
+        Record &rec = packIo.record();
         RecordWrap srcRec(pack_.get(), recIdx_);
         rec = srcRec;
 
@@ -221,8 +221,8 @@ public:
      *   true when successfully read.
      *   false when the stream has reached the end.
      */
-    bool readLog(RecordRaw &rec, BlockData &blockD) {
-        PackIoWrap<RecordRaw> packIo(&rec, &blockD);
+    bool readLog(Record &rec, BlockData &blockD) {
+        PackIoWrap packIo(&rec, &blockD);
         return readLog(packIo);
     }
     /**
@@ -369,7 +369,7 @@ public:
                     blocks.pop();
                 }
             }
-            const PackIoWrap<const RecordWrapConst> packIo(&rec, &blockD);
+            const PackIoWrapConst packIo(&rec, &blockD);
             if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
             v.push_back(std::move(blockD));
         }
