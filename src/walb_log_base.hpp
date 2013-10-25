@@ -691,19 +691,34 @@ public:
      */
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
         checkPbs();
+        checkSizeLb(ioSizeLb);
         uint32_t csum = salt;
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
         while (0 < remaining) {
-            if (nBlocks() <= i) throw RT_ERR("Index out of range.");
+            assert(i < nBlocks());
             size_t s = pbs();
             if (remaining < pbs()) s = remaining;
             csum = cybozu::util::checksumPartial(get(i), s, csum);
             remaining -= s;
             i++;
         }
-        assert(remaining == 0);
         return cybozu::util::checksumFinish(csum);
+    }
+    bool calcIsAllZero(size_t ioSizeLb) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
+            remaining -= s;
+            i++;
+        }
+        return true;
     }
     void write(int fd) const {
         cybozu::util::FdWriter fdw(fd);
@@ -718,6 +733,12 @@ public:
 protected:
     void checkPbs() const {
         if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
+    }
+    void checkSizeLb(size_t ioSizeLb) const {
+        if (nBlocks() * pbs() < ioSizeLb * LOGICAL_BLOCK_SIZE) {
+            throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
+                         , ioSizeLb, ::capacity_lb(pbs(), nBlocks()));
+        }
     }
 };
 
