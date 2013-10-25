@@ -411,11 +411,7 @@ public:
     bool calcIsAllZero() const {
         if (isCompressed() || rawSize() == 0) { return false; }
         assert(rawSize() % LOGICAL_BLOCK_SIZE == 0);
-        const uint64_t *p = reinterpret_cast<const uint64_t *>(rawData());
-        for (size_t i = 0; i < rawSize() / sizeof(*p); i++) {
-            if (p[i] != 0) { return false; }
-        }
-        return true;
+        return cybozu::util::calcIsAllZero(rawData(), rawSize());
     }
 
     void print(::FILE *fp = ::stdout) const {
