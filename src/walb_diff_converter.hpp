@@ -28,16 +28,20 @@ namespace walb {
 /**
  * Convert a logpack data to a diff data.
  *
+ * PackIo: PackIoWrapConst, PackIoWrap, or PackIoRaw<>.
+ *
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
  */
+template <class PackIo>
 bool convertLogToDiff(
-    const log::PackIoWrap &packIo, diff::Record &mrec, diff::IoData &diffIo)
+    const PackIo &packIo, diff::Record &mrec, diff::IoData &diffIo)
 {
     const log::Record &rec = packIo.record();
     const log::BlockData &blockD = packIo.blockData();
 
+    /* Padding */
     if (rec.isPadding()) return false;
 
     mrec.init();
@@ -47,6 +51,15 @@ bool convertLogToDiff(
     /* Discard */
     if (rec.isDiscard()) {
         mrec.setDiscard();
+        mrec.setDataSize(0);
+        diffIo.set(mrec.record(), {});
+        return true;
+    }
+
+    /* AllZero */
+    if (blockD.calcIsAllZero(rec.ioSizeLb())) {
+        mrec.setAllZero();
+        mrec.setDataSize(0);
         diffIo.set(mrec.record(), {});
         return true;
     }
@@ -73,21 +86,13 @@ bool convertLogToDiff(
     assert(off == ioSizeB);
     diffIo.set(mrec.record(), std::move(buf));
 
-    /* All-zero. */
-    if (diffIo.calcIsAllZero()) {
-        mrec.setAllZero();
-        mrec.setDataSize(0);
-        diffIo.set(mrec.record(), {});
-        return true;
-    }
-
-    /* Checksum. */
-    mrec.setChecksum(diffIo.calcChecksum());
-
     /* Compression. (currently NONE). */
     mrec.setCompressionType(::WALB_DIFF_CMPR_NONE);
     mrec.setDataOffset(0);
     mrec.setDataSize(ioSizeB);
+
+    /* Checksum. */
+    mrec.setChecksum(diffIo.calcChecksum());
 
     return true;
 }
