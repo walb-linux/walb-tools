@@ -5,7 +5,7 @@ CC = gcc-4.8.1
 
 OPT_FLAGS =
 ifeq ($(DEBUG),1)
-OPT_FLAGS += -g -DDEBUG -DWALB_DEBUG
+OPT_FLAGS += -g -rdynamic -DDEBUG -DWALB_DEBUG
 else
 OPT_FLAGS += -O2 -DNDEBUG
 endif
