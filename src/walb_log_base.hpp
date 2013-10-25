@@ -742,6 +742,60 @@ protected:
     }
 };
 
+template <typename CharT>
+class BlockDataWrapT : public BlockData
+{
+private:
+    unsigned int pbs_;
+    CharT *data_;
+    size_t nBlocks_;
+public:
+    BlockDataWrapT(unsigned int pbs, CharT *data, size_t nBlocks)
+        : pbs_(pbs), data_(data), nBlocks_(nBlocks) {}
+    DISABLE_COPY_AND_ASSIGN(BlockDataWrapT);
+    DISABLE_MOVE(BlockDataWrapT);
+
+    unsigned int pbs() const override { return pbs_; }
+    void setPbs(unsigned int pbs) override {
+        throw RT_ERR("Do not call this member function.");
+    }
+    size_t nBlocks() const override { return nBlocks_; }
+    const uint8_t *get(size_t idx) const override {
+        check(idx);
+        return reinterpret_cast<uint8_t *>(&data_[idx * pbs()]);
+    }
+    uint8_t *get(size_t idx) override {
+        assert_bt(!std::is_const<CharT>::value);
+        check(idx);
+        return reinterpret_cast<uint8_t *>(&data_[idx * pbs()]);
+    }
+    void resize(size_t) override {
+        throw RT_ERR("Do not call this member function.");
+    }
+    void addBlock(const Block &) override {
+        throw RT_ERR("Do not call this member function.");
+    }
+    Block getBlock(size_t idx) const override {
+        check(idx);
+        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
+        ::memcpy(b.get(), get(idx), pbs());
+        return b;
+    }
+private:
+    void check(size_t idx) const {
+        checkPbs();
+        if (!data_) {
+            throw RT_ERR("BlockDataWrap: data_ is NULL.");
+        }
+        if (nBlocks() <= idx) {
+            throw RT_ERR("BlockDataWrap: index out of range.");
+        }
+    }
+};
+
+using BlockDataWrap = BlockDataWrapT<uint8_t>;
+using BlockDataWrapConst = BlockDataWrapT<const uint8_t>; //must declare with const.
+
 /**
  * Block data using a vector.
  */
@@ -785,6 +839,7 @@ public:
         ::memcpy(&data_[s0], block.get(), pbs());
     }
     Block getBlock(size_t idx) const override {
+        check(idx);
         Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
         ::memcpy(b.get(), get(idx), pbs());
         return b;
@@ -871,16 +926,17 @@ private:
  * This is just a wrapper of a record and a block data.
  *
  * RecordT: Record or const Record.
+ * BlockDataT: BlockData or const BlockData.
  */
-template <class RecordT>
+template <class RecordT, class BlockDataT>
 class PackIoWrapT
 {
 private:
     RecordT *recP_;
-    BlockData *blockD_;
+    BlockDataT *blockD_;
 
 public:
-    PackIoWrapT(RecordT *rec, BlockData *blockD)
+    PackIoWrapT(RecordT *rec, BlockDataT *blockD)
         : recP_(rec), blockD_(blockD) {
         assert(recP_);
         assert(blockD_);
@@ -901,7 +957,10 @@ public:
         return *const_cast<Record *>(recP_);
     }
     const BlockData &blockData() const { return *blockD_; }
-    BlockData &blockData() { return *blockD_; }
+    BlockData &blockData() {
+        assert_bt(!std::is_const<BlockDataT>::value);
+        return *const_cast<BlockData *>(blockD_);
+    }
 
     bool isValid(bool isChecksum = true) const {
         if (!recP_->isValid()) {
@@ -953,8 +1012,11 @@ public:
     }
 };
 
-using PackIoWrap = PackIoWrapT<Record>;
-using PackIoWrapConst = PackIoWrapT<const Record>; //must use with const.
+using PackIoWrap = PackIoWrapT<Record, BlockData>;
+/**
+ * must use with const.
+ */
+using PackIoWrapConst = PackIoWrapT<const Record, const BlockData>;
 
 /**
  * Logpack record and IO data.
