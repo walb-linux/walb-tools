@@ -446,7 +446,9 @@ public:
     struct walb_logpack_header &header() override {
         assert_bt(!std::is_const<CharT>::value);
         checkBlock();
-        return *reinterpret_cast<struct walb_logpack_header *>(data_);
+        using CharTT = typename std::remove_const<CharT>::type;
+        return *reinterpret_cast<struct walb_logpack_header *>(
+            const_cast<CharTT *>(data_));
     }
     unsigned int pbs() const override { return pbs_; }
     uint32_t salt() const override { return salt_; }
@@ -630,6 +632,8 @@ public:
 /**
  * Log data of an IO.
  * Log record is a reference.
+ *
+ * PackHeaderT: PackHeader or const PackHeader.
  */
 template <class PackHeaderT>
 class RecordWrapT : public Record
@@ -756,18 +760,20 @@ public:
     DISABLE_MOVE(BlockDataWrapT);
 
     unsigned int pbs() const override { return pbs_; }
-    void setPbs(unsigned int pbs) override {
+    void setPbs(unsigned int) override {
         throw RT_ERR("Do not call this member function.");
     }
     size_t nBlocks() const override { return nBlocks_; }
     const uint8_t *get(size_t idx) const override {
         check(idx);
-        return reinterpret_cast<uint8_t *>(&data_[idx * pbs()]);
+        return reinterpret_cast<const uint8_t *>(&data_[idx * pbs()]);
     }
     uint8_t *get(size_t idx) override {
         assert_bt(!std::is_const<CharT>::value);
         check(idx);
-        return reinterpret_cast<uint8_t *>(&data_[idx * pbs()]);
+        using CharTT = typename std::remove_const<CharT>::type;
+        return reinterpret_cast<uint8_t *>(
+            const_cast<CharTT*>(&data_[idx * pbs()]));
     }
     void resize(size_t) override {
         throw RT_ERR("Do not call this member function.");

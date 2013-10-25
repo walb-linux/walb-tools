@@ -59,7 +59,7 @@ public:
         assert(isValid());
     }
 
-    void setUuid(const uint8_t *uuid) {
+    void setUuid(const void *uuid) {
         ::memcpy(&h_.uuid[0], uuid, UUID_SIZE);
     }
 

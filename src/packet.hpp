@@ -74,6 +74,7 @@ public:
 class Ack : public Packet
 {
 public:
+    using Packet :: Packet;
     void send() {
         sendDebugMsg("ACK");
         write(ACK_MSG);
@@ -91,6 +92,7 @@ public:
 class Version : public Packet
 {
 public:
+    using Packet :: Packet;
     Version(cybozu::Socket &sock) : Packet(sock) {}
     void send() {
         sendDebugMsg("VERSION");
@@ -113,7 +115,7 @@ public:
 class Answer : public Packet
 {
 public:
-    Answer(cybozu::Socket &sock) : Packet(sock) {}
+    using Packet :: Packet;
     void ok() { send(true, 0, ""); }
     void ng(int err, const std::string &msg) { send(false, err, msg); }
     void send(bool b, int err, const std::string &msg) {
