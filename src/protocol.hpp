@@ -21,6 +21,7 @@
 #include "fileio.hpp"
 #include "walb_diff_virt.hpp"
 #include "server_data.hpp"
+#include "proxy_data.hpp"
 #include "walb_diff_pack.hpp"
 #include "walb_diff_compressor.hpp"
 #include "thread_util.hpp"
@@ -28,6 +29,7 @@
 #include "walb_log_compressor.hpp"
 #include "walb_log_file.hpp"
 #include "uuid.hpp"
+#include "walb_diff_converter.hpp"
 
 namespace walb {
 
@@ -287,7 +289,7 @@ private:
         }
         void recvAndWrite() {
             packet::Packet packet(sock_);
-            walb::ServerData sd(baseDir_.str(), name_);
+            ServerData sd(baseDir_.str(), name_);
             sd.reset(gid_);
             sd.createLv(sizeLb_);
             std::string lvPath = sd.getLv().path().str();
@@ -418,8 +420,8 @@ class DirtyHashSyncProtocol : public Protocol
             std::vector<char> buf(bulkLb_ * LOGICAL_BLOCK_SIZE);
             cybozu::util::BlockDevice bd(path_, O_RDONLY);
             cybozu::murmurhash3::Hasher hasher(seed_);
-            walb::ConverterQueue convQ(4, 2, true, ::WALB_DIFF_CMPR_SNAPPY); /* TODO: do not hardcode. */
-            walb::diff::Packer packer;
+            ConverterQueue convQ(4, 2, true, ::WALB_DIFF_CMPR_SNAPPY); /* TODO: do not hardcode. */
+            diff::Packer packer;
             packer.setMaxPackSize(2U << 20); /* 2MiB. TODO: do not hardcode. */
             packer.setMaxNumRecords(10); /* TODO: do not hardcode. */
             std::atomic<bool> isError(false);
@@ -584,7 +586,7 @@ class DirtyHashSyncProtocol : public Protocol
             packet.read(bulkLb_);
             packet.read(seed_);
             packet::Answer ans(sock_);
-            walb::ServerData sd(baseDir_.str(), name_);
+            ServerData sd(baseDir_.str(), name_);
             if (!sd.lvExists()) {
                 std::string msg = cybozu::util::formatString(
                     "Lv does not exist for %s. Try full-sync."
@@ -598,7 +600,7 @@ class DirtyHashSyncProtocol : public Protocol
         }
         void recvAndWriteDiffData() {
             packet::Packet packet(sock_);
-            walb::ServerData sd(baseDir_.str(), name_);
+            ServerData sd(baseDir_.str(), name_);
             std::string lvPath = sd.getLv().path().str();
             cybozu::util::BlockDevice bd(lvPath, O_RDWR);
             cybozu::murmurhash3::Hasher hasher(seed_);
@@ -613,7 +615,7 @@ class DirtyHashSyncProtocol : public Protocol
                 cybozu::FilePath fp = sd.getDiffPath(diff);
                 diffPaths.push_back(fp.str());
             }
-            walb::diff::VirtualFullScanner virtLv(bd.getFd(), diffPaths);
+            diff::VirtualFullScanner virtLv(bd.getFd(), diffPaths);
             std::vector<char> buf0(bulkLb_ * LOGICAL_BLOCK_SIZE);
 
             logger_.info("hoge2");
@@ -756,7 +758,7 @@ public:
 };
 #endif
 
-#if 0
+#if 1
 /**
  * Wlog-send protocol.
  *
@@ -768,7 +770,7 @@ class LogSendProtocol : public Protocol
 private:
     using Block = std::shared_ptr<uint8_t>;
     using BoundedQ = cybozu::thread::BoundedQueue<log::CompressedData, true>;
-    const size_t Q_SIZE = 10; /* TODO: do not hard cord. */
+    static constexpr size_t Q_SIZE = 10; /* TODO: do not hard cord. */
 
     class Data : public ProtocolData
     {
@@ -790,7 +792,7 @@ private:
         std::string str() const {
             return cybozu::util::formatString(
                 "name %s uuid %s diff (%s) pbs %" PRIu32 " salt %08x %" PRIu64 ""
-                , name_.c_str(), uuid_.str().c_str(), diff.str().c_str()
+                , name_.c_str(), uuid_.str().c_str(), diff_.str().c_str()
                 , pbs_, salt_, sizePb_);
         }
     };
@@ -825,11 +827,11 @@ private:
             void operator()() noexcept override try {
                 packet::StreamControl ctrl(packet_.sock());
                 while (!inQ_.isEnd()) {
-                    CompressedData cd = inQ_.pop();
+                    log::CompressedData cd = inQ_.pop();
                     ctrl.next();
                     cd.send(packet_);
                 }
-                if (isError) ctrl.error(); else ctrl.end();
+                if (isError_) ctrl.error(); else ctrl.end();
             } catch (...) {
                 throwErrorLater();
                 inQ_.error();
@@ -838,6 +840,30 @@ private:
     public:
         Client(cybozu::Socket &sock, Logger &logger, const std::vector<std::string> &params)
             : Data(sock, logger, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
+        void run() {
+#if 0
+            /* Open wldev device. */
+
+            /* Get pbs, salt from wldev. */
+
+            /* Decide lsid range. */
+
+
+            /* Get wlog information. */
+
+
+            setParams();
+            prepare();
+            while (true) {
+                /* Get logpack and push */
+                push();
+            }
+            sync();
+            //error();
+
+            /* now editing */
+#endif
+        }
         void setParams(const std::string &name, const uint8_t *uuid, const MetaDiff &diff,
                        uint32_t pbs, uint32_t salt, uint64_t sizePb) {
             name_ = name;
@@ -846,7 +872,7 @@ private:
             pbs_ = pbs;
             salt_ = salt;
             sizePb_ = sizePb;
-            checkParam();
+            checkParams();
         }
         /**
          * Prepare worker threads.
@@ -854,7 +880,7 @@ private:
         void prepare() {
             isError_ = false;
             negotiate();
-            compressor_.set(std::make_shared<wlab::log::CompressWorker>(q0_, q1_));
+            compressor_.set(std::make_shared<log::CompressWorker>(q0_, q1_));
             sender_.set(std::make_shared<Sender>(q1_, sock_, logger_, isError_));
             compressor_.start();
             sender_.start();
@@ -864,7 +890,7 @@ private:
          * Do not send end logpack header by yourself. Use sync() instead.
          * TODO: use better interface.
          */
-        void push(const log::PackHeaderWrapConst &header, std::queue<Block> &&blocks) {
+        void push(const log::PackHeaderWrap &header, std::queue<Block> &&blocks) {
             assert(header.totalIoSize() == blocks.size());
             /* Header */
             log::CompressedData cd;
@@ -886,7 +912,7 @@ private:
             q0_.push(generateEndHeaderBlock());
             q0_.sync();
             joinWorkers();
-            packet::Ack ack;
+            packet::Ack ack(sock_);
             ack.recv();
         }
         /**
@@ -902,10 +928,10 @@ private:
          * RETURN:
          *   Number of consumed physical blocks.
          */
-        size_t pushIo(const log::PackHeaderWrapConst &header, size_t idx,
+        size_t pushIo(const log::PackHeader &header, size_t idx,
                     std::queue<Block> &blocks) {
 
-            log::RecordWrapConst rec(header, idx);
+            const log::RecordWrapConst rec(&header, idx);
             if (!rec.hasData()) return 0;
 
             size_t s = header.pbs() * rec.ioSizePb();
@@ -922,17 +948,17 @@ private:
             }
             assert(n == 0);
             assert(off == s);
-            CompressedData cd;
+            log::CompressedData cd;
             cd.moveFrom(0, s, std::move(v));
             q0_.push(std::move(cd));
             return rec.ioSizePb();
         }
-        CompressedData generateEndHeaderBlock() const {
-            Block b = cybozu::util::allocateBlocks(pbs_, pbs_);
+        log::CompressedData generateEndHeaderBlock() const {
+            Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
             log::PackHeaderRaw header(b, pbs_, salt_);
             header.setEnd();
             header.updateChecksum();
-            CompressedData cd;
+            log::CompressedData cd;
             cd.copyFrom(0, pbs_, b.get());
             return cd;
         }
@@ -967,8 +993,13 @@ private:
         void run() {
             loadParams();
             negotiate();
-            logger_.info("wlog-send %s %" PRIu64 " %u %u (%" PRIu64 " %" PRIu64")"
-                         , name_.c_str(), sizeLb_, bulkLb_, seed_, snap_.gid0(), snap_.gid1());
+            logger_.info(
+                "wlog-send %s %s ((%" PRIu64 ", %" PRIu64 "), (%" PRIu64", %" PRIu64 ")) "
+                "%" PRIu32 " %" PRIu32 " %" PRIu64 " "
+                , name_.c_str(), uuid_.str().c_str()
+                , diff_.snap0().gid0(), diff_.snap0().gid1()
+                , diff_.snap1().gid0(), diff_.snap1().gid1()
+                , pbs_, salt_, sizePb_);
             recvAndWriteDiffData();
         }
     private:
@@ -989,7 +1020,7 @@ private:
             packet.read(sizePb_);
             checkParams();
             packet::Answer ans(sock_);
-            walb::ProxyData pd(baseDir_.str(), name_);
+            ProxyData pd(baseDir_.str(), name_);
             if (pd.getServerNameList().empty()) {
                 std::string msg("There is no server registered.");
                 ans.ng(1, msg);
@@ -1001,48 +1032,74 @@ private:
             packet::Packet packet(sock_);
 
             /* TODO: proxy data instance must be shared among threads. */
-            walb::ProxyData pd(baseDir_.str(), name_);
+            ProxyData pd(baseDir_.str(), name_);
             cybozu::TmpFile tmpFile(pd.getDiffDirToAdd().str());
             const uint16_t maxIoBlocks = 64 * 1024 / LOGICAL_BLOCK_SIZE; /* TODO: */
-            walb::diff::MemoryData wdiffM(maxIoBlocks);
+            diff::MemoryData wdiffM(maxIoBlocks);
             wdiffM.header().setUuid(uuid_.rawData());
 
             while (readLogpackAndAdd(packet, wdiffM)) {}
             wdiffM.writeTo(tmpFile.fd());
-            tmpFile.save(pd.getDiffDirToAdd(diff_).str());
+            tmpFile.save(pd.getDiffPathToAdd(diff_).str());
             pd.add(diff_);
+
+            packet::Ack ack(sock_);
+            ack.send();
 
             /* TODO: notify wdiff-sender threads. */
         }
     private:
-        bool readLogpackAndAdd(packet::Packet &packet, walb::diff::Memorydata &wdiffM) {
-            walb::log::CompressedData cdHead, cdIo;
-            cdHead.read(packet);
+        /**
+         * Read a logpack, convert to diff data and
+         * add all the IOs in the pack into the memory data.
+         *
+         * padding data will be skipped.
+         *
+         * RETURN:
+         *   false if it read the end header block,
+         *   true otherwise.
+         */
+        bool readLogpackAndAdd(packet::Packet &packet, diff::MemoryData &wdiffM) {
+            log::CompressedData cdHead, cdIo;
+            packet::StreamControl ctrl(packet.sock());
+            if (!ctrl.isNext()) logAndThrow("Client said error.");
+            ctrl.reset();
+            cdHead.recv(packet);
             if (cdHead.isCompressed()) cdHead = cdHead.uncompress();
             const uint8_t *raw = reinterpret_cast<const uint8_t *>(cdHead.rawData());
-            const walb::log::PackHeaderWrapConst packH(raw, pbs_, salt_);
+            const log::PackHeaderWrapConst packH(raw, pbs_, salt_);
             if (!packH.isValid()) {
                 logAndThrow("invalid logpack header: lsid %" PRIu64 "", packH.logpackLsid());
             }
-            for (size_t i = 0; i < packH.nRecords(); i++) {
-                const walb::log::RecordWrapConst rec(&packH, i);
-                if (!rec.hasData()) continue;
-
-                /* now editing. */
-#if 0
-                walb::log::PackIoRaw packIo(packH,
-#endif
-
-
-
-
-                /* now editing */
+            if (packH.isEnd()) {
+                if (!ctrl.isEnd()) logAndThrow("Client did not say end.");
+                return false;
             }
 
-
-
-
-            /* now editing */
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                const log::RecordWrapConst lrec(&packH, i);
+                if (!lrec.hasData()) continue;
+                /* Read IO data. */
+                if (!ctrl.isNext()) logAndThrow("Client said error.");
+                ctrl.reset();
+                cdIo.recv(packet);
+                if (cdIo.isCompressed()) cdIo = cdIo.uncompress();
+                if (cdIo.rawSize() != lrec.ioSizePb() * pbs_) {
+                    logAndThrow("invalid size of log IO. expected %zu received %zu."
+                                , lrec.ioSizePb() * pbs_, cdIo.rawSize());
+                }
+                /* Convert Log to diff. */
+                const log::BlockDataWrapT<const char> blockData(
+                    pbs_, cdIo.rawData(), lrec.ioSizePb());
+                const log::PackIoWrapConst packIo(&lrec, &blockData);
+                diff::RecordRaw drec;
+                diff::IoData dio;
+                if (convertLogToDiff(packIo, drec, dio)) {
+                    /* Add to memory data. */
+                    wdiffM.add(drec, std::move(dio));
+                }
+            }
+            return true;
         }
     };
 
@@ -1051,14 +1108,14 @@ public:
 
     /**
      * @params using cybozu::loadFromStr() to convert.
+     *   [0] :: string: lv identifier.
+     *
+     *   now editing
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
                      const std::vector<std::string> &params) override {
         Client client(sock, logger, params);
-#if 0
         client.run();
-#endif
-        /* now editing */
     }
     /**
      *
@@ -1101,7 +1158,7 @@ private:
         DECLARE_PROTOCOL(echo, EchoProtocol);
         DECLARE_PROTOCOL(dirty-full-sync, DirtyFullSyncProtocol);
         DECLARE_PROTOCOL(dirty-hash-sync, DirtyHashSyncProtocol);
-        //DECLARE_PROTOCOL(wlog-send, LogSendProtocol);
+        DECLARE_PROTOCOL(wlog-send, LogSendProtocol);
         //DECLARE_PROTOCOL(wdiff-send, DiffSendProtocol);
         /* now editing */
     }
