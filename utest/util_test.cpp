@@ -156,3 +156,16 @@ CYBOZU_TEST_AUTO(formatString)
         CYBOZU_TEST_EQUAL(st.size(), 20);
     }
 }
+
+CYBOZU_TEST_AUTO(calcIsAllZero)
+{
+    const size_t s = 1024;
+    std::vector<char> v(s, 0);
+    for (size_t i = 0; i < 32; i++) {
+        CYBOZU_TEST_ASSERT(cybozu::util::calcIsAllZero(&v[i], s - i));
+    }
+    v[s - 1] = 1;
+    for (size_t i = 0; i < 32; i++) {
+        CYBOZU_TEST_ASSERT(!cybozu::util::calcIsAllZero(&v[i], s - i));
+    }
+}
