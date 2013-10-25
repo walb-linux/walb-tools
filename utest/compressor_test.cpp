@@ -103,7 +103,7 @@ std::vector<std::vector<char> > generateRawPacks()
     it.begin();
     while (it.isValid()) {
         //it.record().printOneline(); /* debug */
-        addIo(*it.record().rawRecord(), it.rawData(), it.rawSize());
+        addIo(it.record().record(), it.rawData(), it.rawSize());
         it.next();
     }
     packh.updateChecksum();
