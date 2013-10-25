@@ -337,7 +337,7 @@ public:
         uint32_t dataOffset = 0;
         for (size_t i = 0; i < pack_.nRecords(); i++) {
             /* Copy each IO data. */
-            RecordWrapConst rec(&pack_.record(i));
+            const RecordWrapConst rec(&pack_.record(i));
             uint32_t dataSize = rec.dataSize();
             assert(rec.dataOffset() == dataOffset);
             if (rec.isNormal()) {
@@ -403,7 +403,7 @@ public:
         return add(rec.record(), data);
     }
     bool add(const struct walb_diff_record &rec0, const char *data) {
-        RecordWrapConst rec(&rec0);
+        const RecordWrapConst rec(&rec0);
         assert(rec.isValid());
         size_t dSize = rec.dataSize();
         if (!packh_.canAdd(dSize)) return false;

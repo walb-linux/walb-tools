@@ -479,7 +479,7 @@ private:
     size_t nDiscard_;
     size_t nPadding_;
 
-    using PackIo = walb::log::PackIoRaw;
+    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataVec>;
 
 public:
     WalbLogApplyer(

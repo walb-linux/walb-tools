@@ -81,7 +81,7 @@ class WldevVerifier
 private:
     using PackHeader = walb::log::PackHeaderRaw;
     using PackHeaderPtr = std::shared_ptr<PackHeader>;
-    using PackIo = walb::log::PackIoRaw;
+    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;

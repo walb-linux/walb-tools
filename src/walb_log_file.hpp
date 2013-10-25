@@ -186,23 +186,23 @@ public:
 
         /* Copy to the record. */
         Record &rec = packIo.record();
-        RecordWrap srcRec(pack_.get(), recIdx_);
+        const RecordWrapConst srcRec(pack_.get(), recIdx_);
         rec = srcRec;
 
         /* Read to the blockD. */
         BlockData &blockD = packIo.blockData();
         blockD.setPbs(pbs_);
-        blockD.clear();
         if (rec.hasData()) {
+            blockD.resize(rec.ioSizePb());
             for (size_t i = 0; i < rec.ioSizePb(); i++) {
                 try {
-                    std::shared_ptr<uint8_t> b = allocPb();
-                    fdr_.read(reinterpret_cast<char *>(b.get()), pbs_);
-                    blockD.addBlock(b);
+                    fdr_.read(blockD.get(i), pbs_);
                 } catch (cybozu::util::EofError &e) {
                     throw InvalidIo();
                 }
             }
+        } else {
+            blockD.resize(0);
         }
 
         /* Validate. */
@@ -359,10 +359,10 @@ public:
             throw RT_ERR("blocks.size() must be %u but %zu."
                          , header.totalIoSize(), blocks.size());
         }
-        std::vector<BlockData> v;
+        std::vector<BlockDataShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
             const RecordWrapConst rec(&header, i);
-            BlockData blockD(pbs_);
+            BlockDataShared blockD(pbs_);
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {
                     blockD.addBlock(std::move(blocks.front()));
@@ -434,7 +434,7 @@ public:
         reader.readHeader(wh);
         wh.print(fp);
 
-        PackIoRaw packIo;
+        PackIoRaw<BlockDataVec> packIo;
         while (reader.readLog(packIo)) {
             packIo.printOneline(fp);
         }

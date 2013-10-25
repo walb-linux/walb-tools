@@ -19,8 +19,8 @@
 #include "block_diff.hpp"
 #include "walb_diff.h"
 #include "stdout_logger.hpp"
-
 #include "walb/block_size.h"
+#include "backtrace.hpp"
 
 static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
@@ -34,6 +34,14 @@ namespace diff {
 class Record : public block_diff::BlockDiffKey
 {
 public:
+
+    Record() = default;
+    Record(const Record &rhs) = delete;
+    DISABLE_MOVE(Record);
+    Record &operator=(const Record &rhs) {
+        record() = rhs.record();
+        return *this;
+    }
     virtual ~Record() noexcept = default;
 
     /*
@@ -60,11 +68,6 @@ public:
     size_t rawSize() const override { return sizeof(struct walb_diff_record); }
     const char *rawData() const override { return ptr<char>(); }
     char *rawData() { return ptr<char>(); }
-
-    DEPRECATED
-    struct walb_diff_record *rawRecord() { return &record(); }
-    DEPRECATED
-    const struct walb_diff_record *rawRecord() const { return &record(); }
 
     uint8_t compressionType() const { return record().compression_type; }
     bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
@@ -164,12 +167,11 @@ template <class RecT>
 class RecordWrapT : public Record
 {
 private:
-    using RecTT = typename std::remove_const<RecT>::type;
-    RecTT *recP_; /* must not be nullptr. */
+    RecT *recP_; /* must not be nullptr. */
 
 public:
     explicit RecordWrapT(RecT *recP)
-        : recP_(const_cast<RecTT *>(recP)) {
+        : recP_(recP) {
         assert(recP);
     }
     RecordWrapT(const RecordWrapT &rhs) : recP_(rhs.recP_) {}
@@ -180,12 +182,15 @@ public:
     }
     RecordWrapT &operator=(RecordWrapT &&rhs) = delete;
 
-    struct walb_diff_record &record() override { return *recP_; }
+    struct walb_diff_record &record() override {
+        assert_bt(!std::is_const<RecT>::value);
+        return *const_cast<struct walb_diff_record *>(recP_);
+    }
     const struct walb_diff_record &record() const override { return *recP_; }
 };
 
 using RecordWrap = RecordWrapT<struct walb_diff_record>;
-using RecordWrapConst = RecordWrapT<const struct walb_diff_record>;
+using RecordWrapConst = RecordWrapT<const struct walb_diff_record>; //must declare with const.
 
 /**
  * Class for struct walb_diff_record.
@@ -202,33 +207,33 @@ public:
     /**
      * Default.
      */
-    RecordRaw() : rec_() { init(); }
+    RecordRaw() : Record(), rec_() { init(); }
     /**
      * Clone.
      */
     RecordRaw(const RecordRaw &rec, bool isCheck = true)
-        : rec_(rec.rec_) {
+        : Record(), rec_(rec.rec_) {
         if (isCheck) check();
     }
     /**
      * Convert.
      */
     RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
-        : rec_(rawRec) {
+        : Record(), rec_(rawRec) {
         if (isCheck) check();
     }
     /**
      * Convert.
      */
     RecordRaw(const Record &rec, bool isCheck = true)
-        : rec_(rec.record()) {
+        : Record(), rec_(rec.record()) {
         if (isCheck) check();
     }
     /**
      * For raw data.
      */
     RecordRaw(const char *data, size_t size)
-        : rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
+        : Record(), rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
         if (size != sizeof(rec_)) {
             throw RT_ERR("size is invalid.");
         }
@@ -340,7 +345,7 @@ public:
     }
 
     void set(const walb_diff_record &rec0) {
-        RecordWrapConst rec(&rec0);
+        const RecordWrapConst rec(&rec0);
         if (rec.isNormal()) {
             setIoBlocks(rec.ioBlocks());
             setCompressionType(rec.compressionType());

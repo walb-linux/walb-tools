@@ -89,7 +89,7 @@ private:
     bool isVerbose_;
 
     using PackHeader = walb::log::PackHeaderRaw;
-    using PackIo = walb::log::PackIoRaw;
+    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using Block = std::shared_ptr<uint8_t>;
 
 public:

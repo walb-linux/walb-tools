@@ -104,7 +104,7 @@ private:
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using PackHeader = walb::log::PackHeaderRaw;
-    using PackIo = walb::log::PackIoRaw;
+    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::log::SuperBlock;
 

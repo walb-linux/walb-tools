@@ -124,7 +124,7 @@ private:
             std::queue<Block> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
-                BlockData blockD(pbs);
+                BlockDataShared blockD(pbs);
                 PackIoWrap packIo(&rec, &blockD);
 
                 if (rec.hasData()) {

@@ -24,6 +24,74 @@
 #include "walb_diff_file.hpp"
 
 namespace walb {
+
+/**
+ * Convert a logpack data to a diff data.
+ *
+ * RETURN:
+ *   false if the pack IO is padding data.
+ *   true if the pack IO is normal IO or discard or allzero.
+ */
+bool convertLogToDiff(
+    const log::PackIoWrap &packIo, diff::Record &mrec, diff::IoData &diffIo)
+{
+    const log::Record &rec = packIo.record();
+    const log::BlockData &blockD = packIo.blockData();
+
+    if (rec.isPadding()) return false;
+
+    mrec.init();
+    mrec.setIoAddress(rec.offset());
+    mrec.setIoBlocks(rec.ioSizeLb());
+
+    /* Discard */
+    if (rec.isDiscard()) {
+        mrec.setDiscard();
+        diffIo.set(mrec.record(), {});
+        return true;
+    }
+
+    /* Copy data from logpack data to diff io data. */
+    assert(0 < rec.ioSizeLb());
+    const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+    std::vector<char> buf(ioSizeB);
+    size_t remaining = ioSizeB;
+    size_t off = 0;
+    const unsigned int pbs = rec.pbs();
+    for (size_t i = 0; i < rec.ioSizePb(); i++) {
+        if (pbs <= remaining) {
+            ::memcpy(&buf[off], blockD.get(i), pbs);
+            off += pbs;
+            remaining -= pbs;
+        } else {
+            ::memcpy(&buf[off], blockD.get(i), remaining);
+            off += remaining;
+            remaining = 0;
+        }
+    }
+    assert(remaining == 0);
+    assert(off == ioSizeB);
+    diffIo.set(mrec.record(), std::move(buf));
+
+    /* All-zero. */
+    if (diffIo.calcIsAllZero()) {
+        mrec.setAllZero();
+        mrec.setDataSize(0);
+        diffIo.set(mrec.record(), {});
+        return true;
+    }
+
+    /* Checksum. */
+    mrec.setChecksum(diffIo.calcChecksum());
+
+    /* Compression. (currently NONE). */
+    mrec.setCompressionType(::WALB_DIFF_CMPR_NONE);
+    mrec.setDataOffset(0);
+    mrec.setDataSize(ioSizeB);
+
+    return true;
+}
+
 namespace diff {
 
 /**
@@ -38,7 +106,6 @@ private:
     using DiffRecord = RecordRaw;
     using DiffRecordPtr = std::shared_ptr<DiffRecord>;
     using DiffIo = IoData;
-    using DiffIoPtr = std::shared_ptr<DiffIo>;
 
 public:
     Converter() = default;
@@ -127,88 +194,23 @@ private:
 
         /* Convert each log. */
         while (!reader.isEnd()) {
-            log::PackIoRaw packIo;
+            log::PackIoRaw<log::BlockDataVec> packIo;
             if (reader.isFirstInPack()) {
                 lsid = reader.packHeader().nextLogpackLsid();
             }
             reader.readLog(packIo);
 
-            DiffRecordPtr diffRec;
-            DiffIoPtr diffIo;
-            std::tie(diffRec, diffIo) = convertLogpackDataToDiffRecord(packIo);
-            if (diffRec) {
-                walbDiff.add(*diffRec, std::move(*diffIo));
-                writtenBlocks += diffRec->ioBlocks();
+            diff::RecordRaw diffRec;
+            DiffIo diffIo;
+            if (convertLogToDiff(packIo, diffRec, diffIo)) {
+                walbDiff.add(diffRec, std::move(diffIo));
+                writtenBlocks += diffRec.ioBlocks();
             }
         }
 
         lsid = reader.endLsid();
         ::fprintf(::stderr, "converted until lsid %" PRIu64 "\n", lsid);
         return true;
-    }
-
-    /**
-     * Convert a logpack data to a diff record.
-     */
-    std::pair<DiffRecordPtr, DiffIoPtr> convertLogpackDataToDiffRecord(const log::PackIoWrap &packIo) {
-        const log::RecordRaw &rec = packIo.record();
-        const log::BlockData &blockD = packIo.blockData();
-
-        if (rec.isPadding()) {
-            return std::make_pair(DiffRecordPtr(), DiffIoPtr());
-        }
-
-        std::shared_ptr<DiffRecord> p(new DiffRecord());
-        DiffRecord &mrec = *p;
-        mrec.setIoAddress(rec.record().offset);
-        mrec.setIoBlocks(rec.record().io_size);
-
-        if (rec.isDiscard()) {
-            mrec.setDiscard();
-            return std::make_pair(p, DiffIoPtr(new DiffIo()));
-        }
-
-        /* Copy data from logpack data to diff io data. */
-        assert(0 < rec.ioSizeLb());
-        const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        auto iop = std::make_shared<DiffIo>();
-        iop->setIoBlocks(rec.ioSizeLb());
-        std::vector<char> buf(ioSizeB);
-        size_t remaining = ioSizeB;
-        size_t off = 0;
-        const unsigned int pbs = rec.pbs();
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            if (pbs <= remaining) {
-                ::memcpy(&buf[off], blockD.rawData<char>(i), pbs);
-                off += pbs;
-                remaining -= pbs;
-            } else {
-                ::memcpy(&buf[off], blockD.rawData<char>(i), remaining);
-                off += remaining;
-                remaining = 0;
-            }
-        }
-        assert(remaining == 0);
-        assert(off == ioSizeB);
-        iop->moveFrom(std::move(buf));
-
-        /* All-zero. */
-        if (iop->calcIsAllZero()) {
-            mrec.setAllZero();
-            mrec.setDataSize(0);
-            *iop = DiffIo();
-            return std::make_pair(p, iop);
-        }
-
-        /* Checksum. */
-        mrec.setChecksum(iop->calcChecksum());
-
-        /* Compression. (currently NONE). */
-        mrec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        mrec.setDataOffset(0);
-        mrec.setDataSize(ioSizeB);
-
-        return std::make_pair(p, iop);
     }
 };
 

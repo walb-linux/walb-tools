@@ -159,7 +159,7 @@ private:
         }
         /* Read pack IO. */
         while (!reader.isEnd()) {
-            walb::log::PackIoRaw packIo;
+            walb::log::PackIoRaw<walb::log::BlockDataVec> packIo;
             reader.readLog(packIo);
             updateBitmap(packIo.record());
         }

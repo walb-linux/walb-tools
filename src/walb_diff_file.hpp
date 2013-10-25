@@ -168,14 +168,14 @@ public:
      * @data0 IO data.
      */
     void writeDiff(const walb_diff_record &rec0, const char *data0) {
-        RecordWrapConst rec(&rec0);
+        const RecordWrapConst rec(&rec0);
         std::vector<char> data(rec.dataSize());
         ::memcpy(&data[0], data0, rec.dataSize());
         writeDiff(rec0, std::move(data));
     }
     void writeDiff(const walb_diff_record &rec0, std::vector<char> &&data0) {
         checkWrittenHeader();
-        RecordWrapConst rec(&rec0);
+        const RecordWrapConst rec(&rec0);
         IoData io;
         io.set(rec0, std::move(data0));
         check(rec, io);
@@ -200,7 +200,7 @@ public:
      * @data IO data.
      */
     void compressAndWriteDiff(const walb_diff_record &rec, const char *data) {
-        RecordWrapConst rec0(&rec);
+        const RecordWrapConst rec0(&rec);
         if (rec0.isCompressed()) {
             writeDiff(rec, data);
             return;
@@ -363,6 +363,14 @@ public:
     bool readDiff(Record &rec, IoData &io) {
         if (!canRead()) return false;
         ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
+
+        /* debug */
+        if (!rec.isValid()) {
+            rec.print(::stderr);
+            const RecordWrapConst rec1(&pack_.record(recIdx_));
+            rec1.print(::stderr);
+        }
+
         if (!rec.isValid()) {
             throw RT_ERR("Invalid record.");
         }

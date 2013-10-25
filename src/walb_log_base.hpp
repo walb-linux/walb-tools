@@ -20,6 +20,7 @@
 #include "walb/log_device.h"
 #include "walb/log_record.h"
 #include "walb_log.h"
+#include "backtrace.hpp"
 
 namespace walb {
 namespace log {
@@ -429,13 +430,12 @@ template <typename CharT>
 class PackHeaderWrapT : public PackHeader
 {
 protected:
-    using CharTT = typename std::remove_const<CharT>::type;
-    CharTT *data_;
+    CharT *data_;
     unsigned int pbs_;
     uint32_t salt_;
 public:
     PackHeaderWrapT(CharT *data, unsigned int pbs, uint32_t salt)
-        : data_(const_cast<CharTT *>(data)), pbs_(pbs), salt_(salt) {
+        : data_(data), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
     ~PackHeaderWrapT() noexcept = default;
@@ -444,6 +444,7 @@ public:
         return *reinterpret_cast<const struct walb_logpack_header *>(data_);
     }
     struct walb_logpack_header &header() override {
+        assert_bt(!std::is_const<CharT>::value);
         checkBlock();
         return *reinterpret_cast<struct walb_logpack_header *>(data_);
     }
@@ -460,7 +461,7 @@ public:
         }
     }
     void resetData(CharT *data) {
-        data_ = const_cast<CharTT *>(data);
+        data_ = data;
     }
 protected:
     void checkBlock() const {
@@ -471,7 +472,7 @@ protected:
 };
 
 using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
-using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>; // must use with const. */
+using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>; //must use with const.
 
 class PackHeaderRaw : public PackHeaderWrap
 {
@@ -497,6 +498,15 @@ public:
 class Record
 {
 public:
+    Record() = default;
+    Record(const Record &) = delete;
+    Record &operator=(const Record &rhs) {
+        record() = rhs.record();
+        setPbs(rhs.pbs());
+        setSalt(rhs.salt());
+        return *this;
+    }
+    DISABLE_MOVE(Record);
     virtual ~Record() noexcept {}
 
     /* Interface to access a record */
@@ -509,6 +519,7 @@ public:
     virtual void setPos(size_t) = 0;
     virtual void setPbs(unsigned int) = 0;
     virtual void setSalt(uint32_t) = 0;
+
 
     /* default implementation. */
     uint64_t lsid() const { return record().lsid; }
@@ -624,12 +635,11 @@ template <class PackHeaderT>
 class RecordWrapT : public Record
 {
 protected:
-    using PackHeaderTT = typename std::remove_const<PackHeaderT>::type;
-    PackHeaderTT *logh_;
+    PackHeaderT *logh_;
     size_t pos_;
 public:
     RecordWrapT(PackHeaderT *logh, size_t pos)
-        : Record(), logh_(const_cast<PackHeaderTT *>(logh)) , pos_(pos) {
+        : Record(), logh_(logh) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
     ~RecordWrapT() noexcept override {}
@@ -645,17 +655,144 @@ public:
     void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
     const struct walb_log_record &record() const override { return logh_->record(pos_); }
-    struct walb_log_record &record() override { return logh_->record(pos_); }
+    struct walb_log_record &record() override {
+        assert_bt(!std::is_const<PackHeaderT>::value);
+        return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
+    }
 };
 
 using RecordWrap = RecordWrapT<PackHeader>;
-using RecordWrapConst = RecordWrapT<const PackHeader>; /* must use with const. */
+using RecordWrapConst = RecordWrapT<const PackHeader>; //must use with const.
+
+/**
+ * Interface.
+ */
+class BlockData
+{
+public:
+    using Block = std::shared_ptr<uint8_t>;
+
+    virtual ~BlockData() noexcept = default;
+
+    /*
+     * You must implement these member functions.
+     */
+    virtual unsigned int pbs() const = 0;
+    virtual void setPbs(unsigned int pbs) = 0;
+    virtual size_t nBlocks() const = 0;
+    virtual const uint8_t *get(size_t idx) const = 0;
+    virtual uint8_t *get(size_t idx) = 0;
+    virtual void resize(size_t nBlocks) = 0;
+    virtual void addBlock(const Block &block) = 0;
+    virtual Block getBlock(size_t idx) const = 0;
+
+    /*
+     * Utilities.
+     */
+    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
+        checkPbs();
+        uint32_t csum = salt;
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            if (nBlocks() <= i) throw RT_ERR("Index out of range.");
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            csum = cybozu::util::checksumPartial(get(i), s, csum);
+            remaining -= s;
+            i++;
+        }
+        assert(remaining == 0);
+        return cybozu::util::checksumFinish(csum);
+    }
+    void write(int fd) const {
+        cybozu::util::FdWriter fdw(fd);
+        write(fdw);
+    }
+    void write(cybozu::util::FdWriter &fdw) const {
+        checkPbs();
+        for (size_t i = 0; i < nBlocks(); i++) {
+            fdw.write(get(i), pbs());
+        }
+    }
+protected:
+    void checkPbs() const {
+        if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
+    }
+};
+
+/**
+ * Block data using a vector.
+ */
+class BlockDataVec : public BlockData
+{
+private:
+    using Block = std::shared_ptr<uint8_t>;
+    unsigned int pbs_; /* physical block size. */
+    std::vector<uint8_t> data_;
+
+public:
+    BlockDataVec() : pbs_(0), data_() {}
+    explicit BlockDataVec(unsigned int pbs) : pbs_(pbs), data_() {}
+    BlockDataVec(const BlockDataVec &) = default;
+    BlockDataVec(BlockDataVec &&) = default;
+    BlockDataVec &operator=(const BlockDataVec &) = default;
+    BlockDataVec &operator=(BlockDataVec &&) = default;
+
+    unsigned int pbs() const override { return pbs_; }
+    void setPbs(unsigned int pbs) override {
+        pbs_ = pbs;
+        checkPbs();
+    }
+    size_t nBlocks() const override { return data_.size() / pbs(); }
+    const uint8_t *get(size_t idx) const override {
+        check(idx);
+        return &data_[idx * pbs()];
+    }
+    uint8_t *get(size_t idx) override {
+        check(idx);
+        return &data_[idx * pbs()];
+    }
+    void resize(size_t nBlocks0) override {
+        data_.resize(nBlocks0 * pbs());
+    }
+    void addBlock(const Block &block) override {
+        checkPbs();
+        size_t s0 = data_.size();
+        size_t s1 = s0 + pbs();
+        data_.resize(s1);
+        ::memcpy(&data_[s0], block.get(), pbs());
+    }
+    Block getBlock(size_t idx) const override {
+        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
+        ::memcpy(b.get(), get(idx), pbs());
+        return b;
+    }
+
+    void moveFrom(std::vector<uint8_t> &&data) {
+        data_ = std::move(data);
+    }
+    void copyFrom(const uint8_t *data, size_t size) {
+        data_.resize(size);
+        ::memcpy(&data_[0], data, size);
+    }
+private:
+    void check(size_t idx) const {
+        checkPbs();
+        if (data_.size() % pbs() != 0) {
+            throw RT_ERR("data size is not multiples of pbs.");
+        }
+        if (nBlocks() <= idx) {
+            throw RT_ERR("BlockDataVec: index out of range.");
+        }
+    }
+};
 
 /**
  * Helper class to manage multiple IO blocks.
  * This is copyable and movable.
  */
-class BlockData /* final */
+class BlockDataShared : public BlockData
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
@@ -664,63 +801,47 @@ private:
     std::vector<Block> data_; /* Each block's size must be pbs_. */
 
 public:
-    BlockData() : pbs_(0), data_() {}
-    explicit BlockData(unsigned int pbs) : pbs_(pbs), data_() {}
-    ~BlockData() noexcept = default;
-    BlockData(const BlockData &) = default;
-    BlockData(BlockData &&) = default;
-    BlockData &operator=(const BlockData &) = default;
-    BlockData &operator=(BlockData &&) = default;
+    BlockDataShared() : pbs_(0), data_() {}
+    explicit BlockDataShared(unsigned int pbs) : pbs_(pbs), data_() {}
+    BlockDataShared(const BlockDataShared &) = default;
+    BlockDataShared(BlockDataShared &&) = default;
+    BlockDataShared &operator=(const BlockDataShared &) = default;
+    BlockDataShared &operator=(BlockDataShared &&) = default;
 
-    void addBlock(const Block &block) { data_.push_back(block); }
-    Block getBlock(size_t idx) { return data_[idx]; }
-    const Block getBlock(size_t idx) const { return data_[idx]; }
-
-    void setPbs(unsigned int pbs) { pbs_ = pbs; }
-    void clear() { data_.clear(); }
-
-    template<typename T>
-    T* rawData(size_t idx) {
-        return reinterpret_cast<T *>(data_[idx].get());
+    unsigned int pbs() const override { return pbs_; }
+    void setPbs(unsigned int pbs) override { pbs_ = pbs; }
+    size_t nBlocks() const override { return data_.size(); }
+    const uint8_t *get(size_t idx) const override {
+        check(idx);
+        return data_[idx].get();
     }
-    template<typename T>
-    const T* rawData(size_t idx) const {
-        return reinterpret_cast<const T *>(data_[idx].get());
+    uint8_t *get(size_t idx) override {
+        check(idx);
+        return data_[idx].get();
     }
-
-    size_t nBlocks() const { return data_.size(); }
-
-    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
-        checkPbs();
-        uint32_t csum = salt;
-        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
-        size_t i = 0;
-        while (0 < remaining) {
-            if (data_.size() <= i) throw RT_ERR("Index out of range.");
-            size_t s = pbs_;
-            if (remaining < pbs_) s = remaining;
-            csum = cybozu::util::checksumPartial(getBlock(i).get(), s, csum);
-            remaining -= s;
-            i++;
+    void resize(size_t nBlocks0) override {
+        if (nBlocks0 < data_.size()) {
+            data_.resize(nBlocks0);
         }
-        assert(remaining == 0);
-        return cybozu::util::checksumFinish(csum);
-    }
-
-    void write(int fd) const {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
-    }
-    void write(cybozu::util::FdWriter &fdw) const {
-        checkPbs();
-        for (const Block &blk : data_) {
-            fdw.write(blk.get(), pbs_);
+        while (data_.size() < nBlocks0) {
+            data_.push_back(allocPb());
         }
     }
+    void addBlock(const Block &block) override {
+        assert(block);
+        data_.push_back(block);
+    }
+    Block getBlock(size_t idx) const override { return data_[idx]; }
 
 private:
-    void checkPbs() const {
-        if (pbs_ == 0) throw RT_ERR("pbs must not be zero.");
+    void check(size_t idx) const {
+        checkPbs();
+        if (nBlocks() <= idx) {
+            throw RT_ERR("BlockDataShared: index out of range.");
+        }
+    }
+    Block allocPb() const {
+        return cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
     }
 };
 
@@ -734,12 +855,12 @@ template <class RecordT>
 class PackIoWrapT
 {
 private:
-    Record *recP_;
+    RecordT *recP_;
     BlockData *blockD_;
 
 public:
     PackIoWrapT(RecordT *rec, BlockData *blockD)
-        : recP_(const_cast<Record *>(rec)), blockD_(blockD) {
+        : recP_(rec), blockD_(blockD) {
         assert(recP_);
         assert(blockD_);
     }
@@ -754,14 +875,21 @@ public:
     DISABLE_MOVE(PackIoWrapT);
 
     const Record &record() const { return *recP_; }
-    Record &record() { return *recP_; }
+    Record &record() {
+        assert_bt(!std::is_const<RecordT>::value);
+        return *const_cast<Record *>(recP_);
+    }
     const BlockData &blockData() const { return *blockD_; }
     BlockData &blockData() { return *blockD_; }
 
     bool isValid(bool isChecksum = true) const {
-        if (!recP_->isValid()) { return false; }
+        if (!recP_->isValid()) {
+            LOGd("invalid record.");
+            return false; }
         if (isChecksum && recP_->hasDataForChecksum() &&
             calcIoChecksum() != recP_->record().checksum) {
+            LOGd("invalid checksum expected %08x calculated %08x."
+                 , recP_->record().checksum, calcIoChecksum());
             return false;
         }
         return true;
@@ -775,7 +903,7 @@ public:
                       recP_->record().checksum, calcIoChecksum());
             for (size_t i = 0; i < recP_->ioSizePb(); i++) {
                 ::fprintf(fp, "----------block %zu----------\n", i);
-                cybozu::util::printByteArray(fp, blockD_->getBlock(i).get(), recP_->pbs());
+                cybozu::util::printByteArray(fp, blockD_->get(i), recP_->pbs());
             }
         }
     }
@@ -805,20 +933,22 @@ public:
 };
 
 using PackIoWrap = PackIoWrapT<Record>;
-using PackIoWrapConst = PackIoWrapT<const Record>; // use this with const.
+using PackIoWrapConst = PackIoWrapT<const Record>; //must use with const.
 
 /**
  * Logpack record and IO data.
  * This is copyable and movable.
+ * BlockDataT: BlockDataVec or BlockDataShared.
  */
+template <class BlockDataT>
 class PackIoRaw : public PackIoWrap
 {
 private:
     RecordRaw rec_;
-    BlockData blockD_;
+    BlockDataT blockD_;
 public:
     PackIoRaw() : PackIoWrap(&rec_, &blockD_) {}
-    PackIoRaw(const RecordRaw &rec, BlockData &&blockD)
+    PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
         : PackIoWrap(&rec_, &blockD_)
         , rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const PackHeader &logh, size_t pos)
