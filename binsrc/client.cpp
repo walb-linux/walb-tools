@@ -42,7 +42,8 @@ try {
     cybozu::SetLogFILE(::stderr);
     cybozu::Socket sock;
     sock.connect(opt.addr, opt.port);
-    walb::runProtocolAsClient(sock, opt.clientId, opt.cmd, opt.params);
+    std::atomic<bool> forceQuit(false);
+    walb::runProtocolAsClient(sock, opt.clientId, forceQuit, opt.cmd, opt.params);
     return 0;
 } catch (std::exception &e) {
     ::fprintf(::stderr, "exception: %s\n", e.what());

@@ -30,6 +30,7 @@
 #include "walb_log_file.hpp"
 #include "uuid.hpp"
 #include "walb_diff_converter.hpp"
+#include "server_util.hpp"
 
 namespace walb {
 
@@ -118,9 +119,9 @@ protected:
 public:
     Protocol(const std::string &name) : name_(name) {}
     const std::string &name() const { return name_; }
-    virtual void runAsClient(cybozu::Socket &, Logger &,
+    virtual void runAsClient(cybozu::Socket &, Logger &, const std::atomic<bool>&,
                              const std::vector<std::string> &) = 0;
-    virtual void runAsServer(cybozu::Socket &, Logger &,
+    virtual void runAsServer(cybozu::Socket &, Logger &, const std::atomic<bool>&,
                              const std::vector<std::string> &) = 0;
 };
 
@@ -133,6 +134,7 @@ public:
     using Protocol :: Protocol;
 
     void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &,
                      const std::vector<std::string> &params) override {
         if (params.empty()) throw std::runtime_error("params empty.");
         packet::Packet packet(sock);
@@ -150,6 +152,7 @@ public:
         }
     }
     void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &,
                      const std::vector<std::string> &) override {
         packet::Packet packet(sock);
         uint32_t size;
@@ -172,10 +175,13 @@ class ProtocolData
 protected:
     cybozu::Socket &sock_;
     Logger &logger_;
+    const std::atomic<bool> &forceQuit_;
     const std::vector<std::string> &params_;
 public:
-    ProtocolData(cybozu::Socket &sock, Logger &logger, const std::vector<std::string> &params)
-        : sock_(sock), logger_(logger), params_(params) {}
+    ProtocolData(cybozu::Socket &sock, Logger &logger,
+                 const std::atomic<bool> &forceQuit,
+                 const std::vector<std::string> &params)
+        : sock_(sock), logger_(logger), forceQuit_(forceQuit), params_(params) {}
     virtual ~ProtocolData() noexcept = default;
 
     void logAndThrow(const char *fmt, ...) const {
@@ -327,8 +333,9 @@ public:
      *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LOGICAL_BLOCK_SIZE;
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Client client(sock, logger, params);
+        Client client(sock, logger, forceQuit, params);
         client.run();
     }
     /**
@@ -337,8 +344,9 @@ public:
      *   [0] :: string:
      */
     void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Server server(sock, logger, params);
+        Server server(sock, logger, forceQuit, params);
         server.run();
     }
 };
@@ -740,8 +748,9 @@ public:
      *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LOGICAL_BLOCK_SIZE;
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Client client(sock, logger, params);
+        Client client(sock, logger, forceQuit, params);
         client.run();
     }
     /**
@@ -750,8 +759,9 @@ public:
      *   [0] :: string:
      */
     void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Server server(sock, logger, params);
+        Server server(sock, logger, forceQuit, params);
         server.run();
     }
     /* now editing */
@@ -838,8 +848,9 @@ private:
             }
         };
     public:
-        Client(cybozu::Socket &sock, Logger &logger, const std::vector<std::string> &params)
-            : Data(sock, logger, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
+        Client(cybozu::Socket &sock, Logger &logger, const std::atomic<bool> &forceQuit,
+               const std::vector<std::string> &params)
+            : Data(sock, logger, forceQuit, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
         void run() {
 #if 0
             /* Open wldev device. */
@@ -1113,8 +1124,9 @@ public:
      *   now editing
      */
     void runAsClient(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Client client(sock, logger, params);
+        Client client(sock, logger, forceQuit, params);
         client.run();
     }
     /**
@@ -1123,8 +1135,9 @@ public:
      *   [0] :: string:
      */
     void runAsServer(cybozu::Socket &sock, Logger &logger,
+                     const std::atomic<bool> &forceQuit,
                      const std::vector<std::string> &params) override {
-        Server server(sock, logger, params);
+        Server server(sock, logger, forceQuit, params);
         server.run();
     }
 };
@@ -1169,8 +1182,9 @@ private:
  * Run a protocol as a client.
  */
 static inline void runProtocolAsClient(
-    cybozu::Socket &sock, const std::string &clientId, const std::string &protocolName,
-    const std::vector<std::string> &params)
+    cybozu::Socket &sock, const std::string &clientId,
+    const std::atomic<bool> &forceQuit,
+    const std::string &protocolName, const std::vector<std::string> &params)
 {
     packet::Packet packet(sock);
     packet.write(clientId);
@@ -1195,7 +1209,7 @@ static inline void runProtocolAsClient(
         throw std::runtime_error("receive OK but protocol not found.");
     }
     /* Client can throw an error. */
-    protocol->runAsClient(sock, logger, params);
+    protocol->runAsClient(sock, logger, forceQuit, params);
 }
 
 /**
@@ -1204,7 +1218,9 @@ static inline void runProtocolAsClient(
  * TODO: arguments for server data.
  */
 static inline void runProtocolAsServer(
-    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr) noexcept
+    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
+    const std::atomic<bool> &forceQuit,
+    std::atomic<cybozu::server::ControlFlag> &ctrlFlag) noexcept
 {
     ::printf("runProtocolAsServer start\n"); /* debug */
     packet::Packet packet(sock);
@@ -1220,9 +1236,22 @@ static inline void runProtocolAsServer(
     packet.write(serverId);
 
     Logger logger(serverId, clientId);
-    Protocol *protocol = ProtocolFactory::getInstance().find(protocolName);
-
     packet::Answer ans(sock);
+
+    /* Server shutdown commands. */
+    if (protocolName == "graceful-shutdown") {
+        ctrlFlag = cybozu::server::ControlFlag::GRACEFUL_SHUTDOWN;
+        logger.info("graceful shutdown.");
+        ans.ok();
+        return;
+    } else if (protocolName == "force-shutdown") {
+        ctrlFlag = cybozu::server::ControlFlag::FORCE_SHUTDOWN;
+        logger.info("force shutdown.");
+        ans.ok();
+        return;
+    }
+
+    Protocol *protocol = ProtocolFactory::getInstance().find(protocolName);
     if (!protocol) {
         std::string msg = cybozu::util::formatString(
             "There is not such protocol %s.", protocolName.c_str());
@@ -1241,7 +1270,7 @@ static inline void runProtocolAsServer(
 
     logger.info("initial negotiation succeeded: %s", protocolName.c_str());
     try {
-        protocol->runAsServer(sock, logger, { baseDirStr });
+        protocol->runAsServer(sock, logger, forceQuit, { baseDirStr });
     } catch (std::exception &e) {
         logger.error("[%s] runProtocolAsServer failed: %s.", e.what());
     } catch (...) {
