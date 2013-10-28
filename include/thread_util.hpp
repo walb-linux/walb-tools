@@ -426,11 +426,13 @@ public:
     /**
      * Cancel all tasks in the ready queue.
      */
-    void cancelAll() {
+    size_t cancelAll() {
         std::lock_guard<std::mutex> lk(mutex_);
         assert(readyQ_.size() == ready_.size());
+        size_t ret = readyQ_.size();
         readyQ_.clear();
         ready_.clear();
+        return ret;
     }
     /**
      * RETURN:
