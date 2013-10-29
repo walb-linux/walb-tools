@@ -40,6 +40,7 @@ std::string getPollingPath(const std::string &wdevName)
 class Fd
 {
     int fd;
+    bool doAutoClose_;
     Fd(const Fd&) = delete;
     void operator=(const Fd&) = delete;
 public:
@@ -48,6 +49,7 @@ public:
      */
     explicit Fd(int fd, const std::string& errMsg = "")
         : fd(fd)
+        , doAutoClose_(true)
     {
         if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
     }
@@ -56,8 +58,11 @@ public:
         if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
         fd = -1;
     }
+    void dontClose() {
+        doAutoClose_ = false;
+    }
     ~Fd() noexcept {
-        if (fd < 0) return;
+        if (fd < 0 || !doAutoClose_) return;
         ::close(fd);
     }
     int operator()() const noexcept { return fd; }
@@ -218,19 +223,18 @@ private:
         std::string path = getPollingPath(wdevName);
         Fd fd(::open(path.c_str(), O_RDONLY), std::string("addNolock:can't open ") + path);
 
-        if (!addName(wdevName, fd())) goto error1;
+        if (!addName(wdevName, fd())) return false;
 
         struct epoll_event ev;
         ::memset(&ev, 0, sizeof(ev));
         ev.events = EPOLLIN | EPOLLET;
         ev.data.fd = fd();
-        if (::epoll_ctl(efd_(), EPOLL_CTL_ADD, fd(), &ev) < 0) goto error2;
+        if (::epoll_ctl(efd_(), EPOLL_CTL_ADD, fd(), &ev) < 0) {
+            delName(wdevName, fd());
+            return false;
+        }
+        fd.dontClose();
         return true;
-
-      error2:
-        delName(wdevName, fd());
-      error1:
-        return false;
     }
     /**
      * Delete an walb device.
