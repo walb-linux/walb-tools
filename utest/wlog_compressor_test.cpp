@@ -102,8 +102,8 @@ CYBOZU_TEST_AUTO(compressor)
         Consumer(BoundedQ &inQ, std::vector<uint32_t> &csumV)
             : inQ_(inQ), csumV_(csumV) {}
         void operator()() noexcept override try {
-            while (!inQ_.isEnd()) {
-                walb::log::CompressedData cd = inQ_.pop();
+            walb::log::CompressedData cd;
+            while (inQ_.pop(cd)) {
                 uint32_t csum = calcCsum(cd);
                 csumV_.push_back(csum);
             }

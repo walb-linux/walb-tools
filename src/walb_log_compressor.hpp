@@ -144,8 +144,8 @@ public:
         : inQ_(inQ), outQ_(outQ) {}
     void operator()() override {
         try {
-            while (!inQ_.isEnd()) {
-                CompressedData d = inQ_.pop();
+            CompressedData d;
+            while (inQ_.pop(d)) {
                 if (d.isCompressed()) {
                     outQ_.push(std::move(d));
                 } else {
@@ -177,8 +177,8 @@ public:
         : inQ_(inQ), outQ_(outQ) {}
     void operator()() override {
         try {
-            while (!inQ_.isEnd()) {
-                CompressedData d = inQ_.pop();
+            CompressedData d;
+            while (inQ_.pop(d)) {
                 if (d.isCompressed()) {
                     outQ_.push(d.uncompress());
                 } else {

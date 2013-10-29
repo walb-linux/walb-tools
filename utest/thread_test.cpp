@@ -181,8 +181,9 @@ CYBOZU_TEST_AUTO(BoundedQueueResize)
 
     std::thread th0([&q, &total] {
             try {
-                while (!q.isEnd()) {
-                    total += q.pop();
+                size_t c;
+                while (q.pop(c)) {
+                    total += c;
                 }
             } catch (...) {
                 q.error();
