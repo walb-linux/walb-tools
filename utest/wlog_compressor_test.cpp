@@ -37,10 +37,22 @@ CYBOZU_TEST_AUTO(compressedData)
 
 void throwErrorIf(std::vector<std::exception_ptr> &&ev)
 {
+    bool isError = false;
+    if (!ev.empty()) {
+        isError = true;
+        ::fprintf(::stderr, "Number of error: %zu\n", ev.size());
+    }
     for (std::exception_ptr &ep : ev) {
-        std::rethrow_exception(ep);
+        try {
+            std::rethrow_exception(ep);
+        } catch (std::exception &e) {
+            ::fprintf(::stderr, "caught error: %s.\n", e.what());
+        } catch (...) {
+            ::fprintf(::stderr, "caught unknown error.\n");
+        }
     }
     ev.clear();
+    if (isError) throw std::runtime_error("Error ocurred.");
 }
 
 uint32_t calcCsum(const walb::log::CompressedData &data)
