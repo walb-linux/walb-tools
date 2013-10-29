@@ -553,6 +553,14 @@ private:
  * T is type of items.
  *   You should use integer types or copyable classes, or shared pointers.
  * Movable: specify non-zero if T must be movable instead of copyable.
+ *
+ * CAUSION:
+ *   If you push 'end data' as T, you can use
+ *   while (!q.isEnd()) q.pop(); pattern.
+ *   Else, q.pop() may throw ClosedError()
+ *   when the sync() is called between the last isEnd() and q.pop().
+ *   You had better use the pattern.
+ *   T t; while (q.pop(t)) { use(t); }
  */
 template <typename T, bool Movable = false>
 class BoundedQueue /* final */
@@ -643,7 +651,18 @@ public:
         if (isFull0) { condFull_.notify_all(); }
         return t;
     }
-
+    /**
+     * Pop an item.
+     * This does not throw ClosedError, return false instead.
+     */
+    bool pop(T &t) {
+        try {
+            t = pop();
+            return true;
+        } catch (ClosedError &) {
+            return false;
+        }
+    }
     /**
      * You must call this when you have no more items to push.
      * After calling this, push() will fail.
@@ -660,6 +679,7 @@ public:
     /**
      * Check if there is no more items and push() will be never called.
      */
+    __attribute__((deprecated))
     bool isEnd() const {
         lock lk(mutex_);
         checkError();
