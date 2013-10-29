@@ -499,7 +499,6 @@ class DirtyHashSyncProtocol : public Protocol
                     if (!packer.empty()) pushPackToQueue();
                     assert(num == c);
                     assert(offLb == sizeLb_);
-                    assert(hashQ.isEnd());
                 } catch (...) {
                     logger_.error("createPack failed.");
                     isError = true;
@@ -802,6 +801,7 @@ private:
                 , pbs_, salt_, sizePb_);
         }
     };
+public:
     /**
      * Client must call
      * (1) setParams().
@@ -832,8 +832,8 @@ private:
                 , isError_(isError) {}
             void operator()() noexcept override try {
                 packet::StreamControl ctrl(packet_.sock());
-                while (!inQ_.isEnd()) {
-                    log::CompressedData cd = inQ_.pop();
+                log::CompressedData cd;
+                while (!inQ_.pop(cd)) {
                     ctrl.next();
                     cd.send(packet_);
                 }
@@ -1176,12 +1176,12 @@ private:
 };
 
 /**
- * Run a protocol as a client.
+ * RETURN:
+ *   Server ID.
  */
-static inline void runProtocolAsClient(
-    cybozu::Socket &sock, const std::string &clientId,
-    const std::atomic<bool> &forceQuit,
-    const std::string &protocolName, const std::vector<std::string> &params)
+static inline std::string run1stNegotiateAsClient(
+    cybozu::Socket &sock,
+    const std::string &clientId, const std::string &protocolName)
 {
     packet::Packet packet(sock);
     packet.write(clientId);
@@ -1192,18 +1192,34 @@ static inline void runProtocolAsClient(
     packet.read(serverId);
 
     Logger logger(clientId, serverId);
-
     packet::Answer ans(sock);
     int err;
     std::string msg;
     if (!ans.recv(&err, &msg)) {
-        logger.warn("received NG: err %d msg %s", err, msg.c_str());
-        return;
+        std::string s = cybozu::util::formatString(
+            "received NG: err %d msg %s", err, msg.c_str());
+        logger.error(s);
+        throw std::runtime_error(s);
     }
+    return serverId;
+}
+
+/**
+ * Run a protocol as a client.
+ */
+static inline void runProtocolAsClient(
+    cybozu::Socket &sock, const std::string &clientId,
+    const std::atomic<bool> &forceQuit,
+    const std::string &protocolName, const std::vector<std::string> &params)
+{
+    std::string serverId = run1stNegotiateAsClient(sock, clientId, protocolName);
+    Logger logger(clientId, serverId);
 
     Protocol *protocol = ProtocolFactory::getInstance().find(protocolName);
     if (!protocol) {
-        throw std::runtime_error("receive OK but protocol not found.");
+        std::string s("receive OK but protocol not found.");
+        logger.error(s);
+        throw std::runtime_error(s);
     }
     /* Client can throw an error. */
     protocol->runAsClient(sock, logger, forceQuit, params);
