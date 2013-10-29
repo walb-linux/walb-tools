@@ -746,6 +746,9 @@ protected:
     }
 };
 
+/**
+ * Block data as contiguous memory image.
+ */
 template <typename CharT>
 class BlockDataWrapT : public BlockData
 {
