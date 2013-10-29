@@ -262,8 +262,7 @@ private:
 
             uint64_t remainingLb = sizeLb_;
             while (0 < remainingLb) {
-                uint16_t lb = bulkLb_;
-                if (remainingLb < bulkLb_) lb = remainingLb;
+                uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 bd.read(&buf[0], size);
                 packet.write(lb);
@@ -305,8 +304,7 @@ private:
             uint16_t c = 0;
             uint64_t remainingLb = sizeLb_;
             while (0 < remainingLb) {
-                uint16_t lb = bulkLb_;
-                if (remainingLb < bulkLb_) lb = remainingLb;
+                uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 uint16_t lb0 = 0;
                 packet.read(lb0);
@@ -466,8 +464,7 @@ class DirtyHashSyncProtocol : public Protocol
             auto addToPack = [this, &hashQ, &packer, &buf, &bd, &hasher, &convQ, &pushPackToQueue](
                 uint64_t &offLb, uint64_t &remainingLb) {
 
-                uint16_t lb = bulkLb_;
-                if (remainingLb < bulkLb_) lb = remainingLb;
+                uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 bd.read(&buf[0], size);
                 cybozu::murmurhash3::Hash h0, h1;
@@ -631,8 +628,7 @@ class DirtyHashSyncProtocol : public Protocol
             auto readBulkAndSendHash = [this, &virtLv, &packet, &buf0, &hasher](
                 uint64_t &offLb, uint64_t &remainingLb) {
 
-                uint16_t lb = bulkLb_;
-                if (remainingLb < bulkLb_) lb = remainingLb;
+                uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 virtLv.read(&buf0[0], size);
                 cybozu::murmurhash3::Hash h0 = hasher(&buf0[0], size);
