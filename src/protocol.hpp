@@ -301,7 +301,7 @@ private:
             cybozu::util::BlockDevice bd(lvPath, O_RDWR);
             std::vector<char> buf(bulkLb_ * LOGICAL_BLOCK_SIZE);
 
-            uint16_t c = 0;
+            uint64_t c = 0;
             uint64_t remainingLb = sizeLb_;
             while (0 < remainingLb) {
                 uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
