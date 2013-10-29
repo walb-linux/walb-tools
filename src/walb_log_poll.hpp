@@ -39,28 +39,28 @@ std::string getPollingPath(const std::string &wdevName)
 
 class Fd
 {
-	int fd;
-	Fd(const Fd&) = delete;
-	void operator=(const Fd&) = delete;
+    int fd;
+    Fd(const Fd&) = delete;
+    void operator=(const Fd&) = delete;
 public:
-	/**
+    /**
      * check fd if errMsg is set
-	 */
-	explicit Fd(int fd, const std::string& errMsg = "")
-		: fd(fd)
-	{
-		if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
-	}
-	void close() {
-		if (fd < 0) return;
-		if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
-		fd = -1;
-	}
-	~Fd() noexcept {
-		if (fd < 0) return;
-		::close(fd);
-	}
-	int operator()() const noexcept { return fd; }
+     */
+    explicit Fd(int fd, const std::string& errMsg = "")
+        : fd(fd)
+    {
+        if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
+    }
+    void close() {
+        if (fd < 0) return;
+        if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
+        fd = -1;
+    }
+    ~Fd() noexcept {
+        if (fd < 0) return;
+        ::close(fd);
+    }
+    int operator()() const noexcept { return fd; }
 };
 /**
  * This is thread safe.
@@ -243,7 +243,7 @@ private:
         if (::epoll_ctl(efd_(), EPOLL_CTL_DEL, fd(), nullptr) < 0) {
             throw std::runtime_error("epoll_ctl failed.");
         }
-		fd.close();
+        fd.close();
     }
 };
 
