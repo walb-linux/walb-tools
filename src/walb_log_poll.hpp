@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "cybozu/exception.hpp"
 
 namespace walb {
 namespace log {
@@ -36,6 +37,36 @@ std::string getPollingPath(const std::string &wdevName)
         "/sys/block/walb!%s/walb/lsids", wdevName.c_str());
 }
 
+class Fd
+{
+    int fd;
+    bool doAutoClose_;
+    Fd(const Fd&) = delete;
+    void operator=(const Fd&) = delete;
+public:
+    /**
+     * check fd if errMsg is set
+     */
+    explicit Fd(int fd, const std::string& errMsg = "")
+        : fd(fd)
+        , doAutoClose_(true)
+    {
+        if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
+    }
+    void close() {
+        if (fd < 0) return;
+        if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
+        fd = -1;
+    }
+    void dontClose() {
+        doAutoClose_ = false;
+    }
+    ~Fd() noexcept {
+        if (fd < 0 || !doAutoClose_) return;
+        ::close(fd);
+    }
+    int operator()() const noexcept { return fd; }
+};
 /**
  * This is thread safe.
  *
@@ -48,7 +79,7 @@ class WalbLogPoller
 {
 private:
     mutable std::mutex mutex_;
-    int efd_;
+    Fd efd_;
     std::vector<struct epoll_event> ev_;
     std::map<std::string, int> fdMap_; /* name, fd. */
     std::map<int, std::string> nameMap_; /* fd, name. */
@@ -56,29 +87,23 @@ private:
 public:
     explicit WalbLogPoller(unsigned int maxEvents = 1)
         : mutex_()
-        , efd_(-1)
+        , efd_(::epoll_create(maxEvents), "epoll_create failed.")
         , ev_(maxEvents)
         , fdMap_()
         , nameMap_() {
         assert(0 < maxEvents);
-        efd_ = ::epoll_create(maxEvents);
-        if (efd_ < 0) {
-            throw std::runtime_error("epoll_create failed.");
-        }
     }
     ~WalbLogPoller() noexcept {
         auto it = fdMap_.begin();
         while (it != fdMap_.end()) {
             int fd = it->second;
-            if (::epoll_ctl(efd_, EPOLL_CTL_DEL, fd, nullptr) < 0) {
+            if (::epoll_ctl(efd_(), EPOLL_CTL_DEL, fd, nullptr) < 0) {
                 /* failed but do nothing. */
             }
             ::close(fd);
             it = fdMap_.erase(it);
         }
         nameMap_.clear();
-        ::close(efd_);
-        efd_ = -1;
     }
     /**
      * DO NOT call this from multiple threads.
@@ -89,7 +114,7 @@ public:
      */
     std::vector<std::string> poll(int timeoutMs = -1) {
         std::vector<std::string> v;
-        int nfds = ::epoll_wait(efd_, &ev_[0], ev_.size(), timeoutMs);
+        int nfds = ::epoll_wait(efd_(), &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
             /* TODO: logging. */
             return v;
@@ -146,11 +171,11 @@ public:
     }
 private:
     bool addName(const std::string &wdevName, int fd) {
-        auto p0 = fdMap_.insert(std::make_pair(wdevName, fd));
+        auto p0 = fdMap_.insert({wdevName, fd});
         if (!p0.second) {
             return false;
         }
-        auto p1 = nameMap_.insert(std::make_pair(fd, wdevName));
+        auto p1 = nameMap_.insert({fd, wdevName});
         if (!p1.second) {
             fdMap_.erase(p0.first);
             return false;
@@ -196,39 +221,33 @@ private:
      */
     bool addNolock(const std::string &wdevName) {
         std::string path = getPollingPath(wdevName);
-        int fd = ::open(path.c_str(), O_RDONLY);
-        if (fd < 0) goto error0;
+        Fd fd(::open(path.c_str(), O_RDONLY), std::string("addNolock:can't open ") + path);
 
-        if (!addName(wdevName, fd)) goto error1;
+        if (!addName(wdevName, fd())) return false;
 
         struct epoll_event ev;
         ::memset(&ev, 0, sizeof(ev));
         ev.events = EPOLLIN | EPOLLET;
-        ev.data.fd = fd;
-        if (::epoll_ctl(efd_, EPOLL_CTL_ADD, fd, &ev) < 0) goto error2;
+        ev.data.fd = fd();
+        if (::epoll_ctl(efd_(), EPOLL_CTL_ADD, fd(), &ev) < 0) {
+            delName(wdevName, fd());
+            return false;
+        }
+        fd.dontClose();
         return true;
-
-      error2:
-        delName(wdevName, fd);
-      error1:
-        ::close(fd);
-      error0:
-        return false;
     }
     /**
      * Delete an walb device.
      * If not found, do nothing.
      */
     void delNolock(const std::string &wdevName) {
-        int fd = getFd(wdevName);
-        if (fd < 0) return;
-        delName(wdevName, fd);
-        if (::epoll_ctl(efd_, EPOLL_CTL_DEL, fd, nullptr) < 0) {
+        Fd fd(getFd(wdevName));
+        if (fd() < 0) return;
+        delName(wdevName, fd());
+        if (::epoll_ctl(efd_(), EPOLL_CTL_DEL, fd(), nullptr) < 0) {
             throw std::runtime_error("epoll_ctl failed.");
         }
-        if (::close(fd) != 0) {
-            throw std::runtime_error("close failed.");
-        }
+        fd.close();
     }
 };
 
