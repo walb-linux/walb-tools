@@ -12,7 +12,11 @@ void testCompressedData(std::vector<char> &&v)
     size_t s = v.size();
     cd0.moveFrom(0, s, std::move(v));
     cd1 = cd0.compress();
-    cd2 = cd1.uncompress();
+    if (cd1.isCompressed()) {
+        cd2 = cd1.uncompress();
+    } else {
+        cd2 = cd1;
+    }
     CYBOZU_TEST_EQUAL(cd0.rawSize(), cd2.rawSize());
     CYBOZU_TEST_ASSERT(::memcmp(cd0.rawData(), cd2.rawData(), cd0.rawSize()) == 0);
 #if 0
