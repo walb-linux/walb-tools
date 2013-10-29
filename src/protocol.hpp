@@ -1164,18 +1164,19 @@ public:
     }
 
 private:
-#define DECLARE_PROTOCOL(name, cls)                                     \
-    map_.insert(std::make_pair(#name, std::unique_ptr<cls>(new cls(#name))))
-
+    template<class Cls>
+    void declareProtocol(const char *name)
+    {
+        map_.insert(std::make_pair(name, std::unique_ptr<Cls>(new Cls(name))));
+    }
     ProtocolFactory() : map_() {
-        DECLARE_PROTOCOL(echo, EchoProtocol);
-        DECLARE_PROTOCOL(dirty-full-sync, DirtyFullSyncProtocol);
-        DECLARE_PROTOCOL(dirty-hash-sync, DirtyHashSyncProtocol);
-        DECLARE_PROTOCOL(wlog-send, LogSendProtocol);
+        declareProtocol<EchoProtocol>("echo");
+        declareProtocol<DirtyFullSyncProtocol>("dirty-full-sync");
+        declareProtocol<DirtyHashSyncProtocol>("dirty-hash-sync");
+        declareProtocol<LogSendProtocol>("wlog-send");
         //DECLARE_PROTOCOL(wdiff-send, DiffSendProtocol);
         /* now editing */
     }
-#undef DECLARE_PROTOCOL
 };
 
 /**
