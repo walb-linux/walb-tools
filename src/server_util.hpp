@@ -6,13 +6,12 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include "sys_logger.hpp"
-
 #include <memory>
 #include <functional>
 #include <atomic>
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
+#include "walb_logger.hpp"
 
 namespace cybozu {
 namespace server {

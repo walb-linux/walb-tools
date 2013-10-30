@@ -15,10 +15,9 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "util.hpp"
 #include "walb_log_file.hpp"
 #include "aio_util.hpp"
@@ -155,11 +154,10 @@ public:
     }
 };
 
-int main(int argc, char* argv[])
-    try
+int main(int argc, char* argv[]) try
 {
+    cybozu::SetLogFILE(::stderr);
     Config config(argc, argv);
-
     WalbLogUpdater wlUpdater(config);
     wlUpdater.update();
 } catch (std::exception& e) {

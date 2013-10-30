@@ -10,9 +10,6 @@
 #include <thread>
 #include <string>
 #include <atomic>
-
-#include "sys_logger.hpp"
-
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
 #include "cybozu/serializer.hpp"

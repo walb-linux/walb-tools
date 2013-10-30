@@ -19,7 +19,7 @@
 #include "tmp_file_serializer.hpp"
 #include "meta.hpp"
 #include "time.hpp"
-#include "stdout_logger.hpp"
+#include "walb_logger.hpp"
 #include "fileio_serializer.hpp"
 
 namespace walb {

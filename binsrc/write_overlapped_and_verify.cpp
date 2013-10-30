@@ -13,9 +13,7 @@
 #include <memory>
 
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "thread_util.hpp"
 #include "random.hpp"
 #include "util.hpp"
@@ -268,9 +266,9 @@ static bool writeConcurrentlyAndVerify(Config &config)
     return ret;
 };
 
-int main(int argc, char* argv[])
-    try
+int main(int argc, char* argv[]) try
 {
+    cybozu::SetLogFILE(::stderr);
     Config config(argc, argv);
     config.check();
     if (!writeConcurrentlyAndVerify(config)) {

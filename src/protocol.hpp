@@ -16,7 +16,7 @@
 #include "cybozu/itoa.hpp"
 #include "packet.hpp"
 #include "util.hpp"
-#include "sys_logger.hpp"
+#include "walb_logger.hpp"
 #include "serializer.hpp"
 #include "fileio.hpp"
 #include "walb_diff_virt.hpp"
@@ -33,81 +33,6 @@
 #include "server_util.hpp"
 
 namespace walb {
-
-/**
- * Logger wrapper for protocols.
- */
-class Logger
-{
-private:
-    std::string selfId_;
-    std::string remoteId_;
-public:
-    Logger(const std::string &selfId, const std::string &remoteId)
-        : selfId_(selfId), remoteId_(remoteId) {}
-
-    void write(cybozu::LogPriority pri, const char *msg) const noexcept {
-        cybozu::PutLog(pri, "[%s][%s] %s", selfId_.c_str(), remoteId_.c_str(), msg);
-    }
-    void write(cybozu::LogPriority pri, const std::string &msg) const noexcept {
-        write(pri, msg.c_str());
-    }
-    void writeV(cybozu::LogPriority pri, const char *format, va_list args) const noexcept {
-        try {
-            std::string msg;
-            cybozu::vformat(msg, format, args);
-            write(pri, msg);
-        } catch (...) {
-            write(pri, "Logger::write() error.");
-        }
-    }
-    void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept {
-        try {
-            va_list args;
-            va_start(args, format);
-            writeV(pri, format, args);
-            va_end(args);
-        } catch (...) {
-            write(pri, "Logger::write() error.");
-        }
-    }
-
-    void debug(UNUSED const std::string &msg) const noexcept {
-#ifdef DEBUG
-        write(cybozu::LogDebug, msg);
-#endif
-    }
-    void info(const std::string &msg) const noexcept { write(cybozu::LogInfo, msg); }
-    void warn(const std::string &msg) const noexcept { write(cybozu::LogWarning, msg); }
-    void error(const std::string &msg) const noexcept { write(cybozu::LogError, msg); }
-
-    void debug(UNUSED const char *format, ...) const noexcept {
-#ifdef DEBUG
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogDebug, format, args);
-        va_end(args);
-#endif
-    }
-    void info(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogInfo, format, args);
-        va_end(args);
-    }
-    void warn(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogWarning, format, args);
-        va_end(args);
-    }
-    void error(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogError, format, args);
-        va_end(args);
-    }
-};
 
 /**
  * Protocol interface.
@@ -1191,7 +1116,7 @@ static inline std::string run1stNegotiateAsClient(
     std::string serverId;
     packet.read(serverId);
 
-    Logger logger(clientId, serverId);
+    ProtocolLogger logger(clientId, serverId);
     packet::Answer ans(sock);
     int err;
     std::string msg;
@@ -1213,7 +1138,7 @@ static inline void runProtocolAsClient(
     const std::string &protocolName, const std::vector<std::string> &params)
 {
     std::string serverId = run1stNegotiateAsClient(sock, clientId, protocolName);
-    Logger logger(clientId, serverId);
+    ProtocolLogger logger(clientId, serverId);
 
     Protocol *protocol = ProtocolFactory::getInstance().find(protocolName);
     if (!protocol) {
@@ -1248,7 +1173,7 @@ static inline void runProtocolAsServer(
     ::printf("isVersionSame: %d\n", isVersionSame); /* debug */
     packet.write(serverId);
 
-    Logger logger(serverId, clientId);
+    ProtocolLogger logger(serverId, clientId);
     packet::Answer ans(sock);
 
     /* Server shutdown commands. */

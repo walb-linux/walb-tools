@@ -20,16 +20,14 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "checksum.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
 #include "io_recipe.hpp"
-
 #include "walb/common.h"
 #include "walb/block_size.h"
 
@@ -152,11 +150,10 @@ private:
     }
 };
 
-int main(int argc, char* argv[])
-    try
+int main(int argc, char* argv[]) try
 {
+    cybozu::SetLogFILE(::stderr);
     Config config(argc, argv);
-
     IoDataVerifier v(config);
     v.run();
 } catch (std::exception& e) {

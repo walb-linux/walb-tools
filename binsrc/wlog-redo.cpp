@@ -18,10 +18,9 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
@@ -894,9 +893,10 @@ private:
     }
 };
 
-int main(int argc, char* argv[])
-    try
+int main(int argc, char* argv[]) try
 {
+    cybozu::SetLogFILE(::stderr);
+
     const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
     Config config(argc, argv);
     config.check();

@@ -18,7 +18,7 @@
 #include "checksum.hpp"
 #include "block_diff.hpp"
 #include "walb_diff.h"
-#include "stdout_logger.hpp"
+#include "walb_logger.hpp"
 #include "walb/block_size.h"
 #include "backtrace.hpp"
 

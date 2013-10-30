@@ -20,10 +20,9 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "fileio.hpp"
@@ -199,11 +198,10 @@ private:
     }
 };
 
-int main(int argc, char* argv[])
-    try
+int main(int argc, char* argv[]) try
 {
+    cybozu::SetLogFILE(::stderr);
     Config config(argc, argv);
-
     WlogVerifier v(config);
     v.run();
 } catch (std::exception& e) {

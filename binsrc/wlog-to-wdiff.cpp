@@ -20,9 +20,7 @@
 #include <type_traits>
 
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "util.hpp"
 #include "walb_diff_converter.hpp"
 
@@ -36,22 +34,22 @@ struct Option : public cybozu::Option
     }
 };
 
-int main(int argc, UNUSED char *argv[])
+int main(int argc, UNUSED char *argv[]) try
 {
-    try {
-        Option opt;
-        if (!opt.parse(argc, argv)) {
-            opt.usage();
-            return 1;
-        }
-        walb::diff::Converter c;
-        c.convert(0, 1, opt.maxIoSize);
-        return 0;
-    } catch (std::exception &e) {
-        LOGe("exception: %s\n", e.what());
-    } catch (...) {
-        LOGe("caught other error.\n");
+    cybozu::SetLogFILE(::stderr);
+    Option opt;
+    if (!opt.parse(argc, argv)) {
+        opt.usage();
+        return 1;
     }
+    walb::diff::Converter c;
+    c.convert(0, 1, opt.maxIoSize);
+    return 0;
+} catch (std::exception &e) {
+    LOGe("exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("caught other error.\n");
     return 1;
 }
 

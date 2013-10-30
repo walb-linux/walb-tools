@@ -20,16 +20,14 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+
 #include "cybozu/option.hpp"
-
-#include "stdout_logger.hpp"
-
+#include "walb_logger.hpp"
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "walb_log_base.hpp"
 #include "walb_log_file.hpp"
 #include "walb_log_gen.hpp"
-
 #include "walb/walb.h"
 
 /**
@@ -136,8 +134,9 @@ private:
     }
 };
 
-int main(int argc, char* argv[])
-try {
+int main(int argc, char* argv[]) try
+{
+    cybozu::SetLogFILE(::stderr);
     Config config(argc, argv);
     config.check();
     walb::log::Generator::Config cfg = config.genConfig();

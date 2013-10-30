@@ -19,7 +19,7 @@
 #include "walb_diff.h"
 #include "compressor.hpp"
 #include "checksum.hpp"
-#include "stdout_logger.hpp"
+#include "walb_logger.hpp"
 
 namespace walb {
 
