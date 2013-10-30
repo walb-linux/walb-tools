@@ -31,6 +31,7 @@
 #include "uuid.hpp"
 #include "walb_diff_converter.hpp"
 #include "server_util.hpp"
+#include "walb_log_net.hpp"
 
 namespace walb {
 
@@ -711,13 +712,15 @@ private:
         MetaDiff diff_;
         uint32_t pbs_; /* physical block size */
         uint32_t salt_; /* checksum salt. */
-        uint64_t sizePb_; /* Number of physical blocks (lsid range) 0 is allowed. */
+        uint64_t sizePb_; /* Number of physical blocks (lsid range).
+                             0 is allowed. -1 means do not check. */
     public:
         using ProtocolData::ProtocolData;
         void checkParams() const {
             if (name_.empty()) logAndThrow("name param empty.");
             if (!diff_.isValid()) logAndThrow("Invalid meta diff.");
             if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
+            /* sizePb_ is not checked now. */
         }
         std::string str() const {
             return cybozu::util::formatString(
@@ -737,41 +740,13 @@ public:
     class Client : public Data
     {
     private:
-        BoundedQ q0_; /* uncompressed data. */
-        BoundedQ q1_; /* compressed data. */
-        cybozu::thread::ThreadRunner compressor_;
-        cybozu::thread::ThreadRunner sender_;
-        std::atomic<bool> isError_;
+        log::Sender sender_;
 
-        class Sender : public cybozu::thread::Runnable
-        {
-        private:
-            BoundedQ &inQ_;
-            packet::Packet packet_;
-            Logger &logger_;
-            const std::atomic<bool> &isError_;
-        public:
-            Sender(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger,
-                   const std::atomic<bool> &isError)
-                : inQ_(inQ), packet_(sock), logger_(logger)
-                , isError_(isError) {}
-            void operator()() noexcept override try {
-                packet::StreamControl ctrl(packet_.sock());
-                log::CompressedData cd;
-                while (!inQ_.pop(cd)) {
-                    ctrl.next();
-                    cd.send(packet_);
-                }
-                if (isError_) ctrl.error(); else ctrl.end();
-            } catch (...) {
-                throwErrorLater();
-                inQ_.error();
-            }
-        };
     public:
         Client(cybozu::Socket &sock, Logger &logger, const std::atomic<bool> &forceQuit,
                const std::vector<std::string> &params)
-            : Data(sock, logger, forceQuit, params), q0_(Q_SIZE), q1_(Q_SIZE) {}
+            : Data(sock, logger, forceQuit, params)
+            , sender_(sock, logger) {}
         void run() {
 #if 0
             /* Open wldev device. */
@@ -780,9 +755,7 @@ public:
 
             /* Decide lsid range. */
 
-
             /* Get wlog information. */
-
 
             setParams();
             prepare();
@@ -810,97 +783,35 @@ public:
          * Prepare worker threads.
          */
         void prepare() {
-            isError_ = false;
             negotiate();
-            compressor_.set(std::make_shared<log::CompressWorker>(q0_, q1_));
-            sender_.set(std::make_shared<Sender>(q1_, sock_, logger_, isError_));
-            compressor_.start();
+            sender_.setParams(pbs_, salt_);
             sender_.start();
         }
         /**
          * Push a log pack.
          * Do not send end logpack header by yourself. Use sync() instead.
-         * TODO: use better interface.
          */
-        void push(const log::PackHeaderWrap &header, std::queue<Block> &&blocks) {
-            assert(header.totalIoSize() == blocks.size());
-            /* Header */
-            log::CompressedData cd;
-            cd.copyFrom(0, header.pbs(), header.rawData());
-            q0_.push(std::move(cd));
-
-            /* IO data */
-            size_t total = 0;
-            for (size_t i = 0; i < header.nRecords(); i++) {
-                total += pushIo(header, i, blocks);
-            }
-            assert(total == header.totalIoSize());
+        void pushHeader(const log::PackHeader &header) {
+            sender_.pushHeader(header);
+        }
+        void pushIo(const log::PackHeader &header, size_t recIdx, const log::BlockData &blockD) {
+            sender_.pushIo(header, recIdx, blockD);
         }
         /**
          * Notify the input has reached the end and finalize the protocol.
-         *
          */
         void sync() {
-            q0_.push(generateEndHeaderBlock());
-            q0_.sync();
-            joinWorkers();
+            sender_.sync();
             packet::Ack ack(sock_);
             ack.recv();
         }
         /**
          * Notify an error and finalize the protocol.
          */
-        void error() {
-            isError_ = true;
-            q0_.error();
-            joinWorkers();
+        void error() noexcept {
+            sender_.error();
         }
     private:
-        /**
-         * RETURN:
-         *   Number of consumed physical blocks.
-         */
-        size_t pushIo(const log::PackHeader &header, size_t idx,
-                    std::queue<Block> &blocks) {
-
-            const log::RecordWrapConst rec(&header, idx);
-            if (!rec.hasData()) return 0;
-
-            size_t s = header.pbs() * rec.ioSizePb();
-            std::vector<char> v;
-            v.resize(s);
-            size_t n = rec.ioSizePb();
-            size_t off = 0;
-            while (0 < n && !blocks.empty()) {
-                Block b = std::move(blocks.front());
-                blocks.pop();
-                ::memcpy(&v[off], b.get(), header.pbs());
-                off += header.pbs();
-                n--;
-            }
-            assert(n == 0);
-            assert(off == s);
-            log::CompressedData cd;
-            cd.moveFrom(0, s, std::move(v));
-            q0_.push(std::move(cd));
-            return rec.ioSizePb();
-        }
-        log::CompressedData generateEndHeaderBlock() const {
-            Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
-            log::PackHeaderRaw header(b, pbs_, salt_);
-            header.setEnd();
-            header.updateChecksum();
-            log::CompressedData cd;
-            cd.copyFrom(0, pbs_, b.get());
-            return cd;
-        }
-        void joinWorkers() {
-            std::exception_ptr ep0, ep1;
-            ep0 = compressor_.joinNoThrow();
-            ep1 = sender_.joinNoThrow();
-            if (ep0) std::rethrow_exception(ep0);
-            if (ep1) std::rethrow_exception(ep1);
-        }
         void negotiate() {
             packet::Packet packet(sock_);
             packet.write(name_);

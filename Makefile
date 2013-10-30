@@ -52,10 +52,10 @@ test_all: $(TEST_BINARIES)
 echo_binaries:
 	@echo $(BINARIES)
 
-.cpp.o:
-	$(CXX) $(CXXFLAGS) -c $< -o $(patsubst %.cpp,%.o,$<)
-.c.o:
-	$(CC) $(CFLAGS) -c $< -o $(patsubst %.cpp,%.o,$<)
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 binsrc/client: binsrc/client.o src/compressor.o src/MurmurHash3.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
@@ -63,6 +63,9 @@ src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 binsrc/server: binsrc/server.o src/compressor.o src/MurmurHash3.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
 src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
+binsrc/wlog-send: binsrc/wlog-send.o src/compressor.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
+src/compressor.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 binsrc/%: binsrc/%.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 
