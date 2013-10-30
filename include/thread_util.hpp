@@ -703,7 +703,7 @@ public:
      * You should call this when error has ocurred.
      * Blockded threads will be waken up and will throw exceptions.
      */
-    void error() {
+    void error() noexcept {
         lock lk(mutex_);
         if (isError_) { return; }
         closed_ = true;
