@@ -90,8 +90,6 @@ public:
     virtual void setPbs(unsigned int) = 0;
     virtual void setSalt(uint32_t) = 0;
 
-    virtual bool isValid(bool isChecksum = true) const = 0;
-
     /*
      * Fields.
      */
@@ -151,6 +149,14 @@ public:
     }
     bool isEnd() const {
         return nRecords() == 0 && logpackLsid() == uint64_t(-1);
+    }
+    bool isValid(bool isChecksum = true) const {
+        if (isChecksum) {
+            return ::is_valid_logpack_header_and_records_with_checksum(
+                &header(), pbs(), salt()) != 0;
+        } else {
+            return ::is_valid_logpack_header_and_records(&header()) != 0;
+        }
     }
 
     /*
@@ -455,14 +461,6 @@ public:
     uint32_t salt() const override { return salt_; }
     void setPbs(unsigned int pbs0) override { pbs_ = pbs0; };
     void setSalt(uint32_t salt0) override { salt_ = salt0; };
-    bool isValid(bool isChecksum = true) const override {
-        if (isChecksum) {
-            return ::is_valid_logpack_header_and_records_with_checksum(
-                &header(), pbs(), salt()) != 0;
-        } else {
-            return ::is_valid_logpack_header_and_records(&header()) != 0;
-        }
-    }
     void resetData(CharT *data) {
         data_ = data;
     }
