@@ -34,6 +34,7 @@ public:
     const char *rawData() const { return &data_[0]; }
     size_t rawSize() const { return data_.size(); }
     bool isCompressed() const { return cmprSize_ != 0; }
+    size_t originalSize() const { return origSize_; }
     void moveFrom(uint32_t cmprSize, uint32_t origSize, std::vector<char> &&data) {
         assert(!data.empty());
         setSizes(cmprSize, origSize);
@@ -73,31 +74,41 @@ public:
         packet.read(&data_[0], data_.size());
         check();
     }
-    CompressedData compress() const {
-        assert(!isCompressed());
-        const std::vector<char> &src = data_;
-        std::vector<char> dst(origSize_);
+    void compressFrom(const void *data, uint32_t size) {
+        data_.resize(size);
+        std::vector<char> &dst = data_;
         uint32_t cSize = 0;
         try {
-            cSize = compressor().run(&dst[0], dst.size(), &src[0], src.size());
+            cSize = compressor().run(&dst[0], size, data, size);
             dst.resize(cSize);
         } catch (cybozu::Exception &) {
-            ::memcpy(&dst[0], &src[0], dst.size());
+            ::memcpy(&dst[0], data, size);
         }
+        setSizes(cSize, size);
+        check();
+    }
+    /**
+     * @data Output buffer which size must be more than originalSize().
+     */
+    void uncompressTo(void *data) const {
+        assert(isCompressed());
+        uint32_t s0 = origSize_;
+        size_t s1 = uncompressor().run(data, s0, &data_[0], data_.size());
+        if (s0 != s1) {
+            throw RT_ERR("uncompressed data size differ: "
+                         "expected %zu real %zu.", s0, s1);
+        }
+    }
+    CompressedData compress() const {
+        assert(!isCompressed());
         CompressedData ret;
-        ret.moveFrom(cSize, origSize_, std::move(dst));
-        ret.check();
+        ret.compressFrom(&data_[0], data_.size());
         return ret;
     }
     CompressedData uncompress() const {
         assert(isCompressed());
-        const std::vector<char> &src = data_;
         std::vector<char> dst(origSize_);
-        size_t oSize = uncompressor().run(&dst[0], dst.size(), &src[0], src.size());
-        if (oSize != origSize_) {
-            throw RT_ERR("uncompressed data size differ %zu %zu."
-                         , oSize, origSize_);
-        }
+        uncompressTo(&dst[0]);
         CompressedData ret;
         ret.moveFrom(0, origSize_, std::move(dst));
         ret.check();
