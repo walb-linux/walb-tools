@@ -78,6 +78,9 @@ utest/%: utest/%.o
 clean:
 	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o binsrc/*.o utest/*.o
 
+cleandep:
+	rm -f src/*.depend binsrc/*.depend utest/*.depend
+
 rebuild:
 	$(MAKE) clean
 	$(MAKE) all
