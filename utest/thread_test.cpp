@@ -186,7 +186,7 @@ CYBOZU_TEST_AUTO(BoundedQueueResize)
                     total += c;
                 }
             } catch (...) {
-                q.error();
+                q.fail();
             }
         });
 

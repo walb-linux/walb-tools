@@ -369,7 +369,7 @@ class DirtyHashSyncProtocol : public Protocol
                     hashQ.sync();
                 } catch (...) {
                     logger_.error("receiveHash failed.");
-                    hashQ.error();
+                    hashQ.fail();
                 }
                 logger_.info("receiveHash end");
             };
@@ -428,7 +428,7 @@ class DirtyHashSyncProtocol : public Protocol
                 } catch (...) {
                     logger_.error("createPack failed.");
                     isError = true;
-                    hashQ.error();
+                    hashQ.fail();
                 }
                 convQ.quit();
                 convQ.join();
@@ -808,8 +808,8 @@ public:
         /**
          * Notify an error and finalize the protocol.
          */
-        void error() noexcept {
-            sender_.error();
+        void fail() noexcept {
+            sender_.fail();
         }
     private:
         void negotiate() {

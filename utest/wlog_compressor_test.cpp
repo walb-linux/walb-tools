@@ -90,7 +90,7 @@ CYBOZU_TEST_AUTO(compressor)
             done();
         } catch (...) {
             throwErrorLater();
-            outQ_.error();
+            outQ_.fail();
         }
     };
     class Consumer : public cybozu::thread::Runnable
@@ -110,7 +110,7 @@ CYBOZU_TEST_AUTO(compressor)
             done();
         } catch (...) {
             throwErrorLater();
-            inQ_.error();
+            inQ_.fail();
         }
     };
 

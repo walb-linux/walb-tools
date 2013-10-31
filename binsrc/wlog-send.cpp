@@ -108,7 +108,7 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
         }
         client.sync();
     } catch (...) {
-        client.error();
+        client.fail();
         throw;
     }
 

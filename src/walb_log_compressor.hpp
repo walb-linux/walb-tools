@@ -167,8 +167,8 @@ public:
             done();
         } catch (...) {
             throwErrorLater();
-            inQ_.error();
-            outQ_.error();
+            inQ_.fail();
+            outQ_.fail();
         }
     }
 };
@@ -200,8 +200,8 @@ public:
             done();
         } catch (...) {
             throwErrorLater();
-            inQ_.error();
-            outQ_.error();
+            inQ_.fail();
+            outQ_.fail();
         }
     }
 };
