@@ -686,7 +686,6 @@ public:
         condEmpty_.notify_all();
         condFull_.notify_all();
     }
-
     /**
      * Check if there is no more items and push() will be never called.
      */
@@ -696,23 +695,16 @@ public:
         checkFailedError();
         return isClosed_ && isEmpty();
     }
-
     /**
      * max size of the queue.
      */
     size_t maxSize() const { return size_; }
-
     /**
      * Current size of the queue.
      */
     size_t size() const {
         lock lk(mutex_);
         return queue_.size();
-    }
-
-    __attribute__((deprecated))
-    void error() noexcept {
-        fail();
     }
     /**
      * You should call this when an error has ocurred.
