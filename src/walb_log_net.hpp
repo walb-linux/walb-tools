@@ -64,7 +64,7 @@ private:
     uint32_t pbs_;
     uint32_t salt_;
     std::atomic<bool> isEnd_;
-    std::atomic<bool> isError_;
+    std::atomic<bool> isFailed_;
 
     cybozu::thread::ThreadRunner compressor_;
     cybozu::thread::ThreadRunner sender_;
@@ -80,12 +80,9 @@ private:
         BoundedQ &inQ_;
         packet::Packet packet_;
         Logger &logger_;
-        const std::atomic<bool> &isError_;
     public:
-        SendWorker(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger,
-                   const std::atomic<bool> &isError)
-            : inQ_(inQ), packet_(sock), logger_(logger)
-            , isError_(isError) {}
+        SendWorker(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger)
+            : inQ_(inQ), packet_(sock), logger_(logger) {}
         void operator()() noexcept override try {
             packet::StreamControl ctrl(packet_.sock());
             log::CompressedData cd;
@@ -93,21 +90,23 @@ private:
                 ctrl.next();
                 cd.send(packet_);
             }
-            if (isError_) ctrl.error(); else ctrl.end();
+            ctrl.end();
             done();
         } catch (...) {
+            try {
+                packet::StreamControl(packet_.sock()).error();
+            } catch (...) {}
             throwErrorLater();
-            inQ_.error();
+            inQ_.fail();
         }
     };
 public:
     Sender(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
-        , isEnd_(false), isError_(false) {
+        , isEnd_(false), isFailed_(false) {
     }
     ~Sender() noexcept {
-        if (!isEnd_ && !isError_) isError_ = true;
-        joinWorkers();
+        if (!isEnd_ && !isFailed_) fail();
     }
     void setParams(uint32_t pbs, uint32_t salt) {
         pbs_ = pbs;
@@ -115,7 +114,7 @@ public:
     }
     void start() {
         compressor_.set(std::make_shared<CompressWorker>(q0_, q1_));
-        sender_.set(std::make_shared<SendWorker>(q1_, sock_, logger_, isError_));
+        sender_.set(std::make_shared<SendWorker>(q1_, sock_, logger_));
         compressor_.start();
         sender_.start();
     }
@@ -127,7 +126,7 @@ public:
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
 #ifdef DEBUG
-        header.isValid();
+        assert(header.isValid());
 #endif
         CompressedData cd;
         cd.copyFrom(0, pbs_, header.rawData());
@@ -154,20 +153,20 @@ public:
         recIdx_++;
     }
     /**
-     * Send the end header block.
+     * Notify the end of input.
      */
     void sync() {
-        q0_.push(generateEndHeaderBlock());
         q0_.sync();
         isEnd_ = true;
         joinWorkers();
     }
     /**
-     * Notify an error and finalie the protocol.
+     * Notify an error.
      */
-    void error() {
-        isError_ = true;
-        q0_.error();
+    void fail() noexcept {
+        isFailed_ = true;
+        q0_.fail();
+        q1_.fail();
         joinWorkers();
     }
 private:
@@ -188,18 +187,6 @@ private:
             }
         }
     }
-    /**
-     * Generate end header block.
-     */
-    CompressedData generateEndHeaderBlock() const {
-        std::shared_ptr<uint8_t> b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
-        log::PackHeaderRaw header(b, pbs_, salt_);
-        header.setEnd();
-        header.updateChecksum();
-        log::CompressedData cd;
-        cd.copyFrom(0, pbs_, b.get());
-        return cd;
-    }
 };
 
 /**
@@ -212,7 +199,137 @@ private:
  */
 class Receiver
 {
-    /* now editing */
+private:
+    cybozu::Socket &sock_;
+    Logger &logger_;
+    uint32_t pbs_;
+    uint32_t salt_;
+    std::atomic<bool> isEnd_;
+    std::atomic<bool> isFailed_;
+
+    cybozu::thread::ThreadRunner receiver_;
+    cybozu::thread::ThreadRunner uncompressor_;
+    size_t recIdx_;
+
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
+    BoundedQ q0_; /* receiver_ to uncompressor_ */
+    BoundedQ q1_; /* uncompressor_ to output. */
+
+    class RecvWorker : public cybozu::thread::Runnable
+    {
+    private:
+        BoundedQ &outQ_;
+        packet::Packet packet_;
+        Logger &logger_;
+    public:
+        RecvWorker(BoundedQ &outQ, cybozu::Socket &sock, Logger &logger)
+            : outQ_(outQ), packet_(sock), logger_(logger) {}
+        void operator()() noexcept override try {
+            packet::StreamControl ctrl(packet_.sock());
+            log::CompressedData cd;
+            while (ctrl.isNext()) {
+                cd.recv(packet_);
+                outQ_.push(std::move(cd));
+                ctrl.reset();
+            }
+            if (ctrl.isError()) {
+                throw std::runtime_error("Client sent an error.");
+            }
+            assert(ctrl.isEnd());
+            done();
+        } catch (...) {
+            throwErrorLater();
+            outQ_.fail();
+        }
+    };
+public:
+    Receiver(cybozu::Socket &sock, Logger &logger)
+        : sock_(sock), logger_(logger)
+        , isEnd_(false), isFailed_(false) {
+    }
+    ~Receiver() noexcept {
+        if (!isEnd_ && !isFailed_) fail();
+    }
+    void setParams(uint32_t pbs, uint32_t salt) {
+        pbs_ = pbs;
+        salt_ = salt;
+    }
+    void start() {
+        receiver_.set(std::make_shared<RecvWorker>(q0_, sock_, logger_));
+        uncompressor_.set(std::make_shared<UncompressWorker>(q0_, q1_));
+        receiver_.start();
+        uncompressor_.start();
+    }
+    /**
+     * You must call popHeader(h) and its corresponding popIo() n times,
+     * where n is h.n_records.
+     *
+     * RETURN:
+     *   false if the input stream has reached the end.
+     */
+    bool popHeader(struct walb_logpack_header &header) {
+        CompressedData cd;
+        if (!q1_.pop(cd)) {
+            isEnd_ = true;
+            joinWorkers();
+            return false;
+        }
+        assert(!cd.isCompressed());
+        PackHeaderWrap h(reinterpret_cast<uint8_t *>(&header), pbs_, salt_);
+        cd.copyTo(h.rawData(), pbs_);
+        if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
+        assert(!h.isEnd());
+        recIdx_ = 0;
+        return true;
+    }
+    /**
+     * Get IO data.
+     * You must call this for discard/padding record also.
+     */
+    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataVec &blockD) {
+        assert(recIdx_ == recIdx);
+        const PackHeaderWrapConst h(reinterpret_cast<const uint8_t *>(&header), pbs_, salt_);
+        assert(recIdx < h.nRecords());
+        const RecordWrapConst rec(&h, recIdx);
+        if (rec.hasData()) {
+            CompressedData cd;
+            if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
+            blockD = convertToBlockData(cd, pbs_);
+        } else {
+            blockD.setPbs(pbs_);
+            blockD.resize(0);
+        }
+        const PackIoWrapConst packIo(&rec, &blockD);
+        if (!packIo.isValid()) throw std::runtime_error("Popped IO is invalid.");
+        recIdx_++;
+    }
+    /**
+     * Notify an error.
+     */
+    void fail() noexcept {
+        isFailed_ = true;
+        q0_.fail();
+        q1_.fail();
+        joinWorkers();
+    }
+private:
+    /**
+     * Join workers to finish.
+     * You can this multiple times because ThreadRunner::join() supports it.
+     */
+    void joinWorkers() noexcept {
+        std::function<void()> f0 = [this]() { receiver_.join(); };
+        std::function<void()> f1 = [this]() { uncompressor_.join(); };
+        for (auto &f : {f0, f1}) {
+            try {
+                f();
+            } catch (std::exception &e) {
+                logger_.error("walb::log::Receiver: %s.", e.what());
+            } catch (...) {
+                logger_.error("walb::log::Receiver: unknown error.");
+            }
+        }
+    }
 };
 
 }} //namespace walb::log
