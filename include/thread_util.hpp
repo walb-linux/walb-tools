@@ -571,8 +571,8 @@ private:
     mutable std::mutex mutex_;
     std::condition_variable condEmpty_;
     std::condition_variable condFull_;
-    bool closed_;
-    bool isError_;
+    bool isClosed_;
+    bool isFailed_;
 
     using lock = std::unique_lock<std::mutex>;
     using TRef = typename std::conditional<Movable, T&&, const T&>::type;
@@ -580,8 +580,11 @@ private:
 public:
     class ClosedError : public std::exception {
     public:
-        ClosedError() : std::exception() {}
         const char *what() const noexcept override { return "ClosedError"; }
+    };
+    class FailedError : public std::exception {
+    public:
+        const char *what() const noexcept override { return "FailedError"; }
     };
 
     /**
@@ -593,18 +596,26 @@ public:
         , mutex_()
         , condEmpty_()
         , condFull_()
-        , closed_(false)
-        , isError_(false) {
+        , isClosed_(false)
+        , isFailed_(false) {
         checkSize();
     }
     /**
      * Default constructor.
      */
     BoundedQueue() : BoundedQueue(1) {}
-
+    /**
+     * Disable copy/move constructors.
+     */
     BoundedQueue(const BoundedQueue &rhs) = delete;
+    BoundedQueue(BoundedQueue &&rhs) = delete;
+    ~BoundedQueue() noexcept = default;
+
+    /**
+     * Disable copy/move.
+     */
     BoundedQueue& operator=(const BoundedQueue &rhs) = delete;
-    ~BoundedQueue() noexcept {}
+    BoundedQueue& operator=(BoundedQueue &&rhs) = delete;
 
     /**
      * Change bounded size.
@@ -621,11 +632,11 @@ public:
      */
     void push(TRef t) {
         lock lk(mutex_);
-        checkError();
-        if (closed_) { throw ClosedError(); }
-        while (!isError_ && !closed_ && isFull()) { condFull_.wait(lk); }
-        checkError();
-        if (closed_) { throw ClosedError(); }
+        checkFailedError();
+        if (isClosed_) throw ClosedError();
+        while (!isFailed_ && !isClosed_ && isFull()) condFull_.wait(lk);
+        checkFailedError();
+        if (isClosed_) throw ClosedError();
 
         bool isEmpty0 = isEmpty();
         queue_.push(static_cast<TRef>(t));
@@ -639,16 +650,16 @@ public:
      */
     T pop() {
         lock lk(mutex_);
-        checkError();
-        if (closed_ && isEmpty()) { throw ClosedError(); }
-        while (!isError_ && !closed_ && isEmpty()) { condEmpty_.wait(lk); }
-        checkError();
-        if (closed_ && isEmpty()) { throw ClosedError(); }
+        checkFailedError();
+        if (isClosed_ && isEmpty()) throw ClosedError();
+        while (!isFailed_ && !isClosed_ && isEmpty()) condEmpty_.wait(lk);
+        checkFailedError();
+        if (isClosed_ && isEmpty()) throw ClosedError();
 
         bool isFull0 = isFull();
         T t = static_cast<TRef>(queue_.front());
         queue_.pop();
-        if (isFull0) { condFull_.notify_all(); }
+        if (isFull0) condFull_.notify_all();
         return t;
     }
     /**
@@ -670,8 +681,8 @@ public:
      */
     void sync() {
         lock lk(mutex_);
-        checkError();
-        closed_ = true;
+        checkFailedError();
+        isClosed_ = true;
         condEmpty_.notify_all();
         condFull_.notify_all();
     }
@@ -682,8 +693,8 @@ public:
     __attribute__((deprecated))
     bool isEnd() const {
         lock lk(mutex_);
-        checkError();
-        return closed_ && isEmpty();
+        checkFailedError();
+        return isClosed_ && isEmpty();
     }
 
     /**
@@ -699,19 +710,22 @@ public:
         return queue_.size();
     }
 
-    /**
-     * You should call this when error has ocurred.
-     * Blockded threads will be waken up and will throw exceptions.
-     */
+    __attribute__((deprecated))
     void error() noexcept {
+        fail();
+    }
+    /**
+     * You should call this when an error has ocurred.
+     * Blockded threads will be waken up and will throw FailedError.
+     */
+    void fail() noexcept {
         lock lk(mutex_);
-        if (isError_) { return; }
-        closed_ = true;
-        isError_ = true;
+        if (isFailed_) return;
+        isClosed_ = true;
+        isFailed_ = true;
         condEmpty_.notify_all();
         condFull_.notify_all();
     }
-
 private:
     bool isFull() const {
         return size_ <= queue_.size();
@@ -719,8 +733,8 @@ private:
     bool isEmpty() const {
         return queue_.empty();
     }
-    void checkError() const {
-        if (isError_) throw std::runtime_error("queue error.");
+    void checkFailedError() const {
+        if (isFailed_) throw FailedError();
     }
     void checkSize() const {
         if (size_ == 0) throw std::runtime_error("queue size must not be 0");
