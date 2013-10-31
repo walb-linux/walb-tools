@@ -21,15 +21,17 @@ CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
-LDFLAGS = -static
+LDFLAGS = -static -L./src
 LDLIBS = -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 else
-LDFLAGS = -Wl,-R,'$$ORIGIN'
+LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
 LDLIBS = -lpthread
 endif
 
+LDLIBS_LOCAL = -lwalb-tools
 LDLIBS_AIO = -laio
 LDLIBS_COMPRESS = -lsnappy -llzma -lz
+LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
 BIN_SOURCES = $(wildcard binsrc/*.cpp)
@@ -39,6 +41,8 @@ SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES) $(TEST_SOURCES)
 DEPENDS = $(patsubst %.cpp,%.depend,$(SOURCES))
 BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
+LOCAL_LIB = src/libwalb-tools.a
+LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
 
 all: build
 build: $(BINARIES)
@@ -57,29 +61,17 @@ echo_binaries:
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-binsrc/client: binsrc/client.o src/compressor.o src/MurmurHash3.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
-src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
-binsrc/server: binsrc/server.o src/compressor.o src/MurmurHash3.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
-src/compressor.o src/MurmurHash3.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
-binsrc/wlog-send: binsrc/wlog-send.o src/compressor.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< \
-src/compressor.o $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
-binsrc/%: binsrc/%.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
+$(LOCAL_LIB): $(LOCAL_LIB_OBJ)
+	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)
 
-utest/compressor_test: utest/compressor_test.o src/compressor.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
-utest/wlog_compressor_test: utest/wlog_compressor_test.o src/compressor.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/compressor.o $(LDLIBS_COMPRESS)
-utest/hash_test: utest/hash_test.o src/MurmurHash3.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS) src/MurmurHash3.o
-utest/%: utest/%.o
+binsrc/%: binsrc/%.o $(LOCAL_LIB)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+utest/%: utest/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 clean:
-	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o binsrc/*.o utest/*.o
+	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o binsrc/*.o utest/*.o $(LOCAL_LIB)
 
 cleandep:
 	rm -f src/*.depend binsrc/*.depend utest/*.depend

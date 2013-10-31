@@ -1,5 +1,7 @@
 *~
 *.o
+*.a
+*.so
 Makefile.depends
 walb
 cybozulib
