@@ -48,13 +48,12 @@ public:
         , baseDir_(baseDir)
         , forceQuit_(forceQuit)
         , ctrlFlag_(ctrlFlag) {}
-    void operator()() noexcept override {
-        try {
-            run();
-            done();
-        } catch (...) {
-            throwErrorLater();
-        }
+    void operator()() noexcept override try {
+        run();
+        sock_.close();
+        done();
+    } catch (...) {
+        throwErrorLater();
         sock_.close();
     }
     void run() {
