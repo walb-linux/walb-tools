@@ -91,6 +91,9 @@ public:
 
 class Version : public Packet
 {
+private:
+    uint32_t version_;
+
 public:
     using Packet :: Packet;
     Version(cybozu::Socket &sock) : Packet(sock) {}
@@ -100,16 +103,17 @@ public:
     }
     bool recv() {
         recvDebugMsg("VERSION");
-        uint32_t version = 0;
-        read(version);
+        version_ = 0;
+        read(version_);
 #if 0
-        if (version != VERSION) {
+        if (version_ != VERSION) {
             throw RT_ERR("Version number differ: required: %" PRIu32 " received %" PRIu32 "."
-                         , VERSION, version);
+                         , VERSION, version_);
         }
 #endif
-        return version == VERSION;
+        return version_ == VERSION;
     }
+    uint32_t get() const { return version_; }
 };
 
 class Answer : public Packet
