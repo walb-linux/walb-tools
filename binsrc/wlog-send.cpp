@@ -52,7 +52,7 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
 
     walb::log::Reader reader(wlogFd);
 
-    std::string serverId = walb::run1stNegotiateAsClient(
+    std::string serverId = walb::protocol::run1stNegotiateAsClient(
         sock, clientId, "wlog-send");
     walb::ProtocolLogger logger(clientId, serverId);
     std::atomic<bool> forceQuit(false);
@@ -63,7 +63,9 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
     uint64_t sizePb = -1; // unknown.
 
     /* wlog-send negotiation */
-    walb::LogSendProtocol::Client client(sock, logger, forceQuit, {});
+    walb::protocol::wlog_send::ClientRunner client(
+        walb::protocol::PROTOCOL_TYPE_MAP.at(walb::protocol::ProtocolName::WLOG_SEND),
+        sock, logger, forceQuit, {});
     /*
      * TODO:
      *   This uuid should not be wlog header.
@@ -107,7 +109,7 @@ try {
     }
     std::string host;
     uint16_t port;
-    std::tie(host, port) = parseHostPortStr(opt.proxyHostPort);
+    std::tie(host, port) = cybozu::net::parseHostPortStr(opt.proxyHostPort);
 
     uint64_t ts = ::time(0);
     if (!opt.timeStampStr.empty()) {

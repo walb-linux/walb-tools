@@ -57,7 +57,8 @@ public:
         sock_.close();
     }
     void run() {
-        walb::runProtocolAsServer(sock_, serverId_, baseDir_.str(), forceQuit_, ctrlFlag_);
+        walb::protocol::runProtocolAsServer(
+            sock_, serverId_, baseDir_.str(), forceQuit_, ctrlFlag_);
     }
 };
 
