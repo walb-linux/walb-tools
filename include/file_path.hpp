@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <cstdlib>
+#include <system_error>
 
 namespace cybozu {
 
@@ -412,5 +414,19 @@ private:
         return s1;
     }
 };
+
+inline FilePath getCurrentDir()
+{
+    char *p = ::getcwd(nullptr, 0);
+    if (!p) throw std::system_error(errno, std::system_category(), "getcwd failed.");
+    try {
+        FilePath fp(p);
+        ::free(p);
+        return fp;
+    } catch (...) {
+        ::free(p);
+        throw;
+    }
+}
 
 }; //namespace cybozu
