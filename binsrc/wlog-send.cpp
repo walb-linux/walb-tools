@@ -21,26 +21,6 @@
 #include "walb_log_file.hpp"
 #include "walb_log_net.hpp"
 
-/**
- * parse "HOST:PORT" format.
- */
-std::pair<std::string, uint16_t> parseHostPortStr(const std::string &s)
-{
-    auto throwError = [&]() {
-        std::string msg = cybozu::util::formatString(
-            "parseHostColonPortStr: invalid format '%s'", s.c_str());
-        throw std::runtime_error(msg);
-    };
-    size_t n = s.find(":");
-    if (n == std::string::npos) throwError();
-    std::string hostStr = s.substr(0, n);
-    if (hostStr.empty()) throwError();
-    std::string portStr = s.substr(n + 1);
-    if (portStr.empty()) throwError();
-    uint16_t port = cybozu::atoi(portStr);
-    return std::make_pair(hostStr, port);
-}
-
 struct Option : cybozu::Option
 {
     std::string proxyHostPort;
