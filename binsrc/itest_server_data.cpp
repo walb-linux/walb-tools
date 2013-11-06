@@ -147,9 +147,8 @@ std::pair<std::shared_ptr<char>, size_t> reallocateBlocksIfNeed(
 {
     assert(currSize % LOGICAL_BLOCK_SIZE == 0);
     assert(newSize % LOGICAL_BLOCK_SIZE == 0);
-    if (blk && newSize <= currSize) return std::make_pair(blk, currSize);
-    return std::make_pair(
-        cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, newSize), newSize);
+    if (blk && newSize <= currSize) return {blk, currSize};
+    return {cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, newSize), newSize};
 }
 
 std::vector<walb::MetaDiff> mergeDiffs(

@@ -263,7 +263,7 @@ public:
             r0.setDataSize(ioBlocks0 * LOGICAL_BLOCK_SIZE);
             r1.setDataSize(ioBlocks1 * LOGICAL_BLOCK_SIZE);
         }
-        return std::make_pair(r0, r1);
+        return {r0, r1};
     }
     /**
      * Split a record into several records
@@ -604,7 +604,7 @@ static inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t 
     ::memcpy(r0.rawData(), io0.rawData(), size0);
     ::memcpy(r1.rawData(), io0.rawData(size0), size1);
 
-    return std::make_pair(std::move(r0), std::move(r1));
+    return {std::move(r0), std::move(r1)};
 }
 
 /**

@@ -114,7 +114,7 @@ public:
         }
         latestRecord_.setTimestamp(diff.timestamp());
         saveLatestRecord();
-        mmap_.insert(std::make_pair(diff.snap0().gid0(), diff));
+        mmap_.emplace(diff.snap0().gid0(), diff);
         return true;
     }
     /**
@@ -151,7 +151,7 @@ public:
         }
         assert(merged.snap0().gid0() == gid0);
         assert(merged.snap1().gid0() == gid1);
-        mmap_.insert(std::make_pair(merged.snap0().gid0(), merged));
+        mmap_.emplace(merged.snap0().gid0(), merged);
         return true;
     }
     /**
@@ -170,7 +170,7 @@ public:
                 end = q.front().snap1().gid0();
                 q.pop_front();
             }
-            v.push_back(std::make_pair(bgn, end));
+            v.emplace_back(bgn, end);
         };
         for (const MetaDiff &diff : listDiff()) {
             bool canM = q.empty() ||
@@ -326,7 +326,7 @@ public:
                 continue;
             MetaDiff diff;
             if (!parseDiffFileName(info.name, diff)) continue;
-            mmap_.insert(std::make_pair(diff.snap0().gid0(), diff));
+            mmap_.emplace(diff.snap0().gid0(), diff);
         }
         check();
         if (mmap_.empty()) {

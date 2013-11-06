@@ -385,7 +385,7 @@ private:
         char *buf = getBuffer(aheadIdx_);
         uint32_t aioKey = aio_.prepareRead(off * pbs_, ioPb * pbs_, buf);
         assert(aioKey != 0);
-        ioQ_.push(std::make_pair(aioKey, ioPb));
+        ioQ_.emplace(aioKey, ioPb);
         aheadLsid_ += ioPb;
         pendingPb_ += ioPb;
         plusIdx(aheadIdx_, ioPb);

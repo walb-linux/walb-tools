@@ -1135,7 +1135,7 @@ private:
     template<bool isClient, class Cls>
     void registerProtocol(const std::string &name) {
         Map &m = getMap<isClient>();
-        m.insert(std::make_pair(name, std::unique_ptr<Cls>(new Cls(name))));
+        m.emplace(name, std::unique_ptr<Cls>(new Cls(name)));
     }
     ProtocolFactory() {
         /* You must call registerProtocol() as your role. */

@@ -349,7 +349,7 @@ private:
                 std::lock_guard<std::mutex> lk(mutex_);
                 __attribute__((unused)) size_t i = running_.erase(task.id());
                 assert(i == 1);
-                __attribute__((unused)) auto pair = done_.insert(std::make_pair(task.id(), ep));
+                __attribute__((unused)) auto pair = done_.emplace(task.id(), ep);
                 assert(pair.second);
 
                 cv_.notify_all();

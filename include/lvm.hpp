@@ -430,7 +430,7 @@ LvMap getLvMap(const std::string &arg)
     LvMap map;
     for (Lv &lv : listLv(arg)) {
         if (lv.isSnapshot()) continue;
-        auto pair = map.insert(std::make_pair(lv.name(), lv));
+        auto pair = map.emplace(lv.name(), lv);
         if (!pair.second) assert(false);
     }
     return map;

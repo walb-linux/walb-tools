@@ -141,7 +141,7 @@ public:
                 std::string gidStr
                     = cybozu::util::removePrefix(lv.snapName(), prefix);
                 uint64_t gid = cybozu::atoi(gidStr);
-                map.insert(std::make_pair(gid, lv));
+                map.emplace(gid, lv);
             }
         }
         return map;
@@ -385,7 +385,7 @@ public:
 
         auto insert = [&]() {
             assert(!v.empty());
-            stat.push_back(std::make_pair(total, v.size()));
+            stat.emplace_back(total, v.size());
             assert(canConsolidate(v));
             vv.push_back(std::move(v));
             v.clear();
