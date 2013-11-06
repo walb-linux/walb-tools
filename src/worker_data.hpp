@@ -107,7 +107,7 @@ public:
         rec.setCanMerge(canMerge);
 
         addRecord(rec);
-        return std::make_pair(gid0, gid1);
+        return {gid0, gid1};
     }
     cybozu::FilePath dirPath() const {
         return baseDir_ + cybozu::FilePath(name_);

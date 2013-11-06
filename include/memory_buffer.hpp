@@ -64,7 +64,7 @@ public:
         size_t off1 = off + size;
 
         SetIterator it =
-            set_.lower_bound(std::make_pair(off0, 0));
+            set_.lower_bound({off0, 0});
         while (it != set_.end() && it->first < off1) {
             if (isOverlapped(it->first, it->second, off, size)) {
                 return false;
@@ -79,8 +79,7 @@ public:
      */
     void setAllocated(size_t off, size_t size) {
         assert(0 < size);
-        UNUSED std::pair<SetIterator, bool> p0 =
-            set_.insert(std::make_pair(off, size));
+        UNUSED const auto p0 = set_.emplace(off, size);
         assert(p0.second);
         allocated_ += size;
         if (maxItemSize_ < size) { maxItemSize_ = size; }
@@ -91,7 +90,7 @@ public:
      */
     void unsetAllocated(size_t off) {
         SetIterator it =
-            set_.lower_bound(std::make_pair(off, 0));
+            set_.lower_bound({off, 0});
         assert(it != set_.end());
         assert(it->first == off);
         size_t size = it->second;

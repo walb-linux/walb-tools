@@ -330,7 +330,7 @@ public:
                 nIos_++;
                 nBlocks_ += r.record().ioBlocks();
                 uint64_t addr = r.record().ioAddress();
-                map_.insert(std::make_pair(addr, std::move(r)));
+                map_.emplace(addr, std::move(r));
             }
             q.pop();
         }
@@ -348,7 +348,7 @@ public:
         for (RecIo &r : rv) {
             uint64_t addr = r.record().ioAddress();
             uint16_t blks = r.record().ioBlocks();
-            map_.insert(std::make_pair(addr, std::move(r)));
+            map_.emplace(addr, std::move(r));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
     }

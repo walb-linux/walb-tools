@@ -289,7 +289,7 @@ public:
             iocbs_[i] = &ptr->iocb;
             ptr->beginTime = beginTime;
             assert(pendingIOs_.find(ptr->key) == pendingIOs_.end());
-            pendingIOs_.insert(std::make_pair(ptr->key, ptr));
+            pendingIOs_.emplace(ptr->key, ptr);
         }
         assert(submitQueue_.empty());
 

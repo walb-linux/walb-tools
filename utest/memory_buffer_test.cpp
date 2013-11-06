@@ -50,7 +50,7 @@ public:
     DISABLE_MOVE(RandomQueue);
 
     void push(std::shared_ptr<T> ptr) {
-        m_.insert(std::make_pair(rand_(), ptr));
+        m_.emplace(rand_(), ptr);
     }
 
     void pop() {

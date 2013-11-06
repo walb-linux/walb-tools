@@ -361,7 +361,7 @@ public:
 
         /* Count overlapped IOs. */
         iop->nOverlapped() = 0;
-        std::pair<off_t, IoPtr> k0 = std::make_pair(key0, IoPtr());
+        const std::pair<off_t, IoPtr> k0 = {key0, IoPtr()};
         IoSet::iterator it = set_.lower_bound(k0);
         while (it != set_.end() && it->first < key1) {
             IoPtr p = it->second;
@@ -375,7 +375,7 @@ public:
         }
 
         /* Insert iop. */
-        set_.insert(std::make_pair(iop->offset(), iop));
+        set_.emplace(iop->offset(), iop);
 
         /* Update maxSize_. */
         if (maxSize_ < iop->size()) {
@@ -411,7 +411,7 @@ public:
         off_t key1 = iop->offset() + iop->size();
 
         /* Decrement nOverlapped of overlapped IOs. */
-        std::pair<off_t, IoPtr> k0 = std::make_pair(key0, IoPtr());
+        const std::pair<off_t, IoPtr> k0 = {key0, IoPtr()};
         IoSet::iterator it = set_.lower_bound(k0);
         while (it != set_.end() && it->first < key1) {
             IoPtr p = it->second;
@@ -439,7 +439,7 @@ private:
      * Delete an IoPtr from the map.
      */
     void deleteFromSet(IoPtr iop) {
-        UNUSED size_t n = set_.erase(std::make_pair(iop->offset(), iop));
+        UNUSED size_t n = set_.erase({iop->offset(), iop});
         assert(n == 1);
     }
 };
