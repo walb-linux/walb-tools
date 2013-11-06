@@ -34,7 +34,7 @@ struct Option : cybozu::Option
     Option() {
         appendMust(&proxyHostPort, "proxy", "proxy host:port");
         appendMust(&name, "name", "volume identifier");
-        appendOpt(&gid, 0, "begin gid.");
+        appendOpt(&gid, 0, "gid", "begin gid.");
         appendParamVec(&wlogPathV, "wlog_path_list", "wlog path list");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&clientId, hostName, "id", "client identifier");
@@ -56,7 +56,6 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
         sock, clientId, "wlog-send");
     walb::ProtocolLogger logger(clientId, serverId);
     std::atomic<bool> forceQuit(false);
-
 
     walb::log::FileHeader fileH;
     reader.readHeader(fileH);

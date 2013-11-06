@@ -1155,7 +1155,7 @@ static inline void registerProtocolsAsClient()
 static inline void registerProtcolsAsWorker()
 {
     ProtocolFactory &factory = ProtocolFactory::getInstance();
-    factory.registerServer<echo::Client>(ProtocolName::ECHO);
+    factory.registerServer<echo::Server>(ProtocolName::ECHO);
     //factory.registerServer<status::WorkerAsServer>(ProtocolName::STATUS);
     factory.registerClient<wlog_send::Client>(ProtocolName::WLOG_SEND);
     /* now editing */
@@ -1164,7 +1164,7 @@ static inline void registerProtcolsAsWorker()
 static inline void registerProtcolsAsProxy()
 {
     ProtocolFactory &factory = ProtocolFactory::getInstance();
-    factory.registerServer<echo::Client>(ProtocolName::ECHO);
+    factory.registerServer<echo::Server>(ProtocolName::ECHO);
     //factory.registerServer<status::ProxyAsServer>(ProtocolName::STATUS);
     factory.registerServer<wlog_send::Server>(ProtocolName::WLOG_SEND);
     //factory.registerClient<wdiff_send::Client>(ProtocolName::WDIFF_SEND);
@@ -1235,6 +1235,9 @@ static inline void runProtocolAsClient(
 /**
  * @clientId will be set.
  * @protocol will be set.
+ *
+ * This function will process shutdown protocols.
+ * For other protocols, this function will do only the common negotiation.
  *
  * RETURN:
  *   true if the protocol has finished or failed that is there is nothing to do.
