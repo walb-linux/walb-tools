@@ -70,9 +70,10 @@ binsrc/%: binsrc/%.o $(LOCAL_LIB)
 utest/%: utest/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-clean:
-	rm -f $(BINARIES) $(TEST_BINARIES) src/*.o binsrc/*.o utest/*.o */*.depend $(LOCAL_LIB)
-
+clean: cleanobj cleandep
+	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB)
+cleanobj:
+	rm -f src/*.o binsrc/*.o utest/*.o
 cleandep:
 	rm -f src/*.depend binsrc/*.depend utest/*.depend
 
