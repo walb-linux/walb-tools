@@ -603,7 +603,7 @@ public:
     /**
      * Default constructor.
      */
-    BoundedQueue() : BoundedQueue(1) {}
+    BoundedQueue() : BoundedQueue(2) {}
     /**
      * Disable copy/move constructors.
      */
@@ -729,7 +729,7 @@ private:
         if (isFailed_) throw FailedError();
     }
     void checkSize() const {
-        if (size_ == 0) throw std::runtime_error("queue size must not be 0");
+        if (size_ < 2) throw std::runtime_error("queue size must be more than 1.");
     }
 };
 
