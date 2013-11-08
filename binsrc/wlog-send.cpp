@@ -59,7 +59,6 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
 
     walb::log::FileHeader fileH;
     reader.readHeader(fileH);
-    uint64_t sizePb = -1; // unknown.
 
     /* wlog-send negotiation */
     walb::protocol::wlog_send::ClientRunner client(
@@ -71,7 +70,8 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
      *   This is used to detect hash-sync/full-sync occurrence
      *   in order to delete pending wlog files in proxies.
      */
-    client.setParams(name, fileH.uuid(), diff, fileH.pbs(), fileH.salt(), sizePb);
+    client.setParams(name, fileH.uuid(), diff, fileH.pbs(), fileH.salt(),
+                     fileH.beginLsid(), fileH.endLsid());
     client.prepare();
 
     /* Send log packs. */
@@ -80,11 +80,15 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
             assert(reader.isFirstInPack());
             walb::log::PackHeader &h = reader.packHeader();
             client.pushHeader(h);
+            logger.debug("push header %" PRIu64 " %zu"
+                         , h.logpackLsid(), h.nRecords());
             for (size_t i = 0; i < h.nRecords(); i++) {
                 walb::log::RecordRaw rec;
                 walb::log::BlockDataVec blockD;
                 reader.readLog(rec, blockD);
                 client.pushIo(h, i, blockD);
+                logger.debug("push IO %zu %" PRIu32 ""
+                             , i, blockD.nBlocks());
             }
         }
         client.sync();

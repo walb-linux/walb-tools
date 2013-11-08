@@ -239,7 +239,7 @@ public:
      *   true if the cursor indicates the first record in a pack.
      */
     bool isFirstInPack() {
-        return isEnd() && recIdx_ == 0;
+        return !isEnd() && recIdx_ == 0;
     }
     /**
      * Get pack header reference.
@@ -348,11 +348,27 @@ public:
         lsid_ = beginLsid_;
     }
     /**
+     * Write a pack header block.
+     * You must call writePackIo() n times after this.
+     * n is header.n_records.
+     */
+    void writePackHeader(const struct walb_logpack_header &header) {
+        if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
+        if (header.n_records == 0) return;
+        fdw_.write(&header, pbs_);
+        lsid_++;
+    }
+    /**
+     * Write a pack IO.
+     */
+    void writePackIo(const BlockData &blockD) {
+        blockD.write(fdw_);
+        lsid_ += blockD.nBlocks();
+    }
+    /**
      * Write a pack.
      */
     void writePack(const PackHeader &header, std::queue<Block> &&blocks) {
-        if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
-        if (header.nRecords() == 0) return;
         /* Validate. */
         checkHeader(header);
         if (header.totalIoSize() != blocks.size()) {
@@ -377,18 +393,22 @@ public:
         assert(blocks.empty());
 
         /* Write */
-        fdw_.write(header.rawData(), pbs_);
+        writePackHeader(header.header());
         for (BlockData &blockD : v) {
-            blockD.write(fdw_);
+            writePackIo(blockD);
         }
-
-        lsid_ = header.nextLogpackLsid();
+        assert(lsid_ == header.nextLogpackLsid());
     }
     /**
      * Get the end lsid that is next lsid of the latest written logpack.
      * Header's begenLsid will be returned if writePack() was not called at all.
      */
     uint64_t endLsid() const { return lsid_; }
+    /**
+     * Parameters.
+     */
+    unsigned int pbs() const { return pbs_; }
+    uint32_t salt() const { return salt_; }
 private:
     /**
      * Check a pack header block.

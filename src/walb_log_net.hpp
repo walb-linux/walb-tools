@@ -17,10 +17,13 @@
 namespace walb {
 namespace log {
 
+constexpr size_t Q_SIZE = 16;
+
 CompressedData convertToCompressedData(const BlockData &blockD, bool doCompress)
 {
     const unsigned int pbs = blockD.pbs();
     const size_t n = blockD.nBlocks();
+    assert(0 < n);
     std::vector<char> d(n * pbs);
     for (size_t i = 0; i < n; i++) {
         ::memcpy(&d[i * pbs], blockD.get(i), pbs);
@@ -30,6 +33,13 @@ CompressedData convertToCompressedData(const BlockData &blockD, bool doCompress)
     return doCompress ? cd.compress() : cd;
 }
 
+template <typename BlockDataT>
+BlockDataT convertToBlockData(const CompressedData &cd, unsigned int pbs)
+{
+    throw std::runtime_error("convertToBlockData: not supported type.");
+}
+
+template <>
 BlockDataVec convertToBlockData(const CompressedData &cd, unsigned int pbs)
 {
     const size_t origSize = cd.originalSize();
@@ -45,6 +55,19 @@ BlockDataVec convertToBlockData(const CompressedData &cd, unsigned int pbs)
     return blockD;
 }
 
+template <>
+BlockDataShared convertToBlockData(const CompressedData &cd, unsigned int pbs)
+{
+    BlockDataVec blockD0 = convertToBlockData<BlockDataVec>(cd, pbs);
+    BlockDataShared blockD1(pbs);
+    const size_t n = blockD0.nBlocks();
+    blockD1.resize(n);
+    for (size_t i = 0; i < n; i++) {
+        ::memcpy(blockD1.get(i), blockD0.get(i), pbs);
+    }
+    return blockD1;
+}
+
 /**
  * Walb log sender via TCP/IP connection.
  * This will send packets only, never receive packets.
@@ -54,7 +77,7 @@ BlockDataVec convertToBlockData(const CompressedData &cd, unsigned int pbs)
  *   (2) call start() to start worker threads.
  *   (3) call pushHeader() and corresponding pushIo() multiple times.
  *   (4) repeat (3).
- *   (5) call sync() for normal finish, or error().
+ *   (5) call sync() for normal finish, or fail().
  */
 class Sender
 {
@@ -86,7 +109,7 @@ private:
         void operator()() noexcept override try {
             packet::StreamControl ctrl(packet_.sock());
             log::CompressedData cd;
-            while (!inQ_.pop(cd)) {
+            while (inQ_.pop(cd)) {
                 ctrl.next();
                 cd.send(packet_);
             }
@@ -103,7 +126,8 @@ private:
 public:
     Sender(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
-        , isEnd_(false), isFailed_(false) {
+        , isEnd_(false), isFailed_(false)
+        , q0_(Q_SIZE), q1_(Q_SIZE) {
     }
     ~Sender() noexcept {
         if (!isEnd_ && !isFailed_) fail();
@@ -130,6 +154,7 @@ public:
 #endif
         CompressedData cd;
         cd.copyFrom(0, pbs_, header.rawData());
+        assert(0 < cd.originalSize());
         q0_.push(std::move(cd));
         recIdx_ = 0;
     }
@@ -146,8 +171,9 @@ public:
         const PackIoWrapConst packIo(&rec, &blockD);
         assert(packIo.isValid());
 #endif
-        if (rec.hasData()) {
+        if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockD, false);
+            assert(0 < cd.originalSize());
             q0_.push(std::move(cd));
         }
         recIdx_++;
@@ -193,8 +219,10 @@ private:
  * Walb log receiver via TCP/IP connection.
  *
  * Usage:
- *   (1) call popHeader() and corresponding popIo() multiple times.
- *   (2) repeat (1) while popHeader() returns true.
+ *   (1) call setParams() to set parameters.
+ *   (2) call start() to start worker threads.
+ *   (3) call popHeader() and corresponding popIo() multiple times.
+ *   (4) repeat (3) while popHeader() returns true.
  *   popHeader() will throw an error if something is wrong.
  */
 class Receiver
@@ -236,6 +264,7 @@ private:
                 throw std::runtime_error("Client sent an error.");
             }
             assert(ctrl.isEnd());
+            outQ_.sync();
             done();
         } catch (...) {
             throwErrorLater();
@@ -245,7 +274,8 @@ private:
 public:
     Receiver(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
-        , isEnd_(false), isFailed_(false) {
+        , isEnd_(false), isFailed_(false)
+        , q0_(Q_SIZE), q1_(Q_SIZE) {
     }
     ~Receiver() noexcept {
         if (!isEnd_ && !isFailed_) fail();
@@ -286,15 +316,16 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataVec &blockD) {
+    template <typename BlockDataT>
+    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
         assert(recIdx_ == recIdx);
         const PackHeaderWrapConst h(reinterpret_cast<const uint8_t *>(&header), pbs_, salt_);
         assert(recIdx < h.nRecords());
         const RecordWrapConst rec(&h, recIdx);
-        if (rec.hasData()) {
+        if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
-            blockD = convertToBlockData(cd, pbs_);
+            blockD = convertToBlockData<BlockDataT>(cd, pbs_);
         } else {
             blockD.setPbs(pbs_);
             blockD.resize(0);

@@ -63,25 +63,99 @@ public:
         std::string name;
         cybozu::Uuid uuid;
         walb::MetaDiff diff;
-        uint32_t pbs, salt, sizePb;
+        uint32_t pbs, salt;
+        uint64_t bgnLsid, endLsid;
         packet.read(name);
         packet.read(uuid);
         packet.read(diff);
         packet.read(pbs);
         packet.read(salt);
-        packet.read(sizePb);
+        packet.read(bgnLsid);
+        packet.read(endLsid);
 
-        logger.info("name %s", name.c_str());
-        logger.info("uuid %s", uuid.str().c_str());
-        logger.info("diff %s", diff.str().c_str());
-        logger.info("pbs %" PRIu32 "", pbs);
-        logger.info("salt %" PRIu32 "", salt);
-        logger.info("sizePb %" PRIu32 "", sizePb);
+        logger.debug("name %s", name.c_str());
+        logger.debug("uuid %s", uuid.str().c_str());
+        logger.debug("diff %s", diff.str().c_str());
+        logger.debug("pbs %" PRIu32 "", pbs);
+        logger.debug("salt %" PRIu32 "", salt);
+        logger.debug("bgnLsid %" PRIu64 "", bgnLsid);
+        logger.debug("endLsid %" PRIu64 "", endLsid);
 
         packet::Answer ans(sock_);
-        //ans.ok();
-        ans.ng(1, "error for test.");
-        /* now editing */
+        if (!checkParams(logger, name, uuid, diff, pbs, salt, bgnLsid, endLsid)) {
+            ans.ng(1, "error for test.");
+            return;
+        }
+        ans.ok();
+        logger.debug("send ans ok.");
+
+        std::string fName = createDiffFileName(diff);
+        fName += ".wlog";
+        cybozu::TmpFile tmpFile(baseDir_.str());
+        cybozu::FilePath fPath = baseDir_ + fName;
+        log::Writer writer(tmpFile.fd());
+        log::FileHeader fileH;
+        const uint8_t *uuidP = static_cast<const uint8_t *>(uuid.rawData());
+        fileH.init(pbs, salt, uuidP, bgnLsid, endLsid);
+        writer.writeHeader(fileH);
+        logger.debug("write header.");
+        recvAndWriteLogs(sock_, writer, logger);
+        logger.debug("close.");
+        writer.close();
+        tmpFile.save(fPath.str());
+
+        packet::Ack ack(sock_);
+        ack.send();
+    }
+private:
+    bool checkParams(Logger &logger,
+        const std::string &name,
+        const cybozu::Uuid &,
+        const walb::MetaDiff &diff,
+        uint32_t pbs, uint32_t,
+        uint64_t bgnLsid, uint64_t endLsid) const {
+
+        if (name.empty()) {
+            logger.error("name is empty.");
+            return false;
+        }
+        if (!diff.isValid()) {
+            logger.error("invalid diff.");
+            return false;
+        }
+        if (!::is_valid_pbs(pbs)) {
+            logger.error("invalid pbs.");
+            return false;
+        }
+        if (endLsid < bgnLsid) {
+            logger.error("invalid lsids.");
+            return false;
+        }
+        return true;
+    }
+    void recvAndWriteLogs(cybozu::Socket &sock, log::Writer &writer, Logger &logger) {
+        uint32_t pbs = writer.pbs();
+        uint32_t salt = writer.salt();
+        auto blk = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+        log::PackHeaderRaw packH(blk, pbs, salt);
+        log::Receiver receiver(sock, logger);
+        receiver.setParams(pbs, salt);
+        receiver.start();
+        while (receiver.popHeader(packH.header())) {
+            logger.debug("write header %" PRIu64 " %zu"
+                         , packH.logpackLsid(), packH.nRecords());
+            writer.writePackHeader(packH.header());
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                log::BlockDataVec blockD(pbs);
+                receiver.popIo(packH.header(), i, blockD);
+                const log::RecordWrapConst lrec(&packH, i);
+                const log::PackIoWrapConst packIo(&lrec, &blockD);
+                if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
+                if (lrec.isPadding()) blockD.resize(lrec.ioSizePb());
+                logger.debug("write IO %zu %" PRIu32 "", i, blockD.nBlocks());
+                writer.writePackIo(blockD);
+            }
+        }
     }
 };
 

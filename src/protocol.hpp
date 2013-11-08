@@ -750,21 +750,21 @@ protected:
     MetaDiff diff_;
     uint32_t pbs_; /* physical block size */
     uint32_t salt_; /* checksum salt. */
-    uint64_t sizePb_; /* Number of physical blocks (lsid range).
-                         0 is allowed. -1 means do not check. */
+    uint64_t bgnLsid_; /* bgnLsid <= endLsid must be satisfied. */
+    uint64_t endLsid_; /* -1 means unknown. */
 public:
     using ProtocolData::ProtocolData;
     void checkParams() const {
         if (name_.empty()) logAndThrow("name param empty.");
         if (!diff_.isValid()) logAndThrow("Invalid meta diff.");
         if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
-        /* sizePb_ is not checked now. */
+        if (endLsid_ < bgnLsid_) logAndThrow("Invalid lsids.");
     }
     std::string str() const {
         return cybozu::util::formatString(
-            "name %s uuid %s diff (%s) pbs %" PRIu32 " salt %08x %" PRIu64 ""
+            "name %s uuid %s diff (%s) pbs %" PRIu32 " salt %08x lsid (%" PRIu64 ", %" PRIu64 ")"
             , name_.c_str(), uuid_.str().c_str(), diff_.str().c_str()
-            , pbs_, salt_, sizePb_);
+            , pbs_, salt_, bgnLsid_, endLsid_);
     }
 };
 
@@ -809,13 +809,14 @@ public:
 #endif
     }
     void setParams(const std::string &name, const uint8_t *uuid, const MetaDiff &diff,
-                   uint32_t pbs, uint32_t salt, uint64_t sizePb) {
+                   uint32_t pbs, uint32_t salt, uint64_t bgnLsid, uint64_t endLsid) {
         name_ = name;
         ::memcpy(uuid_.rawData(), uuid, uuid_.rawSize());
         diff_ = diff;
         pbs_ = pbs;
         salt_ = salt;
-        sizePb_ = sizePb;
+        bgnLsid_ = bgnLsid;
+        endLsid_ = endLsid;
         checkParams();
     }
     /**
@@ -858,7 +859,8 @@ private:
         packet.write(diff_);
         packet.write(pbs_);
         packet.write(salt_);
-        packet.write(sizePb_);
+        packet.write(bgnLsid_);
+        packet.write(endLsid_);
         packet::Answer ans(sock_);
         int err; std::string msg;
         if (!ans.recv(&err, &msg)) {
@@ -885,11 +887,11 @@ public:
         negotiate();
         logger_.info(
             "wlog-send %s %s ((%" PRIu64 ", %" PRIu64 "), (%" PRIu64", %" PRIu64 ")) "
-            "%" PRIu32 " %" PRIu32 " %" PRIu64 " "
+            "%" PRIu32 " %" PRIu32 " (%" PRIu64 ", %" PRIu64 ") "
             , name_.c_str(), uuid_.str().c_str()
             , diff_.snap0().gid0(), diff_.snap0().gid1()
             , diff_.snap1().gid0(), diff_.snap1().gid1()
-            , pbs_, salt_, sizePb_);
+            , pbs_, salt_, bgnLsid_, endLsid_);
         recvAndWriteDiffData();
     }
 private:
@@ -907,7 +909,8 @@ private:
         packet.read(diff_);
         packet.read(pbs_);
         packet.read(salt_);
-        packet.read(sizePb_);
+        packet.read(bgnLsid_);
+        packet.read(endLsid_);
         checkParams();
         packet::Answer ans(sock_);
         ProxyData pd(baseDir_.str(), name_);
