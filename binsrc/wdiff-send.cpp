@@ -1,7 +1,7 @@
 /**
  * @file
- * @brief To send wlog to a proxy.
- * @author
+ * @brief To send wdiff to a server.
+ * @author MITSUNARI Shigeo
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
@@ -61,27 +61,27 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
     reader.readHeader(fileH);
 
     /* wdiff-send negotiation */
-	walb::packet::Packet packet(sock);
-	packet.write(name);
-	packet.write(diff);
+    walb::packet::Packet packet(sock);
+    packet.write(name);
+    packet.write(diff);
 
     /* Send diff packs. */
 
-	walb::packet::StreamControl ctrl(sock);
-	walb::diff::PackHeader packH;
+    walb::packet::StreamControl ctrl(sock);
+    walb::diff::PackHeader packH;
     while (reader.readPackHeader(packH)) {
-		ctrl.next();
-		sock.write(packH.rawData(), packH.rawSize());
+        ctrl.next();
+        sock.write(packH.rawData(), packH.rawSize());
         for (size_t i = 0; i < packH.nRecords(); i++) {
-			const walb::diff::RecordWrapConst rec(&packH.record(i));
-			walb::diff::IoData io;
-			reader.readDiffIo(rec, io);
-			if (rec.dataSize() > 0) {
-				sock.write(io.rawData(), rec.dataSize());
-			}
+            const walb::diff::RecordWrapConst rec(&packH.record(i));
+            walb::diff::IoData io;
+            reader.readDiffIo(rec, io);
+            if (rec.dataSize() > 0) {
+                sock.write(io.rawData(), rec.dataSize());
+            }
         }
-	}
-	ctrl.end();
+    }
+    ctrl.end();
 
     /* The wdiff-send protocol has finished.
        You can close the socket. */
