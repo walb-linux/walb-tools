@@ -142,7 +142,7 @@ private:
         receiver.setParams(pbs, salt);
         receiver.start();
         while (receiver.popHeader(packH.header())) {
-            logger.debug("write header %" PRIu64 " %zu"
+            logger.debug("write header %" PRIu64 " %u"
                          , packH.logpackLsid(), packH.nRecords());
             writer.writePackHeader(packH.header());
             for (size_t i = 0; i < packH.nRecords(); i++) {
@@ -152,7 +152,7 @@ private:
                 const log::PackIoWrapConst packIo(&lrec, &blockD);
                 if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
                 if (lrec.isPadding()) blockD.resize(lrec.ioSizePb());
-                logger.debug("write IO %zu %" PRIu32 "", i, blockD.nBlocks());
+                logger.debug("write IO %zu %zu", i, blockD.nBlocks());
                 writer.writePackIo(blockD);
             }
         }
