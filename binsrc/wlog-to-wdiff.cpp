@@ -28,7 +28,7 @@ struct Option : public cybozu::Option
 {
     uint32_t maxIoSize;
     Option() {
-        //setUsage("Usage: wlog-to-wdiff < [wlogs] > [wdiff]");
+        setUsage("Usage: wlog-to-wdiff < [wlogs] > [wdiff]", true);
         appendOpt(&maxIoSize, uint16_t(-1), "x", "max IO size in the output wdiff [byte].");
         appendHelp("h");
     }

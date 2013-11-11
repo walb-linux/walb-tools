@@ -49,7 +49,7 @@ public:
     const std::string &name() const { return name_; }
 
     virtual void run(cybozu::Socket &, Logger &, const std::atomic<bool>&,
-                     const std::vector<std::string> &) = 0;
+                     const std::vector<std::string> &) {}
 };
 
 namespace echo {

@@ -291,7 +291,7 @@ private:
  *   (2) call readDiff() / readAndUncompressDiff().
  *   (3) repeat (2) until readDiff() returns false.
  * usage2
- *   (1) call readHeader() just once.
+ *   (1) call readHeaderWithoutReadingPackHeader() just once.
  *   (2) call readDiffIo() multiple times after readPackHeader() once.
  *   (3) repeat (2) until readPackHeader() returns false.
  */
@@ -350,7 +350,10 @@ public:
     /**
      * Read header data with another interface.
      */
-    void readHeader(FileHeaderWrap &head) {
+    void readHeaderWithoutReadingPackHeader(FileHeaderWrap &head) {
+        readHeader(head, false);
+    }
+    void readHeader(FileHeaderWrap &head, bool doReadHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
@@ -359,7 +362,7 @@ public:
             throw RT_ERR("diff header invalid.\n");
         }
         isReadHeader_ = true;
-        readPackHeader();
+        if (doReadHeader) readPackHeader();
     }
 
     /**
