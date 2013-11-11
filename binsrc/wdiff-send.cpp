@@ -63,21 +63,21 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
     /* wdiff-send negotiation */
     walb::packet::Packet packet(sock);
     packet.write(name);
-	{
-		cybozu::Uuid uuid;
-		uuid.set(fileH.getUuid());
-		packet.write(uuid);
-	}
-	packet.write(fileH.getMaxIoBlocks());
+    {
+        cybozu::Uuid uuid;
+        uuid.set(fileH.getUuid());
+        packet.write(uuid);
+    }
+    packet.write(fileH.getMaxIoBlocks());
     packet.write(diff);
-	{
-		walb::packet::Answer ans(sock);
-		int err; std::string msg;
-		if (!ans.recv(&err, &msg)) {
-			logger.error("negotiation failed: %d %s", err, msg.c_str());
-			throw cybozu::Exception("sendWdiff:negotiation") << err << msg;
-		}
-	}
+    {
+        walb::packet::Answer ans(sock);
+        int err; std::string msg;
+        if (!ans.recv(&err, &msg)) {
+            logger.error("negotiation failed: %d %s", err, msg.c_str());
+            throw cybozu::Exception("sendWdiff:negotiation") << err << msg;
+        }
+    }
 
     /* Send diff packs. */
 
@@ -96,8 +96,8 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
         }
     }
     ctrl.end();
-	walb::packet::Ack ack(sock);
-	ack.recv();
+    walb::packet::Ack ack(sock);
+    ack.recv();
 
     /* The wdiff-send protocol has finished.
        You can close the socket. */

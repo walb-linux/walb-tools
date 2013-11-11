@@ -481,11 +481,11 @@ public:
         copyFrom(&data0[0], data0.size());
     }
 
-	void set(const struct walb_diff_record &rec0) {
-		IoWrap::set(rec0);
-		data_.resize(rec0.data_size);
-		resetData();
-	}
+    void set(const struct walb_diff_record &rec0) {
+        IoWrap::set(rec0);
+        data_.resize(rec0.data_size);
+        resetData();
+    }
 
     bool isValid() const {
         if (!IoWrap::isValid()) return false;
