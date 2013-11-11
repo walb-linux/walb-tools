@@ -25,3 +25,5 @@ wdev-poll
 lvm-mgr
 wlog-send
 wlog-recv
+wdiff-send
+wdiff-recv
