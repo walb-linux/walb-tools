@@ -422,7 +422,7 @@ public:
         return true;
     }
 
-	bool readPackHeader(PackHeader& pack) {
+    bool readPackHeader(PackHeader& pack) {
         try {
             fdr_.read(pack.rawData(), pack.rawSize());
         } catch (cybozu::util::EofError &e) {
@@ -435,7 +435,7 @@ public:
         recIdx_ = 0;
         totalSize_ = 0;
         return true;
-	}
+    }
     /**
      * Read a diff IO.
      * @rec diff record.
@@ -469,7 +469,7 @@ private:
      *   false if EofError caught.
      */
     bool readPackHeader() {
-		return readPackHeader(pack_);
+        return readPackHeader(pack_);
     }
 };
 
