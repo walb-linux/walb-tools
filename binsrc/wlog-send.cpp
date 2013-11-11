@@ -99,7 +99,7 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
 
     /* The wlog-send protocol has finished.
        You can close the socket. */
-};
+}
 
 int main(int argc, char *argv[])
 try {

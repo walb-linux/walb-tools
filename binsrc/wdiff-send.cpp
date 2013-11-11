@@ -20,6 +20,7 @@
 #include "meta.hpp"
 #include "walb_log_file.hpp"
 #include "walb_log_net.hpp"
+#include "walb_diff_merge.hpp"
 
 struct Option : cybozu::Option
 {
@@ -45,20 +46,16 @@ struct Option : cybozu::Option
 };
 
 void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
-              const std::string &name, int wdiffFd, walb::MetaDiff &diff)
+              const std::string &name, walb::diff::Merger& merger, walb::MetaDiff &diff)
 {
     const std::string diffFileName = createDiffFileName(diff);
     LOGi("try to send %s...", diffFileName.c_str());
 
-    walb::diff::Reader reader(wdiffFd);
-
     std::string serverId = walb::protocol::run1stNegotiateAsClient(
         sock, clientId, "wdiff-send");
     walb::ProtocolLogger logger(clientId, serverId);
-    std::atomic<bool> forceQuit(false);
 
-    walb::diff::FileHeaderRaw fileH;
-    reader.readHeaderWithoutReadingPackHeader(fileH);
+    const walb::diff::FileHeaderWrap& fileH = merger.header();
 
     /* wdiff-send negotiation */
     walb::packet::Packet packet(sock);
@@ -82,17 +79,15 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
     /* Send diff packs. */
 
     walb::packet::StreamControl ctrl(sock);
-    walb::diff::PackHeader packH;
-    while (reader.readPackHeader(packH)) {
+    walb::diff::RecIo recIo;
+    while (merger.pop(recIo)) {
         ctrl.next();
-        sock.write(packH.rawData(), packH.rawSize());
-        for (size_t i = 0; i < packH.nRecords(); i++) {
-            const walb::diff::RecordWrapConst rec(&packH.record(i));
-            walb::diff::IoData io;
-            reader.readDiffIo(rec, io);
-            if (rec.dataSize() > 0) {
-                sock.write(io.rawData(), rec.dataSize());
-            }
+        const walb::diff::RecordRaw& recRaw = recIo.record();
+        const walb_diff_record& rec = recRaw.record();
+        sock.write(&rec, sizeof(rec));
+        if (recRaw.dataSize() > 0) {
+            const walb::diff::IoData& io = recIo.io();
+            sock.write(io.rawData(), recRaw.dataSize());
         }
     }
     ctrl.end();
@@ -101,7 +96,7 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
 
     /* The wdiff-send protocol has finished.
        You can close the socket. */
-};
+}
 
 int main(int argc, char *argv[])
 try {
@@ -121,21 +116,19 @@ try {
         ts = cybozu::strToUnixTime(opt.timeStampStr);
     }
 
-    uint64_t gid = opt.gid;
-    for (const std::string &wdiffPath : opt.wdiffPathV) {
-        cybozu::util::FileOpener fo(wdiffPath, O_RDONLY);
-        walb::MetaDiff diff;
-        diff.init();
-        diff.setSnap0(gid);
-        diff.setSnap1(gid + 1);
-        diff.setTimestamp(ts);
-        diff.setCanMerge(!opt.canNotMerge);
-        cybozu::Socket sock;
-        sock.connect(host, port);
-        sendWdiff(sock, opt.clientId, opt.name, fo.fd(), diff);
-        gid++;
-    }
-    return 0;
+    const uint64_t gid = opt.gid;
+    walb::diff::Merger merger;
+    merger.addWdiffs(opt.wdiffPathV);
+    merger.prepare();
+    walb::MetaDiff diff;
+    diff.init();
+    diff.setSnap0(gid);
+    diff.setSnap1(gid + 1);
+    diff.setTimestamp(ts);
+    diff.setCanMerge(!opt.canNotMerge);
+    cybozu::Socket sock;
+    sock.connect(host, port);
+    sendWdiff(sock, opt.clientId, opt.name, merger, diff);
 } catch (std::exception &e) {
     ::fprintf(::stderr, "exception: %s\n", e.what());
     return 1;
