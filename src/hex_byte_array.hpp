@@ -47,6 +47,9 @@ public:
         }
         return s;
     }
+    void set(const void *data) {
+        ::memcpy(data_, data, SIZE);
+    }
     template <class InputStream>
     void load(InputStream &is) {
         cybozu::loadRange(data_, SIZE, is);
