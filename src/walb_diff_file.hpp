@@ -351,8 +351,8 @@ public:
      * Read header data with another interface.
      */
     void readHeaderWithoutReadingPackHeader(FileHeaderWrap &head) {
-    	readHeader(head, false);
-	}
+        readHeader(head, false);
+    }
     void readHeader(FileHeaderWrap &head, bool doReadHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
