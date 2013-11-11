@@ -58,10 +58,10 @@ public:
     }
 #ifdef __GNUC__
     void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept __attribute__((format(printf, 3, 4)));
-	#define WALB_LOGGER_FORMAT_ATTR __attribute__((format(printf, 2, 3)))
+    #define WALB_LOGGER_FORMAT_ATTR __attribute__((format(printf, 2, 3)))
 #else
     void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept;
-	#define WALB_LOGGER_FORMAT_ATTR
+    #define WALB_LOGGER_FORMAT_ATTR
 #endif
 
     void debug(UNUSED const std::string &msg) const noexcept {

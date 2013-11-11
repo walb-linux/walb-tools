@@ -1322,9 +1322,9 @@ static inline void runProtocolAsServer(
     try {
         protocol->run(sock, logger, forceQuit, { baseDirStr });
     } catch (std::exception &e) {
-        logger.error("[%s] runlAsServer failed: %s", e.what());
+        logger.error("runlAsServer failed: %s", e.what());
     } catch (...) {
-        logger.error("[%s] runAsServer failed: unknown error.");
+        logger.error("runAsServer failed: unknown error.");
     }
 }
 

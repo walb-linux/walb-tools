@@ -80,14 +80,14 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
             assert(reader.isFirstInPack());
             walb::log::PackHeader &h = reader.packHeader();
             client.pushHeader(h);
-            logger.debug("push header %" PRIu64 " %zu"
+            logger.debug("push header %" PRIu64 " %u"
                          , h.logpackLsid(), h.nRecords());
             for (size_t i = 0; i < h.nRecords(); i++) {
                 walb::log::RecordRaw rec;
                 walb::log::BlockDataVec blockD;
                 reader.readLog(rec, blockD);
                 client.pushIo(h, i, blockD);
-                logger.debug("push IO %zu %" PRIu32 ""
+                logger.debug("push IO %zu %zu"
                              , i, blockD.nBlocks());
             }
         }
