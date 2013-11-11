@@ -286,6 +286,14 @@ private:
 
 /**
  * Read walb diff data from an input stream.
+ * usage1
+ *   (1) call readHeader() just once.
+ *   (2) call readDiff() / readAndUncompressDiff().
+ *   (3) repeat (2) until readDiff() returns false.
+ * usage2
+ *   (1) call readHeader() just once.
+ *   (2) call readDiffIo() multiple times after readPackHeader() once.
+ *   (3) repeat (2) until readPackHeader() returns false.
  */
 class Reader
 {
@@ -364,14 +372,12 @@ public:
         if (!canRead()) return false;
         ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
 
-        /* debug */
         if (!rec.isValid()) {
+#ifdef DEBUG
             rec.print(::stderr);
             const RecordWrapConst rec1(&pack_.record(recIdx_));
             rec1.print(::stderr);
-        }
-
-        if (!rec.isValid()) {
+#endif
             throw RT_ERR("Invalid record.");
         }
         readDiffIo(rec, io);
@@ -416,28 +422,20 @@ public:
         return true;
     }
 
-private:
-    /**
-     * Read pack header.
-     *
-     * RETURN:
-     *   false if EofError caught.
-     */
-    bool readPackHeader() {
+	bool readPackHeader(PackHeader& pack) {
         try {
-            fdr_.read(pack_.rawData(), pack_.rawSize());
+            fdr_.read(pack.rawData(), pack.rawSize());
         } catch (cybozu::util::EofError &e) {
             return false;
         }
-        if (!pack_.isValid()) {
+        if (!pack.isValid()) {
             throw RT_ERR("pack header invalid.");
         }
-        if (pack_.isEnd()) { return false; }
+        if (pack.isEnd()) { return false; }
         recIdx_ = 0;
         totalSize_ = 0;
         return true;
-    }
-
+	}
     /**
      * Read a diff IO.
      * @rec diff record.
@@ -462,6 +460,16 @@ private:
         }
         recIdx_++;
         totalSize_ += rec.dataSize();
+    }
+private:
+    /**
+     * Read pack header.
+     *
+     * RETURN:
+     *   false if EofError caught.
+     */
+    bool readPackHeader() {
+		return readPackHeader(pack_);
     }
 };
 
