@@ -56,16 +56,13 @@ public:
             write(pri, "Logger::write() error.");
         }
     }
-    void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept {
-        try {
-            va_list args;
-            va_start(args, format);
-            writeV(pri, format, args);
-            va_end(args);
-        } catch (...) {
-            write(pri, "Logger::write() error.");
-        }
-    }
+#ifdef __GNUC__
+    void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept __attribute__((format(printf, 3, 4)));
+	#define WALB_LOGGER_FORMAT_ATTR __attribute__((format(printf, 2, 3)))
+#else
+    void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept;
+	#define WALB_LOGGER_FORMAT_ATTR
+#endif
 
     void debug(UNUSED const std::string &msg) const noexcept {
 #ifdef DEBUG
@@ -76,34 +73,48 @@ public:
     void warn(const std::string &msg) const noexcept { write(cybozu::LogWarning, msg); }
     void error(const std::string &msg) const noexcept { write(cybozu::LogError, msg); }
 
-    void debug(UNUSED const char *format, ...) const noexcept {
-#ifdef DEBUG
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogDebug, format, args);
-        va_end(args);
-#endif
-    }
-    void info(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogInfo, format, args);
-        va_end(args);
-    }
-    void warn(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogWarning, format, args);
-        va_end(args);
-    }
-    void error(const char *format, ...) const noexcept {
-        va_list args;
-        va_start(args, format);
-        writeV(cybozu::LogError, format, args);
-        va_end(args);
-    }
+    void debug(UNUSED const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
+    void info(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
+    void warn(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
+    void error(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
 };
 
+inline void Logger::writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept {
+    try {
+        va_list args;
+        va_start(args, format);
+        writeV(pri, format, args);
+        va_end(args);
+    } catch (...) {
+        write(pri, "Logger::write() error.");
+    }
+}
+inline void Logger::debug(UNUSED const char *format, ...) const noexcept {
+#ifdef DEBUG
+    va_list args;
+    va_start(args, format);
+    writeV(cybozu::LogDebug, format, args);
+    va_end(args);
+#endif
+}
+inline void Logger::info(const char *format, ...) const noexcept {
+    va_list args;
+    va_start(args, format);
+    writeV(cybozu::LogInfo, format, args);
+    va_end(args);
+}
+inline void Logger::warn(const char *format, ...) const noexcept {
+    va_list args;
+    va_start(args, format);
+    writeV(cybozu::LogWarning, format, args);
+    va_end(args);
+}
+inline void Logger::error(const char *format, ...) const noexcept {
+    va_list args;
+    va_start(args, format);
+    writeV(cybozu::LogError, format, args);
+    va_end(args);
+}
 /**
  * Simple logger.
  */
