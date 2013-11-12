@@ -21,6 +21,7 @@
 #include "walb_logger.hpp"
 #include "walb/block_size.h"
 #include "backtrace.hpp"
+#include "compressor.hpp"
 
 static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
@@ -560,24 +561,13 @@ static inline IoData uncompressIoData(const IoWrap &io0)
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
-    if (io0.compressionType() != ::WALB_DIFF_CMPR_SNAPPY) {
-        throw RT_ERR("Currently only snappy is supported.");
-    }
-    if (io0.ioBlocks() == 0) {
-        return IoData();
-    }
+	walb::Uncompressor dec(io0.compressionType());
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
-    size_t size;
-    if (!snappy::GetUncompressedLength(io0.rawData(), io0.rawSize(), &size)) {
-        throw RT_ERR("snappy::GetUncompressedLength() failed.");
-    }
+	size_t size = dec.run(io1.rawData(), io1.rawSize(), io0.rawData(), io0.rawSize());
     if (size != io1.rawSize()) {
         throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.rawSize());
-    }
-    if (!snappy::RawUncompress(io0.rawData(), io0.rawSize(), io1.rawData())) {
-        throw RT_ERR("snappy::RawUncompress() failed.");
     }
     return io1;
 }
