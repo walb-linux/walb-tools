@@ -561,11 +561,11 @@ static inline IoData uncompressIoData(const IoWrap &io0)
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
-	walb::Uncompressor dec(io0.compressionType());
+    walb::Uncompressor dec(io0.compressionType());
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
-	size_t size = dec.run(io1.rawData(), io1.rawSize(), io0.rawData(), io0.rawSize());
+    size_t size = dec.run(io1.rawData(), io1.rawSize(), io0.rawData(), io0.rawSize());
     if (size != io1.rawSize()) {
         throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.rawSize());
     }
