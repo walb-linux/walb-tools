@@ -381,6 +381,10 @@ public:
         runEngine(outBuf, inBuf); // no throw
         return true;
     }
+    bool push(Buffer&& inBuf)
+    {
+        return push(inBuf);
+    }
     /*
      * return nullptr if quit_ and queue is empty
      * otherwise return buffer after blocking until data comes

@@ -12,6 +12,7 @@
 #include "cybozu/socket.hpp"
 #include "cybozu/atoi.hpp"
 #include "cybozu/log.hpp"
+#include "cybozu/thread.hpp"
 #include "protocol.hpp"
 #include "meta.hpp"
 #include "file_path.hpp"
@@ -21,6 +22,7 @@
 #include "walb_log_file.hpp"
 #include "walb_log_net.hpp"
 #include "walb_diff_merge.hpp"
+#include "walb_diff_compressor.hpp"
 
 struct Option : cybozu::Option
 {
@@ -31,8 +33,11 @@ struct Option : cybozu::Option
     std::string clientId;
     bool canNotMerge;
     std::string timeStampStr;
+	size_t threadNum;
+	int compType;
 
-    Option() {
+    Option(int argc, const char *const argv[]) {
+		std::string compStr;
         appendMust(&serverHostPort, "server", "server host:port");
         appendMust(&name, "name", "volume identifier");
         appendOpt(&gid, 0, "gid", "begin gid.");
@@ -40,26 +45,51 @@ struct Option : cybozu::Option
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&clientId, hostName, "id", "client identifier");
         appendBoolOpt(&canNotMerge, "m", "clear canMerge flag.");
-        appendOpt(&timeStampStr, "", "t", "timestamp in YYYYmmddHHMMSS format.");
+        appendOpt(&timeStampStr, "", "ts", "timestamp in YYYYmmddHHMMSS format.");
+		appendOpt(&threadNum, cybozu::GetProcessorNum(), "tn", "number of thread");
+		appendOpt(&compStr, "snappy", "c", "compression type(none, gzip, snappy(default), lzma)");
         appendHelp("h");
+		if (!parse(argc, argv)) {
+      		usage();
+			exit(1);
+		}
+		if (threadNum == 0) {
+			throw cybozu::Exception("bad number of thread");
+		}
+		const struct {
+			const char *name;
+			int type;
+		} tbl[] = {
+			{ "none", WALB_DIFF_CMPR_NONE },
+			{ "gzip", WALB_DIFF_CMPR_GZIP },
+			{ "snappy", WALB_DIFF_CMPR_SNAPPY },
+			{ "lzma", WALB_DIFF_CMPR_LZMA },
+		};
+		for (const auto& e : tbl) {
+			if (compStr == e.name) {
+				compType = e.type;
+				return;
+			}
+		}
+		throw cybozu::Exception("Option:bad c option") << compStr;
     }
 };
 
-void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
-              const std::string &name, walb::diff::Merger& merger, walb::MetaDiff &diff)
+void sendWdiff(cybozu::Socket &sock,
+              walb::diff::Merger& merger, walb::MetaDiff &diff, const Option& opt)
 {
     const std::string diffFileName = createDiffFileName(diff);
     LOGi("try to send %s...", diffFileName.c_str());
 
     std::string serverId = walb::protocol::run1stNegotiateAsClient(
-        sock, clientId, "wdiff-send");
-    walb::ProtocolLogger logger(clientId, serverId);
+        sock, opt.clientId, "wdiff-send");
+    walb::ProtocolLogger logger(opt.clientId, serverId);
 
     const walb::diff::FileHeaderWrap& fileH = merger.header();
 
     /* wdiff-send negotiation */
     walb::packet::Packet packet(sock);
-    packet.write(name);
+    packet.write(opt.name);
     {
         cybozu::Uuid uuid;
         uuid.set(fileH.getUuid());
@@ -80,6 +110,39 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
 
     walb::packet::StreamControl ctrl(sock);
     walb::diff::RecIo recIo;
+#if 1
+	const size_t maxPushedNum = opt.threadNum * 2 - 1;
+	walb::ConverterQueue conv(maxPushedNum, opt.threadNum, true, opt.compType);
+	walb::diff::Packer packer;
+	size_t pushedNum = 0;
+    while (merger.pop(recIo)) {
+        const walb::diff::RecordRaw& recRaw = recIo.record();
+        const walb_diff_record& rec = recRaw.record();
+        const walb::diff::IoData& io = recIo.io();
+		if (packer.add(rec, io.rawData())) {
+			continue;
+		}
+		conv.push(packer.getPackAsUniquePtr());
+		pushedNum++;
+		packer.reset();
+		packer.add(rec, io.rawData());
+		if (pushedNum < maxPushedNum) {
+			continue;
+		}
+		std::unique_ptr<char[]> p = conv.pop();
+        ctrl.next();
+		sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+		pushedNum--;
+	}
+	if (!packer.empty()) {
+		conv.push(packer.getPackAsUniquePtr());
+	}
+	conv.quit();
+	while (std::unique_ptr<char[]> p = conv.pop()) {
+        ctrl.next();
+		sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+	}
+#else
     while (merger.pop(recIo)) {
         ctrl.next();
         const walb::diff::RecordRaw& recRaw = recIo.record();
@@ -90,6 +153,7 @@ void sendWdiff(cybozu::Socket &sock, const std::string &clientId,
             sock.write(io.rawData(), recRaw.dataSize());
         }
     }
+#endif
     ctrl.end();
     walb::packet::Ack ack(sock);
     ack.recv();
@@ -102,11 +166,7 @@ int main(int argc, char *argv[])
 try {
     cybozu::SetLogFILE(::stderr);
 
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        throw std::runtime_error("option error.");
-    }
+    Option opt(argc, argv);
     std::string host;
     uint16_t port;
     std::tie(host, port) = cybozu::net::parseHostPortStr(opt.serverHostPort);
@@ -128,7 +188,7 @@ try {
     diff.setCanMerge(!opt.canNotMerge);
     cybozu::Socket sock;
     sock.connect(host, port);
-    sendWdiff(sock, opt.clientId, opt.name, merger, diff);
+    sendWdiff(sock, merger, diff, opt);
 } catch (std::exception &e) {
     ::fprintf(::stderr, "exception: %s\n", e.what());
     return 1;
