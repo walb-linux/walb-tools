@@ -3,7 +3,7 @@
 #include <cybozu/xorshift.hpp>
 #include "walb_diff_compressor.hpp"
 
-void test(walb::Compressor::Mode mode)
+void test(int mode)
 {
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
     walb::Compressor c(mode);
@@ -22,10 +22,10 @@ void test(walb::Compressor::Mode mode)
 
 CYBOZU_TEST_AUTO(testCompressor)
 {
-    test(walb::Compressor::AsIs);
-    test(walb::Compressor::Snappy);
-    test(walb::Compressor::Zlib);
-    test(walb::Compressor::Xz);
+    test(WALB_DIFF_CMPR_NONE);
+    test(WALB_DIFF_CMPR_GZIP);
+    test(WALB_DIFF_CMPR_SNAPPY);
+    test(WALB_DIFF_CMPR_LZMA);
 }
 
 #include <cstdio>

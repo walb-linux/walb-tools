@@ -8,6 +8,7 @@
  */
 #include <string>
 #include <cybozu/exception.hpp>
+#include "walb_diff.h"
 
 namespace walb {
 
@@ -31,19 +32,13 @@ struct UncompressorIF {
 class Compressor
 {
 public:
-    enum Mode {
-        AsIs,
-        Snappy,
-        Zlib,
-        Xz
-    };
     /**
-     * @param mode [in] select compressor mode
+     * @param mode [in] select compressor mode(WALB_DIFF_CMPR_{NONE,GZIP,SNAPPY,LZMA}
      * @param compressionLevel [in] compression level
      *                  not used for AsIs, Snappy
      *                  [0, 9] (default 6) for Zlib, Xz
      */
-    explicit Compressor(Mode mode, size_t compressionLevel = 0);
+    explicit Compressor(int mode, size_t compressionLevel = 0);
     ~Compressor() throw();
     /**
      * compress data
@@ -73,7 +68,7 @@ public:
      *                  not used for AsIs, Snappy, Zlib
      *                  memLimit(default 16MiB) for Xz
      */
-    explicit Uncompressor(Compressor::Mode mode, size_t para = 0);
+    explicit Uncompressor(int mode, size_t para = 0);
     ~Uncompressor() throw();
     /**
      * uncompress data

@@ -23,17 +23,6 @@
 
 namespace walb {
 
-inline Compressor::Mode convertCompressionType(int type)
-{
-    switch (type) {
-    case WALB_DIFF_CMPR_NONE: return walb::Compressor::AsIs;
-    case WALB_DIFF_CMPR_GZIP: return walb::Compressor::Zlib;
-    case WALB_DIFF_CMPR_SNAPPY: return walb::Compressor::Snappy;
-    case WALB_DIFF_CMPR_LZMA: return walb::Compressor::Xz;
-    default: throw cybozu::Exception("walb:Compressor:convertCompressionType") << type;
-    }
-}
-
 namespace compressor {
 
 /*
@@ -99,7 +88,7 @@ class PackCompressor : public compressor::PackCompressorBase {
     walb::Compressor c_;
 public:
     PackCompressor(int type, size_t compressionLevel = 0)
-        : type_(type), c_(convertCompressionType(type), compressionLevel)
+        : type_(type), c_(type, compressionLevel)
     {
     }
     void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord)
@@ -142,7 +131,7 @@ class PackUncompressor : public compressor::PackCompressorBase {
     walb::Uncompressor d_;
 public:
     PackUncompressor(int type, size_t para = 0)
-        : type_(type), d_(convertCompressionType(type), para)
+        : type_(type), d_(type, para)
     {
     }
     void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord)
