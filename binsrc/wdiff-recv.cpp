@@ -89,7 +89,6 @@ public:
         fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
         fileH.setUuid(uuid.rawData());
         writer.writeHeader(fileH);
-fileH.print();
         logger.debug("write header.");
         recvAndWriteDiffs(sock_, writer, logger);
         logger.debug("close.");
@@ -116,26 +115,28 @@ private:
     }
     void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger) {
         walb::packet::StreamControl ctrl(sock);
-		walb::diff::RecordRaw recRaw;
         while (ctrl.isNext()) {
-			sock.read(recRaw.rawData(), recRaw.rawSize());
-            if (!recRaw.isValid()) {
-                logAndThrow(logger, "recvAndWriteDiffs:bad recRaw");
+            walb::diff::PackHeader packH;
+            sock.read(packH.rawData(), packH.rawSize());
+            if (!packH.isValid()) {
+                logAndThrow(logger, "recvAndWriteDiffs:bad packH");
             }
-            walb::diff::IoData io;
-            io.set(recRaw.record());
-            if (recRaw.dataSize() == 0) {
-                writer.writeDiff(recRaw.record(), {});
-            } else {
-                sock.read(io.rawData(), recRaw.dataSize());
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                walb::diff::IoData io;
+                const walb::diff::RecordWrapConst rec(&packH.record(i));
+                io.set(rec.record());
+                if (rec.dataSize() == 0) {
+                    writer.writeDiff(rec.record(), {});
+                    continue;
+                }
+                sock.read(io.rawData(), rec.dataSize());
                 if (!io.isValid()) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io");
                 }
-                if (io.calcChecksum() != recRaw.checksum()) {
+                if (io.calcChecksum() != rec.checksum()) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
                 }
-//                writer.writeDiff(recRaw.record(), io.forMove());
-                writer.compressAndWriteDiff(recRaw.record(), io.rawData());
+                writer.writeDiff(rec.record(), io.forMove());
             }
             ctrl.reset();
         }
@@ -184,7 +185,7 @@ void registerProtocolsForWdiffRecvCommand()
 int main(int argc, char *argv[]) try
 {
     cybozu::SetLogFILE(::stderr);
-	cybozu::SetLogPriority(cybozu::LogDebug);
+    cybozu::SetLogPriority(cybozu::LogDebug);
 
     Option opt;
     if (!opt.parse(argc, argv)) {

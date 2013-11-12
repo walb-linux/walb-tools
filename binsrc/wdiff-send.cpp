@@ -33,11 +33,11 @@ struct Option : cybozu::Option
     std::string clientId;
     bool canNotMerge;
     std::string timeStampStr;
-	size_t threadNum;
-	int compType;
+    size_t threadNum;
+    int compType;
 
     Option(int argc, const char *const argv[]) {
-		std::string compStr;
+        std::string compStr;
         appendMust(&serverHostPort, "server", "server host:port");
         appendMust(&name, "name", "volume identifier");
         appendOpt(&gid, 0, "gid", "begin gid.");
@@ -46,32 +46,32 @@ struct Option : cybozu::Option
         appendOpt(&clientId, hostName, "id", "client identifier");
         appendBoolOpt(&canNotMerge, "m", "clear canMerge flag.");
         appendOpt(&timeStampStr, "", "ts", "timestamp in YYYYmmddHHMMSS format.");
-		appendOpt(&threadNum, cybozu::GetProcessorNum(), "tn", "number of thread");
-		appendOpt(&compStr, "snappy", "c", "compression type(none, gzip, snappy(default), lzma)");
+        appendOpt(&threadNum, cybozu::GetProcessorNum(), "tn", "number of thread");
+        appendOpt(&compStr, "snappy", "c", "compression type(none, gzip, snappy(default), lzma)");
         appendHelp("h");
-		if (!parse(argc, argv)) {
-      		usage();
-			exit(1);
-		}
-		if (threadNum == 0) {
-			throw cybozu::Exception("bad number of thread");
-		}
-		const struct {
-			const char *name;
-			int type;
-		} tbl[] = {
-			{ "none", WALB_DIFF_CMPR_NONE },
-			{ "gzip", WALB_DIFF_CMPR_GZIP },
-			{ "snappy", WALB_DIFF_CMPR_SNAPPY },
-			{ "lzma", WALB_DIFF_CMPR_LZMA },
-		};
-		for (const auto& e : tbl) {
-			if (compStr == e.name) {
-				compType = e.type;
-				return;
-			}
-		}
-		throw cybozu::Exception("Option:bad c option") << compStr;
+        if (!parse(argc, argv)) {
+            usage();
+            exit(1);
+        }
+        if (threadNum == 0) {
+            throw cybozu::Exception("bad number of thread");
+        }
+        const struct {
+            const char *name;
+            int type;
+        } tbl[] = {
+            { "none", WALB_DIFF_CMPR_NONE },
+            { "gzip", WALB_DIFF_CMPR_GZIP },
+            { "snappy", WALB_DIFF_CMPR_SNAPPY },
+            { "lzma", WALB_DIFF_CMPR_LZMA },
+        };
+        for (const auto& e : tbl) {
+            if (compStr == e.name) {
+                compType = e.type;
+                return;
+            }
+        }
+        throw cybozu::Exception("Option:bad c option") << compStr;
     }
 };
 
@@ -111,37 +111,37 @@ void sendWdiff(cybozu::Socket &sock,
     walb::packet::StreamControl ctrl(sock);
     walb::diff::RecIo recIo;
 #if 1
-	const size_t maxPushedNum = opt.threadNum * 2 - 1;
-	walb::ConverterQueue conv(maxPushedNum, opt.threadNum, true, opt.compType);
-	walb::diff::Packer packer;
-	size_t pushedNum = 0;
+    const size_t maxPushedNum = opt.threadNum * 2 - 1;
+    walb::ConverterQueue conv(maxPushedNum, opt.threadNum, true, opt.compType);
+    walb::diff::Packer packer;
+    size_t pushedNum = 0;
     while (merger.pop(recIo)) {
         const walb::diff::RecordRaw& recRaw = recIo.record();
         const walb_diff_record& rec = recRaw.record();
         const walb::diff::IoData& io = recIo.io();
-		if (packer.add(rec, io.rawData())) {
-			continue;
-		}
-		conv.push(packer.getPackAsUniquePtr());
-		pushedNum++;
-		packer.reset();
-		packer.add(rec, io.rawData());
-		if (pushedNum < maxPushedNum) {
-			continue;
-		}
-		std::unique_ptr<char[]> p = conv.pop();
+        if (packer.add(rec, io.rawData())) {
+            continue;
+        }
+        conv.push(packer.getPackAsUniquePtr());
+        pushedNum++;
+        packer.reset();
+        packer.add(rec, io.rawData());
+        if (pushedNum < maxPushedNum) {
+            continue;
+        }
+        std::unique_ptr<char[]> p = conv.pop();
         ctrl.next();
-		sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
-		pushedNum--;
-	}
-	if (!packer.empty()) {
-		conv.push(packer.getPackAsUniquePtr());
-	}
-	conv.quit();
-	while (std::unique_ptr<char[]> p = conv.pop()) {
+        sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+        pushedNum--;
+    }
+    if (!packer.empty()) {
+        conv.push(packer.getPackAsUniquePtr());
+    }
+    conv.quit();
+    while (std::unique_ptr<char[]> p = conv.pop()) {
         ctrl.next();
-		sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
-	}
+        sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+    }
 #else
     while (merger.pop(recIo)) {
         ctrl.next();
