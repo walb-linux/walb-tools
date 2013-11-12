@@ -131,11 +131,11 @@ private:
         return cmprSize_ == 0 ? origSize_ : cmprSize_;
     }
     static walb::Compressor &compressor() {
-        static walb::Compressor cmpr(walb::Compressor::Snappy, 0);
+        static walb::Compressor cmpr(WALB_DIFF_CMPR_SNAPPY, 0);
         return cmpr;
     }
     static walb::Uncompressor &uncompressor() {
-        static walb::Uncompressor uncmpr(walb::Compressor::Snappy);
+        static walb::Uncompressor uncmpr(WALB_DIFF_CMPR_SNAPPY);
         return uncmpr;
     }
 };
