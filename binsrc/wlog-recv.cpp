@@ -56,7 +56,6 @@ public:
 
         /* Original behavior for wlog-recv command. */
         ProtocolLogger logger(serverId_, clientId);
-        protocol::wlog_send::ServerRunner(pStr, sock_, logger, forceQuit_, {baseDir_.str()});
 
         packet::Packet packet(sock_);
 
