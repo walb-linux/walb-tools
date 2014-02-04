@@ -173,6 +173,10 @@ public:
     FilePath operator+(const std::string &rhs) const {
         return *this + cybozu::FilePath(rhs);
     }
+    FilePath& operator+=(const std::string &rhs) {
+        *this = *this + rhs;
+        return *this;
+    }
     bool operator==(const FilePath &rhs) const {
         std::string s0 = removeRedundancy().str();
         std::string s1 = rhs.removeRedundancy().str();
