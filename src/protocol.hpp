@@ -33,6 +33,7 @@
 #include "server_util.hpp"
 #include "walb_log_net.hpp"
 #include "memory_buffer.hpp"
+#include "init_vol.hpp"
 
 namespace walb {
 namespace protocol {
@@ -1084,6 +1085,7 @@ enum class ProtocolName
     WDIFF_SEND,
     GRACEFUL_SHUTDOWN,
     FORCE_SHUTDOWN,
+    INIT_VOL,
 };
 
 const std::map<ProtocolName, std::string> PROTOCOL_TYPE_MAP =
@@ -1096,6 +1098,7 @@ const std::map<ProtocolName, std::string> PROTOCOL_TYPE_MAP =
     {ProtocolName::DIRTY_HASH_SYNC, "dirty-diff-sync"},
     {ProtocolName::WLOG_SEND, "wlog-send"},
     {ProtocolName::WDIFF_SEND, "wdiff-send"},
+    {ProtocolName::INIT_VOL, "init-vol"},
 };
 
 /**
@@ -1214,6 +1217,16 @@ static inline std::string run1stNegotiateAsClient(
     return serverId;
 }
 
+static inline void clientDispatch(const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
+    const std::atomic<bool> &forceQuit, const std::vector<std::string> &params)
+{
+    if (protocolName == "init-vol") {
+        clientInitVol(sock, logger, forceQuit, params);
+        return;
+    }
+    throw cybozu::Exception("dispatch:receive OK but protocol not found.") << protocolName;
+}
+
 /**
  * Run a protocol as a client.
  */
@@ -1225,14 +1238,7 @@ static inline void runProtocolAsClient(
     std::string serverId = run1stNegotiateAsClient(sock, clientId, protocolName);
     ProtocolLogger logger(clientId, serverId);
 
-    Protocol *protocol = ProtocolFactory::getInstance().findClient(protocolName);
-    if (!protocol) {
-        std::string s("receive OK but protocol not found.");
-        logger.error(s);
-        throw std::runtime_error(s);
-    }
-    /* Client can throw an error. */
-    protocol->run(sock, logger, forceQuit, params);
+    clientDispatch(protocolName, sock, logger, forceQuit, params);
 }
 
 /**
