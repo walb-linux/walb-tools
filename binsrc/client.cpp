@@ -37,7 +37,7 @@ try {
     Option opt;
     if (!opt.parse(argc, argv)) {
         opt.usage();
-        throw std::runtime_error("option error.");
+        return 1;
     }
     cybozu::SetLogFILE(::stderr);
     cybozu::Socket sock;
@@ -45,12 +45,11 @@ try {
     std::atomic<bool> forceQuit(false);
     walb::protocol::runProtocolAsClient(
         sock, opt.clientId, forceQuit, opt.cmd, opt.params);
-    return 0;
 } catch (std::exception &e) {
-    ::fprintf(::stderr, "exception: %s\n", e.what());
+    LOGe(e.what());
     return 1;
 } catch (...) {
-    ::fprintf(::stderr, "caught other error.\n");
+    LOGe("caught other error.");
     return 1;
 }
 

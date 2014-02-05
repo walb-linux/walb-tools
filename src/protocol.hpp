@@ -33,6 +33,7 @@
 #include "server_util.hpp"
 #include "walb_log_net.hpp"
 #include "memory_buffer.hpp"
+#include "init_vol.hpp"
 
 namespace walb {
 namespace protocol {
@@ -1084,6 +1085,7 @@ enum class ProtocolName
     WDIFF_SEND,
     GRACEFUL_SHUTDOWN,
     FORCE_SHUTDOWN,
+    INIT_VOL,
 };
 
 const std::map<ProtocolName, std::string> PROTOCOL_TYPE_MAP =
@@ -1096,6 +1098,7 @@ const std::map<ProtocolName, std::string> PROTOCOL_TYPE_MAP =
     {ProtocolName::DIRTY_HASH_SYNC, "dirty-diff-sync"},
     {ProtocolName::WLOG_SEND, "wlog-send"},
     {ProtocolName::WDIFF_SEND, "wdiff-send"},
+    {ProtocolName::INIT_VOL, "init-vol"},
 };
 
 /**
@@ -1214,6 +1217,16 @@ static inline std::string run1stNegotiateAsClient(
     return serverId;
 }
 
+static inline void clientDispatch(const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
+    const std::atomic<bool> &forceQuit, const std::vector<std::string> &params)
+{
+    if (protocolName == "init-vol") {
+        clientInitVol(sock, logger, forceQuit, params);
+        return;
+    }
+    throw cybozu::Exception("dispatch:receive OK but protocol not found.") << protocolName;
+}
+
 /**
  * Run a protocol as a client.
  */
@@ -1225,14 +1238,7 @@ static inline void runProtocolAsClient(
     std::string serverId = run1stNegotiateAsClient(sock, clientId, protocolName);
     ProtocolLogger logger(clientId, serverId);
 
-    Protocol *protocol = ProtocolFactory::getInstance().findClient(protocolName);
-    if (!protocol) {
-        std::string s("receive OK but protocol not found.");
-        logger.error(s);
-        throw std::runtime_error(s);
-    }
-    /* Client can throw an error. */
-    protocol->run(sock, logger, forceQuit, params);
+    clientDispatch(protocolName, sock, logger, forceQuit, params);
 }
 
 /**
@@ -1247,7 +1253,7 @@ static inline void runProtocolAsClient(
  *   otherwise false.
  */
 static inline bool run1stNegotiateAsServer(
-    cybozu::Socket &sock, const std::string &serverId,
+    cybozu::Socket &sock, const std::string &serverId, std::string &protocolName,
     std::string &clientId, Protocol **protocolPtr,
     std::atomic<cybozu::server::ControlFlag> &ctrlFlag)
 {
@@ -1256,7 +1262,6 @@ static inline bool run1stNegotiateAsServer(
     LOGi_("run1stNegotiateAsServer start\n");
     packet.read(clientId);
     LOGi_("clientId: %s\n", clientId.c_str());
-    std::string protocolName;
     packet.read(protocolName);
     LOGi_("protocolName: %s\n", protocolName.c_str());
     packet::Version ver(sock);
@@ -1281,6 +1286,7 @@ static inline bool run1stNegotiateAsServer(
     }
 
     /* Find protocol. */
+#if 0
     *protocolPtr = ProtocolFactory::getInstance().findServer(protocolName);
     if (!*protocolPtr) {
         std::string msg = cybozu::util::formatString(
@@ -1289,6 +1295,7 @@ static inline bool run1stNegotiateAsServer(
         ans.ng(1, msg);
         return true;
     }
+#endif
     if (!isVersionSame) {
         std::string msg = cybozu::util::formatString(
             "Version differ: client %" PRIu32 " server %" PRIu32 ""
@@ -1302,19 +1309,43 @@ static inline bool run1stNegotiateAsServer(
     return false;
 }
 
-/**
- * Run a protocol as a server.
- *
- * TODO: arguments for server data.
- */
-static inline void runProtocolAsServer(
+static inline void storageDispatch(
     cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
     std::atomic<cybozu::server::ControlFlag> &ctrlFlag) noexcept
 {
     std::string clientId, protocolName;
     Protocol *protocol;
-    if (run1stNegotiateAsServer(sock, serverId, clientId, &protocol, ctrlFlag)) {
+    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, &protocol, ctrlFlag)) {
+        /* The protocol has finished or failed. */
+        return;
+    }
+    ProtocolLogger logger(serverId, clientId);
+    try {
+        if (protocolName == "init-vol") {
+            storageInitVol(sock, logger, baseDirStr, forceQuit, ctrlFlag);
+        }
+        throw cybozu::Exception("bad protocolName") << protocolName;
+    } catch (std::exception &e) {
+        logger.error("runlAsServer failed: %s", e.what());
+    } catch (...) {
+        logger.error("runAsServer failed: unknown error.");
+    }
+}
+
+/**
+ * Run a protocol as a server.
+ *
+ * TODO: arguments for server data.
+ */
+DEPRECATED static inline void runProtocolAsServer(
+    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
+    const std::atomic<bool> &forceQuit,
+    std::atomic<cybozu::server::ControlFlag> &ctrlFlag) noexcept
+{
+    std::string clientId, protocolName;
+    Protocol *protocol;
+    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, &protocol, ctrlFlag)) {
         /* The protocol has finished or failed. */
         return;
     }

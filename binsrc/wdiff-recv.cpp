@@ -45,9 +45,9 @@ public:
         sock_.close();
     }
     void run() {
-        std::string clientId;
+        std::string clientId, protocolName;
         protocol::Protocol *protocol;
-        if (protocol::run1stNegotiateAsServer(sock_, serverId_, clientId, &protocol, ctrlFlag_)) {
+        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, &protocol, ctrlFlag_)) {
             return;
         }
         const auto pName = protocol::ProtocolName::WDIFF_SEND;
