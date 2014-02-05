@@ -18,44 +18,21 @@
 
 namespace walb {
 
-class RequestWorker : public cybozu::thread::Runnable
+class WdiffRequestWorker : public walb::server::RequestWorker
 {
-private:
-    cybozu::Socket sock_;
-    std::string serverId_;
-    cybozu::FilePath baseDir_;
-    const std::atomic<bool> &forceQuit_;
-    std::atomic<cybozu::server::ControlFlag> &ctrlFlag_;
 public:
-    RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
-                  const cybozu::FilePath &baseDir,
-                  const std::atomic<bool> &forceQuit,
-                  std::atomic<cybozu::server::ControlFlag> &ctrlFlag)
-        : sock_(std::move(sock))
-        , serverId_(serverId)
-        , baseDir_(baseDir)
-        , forceQuit_(forceQuit)
-        , ctrlFlag_(ctrlFlag) {}
-    void operator()() noexcept override try {
-        run();
-        sock_.close();
-        done();
-    } catch (...) {
-        throwErrorLater();
-        sock_.close();
-    }
-    void run() {
+    using RequestWorker :: RequestWorker;
+    void run() override {
         std::string clientId, protocolName;
-        protocol::Protocol *protocol;
-        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, &protocol, ctrlFlag_)) {
+        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, ctrlFlag_)) {
             return;
         }
-        const auto pName = protocol::ProtocolName::WDIFF_SEND;
-        const std::string pStr = protocol::PROTOCOL_TYPE_MAP.at(pName);
-        assert(protocol == protocol::ProtocolFactory::getInstance().findServer(pStr));
-
         /* Original behavior for wdiff-recv command. */
         ProtocolLogger logger(serverId_, clientId);
+        if (protocolName != "wdiff-send") {
+            logger.error("Protocol name must be wdiff-send.");
+            return;
+        }
 
         packet::Packet packet(sock_);
 
@@ -170,18 +147,6 @@ struct Option : cybozu::Option
     }
 };
 
-namespace walb {
-
-namespace protocol {
-
-void registerProtocolsForWdiffRecvCommand()
-{
-    ProtocolFactory &factory = ProtocolFactory::getInstance();
-    factory.registerServer<Protocol>(ProtocolName::WDIFF_SEND);
-}
-
-}} // namespace walb::protocol
-
 int main(int argc, char *argv[]) try
 {
     cybozu::SetLogFILE(::stderr);
@@ -196,14 +161,13 @@ int main(int argc, char *argv[]) try
     if (!baseDir.stat().isDirectory()) {
         throw RT_ERR("%s is not directory.", baseDir.cStr());
     }
-    walb::protocol::registerProtocolsForWdiffRecvCommand();
 
     auto createReqWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<cybozu::server::ControlFlag> &flag) {
-        return std::make_shared<walb::RequestWorker>(
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &flag) {
+        return std::make_shared<walb::WdiffRequestWorker>(
             std::move(sock), opt.serverId, baseDir, forceQuit, flag);
     };
-    cybozu::server::MultiThreadedServer server(1);
+    walb::server::MultiThreadedServer server(1);
     server.run(opt.port, createReqWorker);
     return 0;
 } catch (std::exception &e) {
