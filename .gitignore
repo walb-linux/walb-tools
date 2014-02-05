@@ -12,3 +12,4 @@ GTAGS
 *.wdiff
 *wlog
 *.depend
+*.pyc
