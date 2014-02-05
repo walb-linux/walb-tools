@@ -25,14 +25,15 @@ const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb";
 const std::string DEFAULT_LOG_FILE = "server.log";
 
-using CtrlFlag = std::atomic<walb::server::ControlFlag>;
-
-class ServerRequestWorker : public walb::server::RequestWorker
+/**
+ * Request worker.
+ */
+class StorageRequestWorker : public walb::server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        walb::protocol::serverDispatch(
+        walb::protocol::storageDispatch(
             sock_, serverId_, baseDir_.str(), forceQuit_, ctrlFlag_);
     }
 };
@@ -68,13 +69,6 @@ int main(int argc, char *argv[]) try
     }
     cybozu::OpenLogFile(opt.logFilePath());
 
-#if 0
-    if (daemon(0, 0) < 0) {
-        LOGe("daemon() failed");
-        return 1;
-    }
-#endif
-
     cybozu::FilePath baseDir(opt.baseDirStr);
     if (!baseDir.stat().exists()) {
         if (!baseDir.mkdir()) {
@@ -88,9 +82,8 @@ int main(int argc, char *argv[]) try
     }
 
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, CtrlFlag &ctrlFlag) {
-        return std::make_shared<ServerRequestWorker>(
-            std::move(sock), opt.serverId, baseDir, forceQuit, ctrlFlag);
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &ctrlFlag) {
+        return std::make_shared<StorageRequestWorker>(std::move(sock), opt.serverId, baseDir, forceQuit, ctrlFlag);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

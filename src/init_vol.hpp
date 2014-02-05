@@ -2,7 +2,7 @@
 
 namespace walb {
 
-static inline void clientInitVol(cybozu::Socket& sock, ProtocolLogger& /*logger*/, 
+static inline void clientInitVol(cybozu::Socket& sock, ProtocolLogger& /*logger*/,
     const std::atomic<bool> &/*forceQuit*/, const std::vector<std::string> &params)
 {
     if (params.size() != 2 || params[0].empty() || params[1].empty()) {
@@ -20,7 +20,7 @@ static inline void storageInitVol(cybozu::Socket &sock,
     ProtocolLogger& /*logger*/,
     const std::string &baseDirStr,
     const std::atomic<bool> &/*forceQuit*/,
-    std::atomic<cybozu::server::ControlFlag> &/*ctrlFlag*/)
+    std::atomic<walb::server::ControlFlag> &/*ctrlFlag*/)
 {
     packet::Packet packet(sock);
     std::string volId, wdevPathName;

@@ -9,11 +9,13 @@
 #include <memory>
 #include <functional>
 #include <atomic>
+#include <string>
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
+#include "file_path.hpp"
 #include "walb_logger.hpp"
 
-namespace cybozu {
+namespace walb {
 namespace server {
 
 enum class ControlFlag
@@ -73,4 +75,38 @@ private:
     }
 };
 
-}} //namespace cybozu::server
+/**
+ * Request worker for daemons.
+ *
+ * Override run().
+ */
+class RequestWorker : public cybozu::thread::Runnable
+{
+protected:
+    cybozu::Socket sock_;
+    std::string serverId_;
+    cybozu::FilePath baseDir_;
+    const std::atomic<bool> &forceQuit_;
+    std::atomic<ControlFlag> &ctrlFlag_;
+public:
+    RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
+                  const cybozu::FilePath &baseDir,
+                  const std::atomic<bool> &forceQuit,
+                  std::atomic<ControlFlag> &ctrlFlag)
+        : sock_(std::move(sock))
+        , serverId_(serverId)
+        , baseDir_(baseDir)
+        , forceQuit_(forceQuit)
+        , ctrlFlag_(ctrlFlag) {}
+    void operator()() noexcept override try {
+        run();
+        sock_.close();
+        done();
+    } catch (...) {
+        throwErrorLater();
+        sock_.close();
+    }
+    virtual void run() = 0;
+};
+
+}} //namespace walb::server

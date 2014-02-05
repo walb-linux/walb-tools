@@ -61,9 +61,7 @@ void sendWlog(cybozu::Socket &sock, const std::string &clientId,
     reader.readHeader(fileH);
 
     /* wlog-send negotiation */
-    walb::protocol::wlog_send::ClientRunner client(
-        walb::protocol::PROTOCOL_TYPE_MAP.at(walb::protocol::ProtocolName::WLOG_SEND),
-        sock, logger, forceQuit, {});
+    walb::wlog_send::ClientRunner client(sock, logger, forceQuit, {});
     /*
      * TODO:
      *   This uuid should not be wlog header.
