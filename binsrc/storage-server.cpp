@@ -25,38 +25,14 @@ const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb";
 const std::string DEFAULT_LOG_FILE = "server.log";
 
-using CtrlFlag = std::atomic<cybozu::server::ControlFlag>;
-
 /**
  * Request worker.
  */
-class RequestWorker : public cybozu::thread::Runnable
+class StorageRequestWorker : public walb::server::RequestWorker
 {
-private:
-    cybozu::Socket sock_;
-    std::string serverId_;
-    cybozu::FilePath baseDir_;
-    const std::atomic<bool> &forceQuit_;
-    CtrlFlag &ctrlFlag_;
 public:
-    RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
-                  const cybozu::FilePath &baseDir,
-                  const std::atomic<bool> &forceQuit,
-                  CtrlFlag &ctrlFlag)
-        : sock_(std::move(sock))
-        , serverId_(serverId)
-        , baseDir_(baseDir)
-        , forceQuit_(forceQuit)
-        , ctrlFlag_(ctrlFlag) {}
-    void operator()() noexcept override try {
-        run();
-        sock_.close();
-        done();
-    } catch (...) {
-        throwErrorLater();
-        sock_.close();
-    }
-    void run() {
+    using RequestWorker :: RequestWorker;
+    void run() override {
         walb::protocol::storageDispatch(
             sock_, serverId_, baseDir_.str(), forceQuit_, ctrlFlag_);
     }
@@ -106,11 +82,10 @@ int main(int argc, char *argv[]) try
     }
 
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, CtrlFlag &ctrlFlag) {
-        return std::make_shared<RequestWorker>(
-            std::move(sock), opt.serverId, baseDir, forceQuit, ctrlFlag);
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &ctrlFlag) {
+        return std::make_shared<StorageRequestWorker>(std::move(sock), opt.serverId, baseDir, forceQuit, ctrlFlag);
     };
-    cybozu::server::MultiThreadedServer server;
+    walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);
 
     return 0;
