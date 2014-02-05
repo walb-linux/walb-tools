@@ -1,9 +1,9 @@
 /**
  * @file
- * @brief WalB server daemon.
+ * @brief WalB archive daemon.
  * @author HOSHINO Takashi
  *
- * (C) 2013 Cybozu Labs, Inc.
+ * (C) 2014 Cybozu Labs, Inc.
  */
 #include <cstdio>
 #include <chrono>
@@ -17,24 +17,27 @@
 #include "file_path.hpp"
 #include "protocol.hpp"
 #include "net_util.hpp"
-#include "file_path.hpp"
 #include "server_util.hpp"
 #include "file_util.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
-const std::string DEFAULT_BASE_DIR = "/var/forest/walb";
-const std::string DEFAULT_LOG_FILE = "server.log";
+const std::string DEFAULT_BASE_DIR = "/var/forest/walb/archive";
+const std::string DEFAULT_LOG_FILE = "walb-archive.log";
 
 namespace walb {
 
-class ServerRequestWorker : public server::RequestWorker
+/**
+ * Request worker.
+ */
+class ArchiveRequestWorker : public server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
             { "echo", serverEcho },
+            { "archive-status", proxyStatus },
         };
         protocol::serverDispatch(
             sock_, serverId_, baseDirStr_, forceQuit_, ctrlFlag_, h);
@@ -73,29 +76,21 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     cybozu::OpenLogFile(opt.logFilePath());
-
-#if 0
-    if (daemon(0, 0) < 0) {
-        LOGe("daemon() failed");
-        return 1;
-    }
-#endif
-
     cybozu::util::checkOrMakeDir(opt.baseDirStr);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ControlFlag> &ctrlFlag) {
-        return std::make_shared<walb::ServerRequestWorker>(
+        return std::make_shared<walb::ArchiveRequestWorker>(
             std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, ctrlFlag);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);
 
 } catch (std::exception &e) {
-    LOGe("server: error: %s", e.what());
+    LOGe("ArchiveServer: error: %s", e.what());
     return 1;
 } catch (...) {
-    LOGe("server: caught other error.");
+    LOGe("ArchiveServer: caught other error.");
     return 1;
 }
 

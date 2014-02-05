@@ -32,6 +32,29 @@ struct Option : public cybozu::Option
     }
 };
 
+namespace walb {
+
+void runClient(Option &opt)
+{
+    cybozu::Socket sock;
+    sock.connect(opt.addr, opt.port);
+    std::atomic<bool> forceQuit(false);
+    std::string serverId = protocol::run1stNegotiateAsClient(
+        sock, opt.clientId, opt.cmd);
+    ProtocolLogger logger(opt.clientId, serverId);
+
+    const std::map<std::string, protocol::ClientHandler> h = {
+        { "echo", clientEcho },
+        { "storage-status", clientStorageStatus },
+        { "proxy-status", clientProxyStatus },
+        { "archive-status", clientArchiveStatus },
+        { "init-vol", clientInitVol },
+    };
+    protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
+}
+
+} // namespace walb
+
 int main(int argc, char *argv[])
 try {
     Option opt;
@@ -40,16 +63,13 @@ try {
         return 1;
     }
     cybozu::SetLogFILE(::stderr);
-    cybozu::Socket sock;
-    sock.connect(opt.addr, opt.port);
-    std::atomic<bool> forceQuit(false);
-    walb::protocol::runProtocolAsClient(
-        sock, opt.clientId, forceQuit, opt.cmd, opt.params);
+    walb::runClient(opt);
+
 } catch (std::exception &e) {
-    LOGe(e.what());
+    LOGe("Client: error: %s", e.what());
     return 1;
 } catch (...) {
-    LOGe("caught other error.");
+    LOGe("Client: caught other error.");
     return 1;
 }
 

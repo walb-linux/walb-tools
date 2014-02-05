@@ -59,8 +59,9 @@ public:
         logger.debug("send ans ok.");
 
         const std::string fName = createDiffFileName(diff);
-        cybozu::TmpFile tmpFile(baseDir_.str());
-        cybozu::FilePath fPath = baseDir_ + fName;
+        cybozu::TmpFile tmpFile(baseDirStr_);
+        cybozu::FilePath fPath(baseDirStr_);
+        fPath += fName;
         diff::Writer writer(tmpFile.fd());
         diff::FileHeaderRaw fileH;
         fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
@@ -163,9 +164,10 @@ int main(int argc, char *argv[]) try
     }
 
     auto createReqWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &flag) {
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        std::atomic<walb::server::ControlFlag> &flag) {
         return std::make_shared<walb::WdiffRequestWorker>(
-            std::move(sock), opt.serverId, baseDir, forceQuit, flag);
+            std::move(sock), opt.serverId, baseDir.str(), forceQuit, flag);
     };
     walb::server::MultiThreadedServer server(1);
     server.run(opt.port, createReqWorker);

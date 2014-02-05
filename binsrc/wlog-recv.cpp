@@ -67,8 +67,9 @@ public:
 
         std::string fName = createDiffFileName(diff);
         fName += ".wlog";
-        cybozu::TmpFile tmpFile(baseDir_.str());
-        cybozu::FilePath fPath = baseDir_ + fName;
+        cybozu::TmpFile tmpFile(baseDirStr_);
+        cybozu::FilePath fPath(baseDirStr_);
+        fPath + fName;
         log::Writer writer(tmpFile.fd());
         log::FileHeader fileH;
         const uint8_t *uuidP = static_cast<const uint8_t *>(uuid.rawData());
@@ -168,13 +169,14 @@ int main(int argc, char *argv[]) try
     }
 
     auto createReqWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &flag) {
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        std::atomic<walb::server::ControlFlag> &flag) {
         return std::make_shared<walb::WlogRequestWorker>(
-            std::move(sock), opt.serverId, baseDir, forceQuit, flag);
+            std::move(sock), opt.serverId, baseDir.str(), forceQuit, flag);
     };
     walb::server::MultiThreadedServer server(1);
     server.run(opt.port, createReqWorker);
-    return 0;
+
 } catch (std::exception &e) {
     LOGe("caught error: %s", e.what());
     return 1;

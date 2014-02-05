@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief WalB server daemon.
+ * @brief WalB storage daemon.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -17,26 +17,35 @@
 #include "file_path.hpp"
 #include "protocol.hpp"
 #include "net_util.hpp"
-#include "file_path.hpp"
 #include "server_util.hpp"
+#include "file_util.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
-const std::string DEFAULT_BASE_DIR = "/var/forest/walb";
-const std::string DEFAULT_LOG_FILE = "server.log";
+const std::string DEFAULT_BASE_DIR = "/var/forest/walb/storage";
+const std::string DEFAULT_LOG_FILE = "walb-storage.log";
+
+namespace walb {
 
 /**
  * Request worker.
  */
-class StorageRequestWorker : public walb::server::RequestWorker
+class StorageRequestWorker : public server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        walb::protocol::storageDispatch(
-            sock_, serverId_, baseDir_.str(), forceQuit_, ctrlFlag_);
+        const std::map<std::string, protocol::ServerHandler> h = {
+            { "echo", serverEcho },
+            { "storage-status", storageStatus },
+            { "init-vol", storageInitVol },
+        };
+        protocol::serverDispatch(
+            sock_, serverId_, baseDirStr_, forceQuit_, ctrlFlag_, h);
     }
 };
+
+} // namespace walb
 
 struct Option : cybozu::Option
 {
@@ -68,29 +77,21 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     cybozu::OpenLogFile(opt.logFilePath());
-
-    cybozu::FilePath baseDir(opt.baseDirStr);
-    if (!baseDir.stat().exists()) {
-        if (!baseDir.mkdir()) {
-            LOGe("mkdir base directory %s failed.", baseDir.cStr());
-            return 1;
-        }
-    }
-    if (!baseDir.stat(true).isDirectory()) {
-        LOGe("base directory %s is not directory.", baseDir.cStr());
-        return 1;
-    }
-
+    cybozu::util::checkOrMakeDir(opt.baseDirStr);
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit, std::atomic<walb::server::ControlFlag> &ctrlFlag) {
-        return std::make_shared<StorageRequestWorker>(std::move(sock), opt.serverId, baseDir, forceQuit, ctrlFlag);
+        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        std::atomic<walb::server::ControlFlag> &ctrlFlag) {
+        return std::make_shared<walb::StorageRequestWorker>(
+            std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, ctrlFlag);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);
 
-    return 0;
 } catch (std::exception &e) {
-    ::fprintf(::stderr, "error: %s\n", e.what());
+    LOGe("StorageServer: error: %s\n", e.what());
+    return 1;
+} catch (...) {
+    LOGe("StorageServer: caught other error.");
     return 1;
 }
 

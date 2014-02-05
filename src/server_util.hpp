@@ -85,17 +85,17 @@ class RequestWorker : public cybozu::thread::Runnable
 protected:
     cybozu::Socket sock_;
     std::string serverId_;
-    cybozu::FilePath baseDir_;
+    std::string baseDirStr_;
     const std::atomic<bool> &forceQuit_;
     std::atomic<ControlFlag> &ctrlFlag_;
 public:
     RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
-                  const cybozu::FilePath &baseDir,
+                  const std::string &baseDirStr,
                   const std::atomic<bool> &forceQuit,
                   std::atomic<ControlFlag> &ctrlFlag)
         : sock_(std::move(sock))
         , serverId_(serverId)
-        , baseDir_(baseDir)
+        , baseDirStr_(baseDirStr)
         , forceQuit_(forceQuit)
         , ctrlFlag_(ctrlFlag) {}
     void operator()() noexcept override try {

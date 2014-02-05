@@ -41,6 +41,9 @@
 #include "wlog_send.hpp"
 #include "dirty_full_sync.hpp"
 #include "dirty_hash_sync.hpp"
+#include "storage_status.hpp"
+#include "proxy_status.hpp"
+#include "archive_status.hpp"
 
 namespace walb {
 namespace protocol {
@@ -74,37 +77,26 @@ static inline std::string run1stNegotiateAsClient(
     return serverId;
 }
 
-static inline void clientDispatch(const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
-    const std::atomic<bool> &forceQuit, const std::vector<std::string> &params)
+/**
+ * Client handler type.
+ */
+using ClientHandler = void (*)(
+    cybozu::Socket&, ProtocolLogger&,
+    const std::atomic<bool>&,
+    const std::vector<std::string>&);
+
+static inline void clientDispatch(
+    const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
+    const std::atomic<bool> &forceQuit, const std::vector<std::string> &params,
+    const std::map<std::string, ClientHandler> &handlers)
 {
-    void (*f)(cybozu::Socket&, ProtocolLogger&,
-              const std::atomic<bool>&,
-              const std::vector<std::string>&);
-    const std::map<std::string, decltype(f)> m = {
-        { "echo", clientEcho },
-        { "init-vol", clientInitVol },
-    };
-    auto it = m.find(protocolName);
-    if (it != m.cend()) {
-        f = it->second;
-        f(sock, logger, forceQuit, params);
+    auto it = handlers.find(protocolName);
+    if (it != handlers.cend()) {
+        ClientHandler h = it->second;
+        h(sock, logger, forceQuit, params);
     } else {
         throw cybozu::Exception("dispatch:receive OK but protocol not found.") << protocolName;
     }
-}
-
-/**
- * Run a protocol as a client.
- */
-static inline void runProtocolAsClient(
-    cybozu::Socket &sock, const std::string &clientId,
-    const std::atomic<bool> &forceQuit,
-    const std::string &protocolName, const std::vector<std::string> &params)
-{
-    std::string serverId = run1stNegotiateAsClient(sock, clientId, protocolName);
-    ProtocolLogger logger(clientId, serverId);
-
-    clientDispatch(protocolName, sock, logger, forceQuit, params);
 }
 
 /**
@@ -167,10 +159,23 @@ static inline bool run1stNegotiateAsServer(
     /* Here command existance has not been checked yet. */
 }
 
-static inline void storageDispatch(
+/**
+ * Server handler type.
+ */
+using ServerHandler = void (*)(
+    cybozu::Socket&, ProtocolLogger&,
+    const std::string&,
+    const std::atomic<bool>&,
+    std::atomic<walb::server::ControlFlag>&);
+
+/**
+ * Server dispatcher.
+ */
+static inline void serverDispatch(
     cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
-    std::atomic<walb::server::ControlFlag> &ctrlFlag) noexcept
+    std::atomic<walb::server::ControlFlag> &ctrlFlag,
+    const std::map<std::string, ServerHandler> &handlers) noexcept
 {
     std::string clientId, protocolName;
     if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, ctrlFlag)) {
@@ -179,18 +184,10 @@ static inline void storageDispatch(
     }
     ProtocolLogger logger(serverId, clientId);
     try {
-        void (*f)(cybozu::Socket&, ProtocolLogger&,
-                  const std::string&,
-                  const std::atomic<bool>&,
-                  std::atomic<walb::server::ControlFlag>&);
-        std::map<std::string, decltype(f)> m = {
-            { "echo", serverEcho },
-            { "init-vol", storageInitVol },
-        };
-        auto it = m.find(protocolName);
-        if (it != m.end()) {
-            f = it->second;
-            f(sock, logger, baseDirStr, forceQuit, ctrlFlag);
+        auto it = handlers.find(protocolName);
+        if (it != handlers.cend()) {
+            ServerHandler h = it->second;
+            h(sock, logger, baseDirStr, forceQuit, ctrlFlag);
         } else {
             throw cybozu::Exception("bad protocolName") << protocolName;
         }
@@ -201,34 +198,4 @@ static inline void storageDispatch(
     }
 }
 
-/**
- * For test.
- *
- * Run a protocol as a server.
- */
-static inline void serverDispatch(
-    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
-    const std::atomic<bool> &forceQuit,
-    std::atomic<walb::server::ControlFlag> &ctrlFlag) noexcept
-{
-    std::string clientId, protocolName;
-    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, ctrlFlag)) {
-        /* The protocol has finished or failed. */
-        return;
-    }
-    ProtocolLogger logger(serverId, clientId);
-    try {
-        if (protocolName == "echo") {
-            serverEcho(sock, logger, baseDirStr, forceQuit, ctrlFlag);
-        } else {
-            throw cybozu::Exception("Bad protocolName") << protocolName;
-        }
-    } catch (std::exception &e) {
-        logger.error("runlAsServer failed: %s", e.what());
-    } catch (...) {
-        logger.error("runAsServer failed: unknown error.");
-    }
-}
-
 }} //namespace walb::protocol
-
