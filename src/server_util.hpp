@@ -42,17 +42,17 @@ public:
         cybozu::Socket ssock;
         ssock.bind(port);
         cybozu::thread::ThreadRunnerPool pool(maxNumThreads_);
-        std::atomic<ProcessStatus> flag(ProcessStatus::RUNNING);
+        std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
         std::atomic<bool> forceQuit(false);
-        while (flag == ProcessStatus::RUNNING) {
+        while (st == ProcessStatus::RUNNING) {
             while (!ssock.queryAccept()) {}
             cybozu::Socket sock;
             ssock.accept(sock);
-            pool.add(gen(std::move(sock), forceQuit, flag));
+            pool.add(gen(std::move(sock), forceQuit, st));
             logErrors(pool.gc());
             //LOGi("pool size %zu", pool.size());
         }
-        if (flag == ProcessStatus::FORCE_SHUTDOWN) {
+        if (st == ProcessStatus::FORCE_SHUTDOWN) {
             size_t nCanceled = pool.cancelAll();
             forceQuit = true;
             LOGi("Canceled %zu tasks.", nCanceled);
