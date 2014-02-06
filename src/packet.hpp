@@ -50,18 +50,6 @@ public:
     void read(T &t) { cybozu::load(t, sock_); }
     template <typename T>
     void write(const T &t) { cybozu::save(sock_, t); }
-    void write(const char t[]) {
-        std::string s(t);
-        cybozu::save(sock_, s);
-    }
-    // void write(const char *t) {
-    //     std::string s(t);
-    //     cybozu::save(sock_, s);
-    // }
-    void write(const std::exception &e) {
-        std::string s(e.what());
-        cybozu::save(sock_, s);
-    }
 
 #ifdef PACKET_DEBUG
     void sendDebugMsg(const std::string &msg) {

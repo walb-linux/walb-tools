@@ -45,7 +45,7 @@ static inline void storageStatus(
             packet.write("ok");
             packet.write(volInfo.getStatusAsStrVec());
         } catch (std::exception &e) {
-            packet.write(e);
+            packet.write(e.what());
             logger.error("storageStatus:failed %s", e.what());
         }
     }
