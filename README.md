@@ -5,10 +5,10 @@ WalB kernel device driver is available here: [WalB repository](https://github.co
 
 ### Executable binaries
 
-- walb-client: control backup and replication.
-- walb-worker: monitor and wlog extraction daemon.
-- walb-proxy: forward wlog data from workers to servers.
-- walb-server: manage backup data.
+- client: control backup and replication.
+- storage-server: monitor and wlog extraction daemon.
+- proxy-server: forward wlog data from workers to servers.
+- archive-server: manage backup data.
 
 - wlog-XXX: tools for walb log data.
 - wdiff-XXX: tools for walb diff data.
