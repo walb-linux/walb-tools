@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief Worker data management.
+ * @brief Storage information management.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -18,63 +18,67 @@
 namespace walb {
 
 /**
- * Persistent data for a volume managed by a worker.
+ * Persistent data for a volume managed by a storage daemon.
  *
  * queue file:
  *   must have at least one record.
  */
-class WorkerData
+class StorageVolInfo
 {
 private:
-    cybozu::FilePath baseDir_; /* base directory. */
-    std::string name_; /* volume identifier. */
-    MetaSnap doneRec_;
-    uint64_t nextGid_;
-    uint64_t nextLsid_;
-    uint64_t sizePb_;
+    cybozu::FilePath volDir_; /* volume directory. */
+    std::string volId_; /* volume identifier. */
+    cybozu::FilePath wdevPath_; /* wdev path. */
 
 public:
     /**
-     * @sizePb [physical block].
+     * TODO: mutex.
      */
-    WorkerData(const std::string &baseDirStr, const std::string &name, uint64_t sizePb)
-        : baseDir_(baseDirStr)
-        , name_(name)
-        , doneRec_()
-        , nextGid_(0)
-        , nextLsid_(0)
-        , sizePb_(sizePb) {
-        if (!baseDir_.isFull()) {
-            throw std::runtime_error("base directory must be full path.");
+    StorageVolInfo(const std::string &baseDirStr, const std::string &volId, const std::string &wdevPathName)
+        : volDir_(cybozu::FilePath(baseDirStr) + volId)
+        , volId_(volId)
+        , wdevPath_(wdevPathName) {
+        cybozu::FilePath basePath(baseDirStr);
+        if (basePath.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:already exists") << basePath.str();
         }
-        if (!baseDir_.stat().isDirectory()) {
-            throw std::runtime_error("base directory does not exist.");
+        if (!wdevPath_.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:not found") << wdevPathName;
         }
-        cybozu::FilePath dir = dirPath();
-        if (!dir.stat().exists() && !dir.mkdir()) {
-            throw std::runtime_error("target directory creation failed.");
-        }
-        if (sizePb == 0) {
-            throw std::runtime_error("sizePb must be positive.");
+        if (!basePath.mkdir()) {
+            throw cybozu::Exception("StorageVolInfo:can't make directory") << basePath.str();
         }
     }
     /**
      * You must call this before using.
-     * @lsid the oldest lsid of the walb device.
      */
-    void init(uint64_t lsid) {
-        cybozu::FilePath rp = doneRecordPath();
-        cybozu::FilePath qp = queuePath();
-        if (!rp.stat().exists() || !qp.stat().exists()) {
-            initDoneRecord(lsid);
-            cybozu::util::QueueFile qf(qp.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
-            qf.sync();
-        } else {
-            loadDoneRecord();
-            cybozu::util::QueueFile qf(qp.str(), O_RDWR);
-            initScanQueue(qf);
+    void init() {
+        if (volDir_.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:already exists") << volDir_.str();
         }
+        if (!volDir_.mkdir()) {
+            throw cybozu::Exception("StorageVolInfo:create directory failed") << volDir_.str();
+        }
+
+        {
+            cybozu::FilePath queueFile = volDir_ + "queue";
+            cybozu::util::QueueFile qf(queueFile.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+            qf.sync();
+        }
+        initFile("path", wdevPath_.str());
+        initFile("state", std::string("Syncready"));
+        initFile("done", std::string()); // TODO
     }
+
+private:
+    template <typename T>
+    void initFile(const std::string &fname, const T &t) {
+        cybozu::FilePath path = volDir_ + fname;
+        cybozu::util::FileWriter w(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+        cybozu::save(w, t);
+    }
+
+#if 0
     /**
      * @sizePb [physical block]
      */
@@ -246,6 +250,7 @@ private:
         assert(!it.isEndMark());
         it.get(rec.rawData(), rec.rawSize());
     }
+#endif
 };
 
 } //namespace walb

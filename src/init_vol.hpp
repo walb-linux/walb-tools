@@ -1,4 +1,5 @@
 #pragma once
+#include "storage_vol_info.hpp"
 
 namespace walb {
 
@@ -17,7 +18,7 @@ static inline void clientInitVol(cybozu::Socket& sock, ProtocolLogger& /*logger*
 }
 
 static inline void storageInitVol(cybozu::Socket &sock,
-    ProtocolLogger& /*logger*/,
+    ProtocolLogger& logger,
     const std::string &baseDirStr,
     const std::atomic<bool> &/*forceQuit*/,
     std::atomic<walb::server::ProcessStatus> &/*procStat*/)
@@ -27,19 +28,13 @@ static inline void storageInitVol(cybozu::Socket &sock,
     packet.read(volId);
     packet.read(wdevPathName);
 
-    cybozu::FilePath basePath(baseDirStr);
-    cybozu::FilePath wdevPath(wdevPathName);
-    basePath += volId;
-    if (basePath.stat().exists()) {
-        throw cybozu::Exception("storageInitVol:already exists") << basePath.str();
-    }
-    if (!wdevPath.stat().exists()) {
-        throw cybozu::Exception("storageInitVol:not found") << wdevPathName;
-    }
-    if (!basePath.mkdir()) {
-        throw cybozu::Exception("storageInitVol:can't make directory") << basePath.str();
-    }
-    // QQQ : make path, queue, done, state files
+    StorageVolInfo volInfo(baseDirStr, volId, wdevPathName);
+    volInfo.init();
+
+    packet::Ack ack(sock);
+    ack.send();
+
+    logger.info("storageInitVol: initialize volId %s wdev %s", volId.c_str(), wdevPathName.c_str());
 }
 
 } // walb
