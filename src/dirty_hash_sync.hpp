@@ -414,7 +414,7 @@ static inline void serverDirtyHashSync(
     cybozu::Socket &sock, ProtocolLogger &logger,
     const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
-    std::atomic<walb::server::ControlFlag> &/*ctrlFlag*/)
+    std::atomic<walb::server::ProcessStatus> &/*procStat*/)
 {
     dirty_hash_sync::ServerRunner s("dirty-hash-sync", sock, logger, forceQuit, { baseDirStr });
     s.run();

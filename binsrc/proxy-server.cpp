@@ -40,7 +40,7 @@ public:
             { "proxy-status", proxyStatus },
         };
         protocol::serverDispatch(
-            sock_, serverId_, baseDirStr_, forceQuit_, ctrlFlag_, h);
+            sock_, serverId_, baseDirStr_, forceQuit_, procStat_, h);
     }
 };
 
@@ -79,9 +79,9 @@ int main(int argc, char *argv[]) try
     cybozu::util::checkOrMakeDir(opt.baseDirStr);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ControlFlag> &ctrlFlag) {
+        std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::ProxyRequestWorker>(
-            std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, ctrlFlag);
+            std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

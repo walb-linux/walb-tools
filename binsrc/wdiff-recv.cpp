@@ -24,7 +24,7 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         std::string clientId, protocolName;
-        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, ctrlFlag_)) {
+        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, procStat_)) {
             return;
         }
         /* Original behavior for wdiff-recv command. */
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) try
 
     auto createReqWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ControlFlag> &flag) {
+        std::atomic<walb::server::ProcessStatus> &flag) {
         return std::make_shared<walb::WdiffRequestWorker>(
             std::move(sock), opt.serverId, baseDir.str(), forceQuit, flag);
     };

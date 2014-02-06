@@ -14,7 +14,7 @@ static inline void storageStatus(
     ProtocolLogger &/*logger*/,
     const std::string &/*baseDirStr*/,
     const std::atomic<bool> &/*forceQuit*/,
-    std::atomic<walb::server::ControlFlag> &/*ctrlFlag*/)
+    std::atomic<walb::server::ProcessStatus> &/*procStat*/)
 {
     // now editing
 }

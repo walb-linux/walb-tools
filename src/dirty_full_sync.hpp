@@ -155,7 +155,7 @@ static inline void serverDirtyFullSync(
     cybozu::Socket &sock, ProtocolLogger &logger,
     const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
-    std::atomic<walb::server::ControlFlag> &/*ctrlFlag*/)
+    std::atomic<walb::server::ProcessStatus> &/*procStat*/)
 {
     dirty_full_sync::ServerRunner s("dirty-full-sync", sock, logger, forceQuit, { baseDirStr });
     s.run();

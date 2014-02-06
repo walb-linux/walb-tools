@@ -25,7 +25,7 @@ static inline void serverEcho(cybozu::Socket &sock,
     ProtocolLogger& logger,
     const std::string &/*baseDirStr*/,
     const std::atomic<bool> &/*forceQuit*/,
-    std::atomic<walb::server::ControlFlag> &/*ctrlFlag*/)
+    std::atomic<walb::server::ProcessStatus> &/*procStat*/)
 {
     packet::Packet packet(sock);
     uint32_t size;

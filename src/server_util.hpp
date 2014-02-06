@@ -18,7 +18,7 @@
 namespace walb {
 namespace server {
 
-enum class ControlFlag
+enum class ProcessStatus
 {
     RUNNING, GRACEFUL_SHUTDOWN, FORCE_SHUTDOWN,
 };
@@ -34,7 +34,7 @@ private:
 public:
     using RequestWorkerGenerator =
         std::function<std::shared_ptr<cybozu::thread::Runnable>(
-            cybozu::Socket &&, const std::atomic<bool> &, std::atomic<ControlFlag> &)>;
+            cybozu::Socket &&, const std::atomic<bool> &, std::atomic<ProcessStatus> &)>;
 
     explicit MultiThreadedServer(size_t maxNumThreads = 0)
         : maxNumThreads_(maxNumThreads) {}
@@ -42,9 +42,9 @@ public:
         cybozu::Socket ssock;
         ssock.bind(port);
         cybozu::thread::ThreadRunnerPool pool(maxNumThreads_);
-        std::atomic<ControlFlag> flag(ControlFlag::RUNNING);
+        std::atomic<ProcessStatus> flag(ProcessStatus::RUNNING);
         std::atomic<bool> forceQuit(false);
-        while (flag == ControlFlag::RUNNING) {
+        while (flag == ProcessStatus::RUNNING) {
             while (!ssock.queryAccept()) {}
             cybozu::Socket sock;
             ssock.accept(sock);
@@ -52,7 +52,7 @@ public:
             logErrors(pool.gc());
             //LOGi("pool size %zu", pool.size());
         }
-        if (flag == ControlFlag::FORCE_SHUTDOWN) {
+        if (flag == ProcessStatus::FORCE_SHUTDOWN) {
             size_t nCanceled = pool.cancelAll();
             forceQuit = true;
             LOGi("Canceled %zu tasks.", nCanceled);
@@ -87,17 +87,17 @@ protected:
     std::string serverId_;
     std::string baseDirStr_;
     const std::atomic<bool> &forceQuit_;
-    std::atomic<ControlFlag> &ctrlFlag_;
+    std::atomic<ProcessStatus> &procStat_;
 public:
     RequestWorker(cybozu::Socket &&sock, const std::string &serverId,
                   const std::string &baseDirStr,
                   const std::atomic<bool> &forceQuit,
-                  std::atomic<ControlFlag> &ctrlFlag)
+                  std::atomic<ProcessStatus> &procStat)
         : sock_(std::move(sock))
         , serverId_(serverId)
         , baseDirStr_(baseDirStr)
         , forceQuit_(forceQuit)
-        , ctrlFlag_(ctrlFlag) {}
+        , procStat_(procStat) {}
     void operator()() noexcept override try {
         run();
         sock_.close();

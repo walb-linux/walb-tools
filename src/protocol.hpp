@@ -114,7 +114,7 @@ static inline bool run1stNegotiateAsServer(
     cybozu::Socket &sock, const std::string &serverId,
     std::string &protocolName,
     std::string &clientId,
-    std::atomic<walb::server::ControlFlag> &ctrlFlag)
+    std::atomic<walb::server::ProcessStatus> &procStat)
 {
     packet::Packet packet(sock);
 
@@ -133,12 +133,12 @@ static inline bool run1stNegotiateAsServer(
 
     /* Server shutdown commands. */
     if (protocolName == "graceful-shutdown") {
-        ctrlFlag = walb::server::ControlFlag::GRACEFUL_SHUTDOWN;
+        procStat = walb::server::ProcessStatus::GRACEFUL_SHUTDOWN;
         logger.info("graceful shutdown.");
         ans.ok();
         return true;
     } else if (protocolName == "force-shutdown") {
-        ctrlFlag = walb::server::ControlFlag::FORCE_SHUTDOWN;
+        procStat = walb::server::ProcessStatus::FORCE_SHUTDOWN;
         logger.info("force shutdown.");
         ans.ok();
         return true;
@@ -166,7 +166,7 @@ using ServerHandler = void (*)(
     cybozu::Socket&, ProtocolLogger&,
     const std::string&,
     const std::atomic<bool>&,
-    std::atomic<walb::server::ControlFlag>&);
+    std::atomic<walb::server::ProcessStatus>&);
 
 /**
  * Server dispatcher.
@@ -174,11 +174,11 @@ using ServerHandler = void (*)(
 static inline void serverDispatch(
     cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
-    std::atomic<walb::server::ControlFlag> &ctrlFlag,
+    std::atomic<walb::server::ProcessStatus> &procStat,
     const std::map<std::string, ServerHandler> &handlers) noexcept
 {
     std::string clientId, protocolName;
-    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, ctrlFlag)) {
+    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, procStat)) {
         /* The protocol has finished or failed. */
         return;
     }
@@ -187,7 +187,7 @@ static inline void serverDispatch(
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            h(sock, logger, baseDirStr, forceQuit, ctrlFlag);
+            h(sock, logger, baseDirStr, forceQuit, procStat);
         } else {
             throw cybozu::Exception("bad protocolName") << protocolName;
         }
