@@ -5,6 +5,12 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
+#if 1
+int main()
+{
+}
+#else
+
 #include <cstdio>
 #include <vector>
 #include <chrono>
@@ -391,3 +397,4 @@ int main(int argc, char *argv[])
     }
     return 1;
 }
+#endif

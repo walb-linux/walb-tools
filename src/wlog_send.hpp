@@ -1,5 +1,14 @@
 #pragma once
+#include "protocol.hpp"
 #include "protocol_data.hpp"
+#include "uuid.hpp"
+#include "tmp_file.hpp"
+#include "file_path.hpp"
+#include "walb_log_compressor.hpp"
+#include "walb_log_file.hpp"
+#include "walb_diff_mem.hpp"
+#include "walb_diff_converter.hpp"
+#include "proxy_data.hpp"
 
 namespace walb {
 

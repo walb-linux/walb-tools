@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "util.hpp"
 
 namespace cybozu {
 namespace net {

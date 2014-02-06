@@ -9,8 +9,8 @@
 #include <string>
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
-#include "protocol.hpp"
 #include "net_util.hpp"
+#include "client.hpp"
 
 struct Option : public cybozu::Option
 {
@@ -44,11 +44,9 @@ void runClient(Option &opt)
     ProtocolLogger logger(opt.clientId, serverId);
 
     const std::map<std::string, protocol::ClientHandler> h = {
-        { "echo", clientEcho },
-        { "storage-status", clientStorageStatus },
-        { "proxy-status", clientProxyStatus },
-        { "archive-status", clientArchiveStatus },
-        { "init-vol", clientInitVol },
+        { "status", c2xGetStrVecClient },
+        { "storage-init-vol", c2sInitVolClient },
+        { "archive-init-vol", c2aInitVolClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }

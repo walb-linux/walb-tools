@@ -14,7 +14,7 @@
 #include "file_path.hpp"
 #include "thread_util.hpp"
 #include "net_util.hpp"
-#include "protocol.hpp"
+#include "wlog_send.hpp"
 
 namespace walb {
 

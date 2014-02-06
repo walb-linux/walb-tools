@@ -9,41 +9,11 @@
 #include <map>
 #include <string>
 #include <memory>
-#include <functional>
-#include "cybozu/format.hpp"
 #include "cybozu/socket.hpp"
-#include "cybozu/time.hpp"
-#include "cybozu/atoi.hpp"
-#include "cybozu/itoa.hpp"
 #include "packet.hpp"
 #include "util.hpp"
 #include "walb_logger.hpp"
-#include "serializer.hpp"
-#include "fileio.hpp"
-#include "walb_diff_virt.hpp"
-#include "server_data.hpp"
-#include "proxy_data.hpp"
-#include "walb_diff_pack.hpp"
-#include "walb_diff_compressor.hpp"
-#include "thread_util.hpp"
-#include "murmurhash3.hpp"
-#include "walb_log_compressor.hpp"
-#include "walb_log_file.hpp"
-#include "uuid.hpp"
-#include "walb_diff_converter.hpp"
 #include "server_util.hpp"
-#include "walb_log_net.hpp"
-#include "memory_buffer.hpp"
-
-/* Protocols. */
-#include "init_vol.hpp"
-#include "echo.hpp"
-#include "wlog_send.hpp"
-#include "dirty_full_sync.hpp"
-#include "dirty_hash_sync.hpp"
-#include "storage_status.hpp"
-#include "proxy_status.hpp"
-#include "archive_status.hpp"
 
 namespace walb {
 namespace protocol {
@@ -78,12 +48,31 @@ static inline std::string run1stNegotiateAsClient(
 }
 
 /**
+ * Parameters for commands as a client.
+ */
+struct ClientParams
+{
+    cybozu::Socket &sock;
+    ProtocolLogger &logger;
+    const std::atomic<bool> &forceQuit;
+    const std::vector<std::string> &params;
+
+    ClientParams(
+        cybozu::Socket &sock0,
+        ProtocolLogger &logger0,
+        const std::atomic<bool> &forceQuit0,
+        const std::vector<std::string> &params0)
+        : sock(sock0)
+        , logger(logger0)
+        , forceQuit(forceQuit0)
+        , params(params0) {
+    }
+};
+
+/**
  * Client handler type.
  */
-using ClientHandler = void (*)(
-    cybozu::Socket&, ProtocolLogger&,
-    const std::atomic<bool>&,
-    const std::vector<std::string>&);
+using ClientHandler = void (*)(ClientParams &);
 
 static inline void clientDispatch(
     const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
@@ -93,7 +82,8 @@ static inline void clientDispatch(
     auto it = handlers.find(protocolName);
     if (it != handlers.cend()) {
         ClientHandler h = it->second;
-        h(sock, logger, forceQuit, params);
+        ClientParams p(sock, logger, forceQuit, params);
+        h(p);
     } else {
         throw cybozu::Exception("dispatch:receive OK but protocol not found.") << protocolName;
     }
@@ -160,13 +150,34 @@ static inline bool run1stNegotiateAsServer(
 }
 
 /**
+ * Parameters for commands as a server.
+ */
+struct ServerParams
+{
+    cybozu::Socket &sock;
+    ProtocolLogger &logger;
+    const std::string &baseDirStr;
+    const std::atomic<bool> &forceQuit;
+    std::atomic<walb::server::ProcessStatus> &procStat;
+
+    ServerParams(
+        cybozu::Socket &sock0,
+        ProtocolLogger &logger0,
+        const std::string &baseDirStr0,
+        const std::atomic<bool> &forceQuit0,
+        std::atomic<walb::server::ProcessStatus> &procStat0)
+        : sock(sock0)
+        , logger(logger0)
+        , baseDirStr(baseDirStr0)
+        , forceQuit(forceQuit0)
+        , procStat(procStat0) {
+    }
+};
+
+/**
  * Server handler type.
  */
-using ServerHandler = void (*)(
-    cybozu::Socket&, ProtocolLogger&,
-    const std::string&,
-    const std::atomic<bool>&,
-    std::atomic<walb::server::ProcessStatus>&);
+using ServerHandler = void (*)(ServerParams &);
 
 /**
  * Server dispatcher.
@@ -187,7 +198,8 @@ static inline void serverDispatch(
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            h(sock, logger, baseDirStr, forceQuit, procStat);
+            ServerParams p(sock, logger, baseDirStr, forceQuit, procStat);
+            h(p);
         } else {
             throw cybozu::Exception("bad protocolName") << protocolName;
         }

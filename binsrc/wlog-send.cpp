@@ -12,7 +12,6 @@
 #include "cybozu/socket.hpp"
 #include "cybozu/atoi.hpp"
 #include "cybozu/log.hpp"
-#include "protocol.hpp"
 #include "meta.hpp"
 #include "file_path.hpp"
 #include "time.hpp"
@@ -20,6 +19,7 @@
 #include "meta.hpp"
 #include "walb_log_file.hpp"
 #include "walb_log_net.hpp"
+#include "wlog_send.hpp"
 
 struct Option : cybozu::Option
 {

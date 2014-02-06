@@ -7,14 +7,20 @@
  */
 #include "cybozu/option.hpp"
 #include "cybozu/socket.hpp"
-#include "walb_log_file.hpp"
-#include "walb_log_net.hpp"
-#include "walb_logger.hpp"
-#include "server_util.hpp"
 #include "file_path.hpp"
 #include "thread_util.hpp"
 #include "net_util.hpp"
+#include "tmp_file.hpp"
+#include "server_util.hpp"
 #include "protocol.hpp"
+#include "uuid.hpp"
+#include "meta.hpp"
+#include "walb_log_file.hpp"
+#include "walb_log_net.hpp"
+#include "walb_logger.hpp"
+#include "walb_diff_virt.hpp"
+#include "walb_diff_pack.hpp"
+#include "walb_diff_compressor.hpp"
 
 namespace walb {
 

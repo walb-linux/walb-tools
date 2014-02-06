@@ -13,7 +13,6 @@
 #include "cybozu/atoi.hpp"
 #include "cybozu/log.hpp"
 #include "cybozu/thread.hpp"
-#include "protocol.hpp"
 #include "meta.hpp"
 #include "file_path.hpp"
 #include "time.hpp"
@@ -23,6 +22,8 @@
 #include "walb_log_net.hpp"
 #include "walb_diff_merge.hpp"
 #include "walb_diff_compressor.hpp"
+#include "protocol.hpp"
+#include "uuid.hpp"
 
 struct Option : cybozu::Option
 {

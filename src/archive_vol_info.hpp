@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief Server data.
+ * @brief Archive volume information.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -30,40 +30,50 @@ const std::string RESTORE_PREFIX = "r_";
  * Data manager for a volume in a server.
  * This is not thread-safe.
  */
-class ServerData
+class ArchiveVolInfo
 {
 private:
     const cybozu::FilePath baseDir_;
     const std::string vgName_;
-    const std::string name_;
+    const std::string volId_;
+
+#if 0
     std::shared_ptr<WalbDiffFiles> wdiffsP_;
     MetaSnap baseRecord_; /* snapshot information of the volume. */
+#endif
 
 public:
     /**
      * @baseDirStr base directory path string.
-     * @name volume identifier.
+     * @volId volume identifier.
      * @vgName volume group name.
      */
-    ServerData(const std::string &baseDirStr, const std::string &name,
-               const std::string &vgName = VG_NAME)
+    ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
+                   const std::string &vgName = VG_NAME)
         : baseDir_(baseDirStr)
         , vgName_(vgName)
-        , name_(name)
-        , wdiffsP_()
-        , baseRecord_() {
+        , volId_(volId) {
         if (!baseDir_.stat().isDirectory()) {
-            throw std::runtime_error("Directory not found: " + baseDir_.str());
+            throw cybozu::Exception("Directory not found: " + baseDir_.str());
         }
         if (!cybozu::lvm::vgExists(vgName_)) {
-            throw std::runtime_error("Vg does not exist: " + vgName_);
+            throw cybozu::Exception("Vg does not exist: " + vgName_);
         }
+#if 0
         wdiffsP_ = std::make_shared<WalbDiffFiles>(getDir().str(), true);
         if (!loadBaseRecord()) {
             /* TODO: gid can be specified. */
             reset(0);
         }
+#endif
     }
+    void init() {
+
+        // QQQ
+
+    }
+
+#if 0
     bool lvExists() const {
         return cybozu::lvm::exists(vgName_, lvName());
     }
@@ -88,7 +98,7 @@ public:
         }
         if (newSizeLb < lv.sizeLb()) {
             /* Shrink is not supported. */
-            throw std::runtime_error(
+            throw cybozu::Exception(
                 "You tried to shrink the volume: " + lv.path().str());
         }
         lv.resize(newSizeLb);
@@ -99,7 +109,7 @@ public:
     cybozu::lvm::Lv getLv() const {
         cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName_, lvName());
         if (lv.isSnapshot()) {
-            throw std::runtime_error(
+            throw cybozu::Exception(
                 "The target must not be snapshot: " + lv.path().str());
         }
         return lv;
@@ -135,7 +145,7 @@ public:
      */
     std::map<uint64_t, cybozu::lvm::Lv> getRestores() const {
         std::map<uint64_t, cybozu::lvm::Lv> map;
-        std::string prefix = RESTORE_PREFIX + name_ + "_";
+        std::string prefix = RESTORE_PREFIX + volId_ + "_";
         for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
             if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
                 std::string gidStr
@@ -194,7 +204,7 @@ public:
         std::string latestState = latest.isDirty() ? "dirty" : "clean";
 
         os << "vg: " << vgName_ << std::endl;
-        os << "name: " << name_ << std::endl;
+        os << "name: " << volId_ << std::endl;
         os << "sizeLb: " << getLv().sizeLb() << std::endl;
         os << "oldest: (" << oldest.gid0() << ", " << oldest.gid1() << ") "
            << oldestState << std::endl;
@@ -219,7 +229,7 @@ public:
         print(ss);
         std::string s(ss.str());
         if (::fwrite(&s[0], 1, s.size(), fp) < s.size()) {
-            throw std::runtime_error("fwrite failed.");
+            throw cybozu::Exception("fwrite failed.");
         }
         ::fflush(fp);
     }
@@ -283,14 +293,14 @@ public:
      * Applied diff will be deleted after the application completed successfully.
      */
     void apply(uint64_t gid) {
-        throw std::runtime_error("Do not call this.");
+        throw cybozu::Exception("Do not call this.");
 
         std::vector<MetaDiff> diffV = diffsToApply(gid);
         if (diffV.empty()) return;
         MetaDiff diff = diffV[0];
         for (size_t i = 1; i < diffV.size(); i++) {
             if (!canMerge(diff, diffV[i])) {
-                throw std::runtime_error("could not merge.");
+                throw cybozu::Exception("could not merge.");
             }
             diff = merge(diff, diffV[i]);
         }
@@ -448,7 +458,7 @@ public:
      */
     void finishToConsolidate(const MetaDiff &diff) {
         if (!wdiffsP_->consolidate(diff.snap0().gid0(), diff.snap1().gid0())) {
-            throw std::runtime_error("Consolidate failed.");
+            throw cybozu::Exception("Consolidate failed.");
         }
         wdiffsP_->cleanup();
     }
@@ -457,10 +467,10 @@ private:
         return cybozu::lvm::getVg(vgName_);
     }
     std::string lvName() const {
-        return VOLUME_PREFIX + name_;
+        return VOLUME_PREFIX + volId_;
     }
     cybozu::FilePath getDir() const {
-        return baseDir_ + cybozu::FilePath(name_);
+        return baseDir_ + cybozu::FilePath(volId_);
     }
     cybozu::FilePath baseRecordPath() const {
         return getDir() + cybozu::FilePath("base");
@@ -480,13 +490,14 @@ private:
     }
     void checkBaseRecord() const {
         if (!baseRecord_.isValid()) {
-            throw std::runtime_error("baseRecord is not valid.");
+            throw cybozu::Exception("baseRecord is not valid.");
         }
     }
     std::string restoredSnapshotName(uint64_t gid) const {
         std::string suffix = cybozu::util::formatString("_%" PRIu64 "", gid);
-        return RESTORE_PREFIX + name_ + suffix;
+        return RESTORE_PREFIX + volId_ + suffix;
     }
 };
+#endif
 
 } //namespace walb

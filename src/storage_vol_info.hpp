@@ -1,12 +1,6 @@
 #pragma once
-/**
- * @file
- * @brief Storage information management.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
- */
 #include <cassert>
+#include <cstring>
 #include <time.h>
 #include "cybozu/serializer.hpp"
 #include "queue_file.hpp"
@@ -14,6 +8,7 @@
 #include "tmp_file.hpp"
 #include "tmp_file_serializer.hpp"
 #include "meta.hpp"
+#include "uuid.hpp"
 
 namespace walb {
 
@@ -41,14 +36,11 @@ public:
         , volId_(volId)
         , wdevPath_(wdevPathName) {
         cybozu::FilePath basePath(baseDirStr);
-        if (basePath.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:already exists") << basePath.str();
+        if (!basePath.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:not found") << basePath.str();
         }
         if (!wdevPath_.stat().exists()) {
             throw cybozu::Exception("StorageVolInfo:not found") << wdevPathName;
-        }
-        if (!basePath.mkdir()) {
-            throw cybozu::Exception("StorageVolInfo:can't make directory") << basePath.str();
         }
     }
     /**
@@ -68,7 +60,7 @@ public:
         std::string s;
         loadFile("path", s);
         wdevPath_ = cybozu::FilePath(s);
-        if (wdevPath_.stat().exists()) {
+        if (!wdevPath_.stat().exists()) {
             throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
         }
     }
@@ -76,6 +68,7 @@ public:
      * You must call this before using.
      */
     void init() {
+        LOGe("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
         if (volDir_.stat().exists()) {
             throw cybozu::Exception("StorageVolInfo:already exists") << volDir_.str();
         }
@@ -91,7 +84,7 @@ public:
         saveFile("path", wdevPath_.str());
         saveFile("state", "SyncReady");
         saveFile("done", ""); // TODO
-        cybozu::Uuid uuid = generateUuid();
+        cybozu::Uuid uuid = zeroUuid();
         saveFile("uuid", uuid);
     }
     /**
@@ -141,10 +134,9 @@ private:
         cybozu::util::FileReader r(path.str(), O_RDONLY);
         cybozu::load(t, r);
     }
-    cybozu::Uuid generateUuid() const {
+    cybozu::Uuid zeroUuid() const {
         cybozu::Uuid uuid;
-        cybozu::util::Random<uint64_t> rand;
-        rand.fill(uuid.rawData(), uuid.rawSize());
+        ::memset(uuid.rawData(), 0, uuid.rawSize());
         return uuid;
     }
 #if 0

@@ -15,10 +15,10 @@
 #include "cybozu/serializer.hpp"
 #include "cybozu/option.hpp"
 #include "file_path.hpp"
-#include "protocol.hpp"
 #include "net_util.hpp"
 #include "server_util.hpp"
 #include "file_util.hpp"
+#include "proxy.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -36,8 +36,7 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
-            { "echo", serverEcho },
-            { "proxy-status", proxyStatus },
+            { "proxy-status", c2pStatusServer },
         };
         protocol::serverDispatch(
             sock_, serverId_, baseDirStr_, forceQuit_, procStat_, h);
