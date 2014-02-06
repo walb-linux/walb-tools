@@ -22,6 +22,8 @@ namespace walb {
  *
  * queue file:
  *   must have at least one record.
+ *
+ * TODO: mutex.
  */
 class StorageVolInfo
 {
@@ -32,7 +34,7 @@ private:
 
 public:
     /**
-     * TODO: mutex.
+     * Volume directory must exist.
      */
     StorageVolInfo(const std::string &baseDirStr, const std::string &volId, const std::string &wdevPathName)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
@@ -47,6 +49,27 @@ public:
         }
         if (!basePath.mkdir()) {
             throw cybozu::Exception("StorageVolInfo:can't make directory") << basePath.str();
+        }
+    }
+    /**
+     * Volume directory must exist.
+     */
+    StorageVolInfo(const std::string &baseDirStr, const std::string &volId)
+        : volDir_(cybozu::FilePath(baseDirStr) + volId)
+        , volId_(volId)
+        , wdevPath_() {
+        cybozu::FilePath basePath(baseDirStr);
+        if (!basePath.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:not exists") << basePath.str();
+        }
+        if (!basePath.stat().isDirectory()) {
+            throw cybozu::Exception("StorageVolInfo:not directory") << basePath.str();
+        }
+        std::string s;
+        loadFile("path", s);
+        wdevPath_ = cybozu::FilePath(s);
+        if (wdevPath_.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
         }
     }
     /**
@@ -65,19 +88,65 @@ public:
             cybozu::util::QueueFile qf(queueFile.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
             qf.sync();
         }
-        initFile("path", wdevPath_.str());
-        initFile("state", std::string("Syncready"));
-        initFile("done", std::string()); // TODO
+        saveFile("path", wdevPath_.str());
+        saveFile("state", "SyncReady");
+        saveFile("done", ""); // TODO
+        cybozu::Uuid uuid = generateUuid();
+        saveFile("uuid", uuid);
+    }
+    /**
+     * get status as a string vector.
+     */
+    std::vector<std::string> getStatusAsStrVec() const {
+        std::vector<std::string> v;
+        auto &fmt = cybozu::util::formatString;
+        v.push_back(fmt("volId %s", volId_.c_str()));
+        v.push_back(fmt("wdevPath %s", wdevPath_.cStr()));
+        uint64_t sizeLb = 0; // TODO
+        v.push_back(fmt("size %" PRIu64 "", sizeLb));
+        std::string stateStr;
+        loadFile("state", stateStr);
+        v.push_back(fmt("state %s", stateStr.c_str()));
+        uint64_t logFreeSpacePb = 0; // TODO
+        v.push_back(fmt("logFreeSpace %" PRIu64 "", logFreeSpacePb));
+        uint64_t logCapacityPb = 0; // TODO
+        v.push_back(fmt("logCapacity %" PRIu64 "", logCapacityPb));
+        cybozu::Uuid uuid;
+        loadFile("uuid", uuid);
+        v.push_back(fmt("uuid %s", uuid.str().c_str()));
+        uint32_t pbs = 0;
+        v.push_back(fmt("pbs %" PRIu32 "", pbs));
+        uint32_t salt = 0; // TODO
+        v.push_back(fmt("salt %" PRIu32 "", salt));
+
+        // TODO
+
+        // base <lsid> <gidB> <gidE> <canMerge> <timestamp>
+        // snapshot <lsid> <gid> <gid> <canMerge> <timestamp>
+
+        return v;
     }
 
 private:
     template <typename T>
-    void initFile(const std::string &fname, const T &t) {
+    void saveFile(const std::string &fname, const T &t) const {
+        cybozu::TmpFile tmp(volDir_.str());
+        cybozu::save(tmp, t);
         cybozu::FilePath path = volDir_ + fname;
-        cybozu::util::FileWriter w(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
-        cybozu::save(w, t);
+        tmp.save(path.str());
     }
-
+    template <typename T>
+    void loadFile(const std::string &fname, T &t) const {
+        cybozu::FilePath path = volDir_ + fname;
+        cybozu::util::FileReader r(path.str(), O_RDONLY);
+        cybozu::load(t, r);
+    }
+    cybozu::Uuid generateUuid() const {
+        cybozu::Uuid uuid;
+        cybozu::util::Random<uint64_t> rand;
+        rand.fill(uuid.rawData(), uuid.rawSize());
+        return uuid;
+    }
 #if 0
     /**
      * @sizePb [physical block]
