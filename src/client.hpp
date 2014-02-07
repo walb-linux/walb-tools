@@ -5,25 +5,6 @@ namespace walb {
 
 namespace client_local {
 
-static inline void sendStrVec(
-    cybozu::Socket &sock,
-    const std::vector<std::string> &v, size_t numToSend, const char *msg)
-{
-    if (v.size() != numToSend) {
-        throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
-    }
-    packet::Packet packet(sock);
-    for (size_t i = 0; i < numToSend; i++) {
-        if (v[i].empty()) {
-            throw cybozu::Exception(msg) << "empty string" << i;
-        }
-        packet.write(v[i]);
-    }
-
-    packet::Ack ack(sock);
-    ack.recv();
-}
-
 } // namespace client_local
 
 /**
@@ -54,7 +35,7 @@ static inline void c2xGetStrVecClient(protocol::ClientParams &p)
  */
 static inline void c2sInitVolClient(protocol::ClientParams &p)
 {
-    client_local::sendStrVec(p.sock, p.params, 2, "c2sInitVolClient");
+    protocol::sendStrVec(p.sock, p.params, 2, "c2sInitVolClient");
 }
 
 /**
@@ -62,7 +43,7 @@ static inline void c2sInitVolClient(protocol::ClientParams &p)
  */
 static inline void c2aInitVolClient(protocol::ClientParams &p)
 {
-    client_local::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
+    protocol::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
 }
 
 } // namespace walb

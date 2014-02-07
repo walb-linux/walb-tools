@@ -33,7 +33,7 @@ const std::string RESTORE_PREFIX = "r_";
 class ArchiveVolInfo
 {
 private:
-    const cybozu::FilePath baseDir_;
+    const cybozu::FilePath volDir_;
     const std::string vgName_;
     const std::string volId_;
 
@@ -50,11 +50,12 @@ public:
      */
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
                    const std::string &vgName = VG_NAME)
-        : baseDir_(baseDirStr)
+        : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , vgName_(vgName)
         , volId_(volId) {
-        if (!baseDir_.stat().isDirectory()) {
-            throw cybozu::Exception("Directory not found: " + baseDir_.str());
+        cybozu::FilePath baseDir(baseDirStr);
+        if (!baseDir.stat().isDirectory()) {
+            throw cybozu::Exception("Directory not found: " + baseDirStr);
         }
         if (!cybozu::lvm::vgExists(vgName_)) {
             throw cybozu::Exception("Vg does not exist: " + vgName_);
@@ -68,9 +69,9 @@ public:
 #endif
     }
     void init() {
-
-        // QQQ
-
+        util::saveFile(volDir_, "uuid", cybozu::Uuid());
+        util::saveFile(volDir_, "state", "SyncReady");
+        util::saveFile(volDir_, "base", ""); // TODO
     }
 
 #if 0
@@ -497,7 +498,7 @@ private:
         std::string suffix = cybozu::util::formatString("_%" PRIu64 "", gid);
         return RESTORE_PREFIX + volId_ + suffix;
     }
-};
 #endif
+};
 
 } //namespace walb

@@ -17,7 +17,7 @@
 #include "file_path.hpp"
 #include "net_util.hpp"
 #include "server_util.hpp"
-#include "file_util.hpp"
+#include "walb_util.hpp"
 #include "serializer.hpp"
 #include "fileio.hpp"
 #include "fileio_serializer.hpp"
@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     cybozu::OpenLogFile(opt.logFilePath());
-    cybozu::util::checkOrMakeDir(opt.baseDirStr);
+    walb::util::makeDir(opt.baseDirStr, "storageServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {

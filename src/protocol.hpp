@@ -210,4 +210,44 @@ static inline void serverDispatch(
     }
 }
 
-}} //namespace walb::protocol
+static inline void sendStrVec(
+    cybozu::Socket &sock,
+    const std::vector<std::string> &v, size_t numToSend, const char *msg)
+{
+    if (v.size() != numToSend) {
+        throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
+    }
+    packet::Packet packet(sock);
+    for (size_t i = 0; i < numToSend; i++) {
+        if (v[i].empty()) {
+            throw cybozu::Exception(msg) << "empty string" << i;
+        }
+    }
+    packet.write(v);
+
+    packet::Ack(sock).recv();
+}
+
+static inline std::vector<std::string> recvStrVec(
+    cybozu::Socket &sock, size_t numToRecv, const char *msg, bool doAck = true)
+{
+    packet::Packet packet(sock);
+    std::vector<std::string> v;
+    packet.read(v);
+    if (v.size() != numToRecv) {
+        throw cybozu::Exception(msg) << "bad size" << numToRecv << v.size();
+    }
+    for (size_t i = 0; i < numToRecv; i++) {
+        if (v[i].empty()) {
+            throw cybozu::Exception(msg) << "empty string" << i;
+        }
+    }
+    if (doAck) {
+        packet::Ack(sock).send();
+    }
+    return v;
+}
+
+}} // namespace walb::protocol
+
+

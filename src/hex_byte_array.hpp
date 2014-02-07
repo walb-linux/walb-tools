@@ -27,6 +27,7 @@ class HexByteArrayT
 private:
     uint8_t data_[SIZE];
 public:
+    HexByteArrayT() : data_() {}
     bool operator==(const T &rhs) const {
         return ::memcmp(data_, rhs.data_, SIZE) == 0;
     }

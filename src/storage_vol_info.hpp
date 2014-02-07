@@ -9,6 +9,7 @@
 #include "tmp_file_serializer.hpp"
 #include "meta.hpp"
 #include "uuid.hpp"
+#include "walb_util.hpp"
 
 namespace walb {
 
@@ -58,7 +59,7 @@ public:
             throw cybozu::Exception("StorageVolInfo:not directory") << basePath.str();
         }
         std::string s;
-        loadFile("path", s);
+        util::loadFile(volDir_, "path", s);
         wdevPath_ = cybozu::FilePath(s);
         if (!wdevPath_.stat().exists()) {
             throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
@@ -69,23 +70,16 @@ public:
      */
     void init() {
         LOGe("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
-        if (volDir_.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:already exists") << volDir_.str();
-        }
-        if (!volDir_.mkdir()) {
-            throw cybozu::Exception("StorageVolInfo:create directory failed") << volDir_.str();
-        }
-
+        util::makeDir(volDir_.str(), "StorageVolInfo", true);
         {
             cybozu::FilePath queueFile = volDir_ + "queue";
             cybozu::util::QueueFile qf(queueFile.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
             qf.sync();
         }
-        saveFile("path", wdevPath_.str());
-        saveFile("state", "SyncReady");
-        saveFile("done", ""); // TODO
-        cybozu::Uuid uuid = zeroUuid();
-        saveFile("uuid", uuid);
+        util::saveFile(volDir_, "path", wdevPath_.str());
+        util::saveFile(volDir_, "state", "SyncReady");
+        util::saveFile(volDir_, "done", ""); // TODO
+        util::saveFile(volDir_, "uuid", cybozu::Uuid());
     }
     /**
      * get status as a string vector.
@@ -98,14 +92,14 @@ public:
         uint64_t sizeLb = 0; // TODO
         v.push_back(fmt("size %" PRIu64 "", sizeLb));
         std::string stateStr;
-        loadFile("state", stateStr);
+        util::loadFile(volDir_, "state", stateStr);
         v.push_back(fmt("state %s", stateStr.c_str()));
         uint64_t logFreeSpacePb = 0; // TODO
         v.push_back(fmt("logFreeSpace %" PRIu64 "", logFreeSpacePb));
         uint64_t logCapacityPb = 0; // TODO
         v.push_back(fmt("logCapacity %" PRIu64 "", logCapacityPb));
         cybozu::Uuid uuid;
-        loadFile("uuid", uuid);
+        util::loadFile(volDir_, "uuid", uuid);
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         uint32_t pbs = 0;
         v.push_back(fmt("pbs %" PRIu32 "", pbs));
@@ -121,24 +115,6 @@ public:
     }
 
 private:
-    template <typename T>
-    void saveFile(const std::string &fname, const T &t) const {
-        cybozu::TmpFile tmp(volDir_.str());
-        cybozu::save(tmp, t);
-        cybozu::FilePath path = volDir_ + fname;
-        tmp.save(path.str());
-    }
-    template <typename T>
-    void loadFile(const std::string &fname, T &t) const {
-        cybozu::FilePath path = volDir_ + fname;
-        cybozu::util::FileReader r(path.str(), O_RDONLY);
-        cybozu::load(t, r);
-    }
-    cybozu::Uuid zeroUuid() const {
-        cybozu::Uuid uuid;
-        ::memset(uuid.rawData(), 0, uuid.rawSize());
-        return uuid;
-    }
 #if 0
     /**
      * @sizePb [physical block]

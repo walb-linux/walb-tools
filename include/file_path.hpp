@@ -142,7 +142,6 @@ public:
         : path_(path), normalized_(false), statP_() {}
     explicit FilePath(std::string &&path)
         : path_(std::move(path)), normalized_(false), statP_() {}
-
     /* Copy constructor */
     FilePath(const FilePath &rhs)
         : path_(rhs.path_), normalized_(rhs.normalized_)

@@ -30,10 +30,10 @@ static inline void c2sStatusServer(protocol::ServerParams &p)
 
 static inline void c2sInitVolServer(protocol::ServerParams &p)
 {
-    packet::Packet packet(p.sock);
-    std::string volId, wdevPathName;
-    packet.read(volId);
-    packet.read(wdevPathName);
+    const std::vector<std::string> v =
+        protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
+    const std::string &volId = v[0];
+    const std::string &wdevPathName = v[1];
 
     StorageVolInfo volInfo(p.baseDirStr, volId, wdevPathName);
     volInfo.init();
