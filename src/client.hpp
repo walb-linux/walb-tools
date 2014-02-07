@@ -3,6 +3,33 @@
 
 namespace walb {
 
+namespace client_local {
+
+static inline void sendStrVec(
+    cybozu::Socket &sock,
+    const std::vector<std::string> &v, size_t numToSend, const char *msg)
+{
+    if (v.size() != numToSend) {
+        throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
+    }
+    packet::Packet packet(sock);
+    for (size_t i = 0; i < numToSend; i++) {
+        if (v[i].empty()) {
+            throw cybozu::Exception(msg) << "empty string" << i;
+        }
+        packet.write(v[i]);
+    }
+
+    packet::Ack ack(sock);
+    ack.recv();
+}
+
+} // namespace client_local
+
+/**
+ * params.size() == 0 or 1.
+ * params[0]: volId
+ */
 static inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
     packet::Packet packet(p.sock);
@@ -21,22 +48,21 @@ static inline void c2xGetStrVecClient(protocol::ClientParams &p)
     }
 }
 
+/**
+ * param[0]: volId
+ * param[2]: wdevPath
+ */
 static inline void c2sInitVolClient(protocol::ClientParams &p)
 {
-    if (p.params.size() != 2 || p.params[0].empty() || p.params[1].empty()) {
-        throw cybozu::Exception("c2sInitVolClient:bad params size");
-    }
-    packet::Packet packet(p.sock);
-    packet.write(p.params[0]);
-    packet.write(p.params[1]);
-
-    packet::Ack ack(p.sock);
-    ack.recv();
+    client_local::sendStrVec(p.sock, p.params, 2, "c2sInitVolClient");
 }
 
-static inline void c2aInitVolClient(protocol::ClientParams &/*p*/)
+/**
+ * param[0]: volId
+ */
+static inline void c2aInitVolClient(protocol::ClientParams &p)
 {
-    // parameters check
+    client_local::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
 }
 
 } // namespace walb
