@@ -17,21 +17,15 @@ static inline void c2sStatusServer(protocol::ServerParams &p)
     } else {
         // for a volume
         const std::string &volId = params[0];
-        try {
-            StorageVolInfo volInfo(p.baseDirStr, volId);
-            packet.write("ok");
-            packet.write(volInfo.getStatusAsStrVec());
-        } catch (std::exception &e) {
-            packet.write(e.what());
-            p.logger.error("c2sStatusServer:failed %s", e.what());
-        }
+        StorageVolInfo volInfo(p.baseDirStr, volId);
+        packet.write("ok");
+        packet.write(volInfo.getStatusAsStrVec());
     }
 }
 
 static inline void c2sInitVolServer(protocol::ServerParams &p)
 {
-    const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
     const std::string &volId = v[0];
     const std::string &wdevPathName = v[1];
 
@@ -46,6 +40,28 @@ static inline void c2sInitVolServer(protocol::ServerParams &p)
 
 static inline void c2sFullSyncServer(protocol::ServerParams &p)
 {
+    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sFullSyncServer", false);
+    const std::string& volId = v[0];
+    const uint64_t bulkLb = cybozu::atoi(v[1]);
+    const uint64_t curTime = ::time(0);
+
+    StorageVolInfo volInfo(p.baseDirStr, volId);
+    packet::Packet packet(p.sock);
+
+    const std::string state = volInfo.getState();
+    if (state != "SyncReady") {
+        cybozu::Exception e("c2sFullSyncServer:bad state");
+        e << state;
+        packet.write(e.what());
+        throw e;
+    }
+
+    volInfo.resetWlog(0);
+
+    const uint64_t sizeLb = getSizeLb(volInfo.getWdevPath());
+    const cybozu::Uuid uuid = volInfo.getUuid();
+
+    // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
 }
 
 static inline void s2aDirtyFullSyncClient(protocol::ClientParams &p)
