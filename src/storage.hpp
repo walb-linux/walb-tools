@@ -44,4 +44,12 @@ static inline void c2sInitVolServer(protocol::ServerParams &p)
     p.logger.info("c2sInitVolServer: initialize volId %s wdev %s", volId.c_str(), wdevPathName.c_str());
 }
 
+static inline void c2sFullSyncServer(protocol::ServerParams &p)
+{
+}
+
+static inline void s2aDirtyFullSyncClient(protocol::ClientParams &p)
+{
+}
+
 } // walb

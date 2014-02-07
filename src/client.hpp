@@ -4,7 +4,6 @@
 namespace walb {
 
 namespace client_local {
-
 } // namespace client_local
 
 /**
@@ -30,8 +29,8 @@ static inline void c2xGetStrVecClient(protocol::ClientParams &p)
 }
 
 /**
- * param[0]: volId
- * param[2]: wdevPath
+ * params[0]: volId
+ * params[2]: wdevPath
  */
 static inline void c2sInitVolClient(protocol::ClientParams &p)
 {
@@ -39,11 +38,15 @@ static inline void c2sInitVolClient(protocol::ClientParams &p)
 }
 
 /**
- * param[0]: volId
+ * params[0]: volId
  */
 static inline void c2aInitVolClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
+}
+
+static inline void c2sFullSyncClient(protocol::ClientParams &p)
+{
 }
 
 } // namespace walb

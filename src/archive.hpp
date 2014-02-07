@@ -5,17 +5,13 @@
 namespace walb {
 
 namespace archive_local {
-
 } // namespace archive_local
 
 static inline void c2aStatusServer(protocol::ServerParams &/*p*/)
 {
-    // now editing
+    // QQQ
 }
 
-/**
- *
- */
 static inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const std::vector<std::string> v =
@@ -26,11 +22,14 @@ static inline void c2aInitVolServer(protocol::ServerParams &p)
     volInfo.init();
 
     packet::Ack(p.sock).send();
+}
 
-    // QQQ
-
-
-    // now editing
+/**
+ * Execute dirty full sync protocol as server.
+ * Client is storage server or another archive server.
+ */
+static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
+{
 }
 
 } // walb
