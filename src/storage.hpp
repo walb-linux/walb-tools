@@ -4,6 +4,16 @@
 
 namespace walb {
 
+struct StorageSingleton
+{
+    static StorageSingleton& getInstance() {
+        static StorageSingleton instance;
+        return instance;
+    }
+    cybozu::SocketAddr archive;
+    std::vector<cybozu::SocketAddr> proxyV;
+};
+
 static inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet packet(p.sock);
@@ -62,6 +72,18 @@ static inline void c2sFullSyncServer(protocol::ServerParams &p)
     const cybozu::Uuid uuid = volInfo.getUuid();
 
     // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
+
+
+#if 0
+    cybozu::Socket sock;
+    sock.connect(opt.addr, opt.port);
+    std::atomic<bool> forceQuit(false);
+    std::string serverId = protocol::run1stNegotiateAsClient(
+        sock, opt.clientId, opt.cmd);
+    ProtocolLogger logger(opt.clientId, serverId);
+    // QQQ
+#endif
+
 }
 
 static inline void s2aDirtyFullSyncClient(protocol::ClientParams &p)

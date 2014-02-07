@@ -4,8 +4,8 @@
 
 namespace walb {
 
-namespace client_local {
-} // namespace client_local
+namespace client_impl {
+} // namespace client_impl
 
 /**
  * params.size() == 0 or 1.

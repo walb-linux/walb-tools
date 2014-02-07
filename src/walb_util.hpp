@@ -11,6 +11,8 @@
 #include "tmp_file.hpp"
 #include "uuid.hpp"
 #include "cybozu/exception.hpp"
+#include "cybozu/string_operation.hpp"
+#include "cybozu/socket.hpp"
 
 namespace walb {
 
@@ -61,6 +63,26 @@ void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
 {
     cybozu::util::FileReader r((dir + fname).str(), O_RDONLY);
     cybozu::load(t, r);
+}
+
+inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
+{
+    StrVec v;
+    if (cybozu::Split(v, addrPort, ':', 2) != 2) {
+        throw cybozu::Exception("parse error") << addrPort;
+    }
+    return cybozu::SocketAddr(v[0], static_cast<uint16_t>(cybozu::atoi(v[1])));
+}
+
+inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &multiAddrPort)
+{
+    std::vector<cybozu::SocketAddr> ret;
+    StrVec v;
+    cybozu::Split(v, multiAddrPort, ',');
+    for (const std::string &addrPort : v) {
+        ret.emplace_back(parseSocketAddr(addrPort));
+    }
+    return ret;
 }
 
 }} // namespace walb::util

@@ -55,11 +55,15 @@ struct Option : cybozu::Option
     std::string baseDirStr;
     std::string logFileStr;
     std::string serverId;
+    std::string archiveDStr;
+    std::string multiProxyDStr;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
+        appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&serverId, hostName, "id", "server identifier");
@@ -71,6 +75,20 @@ struct Option : cybozu::Option
     }
 };
 
+void initSingleton(Option &opt)
+{
+    walb::StorageSingleton &s = walb::StorageSingleton::getInstance();
+
+    std::string addr;
+    uint16_t port;
+    s.archive.set(addr, port);
+
+    s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
+    s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
+
+    // QQQ
+}
+
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -79,6 +97,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     cybozu::OpenLogFile(opt.logFilePath());
+    initSingleton(opt);
     walb::util::makeDir(opt.baseDirStr, "storageServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
