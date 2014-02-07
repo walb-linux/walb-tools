@@ -13,6 +13,9 @@
 #include "cybozu/exception.hpp"
 
 namespace walb {
+
+typedef std::vector<std::string> StrVec;
+
 namespace util {
 
 /**

@@ -10,6 +10,7 @@
 #include "meta.hpp"
 #include "uuid.hpp"
 #include "walb_util.hpp"
+#include "wdev_util.hpp"
 
 namespace walb {
 
@@ -113,6 +114,23 @@ public:
 
         return v;
     }
+	std::string getState() const {
+		std::string ret;
+		util::loadFile(volDir_, "state", ret);
+		return ret;
+	}
+	void resetWlog(uint64_t gid)
+	{
+		cybozu::disable_warning_unused_variable(gid);
+		// TODO
+		resetWal(wdevPath_.str());
+	}
+	cybozu::Uuid getUuid() const {
+		cybozu::Uuid uuid;
+		util::loadFile(volDir_, "uuid", uuid);
+		return uuid;
+	}
+	std::string getWdevPath() const { return wdevPath_.str(); }
 
 private:
 #if 0
