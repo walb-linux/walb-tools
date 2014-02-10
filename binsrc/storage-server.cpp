@@ -79,10 +79,6 @@ void initSingleton(Option &opt)
 {
     walb::StorageSingleton &s = walb::StorageSingleton::getInstance();
 
-    std::string addr;
-    uint16_t port;
-    s.archive.set(addr, port);
-
     s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
     s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
     s.nodeId = opt.nodeId;
