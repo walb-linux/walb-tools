@@ -53,20 +53,20 @@ struct Option : cybozu::Option
     std::string logFileStr;
 
     Option() {
-        walb::ArchiveSingleton &s = walb::getGlobal();
+        walb::ArchiveSingleton &a = walb::getArchiveGlobal();
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        appendOpt(&s.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
+        appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&s.nodeId, hostName, "id", "node identifier");
+        appendOpt(&a.nodeId, hostName, "id", "node identifier");
 
         appendHelp("h");
     }
     std::string logFilePath() const {
-        return (cybozu::FilePath(walb::s.baseDirStr) + cybozu::FilePath(logFileStr)).str();
+        return (cybozu::FilePath(walb::ga.baseDirStr) + cybozu::FilePath(logFileStr)).str();
     }
 };
 
@@ -77,13 +77,13 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::makeDir(walb::s.baseDirStr, "archiveServer", false);
+    walb::util::makeDir(walb::ga.baseDirStr, "archiveServer", false);
     cybozu::OpenLogFile(opt.logFilePath());
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::ArchiveRequestWorker>(
-            std::move(sock), walb::s.nodeId, forceQuit, procStat);
+            std::move(sock), walb::ga.nodeId, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

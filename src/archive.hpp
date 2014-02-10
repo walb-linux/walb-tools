@@ -18,13 +18,12 @@ struct ArchiveSingleton
     std::string volumeGroup;
 };
 
-inline ArchiveSingleton& getGlobal()
+inline ArchiveSingleton& getArchiveGlobal()
 {
-    static ArchiveSingleton i;
-    return i;
+    return ArchiveSingleton::getInstance();
 }
 
-const ArchiveSingleton& s = getGlobal();
+const ArchiveSingleton& ga = getArchiveGlobal();
 
 static inline void c2aStatusServer(protocol::ServerParams &/*p*/)
 {
@@ -37,7 +36,7 @@ static inline void c2aInitVolServer(protocol::ServerParams &p)
         protocol::recvStrVec(p.sock, 1, "c2aInitVolServer", false);
     const std::string &volId = v[0];
 
-    ArchiveVolInfo volInfo(s.baseDirStr, volId, s.volumeGroup);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
     volInfo.init();
 
     packet::Ack(p.sock).send();
@@ -49,7 +48,7 @@ static inline void c2aInitVolServer(protocol::ServerParams &p)
  */
 static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 {
-    ProtocolLogger logger(s.nodeId, p.clientId);
+    ProtocolLogger logger(ga.nodeId, p.clientId);
 
     walb::packet::Packet sPack(p.sock);
     std::string hostType, volId;
@@ -68,7 +67,7 @@ static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         throw cybozu::Exception("x2aDirtyFullSyncServer:bulkLb is zero");
     }
 
-    ArchiveVolInfo volInfo(s.baseDirStr, volId, s.volumeGroup);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
     const std::string st = volInfo.getState();
     if (st != "SyncReady") {
         throw cybozu::Exception("x2aDirtyFullSyncServer:state is not SyncReady") << st;
@@ -87,6 +86,10 @@ static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         uint64_t c = 0;
         uint64_t remainingLb = sizeLb;
         while (0 < remainingLb) {
+            if (p.forceQuit) {
+                logger.warn("x2aDirtyFullSyncServer:force stopped");
+                return;
+            }
             const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
             const size_t size = lb * LOGICAL_BLOCK_SIZE;
             size_t encSize;

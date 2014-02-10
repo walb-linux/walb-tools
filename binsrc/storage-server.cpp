@@ -77,10 +77,11 @@ struct Option : cybozu::Option
 
 void initSingleton(Option &opt)
 {
-    walb::StorageSingleton &s = walb::StorageSingleton::getInstance();
+    walb::StorageSingleton &s = walb::getStorageGlobal();
 
     s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
     s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
+
     s.nodeId = opt.nodeId;
     s.baseDirStr = opt.baseDirStr;
 

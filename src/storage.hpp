@@ -17,10 +17,15 @@ struct StorageSingleton
     std::string baseDirStr;
 };
 
+inline StorageSingleton& getStorageGlobal()
+{
+    return StorageSingleton::getInstance();
+}
+
+const StorageSingleton& gs = getStorageGlobal();
+
 static inline void c2sStatusServer(protocol::ServerParams &p)
 {
-    const StorageSingleton &sing = StorageSingleton::getInstance();
-
     packet::Packet packet(p.sock);
     std::vector<std::string> params;
     packet.read(params);
@@ -32,7 +37,7 @@ static inline void c2sStatusServer(protocol::ServerParams &p)
     } else {
         // for a volume
         const std::string &volId = params[0];
-        StorageVolInfo volInfo(sing.baseDirStr, volId);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
         packet.write("ok");
         packet.write(volInfo.getStatusAsStrVec());
     }
@@ -40,32 +45,30 @@ static inline void c2sStatusServer(protocol::ServerParams &p)
 
 static inline void c2sInitVolServer(protocol::ServerParams &p)
 {
-    const StorageSingleton &sing = StorageSingleton::getInstance();
-
     const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
     const std::string &volId = v[0];
     const std::string &wdevPathName = v[1];
 
-    StorageVolInfo volInfo(sing.baseDirStr, volId, wdevPathName);
+    StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
     volInfo.init();
 
     packet::Ack ack(p.sock);
     ack.send();
 
-    ProtocolLogger logger(sing.nodeId, p.clientId);
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.info("c2sInitVolServer: initialize volId %s wdev %s", volId.c_str(), wdevPathName.c_str());
 }
 
 static inline void c2sFullSyncServer(protocol::ServerParams &p)
 {
-    const StorageSingleton &sing = StorageSingleton::getInstance();
+    ProtocolLogger logger(gs.nodeId, p.clientId);
 
     const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sFullSyncServer", false);
     const std::string& volId = v[0];
     const uint64_t bulkLb = cybozu::atoi(v[1]);
     const uint64_t curTime = ::time(0);
 
-    StorageVolInfo volInfo(sing.baseDirStr, volId);
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
     packet::Packet cPack(p.sock);
 
     const std::string state = volInfo.getState();
@@ -83,13 +86,13 @@ static inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
 
-    const cybozu::SocketAddr& archive = sing.archive;
-    const std::string& nodeId = sing.nodeId;
+    const cybozu::SocketAddr& archive = gs.archive;
+    const std::string& nodeId = gs.nodeId;
     std::string archiveId;
     {
         cybozu::Socket aSock;
         aSock.connect(archive);
-        archiveId = walb::protocol::run1stNegotiateAsClient(aSock, sing.nodeId, "dirty-full-sync");
+        archiveId = walb::protocol::run1stNegotiateAsClient(aSock, gs.nodeId, "dirty-full-sync");
         walb::packet::Packet aPack(aSock);
         aPack.write("storageD");
         aPack.write(volId);
@@ -118,6 +121,10 @@ static inline void c2sFullSyncServer(protocol::ServerParams &p)
 
             uint64_t remainingLb = sizeLb;
             while (0 < remainingLb) {
+                if (p.forceQuit) {
+                    logger.warn("c2sFullSyncServer:force stopped");
+                    return;
+                }
                 uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
                 size_t size = lb * LOGICAL_BLOCK_SIZE;
                 bd.read(&buf[0], size);

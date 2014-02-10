@@ -13,6 +13,14 @@ struct ProxySingleton
     std::string baseDirStr;
 };
 
+inline ProxySingleton& getProxyGlobal()
+{
+    return ProxySingleton::getInstance();
+}
+
+const ProxySingleton& gp = getProxyGlobal();
+
+
 static inline void c2pStatusServer(protocol::ServerParams &/*p*/)
 {
     // now editing
