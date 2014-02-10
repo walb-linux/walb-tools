@@ -1,6 +1,6 @@
 /**
  * @file
- * @brief WalB client tool.
+ * @brief WalB controller tool.
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -10,7 +10,7 @@
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
 #include "net_util.hpp"
-#include "client.hpp"
+#include "controller.hpp"
 
 struct Option : public cybozu::Option
 {
@@ -18,7 +18,7 @@ struct Option : public cybozu::Option
     uint16_t port;
     std::string cmd;
     std::vector<std::string> params;
-    std::string clientId;
+    std::string ctrlId;
     Option() {
         appendMust(&addr, "a", "host name or address");
         appendMust(&port, "p", "port number");
@@ -26,7 +26,7 @@ struct Option : public cybozu::Option
         appendParamVec(&params, "parameters", "command parameters");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&clientId, hostName, "id", "client identfier");
+        appendOpt(&ctrlId, hostName, "id", "controller identfier");
 
         appendHelp("h");
     }
@@ -40,13 +40,14 @@ void runClient(Option &opt)
     sock.connect(opt.addr, opt.port);
     std::atomic<bool> forceQuit(false);
     std::string serverId = protocol::run1stNegotiateAsClient(
-        sock, opt.clientId, opt.cmd);
-    ProtocolLogger logger(opt.clientId, serverId);
+        sock, opt.ctrlId, opt.cmd);
+    ProtocolLogger logger(opt.ctrlId, serverId);
 
     const std::map<std::string, protocol::ClientHandler> h = {
         { "status", c2xGetStrVecClient },
         { "storage-init-vol", c2sInitVolClient },
         { "archive-init-vol", c2aInitVolClient },
+        { "full-bkp", c2sFullSyncClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }
@@ -64,10 +65,10 @@ try {
     walb::runClient(opt);
 
 } catch (std::exception &e) {
-    LOGe("Client: error: %s", e.what());
+    LOGe("Controller: error: %s", e.what());
     return 1;
 } catch (...) {
-    LOGe("Client: caught other error.");
+    LOGe("Controller: caught other error.");
     return 1;
 }
 

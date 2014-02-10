@@ -19,8 +19,6 @@ wlog-update
 write_overlapped_and_verify
 write_random_data
 virt-full-cat
-server
-client
 wdev-poll
 lvm-mgr
 wlog-send
@@ -30,3 +28,4 @@ wdiff-recv
 storage-server
 proxy-server
 archive-server
+controller
