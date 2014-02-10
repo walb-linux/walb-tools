@@ -39,7 +39,7 @@ public:
             { "proxy-status", c2pStatusServer },
         };
         protocol::serverDispatch(
-            sock_, serverId_, baseDirStr_, forceQuit_, procStat_, h);
+            sock_, nodeId_, forceQuit_, procStat_, h);
     }
 };
 
@@ -50,7 +50,7 @@ struct Option : cybozu::Option
     uint16_t port;
     std::string baseDirStr;
     std::string logFileStr;
-    std::string serverId;
+    std::string nodeId;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
@@ -58,7 +58,7 @@ struct Option : cybozu::Option
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&serverId, hostName, "id", "server identifier");
+        appendOpt(&nodeId, hostName, "id", "node identifier");
 
         appendHelp("h");
     }
@@ -67,6 +67,16 @@ struct Option : cybozu::Option
     }
 };
 
+void initSingleton(Option &opt)
+{
+    walb::ProxySingleton &s = walb::ProxySingleton::getInstance();
+
+    s.nodeId = opt.nodeId;
+    s.baseDirStr = opt.baseDirStr;
+
+    // QQQ
+}
+
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -74,13 +84,14 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    cybozu::OpenLogFile(opt.logFilePath());
     walb::util::makeDir(opt.baseDirStr, "proxyServer", false);
+    cybozu::OpenLogFile(opt.logFilePath());
+    initSingleton(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::ProxyRequestWorker>(
-            std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, procStat);
+            std::move(sock), opt.nodeId, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

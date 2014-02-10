@@ -43,7 +43,7 @@ public:
             { "storage-init-vol", c2sInitVolServer },
         };
         protocol::serverDispatch(
-            sock_, serverId_, baseDirStr_, forceQuit_, procStat_, h);
+            sock_, nodeId_, forceQuit_, procStat_, h);
     }
 };
 
@@ -82,6 +82,7 @@ void initSingleton(Option &opt)
     s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
     s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
     s.nodeId = opt.nodeId;
+    s.baseDirStr = opt.baseDirStr;
 
     // QQQ
 }
@@ -100,7 +101,7 @@ int main(int argc, char *argv[]) try
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::StorageRequestWorker>(
-            std::move(sock), opt.nodeId, opt.baseDirStr, forceQuit, procStat);
+            std::move(sock), opt.nodeId, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

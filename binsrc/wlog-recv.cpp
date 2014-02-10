@@ -18,17 +18,22 @@
 
 namespace walb {
 
+namespace local
+{
+std::string baseDirStr;
+} // local
+
 class WlogRequestWorker : public walb::server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
         std::string clientId, protocolName;
-        if (protocol::run1stNegotiateAsServer(sock_, serverId_, protocolName, clientId, procStat_)) {
+        if (protocol::run1stNegotiateAsServer(sock_, nodeId_, protocolName, clientId, procStat_)) {
             return;
         }
         /* Original behavior for wlog-recv command. */
-        ProtocolLogger logger(serverId_, clientId);
+        ProtocolLogger logger(nodeId_, clientId);
         if (protocolName != "wlog-send") {
             logger.error("Protocol name must be wlog-send.");
             return;
@@ -67,8 +72,8 @@ public:
 
         std::string fName = createDiffFileName(diff);
         fName += ".wlog";
-        cybozu::TmpFile tmpFile(baseDirStr_);
-        cybozu::FilePath fPath(baseDirStr_);
+        cybozu::TmpFile tmpFile(local::baseDirStr);
+        cybozu::FilePath fPath(local::baseDirStr);
         fPath + fName;
         log::Writer writer(tmpFile.fd());
         log::FileHeader fileH;
@@ -141,13 +146,13 @@ private:
 struct Option : cybozu::Option
 {
     uint16_t port;
-    std::string serverId;
+    std::string nodeId;
     std::string baseDirStr;
 
     Option() {
         appendMust(&port, "p", "port to listen");
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&serverId, hostName, "id", "host identifier");
+        appendOpt(&nodeId, hostName, "id", "host identifier");
         cybozu::FilePath curDir = cybozu::getCurrentDir();
         appendOpt(&baseDirStr, curDir.str(), "b", "base directory.");
         appendHelp("h");
@@ -167,12 +172,13 @@ int main(int argc, char *argv[]) try
     if (!baseDir.stat().isDirectory()) {
         throw RT_ERR("%s is not directory.", baseDir.cStr());
     }
+    walb::local::baseDirStr = baseDir.str();
 
     auto createReqWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &flag) {
         return std::make_shared<walb::WlogRequestWorker>(
-            std::move(sock), opt.serverId, baseDir.str(), forceQuit, flag);
+            std::move(sock), opt.nodeId, forceQuit, flag);
     };
     walb::server::MultiThreadedServer server(1);
     server.run(opt.port, createReqWorker);

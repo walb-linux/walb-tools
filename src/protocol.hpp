@@ -155,23 +155,17 @@ static inline bool run1stNegotiateAsServer(
 struct ServerParams
 {
     cybozu::Socket &sock;
-    ProtocolLogger &logger;
 	const std::string& clientId;
-    const std::string &baseDirStr;
     const std::atomic<bool> &forceQuit;
     std::atomic<walb::server::ProcessStatus> &procStat;
 
     ServerParams(
         cybozu::Socket &sock0,
-        ProtocolLogger &logger0,
         const std::string &clientId,
-        const std::string &baseDirStr0,
         const std::atomic<bool> &forceQuit0,
         std::atomic<walb::server::ProcessStatus> &procStat0)
         : sock(sock0)
-        , logger(logger0)
 		, clientId(clientId)
-        , baseDirStr(baseDirStr0)
         , forceQuit(forceQuit0)
         , procStat(procStat0) {
     }
@@ -186,30 +180,36 @@ using ServerHandler = void (*)(ServerParams &);
  * Server dispatcher.
  */
 static inline void serverDispatch(
-    cybozu::Socket &sock, const std::string &serverId, const std::string &baseDirStr,
+    cybozu::Socket &sock, const std::string &nodeId,
     const std::atomic<bool> &forceQuit,
     std::atomic<walb::server::ProcessStatus> &procStat,
     const std::map<std::string, ServerHandler> &handlers) noexcept
 {
     std::string clientId, protocolName;
-    if (run1stNegotiateAsServer(sock, serverId, protocolName, clientId, procStat)) {
-        /* The protocol has finished or failed. */
-        return;
+    try {
+        if (run1stNegotiateAsServer(sock, nodeId, protocolName, clientId, procStat)) {
+            /* The protocol has finished or failed. */
+            return;
+        }
+    } catch (std::exception &e) {
+        LOGe("run1stNegotiateAsServer failed: %s", e.what());
+    } catch (...) {
+        LOGe("run1stNegotiateAsServer failed: other error");
     }
-    ProtocolLogger logger(serverId, clientId);
+    ProtocolLogger logger(nodeId, clientId);
     try {
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            ServerParams p(sock, logger, clientId, baseDirStr, forceQuit, procStat);
+            ServerParams p(sock, clientId, forceQuit, procStat);
             h(p);
         } else {
             throw cybozu::Exception("bad protocolName") << protocolName;
         }
     } catch (std::exception &e) {
-        logger.error("runlAsServer failed: %s", e.what());
+        logger.error("serverDispatch failed: %s", e.what());
     } catch (...) {
-        logger.error("runAsServer failed: unknown error.");
+        logger.error("serverDispatch failed: other error.");
     }
 }
 
