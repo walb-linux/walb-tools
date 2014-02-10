@@ -55,10 +55,13 @@ public:
         , volId_(volId) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
-            throw cybozu::Exception("Directory not found: " + baseDirStr);
+            throw cybozu::Exception("ArchiveVolInfo:Directory not found: " + baseDirStr);
         }
         if (!cybozu::lvm::vgExists(vgName_)) {
-            throw cybozu::Exception("Vg does not exist: " + vgName_);
+            throw cybozu::Exception("ArchiveVolInfo:Vg does not exist: " + vgName_);
+        }
+        if (volId.empty()) {
+            throw cybozu::Exception("ArchiveVolInfo:volId is empty");
         }
 #if 0
         wdiffsP_ = std::make_shared<WalbDiffFiles>(getDir().str(), true);
@@ -69,12 +72,34 @@ public:
 #endif
     }
     void init() {
-        util::saveFile(volDir_, "uuid", cybozu::Uuid());
-        util::saveFile(volDir_, "state", "SyncReady");
+        util::makeDir(volDir_.str(), "ArchiveVolInfo::init", true);
+        setUuid(cybozu::Uuid());
+        setState("SyncReady");
         util::saveFile(volDir_, "base", ""); // TODO
     }
-
-#if 0
+    void setUuid(const cybozu::Uuid &uuid) {
+        util::saveFile(volDir_, "uuid", uuid);
+    }
+	void setState(const std::string& newState)
+	{
+		const char *tbl[] = {
+			"SyncReady",
+            "Archived",
+			"Stopped",
+		};
+		for (const char *p : tbl) {
+			if (newState == p) {
+				util::saveFile(volDir_, "state", newState);
+				return;
+			}
+		}
+		throw cybozu::Exception("ArchiveVolInfo::setState:bad state") << newState;
+	}
+    std::string getState() const {
+        std::string st;
+        util::loadFile(volDir_, "state", st);
+        return st;
+    }
     bool lvExists() const {
         return cybozu::lvm::exists(vgName_, lvName());
     }
@@ -83,10 +108,38 @@ public:
      * @sizeLb volume size [logical block].
      */
     void createLv(uint64_t sizeLb) {
-        assert(0 < sizeLb);
-        if (lvExists()) return;
+        if (sizeLb == 0) {
+            throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is zero");
+        }
+        if (lvExists()) {
+            uint64_t curSizeLb = getLv().sizeLb();
+            if (curSizeLb != sizeLb) {
+                throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is different") << curSizeLb << sizeLb;
+            }
+            return;
+        }
         getVg().create(lvName(), sizeLb);
     }
+    /**
+     * Get volume data.
+     */
+    cybozu::lvm::Lv getLv() const {
+        cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName_, lvName());
+        if (lv.isSnapshot()) {
+            throw cybozu::Exception(
+                "The target must not be snapshot: " + lv.path().str());
+        }
+        return lv;
+    }
+private:
+    cybozu::lvm::Vg getVg() const {
+        return cybozu::lvm::getVg(vgName_);
+    }
+    std::string lvName() const {
+        return VOLUME_PREFIX + volId_;
+    }
+
+#if 0
     /**
      * Grow the volume.
      * @newSizeLb [logical block].
@@ -105,17 +158,6 @@ public:
         lv.resize(newSizeLb);
     }
     /**
-     * Get volume data.
-     */
-    cybozu::lvm::Lv getLv() const {
-        cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName_, lvName());
-        if (lv.isSnapshot()) {
-            throw cybozu::Exception(
-                "The target must not be snapshot: " + lv.path().str());
-        }
-        return lv;
-    }
-    /**
      * CAUSION:
      *   All data inside the directory will be removed.
      *   The volume will be removed if exists.
@@ -129,9 +171,9 @@ public:
         wdiffsP_->reset(gid);
 
         /* TODO: consider remove or remaining. */
-        if (lvExists()) {
-            getLv().remove();
-        }
+        // if (lvExists()) {
+        //     getLv().remove();
+        // }
     }
     bool initialized() const {
         /* now editing */
@@ -464,12 +506,6 @@ public:
         wdiffsP_->cleanup();
     }
 private:
-    cybozu::lvm::Vg getVg() const {
-        return cybozu::lvm::getVg(vgName_);
-    }
-    std::string lvName() const {
-        return VOLUME_PREFIX + volId_;
-    }
     cybozu::FilePath getDir() const {
         return baseDir_ + cybozu::FilePath(volId_);
     }

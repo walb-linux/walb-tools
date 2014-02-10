@@ -133,7 +133,7 @@ public:
 				return;
 			}
 		}
-		throw cybozu::Exception("setState:bad state") << newState;
+		throw cybozu::Exception("StorageVolInfo::setState:bad state") << newState;
 	}
 	void resetWlog(uint64_t gid)
 	{

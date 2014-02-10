@@ -24,6 +24,7 @@
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb/archive";
 const std::string DEFAULT_LOG_FILE = "walb-archive.log";
+const std::string DEFAULT_VG = "vg";
 
 namespace walb {
 
@@ -49,33 +50,25 @@ public:
 struct Option : cybozu::Option
 {
     uint16_t port;
-    std::string baseDirStr;
     std::string logFileStr;
-    std::string nodeId;
+
     Option() {
+        walb::ArchiveSingleton &s = walb::getGlobal();
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        appendOpt(&s.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&nodeId, hostName, "id", "node identifier");
+        appendOpt(&s.nodeId, hostName, "id", "node identifier");
 
         appendHelp("h");
     }
     std::string logFilePath() const {
-        return (cybozu::FilePath(baseDirStr) + cybozu::FilePath(logFileStr)).str();
+        return (cybozu::FilePath(walb::s.baseDirStr) + cybozu::FilePath(logFileStr)).str();
     }
 };
-
-void initSingleton(Option &opt)
-{
-    walb::ArchiveSingleton &s = walb::ArchiveSingleton::getInstance();
-    s.nodeId = opt.nodeId;
-    s.baseDirStr = opt.baseDirStr;
-
-    // QQQ
-}
 
 int main(int argc, char *argv[]) try
 {
@@ -84,14 +77,13 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::makeDir(opt.baseDirStr, "archiveServer", false);
+    walb::util::makeDir(walb::s.baseDirStr, "archiveServer", false);
     cybozu::OpenLogFile(opt.logFilePath());
-    initSingleton(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::ArchiveRequestWorker>(
-            std::move(sock), opt.nodeId, forceQuit, procStat);
+            std::move(sock), walb::s.nodeId, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);
