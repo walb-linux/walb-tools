@@ -157,6 +157,10 @@ public:
         statP_.reset();
         return *this;
     }
+    /* Copy */
+    FilePath &operator=(const std::string &rhs) {
+        return *this = cybozu::FilePath(rhs);
+    }
     /* Move */
     FilePath &operator=(FilePath &rhs) {
         path_ = std::move(rhs.path_);
