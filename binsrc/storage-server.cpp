@@ -54,7 +54,7 @@ struct Option : cybozu::Option
     uint16_t port;
     std::string baseDirStr;
     std::string logFileStr;
-    std::string serverId;
+    std::string nodeId;
     std::string archiveDStr;
     std::string multiProxyDStr;
     Option() {
@@ -66,7 +66,7 @@ struct Option : cybozu::Option
         appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&serverId, hostName, "id", "server identifier");
+        appendOpt(&nodeId, hostName, "id", "node identifier");
 
         appendHelp("h");
     }
@@ -85,6 +85,7 @@ void initSingleton(Option &opt)
 
     s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
     s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
+    s.nodeId = opt.nodeId;
 
     // QQQ
 }
@@ -103,7 +104,7 @@ int main(int argc, char *argv[]) try
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::StorageRequestWorker>(
-            std::move(sock), opt.serverId, opt.baseDirStr, forceQuit, procStat);
+            std::move(sock), opt.nodeId, opt.baseDirStr, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);

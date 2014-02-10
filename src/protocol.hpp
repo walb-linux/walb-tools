@@ -156,6 +156,7 @@ struct ServerParams
 {
     cybozu::Socket &sock;
     ProtocolLogger &logger;
+	const std::string& clientId;
     const std::string &baseDirStr;
     const std::atomic<bool> &forceQuit;
     std::atomic<walb::server::ProcessStatus> &procStat;
@@ -163,11 +164,13 @@ struct ServerParams
     ServerParams(
         cybozu::Socket &sock0,
         ProtocolLogger &logger0,
+        const std::string &clientId,
         const std::string &baseDirStr0,
         const std::atomic<bool> &forceQuit0,
         std::atomic<walb::server::ProcessStatus> &procStat0)
         : sock(sock0)
         , logger(logger0)
+		, clientId(clientId)
         , baseDirStr(baseDirStr0)
         , forceQuit(forceQuit0)
         , procStat(procStat0) {
@@ -198,7 +201,7 @@ static inline void serverDispatch(
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            ServerParams p(sock, logger, baseDirStr, forceQuit, procStat);
+            ServerParams p(sock, logger, clientId, baseDirStr, forceQuit, procStat);
             h(p);
         } else {
             throw cybozu::Exception("bad protocolName") << protocolName;

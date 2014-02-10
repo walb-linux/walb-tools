@@ -119,6 +119,22 @@ public:
 		util::loadFile(volDir_, "state", ret);
 		return ret;
 	}
+	void setState(const std::string& newState)
+	{
+		const char *tbl[] = {
+			"SyncReady",
+			"Stopped",
+			"Master",
+			"Slave",
+		};
+		for (const char *p : tbl) {
+			if (newState == p) {
+				util::saveFile(volDir_, "state", newState);
+				return;
+			}
+		}
+		throw cybozu::Exception("setState:bad state") << newState;
+	}
 	void resetWlog(uint64_t gid)
 	{
 		cybozu::disable_warning_unused_variable(gid);
