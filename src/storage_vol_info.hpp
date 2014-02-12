@@ -78,7 +78,7 @@ public:
             qf.sync();
         }
         util::saveFile(volDir_, "path", wdevPath_.str());
-        util::saveFile(volDir_, "state", "SyncReady");
+        setState("SyncReady");
         util::saveFile(volDir_, "done", ""); // TODO
         util::saveFile(volDir_, "uuid", cybozu::Uuid());
     }
@@ -92,15 +92,13 @@ public:
         v.push_back(fmt("wdevPath %s", wdevPath_.cStr()));
         uint64_t sizeLb = 0; // TODO
         v.push_back(fmt("size %" PRIu64 "", sizeLb));
-        std::string stateStr;
-        util::loadFile(volDir_, "state", stateStr);
+        const std::string stateStr = getState();
         v.push_back(fmt("state %s", stateStr.c_str()));
         uint64_t logFreeSpacePb = 0; // TODO
         v.push_back(fmt("logFreeSpace %" PRIu64 "", logFreeSpacePb));
         uint64_t logCapacityPb = 0; // TODO
         v.push_back(fmt("logCapacity %" PRIu64 "", logCapacityPb));
-        cybozu::Uuid uuid;
-        util::loadFile(volDir_, "uuid", uuid);
+        const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         uint32_t pbs = 0;
         v.push_back(fmt("pbs %" PRIu32 "", pbs));
@@ -114,39 +112,39 @@ public:
 
         return v;
     }
-	std::string getState() const {
-		std::string ret;
-		util::loadFile(volDir_, "state", ret);
-		return ret;
-	}
-	void setState(const std::string& newState)
-	{
-		const char *tbl[] = {
-			"SyncReady",
-			"Stopped",
-			"Master",
-			"Slave",
-		};
-		for (const char *p : tbl) {
-			if (newState == p) {
-				util::saveFile(volDir_, "state", newState);
-				return;
-			}
-		}
-		throw cybozu::Exception("StorageVolInfo::setState:bad state") << newState;
-	}
-	void resetWlog(uint64_t gid)
-	{
-		cybozu::disable_warning_unused_variable(gid);
-		// TODO
-		resetWal(wdevPath_.str());
-	}
-	cybozu::Uuid getUuid() const {
-		cybozu::Uuid uuid;
-		util::loadFile(volDir_, "uuid", uuid);
-		return uuid;
-	}
-	std::string getWdevPath() const { return wdevPath_.str(); }
+    std::string getState() const {
+        std::string ret;
+        util::loadFile(volDir_, "state", ret);
+        return ret;
+    }
+    void setState(const std::string& newState)
+    {
+        const char *tbl[] = {
+            "SyncReady",
+            "Stopped",
+            "Master",
+            "Slave",
+        };
+        for (const char *p : tbl) {
+            if (newState == p) {
+                util::saveFile(volDir_, "state", newState);
+                return;
+            }
+        }
+        throw cybozu::Exception("StorageVolInfo::setState:bad state") << newState;
+    }
+    void resetWlog(uint64_t gid)
+    {
+        cybozu::disable_warning_unused_variable(gid);
+        // TODO
+        resetWal(wdevPath_.str());
+    }
+    cybozu::Uuid getUuid() const {
+        cybozu::Uuid uuid;
+        util::loadFile(volDir_, "uuid", uuid);
+        return uuid;
+    }
+    std::string getWdevPath() const { return wdevPath_.str(); }
 
 private:
 #if 0
