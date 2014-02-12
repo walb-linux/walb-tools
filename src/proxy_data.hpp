@@ -106,7 +106,7 @@ public:
                 throw std::runtime_error("wdiffs add failed.");
             }
         }
-        wdiffsP_->removeBeforeGid(diff.snap1().gid0());
+        wdiffsP_->removeBeforeGid(diff.snapE.gidB);
     }
     /**
      * @name server name.

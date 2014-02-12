@@ -101,10 +101,7 @@ private:
             logger.error("name is empty.");
             return false;
         }
-        if (!diff.isValid()) {
-            logger.error("invalid diff.");
-            return false;
-        }
+        diff.check();
         if (!::is_valid_pbs(pbs)) {
             logger.error("invalid pbs.");
             return false;

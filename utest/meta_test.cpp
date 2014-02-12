@@ -4,11 +4,11 @@
 
 CYBOZU_TEST_AUTO(diff)
 {
-    walb::MetaDiff d0(0, 0, 1, 2), d1(1, 1, 2, 3);
-    d1.setCanMerge(true);
+    walb::MetaDiff d0(0, 0, 1, 2), d1(1, 2);
+    d1.canMerge = true;
     CYBOZU_TEST_ASSERT(walb::canMerge(d0, d1));
     walb::MetaDiff d2 = walb::merge(d0, d1);
-    CYBOZU_TEST_ASSERT(d2 == walb::MetaDiff(0, 0, 2, 3));
+    CYBOZU_TEST_ASSERT(d2 == walb::MetaDiff(0, 2));
 }
 
 CYBOZU_TEST_AUTO(snap)
@@ -25,8 +25,8 @@ CYBOZU_TEST_AUTO(snap)
     }
     {
         walb::MetaSnap s0(0, 13);
-        walb::MetaDiff d1(0, 0, 10, 12);
-        CYBOZU_TEST_ASSERT(walb::apply(s0, d1) == walb::MetaSnap(10, 13));
+        walb::MetaDiff d1(0, 13, 10, 12);
+        CYBOZU_TEST_ASSERT(walb::apply(s0, d1) == walb::MetaSnap(10, 12));
     }
 }
 
@@ -51,16 +51,25 @@ CYBOZU_TEST_AUTO(serialize)
     ::unlink("test0.bin");
 }
 
-void testApply(const walb::MetaSnap &s0, const walb::MetaDiff &d1)
+void testApply(const walb::MetaSnap &s0, const walb::MetaDiff &d1, const walb::MetaSnap &s1)
 {
-    walb::MetaSnap s1, s2, sa, sb;
-    sa = walb::startToApply(s0, d1);
-    sb = walb::startToApply(sa, d1);
-    CYBOZU_TEST_EQUAL(sa, sb);
+    std::cout << "testApply start:" << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
+    CYBOZU_TEST_ASSERT(walb::canApply(s0, d1));
 
-    s1 = walb::finishToApply(sa, d1);
-    s2 = walb::apply(s0, d1);
-    CYBOZU_TEST_EQUAL(s1, s2);
+    walb::MetaState st(s0);
+    walb::MetaState sa, sb, sc;
+    CYBOZU_TEST_ASSERT(walb::canApply(st, d1));
+    sa = walb::applying(st, d1);
+    sb = walb::apply(st, d1);
+    CYBOZU_TEST_ASSERT(walb::canApply(sa, d1));
+    sc = walb::apply(sa, d1);
+    CYBOZU_TEST_ASSERT(sa.isApplying);
+    CYBOZU_TEST_ASSERT(!sb.isApplying);
+    CYBOZU_TEST_ASSERT(!sc.isApplying);
+    CYBOZU_TEST_EQUAL(sb, sc);
+
+    CYBOZU_TEST_EQUAL(walb::MetaState(s1), sb);
+    std::cout << "testApply end:  " << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
 }
 
 CYBOZU_TEST_AUTO(apply)
@@ -68,22 +77,42 @@ CYBOZU_TEST_AUTO(apply)
     {
         walb::MetaSnap s0(0, 0);
         walb::MetaDiff d1(0, 0, 10, 10);
-        testApply(s0, d1);
+        walb::MetaSnap s1(10, 10);
+        testApply(s0, d1, s1);
+    }
+    {
+        walb::MetaSnap s0(0, 0);
+        walb::MetaDiff d1(0, 1, 2, 3);
+        CYBOZU_TEST_ASSERT(!walb::canApply(s0, d1));
     }
     {
         walb::MetaSnap s0(0, 10);
-        walb::MetaDiff d1(0, 0, 10, 12);
-        testApply(s0, d1);
+        walb::MetaDiff d1(0, 0, 12, 12);
+        walb::MetaSnap s1(12, 12);
+        testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(5, 10);
-        walb::MetaDiff d1(5, 5, 15, 16);
-        testApply(s0, d1);
+        walb::MetaDiff d1(5, 5, 9, 9);
+        walb::MetaSnap s1(9, 10);
+        testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(0, 5);
         walb::MetaDiff d1(0, 5, 15, 16);
-        testApply(s0, d1);
+        walb::MetaSnap s1(15, 16);
+        testApply(s0, d1, s1);
+    }
+    {
+        walb::MetaSnap s0(0, 5);
+        walb::MetaDiff d1(0, 5, 3, 6);
+        walb::MetaSnap s1(3, 6);
+        testApply(s0, d1, s1);
+    }
+    {
+        walb::MetaSnap s0(0, 10);
+        walb::MetaDiff d1(0, 5, 12, 15);
+        CYBOZU_TEST_ASSERT(!walb::canApply(s0, d1));
     }
 }
 
@@ -103,15 +132,11 @@ CYBOZU_TEST_AUTO(oldOrNew)
         CYBOZU_TEST_ASSERT(!walb::isTooOld(s0, d1));
         CYBOZU_TEST_ASSERT(walb::isTooNew(s0, d1));
     }
-#if 0
     {
-        /* If canApply() use more accurate definition,
-           This test will pass. */
         walb::MetaSnap s0(5);
         walb::MetaDiff d1(3, 7);
         CYBOZU_TEST_ASSERT(walb::canApply(s0, d1));
         CYBOZU_TEST_ASSERT(!walb::isTooOld(s0, d1));
         CYBOZU_TEST_ASSERT(!walb::isTooNew(s0, d1));
     }
-#endif
 }

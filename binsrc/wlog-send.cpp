@@ -121,11 +121,12 @@ try {
     for (const std::string &wlogPath : opt.wlogPathV) {
         cybozu::util::FileOpener fo(wlogPath, O_RDONLY);
         walb::MetaDiff diff;
-        diff.init();
-        diff.setSnap0(gid);
-        diff.setSnap1(gid + 1);
-        diff.setTimestamp(ts);
-        diff.setCanMerge(!opt.canNotMerge);
+        diff.snapB.gidB = gid;
+        diff.snapB.gidE = gid;
+        diff.snapE.gidB = gid + 1;
+        diff.snapE.gidE = gid + 1;
+        diff.timestamp = ts;
+        diff.canMerge = !opt.canNotMerge;
         cybozu::Socket sock;
         sock.connect(host, port);
         sendWlog(sock, opt.clientId, opt.name, fo.fd(), diff);

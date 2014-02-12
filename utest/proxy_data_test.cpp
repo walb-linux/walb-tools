@@ -3,6 +3,7 @@
 #include "proxy_data.hpp"
 #include "for_test.hpp"
 
+#if 0 // XXX
 CYBOZU_TEST_AUTO(server)
 {
     std::string testDirStr("proxy_data0");
@@ -65,3 +66,5 @@ CYBOZU_TEST_AUTO(wdiff)
     CYBOZU_TEST_EQUAL(proxyData.getWdiffFiles().listDiff().size(), 0);
     CYBOZU_TEST_EQUAL(proxyData.getWdiffFiles().latestGid(), 7);
 }
+
+#endif // XXX

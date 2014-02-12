@@ -41,7 +41,7 @@ public:
     using ProtocolData::ProtocolData;
     void checkParams() const {
         if (name_.empty()) logAndThrow("name param empty.");
-        if (!diff_.isValid()) logAndThrow("Invalid meta diff.");
+        diff_.check();
         if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
         if (endLsid_ < bgnLsid_) logAndThrow("Invalid lsids.");
     }
@@ -172,8 +172,8 @@ public:
             "wlog-send %s %s ((%" PRIu64 ", %" PRIu64 "), (%" PRIu64", %" PRIu64 ")) "
             "%" PRIu32 " %" PRIu32 " (%" PRIu64 ", %" PRIu64 ") "
             , name_.c_str(), uuid_.str().c_str()
-            , diff_.snap0().gid0(), diff_.snap0().gid1()
-            , diff_.snap1().gid0(), diff_.snap1().gid1()
+            , diff_.snapB.gidB, diff_.snapB.gidE
+            , diff_.snapE.gidB, diff_.snapE.gidE
             , pbs_, salt_, bgnLsid_, endLsid_);
         recvAndWriteDiffData();
     }

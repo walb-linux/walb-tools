@@ -182,11 +182,12 @@ try {
     merger.addWdiffs(opt.wdiffPathV);
     merger.prepare();
     walb::MetaDiff diff;
-    diff.init();
-    diff.setSnap0(gid);
-    diff.setSnap1(gid + 1);
-    diff.setTimestamp(ts);
-    diff.setCanMerge(!opt.canNotMerge);
+    diff.snapB.gidB = gid;
+    diff.snapB.gidE = gid;
+    diff.snapE.gidB = gid + 1;
+    diff.snapE.gidE = gid + 1;
+    diff.timestamp = ts;
+    diff.canMerge = !opt.canNotMerge;
     cybozu::Socket sock;
     sock.connect(host, port);
     sendWdiff(sock, merger, diff, opt);

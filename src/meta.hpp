@@ -26,6 +26,9 @@
  *   gid: non-negative integer (hex string without prefix "0x").
  *   s0 or s1 (generally s) indicates a snapshot. (s0, s1) indicates a diff.
  *
+ *
+ * TODO: rewrite the following constraints.
+ * >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
  * Constraints:
  *   s.gid0 <= s.gid1 must be satisfied.
  *   s0.gid1 < s1.gid0 must be satisfied.
@@ -55,39 +58,463 @@
  * to convert from/to a MetaDiff to/from its filename.
  *
  * Use canConsolidate() and consolidate() to consolidate diff list.
+ * <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
  */
 namespace walb {
 
-const uint16_t META_SNAP_PREAMBLE = 0x0311;
-const uint16_t META_DIFF_PREAMBLE = 0x0312;
+const uint16_t META_SNAP_PREAMBLE    = 0x0311;
+const uint16_t META_DIFF_PREAMBLE    = 0x0312;
+const uint16_t META_STATE_PREAMBLE   = 0x0313;
+const uint16_t META_LSIDGID_PREAMBLE = 0x0314;
 
 /**
  * Snapshot record.
  */
-struct meta_snap
+struct MetaSnap
 {
     uint16_t preamble;
-    uint8_t can_merge; /* 0 or 1. */
-    uint8_t reserved0;
-    uint32_t reserved1;
-    uint64_t timestamp; /* unix time. */
-    uint64_t lsid; /* log sequence id. This is meaningfull at worker. */
-    uint64_t snap[2];
-} __attribute__((packed));
+    uint64_t gidB, gidE;
+
+    MetaSnap()
+        : MetaSnap(-1) {}
+    explicit MetaSnap(uint64_t gid)
+        : MetaSnap(gid, gid) {}
+    MetaSnap(uint64_t gidB, uint64_t gidE)
+        : preamble(META_SNAP_PREAMBLE)
+        , gidB(gidB), gidE(gidE) {}
+    bool isClean() const {
+        return gidB == gidE;
+    }
+    bool isDirty() const {
+        return gidB != gidE;
+    }
+    bool operator==(const MetaSnap &rhs) const {
+        return gidB == rhs.gidB && gidE == rhs.gidE;
+    }
+    bool operator!=(const MetaSnap &rhs) const {
+        return gidB != rhs.gidB || gidE != rhs.gidE;
+    }
+    void check() const {
+        if (preamble != META_SNAP_PREAMBLE) {
+            throw cybozu::Exception("MetaSnap::check:wrong preamble") << preamble;
+        }
+        if (gidB > gidE) {
+            throw cybozu::Exception("MetaSnap::check:must be gidB <= gidE") << gidB << gidE;
+        }
+    }
+    std::string str() const {
+        if (gidB == gidE) {
+            return cybozu::util::formatString("|%" PRIu64 "|", gidB);
+        } else {
+            return cybozu::util::formatString("|%" PRIu64 ",%" PRIu64 "|", gidB, gidE);
+        }
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const MetaSnap &snap) {
+        os << snap.str();
+        return os;
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename InputStream>
+    void load(InputStream &is) {
+        cybozu::load(preamble, is);
+        cybozu::load(gidB, is);
+        cybozu::load(gidE, is);
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename OutputStream>
+    void save(OutputStream &os) const {
+        cybozu::save(os, preamble);
+        cybozu::save(os, gidB);
+        cybozu::save(os, gidE);
+    }
+};
 
 /**
  * Diff record.
  */
-struct meta_diff
+struct MetaDiff
 {
     uint16_t preamble;
-    uint8_t can_merge; /* 0 or 1. */
-    uint8_t reserved0;
-    uint32_t reserved1;
-    uint64_t timestamp; /* unix time. */
-    uint64_t snap0[2];
-    uint64_t snap1[2];
-} __attribute__((packed));
+    bool canMerge;
+    uint64_t timestamp;
+    MetaSnap snapB, snapE;
+
+    MetaDiff()
+        : MetaDiff(MetaSnap(), MetaSnap()) {}
+    MetaDiff(uint64_t snapBgid, uint64_t snapEgid)
+        : MetaDiff(snapBgid, snapBgid, snapEgid, snapEgid) {}
+    MetaDiff(uint64_t snapBgidB, uint64_t snapBgidE, uint64_t snapEgidB, uint64_t snapEgidE)
+        : preamble(META_DIFF_PREAMBLE)
+        , canMerge(false), timestamp(0)
+        , snapB(snapBgidB, snapBgidE)
+        , snapE(snapEgidB, snapEgidE) {}
+    MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE)
+        : preamble(META_DIFF_PREAMBLE)
+        , canMerge(false), timestamp(0)
+        , snapB(snapB), snapE(snapE) {}
+    bool operator==(const MetaDiff &rhs) const {
+        return snapB == rhs.snapB && snapE == rhs.snapE;
+    }
+    bool operator!=(const MetaDiff &rhs) const {
+        return snapB != rhs.snapB || snapE != rhs.snapE;
+    }
+    bool isClean() const {
+        return snapB.isClean() && snapE.isClean();
+    }
+    bool isDirty() const {
+        return snapB.isDirty() || snapE.isDirty();
+    }
+    void check() const {
+        if (preamble != META_DIFF_PREAMBLE) {
+            throw cybozu::Exception("MetaDiff::check:wrong preamble") << preamble;
+        }
+        snapB.check();
+        snapE.check();
+        if (snapB.gidB >= snapE.gidB) {
+            throw cybozu::Exception("MetaDiff::broken progress constraint")
+                << snapB.str() << snapE.str();
+        }
+    }
+    std::string str() const {
+        std::string b = snapB.str();
+        std::string e = snapE.str();
+        return b + "-->" + e;
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const MetaDiff &diff) {
+        os << diff.str();
+        return os;
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename InputStream>
+    void load(InputStream &is) {
+        cybozu::load(preamble, is);
+        cybozu::load(canMerge, is);
+        cybozu::load(timestamp, is);
+        cybozu::load(snapB, is);
+        cybozu::load(snapE, is);
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename OutputStream>
+    void save(OutputStream &os) const {
+        cybozu::save(os, preamble);
+        cybozu::save(os, canMerge);
+        cybozu::save(os, timestamp);
+        cybozu::save(os, snapB);
+        cybozu::save(os, snapE);
+    }
+};
+
+/**
+ * Base lv state record.
+ */
+struct MetaState
+{
+    uint16_t preamble;
+    bool isApplying;
+    MetaSnap snapB, snapE; /* snapE is meaningful when isApplying is true */
+
+    MetaState()
+        : preamble(META_STATE_PREAMBLE)
+        , isApplying(false), snapB(), snapE() {
+    }
+    explicit MetaState(const MetaSnap &snap)
+        : preamble(META_STATE_PREAMBLE)
+        , isApplying(false)
+        , snapB(snap), snapE(snap) {}
+    MetaState(const MetaSnap &snapB, const MetaSnap &snapE)
+        : preamble(META_STATE_PREAMBLE)
+        , isApplying(true)
+        , snapB(snapB), snapE(snapE) {}
+    bool operator==(const MetaState &rhs) const {
+        if (isApplying != rhs.isApplying) {
+            return false;
+        }
+        if (snapB != rhs.snapB) {
+            return false;
+        }
+        if (isApplying && snapE != rhs.snapE) {
+            return false;
+        }
+        return true;
+    }
+    bool operator!=(const MetaState &rhs) const {
+        return !operator==(rhs);
+    }
+    void check() const {
+        if (preamble != META_STATE_PREAMBLE) {
+            throw cybozu::Exception("MetaState::check:wrong preamble") << preamble;
+        }
+        snapB.check();
+        snapE.check();
+        if (isApplying && snapB.gidB >= snapE.gidB) {
+            throw cybozu::Exception("MetaState::broken progress constraint")
+                << snapB.str() << snapE.str();
+        }
+    }
+    std::string str() const {
+        std::string b = snapB.str();
+        std::string e = snapE.str();
+        if (isApplying) {
+            return cybozu::util::formatString("<%s-->%s>", b.c_str(), e.c_str());
+        } else {
+            return cybozu::util::formatString("<%s>", b.c_str());
+        }
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const MetaState &st) {
+        os << st.str();
+        return os;
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename InputStream>
+    void load(InputStream &is) {
+        cybozu::load(preamble, is);
+        cybozu::load(isApplying, is);
+        cybozu::load(snapB, is);
+        cybozu::load(snapE, is);
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename OutputStream>
+    void save(OutputStream &os) const {
+        cybozu::save(os, preamble);
+        cybozu::save(os, isApplying);
+        cybozu::save(os, snapB);
+        cybozu::save(os, snapE);
+    }
+};
+
+/**
+ * LsidGid record.
+ */
+struct MetaLsidGid
+{
+    uint16_t preamble;
+    bool canMerge;
+    uint64_t timestamp; /* unix time */
+    uint64_t lsid; /* log sequence id. */
+    uint64_t gid; /* generation id. */
+
+    MetaLsidGid()
+        : preamble(META_LSIDGID_PREAMBLE)
+        , canMerge(false), timestamp(0), lsid(-1), gid(-1) {
+    }
+    void check() const {
+        if (preamble != META_LSIDGID_PREAMBLE) {
+            throw cybozu::Exception("MetaLsidGid::check:wrong preamble") << preamble;
+        }
+    }
+    std::string str() const {
+        std::string ts = cybozu::unixTimeToStr(timestamp);
+        return cybozu::util::formatString(
+            "LsidGid timestamp %s canMerge %d lsid %" PRIu64 " gid %" PRIu64 ""
+            , ts.c_str(), canMerge, lsid, gid);
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const MetaLsidGid &lg) {
+        os << lg.str();
+        return os;
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename InputStream>
+    void load(InputStream &is) {
+        cybozu::load(preamble, is);
+        cybozu::load(canMerge, is);
+        cybozu::load(timestamp, is);
+        cybozu::load(lsid, is);
+        cybozu::load(gid, is);
+    }
+    /**
+     * For cybozu serializer.
+     */
+    template <typename OutputStream>
+    void save(OutputStream &os) const {
+        cybozu::save(os, preamble);
+        cybozu::save(os, canMerge);
+        cybozu::save(os, timestamp);
+        cybozu::save(os, lsid);
+        cybozu::save(os, gid);
+    }
+};
+
+enum class Relation
+{
+    TOO_OLD_DIFF, TOO_NEW_DIFF, APPLICABLE_DIFF, NOT_APPLICABLE_DIFF,
+};
+
+inline Relation getRelation(const MetaSnap &snap, const MetaDiff &diff)
+{
+    if (diff.isClean()) {
+        if (diff.snapE.gidB <= snap.gidB) {
+            return Relation::TOO_OLD_DIFF;
+        } else if (snap.gidB < diff.snapB.gidB) {
+            return Relation::TOO_NEW_DIFF;
+        }
+        return Relation::APPLICABLE_DIFF;
+    }
+    if (snap.gidB == diff.snapB.gidB && snap.gidE == diff.snapB.gidE) {
+        return Relation::APPLICABLE_DIFF;
+    }
+    return Relation::NOT_APPLICABLE_DIFF;
+}
+
+inline bool canApply(const MetaSnap &snap, const MetaDiff &diff)
+{
+    return getRelation(snap, diff) == Relation::APPLICABLE_DIFF;
+}
+
+inline bool isTooOld(const MetaSnap &snap, const MetaDiff &diff)
+{
+    return getRelation(snap, diff) == Relation::TOO_OLD_DIFF;
+}
+
+inline bool isTooNew(const MetaSnap &snap, const MetaDiff &diff)
+{
+    return getRelation(snap, diff) == Relation::TOO_NEW_DIFF;
+}
+
+inline MetaSnap apply(const MetaSnap &snap, const MetaDiff &diff)
+{
+    MetaSnap ret;
+    assert(canApply(snap, diff));
+    if (diff.isClean()) {
+        ret.gidB = diff.snapE.gidB;
+        ret.gidE = std::max(diff.snapE.gidB, snap.gidE);
+    } else {
+        ret = diff.snapE;
+    }
+    return ret;
+}
+
+inline bool canMerge(const MetaDiff &diff0, const MetaDiff &diff1)
+{
+    return diff1.canMerge && canApply(diff0.snapE, diff1);
+}
+
+inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1)
+{
+    MetaDiff ret;
+    assert(canMerge(diff0, diff1));
+    ret.snapB = diff0.snapB;
+    ret.snapE = apply(diff0.snapE, diff1);
+    ret.canMerge = diff0.canMerge;
+    ret.timestamp = diff1.timestamp;
+    return ret;
+}
+
+inline MetaDiff merge(const std::vector<MetaDiff> &diffV)
+{
+    if (diffV.empty()) {
+        throw cybozu::Exception("merge:empty vector.");
+    }
+    MetaDiff mdiff = diffV[0];
+    for (size_t i = 1; i < diffV.size(); i++) {
+        if (!canMerge(mdiff, diffV[i])) {
+            throw cybozu::Exception("merge:can not merge") << mdiff << diffV[i];
+        }
+        mdiff = merge(mdiff, diffV[i]);
+    }
+    return mdiff;
+}
+
+inline Relation getRelation(const MetaState &st, const MetaDiff &diff)
+{
+    if (st.isApplying) {
+        if (diff.isClean()) {
+            if (diff.snapB.gidB <= st.snapB.gidB &&
+                st.snapE.gidB <= diff.snapE.gidB) {
+                return Relation::APPLICABLE_DIFF;
+            }
+            return Relation::NOT_APPLICABLE_DIFF;
+        }
+        if (st.snapB == diff.snapB && st.snapE.gidB <= diff.snapE.gidB) {
+            return Relation::APPLICABLE_DIFF;
+        }
+        return Relation::NOT_APPLICABLE_DIFF;
+    }
+    if (diff.isClean()) {
+        if (st.snapB.gidB < diff.snapB.gidB) {
+            return Relation::TOO_NEW_DIFF;
+        } else if (diff.snapE.gidB <= st.snapB.gidB) {
+            return Relation::TOO_OLD_DIFF;
+        }
+        return Relation::APPLICABLE_DIFF;
+    }
+    if (st.snapB == diff.snapB && st.snapB.gidB < diff.snapE.gidB) {
+        return Relation::APPLICABLE_DIFF;
+    }
+    return Relation::NOT_APPLICABLE_DIFF;
+}
+
+inline bool canApply(const MetaState &st, const MetaDiff &diff)
+{
+    return getRelation(st, diff) == Relation::APPLICABLE_DIFF;
+}
+
+inline MetaState applying(const MetaState &st, const MetaDiff &diff)
+{
+    assert(canApply(st, diff));
+    MetaState ret;
+    ret.isApplying = true;
+    ret.snapB = st.snapB;
+    if (diff.isClean()) {
+        ret.snapE.gidB = diff.snapE.gidB;
+        if (st.isApplying) {
+            ret.snapE.gidE = std::max(diff.snapE.gidB, st.snapE.gidE);
+            return ret;
+        }
+        ret.snapE.gidE = std::max(diff.snapE.gidB, st.snapB.gidE);
+        return ret;
+    }
+    ret.snapE = diff.snapE;
+    return ret;
+}
+
+inline MetaState apply(const MetaState &st, const MetaDiff &diff)
+{
+    assert(canApply(st, diff));
+    MetaState ret;
+    ret = applying(st, diff);
+    ret.isApplying = false;
+    ret.snapB = ret.snapE;
+    return ret;
+}
+
+/**
+ * Check whether a diff is already applied or not.
+ * If true, the diff can be deleted safely.
+ * This is sufficient condition.
+ */
+inline bool isAlreadyApplied(const MetaSnap &snap, const MetaDiff &diff)
+{
+    return diff.snapE.gidE <= snap.gidB;
+}
+
+/**
+ * Check whether diffC contains diff or not.
+ * If true, the diff can be deleted safely.
+ * This is sufficient condition.
+ */
+inline bool includes(const MetaDiff &diffC, const MetaDiff &diff)
+{
+    return diffC.snapB.gidE <= diff.snapB.gidB && diff.snapE.gidE <= diffC.snapE.gidB;
+}
+
+// QQQ
+
+
+#if 0 // XXX
 
 /**
  * Snapshot identifier.
@@ -370,38 +797,7 @@ static inline MetaSnap apply(const MetaSnap &snap, const MetaDiff &diff)
     uint64_t gid0 = diff.snap1().gid0();
     uint64_t gid1 = std::max(snap.gid1(), diff.snap1().gid1());
     MetaSnap ret(gid0, gid1);
-    ret.setTimestamp(diff.timestamp());
-    return ret;
-}
-
-/**
- * Get dirty snapshot during applying.
- */
-static inline MetaSnap startToApply(const MetaSnap &snap, const MetaDiff &diff)
-{
-    assert(canApply(snap, diff));
-    uint64_t gid0 = snap.gid0();
-    uint64_t gid1 = std::max(snap.gid1(), diff.snap1().gid1());
-    MetaSnap ret(gid0, gid1);
-    ret.setTimestamp(snap.timestamp());
-    return ret;
-}
-
-/**
- * Get result snapshot after applying.
- */
-static inline MetaSnap finishToApply(const MetaSnap &snap, const MetaDiff &diff)
-{
-    assert(snap.isValid());
-    assert(diff.isValid());
-
-    uint64_t gid0 = diff.snap1().gid0();
-    uint64_t gid1 = snap.gid1();
-
-    assert(gid0 <= gid1);
-    assert(gid1 == std::max(gid1, diff.snap1().gid1()));
-    MetaSnap ret(gid0, gid1);
-    ret.setTimestamp(diff.timestamp());
+    ret.setTimestamp(diff.timestamp);
     return ret;
 }
 
@@ -427,7 +823,7 @@ static inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1,
     assert(canMerge(diff0, diff1, ignoreFlag));
     MetaDiff ret(diff0.snap0(), apply(diff0.snap1(), diff1));
     ret.setCanMerge(diff0.canMerge());
-    ret.setTimestamp(diff1.timestamp());
+    ret.setTimestamp(diff1.timestamp);
     return ret;
 }
 
@@ -469,27 +865,32 @@ static inline MetaSnap getSnapFromDiff(const MetaDiff &diff)
     return s;
 }
 
+#endif // XXX
+
 /**
  * @name input file name.
- * @diff will be set.
  * RETURN:
- *   false if parsing failed. diff may be updated partially.
+ *   parsed diff.
  */
-static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff)
+inline MetaDiff parseDiffFileName(const std::string &name)
 {
-    diff.init();
+    MetaDiff diff;
     const std::string minName("YYYYMMDDhhmmss-0-0-1.wdiff");
     std::string s = name;
     if (s.size() < minName.size()) {
-        return false;
+        throw cybozu::Exception("parseDiffFileName:too short name") << name;
     }
     /* timestamp */
     std::string ts = s.substr(0, 14);
-    diff.setTimestamp(cybozu::strToUnixTime(ts));
-    if (s[14] != '-') return false;
+    diff.timestamp = cybozu::strToUnixTime(ts);
+    if (s[14] != '-') {
+        throw cybozu::Exception("parseDiffFileName:parse failure1") << name;
+    }
     /* can_merge */
-    diff.setCanMerge(s[15] != '0');
-    if (s[16] != '-') return false;
+    diff.canMerge = s[15] != '0';
+    if (s[16] != '-') {
+        throw cybozu::Exception("parseDiffFileName:parse failure2") << name;
+    }
     s = s.substr(17);
     /* gid0, gid1(, gid2, gid3). */
     std::vector<uint64_t> gidV;
@@ -498,31 +899,38 @@ static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff)
         if (n == std::string::npos) break;
         uint64_t gid;
         if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
-            return false;
+            throw cybozu::Exception("parseDiffFileName:hexStrToInt failure1") << name;
         }
         gidV.push_back(gid);
         s = s.substr(n + 1);
     }
     size_t n = s.find(".wdiff");
-    if (n == std::string::npos) return false;
+    if (n == std::string::npos) {
+        throw cybozu::Exception("parseDiffFileName:wrong suffix") << name;
+    }
     uint64_t gid;
     if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
-        return false;
+        throw cybozu::Exception("parseDiffFileName:hexStrToInt failure2") << name;
     }
     gidV.push_back(gid);
     switch (gidV.size()) {
     case 2:
-        diff.setSnap0(gidV[0]);
-        diff.setSnap1(gidV[1]);
+        diff.snapB.gidB = gidV[0];
+        diff.snapB.gidE = gidV[0];
+        diff.snapE.gidB = gidV[1];
+        diff.snapE.gidE = gidV[1];
         break;
     case 4:
-        diff.setSnap0(gidV[0], gidV[1]);
-        diff.setSnap1(gidV[2], gidV[3]);
+        diff.snapB.gidB = gidV[0];
+        diff.snapB.gidE = gidV[1];
+        diff.snapE.gidB = gidV[2];
+        diff.snapE.gidE = gidV[3];
         break;
     default:
-        return false;
+        throw cybozu::Exception("parseDiffFileName:parse failure3") << name;
     }
-    return diff.isValid();
+    diff.check();
+    return diff;
 }
 
 /**
@@ -530,23 +938,21 @@ static inline bool parseDiffFileName(const std::string &name, MetaDiff &diff)
  */
 static inline std::string createDiffFileName(const MetaDiff &diff)
 {
-    assert(diff.isValid());
-    MetaSnap s0 = diff.snap0();
-    MetaSnap s1 = diff.snap1();
+    diff.check();
     std::vector<uint64_t> v;
     if (diff.isDirty()) {
-        v.push_back(s0.gid0());
-        v.push_back(s0.gid1());
-        v.push_back(s1.gid0());
-        v.push_back(s1.gid1());
+        v.push_back(diff.snapB.gidB);
+        v.push_back(diff.snapB.gidE);
+        v.push_back(diff.snapE.gidB);
+        v.push_back(diff.snapE.gidE);
     } else {
-        v.push_back(s0.gid0());
-        v.push_back(s1.gid0());
+        v.push_back(diff.snapB.gidB);
+        v.push_back(diff.snapE.gidB);
     }
     std::string s;
-    s += cybozu::unixTimeToStr(diff.timestamp());
+    s += cybozu::unixTimeToStr(diff.timestamp);
     s += '-';
-    s += diff.canMerge() ? '1' : '0';
+    s += diff.canMerge ? '1' : '0';
     for (uint64_t gid : v) {
         s += '-';
         s += cybozu::util::intToHexStr(gid);
