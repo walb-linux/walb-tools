@@ -23,15 +23,15 @@ namespace util {
 /**
  * Make a directory.
  *
- * ensureNotExistance == true
- *   If not exists, make a specified directory.
- *   Otherwise, check the directory existance.
- * ensureNotExistance == false
- *   If not exists, make a specified directory.
- *   Otherwise, throw an error.
+ * If not exists, make a specified directory.
+   If exists,
+ *   ensureNotExistance == false
+ *     check the directory existance.
+ *   ensureNotExistance == true
+ *     throw an error.
  */
 void makeDir(const std::string &dirStr, const char *msg,
-             bool ensureNotExistance)
+             bool ensureNotExistance = false)
 {
     cybozu::FilePath dir(dirStr);
     if (dir.stat().exists()) {

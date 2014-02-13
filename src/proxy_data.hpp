@@ -64,7 +64,7 @@ public:
             throw std::runtime_error("Does not exist: " + baseDir_.str());
         }
         mkdirIfNotExists(getDir());
-        wdiffsP_ = std::make_shared<WalbDiffFiles>(getMasterDir().str(), false);
+        wdiffsP_ = std::make_shared<WalbDiffFiles>(getMasterDir().str());
         mkdirIfNotExists(getServerDir());
         reloadServerRecords();
     }
@@ -89,9 +89,7 @@ public:
      * to server directories. Then, the original file will be removed.
      */
     void add(const MetaDiff &diff) {
-        if (!wdiffsP_->add(diff)) {
-            throw std::runtime_error("add() error.");
-        }
+        wdiffsP_->add(diff);
         cybozu::FilePath fPath(createDiffFileName(diff));
         cybozu::FilePath oldPath = getMasterDir() + fPath;
         for (const auto &pair : serverMap_) {
@@ -102,9 +100,7 @@ public:
                 throw std::runtime_error("link() failed: " + newPath.str());
             }
             WalbDiffFiles &wdiffs = getWdiffFiles(name);
-            if (!wdiffs.add(diff)) {
-                throw std::runtime_error("wdiffs add failed.");
-            }
+            wdiffs.add(diff);
         }
         wdiffsP_->removeBeforeGid(diff.snapE.gidB);
     }
@@ -231,7 +227,7 @@ private:
         auto res1 = wdiffsMap_.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(name),
-            std::forward_as_tuple(dp.str(), false));
+            std::forward_as_tuple(dp.str()));
         if (!res0.second || !res1.second) {
             throw std::runtime_error("map emplace failed.");
         }

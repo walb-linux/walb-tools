@@ -139,7 +139,7 @@ private:
         return VOLUME_PREFIX + volId_;
     }
 
-#if 0
+#if 0 // XXX
     /**
      * Grow the volume.
      * @newSizeLb [logical block].
@@ -534,7 +534,7 @@ private:
         std::string suffix = cybozu::util::formatString("_%" PRIu64 "", gid);
         return RESTORE_PREFIX + volId_ + suffix;
     }
-#endif
+#endif // XXX
 };
 
 } //namespace walb

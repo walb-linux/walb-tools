@@ -9,7 +9,7 @@ CYBOZU_TEST_AUTO(consolidate)
     cybozu::FilePath fp("test_wdiff_files_dir0");
     TestDirectory testDir(fp.str(), true);
 
-    walb::WalbDiffFiles diffFiles(fp.str(), true, true);
+    walb::WalbDiffFiles diffFiles(fp.str());
     walb::MetaDiff diff;
     setDiff(diff, 0, 1, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     setDiff(diff, 1, 2, true);  diffFiles.add(diff); createDiffFile(diffFiles, diff);
@@ -22,7 +22,7 @@ CYBOZU_TEST_AUTO(consolidate)
     CYBOZU_TEST_EQUAL(diffFiles.listName().size(), 5);
 
     {
-        std::vector<walb::MetaDiff> v = diffFiles.getMergingCandidates(0);
+        std::vector<walb::MetaDiff> v = diffFiles.mgr().getMergingCandidates(0);
         CYBOZU_TEST_EQUAL(v.size(), 2);
         CYBOZU_TEST_EQUAL(v[0], walb::MetaDiff(0, 1));
         CYBOZU_TEST_EQUAL(v[1], walb::MetaDiff(1, 2));
@@ -32,7 +32,7 @@ CYBOZU_TEST_AUTO(consolidate)
         createDiffFile(diffFiles, mdiff);
     }
     {
-        std::vector<walb::MetaDiff> v = diffFiles.getMergingCandidates(2);
+        std::vector<walb::MetaDiff> v = diffFiles.mgr().getMergingCandidates(2);
         CYBOZU_TEST_EQUAL(v.size(), 3);
         CYBOZU_TEST_EQUAL(v[0], walb::MetaDiff(2, 3));
         CYBOZU_TEST_EQUAL(v[1], walb::MetaDiff(3, 4));
@@ -58,7 +58,7 @@ CYBOZU_TEST_AUTO(consolidate)
     CYBOZU_TEST_EQUAL(diffV[0].snapB.gidB, 5);
     CYBOZU_TEST_EQUAL(diffV[0].snapE.gidB, 127);
 
-    diffFiles.reset();
+    diffFiles.clean();
     setDiff(diff, 10000, 10001, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     CYBOZU_TEST_EQUAL(diffFiles.listDiff().size(), 1);
 }
@@ -68,7 +68,7 @@ CYBOZU_TEST_AUTO(notCongiguous)
     cybozu::FilePath fp("test_wdiff_files_dir1");
     TestDirectory testDir(fp.str(), true);
 
-    walb::WalbDiffFiles diffFiles(fp.str(), false, true);
+    walb::WalbDiffFiles diffFiles(fp.str());
     walb::MetaDiff diff;
     setDiff(diff, 0, 1, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     setDiff(diff, 2, 3, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
@@ -83,15 +83,15 @@ CYBOZU_TEST_AUTO(notCongiguous)
     CYBOZU_TEST_EQUAL(diffFiles.listName().size(), 6);
 
     {
-        std::vector<walb::MetaDiff> v = diffFiles.getMergingCandidates(0);
+        std::vector<walb::MetaDiff> v = diffFiles.mgr().getMergingCandidates(0);
         CYBOZU_TEST_EQUAL(v.size(), 1);
     }
     {
-        std::vector<walb::MetaDiff> v = diffFiles.getMergingCandidates(2);
+        std::vector<walb::MetaDiff> v = diffFiles.mgr().getMergingCandidates(2);
         CYBOZU_TEST_EQUAL(v.size(), 3);
     }
     {
-        std::vector<walb::MetaDiff> v = diffFiles.getMergingCandidates(5);
+        std::vector<walb::MetaDiff> v = diffFiles.mgr().getMergingCandidates(5);
         CYBOZU_TEST_EQUAL(v.size(), 2);
     }
 
