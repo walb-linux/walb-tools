@@ -20,47 +20,54 @@
 #include "time.hpp"
 
 /**
+ * Backup facility of walb storage will generate a full image depicted as a MetaSnap
+ * and contiguous diff images depicted as MetaDiff list.
+ *
+ * There are four basic struct types to manage archive data.
+ *   MetaSnap: snapshot expression.
+ *     denoted as snap, s, (gidB, gidE), or |B,E|.
+ *     has gidB and gidE as members. gid is generation id. B means begin, E means end.
+ *   MetaDiff: diff expression.
+ *     denoted as diff, (snapB, snapE), or |B,E|-->|B',E'|.
+ *     has snapB and snapE as members.
+ *   MetaState: full image state.
+ *     denoted as state, st, <|B,E|>, or <|B,E|-->|B',E'|>.
+ *     constructed from one or two MetaSnap data.
+ *     used by archive daemon.
+ *   MetaLsidGid: corresponding lsid and gid.
+ *     used by storage daemon.
+ *
  * Wdiff file name format:
- *   [timestamp]-[can_merge]-[s0.gid0]-[s1.gid0].wdiff (clean diff)
- *   [timestamp]-[can_merge]-[s0.gid0]-[s0.gid1]-[s1.gid0]-[s1.gid1].wdiff (dirty diff)
+ *   [timestamp]-[can_merge]-[snapB.gidB]-[snapE.gidB].wdiff (clean diff)
+ *   [timestamp]-[can_merge]-[snapB.gidB]-[snapB.gidE]-[snapE.gidB]-[snapE.gidE].wdiff (dirty diff)
  *   timestamp: YYYYMMDDhhmmss format.
  *   can_merge: 0 or 1.
- *   gid: non-negative integer (hex string without prefix "0x").
- *   s0 or s1 (generally s) indicates a snapshot. (s0, s1) indicates a diff.
+ *   gid expression: non-negative integer (hex string without prefix "0x" here).
  *
- *
- * TODO: rewrite the following constraints.
- * >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
  * Constraints:
- *   s.gid0 <= s.gid1 must be satisfied.
- *   s0.gid1 < s1.gid0 must be satisfied.
- *   If s.gid0 == s.gid1 then the snapshot s is clean, else dirty.
- *   A diff (s0, s1) is called clean only if both s0 and s1 are clean.
+ *   s.gidB <= s.gidE must be satisfied in a snapshot.
+ *   If s.gidB == s.gidE then the snapshot s is clean, else dirty.
+ *   A diff (sB, sE) is called clean only if both sB and sE are clean.
+ *   sB.gidB < sE.gidB must be satisfied in a diff (progress constraint).
+ *   For every snapshot, there are just one applicable diff
+ *   if there is not merged diffs (unique diff constraint).
  *
- * Apply rule:
- *   We can apply a diff (s1, s2) to a snapshot s0 where
- *   if s1 is dirty then
- *     s0 == s1 is required (strictly) or
- *     (s1.gid0() == s0.gid0() and s1.gid1() <= s0.gid1()).
- *     The latter condition is required for multiple calls of startToApply().
- *   else:
- *     s1.gid0 <= s0.gid0 is required.
- *     s1.gid0 == s0.gid0 is required for more strict setting.
- *   After applying, you will get the snapshot s3 where
- *     s3.gid0 = s2.gid0.
- *     s3.gid1 = max(s0.gid1, s2.gid1).
+ * Application rule:
+ *   See getRelation(), canMerge(), applying(), and apply() for detail.
  *
- * Merge rule:
- *   ts0-c-s0-s1.wdiff + ts1-0-s2-s3.wdiff --> ts1-c-s3.wdiff
- *   ts0 <= ts1 must be satisfied.
- *   s1 and (s2, s3) must satisfy the apply rule.
- *   See MetaDiff::canMerge() for detail.
+ * Merging rule:
+ *   See canMerge() and merge() for detail.
  *
- * Use createDiffFileName() and parseDiffFileName()
- * to convert from/to a MetaDiff to/from its filename.
+ * MetaDiffManager:
+ *   manager of multiple diffs.
  *
- * Use canConsolidate() and consolidate() to consolidate diff list.
- * <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ * Utility functions:
+ *   isAlreadyApplied()
+ *   contains()
+ *   getMaxProgressDiff()
+ *     to choose the most preferable diff from applicable/mergeable candidates.
+ *   createDiffFileName()/parseDiffFileName()
+ *     to convert from/to a MetaDiff to/from diff filename.
  */
 namespace walb {
 
