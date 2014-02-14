@@ -40,7 +40,6 @@ namespace walb {
  *
  * TODO:
  *   * use mutex_ for exclusive accesses.
- *   * implement mergeCandidates().
  */
 class ProxyData
 {
@@ -113,16 +112,16 @@ public:
         getWdiffFiles(name).removeBeforeGid(gid);
     }
     /**
-     * Get transfer candidates.
+     * Get transfer diff list.
      * @name server name.
      * @size maximum total size [byte].
      * RETURN:
      *   MetaDiff list that can be merged to a diff
      *   which will be transferred to the server.
      */
-    std::vector<MetaDiff> getTransferCandidates(const std::string &name, uint64_t size) {
+    std::vector<MetaDiff> getTransferDiffList(const std::string &name, uint64_t size) {
         assert(existsServer(name));
-        return getWdiffFiles(name).getTransferCandidates(size);
+        return getWdiffFiles(name).getTransferDiffList(size);
     }
     bool existsServer(const std::string &name) const {
         return serverMap_.find(name) != serverMap_.end()

@@ -805,14 +805,14 @@ public:
     /**
      * This is used for merge.
      */
-    std::vector<MetaDiff> getMergingCandidates(uint64_t gid, uint32_t limit = 0) const {
+    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid, uint32_t limit = 0) const {
         std::vector<MetaDiff> v = getFirstDiffs(gid);
         if (v.empty()) return {};
         MetaDiff diff = getMaxProgressDiff(v);
         v = {diff};
         MetaDiff mdiff = diff;
         while (limit == 0 || v.size() < limit) {
-            std::vector<MetaDiff> u = getMergeableDiffs(mdiff);
+            std::vector<MetaDiff> u = getMergeableCandidates(mdiff);
             if (u.empty()) break;
             diff = getMaxProgressDiff(u);
             v.push_back(diff);
@@ -827,11 +827,11 @@ public:
      *   applicable diff list.
      *   CAUSION: these may not be mergeable.
      */
-    std::vector<MetaDiff> getApplyingCandidates(const MetaSnap &snap, uint32_t limit = 0) const {
+    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, uint32_t limit = 0) const {
         MetaSnap s = snap;
         std::vector<MetaDiff> v;
         while (limit == 0 || v.size() < limit) {
-            std::vector<MetaDiff> u = getApplicableDiffs(s);
+            std::vector<MetaDiff> u = getApplicableCandidates(s);
             if (u.empty()) break;
             MetaDiff d = getMaxProgressDiff(u);
             v.push_back(d);
@@ -842,8 +842,8 @@ public:
     /**
      * Applicable and mergeable diff list.
      */
-    std::vector<MetaDiff> getApplyingAndMergingCandidates(const MetaSnap &snap, uint32_t limit = 0) const {
-        std::vector<MetaDiff> v = getApplyingCandidates(snap, limit);
+    std::vector<MetaDiff> getApplicableAndMergeableDiffList(const MetaSnap &snap, uint32_t limit = 0) const {
+        std::vector<MetaDiff> v = getApplicableDiffList(snap, limit);
         if (v.empty()) return v;
         std::vector<MetaDiff> u;
         MetaDiff mdiff = v[0];
@@ -858,8 +858,8 @@ public:
      * Minimum number of diffs that are applicable.
      * This is useful for applying state.
      */
-    std::vector<MetaDiff> getMinimumApplyingCandidates(const MetaState &st, uint32_t limit = 0) const {
-        std::vector<MetaDiff> v = getApplyingCandidates(st.snapB, limit);
+    std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st, uint32_t limit = 0) const {
+        std::vector<MetaDiff> v = getApplicableDiffList(st.snapB, limit);
         if (v.empty()) return v;
         if (!st.isApplying) return {v[0]};
 
@@ -879,8 +879,8 @@ public:
      * @st base state.
      */
     MetaSnap getLatestSnapshot(const MetaState &st) const {
-        auto v0 = getMinimumApplyingCandidates(st);
-        auto v1 = getApplyingCandidates(st.snapB);
+        auto v0 = getMinimumApplicableDiffList(st);
+        auto v1 = getApplicableDiffList(st.snapB);
         if (v1.size() < v0.size()) {
             throw cybozu::Exception("MetaDiffManager::getLatestSnapshot:size bug")
                 << v0.size() << v1.size();
@@ -907,8 +907,8 @@ public:
             ret.push_back(st.snapB);
         }
         std::vector<MetaDiff> v0, v1;
-        v0 = getMinimumApplyingCandidates(st);
-        v1 = getApplyingCandidates(st.snapB);
+        v0 = getMinimumApplicableDiffList(st);
+        v1 = getApplicableDiffList(st.snapB);
         if (v1.size() < v0.size()) {
             throw cybozu::Exception("MetaDiffManager::getCleanSnapshotList:size bug")
                 << v0.size() << v1.size();
@@ -988,7 +988,7 @@ private:
         }
         return v;
     }
-    std::vector<MetaDiff> getMergeableDiffs(const MetaDiff &diff) const {
+    std::vector<MetaDiff> getMergeableCandidates(const MetaDiff &diff) const {
         std::vector<MetaDiff> v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
@@ -1002,7 +1002,7 @@ private:
         }
         return v;
     }
-    std::vector<MetaDiff> getApplicableDiffs(const MetaSnap &snap) const {
+    std::vector<MetaDiff> getApplicableCandidates(const MetaSnap &snap) const {
         std::vector<MetaDiff> v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;

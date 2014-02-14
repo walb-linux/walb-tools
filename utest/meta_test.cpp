@@ -245,9 +245,9 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), walb::MetaSnap(5));
     CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), walb::MetaSnap(0));
 
-    auto v1 = mgr.getMergingCandidates(0);
+    auto v1 = mgr.getMergeableDiffList(0);
     CYBOZU_TEST_EQUAL(v1.size(), 3);
-    auto v2 = mgr.getMergingCandidates(3);
+    auto v2 = mgr.getMergeableDiffList(3);
     CYBOZU_TEST_EQUAL(v2.size(), 2);
     auto mdiff1 = walb::merge(v1);
     auto mdiff2 = walb::merge(v2);
@@ -274,9 +274,9 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     walb::MetaDiffManager mgr;
     for (walb::MetaDiff &d : v) mgr.add(d);
     CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), walb::MetaSnap(10));
-    auto v0 = mgr.getApplyingCandidates(st.snapB);
+    auto v0 = mgr.getApplicableDiffList(st.snapB);
     CYBOZU_TEST_EQUAL(v0.size(), 3);
-    auto v1 = mgr.getMinimumApplyingCandidates(st);
+    auto v1 = mgr.getMinimumApplicableDiffList(st);
     CYBOZU_TEST_EQUAL(v1.size(), 1);
 
     auto st1a = walb::applying(st, v);
@@ -310,7 +310,7 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
         s0 = walb::apply(s0, d);
     }
 
-    auto v1 = mgr.getApplyingCandidates(snap);
+    auto v1 = mgr.getApplicableDiffList(snap);
     CYBOZU_TEST_ASSERT(v == v1);
 
     cybozu::util::Random<uint32_t> rand;
@@ -323,7 +323,7 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     uint64_t maxGid = s0.gidE;
 
     for (size_t i = 0; i < 10; i++) {
-        auto v2 = mgr.getMergingCandidates(rand() % maxGid);
+        auto v2 = mgr.getMergeableDiffList(rand() % maxGid);
         if (v2.size() > 1) {
             mgr.add(walb::merge(v2));
             mgr.gc();

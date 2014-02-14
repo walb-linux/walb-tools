@@ -91,11 +91,11 @@ public:
         return mgr_;
     }
     /**
-     * Get transfer candidates.
+     * Get transfer diff list.
      * @size max total size [byte].
      */
-    std::vector<MetaDiff> getTransferCandidates(uint64_t size) {
-        std::vector<MetaDiff> v = mgr_.getMergingCandidates(0);
+    std::vector<MetaDiff> getTransferDiffList(uint64_t size) {
+        std::vector<MetaDiff> v = mgr_.getMergeableDiffList(0);
         if (v.empty()) return {};
         std::vector<MetaDiff> u;
         uint64_t total = 0;
