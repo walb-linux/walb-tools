@@ -268,7 +268,7 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     walb::MetaState st(snap);
     std::vector<walb::MetaDiff> v;
     v.emplace_back(0, 5); v.back().canMerge = false;
-    v.emplace_back(5, 10); v.back().canMerge = false;
+    v.emplace_back(5, 10, 10, 10); v.back().canMerge = false;
     v.emplace_back(10, 15); v.back().canMerge = false;
 
     walb::MetaDiffManager mgr;
@@ -279,20 +279,28 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     auto v1 = mgr.getMinimumApplyingCandidates(st);
     CYBOZU_TEST_EQUAL(v1.size(), 1);
 
-    // QQQ
-    auto st1 = walb::applying(st, v0[0]);
-    st1 = walb::applying(st1, v0[1]);
-
+    auto st1a = walb::applying(st, v);
+    auto st1b = walb::applying(st1a, v);
+    walb::MetaState st1c(walb::MetaSnap(0, 10), walb::MetaSnap(15));
+    auto st2a = walb::apply(st, v);
+    auto st2b = walb::apply(st1a, v);
+    walb::MetaState st2c(walb::MetaSnap(15));
+    CYBOZU_TEST_EQUAL(st1a, st1b);
+    CYBOZU_TEST_EQUAL(st1a, st1c);
+    CYBOZU_TEST_EQUAL(st2a, st2b);
+    CYBOZU_TEST_EQUAL(st2a, st2c);
 }
 
 CYBOZU_TEST_AUTO(metaDiffManager3)
 {
-    walb::MetaSnap snap(0), s0(0), s1(0);
+    walb::MetaSnap snap(0), s0(snap), s1(snap);
     walb::MetaState st(snap);
     auto v = randDiffList(snap, 20);
+#if 0
     for (walb::MetaDiff &d : v) {
         std::cout << d << std::endl;
     }
+#endif
 
     walb::MetaDiffManager mgr;
     for (walb::MetaDiff &d : v) {
@@ -325,12 +333,12 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     }
 
     std::vector<walb::MetaSnap> snapV = mgr.getCleanSnapshotList(st);
+#if 0
     for (walb::MetaSnap &s : snapV) {
         std::cout << s << std::endl;
     }
+#endif
     if (!snapV.empty()) {
         CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), snapV[0]);
     }
-
-    // QQQ
 }
