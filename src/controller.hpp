@@ -11,7 +11,7 @@ namespace client_impl {
  * params.size() == 0 or 1.
  * params[0]: volId
  */
-static inline void c2xGetStrVecClient(protocol::ClientParams &p)
+inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
     packet::Packet packet(p.sock);
     packet.write(p.params);
@@ -33,7 +33,7 @@ static inline void c2xGetStrVecClient(protocol::ClientParams &p)
  * params[0]: volId
  * params[2]: wdevPath
  */
-static inline void c2sInitVolClient(protocol::ClientParams &p)
+inline void c2sInitVolClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 2, "c2sInitVolClient");
 }
@@ -41,12 +41,12 @@ static inline void c2sInitVolClient(protocol::ClientParams &p)
 /**
  * params[0]: volId
  */
-static inline void c2aInitVolClient(protocol::ClientParams &p)
+inline void c2aInitVolClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
 }
 
-static inline void c2sFullSyncClient(protocol::ClientParams &p)
+inline void c2sFullSyncClient(protocol::ClientParams &p)
 {
     if (p.params.size() != 1 && p.params.size() != 2) {
         throw cybozu::Exception("c2sFullSyncClient:bad size param") << p.params.size();
@@ -67,6 +67,15 @@ static inline void c2sFullSyncClient(protocol::ClientParams &p)
     if (st != "ok") {
         throw cybozu::Exception("c2sFullSyncClient:not ok") << st;
     }
+}
+
+/**
+ * Restore command.
+ * parameters: volId, gid
+ */
+inline void c2aRestoreClient(protocol::ClientParams &p)
+{
+    // QQQ
 }
 
 } // namespace walb

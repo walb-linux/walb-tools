@@ -85,7 +85,7 @@ struct MetaSnap
     uint64_t gidB, gidE;
 
     MetaSnap()
-        : MetaSnap(-1) {}
+        : MetaSnap(0) {}
     explicit MetaSnap(uint64_t gid)
         : MetaSnap(gid, gid) {}
     MetaSnap(uint64_t gidB, uint64_t gidE)
@@ -275,13 +275,13 @@ struct MetaState
         : preamble(META_STATE_PREAMBLE)
         , isApplying(false), timestamp(0)
         , snapB(), snapE() {}
-    explicit MetaState(const MetaSnap &snap)
+    explicit MetaState(const MetaSnap &snap, uint64_t ts = 0)
         : preamble(META_STATE_PREAMBLE)
-        , isApplying(false), timestamp(0)
+        , isApplying(false), timestamp(ts)
         , snapB(snap), snapE(snap) {}
-    MetaState(const MetaSnap &snapB, const MetaSnap &snapE)
+    MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts = 0)
         : preamble(META_STATE_PREAMBLE)
-        , isApplying(true), timestamp(0)
+        , isApplying(true), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     void set(const MetaSnap &snapB) {
         isApplying = false;

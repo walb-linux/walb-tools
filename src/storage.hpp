@@ -144,9 +144,6 @@ static inline void c2sFullSyncServer(protocol::ServerParams &p)
         walb::packet::Ack(aSock).recv();
     }
 
-    // TODO (10), ....
-
-    // (11)
     volInfo.setState("Master");
     LOGi("c2sFullSyncServer done, ctrl:%s storage:%s archive:%s", p.clientId.c_str(), nodeId.c_str(), archiveId.c_str());
 }

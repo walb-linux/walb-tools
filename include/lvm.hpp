@@ -360,6 +360,17 @@ Lv createSnapshot(
 }
 
 /**
+ * Rename a volume or snapshot.
+ * "lvrename vg oldlv newlv"
+ */
+void renameLv(
+    const std::string &vgName,
+    const std::string &oldLvName, const std::string &newLvName)
+{
+    cybozu::process::call("/sbin/lvrename", { vgName, oldLvName, newLvName });
+}
+
+/**
  * Remove a volume or a snapshot.
  */
 void remove(const std::string &pathStr)

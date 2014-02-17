@@ -74,11 +74,14 @@ public:
     void init() {
         util::makeDir(volDir_.str(), "ArchiveVolInfo::init", true);
         setUuid(cybozu::Uuid());
+        setMetaState(MetaState());
         setState("SyncReady");
-        util::saveFile(volDir_, "base", ""); // TODO
     }
     void setUuid(const cybozu::Uuid &uuid) {
         util::saveFile(volDir_, "uuid", uuid);
+    }
+    void setMetaState(const MetaState &st) {
+        util::saveFile(volDir_, "base", st);
     }
 	void setState(const std::string& newState)
 	{
@@ -130,6 +133,18 @@ public:
                 "The target must not be snapshot: " + lv.path().str());
         }
         return lv;
+    }
+    /**
+     * Restore a snapshot.
+     * (1) create lvm snapshot of base lv. (with temporal lv name)
+     * (2) apply appropriate wdiff files.
+     * (3) rename the lvm snapshot.
+     */
+    void restore(uint64_t gid) {
+
+
+
+        // QQQ
     }
 private:
     cybozu::lvm::Vg getVg() const {

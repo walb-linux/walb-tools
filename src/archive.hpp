@@ -25,12 +25,12 @@ inline ArchiveSingleton& getArchiveGlobal()
 
 const ArchiveSingleton& ga = getArchiveGlobal();
 
-static inline void c2aStatusServer(protocol::ServerParams &/*p*/)
+inline void c2aStatusServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
 }
 
-static inline void c2aInitVolServer(protocol::ServerParams &p)
+inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const std::vector<std::string> v =
         protocol::recvStrVec(p.sock, 1, "c2aInitVolServer", false);
@@ -46,7 +46,7 @@ static inline void c2aInitVolServer(protocol::ServerParams &p)
  * Execute dirty full sync protocol as server.
  * Client is storage server or another archive server.
  */
-static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
+inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 {
     ProtocolLogger logger(ga.nodeId, p.clientId);
 
@@ -77,7 +77,6 @@ static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 
     // recv and write.
     {
-        //TODO: sd.reset(gid_);
         std::string lvPath = volInfo.getLv().path().str();
         cybozu::util::BlockDevice bd(lvPath, O_RDWR);
         std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
@@ -122,11 +121,21 @@ static inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     sPack.read(gidB);
     sPack.read(gidE);
 
-    // TODO: Save to base file. (5) in archive-daemon.txt
+    walb::MetaSnap snap(gidB, gidE);
+    walb::MetaState state(snap, curTime);
+    volInfo.setMetaState(state);
 
     volInfo.setUuid(uuid);
     volInfo.setState("Archived");
     walb::packet::Ack(p.sock).send();
+}
+
+/**
+ * Restore command.
+ */
+inline void c2aRestoreServer(protocol::ServerParams &p)
+{
+    // QQQ
 }
 
 } // walb
