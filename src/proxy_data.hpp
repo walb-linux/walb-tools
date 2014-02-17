@@ -46,7 +46,7 @@ class ProxyData
 private:
     cybozu::FilePath baseDir_; /* base directory. */
     std::string name_; /* volume identifier. */
-    std::shared_ptr<WalbDiffFiles> wdiffsP_; /* primary wdiff data. */
+    WalbDiffFiles wdiffs_; /* primary wdiff data. */
     std::map<std::string, ServerInfo> serverMap_;
     std::map<std::string, WalbDiffFiles> wdiffsMap_; /* server wdiff data. */
     std::mutex mutex_;
@@ -55,7 +55,7 @@ public:
     ProxyData(const std::string &baseDirStr, const std::string &name)
         : baseDir_(baseDirStr)
         , name_(name)
-        , wdiffsP_()
+        , wdiffs_(getMasterDir().str())
         , serverMap_()
         , wdiffsMap_()
         , mutex_() {
@@ -63,13 +63,12 @@ public:
             throw std::runtime_error("Does not exist: " + baseDir_.str());
         }
         mkdirIfNotExists(getDir());
-        wdiffsP_ = std::make_shared<WalbDiffFiles>(getMasterDir().str());
         mkdirIfNotExists(getServerDir());
+		wdiffs_.reloadMetadata();
         reloadServerRecords();
     }
     const WalbDiffFiles &getWdiffFiles() const {
-        assert(wdiffsP_);
-        return *wdiffsP_;
+        return wdiffs_;
     }
     /**
      * For temporary file.
@@ -88,7 +87,7 @@ public:
      * to server directories. Then, the original file will be removed.
      */
     void add(const MetaDiff &diff) {
-        wdiffsP_->add(diff);
+        wdiffs_.add(diff);
         cybozu::FilePath fPath(createDiffFileName(diff));
         cybozu::FilePath oldPath = getMasterDir() + fPath;
         for (const auto &pair : serverMap_) {
@@ -101,7 +100,7 @@ public:
             WalbDiffFiles &wdiffs = getWdiffFiles(name);
             wdiffs.add(diff);
         }
-        wdiffsP_->removeBeforeGid(diff.snapE.gidB);
+        wdiffs_.removeBeforeGid(diff.snapE.gidB);
     }
     /**
      * @name server name.

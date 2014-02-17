@@ -37,17 +37,17 @@ using VgList = std::vector<Vg>;
 
 namespace local {
 
-static bool isSpace(char c)
+inline bool isSpace(char c)
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-static void trim(std::string &str)
+inline void trim(std::string &str)
 {
     cybozu::Trim(str, isSpace);
 }
 
-static std::vector<std::string> splitAndTrim(const std::string &str, char sep)
+inline std::vector<std::string> splitAndTrim(const std::string &str, char sep)
 {
     std::vector<std::string> v;
     cybozu::Split(v, str, sep);
@@ -55,7 +55,7 @@ static std::vector<std::string> splitAndTrim(const std::string &str, char sep)
     return v;
 }
 
-static bool isDeviceAvailable(const cybozu::FilePath &path) {
+inline bool isDeviceAvailable(const cybozu::FilePath &path) {
     if (!path.stat().exists()) return false;
     std::string s = cybozu::process::call("/sbin/dmsetup", {
             "info", "-c", "--noheadings", "-o", "Open", path.str() });
@@ -131,7 +131,7 @@ bool waitForDeviceAvailable(cybozu::FilePath &path)
 /**
  * Prototypes.
  */
-static cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
+cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
 Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb);
 Lv createSnapshot(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
@@ -309,7 +309,7 @@ public:
 /**
  * Get lvm path.
  */
-static cybozu::FilePath getLvmPath(
+inline cybozu::FilePath getLvmPath(
     const std::string &vgName, const std::string &name)
 {
     return cybozu::FilePath("/dev") + cybozu::FilePath(vgName)

@@ -50,12 +50,9 @@ public:
      *   true for server data. must be contiguous.
      *   false for proxy data. must not be contiguous but newer.
      */
-    explicit WalbDiffFiles(const std::string &dirStr)
+    explicit WalbDiffFiles(const std::string &dirStr, bool doMakeDir = true)
         : dir_(dirStr), mgr_() {
-        walb::util::makeDir(dir_.str(), "WalbDiffFiles");
-        reloadMetadata();
-    }
-    ~WalbDiffFiles() noexcept {
+        if (doMakeDir) walb::util::makeDir(dir_.str(), "WalbDiffFiles");
     }
     DISABLE_COPY_AND_ASSIGN(WalbDiffFiles);
     DISABLE_MOVE(WalbDiffFiles);
@@ -87,7 +84,7 @@ public:
     /**
      * To call const member functions.
      */
-    const MetaDiffManager &mgr() const {
+    const MetaDiffManager &getMgr() const {
         return mgr_;
     }
     /**

@@ -828,21 +828,18 @@ public:
         return v;
     }
     /**
-     * This is used for apply or virtual full scan.
-     *
-     * RETURN:
-     *   applicable diff list.
-     *   CAUSION: these may not be mergeable.
+     * QQQ
      */
-    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, uint32_t limit = 0) const {
+    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, uint64_t maxGid = uint64_t(-1)) const {
         MetaSnap s = snap;
         std::vector<MetaDiff> v;
-        while (limit == 0 || v.size() < limit) {
+        for (;;) {
             std::vector<MetaDiff> u = getApplicableCandidates(s);
             if (u.empty()) break;
             MetaDiff d = getMaxProgressDiff(u);
-            v.push_back(d);
             s = apply(s, d);
+            if (s.gidB > maxGid) break;
+            v.push_back(d);
         }
         return v;
     }
@@ -865,8 +862,8 @@ public:
      * Minimum number of diffs that are applicable.
      * This is useful for applying state.
      */
-    std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st, uint32_t limit = 0) const {
-        std::vector<MetaDiff> v = getApplicableDiffList(st.snapB, limit);
+    std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st) const {
+        std::vector<MetaDiff> v = getApplicableDiffList(st.snapB);
         if (v.empty()) return v;
         if (!st.isApplying) return {v[0]};
 
@@ -898,8 +895,8 @@ public:
      * Get the oldest clean snapshot
      * @st base state.
      */
-    MetaSnap getOldestCleanSnapshot(const MetaState &st) const {
-        auto v = getCleanSnapshotList(st);
+    uint64_t getOldestCleanSnapshot(const MetaState &st) const {
+        const std::vector<uint64_t> v = getCleanSnapshotList(st);
         if (v.empty()) {
             throw cybozu::Exception("MetaDiffManager::getOldestCleanSnapshot:there is no clean snapshot");
         }
@@ -908,10 +905,10 @@ public:
     /**
      * Get clean snapshot list sorted by gid.
      */
-    std::vector<MetaSnap> getCleanSnapshotList(const MetaState &st) const {
-        std::vector<MetaSnap> ret;
+    std::vector<uint64_t> getCleanSnapshotList(const MetaState &st) const {
+        std::vector<uint64_t> ret;
         if (!st.isApplying && st.snapB.isClean()) {
-            ret.push_back(st.snapB);
+            ret.push_back(st.snapB.gidB);
         }
         std::vector<MetaDiff> v0, v1;
         v0 = getMinimumApplicableDiffList(st);
@@ -927,13 +924,29 @@ public:
             snap = apply(snap, v0[i]);
             ++i;
         }
-        if (snap.isClean()) ret.push_back(snap);
+        if (snap.isClean()) ret.push_back(snap.gidB);
         while (i < v1.size()) {
             snap = apply(snap, v1[i]);
-            if (snap.isClean()) ret.push_back(snap);
+            if (snap.isClean()) ret.push_back(snap.gidB);
             ++i;
         }
         return ret;
+    }
+    /*
+     * QQQ
+    */
+    std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
+        std::vector<MetaDiff> ret = getApplicableDiffList(st.snapB, gid);
+        if (ret.empty()) return ret;
+
+        const std::vector<MetaDiff> miniDiffList = getMinimumApplicableDiffList(st);
+        if (miniDiffList.size() > ret.size()) return {};
+        const MetaState appliedSt = apply(st, ret);
+        if (appliedSt.snapB.isClean() && appliedSt.snapB.gidB == gid) {
+            return ret;
+        } else {
+            return {};
+        }
     }
     /**
      * Get all diffs between gid0 and gid1.

@@ -36,9 +36,9 @@ private:
     const cybozu::FilePath volDir_;
     const std::string vgName_;
     const std::string volId_;
+    WalbDiffFiles wdiffs_;
 
 #if 0
-    std::shared_ptr<WalbDiffFiles> wdiffsP_;
     MetaSnap baseRecord_; /* snapshot information of the volume. */
 #endif
 
@@ -52,7 +52,8 @@ public:
                    const std::string &vgName = VG_NAME)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , vgName_(vgName)
-        , volId_(volId) {
+        , volId_(volId)
+        , wdiffs_(volDir_.str(), false) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
             throw cybozu::Exception("ArchiveVolInfo:Directory not found: " + baseDirStr);
@@ -63,13 +64,9 @@ public:
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
         }
-#if 0
-        wdiffsP_ = std::make_shared<WalbDiffFiles>(getDir().str(), true);
-        if (!loadBaseRecord()) {
-            /* TODO: gid can be specified. */
-            reset(0);
+        if (volDir_.stat().isDirectory()) {
+            wdiffs_.reloadMetadata();
         }
-#endif
     }
     void init() {
         util::makeDir(volDir_.str(), "ArchiveVolInfo::init", true);
@@ -83,21 +80,26 @@ public:
     void setMetaState(const MetaState &st) {
         util::saveFile(volDir_, "base", st);
     }
-	void setState(const std::string& newState)
-	{
-		const char *tbl[] = {
-			"SyncReady",
+    MetaState getMetaState() const {
+        MetaState st;
+        util::loadFile(volDir_, "base", st);
+        return st;
+    }
+    void setState(const std::string& newState)
+    {
+        const char *tbl[] = {
+            "SyncReady",
             "Archived",
-			"Stopped",
-		};
-		for (const char *p : tbl) {
-			if (newState == p) {
-				util::saveFile(volDir_, "state", newState);
-				return;
-			}
-		}
-		throw cybozu::Exception("ArchiveVolInfo::setState:bad state") << newState;
-	}
+            "Stopped",
+        };
+        for (const char *p : tbl) {
+            if (newState == p) {
+                util::saveFile(volDir_, "state", newState);
+                return;
+            }
+        }
+        throw cybozu::Exception("ArchiveVolInfo::setState:bad state") << newState;
+    }
     std::string getState() const {
         std::string st;
         util::loadFile(volDir_, "state", st);
@@ -140,11 +142,20 @@ public:
      * (2) apply appropriate wdiff files.
      * (3) rename the lvm snapshot.
      */
-    void restore(uint64_t gid) {
-
-
-
+    bool restore(uint64_t gid) {
+        cybozu::lvm::Lv lv = getLv();
+        const std::string targetName = restoredSnapshotName(gid);
+        const std::string tmpLvName = targetName + "_tmp";
+        cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName);
+        const MetaDiffManager& mgr = wdiffs_.getMgr();
+        const std::vector<MetaDiff> metaDiffList = mgr.getDiffListToRestore(getMetaState(), gid);
+        if (metaDiffList.empty()) {
+            return false;
+        }
         // QQQ
+        // apply
+        cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+        return true;
     }
 private:
     cybozu::lvm::Vg getVg() const {
@@ -153,7 +164,9 @@ private:
     std::string lvName() const {
         return VOLUME_PREFIX + volId_;
     }
-
+    std::string restoredSnapshotName(uint64_t gid) const {
+        return RESTORE_PREFIX + volId_ + cybozu::itoa(gid);
+    }
 #if 0 // XXX
     /**
      * Grow the volume.
@@ -383,13 +396,7 @@ private:
      * Full path of the wdiff file of a corresponding meta diff.
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
-        return getDir() + cybozu::FilePath(createDiffFileName(diff));
-    }
-    /**
-     * Wdiff directory.
-     */
-    cybozu::FilePath getDiffDir() const {
-        return getDir();
+        return volDir_ + cybozu::FilePath(createDiffFileName(diff));
     }
     /**
      * @gid threshold gid. That indicates all diffs
@@ -477,16 +484,6 @@ private:
         }
         assert(vv.size() == avgV.size());
 
-#if 0
-        for (std::vector<MetaDiff> &v : vv) {
-            ::printf("-----begin-----\n");
-            for (MetaDiff &diff : v) {
-                diff.print();
-            }
-            ::printf("-----end-----\n");
-        }
-#endif
-
         /*
          * Choose the wdiff list whose average size is the smallest.
          */
@@ -521,9 +518,6 @@ private:
         wdiffsP_->cleanup();
     }
 private:
-    cybozu::FilePath getDir() const {
-        return baseDir_ + cybozu::FilePath(volId_);
-    }
     cybozu::FilePath baseRecordPath() const {
         return getDir() + cybozu::FilePath("base");
     }
@@ -544,10 +538,6 @@ private:
         if (!baseRecord_.isValid()) {
             throw cybozu::Exception("baseRecord is not valid.");
         }
-    }
-    std::string restoredSnapshotName(uint64_t gid) const {
-        std::string suffix = cybozu::util::formatString("_%" PRIu64 "", gid);
-        return RESTORE_PREFIX + volId_ + suffix;
     }
 #endif // XXX
 };
