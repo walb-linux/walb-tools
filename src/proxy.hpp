@@ -20,8 +20,7 @@ inline ProxySingleton& getProxyGlobal()
 
 const ProxySingleton& gp = getProxyGlobal();
 
-
-static inline void c2pStatusServer(protocol::ServerParams &/*p*/)
+inline void c2pStatusServer(protocol::ServerParams &/*p*/)
 {
     // now editing
 }

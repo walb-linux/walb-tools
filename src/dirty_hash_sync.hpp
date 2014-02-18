@@ -399,7 +399,7 @@ private:
  *   [2] :: uint64_t: lv size [byte].
  *   [3] :: uint32_t: bulk size [byte]. less than uint16_t * LOGICAL_BLOCK_SIZE;
  */
-static inline void clientDirtyHashSync(
+inline void clientDirtyHashSync(
     cybozu::Socket &sock, ProtocolLogger &logger,
     const std::atomic<bool> &forceQuit,
     const std::vector<std::string> &params)
@@ -410,7 +410,7 @@ static inline void clientDirtyHashSync(
 
 /**
  */
-static inline void serverDirtyHashSync(
+inline void serverDirtyHashSync(
     cybozu::Socket &sock, ProtocolLogger &logger,
     const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,

@@ -79,7 +79,7 @@ std::string formatString(const char * format, ...)
     return s;
 }
 
-static inline void checkCond(bool cond, const char *name, int line)
+inline void checkCond(bool cond, const char *name, int line)
 {
     if (!cond) {
         throw RT_ERR("check error: %s:%d", name, line);
@@ -89,7 +89,7 @@ static inline void checkCond(bool cond, const char *name, int line)
 /**
  * Get unix time in double.
  */
-static inline double getTime()
+inline double getTime()
 {
     struct timeval tv;
     ::gettimeofday(&tv, NULL);

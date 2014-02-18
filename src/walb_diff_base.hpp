@@ -530,7 +530,7 @@ private:
  * Compress an IO data.
  * Supported algorithms: snappy.
  */
-static inline IoData compressIoData(const IoWrap &io0, int type)
+inline IoData compressIoData(const IoWrap &io0, int type)
 {
     if (io0.isCompressed()) {
         throw RT_ERR("Could not compress already compressed diff IO.");
@@ -556,7 +556,7 @@ static inline IoData compressIoData(const IoWrap &io0, int type)
  * Uncompress an IO data.
  * Supported algorithms: snappy.
  */
-static inline IoData uncompressIoData(const IoWrap &io0)
+inline IoData uncompressIoData(const IoWrap &io0)
 {
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
@@ -579,7 +579,7 @@ static inline IoData uncompressIoData(const IoWrap &io0)
  * CAUSION:
  *   Compressed IO can not be splitted.
  */
-static inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlocks0)
+inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlocks0)
 {
     if (ioBlocks0 == 0 || io0.ioBlocks() <= ioBlocks0) {
         throw RT_ERR("split: ioBlocks0 is out or range.");
@@ -610,7 +610,7 @@ static inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t 
  * CAUSION:
  *   Compressed IO can not be splitted.
  */
-static inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
+inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
 {
     if (ioBlocks0 == 0) {
         throw RT_ERR("splitAll: ioBlocks0 must not be 0.");

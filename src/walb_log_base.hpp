@@ -38,7 +38,7 @@ public:
     const char *what() const noexcept override { return msg_.c_str(); }
 };
 
-static inline void printRecord(
+inline void printRecord(
     ::FILE *fp, size_t idx, const struct walb_log_record &rec)
 {
     ::fprintf(fp,
@@ -60,7 +60,7 @@ static inline void printRecord(
               , rec.offset, rec.io_size);
 }
 
-static inline void printRecordOneline(
+inline void printRecordOneline(
     ::FILE *fp, size_t idx, const struct walb_log_record &rec)
 {
     ::fprintf(fp,

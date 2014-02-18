@@ -128,8 +128,7 @@ private:
  * @nr number of blocks.
  */
 template<typename T>
-static inline
-std::shared_ptr<T> allocateBlocks(size_t alignment, size_t size, size_t nr = 1)
+inline std::shared_ptr<T> allocateBlocks(size_t alignment, size_t size, size_t nr = 1)
 {
     assert(0 < nr);
     T *p = nullptr;
@@ -405,8 +404,7 @@ public:
  * @size: memory size in bytes to allocate.
  */
 template <typename T>
-static inline
-std::shared_ptr<T> allocateMemory(size_t size)
+inline std::shared_ptr<T> allocateMemory(size_t size)
 {
     T *p = nullptr;
     p = reinterpret_cast<T *>(::malloc(size));

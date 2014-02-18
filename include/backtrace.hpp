@@ -44,7 +44,7 @@ namespace cybozu {
  *
  * g++ options '-g -rdynamic' are required to get symbols.
  */
-static inline std::vector<std::string> getBacktrace(size_t depth = 100, bool isMangle = true)
+inline std::vector<std::string> getBacktrace(size_t depth = 100, bool isMangle = true)
 {
     auto demangle = [](const std::string &str) -> std::string {
         size_t n0 = str.find('(');
@@ -73,7 +73,7 @@ static inline std::vector<std::string> getBacktrace(size_t depth = 100, bool isM
     return ret;
 };
 
-static inline void printBacktrace(::FILE *fp = ::stderr)
+inline void printBacktrace(::FILE *fp = ::stderr)
 {
     for (std::string &s : getBacktrace()) {
         ::fprintf(fp, "%s\n", s.c_str());

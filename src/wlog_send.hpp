@@ -263,7 +263,7 @@ private:
 /**
  * WlogSend protocol client.
  */
-static inline void clientWlogSend(
+inline void clientWlogSend(
     cybozu::Socket& sock, ProtocolLogger& logger,
     const std::atomic<bool> &forceQuit, const std::vector<std::string> &params)
 {
@@ -274,7 +274,7 @@ static inline void clientWlogSend(
 /**
  * WlogSend protocol server.
  */
-static inline void serverWlogSend(cybozu::Socket &sock,
+inline void serverWlogSend(cybozu::Socket &sock,
     ProtocolLogger& logger,
     const std::string &baseDirStr,
     const std::atomic<bool> &forceQuit,
