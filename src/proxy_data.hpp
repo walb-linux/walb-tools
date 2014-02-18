@@ -64,7 +64,7 @@ public:
         }
         mkdirIfNotExists(getDir());
         mkdirIfNotExists(getServerDir());
-		wdiffs_.reloadMetadata();
+        wdiffs_.reloadMetadata();
         reloadServerRecords();
     }
     const WalbDiffFiles &getWdiffFiles() const {

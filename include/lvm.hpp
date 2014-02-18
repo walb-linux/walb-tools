@@ -49,8 +49,7 @@ inline void trim(std::string &str)
 
 inline std::vector<std::string> splitAndTrim(const std::string &str, char sep)
 {
-    std::vector<std::string> v;
-    cybozu::Split(v, str, sep);
+    std::vector<std::string> v = cybozu::Split(str, sep);
     for (std::string &s : v) trim(s);
     return v;
 }
@@ -321,11 +320,11 @@ inline cybozu::FilePath getLvmPath(
  */
 Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb)
 {
-    std::vector<std::string> args;
-    args.push_back("--name=" + lvName);
-    args.push_back(local::getSizeOpt(sizeLb));
-    args.push_back(vgName);
-    cybozu::process::call("/sbin/lvcreate", args);
+    cybozu::process::call("/sbin/lvcreate", {
+        std::string("--name=") + lvName,
+        local::getSizeOpt(sizeLb),
+        vgName
+    });
 
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     if (local::waitForDeviceAvailable(lvPath)) {
@@ -343,13 +342,13 @@ Lv createSnapshot(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
     uint64_t sizeLb)
 {
-    std::vector <std::string> args;
-    args.push_back("-s");
-    args.push_back(local::getSizeOpt(sizeLb));
-    args.push_back("--name=" + snapName);
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
-    args.push_back(lvPath.str());
-    cybozu::process::call("/sbin/lvcreate", args);
+    cybozu::process::call("/sbin/lvcreate", {
+        "-s",
+        local::getSizeOpt(sizeLb),
+        std::string("--name=") + snapName,
+        lvPath.str()
+    });
 
     cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
     if (local::waitForDeviceAvailable(snapPath)) {
@@ -380,10 +379,7 @@ void remove(const std::string &pathStr)
         throw std::runtime_error("not found.");
     }
 
-    std::vector<std::string> args;
-    args.push_back("-f");
-    args.push_back(path.str());
-    cybozu::process::call("/sbin/lvremove", args);
+    cybozu::process::call("/sbin/lvremove", { "-f", path.str() });
     local::sleepMs(100); /* for safety. */
 }
 
@@ -392,11 +388,11 @@ void remove(const std::string &pathStr)
  */
 void resize(const std::string &pathStr, uint64_t newSizeLb)
 {
-    std::vector<std::string> args;
-    args.push_back("-f"); /* force volume shrink */
-    args.push_back(local::getSizeOpt(newSizeLb));
-    args.push_back(pathStr);
-    cybozu::process::call("/sbin/lvresize", args);
+    cybozu::process::call("/sbin/lvresize", {
+        "-f", /* force volume shrink */
+        local::getSizeOpt(newSizeLb),
+        pathStr
+    });
     local::sleepMs(100); /* for safety. */
 }
 
@@ -412,7 +408,7 @@ LvList listLv(const std::string &arg = "")
     LvList list;
     std::vector<std::string> args;
     if (!arg.empty()) args.push_back(arg);
-    std::string result
+    const std::string result
         = local::callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
     for (const std::string &s0 : local::splitAndTrim(result, '\n')) {
         if (s0.empty()) continue; /* last '\n' */

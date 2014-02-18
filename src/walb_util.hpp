@@ -67,8 +67,8 @@ void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
 
 inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
 {
-    StrVec v;
-    if (cybozu::Split(v, addrPort, ':', 2) != 2) {
+    const StrVec v = cybozu::Split(addrPort, ':', 2);
+	if (v.size() != 2) {
         throw cybozu::Exception("parse error") << addrPort;
     }
     return cybozu::SocketAddr(v[0], static_cast<uint16_t>(cybozu::atoi(v[1])));
@@ -77,8 +77,7 @@ inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
 inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &multiAddrPort)
 {
     std::vector<cybozu::SocketAddr> ret;
-    StrVec v;
-    cybozu::Split(v, multiAddrPort, ',');
+    const StrVec v = cybozu::Split(multiAddrPort, ',');
     for (const std::string &addrPort : v) {
         ret.emplace_back(parseSocketAddr(addrPort));
     }
