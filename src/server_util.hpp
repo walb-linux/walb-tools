@@ -45,7 +45,8 @@ public:
         std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
         std::atomic<bool> forceQuit(false);
         while (st == ProcessStatus::RUNNING) {
-            while (!ssock.queryAccept()) {}
+            while (!ssock.queryAccept() && st == ProcessStatus::RUNNING) {}
+            if (st != ProcessStatus::RUNNING) break;
             cybozu::Socket sock;
             ssock.accept(sock);
             pool.add(gen(std::move(sock), forceQuit, st));

@@ -79,6 +79,9 @@ inline void clientDispatch(
     const std::atomic<bool> &forceQuit, const std::vector<std::string> &params,
     const std::map<std::string, ClientHandler> &handlers)
 {
+    if (protocolName == "force-shutdown" || protocolName == "graceful-shutdown") {
+        return;
+    }
     auto it = handlers.find(protocolName);
     if (it != handlers.cend()) {
         ClientHandler h = it->second;
