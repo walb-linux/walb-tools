@@ -52,13 +52,17 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
         throw cybozu::Exception("c2sFullSyncClient:bad size param") << p.params.size();
     }
     std::vector<std::string> v;
-    v.push_back(p.params[0]);
-    if (p.params.size() == 2) {
-        uint64_t bulkLb = cybozu::atoi(p.params[1]);
-        if (bulkLb == 0) throw cybozu::Exception("c2sFullSyncClient:zero bulkLb");
-    } else {
-        v.push_back(cybozu::itoa(walb::DEFAULT_BULK_LB));
+    if (p.params[0].empty()) {
+        throw cybozu::Exception("c2sFullSyncClient:empty volId");
     }
+    v.push_back(p.params[0]);
+    uint64_t bulkLb = walb::DEFAULT_BULK_LB;
+    if (p.params.size() == 2) {
+        bulkLb = cybozu::atoi(p.params[1]);
+        if (bulkLb == 0) throw cybozu::Exception("c2sFullSyncClient:zero bulkLb");
+    }
+    v.push_back(cybozu::itoa(bulkLb));
+    LOGd("sendStrVec");
     protocol::sendStrVec(p.sock, v, 2, "c2sFullSyncClient", false);
 
     std::string st;

@@ -41,6 +41,7 @@ public:
         const std::map<std::string, protocol::ServerHandler> h = {
             { "status", c2sStatusServer },
             { "storage-init-vol", c2sInitVolServer },
+            { "full-bkp", c2sFullSyncServer },
         };
         protocol::serverDispatch(
             sock_, nodeId_, forceQuit_, procStat_, h);

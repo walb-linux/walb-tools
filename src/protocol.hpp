@@ -85,7 +85,7 @@ static inline void clientDispatch(
         ClientParams p(sock, logger, forceQuit, params);
         h(p);
     } else {
-        throw cybozu::Exception("dispatch:receive OK but protocol not found.") << protocolName;
+        throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;
     }
 }
 
@@ -108,14 +108,14 @@ static inline bool run1stNegotiateAsServer(
 {
     packet::Packet packet(sock);
 
-    LOGi_("run1stNegotiateAsServer start\n");
+    LOGd("run1stNegotiateAsServer start");
     packet.read(clientId);
-    LOGi_("clientId: %s\n", clientId.c_str());
+    LOGd("clientId: %s", clientId.c_str());
     packet.read(protocolName);
-    LOGi_("protocolName: %s\n", protocolName.c_str());
+    LOGd("protocolName: %s", protocolName.c_str());
     packet::Version ver(sock);
     bool isVersionSame = ver.recv();
-    LOGi_("isVersionSame: %d\n", isVersionSame);
+    LOGd_("isVersionSame: %d", isVersionSame);
     packet.write(serverId);
 
     ProtocolLogger logger(serverId, clientId);
@@ -204,7 +204,7 @@ static inline void serverDispatch(
             ServerParams p(sock, clientId, forceQuit, procStat);
             h(p);
         } else {
-            throw cybozu::Exception("bad protocolName") << protocolName;
+            throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;
         }
     } catch (std::exception &e) {
         logger.error("serverDispatch failed: %s", e.what());

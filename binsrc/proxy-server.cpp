@@ -36,7 +36,7 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
-            { "proxy-status", c2pStatusServer },
+            { "status", c2pStatusServer },
         };
         protocol::serverDispatch(
             sock_, nodeId_, forceQuit_, procStat_, h);
