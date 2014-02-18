@@ -11,6 +11,7 @@
 #include "cybozu/option.hpp"
 #include "net_util.hpp"
 #include "controller.hpp"
+#include "walb_util.hpp"
 
 struct Option : public cybozu::Option
 {
@@ -19,11 +20,13 @@ struct Option : public cybozu::Option
     std::string cmd;
     std::vector<std::string> params;
     std::string ctrlId;
+    bool isDebug;
     Option() {
         appendMust(&addr, "a", "host name or address");
         appendMust(&port, "p", "port number");
         appendParam(&cmd, "command", "command name");
         appendParamVec(&params, "parameters", "command parameters");
+        appendBoolOpt(&isDebug, "debug", "put debug message.");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&ctrlId, hostName, "id", "controller identfier");
@@ -61,7 +64,7 @@ try {
         opt.usage();
         return 1;
     }
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", opt.isDebug);
     walb::runClient(opt);
 
 } catch (std::exception &e) {
