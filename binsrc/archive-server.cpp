@@ -23,7 +23,7 @@
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb/archive";
-const std::string DEFAULT_LOG_FILE = "walb-archive.log";
+const std::string DEFAULT_LOG_FILE = "-";
 const std::string DEFAULT_VG = "vg";
 
 namespace walb {
@@ -51,6 +51,7 @@ struct Option : cybozu::Option
 {
     uint16_t port;
     std::string logFileStr;
+    bool isDebug;
 
     Option() {
         walb::ArchiveSingleton &a = walb::getArchiveGlobal();
@@ -59,6 +60,7 @@ struct Option : cybozu::Option
         appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
+        appendBoolOpt(&isDebug, "debug", "put debug message.");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
@@ -66,7 +68,8 @@ struct Option : cybozu::Option
         appendHelp("h");
     }
     std::string logFilePath() const {
-        return (cybozu::FilePath(walb::ga.baseDirStr) + cybozu::FilePath(logFileStr)).str();
+        if (logFileStr == "-") return logFileStr;
+        return (cybozu::FilePath(walb::ga.baseDirStr) + logFileStr).str();
     }
 };
 
@@ -78,7 +81,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     walb::util::makeDir(walb::ga.baseDirStr, "archiveServer", false);
-    cybozu::OpenLogFile(opt.logFilePath());
+    walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {

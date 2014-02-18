@@ -23,7 +23,7 @@
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb/proxy";
-const std::string DEFAULT_LOG_FILE = "walb-proxy.log";
+const std::string DEFAULT_LOG_FILE = "-";
 
 namespace walb {
 
@@ -51,11 +51,13 @@ struct Option : cybozu::Option
     std::string baseDirStr;
     std::string logFileStr;
     std::string nodeId;
+    bool isDebug;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        appendBoolOpt(&isDebug, "debug", "put debug message.");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&nodeId, hostName, "id", "node identifier");
@@ -63,7 +65,8 @@ struct Option : cybozu::Option
         appendHelp("h");
     }
     std::string logFilePath() const {
-        return (cybozu::FilePath(baseDirStr) + cybozu::FilePath(logFileStr)).str();
+        if (logFileStr == "-") return logFileStr;
+        return (cybozu::FilePath(baseDirStr) + logFileStr).str();
     }
 };
 
@@ -85,7 +88,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     walb::util::makeDir(opt.baseDirStr, "proxyServer", false);
-    cybozu::OpenLogFile(opt.logFilePath());
+    walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initSingleton(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,

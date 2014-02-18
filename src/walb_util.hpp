@@ -13,6 +13,7 @@
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
+#include "cybozu/option.hpp"
 
 namespace walb {
 
@@ -82,6 +83,20 @@ inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &m
         ret.emplace_back(parseSocketAddr(addrPort));
     }
     return ret;
+}
+
+void setLogSetting(const std::string &pathStr, bool isDebug)
+{
+    if (pathStr == "-") {
+        cybozu::SetLogFILE(::stderr);
+    } else {
+        cybozu::OpenLogFile(pathStr);
+    }
+    if (isDebug) {
+        cybozu::SetLogPriority(cybozu::LogDebug);
+    } else {
+        cybozu::SetLogPriority(cybozu::LogInfo);
+    }
 }
 
 }} // namespace walb::util
