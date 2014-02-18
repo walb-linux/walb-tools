@@ -64,7 +64,7 @@ public:
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
         }
-        if (volDir_.stat().isDirectory()) {
+        if (existsVolDir()) {
             wdiffs_.reloadMetadata();
         }
     }
@@ -73,6 +73,21 @@ public:
         setUuid(cybozu::Uuid());
         setMetaState(MetaState());
         setState("SyncReady");
+    }
+    void clear(bool force = false) {
+        const std::string st = getState();
+        if (!force && st != "SyncReady" && st != "Stopped") {
+            throw cybozu::Exception("ArchiveVolInfo::clear:state is neither SyncReady nor Stopped");
+        }
+
+        // Delete all related lvm volumes and snapshots.
+        if (lvExists()) {
+            getLv().remove();
+        }
+
+        if (!volDir_.rmdirRecursive()) {
+            throw cybozu::Exception("ArchiveVolInfo::clear:rmdir recursively failed.");
+        }
     }
     void setUuid(const cybozu::Uuid &uuid) {
         util::saveFile(volDir_, "uuid", uuid);
@@ -104,6 +119,9 @@ public:
         std::string st;
         util::loadFile(volDir_, "state", st);
         return st;
+    }
+    bool existsVolDir() const {
+        return volDir_.stat(true).isDirectory();
     }
     bool lvExists() const {
         return cybozu::lvm::exists(vgName_, lvName());

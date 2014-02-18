@@ -38,7 +38,10 @@ public:
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
             { "status", c2aStatusServer },
-            { "archive-init-vol", c2aInitVolServer },
+            { "init-vol", c2aInitVolServer },
+            { "clear-vol", c2aClearVolServer },
+            { "start", c2aStartServer },
+            { "stop", c2aStopServer },
             { "dirty-full-sync", x2aDirtyFullSyncServer },
             { "restore", c2aRestoreServer },
         };

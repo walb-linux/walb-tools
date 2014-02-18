@@ -30,20 +30,45 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
 }
 
 /**
- * params[0]: volId
- * params[2]: wdevPath
+ * For storage:
+ *   params[0]: volId
+ *   params[2]: wdevPath
+ * For archive:
+ *   params[0]: volId
  */
-inline void c2sInitVolClient(protocol::ClientParams &p)
+inline void c2xInitVolClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, "c2sInitVolClient");
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xInitVolClient");
+}
+
+/**
+ * Server is storage or archive.
+ * params[0]: volId
+ */
+inline void c2xClearVolClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 1, "c2xClearVolClient");
+}
+
+/**
+ * For storage:
+ *   params[0]: volId
+ *   params[1]: master
+ * For archive:
+ *   params[0]: volId
+ */
+inline void c2xStartClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xStartClient");
 }
 
 /**
  * params[0]: volId
+ * params[1]: isForce: "0" or "1".
  */
-inline void c2aInitVolClient(protocol::ClientParams &p)
+inline void c2xStopClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 1, "c2aInitVolClient");
+    protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient");
 }
 
 inline void c2sFullSyncClient(protocol::ClientParams &p)

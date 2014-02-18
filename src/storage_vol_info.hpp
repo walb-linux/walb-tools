@@ -67,10 +67,10 @@ public:
         }
     }
     /**
-     * You must call this before using.
+     * Initialize the volume information directory.
      */
     void init() {
-        LOGe("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
+        LOGd("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
         util::makeDir(volDir_.str(), "StorageVolInfo", true);
         {
             cybozu::FilePath queueFile = volDir_ + "queue";
@@ -81,6 +81,20 @@ public:
         setState("SyncReady");
         util::saveFile(volDir_, "done", ""); // TODO
         util::saveFile(volDir_, "uuid", cybozu::Uuid());
+    }
+    /**
+     * Clear all the volume information.
+     * The directory will be deleted completely.
+     * The instance will be invalid after calling this.
+     */
+    void clear(bool force = false) {
+        const std::string st = getState();
+        if (!force && st != "SyncReady" && st != "Stopped") {
+            throw cybozu::Exception("StoraveVolInfo::clear:state is neither SyncReady nor Stopped");
+        }
+        if (!volDir_.rmdirRecursive()) {
+            throw cybozu::Exception("StorageVolInfo::clear:rmdir recursively failed.");
+        }
     }
     /**
      * get status as a string vector.

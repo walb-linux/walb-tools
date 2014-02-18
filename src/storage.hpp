@@ -24,7 +24,7 @@ inline StorageSingleton& getStorageGlobal()
 
 const StorageSingleton& gs = getStorageGlobal();
 
-static inline void c2sStatusServer(protocol::ServerParams &p)
+inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet packet(p.sock);
     std::vector<std::string> params;
@@ -43,25 +43,92 @@ static inline void c2sStatusServer(protocol::ServerParams &p)
     }
 }
 
-static inline void c2sInitVolServer(protocol::ServerParams &p)
+inline void c2sInitVolServer(protocol::ServerParams &p)
 {
-    LOGd("c2sInitVolServer start");
     const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
     const std::string &volId = v[0];
     const std::string &wdevPathName = v[1];
-    LOGd("c2sInitVolServer hoge");
 
     StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
     volInfo.init();
 
-    packet::Ack ack(p.sock);
-    ack.send();
+    packet::Ack(p.sock).send();
 
     ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.info("c2sInitVolServer: initialize volId %s wdev %s", volId.c_str(), wdevPathName.c_str());
 }
 
-static inline void c2sFullSyncServer(protocol::ServerParams &p)
+inline void c2sClearVolServer(protocol::ServerParams &p)
+{
+    StrVec v = protocol::recvStrVec(p.sock, 1, "c2sClearVolServer", false);
+    const std::string &volId = v[0];
+
+    // TODO: exclusive access for the volId.
+
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    volInfo.clear();
+
+    packet::Ack(p.sock).send();
+
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    logger.info("c2sClearVolServer: cleared volId %s", volId.c_str());
+}
+
+/**
+ * params[0]: volId
+ * params[1]: "master" or "slave".
+ */
+inline void c2sStartServer(protocol::ServerParams &p)
+{
+    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sStartServer", false);
+    const std::string &volId = v[0];
+    const bool isMaster = (v[1] == "master");
+
+    // TODO: exclusive acess for the volId.
+
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string st = volInfo.getState();
+
+    if (st != "Stopped") {
+        throw cybozu::Exception("c2sStartServer:not Stopped state") << st;
+    }
+
+    volInfo.setState(isMaster ? "Master" : "Slave");
+
+    // TODO: start monitoring of the target walb device.
+
+    packet::Ack(p.sock).send();
+}
+
+/**
+ * params[0]: volId
+ * params[1]: isForce: "0" or "1".
+ */
+inline void c2sStopServer(protocol::ServerParams &p)
+{
+    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sStopServer", false);
+    const std::string &volId = v[0];
+    const int isForceInt = cybozu::atoi(v[1]);
+    UNUSED const bool isForce = (isForceInt != 0);
+
+    // TODO: exclusive acess for the volId.
+
+    // TODO: stop monitoring and
+    // If isForce is true, force stop the background tasks for the volume.
+    // Otherwise, wait for the tasks done.
+
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string st = volInfo.getState();
+
+    if (st != "Master" && st != "Slave") {
+        throw cybozu::Exception("c2sStopServer:not Master/Slave state") << st;
+    }
+    volInfo.setState("Stopped");
+
+    packet::Ack(p.sock).send();
+}
+
+inline void c2sFullSyncServer(protocol::ServerParams &p)
 {
     ProtocolLogger logger(gs.nodeId, p.clientId);
 

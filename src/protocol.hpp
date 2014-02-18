@@ -22,7 +22,7 @@ namespace protocol {
  * RETURN:
  *   Server ID.
  */
-static inline std::string run1stNegotiateAsClient(
+inline std::string run1stNegotiateAsClient(
     cybozu::Socket &sock,
     const std::string &clientId, const std::string &protocolName)
 {
@@ -74,7 +74,7 @@ struct ClientParams
  */
 using ClientHandler = void (*)(ClientParams &);
 
-static inline void clientDispatch(
+inline void clientDispatch(
     const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
     const std::atomic<bool> &forceQuit, const std::vector<std::string> &params,
     const std::map<std::string, ClientHandler> &handlers)
@@ -100,7 +100,7 @@ static inline void clientDispatch(
  *   true if the protocol has finished or failed that is there is nothing to do.
  *   otherwise false.
  */
-static inline bool run1stNegotiateAsServer(
+inline bool run1stNegotiateAsServer(
     cybozu::Socket &sock, const std::string &serverId,
     std::string &protocolName,
     std::string &clientId,
@@ -179,7 +179,7 @@ using ServerHandler = void (*)(ServerParams &);
 /**
  * Server dispatcher.
  */
-static inline void serverDispatch(
+inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
     const std::atomic<bool> &forceQuit,
     std::atomic<walb::server::ProcessStatus> &procStat,
@@ -207,21 +207,24 @@ static inline void serverDispatch(
             throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;
         }
     } catch (std::exception &e) {
-        logger.error("serverDispatch failed: %s", e.what());
+        logger.error("%s", e.what());
     } catch (...) {
-        logger.error("serverDispatch failed: other error.");
+        logger.error("serverDispatch: other error.");
     }
 }
 
-static inline void sendStrVec(
+/**
+ * If numToSend == 0, it will not check the vector size.
+ */
+inline void sendStrVec(
     cybozu::Socket &sock,
     const std::vector<std::string> &v, size_t numToSend, const char *msg, bool doAck = true)
 {
-    if (v.size() != numToSend) {
+    if (numToSend != 0 && v.size() != numToSend) {
         throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
     }
     packet::Packet packet(sock);
-    for (size_t i = 0; i < numToSend; i++) {
+    for (size_t i = 0; i < v.size(); i++) {
         if (v[i].empty()) {
             throw cybozu::Exception(msg) << "empty string" << i;
         }
@@ -233,16 +236,19 @@ static inline void sendStrVec(
 	}
 }
 
-static inline std::vector<std::string> recvStrVec(
+/**
+ * If numToRecv == 0, it will not check the vector size.
+ */
+inline std::vector<std::string> recvStrVec(
     cybozu::Socket &sock, size_t numToRecv, const char *msg, bool doAck = true)
 {
     packet::Packet packet(sock);
     std::vector<std::string> v;
     packet.read(v);
-    if (v.size() != numToRecv) {
+    if (numToRecv != 0 && v.size() != numToRecv) {
         throw cybozu::Exception(msg) << "bad size" << numToRecv << v.size();
     }
-    for (size_t i = 0; i < numToRecv; i++) {
+    for (size_t i = 0; i < v.size(); i++) {
         if (v[i].empty()) {
             throw cybozu::Exception(msg) << "empty string" << i;
         }
@@ -254,5 +260,3 @@ static inline std::vector<std::string> recvStrVec(
 }
 
 }} // namespace walb::protocol
-
-

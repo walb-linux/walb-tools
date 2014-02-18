@@ -48,9 +48,12 @@ void runClient(Option &opt)
 
     const std::map<std::string, protocol::ClientHandler> h = {
         { "status", c2xGetStrVecClient },
-        { "storage-init-vol", c2sInitVolClient },
-        { "archive-init-vol", c2aInitVolClient },
+        { "init-vol", c2xInitVolClient },
+        { "clear-vol", c2xClearVolClient },
         { "full-bkp", c2sFullSyncClient },
+        { "restore", c2aRestoreClient },
+        { "start", c2xStartClient },
+        { "stop", c2xStopClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }

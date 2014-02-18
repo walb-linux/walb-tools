@@ -40,7 +40,10 @@ public:
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
             { "status", c2sStatusServer },
-            { "storage-init-vol", c2sInitVolServer },
+            { "init-vol", c2sInitVolServer },
+            { "clear-vol", c2sClearVolServer },
+            { "start", c2sStartServer },
+            { "stop", c2sStopServer },
             { "full-bkp", c2sFullSyncServer },
         };
         protocol::serverDispatch(

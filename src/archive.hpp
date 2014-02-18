@@ -42,6 +42,85 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 }
 
+inline void c2aClearVolServer(protocol::ServerParams &p)
+{
+    StrVec v = protocol::recvStrVec(p.sock, 1, "c2aClearVolServer", false);
+    const std::string &volId = v[0];
+
+    // TODO: exclusive access for the volId.
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    volInfo.clear();
+
+    packet::Ack(p.sock).send();
+
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    logger.info("c2aClearVolServer: cleared volId %s", volId.c_str());
+}
+
+/**
+ * "start" command.
+ * params[0]: volId
+ */
+inline void c2aStartServer(protocol::ServerParams &p)
+{
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    StrVec v = protocol::recvStrVec(p.sock, 1, "c2aStopServer", false);
+    const std::string &volId = v[0];
+
+    /*
+     * TODO:
+     *   Exclusive access for the volId.
+     */
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    if (!volInfo.existsVolDir()) {
+        throw cybozu::Exception("not exists volume directory") << volId;
+    }
+    const std::string st = volInfo.getState();
+    if (st != "Stopped") {
+        throw cybozu::Exception("c2aStartServer:not Stopped state") << st;
+    }
+    volInfo.setState("Archived");
+    packet::Ack(p.sock).send();
+}
+
+/**
+ * command "stop"
+ * params[0]: volId
+ * params[1]: isForce
+ */
+inline void c2aStopServer(protocol::ServerParams &p)
+{
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    StrVec v = protocol::recvStrVec(p.sock, 2, "c2aStopServer", false);
+    const std::string &volId = v[0];
+    const int isForceInt = cybozu::atoi(v[1]);
+    UNUSED const bool isForce = (isForceInt != 0);
+
+    /*
+     * TODO:
+     *   Exclusive access for the volId.
+     *   Force stop related tasks if isForce is true.
+     */
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    if (!volInfo.existsVolDir()) {
+        throw cybozu::Exception("not exists volume directory") << volId;
+    }
+    const std::string st = volInfo.getState();
+    if (st == "Stopped") {
+        logger.info("already stopped %s", volId.c_str());
+        packet::Ack(p.sock).send();
+        return;
+    }
+    if (st != "Archived") {
+        throw cybozu::Exception("c2aStopServer:not Archived state") << st;
+    }
+    volInfo.setState("Stopped");
+    packet::Ack(p.sock).send();
+}
+
 /**
  * Execute dirty full sync protocol as server.
  * Client is storage server or another archive server.
