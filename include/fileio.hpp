@@ -215,6 +215,16 @@ private:
     std::atomic_flag closeFlag_;
 
 public:
+    BlockDevice()
+        : name_()
+        , openFlags_()
+        , fd(-1)
+        , isBlockDevice_(false)
+        , deviceSize_(0)
+        , lbs_(0)
+        , pbs_(0)
+        , closeFlag_(ATOMIC_FLAG_INIT) {
+    }
     BlockDevice(const std::string& name, int flags)
         : name_(name)
         , openFlags_(flags)
@@ -234,26 +244,24 @@ public:
     }
     DISABLE_COPY_AND_ASSIGN(BlockDevice);
 
+    void swap(BlockDevice& rhs) noexcept {
+        name_.swap(rhs.name_);
+        std::swap(openFlags_, rhs.openFlags_);
+        std::swap(fd_, rhs.fd_);
+        std::swap(isBlockDevice_, rhs.isBlockDevice_);
+        std::swap(deviceSize_, rhs.deviceSize_);
+        std::swap(lbs_, rhs.lbs_);
+        std::swap(pbs_, rhs.pbs_);
+        std::swap(closeFlag_, rhs.closeFlag_);
+    }
     explicit BlockDevice(BlockDevice&& rhs)
-        : name_(std::move(rhs.name_))
-        , openFlags_(rhs.openFlags_)
-        , fd_(rhs.fd_)
-        , isBlockDevice_(rhs.isBlockDevice_)
-        , deviceSize_(rhs.deviceSize_)
-        , lbs_(rhs.lbs_)
-        , pbs_(rhs.pbs_) {
-
-        rhs.fd_ = -1;
+        : BlockDevice() {
+        swap(rhs);
     }
 
     BlockDevice& operator=(BlockDevice&& rhs) {
-        name_ = std::move(rhs.name_);
-        openFlags_ = rhs.openFlags_;
-        fd_ = rhs.fd_; rhs.fd_ = -1;
-        isBlockDevice_ = rhs.isBlockDevice_;
-        deviceSize_= rhs.deviceSize_;
-        lbs_ = rhs.lbs_;
-        pbs_ = rhs.pbs_;
+        close();
+        swap(rhs);
         return *this;
     }
 
