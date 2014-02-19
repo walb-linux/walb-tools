@@ -877,21 +877,6 @@ public:
         return getApplicableDiffList(snap, pred);
     }
     /**
-     * Applicable and mergeable diff list.
-     */
-    std::vector<MetaDiff> getApplicableAndMergeableDiffList(const MetaSnap &snap) const {
-        std::vector<MetaDiff> v = getApplicableDiffList(snap);
-        if (v.empty()) return v;
-        std::vector<MetaDiff> u;
-        MetaDiff mdiff = v[0];
-        for (size_t i = 1; i < v.size(); i++) {
-            if (!canMerge(mdiff, v[i])) break;
-            u.push_back(v[i]);
-            mdiff = merge(mdiff, v[i]);
-        }
-        return u;
-    }
-    /**
      * Minimum number of diffs that are applicable.
      * This is useful for applying state.
      */
