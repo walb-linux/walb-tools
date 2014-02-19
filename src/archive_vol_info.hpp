@@ -19,6 +19,7 @@
 #include "file_path.hpp"
 #include "wdiff_data.hpp"
 #include "meta.hpp"
+#include "walb_diff_merge.hpp"
 
 namespace walb {
 
@@ -166,14 +167,46 @@ public:
         const std::string tmpLvName = targetName + "_tmp";
         cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName);
         const MetaDiffManager& mgr = wdiffs_.getMgr();
-        const std::vector<MetaDiff> metaDiffList = mgr.getDiffListToRestore(getMetaState(), gid);
-        if (metaDiffList.empty()) {
-            return false;
+        const int maxRetryNum = 10;
+        int retryNum = 0;
+        std::vector<cybozu::util::FileOpener> ops;
+    retry:
+        {
+            const std::vector<MetaDiff> metaDiffList = mgr.getDiffListToRestore(getMetaState(), gid);
+            if (metaDiffList.empty()) {
+                return false;
+            }
+            // QQQ
+            // apply wdiff files indicated by metaDiffList to lvSnap.
+            for (const MetaDiff& diff : metaDiffList) {
+                cybozu::util::FileOpener op;
+                if (!op.open(createDiffFileName(diff), O_RDONLY)) {
+                    retryNum++;
+                    if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
+                    wdiffs_.reloadMetadata();
+                    ops.clear();
+                    goto retry;
+                }
+                ops.push_back(std::move(op));
+            }
         }
-
-        // QQQ
-        // apply wdiff files indicated by metaDiffList to lvSnap.
-
+        std::vector<int> fds;
+        for (cybozu::util::FileOpener& op : ops) {
+            fds.push_back(op.fd());
+        }
+        diff::Merger merger;
+        merger.addWdiffs(fds);
+        diff::RecIo recIo;
+        cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
+        while (merger.pop(recIo)) {
+            diff::RecordRaw& raw = recIo.record();
+            uint64_t ioAddress = raw.ioAddress();
+            uint64_t ioBlocks = raw.ioBlocks();
+            const char *data = recIo.io().rawData();
+            bd.write(ioAddress * LOGICAL_BLOCK_SIZE, ioBlocks * LOGICAL_BLOCK_SIZE, data);
+        }
+        bd.fdatasync();
+        bd.close();
         cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
         return true;
     }

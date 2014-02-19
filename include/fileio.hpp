@@ -114,13 +114,32 @@ protected:
     int fd_;
     bool isClosed_;
 public:
+    FileOpener()
+        : fd_(-1)
+        , isClosed_(true) {
+    }
     FileOpener(const std::string& filePath, int flags)
-        : fd_(staticOpen(filePath, flags))
-        , isClosed_(false) {
+        : FileOpener() {
+        if (!open(filePath, flags)) throw LibcError(errno, "open failed: ");
     }
     FileOpener(const std::string& filePath, int flags, mode_t mode)
-        : fd_(staticOpen(filePath, flags, mode))
-        , isClosed_(false) {
+        : FileOpener() {
+        if (!open(filePath, flags, mode)) throw LibcError(errno, "open failed: ");
+    }
+    FileOpener(FileOpener&& rhs)
+        : FileOpener()
+    {
+        swap(rhs);
+    }
+    FileOpener& operator=(FileOpener&& rhs)
+    {
+        close();
+        swap(rhs);
+        return *this;
+    }
+    void swap(FileOpener& rhs) noexcept {
+        std::swap(fd_, rhs.fd_);
+        std::swap(isClosed_, rhs.isClosed_);
     }
     ~FileOpener() noexcept {
         try {
@@ -132,6 +151,16 @@ public:
         if (fd_ < 0) throw RT_ERR("fd < 0.");
         return fd_;
     }
+    bool open(const std::string& filePath, int flags) {
+        fd_ = ::open(filePath.c_str(), flags);
+        isClosed_ = fd_ < 0;
+        return fd_ >= 0;
+    }
+    bool open(const std::string& filePath, int flags, mode_t mode) {
+        fd_ = ::open(filePath.c_str(), flags, mode);
+        isClosed_ = fd_ < 0;
+        return fd_ >= 0;
+    }
     void close() {
         if (isClosed_) return;
         if (::close(fd_) < 0) {
@@ -139,17 +168,6 @@ public:
         }
         isClosed_ = true;
         fd_ = -1;
-    }
-private:
-    static int staticOpen(const std::string& filePath, int flags) {
-        int fd = ::open(filePath.c_str(), flags);
-        if (fd < 0) throw LibcError(errno, "open failed: ");
-        return fd;
-    }
-    static int staticOpen(const std::string& filePath, int flags, mode_t mode) {
-        int fd = ::open(filePath.c_str(), flags, mode);
-        if (fd < 0) throw LibcError(errno, "open failed: ");
-        return fd;
     }
 };
 

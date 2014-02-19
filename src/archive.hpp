@@ -212,7 +212,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 /**
  * Restore command.
  */
-inline void c2aRestoreServer(protocol::ServerParams &p)
+inline void c2aRestoreServer(protocol::ServerParams &)
 {
     // QQQ
 }

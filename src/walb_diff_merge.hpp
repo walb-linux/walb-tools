@@ -40,8 +40,16 @@ private:
         mutable bool isFilled_;
         mutable bool isEnd_;
     public:
-        Wdiff(const std::string &wdiffPath)
+        explicit Wdiff(const std::string &wdiffPath)
             : wdiffPath_(wdiffPath), reader_(wdiffPath, O_RDONLY)
+            , headerP_(reader_.readHeader())
+            , rec_()
+            , io_()
+            , isFilled_(false)
+            , isEnd_(false) {
+        }
+        explicit Wdiff(int fd)
+            : wdiffPath_(), reader_(fd)
             , headerP_(reader_.readHeader())
             , rec_()
             , io_()
@@ -156,6 +164,11 @@ public:
     void addWdiffs(const std::vector<std::string> &wdiffPaths) {
         for (const std::string &s : wdiffPaths) {
             addWdiff(s);
+        }
+    }
+    void addWdiffs(const std::vector<int>& fds) {
+        for (int fd : fds) {
+            wdiffs_.emplace_back(new Wdiff(fd));
         }
     }
     /**

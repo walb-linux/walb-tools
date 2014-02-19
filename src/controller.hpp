@@ -102,7 +102,7 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
  * Restore command.
  * parameters: volId, gid
  */
-inline void c2aRestoreClient(protocol::ClientParams &p)
+inline void c2aRestoreClient(protocol::ClientParams &)
 {
     // QQQ
 }
