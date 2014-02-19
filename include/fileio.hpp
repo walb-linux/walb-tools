@@ -211,19 +211,17 @@ private:
     uint64_t deviceSize_; // [bytes].
     unsigned int lbs_; // logical block size [bytes].
     unsigned int pbs_; // physical block size [bytes].
-
-    std::atomic_flag closeFlag_;
-
+    bool isClosed_;
 public:
     BlockDevice()
         : name_()
         , openFlags_()
-        , fd(-1)
+        , fd_(-1)
         , isBlockDevice_(false)
         , deviceSize_(0)
         , lbs_(0)
         , pbs_(0)
-        , closeFlag_(ATOMIC_FLAG_INIT) {
+        , isClosed_(true) {
     }
     BlockDevice(const std::string& name, int flags)
         : name_(name)
@@ -233,7 +231,7 @@ public:
         , deviceSize_(getDeviceSizeStatic(fd_))
         , lbs_(getLogicalBlockSizeStatic(fd_))
         , pbs_(getPhysicalBlockSizeStatic(fd_))
-        , closeFlag_(ATOMIC_FLAG_INIT) {
+        , isClosed_(true) {
 #if 0
         ::printf("device %s size %zu isWrite %d isDirect %d isBlockDevice %d "
                  "lbs %u pbs %u\n",
@@ -252,7 +250,7 @@ public:
         std::swap(deviceSize_, rhs.deviceSize_);
         std::swap(lbs_, rhs.lbs_);
         std::swap(pbs_, rhs.pbs_);
-        std::swap(closeFlag_, rhs.closeFlag_);
+        std::swap(isClosed_, rhs.isClosed_);
     }
     explicit BlockDevice(BlockDevice&& rhs)
         : BlockDevice() {
@@ -273,12 +271,13 @@ public:
     }
 
     void close() {
-        if (closeFlag_.test_and_set()) return;
+        if (isClosed_) return;
         if (fd_ > 0) {
             if (::close(fd_) < 0) {
                 throw LibcError(errno, "close failed: ");
             }
             fd_ = -1;
+            isClosed_ = true;
         }
     }
 
