@@ -15,6 +15,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <functional>
 #include "cybozu/serializer.hpp"
 #include "util.hpp"
 #include "time.hpp"
@@ -88,6 +89,18 @@ struct MetaSnap
         : MetaSnap(0) {}
     explicit MetaSnap(uint64_t gid)
         : MetaSnap(gid, gid) {}
+    explicit MetaSnap(std::initializer_list<uint64_t> l)
+        : MetaSnap() {
+        if (l.size() == 1) {
+            gidB = gidE = *l.begin();
+        } else if (l.size() == 2) {
+            auto it = l.begin();
+            gidB = *it; ++it;
+            gidE = *it;
+        } else {
+            throw cybozu::Exception("MetaSnap:must have 1 or 2 arguments");
+        }
+    }
     MetaSnap(uint64_t gidB, uint64_t gidE)
         : preamble(META_SNAP_PREAMBLE)
         , gidB(gidB), gidE(gidE) {}
@@ -177,16 +190,13 @@ struct MetaDiff
 
     MetaDiff()
         : MetaDiff(MetaSnap(), MetaSnap()) {}
-    MetaDiff(uint64_t snapBgid, uint64_t snapEgid)
-        : MetaDiff(snapBgid, snapBgid, snapEgid, snapEgid) {}
-    MetaDiff(uint64_t snapBgidB, uint64_t snapBgidE, uint64_t snapEgidB, uint64_t snapEgidE)
+    MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool canMerge = false, uint64_t ts = 0)
+        : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), canMerge, ts) {}
+    MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool canMerge = false, uint64_t ts = 0)
+        : MetaDiff(MetaSnap(b), MetaSnap(e), canMerge, ts) {}
+    MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool canMerge = false, uint64_t ts = 0)
         : preamble(META_DIFF_PREAMBLE)
-        , canMerge(false), timestamp(0)
-        , snapB(snapBgidB, snapBgidE)
-        , snapE(snapEgidB, snapEgidE) {}
-    MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE)
-        : preamble(META_DIFF_PREAMBLE)
-        , canMerge(false), timestamp(0)
+        , canMerge(canMerge), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     bool operator==(const MetaDiff &rhs) const {
         return snapB == rhs.snapB && snapE == rhs.snapE;
@@ -828,9 +838,10 @@ public:
         return v;
     }
     /**
-     * QQQ
+     * Get applicable diff list to a specified snapshot
+     * where all the diffs and applied snapshot satisfy a specified predicate.
      */
-    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, uint64_t maxGid = uint64_t(-1)) const {
+    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &diff, const MetaSnap &snap)> &pred) const {
         MetaSnap s = snap;
         std::vector<MetaDiff> v;
         for (;;) {
@@ -838,16 +849,34 @@ public:
             if (u.empty()) break;
             MetaDiff d = getMaxProgressDiff(u);
             s = apply(s, d);
-            if (s.gidB > maxGid) break;
+            if (!pred(d, s)) break;
             v.push_back(d);
         }
         return v;
     }
+    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap) const {
+        auto pred = [](const MetaDiff &, const MetaSnap &) {
+            return true;
+        };
+        return getApplicableDiffList(snap, pred);
+    }
+    std::vector<MetaDiff> getApplicableDiffListByGid(const MetaSnap &snap, uint64_t maxGid) const {
+        auto pred = [&](const MetaDiff &, const MetaSnap &snap) {
+            return snap.gidB <= maxGid;
+        };
+        return getApplicableDiffList(snap, pred);
+    }
+    std::vector<MetaDiff> getApplicableDiffListByTime(const MetaSnap &snap, uint64_t maxTimestamp) const {
+        auto pred = [&](const MetaDiff &diff, const MetaSnap &) {
+            return diff.timestamp <= maxTimestamp;
+        };
+        return getApplicableDiffList(snap, pred);
+    }
     /**
      * Applicable and mergeable diff list.
      */
-    std::vector<MetaDiff> getApplicableAndMergeableDiffList(const MetaSnap &snap, uint32_t limit = 0) const {
-        std::vector<MetaDiff> v = getApplicableDiffList(snap, limit);
+    std::vector<MetaDiff> getApplicableAndMergeableDiffList(const MetaSnap &snap) const {
+        std::vector<MetaDiff> v = getApplicableDiffList(snap);
         if (v.empty()) return v;
         std::vector<MetaDiff> u;
         MetaDiff mdiff = v[0];
@@ -863,19 +892,15 @@ public:
      * This is useful for applying state.
      */
     std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st) const {
-        std::vector<MetaDiff> v = getApplicableDiffList(st.snapB);
-        if (v.empty()) return v;
-        if (!st.isApplying) return {v[0]};
-
-        MetaSnap snap = st.snapB;
-        for (size_t i = 0; i < v.size(); i++) {
-            snap = apply(snap, v[i]);
-            if (st.snapE.gidB <= snap.gidB) {
-                v.resize(i + 1);
-                return v;
-            }
+        size_t c = 0;
+        if (!st.isApplying) {
+            return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &) {
+                return (c++) == 0;
+            });
         }
-        throw cybozu::Exception("MetaDiffManager::getMinimumApplyingCandidates:not applicable");
+        return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &snap) {
+                return snap.gidB <= st.snapE.gidB;
+            });
     }
     /**
      * Get the latest snapshot.
@@ -932,11 +957,13 @@ public:
         }
         return ret;
     }
-    /*
-     * QQQ
-    */
+    /**
+     * Get diff list to restore a clean snapshot specified by a gid.
+     * RETURN:
+     *   Empty vector means the clean snapshot can not be restored.
+     */
     std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
-        std::vector<MetaDiff> ret = getApplicableDiffList(st.snapB, gid);
+        std::vector<MetaDiff> ret = getApplicableDiffListByGid(st.snapB, gid);
         if (ret.empty()) return ret;
 
         const std::vector<MetaDiff> miniDiffList = getMinimumApplicableDiffList(st);
@@ -947,6 +974,17 @@ public:
         } else {
             return {};
         }
+    }
+    /**
+     * Get diff list to apply all diffs before a specified timestamp.
+     * RETURN:
+     *   Empty vector means there is no diff to apply.
+     */
+    std::vector<MetaDiff> getDiffListToApply(const MetaState &st, uint64_t timestamp) const {
+        std::vector<MetaDiff> ret = getApplicableDiffListByTime(st.snapB, timestamp);
+        const std::vector<MetaDiff> miniDiffList = getMinimumApplicableDiffList(st);
+        if (miniDiffList.size() > ret.size()) return miniDiffList;
+        return ret;
     }
     /**
      * Get all diffs between gid0 and gid1.

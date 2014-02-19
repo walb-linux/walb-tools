@@ -5,7 +5,7 @@
 
 CYBOZU_TEST_AUTO(diff)
 {
-    walb::MetaDiff d0(0, 0, 1, 2), d1(1, 2);
+    walb::MetaDiff d0({0, 0}, {1, 2}), d1(1, 2);
     d1.canMerge = true;
     CYBOZU_TEST_ASSERT(walb::canMerge(d0, d1));
     walb::MetaDiff d2 = walb::merge(d0, d1);
@@ -16,17 +16,17 @@ CYBOZU_TEST_AUTO(snap)
 {
     {
         walb::MetaSnap s0(0, 7);
-        walb::MetaDiff d1(0, 0, 10, 10);
+        walb::MetaDiff d1({0, 0}, {10, 10});
         CYBOZU_TEST_ASSERT(walb::apply(s0, d1) == walb::MetaSnap(10, 10));
     }
     {
         walb::MetaSnap s0(0, 10);
-        walb::MetaDiff d1(0, 0, 10, 10);
+        walb::MetaDiff d1({0, 0}, {10, 10});
         CYBOZU_TEST_ASSERT(walb::apply(s0, d1) == walb::MetaSnap(10, 10));
     }
     {
         walb::MetaSnap s0(0, 13);
-        walb::MetaDiff d1(0, 13, 10, 12);
+        walb::MetaDiff d1({0, 13}, {10, 12});
         CYBOZU_TEST_ASSERT(walb::apply(s0, d1) == walb::MetaSnap(10, 12));
     }
 }
@@ -77,42 +77,42 @@ CYBOZU_TEST_AUTO(apply)
 {
     {
         walb::MetaSnap s0(0, 0);
-        walb::MetaDiff d1(0, 0, 10, 10);
+        walb::MetaDiff d1({0, 0}, {10, 10});
         walb::MetaSnap s1(10, 10);
         testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(0, 0);
-        walb::MetaDiff d1(0, 1, 2, 3);
+        walb::MetaDiff d1({0, 1}, {2, 3});
         CYBOZU_TEST_ASSERT(!walb::canApply(s0, d1));
     }
     {
         walb::MetaSnap s0(0, 10);
-        walb::MetaDiff d1(0, 0, 12, 12);
+        walb::MetaDiff d1({0, 0}, {12, 12});
         walb::MetaSnap s1(12, 12);
         testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(5, 10);
-        walb::MetaDiff d1(5, 5, 9, 9);
+        walb::MetaDiff d1({5, 5}, {9, 9});
         walb::MetaSnap s1(9, 10);
         testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(0, 5);
-        walb::MetaDiff d1(0, 5, 15, 16);
+        walb::MetaDiff d1({0, 5}, {15, 16});
         walb::MetaSnap s1(15, 16);
         testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(0, 5);
-        walb::MetaDiff d1(0, 5, 3, 6);
+        walb::MetaDiff d1({0, 5}, {3, 6});
         walb::MetaSnap s1(3, 6);
         testApply(s0, d1, s1);
     }
     {
         walb::MetaSnap s0(0, 10);
-        walb::MetaDiff d1(0, 5, 12, 15);
+        walb::MetaDiff d1({0, 5}, {12, 15});
         CYBOZU_TEST_ASSERT(!walb::canApply(s0, d1));
     }
 }
@@ -229,21 +229,19 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     walb::MetaSnap snap(0);
     walb::MetaState st(snap);
     std::vector<walb::MetaDiff> v;
-    v.emplace_back(0, 1);
-    v.back().canMerge = true;
-    v.emplace_back(1, 2);
-    v.back().canMerge = true;
-    v.emplace_back(2, 3);
-    v.back().canMerge = true;
-    v.emplace_back(3, 4);
-    v.back().canMerge = false;
-    v.emplace_back(4, 5);
-    v.back().canMerge = true;
+
+    v.emplace_back(0, 1, true, 1000);
+    v.emplace_back(1, 2, true, 1001);
+    v.emplace_back(2, 3, true, 1002);
+    v.emplace_back(3, 4, false, 1003);
+    v.emplace_back(4, 5, true, 1004);
 
     walb::MetaDiffManager mgr;
     for (walb::MetaDiff &d : v) mgr.add(d);
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), walb::MetaSnap(5));
     CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 0);
+    CYBOZU_TEST_EQUAL(mgr.getApplicableDiffListByGid(snap, 4).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getApplicableDiffListByTime(snap, 1003).size(), 4);
 
     auto v1 = mgr.getMergeableDiffList(0);
     CYBOZU_TEST_EQUAL(v1.size(), 3);
@@ -260,6 +258,7 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(v3.size(), 2);
     CYBOZU_TEST_EQUAL(v3[0], mdiff1);
     CYBOZU_TEST_EQUAL(v3[1], mdiff2);
+
 }
 
 CYBOZU_TEST_AUTO(metaDiffManager2)
@@ -267,9 +266,9 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     walb::MetaSnap snap(0, 10);
     walb::MetaState st(snap);
     std::vector<walb::MetaDiff> v;
-    v.emplace_back(0, 5); v.back().canMerge = false;
-    v.emplace_back(5, 10, 10, 10); v.back().canMerge = false;
-    v.emplace_back(10, 15); v.back().canMerge = false;
+    v.emplace_back(0, 5, false);
+    v.push_back(walb::MetaDiff({5, 10}, {10, 10}, false));
+    v.emplace_back(10, 15, false);
 
     walb::MetaDiffManager mgr;
     for (walb::MetaDiff &d : v) mgr.add(d);

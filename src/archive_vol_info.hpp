@@ -170,9 +170,32 @@ public:
         if (metaDiffList.empty()) {
             return false;
         }
+
         // QQQ
-        // apply
+        // apply wdiff files indicated by metaDiffList to lvSnap.
+
         cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+        return true;
+    }
+    /**
+     * QQQ
+     */
+    bool apply(uint64_t timestamp) {
+        MetaState st0 = getMetaState();
+        const MetaDiffManager &mgr = wdiffs_.getMgr();
+        std::vector<MetaDiff> metaDiffList = mgr.getDiffListToApply(st0, timestamp);
+        if (metaDiffList.empty()) {
+            // There is nothing to apply.
+            return false;
+        }
+        MetaState st1 = applying(st0, metaDiffList);
+        setMetaState(st1);
+
+        // QQQ
+        // apply wdiff files indicated by metaDiffList to lv.
+
+        MetaState st2 = walb::apply(st0, metaDiffList);
+        setMetaState(st2);
         return true;
     }
 private:
