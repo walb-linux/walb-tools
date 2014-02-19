@@ -820,28 +820,34 @@ public:
         return eraseBeforeGid(st.snapB.gidB);
     }
     /**
-     * This is used for merge.
+     * Get mergeable diff list started by lower-bound search with a specified gid,
+     * where all the diffs satisfy a specified predicate.
      */
-    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid, uint32_t limit = 0) const {
+    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid, const std::function<bool(const MetaDiff &)> &pred) const {
         std::vector<MetaDiff> v = getFirstDiffs(gid);
         if (v.empty()) return {};
         MetaDiff diff = getMaxProgressDiff(v);
         v = {diff};
         MetaDiff mdiff = diff;
-        while (limit == 0 || v.size() < limit) {
+        for (;;) {
             std::vector<MetaDiff> u = getMergeableCandidates(mdiff);
             if (u.empty()) break;
             diff = getMaxProgressDiff(u);
-            v.push_back(diff);
+            if (!pred(diff)) break;
             mdiff = merge(mdiff, diff);
+            v.push_back(diff);
         }
         return v;
+    }
+    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid) const {
+        auto pred = [](const MetaDiff &) { return true; };
+        return getMergeableDiffList(gid, pred);
     }
     /**
      * Get applicable diff list to a specified snapshot
      * where all the diffs and applied snapshot satisfy a specified predicate.
      */
-    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &diff, const MetaSnap &snap)> &pred) const {
+    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &, const MetaSnap &)> &pred) const {
         MetaSnap s = snap;
         std::vector<MetaDiff> v;
         for (;;) {
@@ -855,9 +861,7 @@ public:
         return v;
     }
     std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap) const {
-        auto pred = [](const MetaDiff &, const MetaSnap &) {
-            return true;
-        };
+        auto pred = [](const MetaDiff &, const MetaSnap &) { return true; };
         return getApplicableDiffList(snap, pred);
     }
     std::vector<MetaDiff> getApplicableDiffListByGid(const MetaSnap &snap, uint64_t maxGid) const {
