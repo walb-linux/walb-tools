@@ -881,8 +881,8 @@ public:
      * This is useful for applying state.
      */
     std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st) const {
-        size_t c = 0;
         if (!st.isApplying) {
+            size_t c = 0;
             return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &) {
                 return (c++) == 0;
             });
