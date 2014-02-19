@@ -112,11 +112,9 @@ class FileOpener
 {
 protected:
     int fd_;
-    bool isClosed_;
 public:
     FileOpener()
-        : fd_(-1)
-        , isClosed_(true) {
+        : fd_(-1) {
     }
     FileOpener(const std::string& filePath, int flags)
         : FileOpener() {
@@ -139,7 +137,6 @@ public:
     }
     void swap(FileOpener& rhs) noexcept {
         std::swap(fd_, rhs.fd_);
-        std::swap(isClosed_, rhs.isClosed_);
     }
     ~FileOpener() noexcept {
         try {
@@ -153,20 +150,17 @@ public:
     }
     bool open(const std::string& filePath, int flags) {
         fd_ = ::open(filePath.c_str(), flags);
-        isClosed_ = fd_ < 0;
         return fd_ >= 0;
     }
     bool open(const std::string& filePath, int flags, mode_t mode) {
         fd_ = ::open(filePath.c_str(), flags, mode);
-        isClosed_ = fd_ < 0;
         return fd_ >= 0;
     }
     void close() {
-        if (isClosed_) return;
+        if (fd_ < 0) return;
         if (::close(fd_) < 0) {
             throw LibcError(errno, "close failed: ");
         }
-        isClosed_ = true;
         fd_ = -1;
     }
 };
@@ -211,7 +205,6 @@ private:
     uint64_t deviceSize_; // [bytes].
     unsigned int lbs_; // logical block size [bytes].
     unsigned int pbs_; // physical block size [bytes].
-    bool isClosed_;
 public:
     BlockDevice()
         : name_()
@@ -220,8 +213,7 @@ public:
         , isBlockDevice_(false)
         , deviceSize_(0)
         , lbs_(0)
-        , pbs_(0)
-        , isClosed_(true) {
+        , pbs_(0) {
     }
     BlockDevice(const std::string& name, int flags)
         : name_(name)
@@ -230,8 +222,7 @@ public:
         , isBlockDevice_(isBlockDeviceStatic(fd_))
         , deviceSize_(getDeviceSizeStatic(fd_))
         , lbs_(getLogicalBlockSizeStatic(fd_))
-        , pbs_(getPhysicalBlockSizeStatic(fd_))
-        , isClosed_(true) {
+        , pbs_(getPhysicalBlockSizeStatic(fd_)) {
 #if 0
         ::printf("device %s size %zu isWrite %d isDirect %d isBlockDevice %d "
                  "lbs %u pbs %u\n",
@@ -250,7 +241,6 @@ public:
         std::swap(deviceSize_, rhs.deviceSize_);
         std::swap(lbs_, rhs.lbs_);
         std::swap(pbs_, rhs.pbs_);
-        std::swap(isClosed_, rhs.isClosed_);
     }
     explicit BlockDevice(BlockDevice&& rhs)
         : BlockDevice() {
@@ -271,14 +261,11 @@ public:
     }
 
     void close() {
-        if (isClosed_) return;
-        if (fd_ > 0) {
-            if (::close(fd_) < 0) {
-                throw LibcError(errno, "close failed: ");
-            }
-            fd_ = -1;
-            isClosed_ = true;
+        if (fd_ < 0) return;
+        if (::close(fd_) < 0) {
+            throw LibcError(errno, "close failed: ");
         }
+        fd_ = -1;
     }
 
     /**
