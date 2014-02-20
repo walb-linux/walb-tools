@@ -19,7 +19,7 @@ public:
         bool maked;
         typename Map::iterator itr;
         std::tie(itr, maked) = map_.insert(std::make_pair(volId, nullptr));
-        if (!maked) {
+        if (maked) {
             itr->second = std::unique_ptr<State>(new State());
         }
         return std::make_pair(itr->second.get(), maked);

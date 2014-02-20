@@ -43,6 +43,7 @@ CYBOZU_TEST_AUTO(StateMap)
         CYBOZU_TEST_ASSERT(p);
         CYBOZU_TEST_EQUAL(p->a, 5);
     }
-    CYBOZU_TEST_EXCEPTION(m.del("abc"), cybozu::Exception);
+	m.del("abc");
+	CYBOZU_TEST_EXCEPTION(m.del("abc"), cybozu::Exception);
 }
 
