@@ -9,7 +9,9 @@ namespace walb {
 struct StorageVolState {
     std::string state;
     bool stopping;
-//    std::unique_lock<std::mutex> 
+    std::unique_lock<std::mutex> getLock() {
+        return std::unique_lock<std::mutex>(mu_);
+    }
 private:
     std::mutex mu_;
 };
@@ -33,6 +35,23 @@ inline StorageSingleton& getStorageGlobal()
 }
 
 const StorageSingleton& gs = getStorageGlobal();
+
+inline StorageVolState &getStorageVolState(const std::string &volId)
+{
+    StorageVolState *p;
+    bool maked;
+    std::tie(p, maked) = getStorageGlobal().stMap.get(volId);
+    assert(p);
+    if (maked) {
+        // Load from the state file.
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string st = volInfo.getState();
+        std::unique_lock<std::mutex> lk(p->getLock());
+        p->state = st;
+        p->stopping = false;
+    }
+    return *p;
+}
 
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
