@@ -16,3 +16,4 @@ worker_data_test
 hash_test
 wlog_compressor_test
 state_map_test
+raii_counter_test
