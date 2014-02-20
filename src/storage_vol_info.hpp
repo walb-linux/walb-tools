@@ -14,6 +14,15 @@
 
 namespace walb {
 
+const char *const sClear = "Clear";
+const char *const sSyncReady = "SyncReady";
+const char *const sFullSync = "FullSync";
+const char *const sHashSync = "HashSync";
+const char *const sStopped = "Stopped";
+const char *const sMaster = "Master";
+const char *const sSlave = "Slave";
+const char *const sWlogSend = "WlogSend";
+
 /**
  * Persistent data for a volume managed by a storage daemon.
  *
@@ -78,7 +87,7 @@ public:
             qf.sync();
         }
         util::saveFile(volDir_, "path", wdevPath_.str());
-        setState("SyncReady");
+        setState(sSyncReady);
         util::saveFile(volDir_, "done", ""); // TODO
         util::saveFile(volDir_, "uuid", cybozu::Uuid());
     }
@@ -89,7 +98,7 @@ public:
      */
     void clear(bool force = false) {
         const std::string st = getState();
-        if (!force && st != "SyncReady" && st != "Stopped") {
+        if (!force && st != sSyncReady && st != sStopped) {
             throw cybozu::Exception("StoraveVolInfo::clear:state is neither SyncReady nor Stopped");
         }
         if (!volDir_.rmdirRecursive()) {
@@ -134,10 +143,10 @@ public:
     void setState(const std::string& newState)
     {
         const char *tbl[] = {
-            "SyncReady",
-            "Stopped",
-            "Master",
-            "Slave",
+            sSyncReady,
+            sStopped,
+            sMaster,
+            sSlave,
         };
         for (const char *p : tbl) {
             if (newState == p) {

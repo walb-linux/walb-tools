@@ -1,9 +1,18 @@
 #pragma once
 #include "protocol.hpp"
 #include "storage_vol_info.hpp"
+#include "state_map.hpp"
 #include <snappy.h>
 
 namespace walb {
+
+struct StorageVolState {
+    std::string state;
+    bool stopping;
+//    std::unique_lock<std::mutex> 
+private:
+    std::mutex mu_;
+};
 
 struct StorageSingleton
 {
@@ -15,6 +24,7 @@ struct StorageSingleton
     std::vector<cybozu::SocketAddr> proxyV;
     std::string nodeId;
     std::string baseDirStr;
+    walb::StateMap<StorageVolState> stMap;
 };
 
 inline StorageSingleton& getStorageGlobal()
@@ -89,7 +99,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     const std::string st = volInfo.getState();
 
-    if (st != "Stopped") {
+    if (st != sStopped) {
         throw cybozu::Exception("c2sStartServer:not Stopped state") << st;
     }
 
@@ -143,7 +153,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     packet::Packet cPack(p.sock);
 
     const std::string state = volInfo.getState();
-    if (state != "SyncReady") {
+    if (state != sSyncReady) {
         cybozu::Exception e("c2sFullSyncServer:bad state");
         e << state;
         logger.error("%s", e.what());
@@ -217,7 +227,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         walb::packet::Ack(aSock).recv();
     }
 
-    volInfo.setState("Master");
+    volInfo.setState(sMaster);
     LOGi("c2sFullSyncServer done, ctrl:%s storage:%s archive:%s", p.clientId.c_str(), nodeId.c_str(), archiveId.c_str());
 }
 
