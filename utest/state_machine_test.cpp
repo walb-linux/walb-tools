@@ -52,7 +52,6 @@ CYBOZU_TEST_AUTO(trans)
     sm.addEdge("b", "c");
     sm.addEdge("c", "d");
     sm.set("a");
-
     {
         walb::StateMachineTransaction ts(sm);
         // fail
@@ -65,17 +64,14 @@ CYBOZU_TEST_AUTO(trans)
         CYBOZU_TEST_EQUAL(sm.get(), "c");
         CYBOZU_TEST_EQUAL(sm.get(), "c");
     }
-
     // rollback
     sm.set("a");
     {
         walb::StateMachineTransaction ts(sm);
-
         CYBOZU_TEST_ASSERT(ts.tryChange("a", "b"));
         CYBOZU_TEST_EQUAL(sm.get(), "b");
     }
-       CYBOZU_TEST_EQUAL(sm.get(), "a");
-
+    CYBOZU_TEST_EQUAL(sm.get(), "a");
     // err
     sm.set("a");
     {
@@ -93,7 +89,6 @@ CYBOZU_TEST_AUTO(trans)
         CYBOZU_TEST_EQUAL(sm.get(), "c");
         CYBOZU_TEST_EXCEPTION(ts.commit("d"), cybozu::Exception);
     }
-       CYBOZU_TEST_EQUAL(sm.get(), "c");
-    
+    CYBOZU_TEST_EQUAL(sm.get(), "c");
 }
 
