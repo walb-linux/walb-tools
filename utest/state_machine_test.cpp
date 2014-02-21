@@ -63,6 +63,7 @@ CYBOZU_TEST_AUTO(trans)
         ts.commit("c");
         CYBOZU_TEST_EQUAL(sm.get(), "c");
     }
+    CYBOZU_TEST_EQUAL(sm.get(), "c");
     // rollback
     sm.set("a");
     {
