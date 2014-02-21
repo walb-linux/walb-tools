@@ -13,18 +13,18 @@ class StateMachineTransaction;
 class StateMachine
 {
     friend StateMachineTransaction;
-	using StrSet = std::set<std::string>;
-	using Map = std::map<std::string, StrSet>;
-	using AutoLock = std::lock_guard<std::mutex>;
-	mutable std::mutex m_;
-	Map map_;
-	Map::iterator cur_;
+    using StrSet = std::set<std::string>;
+    using Map = std::map<std::string, StrSet>;
+    using AutoLock = std::lock_guard<std::mutex>;
+    mutable std::mutex m_;
+    Map map_;
+    Map::iterator cur_;
     bool inTrans_; // true if in [tryChange, commit or transaction.dstr]
     bool changeNoLock(Map::iterator& cur, const std::string& from, const std::string& to) {
-		if (cur->first != from) return false;
-		if (cur->second.find(to) == cur->second.end()) return false;
-		cur = map_.find(to);
-		assert(cur != map_.end());
+        if (cur->first != from) return false;
+        if (cur->second.find(to) == cur->second.end()) return false;
+        cur = map_.find(to);
+        assert(cur != map_.end());
         return true;
     }
     void verifyLocked() const {
@@ -32,27 +32,29 @@ class StateMachine
     }
 public:
     StateMachine()
-        : inTrans_(false) {
+        : cur_(map_.end())
+        , inTrans_(false) {
     }
     void addEdge(const std::string &src, const std::string &dst) {
-		AutoLock al(m_);
+        AutoLock al(m_);
         verifyLocked();
-		map_[src].insert(dst);
+        map_[src].insert(dst);
+        map_.insert(std::make_pair(dst, StrSet()));
     }
-	void set(const std::string& state) {
-		AutoLock al(m_);
+    void set(const std::string& state) {
+        AutoLock al(m_);
         verifyLocked();
-		Map::iterator i = map_.find(state);
-		if (i == map_.end()) throw cybozu::Exception("StateMachine:setState:not found") << state;
+        Map::iterator i = map_.find(state);
+        if (i == map_.end()) throw cybozu::Exception("StateMachine:setState:not found") << state;
         cur_ = i;
-	}
+    }
     const std::string &get() const {
-		AutoLock al(m_);
-		if (cur_ == map_.end()) throw cybozu::Exception("StateMachine:get:not set");
+        AutoLock al(m_);
+        if (cur_ == map_.end()) throw cybozu::Exception("StateMachine:get:not set");
         return cur_->first;
     }
     bool change(const std::string& from, const std::string& to) {
-		AutoLock al(m_);
+        AutoLock al(m_);
         verifyLocked();
         return changeNoLock(cur_, from, to);
     }
@@ -65,7 +67,7 @@ private:
     StateMachine::Map::iterator from_;
 public:
     StateMachineTransaction(StateMachine &sm)
-		: sm_(sm) {
+        : sm_(sm) {
     }
     ~StateMachineTransaction() noexcept {
         StateMachine::AutoLock al(sm_.m_);
