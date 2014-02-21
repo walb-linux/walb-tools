@@ -66,7 +66,7 @@ private:
     StateMachine &sm_;
     StateMachine::Map::iterator from_;
 public:
-    StateMachineTransaction(StateMachine &sm)
+    explicit StateMachineTransaction(StateMachine &sm)
         : sm_(sm) {
     }
     ~StateMachineTransaction() noexcept {
@@ -94,4 +94,3 @@ public:
 };
 
 } // walb
-
