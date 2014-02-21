@@ -134,7 +134,7 @@ cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
 Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb);
 Lv createSnapshot(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
-    uint64_t sizeLb);
+    bool isWritable, uint64_t sizeLb);
 void remove(const std::string &pathStr);
 void resize(const std::string &pathStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
@@ -185,10 +185,10 @@ public:
     bool exists() const {
         return cybozu::lvm::exists(vgName(), name());
     }
-    Lv takeSnapshot(const std::string &snapName, uint64_t sizeLb = 0) const {
+    Lv takeSnapshot(const std::string &snapName, bool isWritable = false, uint64_t sizeLb = 0) const {
         checkVolume();
         if (sizeLb == 0 || sizeLb_ < sizeLb) sizeLb = sizeLb_;
-        return createSnapshot(vgName_, lvName_, snapName, sizeLb);
+        return createSnapshot(vgName_, lvName_, snapName, isWritable, sizeLb);
     }
     /**
      * @snapName specify an empty string for wildcard.
@@ -340,13 +340,14 @@ Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeL
  */
 Lv createSnapshot(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
-    uint64_t sizeLb)
+    bool isWritable, uint64_t sizeLb)
 {
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     cybozu::process::call("/sbin/lvcreate", {
         "-s",
         local::getSizeOpt(sizeLb),
         std::string("--name=") + snapName,
+        "-p", isWritable ? "rw" : "r",
         lvPath.str()
     });
 

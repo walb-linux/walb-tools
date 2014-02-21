@@ -16,10 +16,12 @@ struct Option : public cybozu::Option
     std::string command;
     std::vector<std::string> args;
     uint64_t size;
+    bool isWritable;
     Option() {
         appendOpt(&vgName, "", "vg", "volume group name");
         appendOpt(&lvName, "", "lv", "logical volume name");
         appendOpt(&size, 0, "s", "size");
+        appendBoolOpt(&isWritable, "w", "take writable snapshot");
         appendParam(&command, "command name");
         appendParamVec(&args, "args", "command-specified arguments");
         appendHelp("h");
@@ -31,7 +33,7 @@ struct Option : public cybozu::Option
             "  listvg: print volume group list\n"
             "  listsnap: list snapshots of a specified vg and lv.\n"
             "  create [lvname]: create a lv. specify -vg and -s\n"
-            "  snap [snapname]: create a snapshot with a name. specify -vg and -lv. option: -s [size].\n"
+            "  snap [snapname]: create a snapshot with a name. specify -vg and -lv. option: -s [size], -w.\n"
             "  remove [name]: remove a lv or a snapshot. specify -vg.\n"
             "  resize [name]: resize a lv or a snapshot. specify -vg and -s.\n"
             "  parent [snapname]: get parent logical volume. specify -vg.\n"
@@ -41,6 +43,7 @@ struct Option : public cybozu::Option
             "  -s [size]: specify size. you can use suffix in [kmgtKMGT].\n"
             "             k/m/g/t means kilo/mega/giga/tera bytes.\n"
             "             k/m/g/t means kibi/mebi/gibi/tebi bytes.\n"
+            "  -w: take writable snapshot.\n"
             );
         setUsage(usage);
     }
@@ -116,7 +119,7 @@ void dispatch(const Option &opt)
         }
         opt.checkNumArgs(1);
         std::string name = opt.args[0];
-        cybozu::lvm::Lv snap = lv.takeSnapshot(name, opt.sizeLb());
+        cybozu::lvm::Lv snap = lv.takeSnapshot(name, opt.isWritable, opt.sizeLb());
         snap.print();
         ::printf("snapshot created.\n");
     } else if (opt.command == "remove") {
