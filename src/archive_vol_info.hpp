@@ -170,7 +170,14 @@ public:
         cybozu::lvm::Lv lv = getLv();
         const std::string targetName = restoredSnapshotName(gid);
         const std::string tmpLvName = targetName + "_tmp";
-        cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName);
+        if (lv.hasSnapshot(tmpLvName)) {
+            lv.getSnapshot(tmpLvName).remove();
+        }
+        if (lv.hasSnapshot(targetName)) {
+            // Already restored.
+            return false;
+        }
+        cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
         const MetaDiffManager& mgr = wdiffs_.getMgr();
         const int maxRetryNum = 10;
         int retryNum = 0;
@@ -181,7 +188,6 @@ public:
             if (metaDiffList.empty()) {
                 return false;
             }
-            // QQQ
             // apply wdiff files indicated by metaDiffList to lvSnap.
             for (const MetaDiff& diff : metaDiffList) {
                 cybozu::util::FileOpener op;
@@ -203,12 +209,27 @@ public:
         merger.addWdiffs(fds);
         diff::RecIo recIo;
         cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
+        std::vector<char> zero;
         while (merger.pop(recIo)) {
             diff::RecordRaw& raw = recIo.record();
-            uint64_t ioAddress = raw.ioAddress();
-            uint64_t ioBlocks = raw.ioBlocks();
-            const char *data = recIo.io().rawData();
-            bd.write(ioAddress * LOGICAL_BLOCK_SIZE, ioBlocks * LOGICAL_BLOCK_SIZE, data);
+            assert(!raw.isCompressed());
+            const uint64_t ioAddress = raw.ioAddress();
+            const uint64_t ioBlocks = raw.ioBlocks();
+            LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
+            const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
+            const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
+
+            // TODO: check the IO is out of range or not.
+
+            const char *data;
+            // Curently a discard IO is converted to an all-zero IO.
+            if (raw.isAllZero() || raw.isDiscard()) {
+                if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
+                data = &zero[0];
+            } else {
+                data = recIo.io().rawData();
+            }
+            bd.write(ioAddrB, ioSizeB, data);
         }
         bd.fdatasync();
         bd.close();
@@ -288,7 +309,7 @@ private:
         return VOLUME_PREFIX + volId_;
     }
     std::string restoredSnapshotName(uint64_t gid) const {
-        return RESTORE_PREFIX + volId_ + cybozu::itoa(gid);
+        return RESTORE_PREFIX + volId_ + "_" + cybozu::itoa(gid);
     }
 #if 0 // XXX
     /**
