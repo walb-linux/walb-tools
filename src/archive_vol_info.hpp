@@ -37,7 +37,7 @@ private:
     const cybozu::FilePath volDir_;
     const std::string vgName_;
     const std::string volId_;
-    WalbDiffFiles wdiffs_;
+    mutable WalbDiffFiles wdiffs_;
 
 #if 0
     MetaSnap baseRecord_; /* snapshot information of the volume. */
@@ -89,6 +89,11 @@ public:
         if (!volDir_.rmdirRecursive()) {
             throw cybozu::Exception("ArchiveVolInfo::clear:rmdir recursively failed.");
         }
+    }
+    cybozu::Uuid getUuid() const {
+        cybozu::Uuid uuid;
+        util::loadFile(volDir_, "uuid", uuid);
+        return uuid;
     }
     void setUuid(const cybozu::Uuid &uuid) {
         util::saveFile(volDir_, "uuid", uuid);
@@ -230,6 +235,50 @@ public:
         MetaState st2 = walb::apply(st0, metaDiffList);
         setMetaState(st2);
         return true;
+    }
+    std::vector<std::string> getStatusAsStrVec() const {
+        std::vector<std::string> v;
+        auto &fmt = cybozu::util::formatString;
+        wdiffs_.reloadMetadata();
+
+        v.push_back(fmt("volId %s", volId_.c_str()));
+        uint64_t sizeLb = 0; // TODO
+        v.push_back(fmt("size %" PRIu64 "", sizeLb));
+        const cybozu::Uuid uuid = getUuid();
+        v.push_back(fmt("uuid %s", uuid.str().c_str()));
+        std::string st = getState();
+        v.push_back(fmt("state %s", st.c_str()));
+        std::vector<std::string> actionV; // TODO
+        std::string actions;
+        for (const std::string &s : actionV) {
+            actions += std::string(" ") + s;
+        }
+        v.push_back(fmt("actions %s", actions.c_str()));
+        const MetaState metaSt = getMetaState();
+        v.push_back(fmt("base %s", metaSt.str().c_str()));
+        const MetaSnap latest = wdiffs_.getMgr().getLatestSnapshot(metaSt);
+        v.push_back(fmt("latest %s", latest.str().c_str()));
+        size_t numRestored = 0; // TODO
+        v.push_back(fmt("numRestored %zu", numRestored));
+        for (size_t i = 0; i < numRestored; i++) {
+            uint64_t gid = 0; // TODO
+            v.push_back(fmt("restored %" PRIu64 "", gid));
+        }
+        std::vector<MetaSnap> rv; // TODO
+        v.push_back(fmt("numRestoreble %zu", rv.size()));
+        for (size_t i = 0; i < rv.size(); i++) {
+            MetaSnap snap; // TODO
+            v.push_back(fmt("snapshot %" PRIu64 "", snap.gidB));
+        }
+        std::vector<MetaDiff> dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
+        v.push_back(fmt("numWdiff %zu", dv.size()));
+        for (const MetaDiff &d : dv) {
+            size_t size = wdiffs_.getDiffFileSize(d);
+            v.push_back(fmt("wdiff %s %d %" PRIu64 " %s"
+                            , d.str().c_str(), d.canMerge ? 1 : 0, size
+                            , cybozu::unixTimeToStr(d.timestamp).c_str()));
+        }
+        return v;
     }
 private:
     cybozu::lvm::Vg getVg() const {

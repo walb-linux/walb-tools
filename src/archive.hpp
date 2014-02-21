@@ -25,9 +25,23 @@ inline ArchiveSingleton& getArchiveGlobal()
 
 const ArchiveSingleton& ga = getArchiveGlobal();
 
-inline void c2aStatusServer(protocol::ServerParams &/*p*/)
+inline void c2aStatusServer(protocol::ServerParams &p)
 {
-    // QQQ
+    packet::Packet pkt(p.sock);
+    StrVec params;
+    pkt.read(params);
+
+    if (params.empty()) {
+        // for all volumes
+        pkt.write("not implemented yet");
+        // TODO
+    } else {
+        // for a volume
+        const std::string &volId = params[0];
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        pkt.write("ok");
+        pkt.write(volInfo.getStatusAsStrVec());
+    }
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)
