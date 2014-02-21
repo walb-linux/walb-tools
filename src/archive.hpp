@@ -212,9 +212,30 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 /**
  * Restore command.
  */
-inline void c2aRestoreServer(protocol::ServerParams &)
+inline void c2aRestoreServer(protocol::ServerParams &p)
 {
-    // QQQ
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    StrVec v = protocol::recvStrVec(p.sock, 2, "c2aRestoreServer", false);
+    const std::string &volId = v[0];
+    const uint64_t gid = cybozu::atoi(v[1]);
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    const std::string st = volInfo.getState();
+    packet::Packet pkt(p.sock);
+    if (st != "Archived") {
+        cybozu::Exception e("c2aRestoreServer:state is not Archived");
+        e << volId << st;
+        pkt.write(e.what());
+        throw e;
+    }
+    if (!volInfo.restore(gid)) {
+        cybozu::Exception e("c2aRestoreServer:restore failed");
+        e << volId << gid;
+        pkt.write(e.what());
+        throw e;
+    }
+
+    pkt.write("ok");
 }
 
 } // walb

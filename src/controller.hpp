@@ -102,9 +102,16 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
  * Restore command.
  * parameters: volId, gid
  */
-inline void c2aRestoreClient(protocol::ClientParams &)
+inline void c2aRestoreClient(protocol::ClientParams &p)
 {
-    // QQQ
+    protocol::sendStrVec(p.sock, p.params, 2, "c2aRestoreClient", false);
+    packet::Packet pkt(p.sock);
+
+    std::string s;
+    pkt.read(s);
+    if (s != "ok") {
+        throw cybozu::Exception("c2aRestoreClient:failed") << s;
+    }
 }
 
 } // namespace walb
