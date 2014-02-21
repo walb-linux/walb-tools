@@ -142,11 +142,7 @@ public:
     ~ZeroMemory() noexcept {}
 
     void resize(size_t newSize) {
-        size_t oldSize = v_.size();
-        v_.resize(newSize);
-        if (oldSize < newSize) {
-            ::memset(&v_[oldSize], 0, newSize - oldSize);
-        }
+        v_.resize(newSize, 0);
     }
 
     std::shared_ptr<T> makePtr() {
@@ -251,7 +247,13 @@ public:
      */
     void run() {
         /* Read a wdiff file and redo IOs in it. */
-        walb::diff::Reader wdiffR(0);
+        cybozu::util::FileOpener fo;
+        int fd = 0; // stdin
+        if (config_.inWdiffPath() != "-") {
+            fo.open(config_.inWdiffPath(), O_RDONLY);
+            fd = fo.fd();
+        }
+        walb::diff::Reader wdiffR(fd);
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
