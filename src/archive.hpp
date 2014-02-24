@@ -296,6 +296,14 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 
     checkNoActionRunning(volId, "x2aDirtyFullSyncServer");
     ArchiveVolState &volSt = getArchiveVolState(volId);
+
+    if (volSt.stopping) {
+        cybozu::Exception e("x2aDirtyFullSyncServer:stopping");
+        e << volId;
+        sPack.write(e.what());
+        throw e;
+    }
+
     StateMachine &sm = volSt.sm;
     {
         StateMachineTransaction tran(sm, aSyncReady, atFullSync, "x2aDirtyFullSyncServer");

@@ -254,6 +254,14 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     packet::Packet cPack(p.sock);
 
     StorageVolState &volSt = getStorageVolState(volId);
+
+    if (volSt.stopping) {
+        cybozu::Exception e("c2sFullSyncServer:stopping");
+        e << volId;
+        cPack.write(e.what());
+        throw e;
+    }
+
     StateMachine &sm = volSt.sm;
     {
         StateMachineTransaction tran(sm, sSyncReady, stFullSync, "c2sFullSyncServer");
