@@ -2,15 +2,51 @@
 #include "protocol.hpp"
 #include "storage_vol_info.hpp"
 #include "state_map.hpp"
+#include "state_machine.hpp"
 #include <snappy.h>
 
 namespace walb {
 
 struct StorageVolState {
-    std::string state;
     bool stopping;
+    StateMachine state;
     std::unique_lock<std::mutex> getLock() {
         return std::unique_lock<std::mutex>(mu_);
+    }
+    void init(const std::string& st)
+    {
+        const struct StateMachine::Pair tbl[] = {
+            { sClear, stInitVol },
+            { stInitVol, sSyncReady },
+            { sSyncReady, stClearVol },
+            { stClearVol, sClear },
+
+            { sSyncReady, stStartSlave },
+            { stStartSlave, sSlave },
+            { sSlave, stStopSlave },
+            { stStopSlave, sSyncReady },
+
+            { sSlave, stWlogRemove },
+            { stWlogRemove, sSlave },
+
+            { sSyncReady, stFullSync },
+            { stFullSync, sStopped },
+            { sSyncReady, stHashSync },
+            { stHashSync, sStopped },
+            { sStopped, stReset },
+            { stReset, sSyncReady },
+
+            { sStopped, stStartMaster },
+            { stStartMaster, sMaster },
+            { sMaster, stStopMaster },
+            { stStopMaster, sStopped },
+
+            { sMaster, stWlogSend },
+            { stWlogSend, sMaster },
+        };
+        state.init(tbl);
+        state.set(st);
+        stopping = false;
     }
 private:
     std::mutex mu_;
@@ -38,19 +74,16 @@ const StorageSingleton& gs = getStorageGlobal();
 
 inline StorageVolState &getStorageVolState(const std::string &volId)
 {
-    StorageVolState *p;
     bool maked;
-    std::tie(p, maked) = getStorageGlobal().stMap.get(volId);
-    assert(p);
+    StorageVolState& s = getStorageGlobal().stMap.get(volId, &maked);
     if (maked) {
         // Load from the state file.
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string st = volInfo.getState();
-        std::unique_lock<std::mutex> lk(p->getLock());
-        p->state = st;
-        p->stopping = false;
+        std::unique_lock<std::mutex> lk(s.getLock());
+        s.init(st);
     }
-    return *p;
+    return s;
 }
 
 inline void c2sStatusServer(protocol::ServerParams &p)
@@ -78,9 +111,13 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     const std::string &wdevPathName = v[1];
 
-    StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
-    volInfo.init();
-
+    StateMachine &sm = getStorageVolState(volId).state;
+    {
+        StateMachineTransaction tran(sm, sClear, stInitVol);
+        StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
+        volInfo.init();
+        tran.commit(sSyncReady);
+    }
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(gs.nodeId, p.clientId);
@@ -92,11 +129,13 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 1, "c2sClearVolServer", false);
     const std::string &volId = v[0];
 
-    // TODO: exclusive access for the volId.
-
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    volInfo.clear();
-
+    StateMachine &sm = getStorageVolState(volId).state;
+    {
+        StateMachineTransaction tran(sm, sSyncReady, stClearVol);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        volInfo.clear();
+        tran.commit(sClear);
+    }
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(gs.nodeId, p.clientId);
@@ -113,19 +152,20 @@ inline void c2sStartServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     const bool isMaster = (v[1] == "master");
 
-    // TODO: exclusive acess for the volId.
-
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    const std::string st = volInfo.getState();
-
-    if (st != sStopped) {
-        throw cybozu::Exception("c2sStartServer:not Stopped state") << st;
+    StateMachine &sm = getStorageVolState(volId).state;
+    if (isMaster) {
+        StateMachineTransaction tran(sm, sStopped, stStartMaster);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        volInfo.setState(sMaster);
+        // TODO: start monitoring of the target walb device.
+        tran.commit(sMaster);
+    } else {
+        StateMachineTransaction tran(sm, sStopped, stStartSlave);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        volInfo.setState(sSlave);
+        // TODO: start monitoring of the target walb device.
+        tran.commit(sSlave);
     }
-
-    volInfo.setState(isMaster ? "Master" : "Slave");
-
-    // TODO: start monitoring of the target walb device.
-
     packet::Ack(p.sock).send();
 }
 

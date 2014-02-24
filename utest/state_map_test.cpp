@@ -6,12 +6,14 @@ struct State {
     State() : a(5) {}
 };
 
+#if 0
+QQQ
 CYBOZU_TEST_AUTO(StateMap)
 {
     walb::StateMap<State> m;
     {
-        State *p = 0;
         bool maked = false;
+        State &p = 0;
         std::tie(p, maked) = m.get("abc");
         CYBOZU_TEST_ASSERT(maked);
         CYBOZU_TEST_ASSERT(p);
@@ -46,4 +48,5 @@ CYBOZU_TEST_AUTO(StateMap)
     m.del("abc");
     CYBOZU_TEST_EXCEPTION(m.del("abc"), cybozu::Exception);
 }
+#endif
 

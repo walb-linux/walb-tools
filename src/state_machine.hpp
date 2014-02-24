@@ -41,6 +41,17 @@ public:
         map_[src].insert(dst);
         map_.insert(std::make_pair(dst, StrSet()));
     }
+    struct Pair {
+        const char *from;
+        const char *to;
+    };
+    template<size_t N>
+    void init(const Pair (&tbl)[N])
+    {
+        for (size_t i = 0; i < N; i++) {
+            addEdge(tbl[i].from, tbl[i].to);
+        }
+    }
     void set(const std::string& state) {
         AutoLock al(m_);
         verifyLocked();
@@ -74,6 +85,12 @@ public:
         if (!sm_.inTrans_) return;
         sm_.cur_ = from_;
         sm_.inTrans_ = false;
+    }
+    StateMachineTransaction(StateMachine &sm, const std::string& from, const std::string& to)
+        : sm_(sm) {
+        if (!tryChange(from, to)) {
+            throw cybozu::Exception("StateMachineTransaction:bad state") << sm.get() << from << to;
+        }
     }
     bool tryChange(const std::string& from, const std::string& pass) {
         StateMachine::AutoLock al(sm_.m_);

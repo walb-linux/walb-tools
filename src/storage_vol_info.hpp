@@ -16,12 +16,23 @@ namespace walb {
 
 const char *const sClear = "Clear";
 const char *const sSyncReady = "SyncReady";
-const char *const sFullSync = "FullSync";
-const char *const sHashSync = "HashSync";
 const char *const sStopped = "Stopped";
 const char *const sMaster = "Master";
 const char *const sSlave = "Slave";
-const char *const sWlogSend = "WlogSend";
+
+// temporary state
+const char *const stInitVol = "InitVol";
+const char *const stClearVol = "ClearVol";
+const char *const stStartSlave = "StartSlave";
+const char *const stStopSlave = "StopSlave";
+const char *const stFullSync = "FullSync";
+const char *const stHashSync = "HashSync";
+const char *const stStartMaster = "StartMaster";
+const char *const stStopMaster = "StopMaster";
+const char *const stReset = "Reset";
+const char *const stWlogSend = "WlogSend";
+const char *const stWlogRemove = "WlogRemove";
+
 
 /**
  * Persistent data for a volume managed by a storage daemon.
@@ -96,11 +107,7 @@ public:
      * The directory will be deleted completely.
      * The instance will be invalid after calling this.
      */
-    void clear(bool force = false) {
-        const std::string st = getState();
-        if (!force && st != sSyncReady && st != sStopped) {
-            throw cybozu::Exception("StoraveVolInfo::clear:state is neither SyncReady nor Stopped");
-        }
+    void clear() {
         if (!volDir_.rmdirRecursive()) {
             throw cybozu::Exception("StorageVolInfo::clear:rmdir recursively failed.");
         }
