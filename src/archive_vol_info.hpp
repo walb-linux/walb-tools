@@ -23,9 +23,22 @@
 
 namespace walb {
 
-const std::string VG_NAME = "vg";
 const std::string VOLUME_PREFIX = "i_";
 const std::string RESTORE_PREFIX = "r_";
+
+const char *const aClear = "Clear";
+const char *const aSyncReady = "SyncReady";
+const char *const aArchived = "Archived";
+const char *const aStopped = "Stopped";
+
+// temporary state
+const char *const atInitVol = "InitVol";
+const char *const atClearVol = "ClearVol";
+const char *const atFullSync = "FullSync";
+const char *const atHashSync = "HashSync";
+const char *const atWdiffRecv = "WdiffRecv";
+const char *const atStop = "Stop";
+const char *const atStart = "Start";
 
 /**
  * Data manager for a volume in a server.
@@ -39,10 +52,6 @@ private:
     const std::string volId_;
     mutable WalbDiffFiles wdiffs_;
 
-#if 0
-    MetaSnap baseRecord_; /* snapshot information of the volume. */
-#endif
-
 public:
     /**
      * @baseDirStr base directory path string.
@@ -50,7 +59,7 @@ public:
      * @vgName volume group name.
      */
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
-                   const std::string &vgName = VG_NAME)
+                   const std::string &vgName)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , vgName_(vgName)
         , volId_(volId)
@@ -73,19 +82,18 @@ public:
         util::makeDir(volDir_.str(), "ArchiveVolInfo::init", true);
         setUuid(cybozu::Uuid());
         setMetaState(MetaState());
-        setState("SyncReady");
+        setState(aSyncReady);
     }
-    void clear(bool force = false) {
-        const std::string st = getState();
-        if (!force && st != "SyncReady" && st != "Stopped") {
-            throw cybozu::Exception("ArchiveVolInfo::clear:state is neither SyncReady nor Stopped");
-        }
-
+    /**
+     * CAUSION:
+     *   The volume will be removed if exists.
+     *   All data inside the directory will be removed.
+     */
+    void clear() {
         // Delete all related lvm volumes and snapshots.
         if (lvExists()) {
             getLv().remove();
         }
-
         if (!volDir_.rmdirRecursive()) {
             throw cybozu::Exception("ArchiveVolInfo::clear:rmdir recursively failed.");
         }
@@ -109,9 +117,7 @@ public:
     void setState(const std::string& newState)
     {
         const char *tbl[] = {
-            "SyncReady",
-            "Archived",
-            "Stopped",
+            aSyncReady, aArchived, aStopped,
         };
         for (const char *p : tbl) {
             if (newState == p) {
@@ -328,24 +334,6 @@ private:
                 "You tried to shrink the volume: " + lv.path().str());
         }
         lv.resize(newSizeLb);
-    }
-    /**
-     * CAUSION:
-     *   All data inside the directory will be removed.
-     *   The volume will be removed if exists.
-     */
-    void reset(uint64_t gid) {
-        baseRecord_.init();
-        baseRecord_.setSnap(gid);
-        baseRecord_.setTimestamp(::time(0));
-        saveBaseRecord();
-
-        wdiffsP_->reset(gid);
-
-        /* TODO: consider remove or remaining. */
-        // if (lvExists()) {
-        //     getLv().remove();
-        // }
     }
     bool initialized() const {
         /* now editing */
