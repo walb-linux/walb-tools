@@ -61,7 +61,7 @@ public:
      * CAUSION:
      *   All data inside the directory will be removed.
      */
-    void clean() {
+    void clear() {
         /* remove all wdiff files. */
         removeBeforeGid(uint64_t(-1));
     }

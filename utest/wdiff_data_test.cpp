@@ -58,7 +58,7 @@ CYBOZU_TEST_AUTO(consolidate)
     CYBOZU_TEST_EQUAL(diffV[0].snapB.gidB, 5);
     CYBOZU_TEST_EQUAL(diffV[0].snapE.gidB, 127);
 
-    diffFiles.clean();
+    diffFiles.clear();
     setDiff(diff, 10000, 10001, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     CYBOZU_TEST_EQUAL(diffFiles.listDiff().size(), 1);
 }
