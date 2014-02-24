@@ -6,6 +6,9 @@
  *
  * (C) 2014 Cybozu Labs, Inc.
  */
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include "util.hpp"
 #include "file_path.hpp"
 #include "tmp_file.hpp"
@@ -99,4 +102,35 @@ void setLogSetting(const std::string &pathStr, bool isDebug)
     }
 }
 
-}} // namespace walb::util
+struct Stopper
+{
+    std::atomic<bool> &stopping;
+    std::atomic<bool> &forceStop;
+
+    Stopper(std::atomic<bool> &stopping, std::atomic<bool> &forceStop)
+        : stopping(stopping), forceStop(forceStop) {
+    }
+    ~Stopper() noexcept {
+        stopping = false;
+        forceStop = false;
+    }
+    void operator()(bool isForce) {
+        bool b = false;
+        if (!stopping.compare_exchange_strong(b, true)) {
+            throw cybozu::Exception("Stopper:already stopping is true");
+        }
+        if (isForce) {
+            b = false;
+            if (!forceStop.compare_exchange_strong(b, true)) {
+                throw cybozu::Exception("Stopper:already forceStop is true");
+            }
+        }
+    }
+};
+
+inline void sleepMs(size_t ms)
+{
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+}} // walb::util
