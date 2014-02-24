@@ -112,11 +112,16 @@ public:
             throw cybozu::Exception("StorageVolInfo::clear:rmdir recursively failed.");
         }
     }
+    bool existsVolDir() const {
+        return volDir_.stat(true).isDirectory();
+    }
     /**
      * get status as a string vector.
      */
     std::vector<std::string> getStatusAsStrVec() const {
         std::vector<std::string> v;
+        if (!existsVolDir()) return v;
+
         auto &fmt = cybozu::util::formatString;
         v.push_back(fmt("volId %s", volId_.c_str()));
         v.push_back(fmt("wdevPath %s", wdevPath_.cStr()));
