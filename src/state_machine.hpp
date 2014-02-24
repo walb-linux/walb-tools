@@ -30,6 +30,10 @@ class StateMachine
     void verifyLocked() const {
         if (inTrans_) throw cybozu::Exception("StateMachine:locked");
     }
+    void addEdgeNoLock(const std::string &src, const std::string &dst) {
+        map_[src].insert(dst);
+        map_.insert(std::make_pair(dst, StrSet()));
+    }
 public:
     StateMachine()
         : cur_(map_.end())
@@ -38,18 +42,18 @@ public:
     void addEdge(const std::string &src, const std::string &dst) {
         AutoLock al(m_);
         verifyLocked();
-        map_[src].insert(dst);
-        map_.insert(std::make_pair(dst, StrSet()));
+        addEdgeNoLock(src, dst);
     }
     struct Pair {
         const char *from;
         const char *to;
     };
     template<size_t N>
-    void init(const Pair (&tbl)[N])
-    {
+    void init(const Pair (&tbl)[N]) {
+        AutoLock al(m_);
+        verifyLocked();
         for (size_t i = 0; i < N; i++) {
-            addEdge(tbl[i].from, tbl[i].to);
+            addEdgeNoLock(tbl[i].from, tbl[i].to);
         }
     }
     void set(const std::string& state) {
