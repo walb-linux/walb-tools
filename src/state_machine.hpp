@@ -80,6 +80,7 @@ class StateMachineTransaction
 private:
     StateMachine &sm_;
     StateMachine::Map::iterator from_;
+    std::string errMsg_;
 public:
     explicit StateMachineTransaction(StateMachine &sm)
         : sm_(sm) {
@@ -90,15 +91,19 @@ public:
         sm_.cur_ = from_;
         sm_.inTrans_ = false;
     }
-    StateMachineTransaction(StateMachine &sm, const std::string& from, const std::string& to)
-        : sm_(sm) {
+    StateMachineTransaction(StateMachine &sm, const std::string& from, const std::string& to, const std::string &errMsg = "")
+        : sm_(sm), errMsg_(errMsg) {
         if (!tryChange(from, to)) {
-            throw cybozu::Exception("StateMachineTransaction:bad state") << sm.get() << from << to;
+            throw cybozu::Exception(errMsg)
+                << "StateMachineTransaction:bad state" << sm.get() << from << to;
         }
     }
     bool tryChange(const std::string& from, const std::string& pass) {
         StateMachine::AutoLock al(sm_.m_);
-        if (sm_.inTrans_) throw cybozu::Exception("StateMachineTransaction:tryChange:already called");
+        if (sm_.inTrans_) {
+            throw cybozu::Exception(errMsg_)
+                << "StateMachineTransaction:tryChange:already called";
+        }
         from_ = sm_.cur_;
         if (!sm_.changeNoLock(sm_.cur_, from, pass)) return false;
         sm_.inTrans_ = true;
@@ -106,11 +111,18 @@ public:
     }
     void commit(const std::string& to) {
         StateMachine::AutoLock al(sm_.m_);
-        if (!sm_.inTrans_) throw cybozu::Exception("StateMachineTransaction:commit:tryChange is not called");
+        if (!sm_.inTrans_) {
+            throw cybozu::Exception(errMsg_)
+                << "StateMachineTransaction:commit:tryChange is not called";
+        }
         if (!sm_.changeNoLock(sm_.cur_, sm_.cur_->first, to)) {
-            throw cybozu::Exception("StateMachineTransaction:commit:can't change") << to;
+            throw cybozu::Exception(errMsg_)
+                << "StateMachineTransaction:commit:can't change" << to;
         }
         sm_.inTrans_ = false;
+    }
+    void setErrorMessage(const std::string &msg) {
+        errMsg_ = msg;
     }
 };
 
