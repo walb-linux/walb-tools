@@ -31,13 +31,12 @@ inline bool isAllZero(const std::vector<int> &v)
  */
 struct ArchiveVolState
 {
-    std::atomic<bool> stopping;
-    std::atomic<bool> forceStop;
+    std::atomic<int> stopState;
     StateMachine sm;
     std::mutex mutex;
     MultiRaiiCounter actionCounters;
 
-    explicit ArchiveVolState(const std::string& volId) : stopping(false), forceStop(false), actionCounters(mutex) {
+    explicit ArchiveVolState(const std::string& volId) : stopState(NotStopping), actionCounters(mutex) {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
             { atInitVol, aSyncReady },
@@ -221,7 +220,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
      * Only one thread can make the stopping flag true at once.
      * Notify other threads working on the volume.
      */
-    util::Stopper stopper(volSt.stopping, volSt.forceStop);
+    util::Stopper stopper(volSt.stopState);
     stopper.begin(isForce);
 
     /*
@@ -296,9 +295,9 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     checkNoActionRunning(volId, "x2aDirtyFullSyncServer");
     ArchiveVolState &volSt = getArchiveVolState(volId);
 
-    if (volSt.stopping) {
-        cybozu::Exception e("x2aDirtyFullSyncServer:stopping");
-        e << volId;
+    if (volSt.stopState != NotStopping) {
+        cybozu::Exception e("x2aDirtyFullSyncServer:notStopping");
+        e << volId << volSt.stopState;
         sPack.write(e.what());
         throw e;
     }
@@ -325,7 +324,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
             uint64_t c = 0;
             uint64_t remainingLb = sizeLb;
             while (0 < remainingLb) {
-                if (p.forceQuit || volSt.forceStop) {
+                if (volSt.stopState == forceStopping || p.forceQuit) {
                     logger.warn("x2aDirtyFullSyncServer:force stopped:%s", volId.c_str());
                     return;
                 }

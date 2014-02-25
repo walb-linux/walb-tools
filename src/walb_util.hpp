@@ -22,6 +22,11 @@ namespace walb {
 
 typedef std::vector<std::string> StrVec;
 
+enum StopState {
+    NotStopping,
+    Stopping,
+    forceStopping
+};
 namespace util {
 
 /**
@@ -72,7 +77,7 @@ void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
 inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
 {
     const StrVec v = cybozu::Split(addrPort, ':', 2);
-	if (v.size() != 2) {
+    if (v.size() != 2) {
         throw cybozu::Exception("parse error") << addrPort;
     }
     return cybozu::SocketAddr(v[0], static_cast<uint16_t>(cybozu::atoi(v[1])));
@@ -104,18 +109,20 @@ void setLogSetting(const std::string &pathStr, bool isDebug)
 
 struct Stopper
 {
-    std::atomic<bool> &stopping;
-    std::atomic<bool> &forceStop;
+    std::atomic<int> &stopState;
 
-    Stopper(std::atomic<bool> &stopping, std::atomic<bool> &forceStop)
-        : stopping(stopping), forceStop(forceStop) {
+    Stopper(std::atomic<int> &stopState)
+        : stopState(stopState) {
     }
     ~Stopper() noexcept {
+#if 0 // QQQ
         stopping = false;
         forceStop = false;
+#endif
     }
-    void begin(bool isForce) {
-        bool b = false;
+    void begin(bool /*isForce*/) {
+#if 0 // QQQ
+        int b = false;
         if (!stopping.compare_exchange_strong(b, true)) {
             throw cybozu::Exception("Stopper:already stopping is true");
         }
@@ -125,6 +132,7 @@ struct Stopper
                 throw cybozu::Exception("Stopper:already forceStop is true");
             }
         }
+#endif
     }
 };
 

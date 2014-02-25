@@ -9,11 +9,10 @@
 namespace walb {
 
 struct StorageVolState {
-    std::atomic<bool> stopping;
-    std::atomic<bool> forceStop;
+    std::atomic<int> stopState;
     StateMachine sm;
 
-    explicit StorageVolState(const std::string& volId) : stopping(false), forceStop(false), sm() {
+    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm() {
         const struct StateMachine::Pair tbl[] = {
             { sClear, stInitVol },
             { stInitVol, sSyncReady },
@@ -190,7 +189,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
     // TODO: exclusive acess for the volId.
     StorageVolState &volSt = getStorageVolState(volId);
-    util::Stopper stopper(volSt.stopping, volSt.forceStop);
+    util::Stopper stopper(volSt.stopState);
     stopper.begin(isForce);
 
     // Wait for all tasks stopped.
@@ -255,9 +254,9 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     StorageVolState &volSt = getStorageVolState(volId);
 
-    if (volSt.stopping) {
-        cybozu::Exception e("c2sFullSyncServer:stopping");
-        e << volId;
+    if (volSt.stopState != NotStopping) {
+        cybozu::Exception e("c2sFullSyncServer:NotStopping");
+        e << volId << volSt.stopState;
         cPack.write(e.what());
         throw e;
     }
@@ -307,7 +306,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
                 uint64_t remainingLb = sizeLb;
                 while (0 < remainingLb) {
-                    if (volSt.forceStop || p.forceQuit) {
+                    if (volSt.stopState == forceStopping || p.forceQuit) {
                         logger.warn("c2sFullSyncServer:force stopped");
                         // TODO: stop monitoring.
                         return;
