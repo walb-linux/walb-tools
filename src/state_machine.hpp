@@ -35,7 +35,7 @@ class StateMachine
         map_.insert(std::make_pair(dst, StrSet()));
     }
 public:
-    StateMachine(std::recursive_mutex& m)
+    explicit StateMachine(std::recursive_mutex& m)
         : m_(m)
         , cur_(map_.end())
         , inTrans_(false) {

@@ -9,11 +9,11 @@
 namespace walb {
 
 struct StorageVolState {
-    std::recursive_mutex m_;
+    std::recursive_mutex mu;
     std::atomic<int> stopState;
     StateMachine sm;
 
-    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm(m_) {
+    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm(mu) {
         const struct StateMachine::Pair tbl[] = {
             { sClear, stInitVol },
             { stInitVol, sSyncReady },
@@ -188,37 +188,33 @@ inline void c2sStopServer(protocol::ServerParams &p)
     const int isForceInt = cybozu::atoi(v[1]);
     UNUSED const bool isForce = (isForceInt != 0);
 
-    // TODO: exclusive acess for the volId.
     StorageVolState &volSt = getStorageVolState(volId);
-    util::Stopper stopper(volSt.stopState);
-    stopper.begin(isForce);
+    packet::Ack(p.sock).send();
 
-    // Wait for all tasks stopped.
-    // Tasks: sFullSync sHashSync, sWlogSend, sWlogRemove
-    StateMachine &sm = volSt.sm;
-    size_t c = 0;
-    for (;;) {
-        if (c > DEFAULT_TIMEOUT) { // TODO: client should send timeout parameter.
-            throw cybozu::Exception("c2sStopServer:timeout") << DEFAULT_TIMEOUT;
-        }
-        const std::string &st = sm.get();
-        if (st == stFullSync || st == stHashSync || st == stWlogSend || st == stWlogRemove) {
-            util::sleepMs(1000);
-            c++;
-            continue;
-        }
+    util::Stopper stopper(volSt.stopState, isForce);
+    if (!stopper.isSuccess()) {
+        return;
     }
-    const std::string &st = sm.get();
+
+    UniqueLock ul(volSt.mu);
+    StateMachine &sm = volSt.sm;
+
+    util::waitUntil(ul, [&]() {
+            const std::string &st = sm.get();
+            return st == stFullSync || st == stHashSync || st == stWlogSend || st == stWlogRemove;
+        }, "c2sStopServer");
+
+    const std::string st = sm.get();
     if (st != sMaster || st != sSlave) {
         /* For SyncReady state (after stopping FullSync and HashSync),
            there is nothing to do. */
-        packet::Ack(p.sock).send();
         return;
     }
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     if (st == sMaster) {
         StateMachineTransaction tran(sm, sMaster, stStopMaster, "c2sStopServer");
+        ul.unlock();
 
         // TODO: stop monitoring.
 
@@ -227,14 +223,13 @@ inline void c2sStopServer(protocol::ServerParams &p)
     } else {
         assert(st == sSlave);
         StateMachineTransaction tran(sm, sSlave, stStopSlave, "c2sStopServer");
+        ul.unlock();
 
         // TODO: stop monitoring.
 
         volInfo.setState(sSyncReady);
         tran.commit(sSyncReady);
     }
-
-    packet::Ack(p.sock).send();
 }
 
 inline void c2sFullSyncServer(protocol::ServerParams &p)
@@ -307,7 +302,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
                 uint64_t remainingLb = sizeLb;
                 while (0 < remainingLb) {
-                    if (volSt.stopState == forceStopping || p.forceQuit) {
+                    if (volSt.stopState == ForceStopping || p.forceQuit) {
                         logger.warn("c2sFullSyncServer:force stopped");
                         // TODO: stop monitoring.
                         return;

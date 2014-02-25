@@ -13,6 +13,7 @@
 #include "file_path.hpp"
 #include "tmp_file.hpp"
 #include "uuid.hpp"
+#include "constant.hpp"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
@@ -21,12 +22,14 @@
 namespace walb {
 
 typedef std::vector<std::string> StrVec;
+typedef std::unique_lock<std::recursive_mutex> UniqueLock;
 
 enum StopState {
     NotStopping,
     Stopping,
-    forceStopping
+    ForceStopping
 };
+
 namespace util {
 
 /**
@@ -107,32 +110,26 @@ void setLogSetting(const std::string &pathStr, bool isDebug)
     }
 }
 
-struct Stopper
+class Stopper
 {
+private:
     std::atomic<int> &stopState;
-
-    Stopper(std::atomic<int> &stopState)
-        : stopState(stopState) {
+    bool success;
+public:
+    Stopper(std::atomic<int> &stopState, bool isForce)
+        : stopState(stopState), success(false) {
+        int before = NotStopping;
+        const int after = isForce ? ForceStopping : Stopping;
+        success = stopState.compare_exchange_strong(before, after);
     }
     ~Stopper() noexcept {
-#if 0 // QQQ
-        stopping = false;
-        forceStop = false;
-#endif
+        if (success) {
+            assert(stopState != NotStopping);
+            stopState = NotStopping;
+        }
     }
-    void begin(bool /*isForce*/) {
-#if 0 // QQQ
-        int b = false;
-        if (!stopping.compare_exchange_strong(b, true)) {
-            throw cybozu::Exception("Stopper:already stopping is true");
-        }
-        if (isForce) {
-            b = false;
-            if (!forceStop.compare_exchange_strong(b, true)) {
-                throw cybozu::Exception("Stopper:already forceStop is true");
-            }
-        }
-#endif
+    bool isSuccess() const {
+        return success;
     }
 };
 
@@ -140,5 +137,21 @@ inline void sleepMs(size_t ms)
 {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
+
+/**
+ * return when pred() is true.
+ */
+template <typename Mutex, typename Pred>
+void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_TIMEOUT)
+{
+    for (size_t c = 0; c < timeout; c++) {
+        if (pred()) return;
+        mu.unlock();
+        sleepMs(1000);
+        mu.lock();
+    }
+    throw cybozu::Exception(msg) << "timeout" << timeout;
+}
+
 
 }} // walb::util

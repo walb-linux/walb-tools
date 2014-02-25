@@ -6,38 +6,23 @@ struct State {
     State(const std::string& id) : id(id) {}
 };
 
-#if 0
-// QQQ
 CYBOZU_TEST_AUTO(StateMap)
 {
     walb::StateMap<State> m;
     {
-        bool maked = false;
-        State& s = m.get("abc", &maked);
-        CYBOZU_TEST_ASSERT(maked);
-        CYBOZU_TEST_EQUAL(s.a, 5);
+        State& s = m.get("abc");
+        CYBOZU_TEST_EQUAL(s.id, "abc");
+        s.id = "xyz";
     }
     {
-        bool maked = false;
-        State& s = m.get("abc", &maked);
-        CYBOZU_TEST_ASSERT(!maked);
-        CYBOZU_TEST_EQUAL(s.a, 5);
-        s.a = 9;
-    }
-    {
-        bool maked = false;
-        State& s = m.get("abc", &maked);
-        CYBOZU_TEST_ASSERT(!maked);
-        CYBOZU_TEST_EQUAL(s.a, 9);
+        State& s = m.get("abc");
+        CYBOZU_TEST_EQUAL(s.id, "xyz");
     }
     m.del("abc");
     {
-        bool maked = false;
-        State& s = m.get("abc", &maked);
-        CYBOZU_TEST_ASSERT(maked);
-        CYBOZU_TEST_EQUAL(s.a, 5);
+        State& s = m.get("abc");
+        CYBOZU_TEST_EQUAL(s.id, "abc");
     }
     m.del("abc");
     CYBOZU_TEST_EXCEPTION(m.del("abc"), cybozu::Exception);
 }
-#endif

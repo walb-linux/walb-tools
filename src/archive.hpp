@@ -1,10 +1,11 @@
 #pragma once
 #include "protocol.hpp"
 #include "archive_vol_info.hpp"
+#include <algorithm>
 #include <snappy.h>
 #include "walb/block_size.h"
 #include "state_machine.hpp"
-#include "raii_counter.hpp"
+#include "action_counter.hpp"
 #include "state_map.hpp"
 #include "constant.hpp"
 
@@ -18,28 +19,20 @@ const char *const aApply = "Apply";
 const char *const aRestore = "Restore";
 const char *const aReplSync = "ReplSync";
 
-inline bool isAllZero(const std::vector<int> &v)
-{
-    for (int i : v) {
-        if (i != 0) return false;
-    }
-    return true;
-}
-
 /**
  * Manage one instance for each volume.
  */
 struct ArchiveVolState
 {
-    std::recursive_mutex m_;
+    std::recursive_mutex mu;
     std::atomic<int> stopState;
     StateMachine sm;
-    MultiRaiiCounter actionCounters;
+    ActionCounters actionCounters;
 
     explicit ArchiveVolState(const std::string& volId)
         : stopState(NotStopping)
-        , sm(m_)
-        , actionCounters(m_) {
+        , sm(mu)
+        , actionCounters(mu) {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
             { atInitVol, aSyncReady },
@@ -143,10 +136,10 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 
 inline void checkNoActionRunning(const std::string &volId, const char *msg)
 {
-    MultiRaiiCounter &actionCounters = getArchiveVolState(volId).actionCounters;
+    ActionCounters &actionCounters = getArchiveVolState(volId).actionCounters;
     std::vector<int> v = actionCounters.getValues({aMerge, aApply, aRestore, aReplSync});
     assert(v.size() == 4);
-    if (!isAllZero(v)) {
+    if (!std::all_of(v.begin(), v.end(), [](int i) { return i == 0; })) {
         throw cybozu::Exception(msg)
             << "there are running actions"
             << v[0] << v[1] << v[2] << v[3];
@@ -217,57 +210,41 @@ inline void c2aStopServer(protocol::ServerParams &p)
     const bool isForce = (int)cybozu::atoi(v[1]) != 0;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
+    packet::Ack(p.sock).send();
+
+    util::Stopper stopper(volSt.stopState, isForce);
+    if (!stopper.isSuccess()) {
+        return;
+    }
+
+    UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
 
-    /*
-     * Only one thread can make the stopping flag true at once.
-     * Notify other threads working on the volume.
-     */
-    util::Stopper stopper(volSt.stopState);
-    stopper.begin(isForce);
+    util::waitUntil(ul, [&]() {
+            bool go = volSt.actionCounters.isAllZero({aMerge, aApply, aRestore, aReplSync});
+            if (go) {
+                const std::string &st = sm.get();
+                go = st == atHashSync || st == atWdiffRecv || st == atFullSync;
+            }
+            return go;
+        }, "c2aStopServer");
 
-    /*
-     * Wait for all background tasks to be stopped.
-     * Tasks: all actions, HashSync, WdiffRecv, and FullSync.
-     */
-    size_t c = 0;
-    for (;;) {
-        if (c > DEFAULT_TIMEOUT) { // TODO: client should send timeout parameter.
-            throw cybozu::Exception("c2aStopServer:timeout") << DEFAULT_TIMEOUT;
-        }
-        std::vector<int> v = volSt.actionCounters.getValues(
-            {aMerge, aApply, aRestore, aReplSync});
-        if (!isAllZero(v)) {
-            util::sleepMs(1000);
-            c++;
-            continue;
-        }
-        const std::string &st = sm.get();
-        if (st == atHashSync || st == atWdiffRecv || st == atFullSync) {
-            util::sleepMs(1000);
-            c++;
-            continue;
-        }
-    }
     const std::string &st = sm.get();
     logger.info("Tasks have been stopped volId: %s state: %s"
                 , volId.c_str(), st.c_str());
     if (st != aArchived) {
-        packet::Ack(p.sock).send();
         return;
     }
-    {
-        StateMachineTransaction tran(sm, aArchived, atStop, "c2aStopServer");
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
-        const std::string st = volInfo.getState();
-        if (st != aArchived) {
-            throw cybozu::Exception("c2aStopServer:not Archived state") << st;
-        }
-        volInfo.setState(aStopped);
-        tran.commit(aStopped);
-    }
 
-    packet::Ack(p.sock).send();
+    StateMachineTransaction tran(sm, aArchived, atStop, "c2aStopServer");
+    ul.unlock();
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    const std::string fst = volInfo.getState();
+    if (fst != aArchived) {
+        throw cybozu::Exception("c2aStopServer:not Archived state") << fst;
+    }
+    volInfo.setState(aStopped);
+    tran.commit(aStopped);
 }
 
 /**
@@ -327,7 +304,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
             uint64_t c = 0;
             uint64_t remainingLb = sizeLb;
             while (0 < remainingLb) {
-                if (volSt.stopState == forceStopping || p.forceQuit) {
+                if (volSt.stopState == ForceStopping || p.forceQuit) {
                     logger.warn("x2aDirtyFullSyncServer:force stopped:%s", volId.c_str());
                     return;
                 }
@@ -403,8 +380,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         throw e;
     }
 
-    std::unique_lock<RaiiCounter> counterLk(
-        getArchiveVolState(volId).actionCounters.getLock(aRestore));
+    ActionCounterTransaction tran(volSt.actionCounters, volId);
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
 
