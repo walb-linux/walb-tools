@@ -13,16 +13,15 @@ class StateMap {
     using AutoLock = std::lock_guard<std::mutex>;
     Map map_;
 public:
-    State& get(const std::string& volId, bool *pmaked = nullptr)
+    State& get(const std::string& volId)
     {
         AutoLock al(mu_);
         bool maked;
         typename Map::iterator itr;
         std::tie(itr, maked) = map_.insert(std::make_pair(volId, nullptr));
         if (maked) {
-            itr->second = std::unique_ptr<State>(new State());
+            itr->second = std::unique_ptr<State>(new State(volId));
         }
-        if (pmaked) *pmaked = maked;
         return *itr->second;
     }
     std::unique_ptr<State> del(const std::string& volId)

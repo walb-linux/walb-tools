@@ -13,7 +13,7 @@ struct StorageVolState {
     std::atomic<bool> forceStop;
     StateMachine sm;
 
-    StorageVolState() : stopping(false), forceStop(false), sm() {
+    explicit StorageVolState(const std::string& volId) : stopping(false), forceStop(false), sm() {
         const struct StateMachine::Pair tbl[] = {
             { sClear, stInitVol },
             { stInitVol, sSyncReady },
@@ -44,8 +44,11 @@ struct StorageVolState {
             { stWlogSend, sMaster },
         };
         sm.init(tbl);
-        sm.set(sClear);
+
+        initInner(volId);
     }
+private:
+    void initInner(const std::string& volId);
 };
 
 struct StorageSingleton
@@ -68,22 +71,19 @@ inline StorageSingleton& getStorageGlobal()
 
 const StorageSingleton& gs = getStorageGlobal();
 
+inline void StorageVolState::initInner(const std::string& volId)
+{
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    if (volInfo.existsVolDir()) {
+        sm.set(volInfo.getState());
+    } else {
+        sm.set(sClear);
+    }
+}
+
 inline StorageVolState &getStorageVolState(const std::string &volId)
 {
-    bool maked;
-    StorageVolState& s = getStorageGlobal().stMap.get(volId, &maked);
-    if (maked) {
-        // TODO: stMap.get(volId, callback);
-        // otherwise, it causes race condition.
-
-        // Load from the state file.
-        StorageVolInfo volInfo(gs.baseDirStr, volId);
-        if (volInfo.existsVolDir()) {
-            const std::string st = volInfo.getState();
-            s.sm.set(st);
-        }
-    }
-    return s;
+    return getStorageGlobal().stMap.get(volId);
 }
 
 inline void c2sStatusServer(protocol::ServerParams &p)

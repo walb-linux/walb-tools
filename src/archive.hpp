@@ -37,7 +37,7 @@ struct ArchiveVolState
     std::mutex mutex;
     MultiRaiiCounter actionCounters;
 
-    ArchiveVolState() : stopping(false), forceStop(false), actionCounters(mutex) {
+    explicit ArchiveVolState(const std::string& volId) : stopping(false), forceStop(false), actionCounters(mutex) {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
             { atInitVol, aSyncReady },
@@ -61,8 +61,10 @@ struct ArchiveVolState
             { atStart, aArchived },
         };
         sm.init(tbl);
-        sm.set(aClear);
+        initInner(volId);
     }
+private:
+    void initInner(const std::string& volId);
 };
 
 struct ArchiveSingleton
@@ -86,21 +88,19 @@ inline ArchiveSingleton& getArchiveGlobal()
 
 const ArchiveSingleton& ga = getArchiveGlobal();
 
+inline void ArchiveVolState::initInner(const std::string& volId)
+{
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    if (volInfo.existsVolDir()) {
+        sm.set(volInfo.getState());
+    } else {
+        sm.set(aClear);
+    }
+}
+
 inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 {
-    bool maked;
-    ArchiveVolState &s = getArchiveGlobal().stMap.get(volId, &maked);
-    if (maked) {
-        // TODO: stMap.get(volId, callback);
-
-        // Load from the state file.
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
-        if (volInfo.existsVolDir()) {
-            std::string st = volInfo.getState();
-            s.sm.set(st);
-        }
-    }
-    return s;
+    return getArchiveGlobal().stMap.get(volId);
 }
 
 inline void c2aStatusServer(protocol::ServerParams &p)
