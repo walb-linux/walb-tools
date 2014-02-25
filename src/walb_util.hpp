@@ -114,7 +114,7 @@ struct Stopper
         stopping = false;
         forceStop = false;
     }
-    void operator()(bool isForce) {
+    void begin(bool isForce) {
         bool b = false;
         if (!stopping.compare_exchange_strong(b, true)) {
             throw cybozu::Exception("Stopper:already stopping is true");

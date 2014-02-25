@@ -191,7 +191,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
     // TODO: exclusive acess for the volId.
     StorageVolState &volSt = getStorageVolState(volId);
     util::Stopper stopper(volSt.stopping, volSt.forceStop);
-    stopper(isForce);
+    stopper.begin(isForce);
 
     // Wait for all tasks stopped.
     // Tasks: sFullSync sHashSync, sWlogSend, sWlogRemove

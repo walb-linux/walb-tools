@@ -212,8 +212,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
     ProtocolLogger logger(ga.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 2, "c2aStopServer", false);
     const std::string &volId = v[0];
-    const int isForceInt = cybozu::atoi(v[1]);
-    UNUSED const bool isForce = (isForceInt != 0);
+    const bool isForce = (int)cybozu::atoi(v[1]) != 0;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     StateMachine &sm = volSt.sm;
@@ -223,7 +222,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
      * Notify other threads working on the volume.
      */
     util::Stopper stopper(volSt.stopping, volSt.forceStop);
-    stopper(isForce);
+    stopper.begin(isForce);
 
     /*
      * Wait for all background tasks to be stopped.
@@ -406,7 +405,6 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         getArchiveVolState(volId).actionCounters.getLock(aRestore));
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
-    const std::string st = volInfo.getState();
 
     // TODO: volinfo.restore(gid, volSt.forceStop, p.forceQuit);
     if (!volInfo.restore(gid)) {
