@@ -142,7 +142,6 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
         volInfo.clear();
         tran.commit(sClear);
     }
-    getStorageGlobal().stMap.del(volId);
 
     packet::Ack(p.sock).send();
 
@@ -206,7 +205,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
     const std::string st = sm.get();
     if (st != sMaster || st != sSlave) {
-        /* For SyncReady state (after stopping FullSync and HashSync),
+        /* For SyncReady state (after FullSync and HashSync canceled),
            there is nothing to do. */
         return;
     }
@@ -251,7 +250,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     StorageVolState &volSt = getStorageVolState(volId);
 
     if (volSt.stopState != NotStopping) {
-        cybozu::Exception e("c2sFullSyncServer:NotStopping");
+        cybozu::Exception e("c2sFullSyncServer:Stopping");
         e << volId << volSt.stopState;
         cPack.write(e.what());
         throw e;
@@ -326,8 +325,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
             walb::packet::Ack(aSock).recv();
         }
         tran.commit(sStopped);
-    }
-    {
+
         StateMachineTransaction tran(sm, sStopped, stStartMaster, "c2sFullSyncServer");
         volInfo.setState(sMaster);
         tran.commit(sMaster);

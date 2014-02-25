@@ -117,23 +117,6 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     }
 }
 
-inline void c2aInitVolServer(protocol::ServerParams &p)
-{
-    const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 1, "c2aInitVolServer", false);
-    const std::string &volId = v[0];
-
-    StateMachine &sm = getArchiveVolState(volId).sm;
-    {
-        StateMachineTransaction tran(sm, aClear, atInitVol, "c2ainitVolServer");
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
-        volInfo.init();
-        tran.commit(aSyncReady);
-    }
-
-    packet::Ack(p.sock).send();
-}
-
 inline void checkNoActionRunning(const std::string &volId, const char *msg)
 {
     ActionCounters &actionCounters = getArchiveVolState(volId).actionCounters;
@@ -146,24 +129,44 @@ inline void checkNoActionRunning(const std::string &volId, const char *msg)
     }
 }
 
+inline void c2aInitVolServer(protocol::ServerParams &p)
+{
+    const std::vector<std::string> v =
+        protocol::recvStrVec(p.sock, 1, "c2aInitVolServer", false);
+    const std::string &volId = v[0];
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    checkNoActionRunning(volId, "c2aInitVolServer");
+    {
+        StateMachineTransaction tran(volSt.sm, aClear, atInitVol, "c2ainitVolServer");
+        ul.unlock();
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        volInfo.init();
+        tran.commit(aSyncReady);
+    }
+
+    packet::Ack(p.sock).send();
+}
+
 inline void c2aClearVolServer(protocol::ServerParams &p)
 {
     StrVec v = protocol::recvStrVec(p.sock, 1, "c2aClearVolServer", false);
     const std::string &volId = v[0];
 
-    checkNoActionRunning(volId, "c2aClearVolServer");
     ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    checkNoActionRunning(volId, "c2aClearVolServer");
     StateMachine &sm = volSt.sm;
     const std::string &currSt = sm.get(); // Stopped or SyncReady.
     {
         StateMachineTransaction tran(sm, currSt, atClearVol, "c2aClearVolServer");
+        ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
         volInfo.clear();
         tran.commit(aClear);
     }
-
-    // TODO: This will be race.
-    std::unique_ptr<ArchiveVolState> volStP = getArchiveGlobal().stMap.del(volId);
 
     packet::Ack(p.sock).send();
 

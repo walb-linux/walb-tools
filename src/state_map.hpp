@@ -24,16 +24,9 @@ public:
         }
         return *itr->second;
     }
-    std::unique_ptr<State> del(const std::string& volId)
-    {
-        AutoLock al(mu_);
-        typename Map::iterator i = map_.find(volId);
-        if (i == map_.end()) throw cybozu::Exception("StateMap:del:not found") << volId;
-        std::unique_ptr<State> p = std::move(i->second);
-        map_.erase(i);
-        return p;
-    }
+
+    // We can not remove instances of State
+    // because we can not ensure uniqueness of state instance per volId.
 };
 
 } // walb
-
