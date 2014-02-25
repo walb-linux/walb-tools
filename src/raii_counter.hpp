@@ -11,7 +11,7 @@ namespace walb {
  * Usage:
  *
  * <pre>
- * std::mutex mu;
+ * std::recursive_mutex mu;
  * RaiiCounter c;
  * c.setMutex(&mu);
  *
@@ -24,7 +24,7 @@ namespace walb {
  *
  * // thread B
  * {
- *   std::lock_guard<std::mutex> lk(mu);
+ *   std::lock_guard<std::recursive_mutex> lk(mu);
  *   c.get()
  * }
  * </pre>
@@ -32,7 +32,8 @@ namespace walb {
 class RaiiCounter
 {
 private:
-    std::mutex *muP_;
+    using AutoLock = std::lock_guard<std::recursive_mutex>;
+    std::recursive_mutex *muP_;
     int c_;
 
 public:
@@ -41,23 +42,23 @@ public:
     /**
      * muP: Shared lock.
      */
-    void setMutex(std::mutex *muP) {
+    void setMutex(std::recursive_mutex *muP) {
         muP_ = muP;
         check();
     }
     void reset() {
         check();
-        std::lock_guard<std::mutex> lk(*muP_);
+        AutoLock lk(*muP_);
         c_ = 0;
     }
     void lock() {
         check();
-        std::lock_guard<std::mutex> lk(*muP_);
+        AutoLock lk(*muP_);
         ++c_;
     }
     void unlock() {
         check();
-        std::lock_guard<std::mutex> lk(*muP_);
+        AutoLock lk(*muP_);
         --c_;
     }
     /**
@@ -78,10 +79,11 @@ class MultiRaiiCounter
 {
 private:
     using Map = std::map<std::string, RaiiCounter>;
+    using AutoLock = std::lock_guard<std::recursive_mutex>;
     Map map_;
-    std::mutex &mu_;
+    std::recursive_mutex &mu_;
 public:
-    explicit MultiRaiiCounter(std::mutex &mu) : map_(), mu_(mu) {
+    explicit MultiRaiiCounter(std::recursive_mutex &mu) : map_(), mu_(mu) {
     }
     /**
      * Increment the counter indicated by a specified name.
@@ -91,7 +93,7 @@ public:
     std::unique_lock<RaiiCounter> getLock(const std::string &name) {
         RaiiCounter *p;
         {
-            std::lock_guard<std::mutex> lk(mu_);
+            AutoLock lk(mu_);
             p = get(name);
         }
         assert(p);
@@ -101,7 +103,7 @@ public:
      * Get values atomically.
      */
     std::vector<int> getValues(const std::vector<std::string> &nameV) {
-        std::lock_guard<std::mutex> lk(mu_);
+        AutoLock lk(mu_);
         std::vector<int> ret;
         for (const std::string &name : nameV) {
             ret.push_back(get(name)->get());

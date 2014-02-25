@@ -31,12 +31,15 @@ inline bool isAllZero(const std::vector<int> &v)
  */
 struct ArchiveVolState
 {
+    std::recursive_mutex m_;
     std::atomic<int> stopState;
     StateMachine sm;
-    std::mutex mutex;
     MultiRaiiCounter actionCounters;
 
-    explicit ArchiveVolState(const std::string& volId) : stopState(NotStopping), actionCounters(mutex) {
+    explicit ArchiveVolState(const std::string& volId)
+        : stopState(NotStopping)
+        , sm(m_)
+        , actionCounters(m_) {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
             { atInitVol, aSyncReady },

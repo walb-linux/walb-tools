@@ -1,9 +1,11 @@
 #include "cybozu/test.hpp"
 #include "state_machine.hpp"
 
+std::recursive_mutex g_m;
+
 CYBOZU_TEST_AUTO(add)
 {
-    walb::StateMachine sm;
+    walb::StateMachine sm(g_m);
     sm.addEdge("a", "b");
     sm.addEdge("a", "c");
     sm.addEdge("a", "d");
@@ -17,7 +19,7 @@ CYBOZU_TEST_AUTO(add)
 
 CYBOZU_TEST_AUTO(change)
 {
-    walb::StateMachine sm;
+    walb::StateMachine sm(g_m);
     sm.addEdge("a", "b");
     sm.addEdge("a", "c");
     sm.addEdge("a", "d");
@@ -45,7 +47,7 @@ CYBOZU_TEST_AUTO(change)
 
 CYBOZU_TEST_AUTO(trans)
 {
-    walb::StateMachine sm;
+    walb::StateMachine sm(g_m);
     sm.addEdge("a", "b");
     sm.addEdge("a", "c");
     sm.addEdge("a", "d");

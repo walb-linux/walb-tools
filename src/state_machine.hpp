@@ -15,8 +15,8 @@ class StateMachine
     friend StateMachineTransaction;
     using StrSet = std::set<std::string>;
     using Map = std::map<std::string, StrSet>;
-    using AutoLock = std::lock_guard<std::mutex>;
-    mutable std::mutex m_;
+    using AutoLock = std::lock_guard<std::recursive_mutex>;
+    std::recursive_mutex &m_;
     Map map_;
     Map::iterator cur_;
     bool inTrans_; // true if in [tryChange, commit or transaction.dstr]
@@ -35,8 +35,9 @@ class StateMachine
         map_.insert(std::make_pair(dst, StrSet()));
     }
 public:
-    StateMachine()
-        : cur_(map_.end())
+    StateMachine(std::recursive_mutex& m)
+        : m_(m)
+        , cur_(map_.end())
         , inTrans_(false) {
     }
     void addEdge(const std::string &src, const std::string &dst) {

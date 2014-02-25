@@ -9,10 +9,11 @@
 namespace walb {
 
 struct StorageVolState {
+    std::recursive_mutex m_;
     std::atomic<int> stopState;
     StateMachine sm;
 
-    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm() {
+    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm(m_) {
         const struct StateMachine::Pair tbl[] = {
             { sClear, stInitVol },
             { stInitVol, sSyncReady },
