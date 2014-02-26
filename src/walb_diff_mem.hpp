@@ -35,7 +35,7 @@ public:
         rec_ = rec;
         if (rec.isNormal()) {
             io_.setIoBlocks(io.ioBlocks());
-            io_.setCompressionType(io.compressionType());
+            io_.setCompressionType(io.compressionType);
             io_.resizeData(io.size);
             ::memcpy(io_.rawData(), io.rawData(), io.size);
         } else {

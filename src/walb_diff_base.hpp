@@ -312,23 +312,23 @@ class IoWrap
 {
 protected:
     uint16_t ioBlocks_; /* [logical block]. */
-    int compressionType_;
 public:
+    int compressionType;
     const char *data;
     size_t size;
 
     IoWrap()
-        : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
+        : ioBlocks_(0), compressionType(::WALB_DIFF_CMPR_NONE)
         , data(nullptr), size(0) {}
     IoWrap(const IoWrap &rhs)
-        : ioBlocks_(rhs.ioBlocks_), compressionType_(rhs.compressionType_)
+        : ioBlocks_(rhs.ioBlocks_), compressionType(rhs.compressionType)
         , data(rhs.data), size(rhs.size) {}
 
     uint16_t ioBlocks() const { return ioBlocks_; }
     void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
-    int compressionType() const { return compressionType_; }
-    void setCompressionType(int type) { compressionType_ = type; }
-    bool isCompressed() const { return compressionType_ != ::WALB_DIFF_CMPR_NONE; }
+//    int compressionType() const { return compressionType; }
+    void setCompressionType(int type) { compressionType = type; }
+    bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const {
         return ioBlocks_ == 0;
@@ -408,14 +408,14 @@ public:
                   "size %zu\n"
                   "checksum %0x\n"
                   , ioBlocks()
-                  , compressionType()
+                  , compressionType
                   , size
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks()
-                  , compressionType()
+                  , compressionType
                   , size
                   , calcChecksum());
     }
@@ -445,14 +445,14 @@ public:
 
     IoData &operator=(const IoData &rhs) {
         ioBlocks_ = rhs.ioBlocks_;
-        compressionType_ = rhs.compressionType_;
+        compressionType = rhs.compressionType;
         data_ = rhs.data_;
         resetData();
         return *this;
     }
     IoData &operator=(IoData &&rhs) {
         ioBlocks_ = rhs.ioBlocks_;
-        compressionType_ = rhs.compressionType_;
+        compressionType = rhs.compressionType;
         data_ = std::move(rhs.data_);
         resetData();
         return *this;
@@ -547,7 +547,7 @@ inline IoData uncompressIoData(const IoWrap &io0)
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
-    walb::Uncompressor dec(io0.compressionType());
+    walb::Uncompressor dec(io0.compressionType);
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
