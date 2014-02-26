@@ -51,40 +51,26 @@ private:
 
 public:
     /**
-     * Volume directory must exist.
+     * For initialization.
      */
     StorageVolInfo(const std::string &baseDirStr, const std::string &volId, const std::string &wdevPathName)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , volId_(volId)
         , wdevPath_(wdevPathName) {
-        cybozu::FilePath basePath(baseDirStr);
-        if (!basePath.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:not found") << basePath.str();
-        }
-        if (!wdevPath_.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:not found") << wdevPathName;
-        }
+        verifyBaseDirExistance(baseDirStr);
+        verifyWdevPathExistance();
     }
     /**
-     * Volume directory must exist.
+     * If volume directory does not exist, only existsVolDir() can be called.
      */
     StorageVolInfo(const std::string &baseDirStr, const std::string &volId)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , volId_(volId)
         , wdevPath_() {
-        cybozu::FilePath basePath(baseDirStr);
-        if (!basePath.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:not exists") << basePath.str();
-        }
-        if (!basePath.stat().isDirectory()) {
-            throw cybozu::Exception("StorageVolInfo:not directory") << basePath.str();
-        }
-        std::string s;
-        util::loadFile(volDir_, "path", s);
-        wdevPath_ = cybozu::FilePath(s);
-        if (!wdevPath_.stat().exists()) {
-            throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
-        }
+        verifyBaseDirExistance(baseDirStr);
+        if (!existsVolDir()) return;
+        loadWdevPath();
+        verifyWdevPathExistance();
     }
     /**
      * Initialize the volume information directory.
@@ -182,6 +168,25 @@ public:
     std::string getWdevPath() const { return wdevPath_.str(); }
 
 private:
+    void loadWdevPath() {
+        std::string s;
+        util::loadFile(volDir_, "path", s);
+        wdevPath_ = cybozu::FilePath(s);
+    }
+    void verifyWdevPathExistance() {
+        if (!wdevPath_.stat(true).exists()) {
+            throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
+        }
+    }
+    void verifyBaseDirExistance(const std::string &baseDirStr) {
+        cybozu::FilePath baseDir(baseDirStr);
+        if (!baseDir.stat().exists()) {
+            throw cybozu::Exception("StorageVolInfo:not exists") << baseDir.str();
+        }
+        if (!baseDir.stat().isDirectory()) {
+            throw cybozu::Exception("StorageVolInfo:not directory") << baseDir.str();
+        }
+    }
 #if 0
     /**
      * @sizePb [physical block]

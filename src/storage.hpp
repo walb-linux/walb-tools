@@ -100,6 +100,11 @@ inline void c2sStatusServer(protocol::ServerParams &p)
         // for a volume
         const std::string &volId = params[0];
         StorageVolInfo volInfo(gs.baseDirStr, volId);
+        if (!volInfo.existsVolDir()) {
+            cybozu::Exception e("c2sStatusServer:no such volume");
+            packet.write(e.what());
+            throw e;
+        }
         packet.write("ok");
 
         StrVec statusStrV;
