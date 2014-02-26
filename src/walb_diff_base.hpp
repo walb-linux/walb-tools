@@ -476,6 +476,7 @@ public:
     char *rawData(size_t offset = 0) { return &data_[offset]; }
     std::vector<char> forMove() {
         std::vector<char> v = std::move(data_);
+        data_.clear();
         resetData();
         return v;
     }
