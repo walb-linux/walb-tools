@@ -258,7 +258,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     StateMachine &sm = volSt.sm;
     {
-        StateMachineTransaction tran(sm, sSyncReady, stFullSync, "c2sFullSyncServer");
+        StateMachineTransaction tran0(sm, sSyncReady, stFullSync, "c2sFullSyncServer");
 
         volInfo.resetWlog(0);
 
@@ -324,11 +324,11 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
             }
             walb::packet::Ack(aSock).recv();
         }
-        tran.commit(sStopped);
+        tran0.commit(sStopped);
 
-        StateMachineTransaction tran(sm, sStopped, stStartMaster, "c2sFullSyncServer");
+        StateMachineTransaction tran1(sm, sStopped, stStartMaster, "c2sFullSyncServer");
         volInfo.setState(sMaster);
-        tran.commit(sMaster);
+        tran1.commit(sMaster);
     }
 
     // TODO: If thrown an error, someone must stop monitoring task.
