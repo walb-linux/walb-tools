@@ -34,10 +34,7 @@ public:
     void copyFrom(const RecordRaw &rec, const IoData &io) {
         rec_ = rec;
         if (rec.isNormal()) {
-            io_.ioBlocks = io.ioBlocks;
-            io_.compressionType = io.compressionType;
-            io_.resizeData(io.size);
-            ::memcpy(io_.rawData(), io.rawData(), io.size);
+            io_ = io;
         } else {
             io_ = IoData();
         }

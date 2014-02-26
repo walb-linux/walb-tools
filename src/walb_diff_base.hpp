@@ -502,10 +502,6 @@ public:
         resetData();
         return v;
     }
-    void resizeData(size_t size) {
-        data_.resize(size);
-        resetData();
-    }
 private:
     /**
      * You must call this after changing data_.
