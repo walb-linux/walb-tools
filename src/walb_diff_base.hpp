@@ -427,10 +427,9 @@ public:
     IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
         resetData();
     }
-    IoData(uint16_t ioBlocks, int compressionType, const char *data, size_t size) {
-        this->ioBlocks = ioBlocks;
-        this->compressionType = compressionType;
-        data_.assign(data, data + size);
+    IoData(uint16_t ioBlocks, int compressionType, const char *data = 0, size_t size = 0) {
+        setBlocksAndType(ioBlocks, compressionType);
+        if (data) data_.assign(data, data + size);
         resetData();
     }
     void clear() {
@@ -439,6 +438,10 @@ public:
         data_.clear();
         resetData();
     }
+    void setBlocksAndType(uint16_t ioBlocks, int compressionType) {
+        this->ioBlocks = ioBlocks;
+        this->compressionType = compressionType;
+    }
     /*
         set data
         return written size
@@ -446,9 +449,7 @@ public:
         size_t setter(char *data);
     */
     template<class Writter>
-    void setByWritter(uint16_t ioBlocks, int compressionType, size_t reserveSize, Writter writter) {
-        this->ioBlocks = ioBlocks;
-        this->compressionType = compressionType;
+    void setByWritter(size_t reserveSize, Writter writter) {
         data_.resize(reserveSize);
         size_t writtenSize = writter(&data_[0]);
         data_.resize(writtenSize);
@@ -456,15 +457,13 @@ public:
     }
 
     IoData &operator=(const IoData &rhs) {
-        ioBlocks = rhs.ioBlocks;
-        compressionType = rhs.compressionType;
+        setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
         data_ = rhs.data_;
         resetData();
         return *this;
     }
     IoData &operator=(IoData &&rhs) {
-        ioBlocks = rhs.ioBlocks;
-        compressionType = rhs.compressionType;
+        setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
         data_ = std::move(rhs.data_);
         resetData();
         return *this;
@@ -523,8 +522,8 @@ inline IoData compressIoData(const IoWrap &io0, int type)
         return IoData();
     }
     assert(io0.isValid());
-    IoData io1;
-    io1.setByWritter(io0.ioBlocks, type, snappy::MaxCompressedLength(io0.size), [&](char *p) {
+    IoData io1(io0.ioBlocks, type);
+    io1.setByWritter(snappy::MaxCompressedLength(io0.size), [&](char *p) {
         size_t size;
         snappy::RawCompress(io0.data, io0.size, p, &size);
         return size;
@@ -542,9 +541,9 @@ inline IoData uncompressIoData(const IoWrap &io0)
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
     walb::Uncompressor dec(io0.compressionType);
-    IoData io1;
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
-    io1.setByWritter(io0.ioBlocks, WALB_DIFF_CMPR_NONE, decSize, [&](char *p) {
+    IoData io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
+    io1.setByWritter(decSize, [&](char *p) {
         size_t size = dec.run(p, decSize, io0.data, io0.size);
         if (size != decSize) {
             throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
