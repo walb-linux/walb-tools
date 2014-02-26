@@ -494,8 +494,8 @@ public:
         data_ = std::move(data);
         resetData();
     }
-    const char *rawData(size_t offset = 0) const { return &data_[offset]; }
-    char *rawData(size_t offset = 0) { return &data_[offset]; }
+    const char *rawData() const { return &data_[0]; }
+    char *rawData() { return &data_[0]; }
     std::vector<char> forMove() {
         std::vector<char> v = std::move(data_);
         data_.clear();
