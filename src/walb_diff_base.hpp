@@ -323,7 +323,7 @@ struct IoWrap
 
     bool empty() const { return ioBlocks == 0; }
 
-    void set(const walb_diff_record &rec0) {
+    void set0(const walb_diff_record &rec0) {
         const RecordWrapConst rec(&rec0);
         if (rec.isNormal()) {
             ioBlocks = rec.ioBlocks();
@@ -333,13 +333,10 @@ struct IoWrap
             compressionType = ::WALB_DIFF_CMPR_NONE;
         }
     }
-    void resetData(const char *data, size_t size) {
+    void set(const walb_diff_record &rec0, const char *data, size_t size) {
+        set0(rec0);
         this->data = data;
         this->size = size;
-    }
-    void set(const walb_diff_record &rec0, const char *data, size_t size) {
-        set(rec0);
-        resetData(data, size);
     }
 
     bool isValid() const {
@@ -430,7 +427,6 @@ public:
     IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
         resetData();
     }
-    ~IoData() noexcept = default;
 
     IoData &operator=(const IoData &rhs) {
         ioBlocks = rhs.ioBlocks;
@@ -448,17 +444,17 @@ public:
     }
 
     void set(const struct walb_diff_record &rec0, std::vector<char> &&data0) {
-        IoWrap::set(rec0);
+        IoWrap::set0(rec0);
         moveFrom(std::move(data0));
     }
 
     void set(const struct walb_diff_record &rec0, const std::vector<char> &data0) {
-        IoWrap::set(rec0);
+        IoWrap::set0(rec0);
         copyFrom(&data0[0], data0.size());
     }
 
     void set(const struct walb_diff_record &rec0) {
-        IoWrap::set(rec0);
+        IoWrap::set0(rec0);
         data_.resize(rec0.data_size);
         resetData();
     }
@@ -472,11 +468,6 @@ public:
         return true;
     }
 
-    void copyFrom(const void *data, size_t size) {
-        data_.resize(size);
-        ::memcpy(&data_[0], data, size);
-        resetData();
-    }
     void moveFrom(std::vector<char> &&data) {
         data_ = std::move(data);
         resetData();
@@ -493,11 +484,17 @@ public:
         resetData();
     }
 private:
+    void copyFrom(const void *data, size_t size) {
+        data_.resize(size);
+        ::memcpy(&data_[0], data, size);
+        resetData();
+    }
     /**
      * You must call this after changing data_.
      */
     void resetData() {
-        IoWrap::resetData(&data_[0], data_.size());
+        data = &data_[0];
+        size = data_.size();
     }
 };
 
