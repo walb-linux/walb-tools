@@ -552,12 +552,14 @@ inline IoData uncompressIoData(const IoWrap &io0)
     }
     walb::Uncompressor dec(io0.compressionType);
     IoData io1;
-    io1.ioBlocks = io0.ioBlocks;
-    io1.resizeData(io0.ioBlocks * LOGICAL_BLOCK_SIZE);
-    size_t size = dec.run(io1.rawData(), io1.size, io0.data, io0.size);
-    if (size != io1.size) {
-        throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.size);
-    }
+    const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
+    io1.setByWritter(io0.ioBlocks, WALB_DIFF_CMPR_NONE, decSize, [&](char *p) {
+        size_t size = dec.run(p, decSize, io0.data, io0.size);
+        if (size != decSize) {
+            throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
+        }
+        return decSize;
+    });
     return io1;
 }
 
