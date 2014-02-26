@@ -112,7 +112,7 @@ public:
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(ioP->rawSize() == size);
+        assert(ioP->size == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }
@@ -281,7 +281,7 @@ public:
 private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
         auto ioP = std::make_shared<DiffIo>();
-        ioP->setIoBlocks(ioBlocks);
+        ioP->ioBlocks = ioBlocks;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         zeroMem_.resize(size);
         ioP->moveFrom(std::move(zeroMem_.forMove()));

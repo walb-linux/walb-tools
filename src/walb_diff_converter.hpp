@@ -52,7 +52,7 @@ bool convertLogToDiff(
     if (rec.isDiscard()) {
         mrec.setDiscard();
         mrec.setDataSize(0);
-        diffIo.set(mrec.record(), {});
+        diffIo.set(mrec.record());
         return true;
     }
 
@@ -60,7 +60,7 @@ bool convertLogToDiff(
     if (blockD.calcIsAllZero(rec.ioSizeLb())) {
         mrec.setAllZero();
         mrec.setDataSize(0);
-        diffIo.set(mrec.record(), {});
+        diffIo.set(mrec.record());
         return true;
     }
 
@@ -84,7 +84,8 @@ bool convertLogToDiff(
     }
     assert(remaining == 0);
     assert(off == ioSizeB);
-    diffIo.set(mrec.record(), std::move(buf));
+    diffIo.set(mrec.record());
+    diffIo.moveFrom(std::move(buf));
 
     /* Compression. (currently NONE). */
     mrec.setCompressionType(::WALB_DIFF_CMPR_NONE);

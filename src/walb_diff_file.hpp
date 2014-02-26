@@ -168,16 +168,15 @@ public:
      * @data0 IO data.
      */
     void writeDiff(const walb_diff_record &rec0, const char *data0) {
-        const RecordWrapConst rec(&rec0);
-        std::vector<char> data(rec.dataSize());
-        ::memcpy(&data[0], data0, rec.dataSize());
+        std::vector<char> data(data0, data0 + rec0.data_size);
         writeDiff(rec0, std::move(data));
     }
     void writeDiff(const walb_diff_record &rec0, std::vector<char> &&data0) {
         checkWrittenHeader();
         const RecordWrapConst rec(&rec0);
         IoData io;
-        io.set(rec0, std::move(data0));
+        io.set(rec0);
+        io.moveFrom(std::move(data0));
         check(rec, io);
 
         /* Try to add. */
@@ -218,7 +217,7 @@ public:
         RecordRaw rec1(rec);
         IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
         rec1.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setDataSize(io1.rawSize());
+        rec1.setDataSize(io1.size);
         rec1.setChecksum(io1.calcChecksum());
         writeDiff(rec1.record(), io1.forMove());
     }
@@ -247,8 +246,8 @@ private:
             IoData io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.rawData(), io0.rawSize());
-            total += io0.rawSize();
+            fdw_.write(io0.rawData(), io0.size);
+            total += io0.size;
         }
         assert(total == pack_.totalSize());
         pack_.reset();
@@ -273,10 +272,10 @@ private:
     void check(UNUSED const RecordWrapConst &rec, UNUSED const IoWrap &io) const {
         assert(rec.isValid());
         assert(io.isValid());
-        assert(rec.dataSize() == io.rawSize());
+        assert(rec.dataSize() == io.size);
         if (rec.isNormal()) {
-            assert(rec.compressionType() == io.compressionType());
-            assert(rec.ioBlocks() == io.ioBlocks());
+            assert(rec.compressionType() == io.compressionType);
+            assert(rec.ioBlocks() == io.ioBlocks);
             assert(rec.checksum() == io.calcChecksum());
         } else {
             assert(io.empty());
@@ -410,7 +409,7 @@ public:
         rec = rec0;
         io = uncompressIoData(io0);
         rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        rec.setDataSize(io.rawSize());
+        rec.setDataSize(io.size);
         rec.setChecksum(io.calcChecksum());
         assert(rec.isValid());
         assert(io.isValid());
@@ -450,19 +449,20 @@ public:
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }
-        if (0 < rec.dataSize()) {
-            io.resizeData(rec.dataSize());
-            io.setIoBlocks(rec.ioBlocks());
-            io.setCompressionType(rec.compressionType());
-
-            fdr_.read(io.rawData(), io.rawSize());
-            uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.rawSize(), 0);
+        const size_t recSize = rec.dataSize();
+        if (recSize > 0) {
+            io.setBlocksAndType(rec.ioBlocks(), rec.compressionType());
+            io.setByWritter(recSize, [&](char *p) {
+                fdr_.read(p, recSize);
+                return recSize;
+            });
+            const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
             if (rec.checksum() != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
             }
+            totalSize_ += recSize;
         }
         recIdx_++;
-        totalSize_ += rec.dataSize();
     }
 private:
     /**

@@ -34,12 +34,9 @@ public:
     void copyFrom(const RecordRaw &rec, const IoData &io) {
         rec_ = rec;
         if (rec.isNormal()) {
-            io_.setIoBlocks(io.ioBlocks());
-            io_.setCompressionType(io.compressionType());
-            io_.resizeData(io.rawSize());
-            ::memcpy(io_.rawData(), io.rawData(), io.rawSize());
+            io_ = io;
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
     void moveFrom(const RecordRaw &rec, IoData &&io) {
@@ -47,17 +44,17 @@ public:
         if (rec.isNormal()) {
             io_ = std::move(io);
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
     void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
         rec_ = rec;
         if (rec.isNormal()) {
-            io_.setIoBlocks(rec.ioBlocks());
-            io_.setCompressionType(rec.compressionType());
+            io_.ioBlocks = rec.ioBlocks();
+            io_.compressionType = rec.compressionType();
             io_.moveFrom(std::move(data));
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
 
@@ -75,18 +72,18 @@ public:
             return false;
         }
         if (!rec_.isNormal()) {
-            if (io_.ioBlocks() != 0) {
+            if (io_.ioBlocks != 0) {
                 LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
                 return false;
             }
             return true;
         }
-        if (rec_.ioBlocks() != io_.ioBlocks()) {
-            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks());
+        if (rec_.ioBlocks() != io_.ioBlocks) {
+            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks);
             return false;
         }
-        if (rec_.dataSize() != io_.rawSize()) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.rawSize());
+        if (rec_.dataSize() != io_.size) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.size);
             return false;
         }
         if (rec_.isCompressed()) {
@@ -223,11 +220,11 @@ public:
 
             size_t size = 0;
             if (rec_.isNormal()) {
-                size = io_.rawSize() - rblks * LOGICAL_BLOCK_SIZE;
+                size = io_.size - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data(size);
             if (rec_.isNormal()) {
-                assert(rec_.dataSize() == io_.rawSize());
+                assert(rec_.dataSize() == io_.size);
                 rec.setDataSize(size);
                 ::memcpy(&data[0], io_.rawData(), size);
             }
@@ -254,11 +251,11 @@ public:
 
         size_t size = 0;
         if (rec_.isNormal()) {
-            size = io_.rawSize() - off;
+            size = io_.size - off;
         }
         std::vector<char> data(size);
         if (rec_.isNormal()) {
-            assert(rec_.dataSize() == io_.rawSize());
+            assert(rec_.dataSize() == io_.size);
             rec.setDataSize(size);
             ::memcpy(&data[0], io_.rawData() + off, size);
         }
@@ -477,7 +474,7 @@ public:
         }
         uint32_t rawSize() const {
             checkValid();
-            return it_->second.io().rawSize();
+            return it_->second.io().size;
         }
     protected:
         void checkValid() const {
