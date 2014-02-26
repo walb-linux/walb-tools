@@ -197,7 +197,7 @@ public:
             // apply wdiff files indicated by metaDiffList to lvSnap.
             for (const MetaDiff& diff : metaDiffList) {
                 cybozu::util::FileOpener op;
-                if (!op.open(createDiffFileName(diff), O_RDONLY)) {
+                if (!op.open(getDiffPath(diff).str(), O_RDONLY)) {
                     retryNum++;
                     if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
                     wdiffs_.reloadMetadata();
@@ -316,6 +316,12 @@ private:
     }
     std::string restoredSnapshotName(uint64_t gid) const {
         return RESTORE_PREFIX + volId_ + "_" + cybozu::itoa(gid);
+    }
+    /**
+     * Full path of the wdiff file of a corresponding meta diff.
+     */
+    cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
+        return volDir_ + cybozu::FilePath(createDiffFileName(diff));
     }
 #if 0 // XXX
     /**
@@ -523,12 +529,6 @@ private:
          */
 
         finishToApply(diff);
-    }
-    /**
-     * Full path of the wdiff file of a corresponding meta diff.
-     */
-    cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
-        return volDir_ + cybozu::FilePath(createDiffFileName(diff));
     }
     /**
      * @gid threshold gid. That indicates all diffs
