@@ -394,7 +394,7 @@ public:
         }
     }
 
-    const char *rawData(size_t offset = 0) const { return data + offset; }
+    const char *rawData() const { return data; }
 
     /**
      * Calculate checksum.
@@ -598,7 +598,7 @@ inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlock
     r0.resizeData(size0);
     r1.resizeData(size1);
     ::memcpy(r0.rawData(), io0.rawData(), size0);
-    ::memcpy(r1.rawData(), io0.rawData(size0), size1);
+    ::memcpy(r1.rawData(), io0.rawData() + size0, size1);
 
     return {std::move(r0), std::move(r1)};
 }
@@ -629,7 +629,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
         size_t size = blks * LOGICAL_BLOCK_SIZE;
         io.setIoBlocks(blks);
         io.resizeData(size);
-        ::memcpy(io.rawData(), io0.rawData(off), size);
+        ::memcpy(io.rawData(), io0.rawData() + off, size);
         v.push_back(std::move(io));
         remaining -= blks;
         off += size;
