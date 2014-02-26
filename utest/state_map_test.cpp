@@ -18,11 +18,4 @@ CYBOZU_TEST_AUTO(StateMap)
         State& s = m.get("abc");
         CYBOZU_TEST_EQUAL(s.id, "xyz");
     }
-    m.del("abc");
-    {
-        State& s = m.get("abc");
-        CYBOZU_TEST_EQUAL(s.id, "abc");
-    }
-    m.del("abc");
-    CYBOZU_TEST_EXCEPTION(m.del("abc"), cybozu::Exception);
 }
