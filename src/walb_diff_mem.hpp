@@ -35,7 +35,7 @@ public:
         rec_ = rec;
         if (rec.isNormal()) {
             io_.setIoBlocks(io.ioBlocks());
-            io_.setCompressionType(io.compressionType);
+            io_.compressionType = io.compressionType;
             io_.resizeData(io.size);
             ::memcpy(io_.rawData(), io.rawData(), io.size);
         } else {
@@ -54,7 +54,7 @@ public:
         rec_ = rec;
         if (rec.isNormal()) {
             io_.setIoBlocks(rec.ioBlocks());
-            io_.setCompressionType(rec.compressionType());
+            io_.compressionType = rec.compressionType();
             io_.moveFrom(std::move(data));
         } else {
             io_ = IoData();

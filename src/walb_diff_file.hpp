@@ -453,7 +453,7 @@ public:
         if (0 < rec.dataSize()) {
             io.resizeData(rec.dataSize());
             io.setIoBlocks(rec.ioBlocks());
-            io.setCompressionType(rec.compressionType());
+            io.compressionType = rec.compressionType();
 
             fdr_.read(io.rawData(), io.size);
             uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);

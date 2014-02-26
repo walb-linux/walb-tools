@@ -326,8 +326,7 @@ public:
 
     uint16_t ioBlocks() const { return ioBlocks_; }
     void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
-//    int compressionType() const { return compressionType; }
-    void setCompressionType(int type) { compressionType = type; }
+//    void setCompressionType(int type) { compressionType = type; }
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const {
@@ -338,10 +337,10 @@ public:
         const RecordWrapConst rec(&rec0);
         if (rec.isNormal()) {
             setIoBlocks(rec.ioBlocks());
-            setCompressionType(rec.compressionType());
+            compressionType = rec.compressionType();
         } else {
             setIoBlocks(0);
-            setCompressionType(::WALB_DIFF_CMPR_NONE);
+            compressionType = ::WALB_DIFF_CMPR_NONE;
         }
     }
     void resetData(const char *data, size_t size) {
@@ -530,7 +529,7 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     assert(io0.isValid());
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
-    io1.setCompressionType(type);
+    io1.compressionType = type;
     io1.resizeData(snappy::MaxCompressedLength(io0.size));
     size_t size;
     snappy::RawCompress(io0.data, io0.size, io1.rawData(), &size);
