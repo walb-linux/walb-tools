@@ -2,6 +2,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <cassert>
 #include "cybozu/exception.hpp"
 
 namespace walb {
@@ -16,12 +17,15 @@ public:
     State& get(const std::string& volId)
     {
         AutoLock al(mu_);
-        bool maked;
         typename Map::iterator itr;
-        std::tie(itr, maked) = map_.insert(std::make_pair(volId, nullptr));
-        if (maked) {
-            itr->second = std::unique_ptr<State>(new State(volId));
+        itr = map_.find(volId);
+        if (itr == map_.end()) {
+            std::unique_ptr<State> ptr(new State(volId));
+            bool maked;
+            std::tie(itr, maked) = map_.emplace(volId, std::move(ptr));
+            assert(maked);
         }
+        assert(itr->second);
         return *itr->second;
     }
 
