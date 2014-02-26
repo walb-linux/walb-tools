@@ -323,17 +323,6 @@ public:
     IoWrap(const IoWrap &rhs)
         : ioBlocks_(rhs.ioBlocks_), compressionType_(rhs.compressionType_)
         , data(rhs.data), size(rhs.size) {}
-    IoWrap(IoWrap &&) = delete;
-    virtual ~IoWrap() noexcept = default;
-
-    IoWrap &operator=(const IoWrap &rhs) {
-        ioBlocks_ = rhs.ioBlocks_;
-        compressionType_ = rhs.compressionType_;
-        data = rhs.data;
-        size = rhs.size;
-        return *this;
-    }
-    IoWrap &operator=(IoWrap &&rhs) = delete;
 
     uint16_t ioBlocks() const { return ioBlocks_; }
     void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
