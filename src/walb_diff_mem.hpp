@@ -36,7 +36,7 @@ public:
         if (rec.isNormal()) {
             io_ = io;
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
     void moveFrom(const RecordRaw &rec, IoData &&io) {
@@ -44,7 +44,7 @@ public:
         if (rec.isNormal()) {
             io_ = std::move(io);
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
     void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
@@ -54,7 +54,7 @@ public:
             io_.compressionType = rec.compressionType();
             io_.moveFrom(std::move(data));
         } else {
-            io_ = IoData();
+            io_.clear();
         }
     }
 

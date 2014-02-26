@@ -433,6 +433,12 @@ public:
         data_.assign(data, data + size);
         resetData();
     }
+    void clear() {
+        ioBlocks = 0;
+        compressionType = ::WALB_DIFF_CMPR_NONE;
+        data_.clear();
+        resetData();
+    }
     /*
         set data
         return written size
