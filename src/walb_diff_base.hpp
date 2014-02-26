@@ -313,9 +313,8 @@ class IoWrap
 protected:
     uint16_t ioBlocks_; /* [logical block]. */
     int compressionType_;
-    const char *data;
-
 public:
+    const char *data;
     size_t size;
 
     IoWrap()
@@ -394,16 +393,14 @@ public:
         }
     }
 
-    const char *rawData() const { return data; }
-
     /**
      * Calculate checksum.
      */
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
-        assert(rawData());
+        assert(data);
         assert(size > 0);
-        return cybozu::util::calcChecksum(rawData(), size, 0);
+        return cybozu::util::calcChecksum(data, size, 0);
     }
 
     /**
@@ -412,7 +409,7 @@ public:
     bool calcIsAllZero() const {
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(rawData(), size);
+        return cybozu::util::calcIsAllZero(data, size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -547,7 +544,7 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     io1.setCompressionType(type);
     io1.resizeData(snappy::MaxCompressedLength(io0.size));
     size_t size;
-    snappy::RawCompress(io0.rawData(), io0.size, io1.rawData(), &size);
+    snappy::RawCompress(io0.data, io0.size, io1.rawData(), &size);
     io1.resizeData(size);
     return io1;
 }
@@ -565,7 +562,7 @@ inline IoData uncompressIoData(const IoWrap &io0)
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
-    size_t size = dec.run(io1.rawData(), io1.size, io0.rawData(), io0.size);
+    size_t size = dec.run(io1.rawData(), io1.size, io0.data, io0.size);
     if (size != io1.size) {
         throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.size);
     }
@@ -597,8 +594,8 @@ inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlock
     size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
     r0.resizeData(size0);
     r1.resizeData(size1);
-    ::memcpy(r0.rawData(), io0.rawData(), size0);
-    ::memcpy(r1.rawData(), io0.rawData() + size0, size1);
+    ::memcpy(r0.rawData(), io0.data, size0);
+    ::memcpy(r1.rawData(), io0.data + size0, size1);
 
     return {std::move(r0), std::move(r1)};
 }
@@ -629,7 +626,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
         size_t size = blks * LOGICAL_BLOCK_SIZE;
         io.setIoBlocks(blks);
         io.resizeData(size);
-        ::memcpy(io.rawData(), io0.rawData() + off, size);
+        ::memcpy(io.rawData(), io0.data + off, size);
         v.push_back(std::move(io));
         remaining -= blks;
         off += size;
