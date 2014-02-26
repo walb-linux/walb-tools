@@ -452,7 +452,7 @@ public:
         }
         if (0 < rec.dataSize()) {
             io.resizeData(rec.dataSize());
-            io.setIoBlocks(rec.ioBlocks());
+            io.ioBlocks = rec.ioBlocks();
             io.compressionType = rec.compressionType();
 
             fdr_.read(io.rawData(), io.size);

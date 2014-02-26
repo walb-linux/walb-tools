@@ -53,7 +53,7 @@ public:
     void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
         rec_ = rec;
         if (rec.isNormal()) {
-            io_.setIoBlocks(rec.ioBlocks());
+            io_.ioBlocks = rec.ioBlocks();
             io_.compressionType = rec.compressionType();
             io_.moveFrom(std::move(data));
         } else {

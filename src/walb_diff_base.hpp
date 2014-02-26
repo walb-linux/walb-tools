@@ -322,7 +322,6 @@ struct IoWrap
         : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType)
         , data(rhs.data), size(rhs.size) {}
 
-    void setIoBlocks(uint16_t ioBlocks) { this->ioBlocks = ioBlocks; }
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const {
@@ -524,7 +523,7 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     }
     assert(io0.isValid());
     IoData io1;
-    io1.setIoBlocks(io0.ioBlocks);
+    io1.ioBlocks = io0.ioBlocks;
     io1.compressionType = type;
     io1.resizeData(snappy::MaxCompressedLength(io0.size));
     size_t size;
@@ -544,7 +543,7 @@ inline IoData uncompressIoData(const IoWrap &io0)
     }
     walb::Uncompressor dec(io0.compressionType);
     IoData io1;
-    io1.setIoBlocks(io0.ioBlocks);
+    io1.ioBlocks = io0.ioBlocks;
     io1.resizeData(io0.ioBlocks * LOGICAL_BLOCK_SIZE);
     size_t size = dec.run(io1.rawData(), io1.size, io0.data, io0.size);
     if (size != io1.size) {
@@ -572,8 +571,8 @@ inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlock
 
     IoData r0, r1;
     uint16_t ioBlocks1 = io0.ioBlocks - ioBlocks0;
-    r0.setIoBlocks(ioBlocks0);
-    r1.setIoBlocks(ioBlocks1);
+    r0.ioBlocks = ioBlocks0;
+    r1.ioBlocks = ioBlocks1;
     size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
     size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
     r0.resizeData(size0);
@@ -608,7 +607,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
         IoData io;
         uint16_t blks = std::min(remaining, ioBlocks0);
         size_t size = blks * LOGICAL_BLOCK_SIZE;
-        io.setIoBlocks(blks);
+        io.ioBlocks = blks;
         io.resizeData(size);
         ::memcpy(io.rawData(), io0.data + off, size);
         v.push_back(std::move(io));
