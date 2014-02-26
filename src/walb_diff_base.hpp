@@ -318,15 +318,10 @@ struct IoWrap
     IoWrap()
         : ioBlocks(0), compressionType(::WALB_DIFF_CMPR_NONE)
         , data(nullptr), size(0) {}
-    IoWrap(const IoWrap &rhs)
-        : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType)
-        , data(rhs.data), size(rhs.size) {}
 
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
-    bool empty() const {
-        return ioBlocks == 0;
-    }
+    bool empty() const { return ioBlocks == 0; }
 
     void set(const walb_diff_record &rec0) {
         const RecordWrapConst rec(&rec0);
