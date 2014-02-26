@@ -427,9 +427,25 @@ public:
     IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
         resetData();
     }
-    IoData(uint16_t ioBlocks, const char *data, size_t size) {
+    IoData(uint16_t ioBlocks, int compressionType, const char *data, size_t size) {
         this->ioBlocks = ioBlocks;
+        this->compressionType = compressionType;
         data_.assign(data, data + size);
+        resetData();
+    }
+    /*
+        set data
+        return written size
+        don't write larger than reserveSize
+        size_t setter(char *data);
+    */
+    template<class Writter>
+    void setByWritter(uint16_t ioBlocks, int compressionType, size_t reserveSize, Writter writter) {
+        this->ioBlocks = ioBlocks;
+        this->compressionType = compressionType;
+        data_.resize(reserveSize);
+        size_t writtenSize = writter(&data_[0]);
+        data_.resize(writtenSize);
         resetData();
     }
 
@@ -517,12 +533,11 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     }
     assert(io0.isValid());
     IoData io1;
-    io1.ioBlocks = io0.ioBlocks;
-    io1.compressionType = type;
-    io1.resizeData(snappy::MaxCompressedLength(io0.size));
-    size_t size;
-    snappy::RawCompress(io0.data, io0.size, io1.rawData(), &size);
-    io1.resizeData(size);
+    io1.setByWritter(io0.ioBlocks, type, snappy::MaxCompressedLength(io0.size), [&](char *p) {
+        size_t size;
+        snappy::RawCompress(io0.data, io0.size, p, &size);
+        return size;
+    });
     return io1;
 }
 
@@ -569,7 +584,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
     while (0 < remaining) {
         uint16_t blks = std::min(remaining, ioBlocks0);
         size_t size = blks * LOGICAL_BLOCK_SIZE;
-        v.emplace_back(blks, io0.data + off, size);
+        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, io0.data + off, size);
         remaining -= blks;
         off += size;
     }

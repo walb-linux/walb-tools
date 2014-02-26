@@ -450,19 +450,19 @@ public:
         if (rec.dataOffset() != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
         }
-        if (0 < rec.dataSize()) {
-            io.resizeData(rec.dataSize());
-            io.ioBlocks = rec.ioBlocks();
-            io.compressionType = rec.compressionType();
-
-            fdr_.read(io.rawData(), io.size);
+        const size_t recSize = rec.dataSize();
+        if (recSize > 0) {
+            io.setByWritter(rec.ioBlocks(), rec.compressionType(), recSize, [&](char *p) {
+                fdr_.read(p, recSize);
+                return recSize;
+            });
             uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
             if (rec.checksum() != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
             }
+            totalSize_ += recSize;
         }
         recIdx_++;
-        totalSize_ += rec.dataSize();
     }
 private:
     /**
