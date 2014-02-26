@@ -470,17 +470,6 @@ public:
         return *this;
     }
 
-    void set(const struct walb_diff_record &rec0, std::vector<char> &&data0) {
-        IoWrap::set0(rec0);
-        moveFrom(std::move(data0));
-    }
-
-    void set(const struct walb_diff_record &rec0, const std::vector<char> &data0) {
-        IoWrap::set0(rec0);
-        data_ = data0;
-        resetData();
-    }
-
     void set(const struct walb_diff_record &rec0) {
         IoWrap::set0(rec0);
         data_.resize(rec0.data_size);

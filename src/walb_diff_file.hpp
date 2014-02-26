@@ -177,7 +177,8 @@ public:
         checkWrittenHeader();
         const RecordWrapConst rec(&rec0);
         IoData io;
-        io.set(rec0, std::move(data0));
+        io.set(rec0);
+        io.moveFrom(std::move(data0));
         check(rec, io);
 
         /* Try to add. */
