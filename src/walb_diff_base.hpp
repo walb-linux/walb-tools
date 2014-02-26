@@ -314,15 +314,15 @@ protected:
     uint16_t ioBlocks_; /* [logical block]. */
     int compressionType_;
     const char *dataP_;
-    size_t dataSize_;
+    size_t size;
 
 public:
     IoWrap()
         : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
-        , dataP_(nullptr), dataSize_(0) {}
+        , dataP_(nullptr), size(0) {}
     IoWrap(const IoWrap &rhs)
         : ioBlocks_(rhs.ioBlocks_), compressionType_(rhs.compressionType_)
-        , dataP_(rhs.dataP_), dataSize_(rhs.dataSize_) {}
+        , dataP_(rhs.dataP_), size(rhs.size) {}
     IoWrap(IoWrap &&) = delete;
     virtual ~IoWrap() noexcept = default;
 
@@ -330,7 +330,7 @@ public:
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
         dataP_ = rhs.dataP_;
-        dataSize_ = rhs.dataSize_;
+        size = rhs.size;
         return *this;
     }
     IoWrap &operator=(IoWrap &&rhs) = delete;
@@ -356,8 +356,8 @@ public:
         }
     }
     void resetData(const char *data, size_t size) {
-        dataP_ = data;
-        dataSize_ = size;
+        this->dataP_ = data;
+        this->size = size;
     }
     void set(const walb_diff_record &rec0, const char *data, size_t size) {
         set(rec0);
@@ -366,7 +366,7 @@ public:
 
     bool isValid() const {
         if (empty()) {
-            if (dataP_ != nullptr || dataSize_ != 0) {
+            if (dataP_ != nullptr || size != 0) {
                 LOGd("Data is not empty.\n");
                 return false;
             }
@@ -377,15 +377,15 @@ public:
                     LOGd("data pointer is null\n");
                     return false;
                 }
-                if (dataSize_ == 0) {
-                    LOGd("data size is not 0: %zu\n", dataSize_);
+                if (size == 0) {
+                    LOGd("data size is not 0: %zu\n", size);
                     return false;
                 }
                 return true;
             } else {
-                if (dataSize_ != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
+                if (size != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , dataSize_, ioBlocks_ * LOGICAL_BLOCK_SIZE);
+                         , size, ioBlocks_ * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -394,7 +394,7 @@ public:
     }
 
     const char *rawData(size_t offset = 0) const { return dataP_ + offset; }
-    size_t rawSize() const { return dataSize_; }
+    size_t rawSize() const { return size; }
 
     /**
      * Calculate checksum.
@@ -442,7 +442,7 @@ class IoData : public IoWrap
 {
 private:
     /* You must call resetData() for consistency of
-       dataP_ and dataSize_ after changing data_. */
+       dataP_ and size after changing data_. */
     std::vector<char> data_;
 
 public:
@@ -490,7 +490,7 @@ public:
 
     bool isValid() const {
         if (!IoWrap::isValid()) return false;
-        if (dataP_ != &data_[0] || dataSize_ != data_.size()) {
+        if (dataP_ != &data_[0] || size != data_.size()) {
             LOGd("resetData() must be called.\n");
             return false;
         }
