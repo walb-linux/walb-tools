@@ -450,7 +450,8 @@ public:
 
     void set(const struct walb_diff_record &rec0, const std::vector<char> &data0) {
         IoWrap::set0(rec0);
-        copyFrom(&data0[0], data0.size());
+        data_ = data0;
+        resetData();
     }
 
     void set(const struct walb_diff_record &rec0) {
@@ -485,11 +486,6 @@ public:
         resetData();
     }
 private:
-    void copyFrom(const void *data, size_t size) {
-        data_.resize(size);
-        ::memcpy(&data_[0], data, size);
-        resetData();
-    }
     /**
      * You must call this after changing data_.
      */
