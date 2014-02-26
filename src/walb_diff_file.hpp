@@ -168,9 +168,7 @@ public:
      * @data0 IO data.
      */
     void writeDiff(const walb_diff_record &rec0, const char *data0) {
-        const RecordWrapConst rec(&rec0);
-        std::vector<char> data(rec.dataSize());
-        ::memcpy(&data[0], data0, rec.dataSize());
+        std::vector<char> data(data0, data0 + rec0.data_size);
         writeDiff(rec0, std::move(data));
     }
     void writeDiff(const walb_diff_record &rec0, std::vector<char> &&data0) {
