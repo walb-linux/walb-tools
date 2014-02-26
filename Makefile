@@ -52,6 +52,10 @@ test_all: $(TEST_BINARIES)
 	@for t in $(TEST_BINARIES); do \
 	    ./$$t; \
 	done 2>&1 |tee test.log |grep ^ctest:name
+itest: $(BINARIES)
+	make -C itest/wdiff
+	make -C itest/wlog
+
 
 echo_binaries:
 	@echo $(BINARIES)

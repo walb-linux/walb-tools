@@ -112,7 +112,7 @@ public:
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(ioP->rawSize() == size);
+        assert(ioP->size == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }

@@ -218,7 +218,7 @@ public:
         RecordRaw rec1(rec);
         IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
         rec1.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setDataSize(io1.rawSize());
+        rec1.setDataSize(io1.size);
         rec1.setChecksum(io1.calcChecksum());
         writeDiff(rec1.record(), io1.forMove());
     }
@@ -247,8 +247,8 @@ private:
             IoData io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.rawData(), io0.rawSize());
-            total += io0.rawSize();
+            fdw_.write(io0.rawData(), io0.size);
+            total += io0.size;
         }
         assert(total == pack_.totalSize());
         pack_.reset();
@@ -273,7 +273,7 @@ private:
     void check(UNUSED const RecordWrapConst &rec, UNUSED const IoWrap &io) const {
         assert(rec.isValid());
         assert(io.isValid());
-        assert(rec.dataSize() == io.rawSize());
+        assert(rec.dataSize() == io.size);
         if (rec.isNormal()) {
             assert(rec.compressionType() == io.compressionType());
             assert(rec.ioBlocks() == io.ioBlocks());
@@ -410,7 +410,7 @@ public:
         rec = rec0;
         io = uncompressIoData(io0);
         rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        rec.setDataSize(io.rawSize());
+        rec.setDataSize(io.size);
         rec.setChecksum(io.calcChecksum());
         assert(rec.isValid());
         assert(io.isValid());
@@ -455,8 +455,8 @@ public:
             io.setIoBlocks(rec.ioBlocks());
             io.setCompressionType(rec.compressionType());
 
-            fdr_.read(io.rawData(), io.rawSize());
-            uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.rawSize(), 0);
+            fdr_.read(io.rawData(), io.size);
+            uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
             if (rec.checksum() != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
             }

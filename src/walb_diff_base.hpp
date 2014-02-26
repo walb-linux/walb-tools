@@ -314,9 +314,10 @@ protected:
     uint16_t ioBlocks_; /* [logical block]. */
     int compressionType_;
     const char *dataP_;
-    size_t size;
 
 public:
+    size_t size;
+
     IoWrap()
         : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
         , dataP_(nullptr), size(0) {}
@@ -394,7 +395,6 @@ public:
     }
 
     const char *rawData(size_t offset = 0) const { return dataP_ + offset; }
-    size_t rawSize() const { return size; }
 
     /**
      * Calculate checksum.
@@ -402,17 +402,17 @@ public:
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
         assert(rawData());
-        assert(0 < rawSize());
-        return cybozu::util::calcChecksum(rawData(), rawSize(), 0);
+        assert(size > 0);
+        return cybozu::util::calcChecksum(rawData(), size, 0);
     }
 
     /**
      * Calculate whether all-zero or not.
      */
     bool calcIsAllZero() const {
-        if (isCompressed() || rawSize() == 0) { return false; }
-        assert(rawSize() % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(rawData(), rawSize());
+        if (isCompressed() || size == 0) { return false; }
+        assert(size % LOGICAL_BLOCK_SIZE == 0);
+        return cybozu::util::calcIsAllZero(rawData(), size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -423,14 +423,14 @@ public:
                   "checksum %0x\n"
                   , ioBlocks()
                   , compressionType()
-                  , rawSize()
+                  , size
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks()
                   , compressionType()
-                  , rawSize()
+                  , size
                   , calcChecksum());
     }
 };
@@ -545,9 +545,9 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.setCompressionType(type);
-    io1.resizeData(snappy::MaxCompressedLength(io0.rawSize()));
+    io1.resizeData(snappy::MaxCompressedLength(io0.size));
     size_t size;
-    snappy::RawCompress(io0.rawData(), io0.rawSize(), io1.rawData(), &size);
+    snappy::RawCompress(io0.rawData(), io0.size, io1.rawData(), &size);
     io1.resizeData(size);
     return io1;
 }
@@ -565,9 +565,9 @@ inline IoData uncompressIoData(const IoWrap &io0)
     IoData io1;
     io1.setIoBlocks(io0.ioBlocks());
     io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
-    size_t size = dec.run(io1.rawData(), io1.rawSize(), io0.rawData(), io0.rawSize());
-    if (size != io1.rawSize()) {
-        throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.rawSize());
+    size_t size = dec.run(io1.rawData(), io1.size, io0.rawData(), io0.size);
+    if (size != io1.size) {
+        throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.size);
     }
     return io1;
 }
@@ -634,7 +634,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
         remaining -= blks;
         off += size;
     }
-    assert(off == io0.rawSize());
+    assert(off == io0.size);
     assert(!v.empty());
 
     return v;

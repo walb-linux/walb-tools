@@ -36,8 +36,8 @@ public:
         if (rec.isNormal()) {
             io_.setIoBlocks(io.ioBlocks());
             io_.setCompressionType(io.compressionType());
-            io_.resizeData(io.rawSize());
-            ::memcpy(io_.rawData(), io.rawData(), io.rawSize());
+            io_.resizeData(io.size);
+            ::memcpy(io_.rawData(), io.rawData(), io.size);
         } else {
             io_ = IoData();
         }
@@ -85,8 +85,8 @@ public:
             LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks());
             return false;
         }
-        if (rec_.dataSize() != io_.rawSize()) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.rawSize());
+        if (rec_.dataSize() != io_.size) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.size);
             return false;
         }
         if (rec_.isCompressed()) {
@@ -223,11 +223,11 @@ public:
 
             size_t size = 0;
             if (rec_.isNormal()) {
-                size = io_.rawSize() - rblks * LOGICAL_BLOCK_SIZE;
+                size = io_.size - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data(size);
             if (rec_.isNormal()) {
-                assert(rec_.dataSize() == io_.rawSize());
+                assert(rec_.dataSize() == io_.size);
                 rec.setDataSize(size);
                 ::memcpy(&data[0], io_.rawData(), size);
             }
@@ -254,11 +254,11 @@ public:
 
         size_t size = 0;
         if (rec_.isNormal()) {
-            size = io_.rawSize() - off;
+            size = io_.size - off;
         }
         std::vector<char> data(size);
         if (rec_.isNormal()) {
-            assert(rec_.dataSize() == io_.rawSize());
+            assert(rec_.dataSize() == io_.size);
             rec.setDataSize(size);
             ::memcpy(&data[0], io_.rawData() + off, size);
         }
@@ -477,7 +477,7 @@ public:
         }
         uint32_t rawSize() const {
             checkValid();
-            return it_->second.io().rawSize();
+            return it_->second.io().size;
         }
     protected:
         void checkValid() const {
