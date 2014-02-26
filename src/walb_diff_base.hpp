@@ -427,6 +427,11 @@ public:
     IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
         resetData();
     }
+    IoData(uint16_t ioBlocks, const char *data, size_t size) {
+        this->ioBlocks = ioBlocks;
+        data_.assign(data, data + size);
+        resetData();
+    }
 
     IoData &operator=(const IoData &rhs) {
         ioBlocks = rhs.ioBlocks;
@@ -542,37 +547,6 @@ inline IoData uncompressIoData(const IoWrap &io0)
 }
 
 /**
- * Split an IO into two IOs
- * where the first IO's ioBlocks will be a specified one.
- *
- * CAUSION:
- *   Compressed IO can not be splitted.
- */
-inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlocks0)
-{
-    if (ioBlocks0 == 0 || io0.ioBlocks <= ioBlocks0) {
-        throw RT_ERR("split: ioBlocks0 is out or range.");
-    }
-    if (io0.isCompressed()) {
-        throw RT_ERR("split: compressed IO can not be splitted.");
-    }
-    assert(io0.isValid());
-
-    IoData r0, r1;
-    uint16_t ioBlocks1 = io0.ioBlocks - ioBlocks0;
-    r0.ioBlocks = ioBlocks0;
-    r1.ioBlocks = ioBlocks1;
-    size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
-    size_t size1 = ioBlocks1 * LOGICAL_BLOCK_SIZE;
-    r0.resizeData(size0);
-    r1.resizeData(size1);
-    ::memcpy(r0.rawData(), io0.data, size0);
-    ::memcpy(r1.rawData(), io0.data + size0, size1);
-
-    return {std::move(r0), std::move(r1)};
-}
-
-/**
  * Split an IO into multiple IOs
  * each of which io size is not more than a specified one.
  *
@@ -593,13 +567,9 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
     uint16_t remaining = io0.ioBlocks;
     size_t off = 0;
     while (0 < remaining) {
-        IoData io;
         uint16_t blks = std::min(remaining, ioBlocks0);
         size_t size = blks * LOGICAL_BLOCK_SIZE;
-        io.ioBlocks = blks;
-        io.resizeData(size);
-        ::memcpy(io.rawData(), io0.data + off, size);
-        v.push_back(std::move(io));
+        v.emplace_back(blks, io0.data + off, size);
         remaining -= blks;
         off += size;
     }
