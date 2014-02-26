@@ -313,24 +313,24 @@ class IoWrap
 protected:
     uint16_t ioBlocks_; /* [logical block]. */
     int compressionType_;
-    const char *dataP_;
+    const char *data;
 
 public:
     size_t size;
 
     IoWrap()
         : ioBlocks_(0), compressionType_(::WALB_DIFF_CMPR_NONE)
-        , dataP_(nullptr), size(0) {}
+        , data(nullptr), size(0) {}
     IoWrap(const IoWrap &rhs)
         : ioBlocks_(rhs.ioBlocks_), compressionType_(rhs.compressionType_)
-        , dataP_(rhs.dataP_), size(rhs.size) {}
+        , data(rhs.data), size(rhs.size) {}
     IoWrap(IoWrap &&) = delete;
     virtual ~IoWrap() noexcept = default;
 
     IoWrap &operator=(const IoWrap &rhs) {
         ioBlocks_ = rhs.ioBlocks_;
         compressionType_ = rhs.compressionType_;
-        dataP_ = rhs.dataP_;
+        data = rhs.data;
         size = rhs.size;
         return *this;
     }
@@ -357,7 +357,7 @@ public:
         }
     }
     void resetData(const char *data, size_t size) {
-        this->dataP_ = data;
+        this->data = data;
         this->size = size;
     }
     void set(const walb_diff_record &rec0, const char *data, size_t size) {
@@ -367,14 +367,14 @@ public:
 
     bool isValid() const {
         if (empty()) {
-            if (dataP_ != nullptr || size != 0) {
+            if (data != nullptr || size != 0) {
                 LOGd("Data is not empty.\n");
                 return false;
             }
             return true;
         } else {
             if (isCompressed()) {
-                if (dataP_ == nullptr) {
+                if (data == nullptr) {
                     LOGd("data pointer is null\n");
                     return false;
                 }
@@ -394,7 +394,7 @@ public:
         }
     }
 
-    const char *rawData(size_t offset = 0) const { return dataP_ + offset; }
+    const char *rawData(size_t offset = 0) const { return data + offset; }
 
     /**
      * Calculate checksum.
@@ -442,7 +442,7 @@ class IoData : public IoWrap
 {
 private:
     /* You must call resetData() for consistency of
-       dataP_ and size after changing data_. */
+       data and size after changing data_. */
     std::vector<char> data_;
 
 public:
@@ -490,7 +490,7 @@ public:
 
     bool isValid() const {
         if (!IoWrap::isValid()) return false;
-        if (dataP_ != &data_[0] || size != data_.size()) {
+        if (data != &data_[0] || size != data_.size()) {
             LOGd("resetData() must be called.\n");
             return false;
         }
