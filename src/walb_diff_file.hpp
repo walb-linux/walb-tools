@@ -276,7 +276,7 @@ private:
         assert(rec.dataSize() == io.size);
         if (rec.isNormal()) {
             assert(rec.compressionType() == io.compressionType);
-            assert(rec.ioBlocks() == io.ioBlocks());
+            assert(rec.ioBlocks() == io.ioBlocks);
             assert(rec.checksum() == io.calcChecksum());
         } else {
             assert(io.empty());

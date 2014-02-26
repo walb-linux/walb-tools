@@ -34,7 +34,7 @@ public:
     void copyFrom(const RecordRaw &rec, const IoData &io) {
         rec_ = rec;
         if (rec.isNormal()) {
-            io_.setIoBlocks(io.ioBlocks());
+            io_.ioBlocks = io.ioBlocks;
             io_.compressionType = io.compressionType;
             io_.resizeData(io.size);
             ::memcpy(io_.rawData(), io.rawData(), io.size);
@@ -75,14 +75,14 @@ public:
             return false;
         }
         if (!rec_.isNormal()) {
-            if (io_.ioBlocks() != 0) {
+            if (io_.ioBlocks != 0) {
                 LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
                 return false;
             }
             return true;
         }
-        if (rec_.ioBlocks() != io_.ioBlocks()) {
-            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks());
+        if (rec_.ioBlocks() != io_.ioBlocks) {
+            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks);
             return false;
         }
         if (rec_.dataSize() != io_.size) {

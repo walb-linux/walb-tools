@@ -308,38 +308,34 @@ private:
  * Io data.
  * This does not manage data array.
  */
-class IoWrap
+struct IoWrap
 {
-protected:
-    uint16_t ioBlocks_; /* [logical block]. */
-public:
+    uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     const char *data;
     size_t size;
 
     IoWrap()
-        : ioBlocks_(0), compressionType(::WALB_DIFF_CMPR_NONE)
+        : ioBlocks(0), compressionType(::WALB_DIFF_CMPR_NONE)
         , data(nullptr), size(0) {}
     IoWrap(const IoWrap &rhs)
-        : ioBlocks_(rhs.ioBlocks_), compressionType(rhs.compressionType)
+        : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType)
         , data(rhs.data), size(rhs.size) {}
 
-    uint16_t ioBlocks() const { return ioBlocks_; }
-    void setIoBlocks(uint16_t ioBlocks) { ioBlocks_ = ioBlocks; }
-//    void setCompressionType(int type) { compressionType = type; }
+    void setIoBlocks(uint16_t ioBlocks) { this->ioBlocks = ioBlocks; }
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const {
-        return ioBlocks_ == 0;
+        return ioBlocks == 0;
     }
 
     void set(const walb_diff_record &rec0) {
         const RecordWrapConst rec(&rec0);
         if (rec.isNormal()) {
-            setIoBlocks(rec.ioBlocks());
+            ioBlocks = rec.ioBlocks();
             compressionType = rec.compressionType();
         } else {
-            setIoBlocks(0);
+            ioBlocks = 0;
             compressionType = ::WALB_DIFF_CMPR_NONE;
         }
     }
@@ -371,9 +367,9 @@ public:
                 }
                 return true;
             } else {
-                if (size != ioBlocks_ * LOGICAL_BLOCK_SIZE) {
+                if (size != ioBlocks * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , size, ioBlocks_ * LOGICAL_BLOCK_SIZE);
+                         , size, ioBlocks * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -406,14 +402,14 @@ public:
                   "type %d\n"
                   "size %zu\n"
                   "checksum %0x\n"
-                  , ioBlocks()
+                  , ioBlocks
                   , compressionType
                   , size
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
-                  , ioBlocks()
+                  , ioBlocks
                   , compressionType
                   , size
                   , calcChecksum());
@@ -443,14 +439,14 @@ public:
     ~IoData() noexcept = default;
 
     IoData &operator=(const IoData &rhs) {
-        ioBlocks_ = rhs.ioBlocks_;
+        ioBlocks = rhs.ioBlocks;
         compressionType = rhs.compressionType;
         data_ = rhs.data_;
         resetData();
         return *this;
     }
     IoData &operator=(IoData &&rhs) {
-        ioBlocks_ = rhs.ioBlocks_;
+        ioBlocks = rhs.ioBlocks;
         compressionType = rhs.compressionType;
         data_ = std::move(rhs.data_);
         resetData();
@@ -523,12 +519,12 @@ inline IoData compressIoData(const IoWrap &io0, int type)
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
         throw RT_ERR("Currently only snappy is supported.");
     }
-    if (io0.ioBlocks() == 0) {
+    if (io0.ioBlocks == 0) {
         return IoData();
     }
     assert(io0.isValid());
     IoData io1;
-    io1.setIoBlocks(io0.ioBlocks());
+    io1.setIoBlocks(io0.ioBlocks);
     io1.compressionType = type;
     io1.resizeData(snappy::MaxCompressedLength(io0.size));
     size_t size;
@@ -548,8 +544,8 @@ inline IoData uncompressIoData(const IoWrap &io0)
     }
     walb::Uncompressor dec(io0.compressionType);
     IoData io1;
-    io1.setIoBlocks(io0.ioBlocks());
-    io1.resizeData(io0.ioBlocks() * LOGICAL_BLOCK_SIZE);
+    io1.setIoBlocks(io0.ioBlocks);
+    io1.resizeData(io0.ioBlocks * LOGICAL_BLOCK_SIZE);
     size_t size = dec.run(io1.rawData(), io1.size, io0.data, io0.size);
     if (size != io1.size) {
         throw RT_ERR("Uncompressed data size is invalid %zu %zu.", size, io1.size);
@@ -566,7 +562,7 @@ inline IoData uncompressIoData(const IoWrap &io0)
  */
 inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlocks0)
 {
-    if (ioBlocks0 == 0 || io0.ioBlocks() <= ioBlocks0) {
+    if (ioBlocks0 == 0 || io0.ioBlocks <= ioBlocks0) {
         throw RT_ERR("split: ioBlocks0 is out or range.");
     }
     if (io0.isCompressed()) {
@@ -575,7 +571,7 @@ inline std::pair<IoData, IoData> splitIoData(const IoWrap &io0, uint16_t ioBlock
     assert(io0.isValid());
 
     IoData r0, r1;
-    uint16_t ioBlocks1 = io0.ioBlocks() - ioBlocks0;
+    uint16_t ioBlocks1 = io0.ioBlocks - ioBlocks0;
     r0.setIoBlocks(ioBlocks0);
     r1.setIoBlocks(ioBlocks1);
     size_t size0 = ioBlocks0 * LOGICAL_BLOCK_SIZE;
@@ -606,7 +602,7 @@ inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
     assert(io0.isValid());
 
     std::vector<IoData> v;
-    uint16_t remaining = io0.ioBlocks();
+    uint16_t remaining = io0.ioBlocks;
     size_t off = 0;
     while (0 < remaining) {
         IoData io;
