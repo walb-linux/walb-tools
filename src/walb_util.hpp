@@ -12,6 +12,9 @@
 #include "util.hpp"
 #include "file_path.hpp"
 #include "tmp_file.hpp"
+#include "tmp_file_serializer.hpp"
+#include "fileio.hpp"
+#include "fileio_serializer.hpp"
 #include "uuid.hpp"
 #include "constant.hpp"
 #include "cybozu/exception.hpp"
@@ -152,6 +155,5 @@ void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_T
     }
     throw cybozu::Exception(msg) << "timeout" << timeout;
 }
-
 
 }} // walb::util

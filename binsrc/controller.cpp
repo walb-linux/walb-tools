@@ -54,6 +54,7 @@ void runClient(Option &opt)
         { "restore", c2aRestoreClient },
         { "start", c2xStartClient },
         { "stop", c2xStopClient },
+        { "archive-info", c2pArchiveInfoClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }

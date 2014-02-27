@@ -4,9 +4,6 @@
 
 namespace walb {
 
-namespace client_impl {
-} // namespace client_impl
-
 /**
  * params.size() == 0 or 1.
  * params[0]: volId
@@ -112,6 +109,24 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
     if (s != "ok") {
         throw cybozu::Exception("c2aRestoreClient:failed") << s;
     }
+}
+
+/**
+ * pattern (1)
+ *   get <archiveId>
+ * pattern (2)
+ *   add <archiveId> <addr>:<port> <cmprType>:<cmprLevel>
+ * pattern (3)
+ *   update <archiveId> <addr>:<port> <cmprType>:<cmprLevel>
+ * pattern (4)
+ *   delete <archiveId>
+ *
+ * <cmprType>: compression type. none, snappy, gzip, or lzma.
+ * <cmprLevel>: compression level. integer from 0 to 9.
+ */
+inline void c2pArchiveInfoClient(protocol::ClientParams &/*p*/)
+{
+    // QQQ
 }
 
 } // namespace walb
