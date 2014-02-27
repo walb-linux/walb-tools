@@ -41,6 +41,7 @@ public:
             { "stop", c2pStopServer },
             { "archive-info", c2pArchiveInfoServer },
             { "clear-vol", c2pClearVolServer },
+            { "wlog-transfer", s2pWlogTransferServer },
         };
         protocol::serverDispatch(
             sock_, nodeId_, forceQuit_, procStat_, h);
@@ -52,9 +53,7 @@ public:
 struct Option : cybozu::Option
 {
     uint16_t port;
-    std::string baseDirStr;
     std::string logFileStr;
-    std::string nodeId;
     bool isDebug;
     size_t maxConnections;
     size_t maxBackgroundTasks;
@@ -65,7 +64,6 @@ struct Option : cybozu::Option
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
         appendOpt(&maxConnections, walb::DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
@@ -75,29 +73,30 @@ struct Option : cybozu::Option
         appendOpt(&retryTimeout, walb::DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
         appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
+
+        walb::ProxySingleton &p = walb::getProxyGlobal();
+        appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&nodeId, hostName, "id", "node identifier");
+        appendOpt(&p.nodeId, hostName, "id", "node identifier");
 
         appendHelp("h");
     }
     std::string logFilePath() const {
         if (logFileStr == "-") return logFileStr;
-        return (cybozu::FilePath(baseDirStr) + logFileStr).str();
+        return (cybozu::FilePath(walb::gp.baseDirStr) + logFileStr).str();
     }
 };
 
-void initSingleton(Option &opt)
+void initSingleton(Option &/*opt*/)
 {
-    walb::ProxySingleton &s = walb::ProxySingleton::getInstance();
-
-    s.nodeId = opt.nodeId;
-    s.baseDirStr = opt.baseDirStr;
+    //walb::ProxySingleton &p = walb::ProxySingleton::getInstance();
 
     // QQQ
 }
 
 void initializeProxy(Option &opt)
 {
+    walb::util::makeDir(walb::gp.baseDirStr, "proxyServer", false);
     initSingleton(opt);
 
     // Check all the volumes directories.
@@ -124,14 +123,13 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::makeDir(opt.baseDirStr, "proxyServer", false);
     walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeProxy(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
         return std::make_shared<walb::ProxyRequestWorker>(
-            std::move(sock), opt.nodeId, forceQuit, procStat);
+            std::move(sock), walb::gp.nodeId, forceQuit, procStat);
     };
     walb::server::MultiThreadedServer server(opt.maxConnections);
     server.run(opt.port, createRequestWorker);

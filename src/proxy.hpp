@@ -101,4 +101,9 @@ inline void c2pClearVolServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
+inline void s2pWlogTransferServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 } // walb

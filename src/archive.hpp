@@ -398,4 +398,12 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     pkt.write("ok");
 }
 
+/**
+ *
+ */
+inline void x2aWdiffTransferServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 } // walb

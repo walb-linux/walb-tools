@@ -341,4 +341,12 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     LOGi("c2sFullSyncServer done, ctrl:%s storage:%s archive:%s", p.clientId.c_str(), nodeId.c_str(), archiveId.c_str());
 }
 
+/**
+ * Take a snapshot to restore in archive hosts.
+ */
+inline void c2sSnapshotServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 } // walb

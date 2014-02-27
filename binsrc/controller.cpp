@@ -55,6 +55,7 @@ void runClient(Option &opt)
         { "start", c2xStartClient },
         { "stop", c2xStopClient },
         { "archive-info", c2pArchiveInfoClient },
+        { "snapshot", c2sSnapshotClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }

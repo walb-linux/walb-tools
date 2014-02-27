@@ -129,4 +129,13 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &/*p*/)
     // QQQ
 }
 
+/**
+ *
+ */
+inline void c2sSnapshotClient(protocol::ClientParams &/*p*/)
+{
+
+    // QQQ
+}
+
 } // namespace walb

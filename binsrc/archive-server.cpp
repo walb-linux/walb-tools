@@ -44,6 +44,7 @@ public:
             { "stop", c2aStopServer },
             { "dirty-full-sync", x2aDirtyFullSyncServer },
             { "restore", c2aRestoreServer },
+            { "wdiff-transfer", x2aWdiffTransferServer },
         };
         protocol::serverDispatch(
             sock_, nodeId_, forceQuit_, procStat_, h);
@@ -78,6 +79,22 @@ struct Option : cybozu::Option
     }
 };
 
+void initializeArchive(Option &/*opt*/)
+{
+    walb::util::makeDir(walb::ga.baseDirStr, "archiveServer", false);
+
+    // Start task dispatcher thread.
+
+    // QQQ
+}
+
+void finalizeArchive()
+{
+    // Stop task dispatcher thread.
+
+    // QQQ
+}
+
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -85,8 +102,8 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::makeDir(walb::ga.baseDirStr, "archiveServer", false);
     walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    initializeArchive(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
         std::atomic<walb::server::ProcessStatus> &procStat) {
@@ -95,6 +112,7 @@ int main(int argc, char *argv[]) try
     };
     walb::server::MultiThreadedServer server;
     server.run(opt.port, createRequestWorker);
+    finalizeArchive();
 
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());
