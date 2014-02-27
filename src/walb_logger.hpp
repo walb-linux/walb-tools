@@ -8,17 +8,18 @@
  */
 #include "cybozu/log.hpp"
 #include "util.hpp"
+#include <map>
 
 #ifdef DEBUG
 #define LOGd(fmt, args...)                                              \
-    cybozu::PutLog(cybozu::LogDebug, "(%s:%d)" fmt, __func__, __LINE__, ##args)
+    cybozu::PutLog(cybozu::LogDebug, "DEBUG (%s:%d) " fmt, __func__, __LINE__, ##args)
 #else
 #define LOGd(fmt, args...)
 #endif
 
-#define LOGi(fmt, args...) cybozu::PutLog(cybozu::LogInfo, fmt, ##args)
-#define LOGw(fmt, args...) cybozu::PutLog(cybozu::LogWarning, fmt, ##args)
-#define LOGe(fmt, args...) cybozu::PutLog(cybozu::LogError, fmt, ##args)
+#define LOGi(fmt, args...) cybozu::PutLog(cybozu::LogInfo, "INFO " fmt, ##args)
+#define LOGw(fmt, args...) cybozu::PutLog(cybozu::LogWarning, "WARNING " fmt, ##args)
+#define LOGe(fmt, args...) cybozu::PutLog(cybozu::LogError, "ERROR " fmt, ##args)
 
 #define LOGd_(fmt, args...)
 #define LOGi_(fmt, args...)
@@ -115,6 +116,24 @@ inline void Logger::error(const char *format, ...) const noexcept {
     writeV(cybozu::LogError, format, args);
     va_end(args);
 }
+
+namespace logger_local {
+
+inline const char *getPriStr(cybozu::LogPriority pri)
+{
+    static const std::map<int, std::string> priMap = {
+        { cybozu::LogDebug, "DEBUG" },
+        { cybozu::LogInfo, "INFO" },
+        { cybozu::LogWarning, "WARNING" },
+        { cybozu::LogError, "ERROR" },
+    };
+    std::map<int, std::string>::const_iterator itr = priMap.find(pri);
+    assert(itr != priMap.cend());
+    return itr->second.c_str();
+}
+
+} // namespace logger_local
+
 /**
  * Simple logger.
  */
@@ -122,7 +141,7 @@ class SimpleLogger : public Logger
 {
 public:
     void write(cybozu::LogPriority pri, const char *msg) const noexcept override {
-        cybozu::PutLog(pri, "%s", msg);
+        cybozu::PutLog(pri, "%s %s", logger_local::getPriStr(pri), msg);
     }
 };
 
@@ -138,7 +157,8 @@ public:
     ProtocolLogger(const std::string &selfId, const std::string &remoteId)
         : selfId_(selfId), remoteId_(remoteId) {}
     void write(cybozu::LogPriority pri, const char *msg) const noexcept override {
-        cybozu::PutLog(pri, "[%s][%s] %s", selfId_.c_str(), remoteId_.c_str(), msg);
+        cybozu::PutLog(pri, "%s [%s][%s] %s", logger_local::getPriStr(pri)
+                       , selfId_.c_str(), remoteId_.c_str(), msg);
     }
 };
 
