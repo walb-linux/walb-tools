@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file
- * @brief Walb diff files management.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
- */
 #include <cassert>
 #include <map>
 #include <vector>
@@ -21,6 +14,7 @@
 #include "time.hpp"
 #include "walb_logger.hpp"
 #include "walb_util.hpp"
+#include "fileio.hpp"
 #include "fileio_serializer.hpp"
 
 namespace walb {
@@ -31,11 +25,6 @@ namespace walb {
  *
  * Wdiff files:
  *   See meta.hpp for wdiff file name format.
- *
- * LatestRecord file:
- *   This indicates the latest snapshot gid(s).
- *   The file contents is a serialized MetaSnap object.
- *   gid0, gid1, and timestamp are meaningfull.
  */
 class WalbDiffFiles
 {
@@ -45,7 +34,7 @@ private:
 
 public:
     /**
-     * @dirStr a directory that contains wdiff files and latest records.
+     * @dirStr a directory that contains wdiff files.
      * @isContiguous:
      *   true for server data. must be contiguous.
      *   false for proxy data. must not be contiguous but newer.
@@ -75,7 +64,7 @@ public:
         }
     }
     /**
-     * Add a diff and update the "latest" record file.
+     * Add a diff file.
      * Before calling this, you must settle the diff file.
      */
     void add(const MetaDiff &diff) {
@@ -138,6 +127,7 @@ public:
     /**
      * Reload metadata by scanning directory entries.
      * searching "*.wdiff" files.
+     * It's heavy operation.
      */
     void reloadMetadata() {
         mgr_.clear();
@@ -188,6 +178,86 @@ private:
             v.push_back(createDiffFileName(diff));
         }
         return v;
+    }
+};
+
+/**
+ * Wdiff files manager for Proxy.
+ * This is not thread-safe.
+ */
+class WalbDiffFilesForProxy
+{
+private:
+    cybozu::FilePath dir_;
+    using MgrMap = std::map<cybozu::Uuid, MetaDiffManager>;
+    MgrMap mgrMap_;
+
+public:
+    explicit WalbDiffFilesForProxy(const std::string &dirStr, bool doMakeDir = true)
+        : dir_(dirStr), mgrMap_() {
+        if (doMakeDir) walb::util::makeDir(dir_.str(), "WalbDiffFilesForProxy");
+    }
+    DISABLE_COPY_AND_ASSIGN(WalbDiffFilesForProxy);
+    DISABLE_MOVE(WalbDiffFilesForProxy);
+
+    /**
+     * CAUSION:
+     *   All data inside the directory will be removed.
+     */
+    void clear() {
+        // QQQ
+    }
+    /**
+     * CAUSION:
+     *   Whole directory will be removed.
+     */
+    void clearDir() {
+        // QQQ
+    }
+    const MetaDiffManager &getMgr(const cybozu::Uuid &/*uuid*/) {
+        // QQQ
+        static MetaDiffManager mgr;
+        return mgr;
+    }
+    /**
+     * Add a diff file.
+     * Before calling this, you must settle the diff file.
+     * A corresponding uuid is required to distinguish diffs by uuid.
+     */
+    void add(const MetaDiff &/*diff*/, const cybozu::Uuid &/*uuid*/) {
+        // QQQ
+    }
+    /**
+     * Remove all diff files except having a specified uuid.
+     */
+    void removeExceptUuid(const cybozu::Uuid &/*uuid*/) {
+        // QQQ
+    }
+    /**
+     * Remove all diff files whose snapE.gidE is not greater than a specified gid.
+     */
+    void removeBeforeGid(uint64_t /*gid*/) {
+        // QQQ
+    }
+    /**
+     * Reload metadata by scanning directory entries.
+     * searching "*.wdiff" files.
+     * It will also read the header block of files to obtain uuid.
+     * It's heavy operation.
+     */
+    void reloadMetadata() {
+        // QQQ
+    }
+    /**
+     * @size [byte]
+     *   Total size of diff must not exceeds the size
+     *   except for the case that there is only one diff file.
+     * RETURN:
+     *   false if there is no diffs to send.
+     */
+    bool getDiffListToSend(uint64_t /*size*/, std::vector<MetaDiff> &/*diffV*/, cybozu::Uuid &/*uuid*/) {
+        // QQQ
+        return false;
     }
 };
 
