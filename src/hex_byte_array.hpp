@@ -28,12 +28,12 @@ private:
     uint8_t data_[SIZE];
 public:
     HexByteArrayT() : data_() {}
-    bool operator==(const T &rhs) const {
-        return ::memcmp(data_, rhs.data_, SIZE) == 0;
-    }
-    bool operator!=(const T &rhs) const {
-        return ::memcmp(data_, rhs.data_, SIZE) != 0;
-    }
+    bool operator==(const T &rhs) const { return cmp(rhs) == 0; }
+    bool operator!=(const T &rhs) const { return cmp(rhs) != 0; }
+    bool operator<(const T &rhs) const { return cmp(rhs) < 0; }
+    bool operator<=(const T &rhs) const { return cmp(rhs) <= 0; }
+    bool operator>(const T &rhs) const { return cmp(rhs) > 0; }
+    bool operator>=(const T &rhs) const { return cmp(rhs) >= 0; }
     const void *rawData() const { return data_; }
     void *rawData() { return data_; }
     static size_t rawSize() { return SIZE; }
@@ -62,6 +62,10 @@ public:
     friend inline std::ostream &operator<<(std::ostream &os, const T &t) {
         os << t.str();
         return os;
+    }
+private:
+    int cmp(const T &rhs) const {
+        return ::memcmp(data_, rhs.data_, SIZE);
     }
 };
 
