@@ -23,7 +23,7 @@
 #include "fileio_serializer.hpp"
 #include "meta.hpp"
 #include "wdiff_data.hpp"
-#include "server_info.hpp"
+#include "host_info.hpp"
 
 namespace walb {
 
@@ -47,7 +47,7 @@ private:
     cybozu::FilePath baseDir_; /* base directory. */
     std::string name_; /* volume identifier. */
     WalbDiffFiles wdiffs_; /* primary wdiff data. */
-    std::map<std::string, ServerInfo> serverMap_;
+    std::map<std::string, HostInfo> serverMap_;
     std::map<std::string, WalbDiffFiles> wdiffsMap_; /* server wdiff data. */
     std::mutex mutex_;
 
@@ -126,11 +126,11 @@ public:
         return serverMap_.find(name) != serverMap_.end()
             && wdiffsMap_.find(name) != wdiffsMap_.end();
     }
-    const ServerInfo &getServer(const std::string &name) const {
+    const HostInfo &getServer(const std::string &name) const {
         return serverMap_.at(name);
     }
-    void addServer(const ServerInfo &server) {
-        const std::string &name = server.name();
+    void addServer(const HostInfo &server) {
+        const std::string &name = server.name;
         assert(!existsServer(name));
         emplace(name, server);
         saveServerRecord(name);
@@ -191,7 +191,7 @@ private:
     }
     void saveServerRecord(const std::string &name) const {
         assert(existsServer(name));
-        const ServerInfo &server = getServer(name);
+        const HostInfo &server = getServer(name);
         cybozu::FilePath fp = serverRecordPath(name);
         cybozu::TmpFile tmpFile(fp.parent().str());
         cybozu::save(tmpFile, server);
@@ -211,15 +211,15 @@ private:
             ::printf("hoge: [%s]\n", info.name.c_str()); /* debug */
             cybozu::FilePath fp = getDir() + cybozu::FilePath(info.name);
             cybozu::util::FileReader reader(fp.str(), O_RDONLY);
-            ServerInfo server;
+            HostInfo server;
             cybozu::load(server, reader);
-            if (removeSuffix(info.name, ".server") != server.name()) {
+            if (removeSuffix(info.name, ".server") != server.name) {
                 throw std::runtime_error("server name invalid.");
             }
-            emplace(server.name(), server);
+            emplace(server.name, server);
         }
     }
-    void emplace(const std::string &name, const ServerInfo &server) {
+    void emplace(const std::string &name, const HostInfo &server) {
         cybozu::FilePath dp = getServerDir(name);
         auto res0 = serverMap_.emplace(name, server);
         auto res1 = wdiffsMap_.emplace(

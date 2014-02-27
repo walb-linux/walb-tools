@@ -5,6 +5,7 @@
 #include "file_path.hpp"
 #include "meta.hpp"
 #include "wdiff_data.hpp"
+#include "tmp_file_serializer.hpp"
 
 class TestDirectory
 {

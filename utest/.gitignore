@@ -18,3 +18,4 @@ wlog_compressor_test
 state_map_test
 action_counter_test
 state_machine_test
+host_info_test
