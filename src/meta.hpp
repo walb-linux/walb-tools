@@ -772,17 +772,30 @@ public:
                 v.push_back(d);
             }
         }
+        // This is O(NlogN) algorithm if O(d.snapB.gidE - d.snapB.gidB) is constant.
+        std::multimap<uint64_t, MetaDiff> m;
+        for (const MetaDiff &d : v) {
+            m.emplace(d.snapB.gidB, d);
+        }
         std::set<MetaDiff> s;
-        // This is simple but takes O(N^2) calculation cost.
         for (const MetaDiff &d0 : v) {
-            for (const MetaDiff &d1 : v) {
+            assert(d0.isClean());
+            // All candidates exist in this range.
+            auto itr = m.lower_bound(d0.snapB.gidB);
+            auto end = m.upper_bound(d0.snapE.gidB);
+            while (itr != end) {
+                const MetaDiff &d1 = itr->second;
+                assert(d1.isClean());
                 if (d0 != d1 && contains(d0, d1)) {
-                    auto it = s.find(d1);
-                    if (it != s.end()) continue;
                     erase(d1);
+                    assert(s.find(d1) == s.end());
                     s.insert(d1);
+                    itr = m.erase(itr);
+                } else {
+                    ++itr;
                 }
             }
+            assert(s.size() + m.size() == v.size());
         }
         return std::vector<MetaDiff>(s.begin(), s.end());
     }
