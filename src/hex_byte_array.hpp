@@ -12,6 +12,7 @@
 #include <iostream>
 #include "cybozu/serializer.hpp"
 #include "cybozu/atoi.hpp"
+#include "cybozu/itoa.hpp"
 
 namespace cybozu {
 

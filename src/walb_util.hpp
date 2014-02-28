@@ -21,6 +21,8 @@
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
+#include "cybozu/atoi.hpp"
+#include "cybozu/log.hpp"
 
 namespace walb {
 
