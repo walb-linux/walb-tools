@@ -77,8 +77,8 @@ public:
         return mgr_;
     }
     /**
-     * Get transfer diff list.
-     * @size max total size [byte].
+     * Get transfer diff list for proxy WdiffTransfer.
+     * @size max total file size [byte].
      */
     std::vector<MetaDiff> getTransferDiffList(uint64_t size) {
         std::vector<MetaDiff> v = mgr_.getMergeableDiffList(0);
@@ -109,6 +109,19 @@ public:
         removeDiffFiles(mgr_.eraseBeforeGid(gid));
     }
     /**
+     * Remove diff files.
+     * @diffV diff list.
+     */
+    void removeDiffFiles(const std::vector<MetaDiff> &v) {
+        for (const MetaDiff &d : v) {
+            cybozu::FilePath p = dir_ + createDiffFileName(d);
+            if (!p.stat().isFile()) continue;
+            if (!p.unlink()) {
+                /* TODO: put log. */
+            }
+        }
+    }
+    /**
      * List of wdiff name in order of gid.
      * RETURN:
      *   list of wdiff name.
@@ -130,7 +143,7 @@ public:
      * It's heavy operation.
      */
     void reloadMetadata() {
-        mgr_.clear();
+        std::vector<MetaDiff> v;
         std::vector<cybozu::FileInfo> list;
         if (!cybozu::GetFileList(list, dir_.str(), "wdiff")) {
             throw std::runtime_error("GetFileList failed.");
@@ -139,6 +152,11 @@ public:
             if (info.name == "." || info.name == ".." || !info.isFile)
                 continue;
             MetaDiff diff = parseDiffFileName(info.name);
+            v.push_back(diff);
+        }
+
+        mgr_.clear();
+        for (const MetaDiff &diff : v) {
             mgr_.add(diff);
         }
     }
@@ -156,19 +174,6 @@ public:
         return (dir_ + fPath).stat().size();
     }
 private:
-    /**
-     * Remove diff files.
-     * @pathStrV file name list (not full paths).
-     */
-    void removeDiffFiles(const std::vector<MetaDiff> &v) const {
-        for (const MetaDiff &d : v) {
-            cybozu::FilePath p = dir_ + createDiffFileName(d);
-            if (!p.stat().isFile()) continue;
-            if (!p.unlink()) {
-                /* TODO: put log. */
-            }
-        }
-    }
     /**
      * Convert diff list to name list.
      */
