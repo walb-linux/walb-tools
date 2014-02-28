@@ -120,7 +120,7 @@ public:
      */
     std::vector<MetaDiff> getTransferDiffList(const std::string &name, uint64_t size) {
         assert(existsServer(name));
-        return getWdiffFiles(name).getTransferDiffList(size);
+        return getWdiffFiles(name).getDiffListToSend(size);
     }
     bool existsServer(const std::string &name) const {
         return serverMap_.find(name) != serverMap_.end()

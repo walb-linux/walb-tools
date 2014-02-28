@@ -80,7 +80,7 @@ public:
      * Get transfer diff list for proxy WdiffTransfer.
      * @size max total file size [byte].
      */
-    std::vector<MetaDiff> getTransferDiffList(uint64_t size) {
+    std::vector<MetaDiff> getDiffListToSend(uint64_t size) {
         std::vector<MetaDiff> v = mgr_.getMergeableDiffList(0);
         if (v.empty()) return {};
         std::vector<MetaDiff> u;
