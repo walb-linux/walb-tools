@@ -25,7 +25,6 @@ public:
             std::tie(itr, maked) = map_.emplace(volId, std::move(ptr));
             assert(maked);
         }
-        assert(itr->second);
         return *itr->second;
     }
 
