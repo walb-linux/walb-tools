@@ -746,65 +746,6 @@ protected:
 };
 
 /**
- * Block data as contiguous memory image.
- */
-template <typename CharT>
-class BlockDataWrapT : public BlockData
-{
-private:
-    unsigned int pbs_;
-    CharT *data_;
-    size_t nBlocks_;
-public:
-    BlockDataWrapT(unsigned int pbs, CharT *data, size_t nBlocks)
-        : pbs_(pbs), data_(data), nBlocks_(nBlocks) {}
-    DISABLE_COPY_AND_ASSIGN(BlockDataWrapT);
-    DISABLE_MOVE(BlockDataWrapT);
-
-    unsigned int pbs() const override { return pbs_; }
-    void setPbs(unsigned int) override {
-        throw RT_ERR("Do not call this member function.");
-    }
-    size_t nBlocks() const override { return nBlocks_; }
-    const uint8_t *get(size_t idx) const override {
-        check(idx);
-        return reinterpret_cast<const uint8_t *>(&data_[idx * pbs()]);
-    }
-    uint8_t *get(size_t idx) override {
-        assert_bt(!std::is_const<CharT>::value);
-        check(idx);
-        using CharTT = typename std::remove_const<CharT>::type;
-        return reinterpret_cast<uint8_t *>(
-            const_cast<CharTT*>(&data_[idx * pbs()]));
-    }
-    void resize(size_t) override {
-        throw RT_ERR("Do not call this member function.");
-    }
-    void addBlock(const Block &) override {
-        throw RT_ERR("Do not call this member function.");
-    }
-    Block getBlock(size_t idx) const override {
-        check(idx);
-        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
-        ::memcpy(b.get(), get(idx), pbs());
-        return b;
-    }
-private:
-    void check(size_t idx) const {
-        checkPbs();
-        if (!data_) {
-            throw RT_ERR("BlockDataWrap: data_ is NULL.");
-        }
-        if (nBlocks() <= idx) {
-            throw RT_ERR("BlockDataWrap: index out of range.");
-        }
-    }
-};
-
-using BlockDataWrap = BlockDataWrapT<uint8_t>;
-using BlockDataWrapConst = BlockDataWrapT<const uint8_t>; //must declare with const.
-
-/**
  * Block data using a vector.
  */
 class BlockDataVec : public BlockData
