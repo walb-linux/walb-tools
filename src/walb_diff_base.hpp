@@ -201,6 +201,27 @@ inline bool isValidRec(const walb_diff_record& rec) {
     }
     return true;
 }
+inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
+    ::fprintf(fp, "----------\n"
+       "ioAddress: %" PRIu64 "\n"
+       "ioBlocks: %u\n"
+       "compressionType: %u\n"
+       "dataOffset: %u\n"
+       "dataSize: %u\n"
+       "checksum: %08x\n"
+       "exists: %d\n"
+       "isAllZero: %d\n"
+       "isDiscard: %d\n",
+       rec.io_address, rec.io_blocks,
+       rec.compression_type, rec.data_offset, rec.data_size,
+       rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+}
+inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
+    ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
+        rec.io_address, rec.io_blocks,
+        rec.compression_type, rec.data_offset, rec.data_size,
+        rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+}
 
 struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
     void init() {
@@ -224,26 +245,8 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
     bool isNormal() const { return isNormalRec(*this); }
     bool isValid() const { return isValidRec(*this); }
 
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "----------\n"
-                  "ioAddress: %" PRIu64 "\n"
-                  "ioBlocks: %u\n"
-                  "compressionType: %u\n"
-                  "dataOffset: %u\n"
-                  "checksum: %08x\n"
-                  "exists: %d\n"
-                  "isAllZero: %d\n"
-                  "isDiscard: %d\n",
-                  io_address, io_blocks,
-                  compression_type, data_offset,
-                  checksum, exists(), isAllZero(), isDiscard());
-    }
-    void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%08x\t%d%d%d\n",
-                  io_address, io_blocks,
-                  compression_type, data_offset,
-                  checksum, exists(), isAllZero(), isDiscard());
-    }
+    void print(::FILE *fp = ::stdout) const { printRec(*this, fp); }
+    void printOneline(::FILE *fp = ::stdout) const { printOnelineRec(*this, fp); }
 
     void setExists() {
         flags |= WALB_DIFF_FLAG(EXIST);
@@ -264,35 +267,6 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
         flags |= WALB_DIFF_FLAG(DISCARD);
     }
 };
-
-template <class RecT>
-class RecordWrapT : public Record
-{
-private:
-    RecT *recP_; /* must not be nullptr. */
-
-public:
-    explicit RecordWrapT(RecT *recP)
-        : recP_(recP) {
-        assert(recP);
-    }
-    RecordWrapT(const RecordWrapT &rhs) : recP_(rhs.recP_) {}
-    RecordWrapT(RecordWrapT &&rhs) = delete;
-    RecordWrapT &operator=(const RecordWrapT &rhs) {
-        *recP_ = *rhs.recP_;
-        return *this;
-    }
-    RecordWrapT &operator=(RecordWrapT &&rhs) = delete;
-
-    struct walb_diff_record &record() override {
-        assert_bt(!std::is_const<RecT>::value);
-        return *const_cast<struct walb_diff_record *>(recP_);
-    }
-    const struct walb_diff_record &record() const override { return *recP_; }
-};
-
-using RecordWrap = RecordWrapT<struct walb_diff_record>;
-using RecordWrapConst = RecordWrapT<const struct walb_diff_record>; //must declare with const.
 
 /**
  * Class for struct walb_diff_record.

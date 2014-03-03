@@ -372,8 +372,7 @@ public:
         if (!rec.isValid()) {
 #ifdef DEBUG
             rec.print(::stderr);
-            const Rec& rec1 = static_cast<const Rec&>(pack_.record(recIdx_));
-            rec1.print(::stderr);
+            printRec(pack_.record(recIdx_));
 #endif
             throw RT_ERR("Invalid record.");
         }
