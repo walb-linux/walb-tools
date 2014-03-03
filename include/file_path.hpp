@@ -133,28 +133,26 @@ class FilePath
 private:
     std::string path_;
     bool normalized_;
-    mutable std::shared_ptr<FileStat> statP_;
 
 public:
     static const char SEPARATOR = '/';
-    FilePath() : path_("."), normalized_(true), statP_() {} /* current directly */
+    FilePath() : path_("."), normalized_(true) {} /* current directly */
     explicit FilePath(const std::string &path)
-        : path_(path), normalized_(false), statP_() {}
+        : path_(path), normalized_(false) {}
     explicit FilePath(std::string &&path)
-        : path_(std::move(path)), normalized_(false), statP_() {}
+        : path_(std::move(path)), normalized_(false) {}
     /* Copy constructor */
     FilePath(const FilePath &rhs)
-        : path_(rhs.path_), normalized_(rhs.normalized_)
-        , statP_() {}
+        : path_(rhs.path_), normalized_(rhs.normalized_) {}
     /* Move constructor */
     FilePath(FilePath &&rhs)
-        : path_(std::move(rhs.path_)), normalized_(rhs.normalized_)
-        , statP_(std::move(statP_)) {}
+        : FilePath() {
+        swap(rhs);
+    }
     /* Copy */
     FilePath &operator=(const FilePath &rhs) {
-        path_ = rhs.path_;
-        normalized_ = rhs.normalized_;
-        statP_.reset();
+        FilePath tmp(rhs);
+        swap(tmp);
         return *this;
     }
     /* Copy */
@@ -162,10 +160,8 @@ public:
         return *this = cybozu::FilePath(rhs);
     }
     /* Move */
-    FilePath &operator=(FilePath &rhs) {
-        path_ = std::move(rhs.path_);
-        normalized_ = rhs.normalized_;
-        statP_ = std::move(rhs.statP_);
+    FilePath &operator=(FilePath &&rhs) {
+        swap(rhs);
         return *this;
     }
     FilePath operator+(const FilePath &rhs) const {
@@ -242,11 +238,8 @@ public:
     const char *cStr() const {
         return path_.c_str();
     }
-    FileStat &stat(bool isForce = false) const {
-        if (!statP_ || isForce) {
-            statP_ = std::make_shared<FileStat>(path_);
-        }
-        return *statP_;
+    FileStat stat() const {
+        return FileStat(path_);
     }
     FilePath toFullPath() const {
         if (isFull()) return *this;
@@ -262,25 +255,21 @@ public:
     bool unlink(int *err = nullptr) const {
         bool ret = ::unlink(path_.c_str()) == 0;
         setError(ret, err);
-        statP_.reset();
         return ret;
     }
     bool mkdir(mode_t mode = 0755, int *err = nullptr) const {
         bool ret = ::mkdir(path_.c_str(), mode) == 0;
         setError(ret, err);
-        statP_.reset();
         return ret;
     }
     bool rmdir(int *err = nullptr) const {
         bool ret = ::rmdir(path_.c_str()) == 0;
         setError(ret, err);
-        statP_.reset();
         return ret;
     }
     bool rename(const FilePath &newPath, int *err = nullptr) const {
         bool ret = ::rename(path_.c_str(), newPath.cStr()) == 0;
         setError(ret, err);
-        statP_.reset();
         return ret;
     }
     bool link(const FilePath &newPath, int *err = nullptr) const {
@@ -296,7 +285,6 @@ public:
     bool chmod(mode_t mode, int *err = nullptr) const {
         bool ret = ::chmod(path_.c_str(), mode) == 0;
         setError(ret, err);
-        statP_.reset();
         return ret;
     }
     void printRecursive() const {
@@ -330,6 +318,10 @@ public:
         return rmdir();
     }
 private:
+    void swap(FilePath &rhs) noexcept {
+        std::swap(path_, rhs.path_);
+        std::swap(normalized_, rhs.normalized_);
+    }
     static void setError(bool ret, int *err) {
         if (!ret && err != nullptr) {
             *err = errno;

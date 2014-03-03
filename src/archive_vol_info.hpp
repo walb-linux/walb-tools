@@ -133,7 +133,7 @@ public:
         return st;
     }
     bool existsVolDir() const {
-        return volDir_.stat(true).isDirectory();
+        return volDir.stat().isDirectory();
     }
     bool lvExists() const {
         return cybozu::lvm::exists(vgName_, lvName());

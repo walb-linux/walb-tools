@@ -99,7 +99,7 @@ public:
         }
     }
     bool existsVolDir() const {
-        return volDir_.stat(true).isDirectory();
+        return volDir_.stat().isDirectory();
     }
     /**
      * get status as a string vector.
@@ -174,16 +174,17 @@ private:
         wdevPath_ = cybozu::FilePath(s);
     }
     void verifyWdevPathExistance() {
-        if (!wdevPath_.stat(true).exists()) {
+        if (!wdevPath_.stat().exists()) {
             throw cybozu::Exception("StorageVolInfo:not found") << wdevPath_.str();
         }
     }
     void verifyBaseDirExistance(const std::string &baseDirStr) {
         cybozu::FilePath baseDir(baseDirStr);
-        if (!baseDir.stat().exists()) {
+        cybozu::FileStat stat = baseDir.stat();
+        if (!stat.exists()) {
             throw cybozu::Exception("StorageVolInfo:not exists") << baseDir.str();
         }
-        if (!baseDir.stat().isDirectory()) {
+        if (!stat.isDirectory()) {
             throw cybozu::Exception("StorageVolInfo:not directory") << baseDir.str();
         }
     }

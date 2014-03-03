@@ -103,7 +103,7 @@ public:
         return st;
     }
     bool existsVolDir() const {
-        return volDir_.stat(true).isDirectory();
+        return volDir_.stat().isDirectory();
     }
     std::vector<std::string> getStatusAsStrVec() const {
         std::vector<std::string> v;
