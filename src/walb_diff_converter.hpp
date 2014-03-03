@@ -93,14 +93,6 @@ inline bool convertLogToDiff(
 
     return true;
 }
-template <class PackIo>
-bool convertLogToDiff(
-    const PackIo &packIo, diff::Record &mrec, diff::IoData &diffIo)
-{
-    const log::Record &rec = packIo.record();
-    const log::BlockData &blockD = packIo.blockData();
-    return convertLogToDiff(rec, blockD, mrec, diffIo);
-}
 
 namespace diff {
 
@@ -212,7 +204,7 @@ private:
 
             diff::RecordRaw diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(packIo, diffRec, diffIo)) {
+            if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.ioBlocks();
             }
