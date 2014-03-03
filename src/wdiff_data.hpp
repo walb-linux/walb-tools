@@ -19,18 +19,11 @@
 
 namespace walb {
 
-inline std::vector<MetaDiff> loadWdiffMetadata(const std::string &dirPath)
+inline std::vector<MetaDiff> loadWdiffMetadata(const std::string &dirStr)
 {
     std::vector<MetaDiff> ret;
-    std::vector<cybozu::FileInfo> list;
-    if (!cybozu::GetFileList(list, dirPath, "wdiff")) {
-        throw std::runtime_error("GetFileList failed.");
-    }
-    for (cybozu::FileInfo &info : list) {
-        if (info.name == "." || info.name == ".." || !info.isFile)
-            continue;
-        MetaDiff diff = parseDiffFileName(info.name);
-        ret.push_back(diff);
+    for (const std::string &fname : util::getFileNameList(dirStr, "wdiff")) {
+        ret.push_back(parseDiffFileName(fname));
     }
     return ret;
 }

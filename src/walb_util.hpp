@@ -23,6 +23,7 @@
 #include "cybozu/option.hpp"
 #include "cybozu/atoi.hpp"
 #include "cybozu/log.hpp"
+#include "cybozu/file.hpp"
 
 namespace walb {
 
@@ -65,6 +66,22 @@ void makeDir(const std::string &dirStr, const char *msg,
     if (!dir.mkdir()) {
         throw cybozu::Exception(msg) << "mkdir failed" << dirStr;
     }
+}
+
+inline std::vector<std::string> getFileNameList(const std::string &dirStr, const char *ext)
+{
+    std::vector<std::string> ret;
+    std::vector<cybozu::FileInfo> list;
+    if (!cybozu::GetFileList(list, dirStr, ext)) {
+        throw cybozu::Exception("GetFileList failed")
+            << dirStr << ext;
+    }
+    for (cybozu::FileInfo &info : list) {
+        if (info.name == "." || info.name == ".." || !info.isFile)
+            continue;
+        ret.push_back(info.name);
+    }
+    return ret;
 }
 
 template <typename T>

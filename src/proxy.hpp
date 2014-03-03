@@ -16,6 +16,7 @@ struct ProxyVolState
     std::atomic<int> stopState;
     StateMachine sm;
     ActionCounters ac; // archive name is action identifier here.
+
     MetaDiffManager diffMgr; // for the master.
     StateMap<MetaDiffManager> diffMgrMap; // for each archive.
 
@@ -24,11 +25,11 @@ struct ProxyVolState
      * In Started/WlogRecv state, this is read-only and accessed by multiple threads.
      * Otherwise, this is writable and accessed by only one thread.
      */
-    std::vector<HostInfo> hostInfoV;
+    std::vector<std::string> archiveList;
 
     explicit ProxyVolState(const std::string &volId)
         : stopState(NotStopping), sm(mu), ac(mu)
-        , diffMgr(), diffMgrMap(), hostInfoV() {
+        , diffMgr(), diffMgrMap(), archiveList() {
         const struct StateMachine::Pair tbl[] = {
             { pClear, ptAddArchiveInfo },
             { ptAddArchiveInfo, pStopped },
@@ -84,17 +85,43 @@ inline ProxySingleton& getProxyGlobal()
 const ProxySingleton& gp = getProxyGlobal();
 
 /**
- * This is called just one time.
+ * This is called just one time and by one thread.
+ * You need not take care about thread-safety inside this function.
  */
 inline void ProxyVolState::initInner(const std::string &volId)
 {
     cybozu::FilePath volDir(gp.baseDirStr);
     volDir += volId;
 
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, diffMgr, diffMgrMap);
+    if (!volInfo.existsVolDir()) {
+        sm.set(pClear);
+        return;
+    }
+
+    sm.set(volInfo.getState());
+    volInfo.reloadMaster();
     // Load host info if exist.
     // Load wdiff meta data for master and each archive directory.
-
-    // QQQ
+    for (const std::string &name : volInfo.getArchiveNameList()) {
+        HostInfo hi = volInfo.getArchiveInfo(name);
+        hi.verify();
+        archiveList.push_back(name);
+        volInfo.reloadSlave(name);
+    }
+    // Retry to make hard links of wdiff files in the master directory.
+    std::vector<MetaDiff> diffV = volInfo.getAllDiffsInMaster();
+    for (const MetaDiff &d : diffV) {
+        for (const std::string &name : archiveList) {
+            volInfo.tryToMakeHardlinkInSlave(d, name);
+        }
+    }
+    volInfo.deleteDiffsFromMaster(diffV);
+    // Here the master directory must contain no wdiff file.
+    if (!diffMgr.getAll().empty()) {
+        throw cybozu::Exception("ProxyVolState::initInner")
+            << "there are wdiff files in the master directory";
+    }
 }
 
 inline void c2pStatusServer(protocol::ServerParams &/*p*/)

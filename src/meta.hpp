@@ -740,6 +740,9 @@ private:
     using AutoLock = std::lock_guard<std::recursive_mutex>;
 
 public:
+    MetaDiffManager() = default;
+    explicit MetaDiffManager(const std::string &)
+        : MetaDiffManager() {}
     void add(const MetaDiff &diff) {
         AutoLock lk(mu_);
         addNolock(diff);
@@ -747,6 +750,12 @@ public:
     void erase(const MetaDiff &diff, bool doesThrowError = false) {
         AutoLock lk(mu_);
         eraseNolock(diff, doesThrowError);
+    }
+    void erase(const std::vector<MetaDiff> &diffV, bool doesThrowError = false) {
+        AutoLock lk(mu_);
+        for (const MetaDiff &diff : diffV) {
+            eraseNolock(diff, doesThrowError);
+        }
     }
     /**
      * Garbage collect.
@@ -798,7 +807,7 @@ public:
     /**
      * Clear all diffs.
      */
-    DEPRECATED void clear() {
+    void clear() {
         AutoLock lk(mu_);
         mmap_.clear();
     }
@@ -1016,7 +1025,7 @@ public:
     /**
      * Get all diffs between gid0 and gid1.
      */
-    std::vector<MetaDiff> getAll(uint64_t gid0 = 0, uint16_t gid1 = -1) const {
+    std::vector<MetaDiff> getAll(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
         if (gid0 >= gid1) {
             throw cybozu::Exception("MetaDiffManager::getAll:gid0 >= gid1")
                 << gid0 << gid1;

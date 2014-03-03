@@ -7,6 +7,7 @@
 #include "host_info.hpp"
 #include "meta.hpp"
 #include "state_map.hpp"
+#include "wdiff_data.hpp"
 
 namespace walb {
 
@@ -29,10 +30,10 @@ const char *const ptWlogRecv = "WlogRecv";
  */
 class ProxyVolInfo
 {
+public:
+    const cybozu::FilePath volDir;
+    const std::string volId;
 private:
-    const cybozu::FilePath volDir_;
-    const std::string volId_;
-
     MetaDiffManager &diffMgr_;
     StateMap<MetaDiffManager> &diffMgrMap_;
 
@@ -43,10 +44,16 @@ public:
      */
     ProxyVolInfo(const std::string &baseDirStr, const std::string &volId,
                  MetaDiffManager &diffMgr, StateMap<MetaDiffManager> &diffMgrMap)
-        : volDir_(cybozu::FilePath(baseDirStr) + volId)
-        , volId_(volId)
+        : volDir(cybozu::FilePath(baseDirStr) + volId)
+        , volId(volId)
         , diffMgr_(diffMgr), diffMgrMap_(diffMgrMap) {
-        // QQQ
+        cybozu::FilePath baseDir(baseDirStr);
+        if (!baseDir.stat().isDirectory()) {
+            throw cybozu::Exception("ProxyVolInfo:Directory not found") << baseDirStr;
+        }
+        if (volId.empty()) {
+            throw cybozu::Exception("ProxyVolInfo:volId is empty");
+        }
     }
     /**
      * Create volume directory
@@ -54,29 +61,51 @@ public:
     void init() {
         // QQQ
     }
-    bool existsArchiveInfo(const std::string &/*name*/) const {
-        // QQQ
-        return false;
+    bool existsArchiveInfo(const std::string &name) const {
+        if (!getArchiveInfoPath(name).stat().isFile()) {
+            return false;
+        }
+        if (!getSlaveDir(name).stat().isDirectory()) {
+            return false;
+        }
+        return true;
     }
-    void addArchiveInfo(const HostInfo &/*host*/) {
-        // QQQ
+    void addArchiveInfo(const HostInfo &hi) {
+        hi.verify();
+        util::saveFile(volDir, hi.name + ".archive", hi);
+        util::makeDir(getSlaveDir(hi.name).str(),
+                      "ProxyVolInfo::addArchiveInfo", true);
     }
-    void deleteArchiveInfo(const HostInfo &/*host*/) {
-        // QQQ
+    void deleteArchiveInfo(const std::string &name) {
+        diffMgrMap_.get(name).clear();
+        getSlaveDir(name).rmdirRecursive();
+        getArchiveInfoPath(name).remove();
     }
-    void updateArchiveInfo(const HostInfo &/*host*/) {
-        // QQQ
+    void updateArchiveInfo(const HostInfo &hi) {
+        hi.verify();
+        util::saveFile(volDir, hi.name + ".archive", hi);
     }
-    HostInfo getArchiveInfo(const std::string &/*name*/) const {
-        // QQQ
-        return HostInfo();
+    HostInfo getArchiveInfo(const std::string &name) const {
+        HostInfo hi;
+        util::loadFile(volDir, name + ".archive", hi);
+        hi.verify();
+        return hi;
     }
     /**
      * Get list of name of all the archive servers.
      */
     std::vector<std::string> getArchiveNameList() const {
-        // QQQ
-        return {};
+        std::vector<std::string> ret, fnameV;
+        fnameV = util::getFileNameList(volDir.str(), "archive");
+        for (const std::string &fname : fnameV) {
+            size_t n = fname.find(".archive");
+            if (n == std::string::npos) {
+                throw cybozu::Exception("ProxyVolInfo::getArchiveNameList")
+                    << "filename extention is not '.archive'";
+            }
+            ret.push_back(fname.substr(0, n));
+        }
+        return ret;
     }
     /**
      * CAUSION:
@@ -85,7 +114,7 @@ public:
      */
     void clear() {
         // Delete all related lvm volumes and snapshots.
-        if (!volDir_.rmdirRecursive()) {
+        if (!volDir.rmdirRecursive()) {
             throw cybozu::Exception("ProxyVolInfo::clear:rmdir recursively failed.");
         }
     }
@@ -96,7 +125,7 @@ public:
         };
         for (const char *p : tbl) {
             if (newState == p) {
-                util::saveFile(volDir_, "state", newState);
+                util::saveFile(volDir, "state", newState);
                 return;
             }
         }
@@ -104,11 +133,11 @@ public:
     }
     std::string getState() const {
         std::string st;
-        util::loadFile(volDir_, "state", st);
+        util::loadFile(volDir, "state", st);
         return st;
     }
     bool existsVolDir() const {
-        return volDir_.stat().isDirectory();
+        return volDir.stat().isDirectory();
     }
     std::vector<std::string> getStatusAsStrVec() const {
         std::vector<std::string> v;
@@ -133,23 +162,64 @@ public:
         return {};
     }
     /**
-     * Remove diffs that do not have a specified uuid.
+     * Reload metada for the mater.
      */
-    void removeDiffsNotHavingUuid(const std::string &/*archiveName*/, const cybozu::Uuid &/*uuid*/) {
-        // QQQ
+    void reloadMaster() {
+        WalbDiffFiles wdiffs(diffMgr_, getMasterDir().str());
+        wdiffs.reload();
     }
     /**
-     * Remove diffs where its snapE.gidE <= gid.
+     * Reload meta data for an archive.
      */
-    void removeDiffsBeforeGid(const std::string &/*archiveName*/, uint64_t /*gid*/) {
-        // QQQ
+    void reloadSlave(const std::string &name) {
+        WalbDiffFiles wdiffs(diffMgrMap_.get(name), getSlaveDir(name).str());
+        wdiffs.reload();
+    }
+    std::vector<MetaDiff> getAllDiffsInMaster() const {
+        return diffMgr_.getAll();
+    }
+    /**
+     * Try make a hard link of a diff file in an archive directory.
+     * If already exists, do nothing.
+     */
+    void tryToMakeHardlinkInSlave(const MetaDiff &diff, const std::string &name) {
+        std::string fname = createDiffFileName(diff);
+        cybozu::FilePath oldPath = getMasterDir() + fname;
+        cybozu::FilePath newPath = getSlaveDir(name) + fname;
+        if (oldPath.stat().exists()) {
+            // Do nothing.
+            return;
+        }
+        if (!oldPath.link(newPath)) {
+            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInSlave")
+                << "make hardlink failed" << oldPath.str() << newPath.str();
+        }
+        diffMgrMap_.get(name).add(diff);
+    }
+    /**
+     * Delete a diff file from the master directory.
+     * Before that, delete the corresponding MetaDidf from diffMgr.
+     */
+    void deleteDiffsFromMaster(const std::vector<MetaDiff> &diffV) {
+        diffMgr_.erase(diffV);
+        WalbDiffFiles wdiffs(diffMgr_, getMasterDir().str());
+        wdiffs.removeDiffFiles(diffV);
+    }
+    cybozu::FilePath getMasterDir() const {
+        return volDir + "master";
+    }
+    cybozu::FilePath getSlaveDir(const std::string &name) const {
+        return volDir + "slave" + name;
     }
 private:
     /**
      * Full path of the wdiff file of a corresponding meta diff.
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
-        return volDir_ + cybozu::FilePath(createDiffFileName(diff));
+        return volDir + cybozu::FilePath(createDiffFileName(diff));
+    }
+    cybozu::FilePath getArchiveInfoPath(const std::string &name) const {
+        return volDir + cybozu::FilePath(name + ".archive");
     }
 };
 
