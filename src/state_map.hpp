@@ -14,22 +14,22 @@ class StateMap {
     using AutoLock = std::lock_guard<std::mutex>;
     Map map_;
 public:
-    State& get(const std::string& volId)
+    State& get(const std::string& id)
     {
         AutoLock al(mu_);
         typename Map::iterator itr;
-        itr = map_.find(volId);
+        itr = map_.find(id);
         if (itr == map_.end()) {
-            std::unique_ptr<State> ptr(new State(volId));
+            std::unique_ptr<State> ptr(new State(id));
             bool maked;
-            std::tie(itr, maked) = map_.emplace(volId, std::move(ptr));
+            std::tie(itr, maked) = map_.emplace(id, std::move(ptr));
             assert(maked);
         }
         return *itr->second;
     }
 
     // We can not remove instances of State
-    // because we can not ensure uniqueness of state instance per volId.
+    // because we can not ensure uniqueness of state instance per id.
 };
 
 } // walb
