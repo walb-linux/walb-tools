@@ -16,6 +16,7 @@
 #include <map>
 #include <set>
 #include <functional>
+#include <mutex>
 #include "cybozu/serializer.hpp"
 #include "util.hpp"
 #include "time.hpp"
@@ -726,6 +727,7 @@ inline MetaDiff getMaxProgressDiff(const std::vector<MetaDiff> &v) {
 
 /**
  * Multiple diffs manager.
+ * This is thread-safe.
  */
 class MetaDiffManager
 {
@@ -734,26 +736,18 @@ private:
     using Mmap = std::multimap<Key, MetaDiff>;
     Mmap mmap_;
 
+    mutable std::recursive_mutex mu_;
+    using AutoLock = std::lock_guard<std::recursive_mutex>;
+
 public:
     void add(const MetaDiff &diff) {
-        uint64_t b = diff.snapB.gidB;
-        uint64_t e = diff.snapB.gidE;
-        if (search(diff) != mmap_.end()) {
-            throw cybozu::Exception("MetaDiffManager::add:already exists") << diff;
-        }
-        mmap_.emplace(std::make_pair(b, e), diff);
+        AutoLock lk(mu_);
+        addNolock(diff);
     }
     void erase(const MetaDiff &diff, bool doesThrowError = false) {
-        auto it = search(diff);
-        if (it == mmap_.end()) {
-            if (doesThrowError) {
-                throw cybozu::Exception("MetaDiffManager::erase:not found") << diff;
-            }
-            return;
-        }
-        mmap_.erase(it);
+        AutoLock lk(mu_);
+        eraseNolock(diff, doesThrowError);
     }
-
     /**
      * Garbage collect.
      *
@@ -764,6 +758,7 @@ public:
      *   Removed diffs.
      */
     std::vector<MetaDiff> gc() {
+        AutoLock lk(mu_);
         std::vector<MetaDiff> v;
         // Get clean diffs.
         for (const auto &p : mmap_) {
@@ -772,6 +767,7 @@ public:
                 v.push_back(d);
             }
         }
+
         // This is O(NlogN) algorithm if O(d.snapB.gidE - d.snapB.gidB) is constant.
         std::multimap<uint64_t, MetaDiff> m;
         for (const MetaDiff &d : v) {
@@ -802,13 +798,25 @@ public:
     /**
      * Clear all diffs.
      */
-    void clear() {
+    DEPRECATED void clear() {
+        AutoLock lk(mu_);
         mmap_.clear();
+    }
+    /**
+     * Clear and add diffs.
+     */
+    void reset(const std::vector<MetaDiff> &v) {
+        AutoLock lk(mu_);
+        mmap_.clear();
+        for (const MetaDiff &d : v) {
+            addNolock(d);
+        }
     }
     /**
      * Erase all diffs whose snapE.gidE is not greater than a specified gid.
      */
     std::vector<MetaDiff> eraseBeforeGid(uint64_t gid) {
+        AutoLock lk(mu_);
         std::vector<MetaDiff> v;
         auto it = mmap_.begin();
         while (it != mmap_.end()) {
@@ -837,6 +845,7 @@ public:
      * where all the diffs satisfy a specified predicate.
      */
     std::vector<MetaDiff> getMergeableDiffList(uint64_t gid, const std::function<bool(const MetaDiff &)> &pred) const {
+        AutoLock lk(mu_);
         std::vector<MetaDiff> v = getFirstDiffs(gid);
         if (v.empty()) return {};
         MetaDiff diff = getMaxProgressDiff(v);
@@ -861,6 +870,7 @@ public:
      * where all the diffs and applied snapshot satisfy a specified predicate.
      */
     std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &, const MetaSnap &)> &pred) const {
+        AutoLock lk(mu_);
         MetaSnap s = snap;
         std::vector<MetaDiff> v;
         for (;;) {
@@ -910,8 +920,12 @@ public:
      * @st base state.
      */
     MetaSnap getLatestSnapshot(const MetaState &st) const {
-        auto v0 = getMinimumApplicableDiffList(st);
-        auto v1 = getApplicableDiffList(st.snapB);
+        std::vector<MetaDiff> v0, v1;
+        {
+            AutoLock lk(mu_);
+            v0 = getMinimumApplicableDiffList(st);
+            v1 = getApplicableDiffList(st.snapB);
+        }
         if (v1.size() < v0.size()) {
             throw cybozu::Exception("MetaDiffManager::getLatestSnapshot:size bug")
                 << v0.size() << v1.size();
@@ -938,8 +952,11 @@ public:
             ret.push_back(st.snapB.gidB);
         }
         std::vector<MetaDiff> v0, v1;
-        v0 = getMinimumApplicableDiffList(st);
-        v1 = getApplicableDiffList(st.snapB);
+        {
+            AutoLock lk(mu_);
+            v0 = getMinimumApplicableDiffList(st);
+            v1 = getApplicableDiffList(st.snapB);
+        }
         if (v1.size() < v0.size()) {
             throw cybozu::Exception("MetaDiffManager::getCleanSnapshotList:size bug")
                 << v0.size() << v1.size();
@@ -965,11 +982,15 @@ public:
      *   Empty vector means the clean snapshot can not be restored.
      */
     std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
-        std::vector<MetaDiff> ret = getApplicableDiffListByGid(st.snapB, gid);
-        if (ret.empty()) return ret;
+        std::vector<MetaDiff> ret, miniDiffList;
+        {
+            AutoLock lk(mu_);
+            ret = getApplicableDiffListByGid(st.snapB, gid);
+            if (ret.empty()) return ret;
 
-        const std::vector<MetaDiff> miniDiffList = getMinimumApplicableDiffList(st);
-        if (miniDiffList.size() > ret.size()) return {};
+            miniDiffList = getMinimumApplicableDiffList(st);
+            if (miniDiffList.size() > ret.size()) return {};
+        }
         const MetaState appliedSt = apply(st, ret);
         if (appliedSt.snapB.isClean() && appliedSt.snapB.gidB == gid) {
             return ret;
@@ -983,8 +1004,12 @@ public:
      *   Empty vector means there is no diff to apply.
      */
     std::vector<MetaDiff> getDiffListToApply(const MetaState &st, uint64_t timestamp) const {
-        std::vector<MetaDiff> ret = getApplicableDiffListByTime(st.snapB, timestamp);
-        const std::vector<MetaDiff> miniDiffList = getMinimumApplicableDiffList(st);
+        std::vector<MetaDiff> ret, miniDiffList;
+        {
+            AutoLock lk(mu_);
+            ret = getApplicableDiffListByTime(st.snapB, timestamp);
+            miniDiffList = getMinimumApplicableDiffList(st);
+        }
         if (miniDiffList.size() > ret.size()) return miniDiffList;
         return ret;
     }
@@ -996,6 +1021,7 @@ public:
             throw cybozu::Exception("MetaDiffManager::getAll:gid0 >= gid1")
                 << gid0 << gid1;
         }
+        AutoLock lk(mu_);
         std::vector<MetaDiff> v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
@@ -1010,6 +1036,25 @@ public:
         return v;
     }
 private:
+    void addNolock(const MetaDiff &diff) {
+        uint64_t b = diff.snapB.gidB;
+        uint64_t e = diff.snapB.gidE;
+
+        if (search(diff) != mmap_.end()) {
+            throw cybozu::Exception("MetaDiffManager::add:already exists") << diff;
+        }
+        mmap_.emplace(std::make_pair(b, e), diff);
+    }
+    void eraseNolock(const MetaDiff &diff, bool doesThrowError = false) {
+        auto it = search(diff);
+        if (it == mmap_.end()) {
+            if (doesThrowError) {
+                throw cybozu::Exception("MetaDiffManager::erase:not found") << diff;
+            }
+            return;
+        }
+        mmap_.erase(it);
+    }
     Key getKey(const MetaDiff &diff) const {
         return std::make_pair(diff.snapB.gidB, diff.snapB.gidE);
     }
