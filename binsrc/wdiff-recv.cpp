@@ -109,20 +109,20 @@ private:
             }
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 walb::diff::IoData io;
-                const walb::diff::RecordWrapConst rec(&packH.record(i));
-                io.set(rec.record());
-                if (rec.dataSize() == 0) {
-                    writer.writeDiff(rec.record(), {});
+                const walb_diff_record& rec = packH.record(i);
+                io.set(rec);
+                if (rec.data_size == 0) {
+                    writer.writeDiff(rec, {});
                     continue;
                 }
-                sock.read(io.rawData(), rec.dataSize());
+                sock.read(io.rawData(), rec.data_size);
                 if (!io.isValid()) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io");
                 }
-                if (io.calcChecksum() != rec.checksum()) {
+                if (io.calcChecksum() != rec.checksum) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
                 }
-                writer.writeDiff(rec.record(), io.forMove());
+                writer.writeDiff(rec, io.forMove());
             }
             ctrl.reset();
         }
