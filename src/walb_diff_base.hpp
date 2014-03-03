@@ -164,6 +164,107 @@ public:
     }
 };
 
+inline bool doesExistRec(const walb_diff_record& rec) {
+    return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
+}
+inline bool isAllZeroRec(const walb_diff_record& rec) {
+    return (rec.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
+}
+inline bool isDiscardRec(const walb_diff_record& rec) {
+    return (rec.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
+}
+inline bool isCompressedRec(const walb_diff_record& rec) {
+	return rec.compression_type != ::WALB_DIFF_CMPR_NONE;
+}
+inline bool isNormalRec(const walb_diff_record& rec) {
+    return !isAllZeroRec(rec) && !isDiscardRec(rec);
+}
+inline bool isValidRec(const walb_diff_record& rec) {
+    if (!doesExistRec(rec)) {
+        LOGd("Does not exist.\n");
+        return false;
+    }
+    if (!isNormalRec(rec)) {
+        if (isAllZeroRec(rec) && isDiscardRec(rec)) {
+            LOGd("allzero and discard flag is exclusive.\n");
+            return false;
+        }
+        return true;
+    }
+    if (::WALB_DIFF_CMPR_MAX <= rec.compression_type) {
+        LOGd("compression type is invalid.\n");
+        return false;
+    }
+    if (rec.io_blocks == 0) {
+        LOGd("ioBlocks() must not be 0 for normal IO.\n");
+        return false;
+    }
+    return true;
+}
+
+struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
+    void init() {
+        ::memset(this, 0, sizeof(walb_diff_record));
+        setExists();
+    }
+//    uint64_t ioAddress() const override { return io_address; }
+//    uint16_t ioBlocks() const override { return io_blocks; }
+    uint64_t endIoAddress() const { return io_address + io_blocks; }
+//    size_t rawSize() const override { return sizeof(struct walb_diff_record); }
+
+//    uint8_t compressionType() const { return record().compression_type; }
+    bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
+//    uint32_t dataOffset() const { return data_offset; }
+//    uint32_t dataSize() const { return data_size; }
+//    uint32_t checksum() const { return checksum; }
+
+    bool exists() const { return doesExistRec(*this); }
+    bool isAllZero() const { return isAllZeroRec(*this); }
+    bool isDiscard() const { return isDiscardRec(*this); }
+    bool isNormal() const { return isNormalRec(*this); }
+    bool isValid() const { return isValidRec(*this); }
+
+    void print(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "----------\n"
+                  "ioAddress: %" PRIu64 "\n"
+                  "ioBlocks: %u\n"
+                  "compressionType: %u\n"
+                  "dataOffset: %u\n"
+                  "checksum: %08x\n"
+                  "exists: %d\n"
+                  "isAllZero: %d\n"
+                  "isDiscard: %d\n",
+                  io_address, io_blocks,
+                  compression_type, data_offset,
+                  checksum, exists(), isAllZero(), isDiscard());
+    }
+    void printOneline(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%08x\t%d%d%d\n",
+                  io_address, io_blocks,
+                  compression_type, data_offset,
+                  checksum, exists(), isAllZero(), isDiscard());
+    }
+
+    void setExists() {
+        flags |= WALB_DIFF_FLAG(EXIST);
+    }
+    void clearExists() {
+        flags &= ~WALB_DIFF_FLAG(EXIST);
+    }
+    void setNormal() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setAllZero() {
+        flags |= WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setDiscard() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags |= WALB_DIFF_FLAG(DISCARD);
+    }
+};
+
 template <class RecT>
 class RecordWrapT : public Record
 {
@@ -323,11 +424,10 @@ struct IoWrap
 
     bool empty() const { return ioBlocks == 0; }
 
-    void set0(const walb_diff_record &rec0) {
-        const RecordWrapConst rec(&rec0);
-        if (rec.isNormal()) {
-            ioBlocks = rec.ioBlocks();
-            compressionType = rec.compressionType();
+    void set0(const walb_diff_record &rec) {
+        if (isNormalRec(rec)) {
+            ioBlocks = rec.io_blocks;
+            compressionType = rec.compression_type;
         } else {
             ioBlocks = 0;
             compressionType = ::WALB_DIFF_CMPR_NONE;

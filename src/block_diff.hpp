@@ -69,6 +69,54 @@ private:
     }
 };
 
+template<class T>
+struct BlockDiffKey2 : public T
+{
+public:
+    int compare(const BlockDiffKey2 &rhs) const {
+        int c = compareInt(T::io_address, rhs.io_address);
+        if (c == 0) {
+            return compareInt(T::io_blocks, rhs.io_blocks);
+        } else {
+            return c;
+        }
+    }
+    bool operator==(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) == 0;
+    }
+    bool operator<(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) < 0;
+    }
+    bool operator!=(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) != 0;
+    }
+    bool operator<=(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) <= 0;
+    }
+    bool operator>(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) > 0;
+    }
+    bool operator>=(const BlockDiffKey2 &rhs) const {
+        return compare(rhs) < 0;
+    }
+    bool isOverlapped(const BlockDiffKey2 &rhs) const {
+        return T::io_address < rhs.io_address + rhs.io_blocks &&
+            rhs.io_address < T::io_address + T::io_blocks;
+    }
+
+    bool isOverwrittenBy(const BlockDiffKey2 &rhs) const {
+        return rhs.io_address <= T::io_address &&
+            T::io_address + T::io_blocks <= rhs.io_address + rhs.io_blocks;
+    }
+
+private:
+    template <typename IntType>
+    static int compareInt(IntType a, IntType b) {
+        if (a == b) { return 0; }
+        return a < b ? -1 : 1;
+    }
+};
+
 /**
  * Block diff value interface.
  */
