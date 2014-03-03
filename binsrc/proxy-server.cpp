@@ -103,7 +103,10 @@ void initializeProxy(Option &opt)
     // For each volume:
     //   If opt.stop is true, set stopped state for the volume.
     //   Otherwise, set started state for the volume and enqueue a background task.
+    //   If master/*.wdiff exist,
+    //   check they have been copied to the each archive directory.
 
+    // Prepare a task queue.
     // Start a task dispatch thread.
 
     // QQQ

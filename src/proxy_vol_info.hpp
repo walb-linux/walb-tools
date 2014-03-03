@@ -6,6 +6,7 @@
 #include "file_path.hpp"
 #include "host_info.hpp"
 #include "meta.hpp"
+#include "state_map.hpp"
 
 namespace walb {
 
@@ -31,16 +32,20 @@ class ProxyVolInfo
 private:
     const cybozu::FilePath volDir_;
     const std::string volId_;
-    //mutable WalbDiffFiles wdiffs_;
+
+    MetaDiffManager &diffMgr_;
+    StateMap<MetaDiffManager> &diffMgrMap_;
 
 public:
     /**
      * @baseDirStr base directory path string.
      * @volId volume identifier.
      */
-    ProxyVolInfo(const std::string &baseDirStr, const std::string &volId)
+    ProxyVolInfo(const std::string &baseDirStr, const std::string &volId,
+                 MetaDiffManager &diffMgr, StateMap<MetaDiffManager> &diffMgrMap)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
-        , volId_(volId) {
+        , volId_(volId)
+        , diffMgr_(diffMgr), diffMgrMap_(diffMgrMap) {
         // QQQ
     }
     /**

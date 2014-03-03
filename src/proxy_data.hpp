@@ -46,25 +46,27 @@ class ProxyData
 private:
     cybozu::FilePath baseDir_; /* base directory. */
     std::string name_; /* volume identifier. */
+    MetaDiffManager diffMgr_;
     WalbDiffFiles wdiffs_; /* primary wdiff data. */
     std::map<std::string, HostInfo> serverMap_;
+    std::map<std::string, MetaDiffManager> diffMgrMap_;
     std::map<std::string, WalbDiffFiles> wdiffsMap_; /* server wdiff data. */
-    std::mutex mutex_;
 
 public:
     ProxyData(const std::string &baseDirStr, const std::string &name)
         : baseDir_(baseDirStr)
         , name_(name)
-        , wdiffs_(getMasterDir().str())
+        , diffMgr_()
+        , wdiffs_(diffMgr_, getMasterDir().str())
         , serverMap_()
-        , wdiffsMap_()
-        , mutex_() {
+        , diffMgrMap_()
+        , wdiffsMap_() {
         if (!baseDir_.stat().isDirectory()) {
             throw std::runtime_error("Does not exist: " + baseDir_.str());
         }
         mkdirIfNotExists(getDir());
         mkdirIfNotExists(getServerDir());
-        wdiffs_.reloadMetadata();
+        wdiffs_.reload();
         reloadServerRecords();
     }
     const WalbDiffFiles &getWdiffFiles() const {
@@ -222,11 +224,16 @@ private:
     void emplace(const std::string &name, const HostInfo &server) {
         cybozu::FilePath dp = getServerDir(name);
         auto res0 = serverMap_.emplace(name, server);
-        auto res1 = wdiffsMap_.emplace(
+        auto res1 = diffMgrMap_.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(name),
-            std::forward_as_tuple(dp.str()));
-        if (!res0.second || !res1.second) {
+            std::forward_as_tuple());
+        MetaDiffManager &mgr = res1.first->second;
+        auto res2 = wdiffsMap_.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(name),
+            std::forward_as_tuple(mgr, dp.str()));
+        if (!res0.second || !res1.second || !res2.second) {
             throw std::runtime_error("map emplace failed.");
         }
     }
