@@ -27,14 +27,14 @@ struct ArchiveVolState
     std::recursive_mutex mu;
     std::atomic<int> stopState;
     StateMachine sm;
-    ActionCounters actionCounters;
+    ActionCounters ac;
 
     MetaDiffManager diffMgr;
 
     explicit ArchiveVolState(const std::string& volId)
         : stopState(NotStopping)
         , sm(mu)
-        , actionCounters(mu)
+        , ac(mu)
         , diffMgr() {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
@@ -124,10 +124,10 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     }
 }
 
-inline void checkNoActionRunning(const std::string &volId, const char *msg)
+inline void verifyNoActionRunning(const std::string &volId, const char *msg)
 {
-    ActionCounters &actionCounters = getArchiveVolState(volId).actionCounters;
-    std::vector<int> v = actionCounters.getValues({aMerge, aApply, aRestore, aReplSync});
+    ActionCounters &ac = getArchiveVolState(volId).ac;
+    std::vector<int> v = ac.getValues({aMerge, aApply, aRestore, aReplSync});
     assert(v.size() == 4);
     if (!std::all_of(v.begin(), v.end(), [](int i) { return i == 0; })) {
         throw cybozu::Exception(msg)
@@ -154,7 +154,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    checkNoActionRunning(volId, "c2aInitVolServer");
+    verifyNoActionRunning(volId, "c2aInitVolServer");
     {
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, "c2ainitVolServer");
         ul.unlock();
@@ -174,7 +174,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    checkNoActionRunning(volId, "c2aClearVolServer");
+    verifyNoActionRunning(volId, "c2aClearVolServer");
     StateMachine &sm = volSt.sm;
     const std::string &currSt = sm.get(); // Stopped or SyncReady.
     {
@@ -201,7 +201,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 1, "c2aStopServer", false);
     const std::string &volId = v[0];
 
-    checkNoActionRunning(volId, "c2aStartServer");
+    verifyNoActionRunning(volId, "c2aStartServer");
     StateMachine &sm = getArchiveVolState(volId).sm;
     {
         StateMachineTransaction tran(sm, aStopped, atStart, "c2aStartServer");
@@ -242,7 +242,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
     StateMachine &sm = volSt.sm;
 
     util::waitUntil(ul, [&]() {
-            bool go = volSt.actionCounters.isAllZero({aMerge, aApply, aRestore, aReplSync});
+            bool go = volSt.ac.isAllZero({aMerge, aApply, aRestore, aReplSync});
             if (go) {
                 const std::string &st = sm.get();
                 go = st == atHashSync || st == atWdiffRecv || st == atFullSync;
@@ -293,7 +293,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         throw cybozu::Exception("x2aDirtyFullSyncServer:bulkLb is zero");
     }
 
-    checkNoActionRunning(volId, "x2aDirtyFullSyncServer");
+    verifyNoActionRunning(volId, "x2aDirtyFullSyncServer");
     ArchiveVolState &volSt = getArchiveVolState(volId);
 
     if (volSt.stopState != NotStopping) {
@@ -401,7 +401,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         throw e;
     }
 
-    ActionCounterTransaction tran(volSt.actionCounters, volId);
+    ActionCounterTransaction tran(volSt.ac, volId);
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
@@ -432,7 +432,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volId, FUNC_NAME);
-    checkNoActionRunning(volId, FUNC_NAME);
+    verifyNoActionRunning(volId, FUNC_NAME);
     {
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
