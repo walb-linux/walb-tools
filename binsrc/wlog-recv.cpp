@@ -128,8 +128,9 @@ private:
                 log::BlockDataVec blockD(pbs);
                 receiver.popIo(packH.header(), i, blockD);
                 const log::RecordWrapConst lrec(&packH, i);
-                const log::PackIoWrapConst packIo(&lrec, &blockD);
-                if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
+                if (!isValidRecordAndBlockData(lrec, blockD)) {
+                    throw cybozu::Exception("recvAndWriteLogs:bad lrec blockD");
+                }
                 if (lrec.isPadding()) blockD.resize(lrec.ioSizePb());
                 logger.debug("write IO %zu %zu", i, blockD.nBlocks());
                 writer.writePackIo(blockD);

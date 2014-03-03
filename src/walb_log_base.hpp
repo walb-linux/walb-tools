@@ -870,6 +870,7 @@ private:
     }
 };
 
+
 /**
  * Logpack record and IO data.
  * This is just a wrapper of a record and a block data.
@@ -962,10 +963,30 @@ public:
 };
 
 using PackIoWrap = PackIoWrapT<Record, BlockData>;
-/**
- * must use with const.
- */
-using PackIoWrapConst = PackIoWrapT<const Record, const BlockData>;
+
+inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
+{
+    const uint32_t salt = rec.salt();
+    if (blockD.nBlocks() < rec.ioSizePb()) {
+        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.") << blockD.nBlocks() << rec.ioSizePb();
+    }
+    return blockD.calcChecksum(rec.ioSizeLb(), salt);
+}
+
+inline bool isValidRecordAndBlockData(const Record& rec, const BlockData& blockD)
+{
+    if (!rec.isValid()) {
+        LOGd("invalid record.");
+        return false; }
+    if (!rec.hasDataForChecksum()) return true;
+    const uint32_t checksum = calcIoChecksum(rec, blockD);
+    if (checksum != rec.record().checksum) {
+        LOGd("invalid checksum expected %08x calculated %08x."
+             , rec.record().checksum, checksum);
+        return false;
+    }
+    return true;
+}
 
 /**
  * Logpack record and IO data.

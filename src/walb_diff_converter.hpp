@@ -28,8 +28,6 @@ namespace walb {
 /**
  * Convert a logpack data to a diff data.
  *
- * PackIo: PackIoWrapConst, PackIoWrap, or PackIoRaw<>.
- *
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.

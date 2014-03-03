@@ -385,8 +385,9 @@ public:
                     blocks.pop();
                 }
             }
-            const PackIoWrapConst packIo(&rec, &blockD);
-            if (!packIo.isValid()) throw RT_ERR("packIo invalid.");
+            if (!isValidRecordAndBlockData(rec, blockD)) {
+                throw cybozu::Exception("writePack:invalid rec/blockD");
+            }
             v.push_back(std::move(blockD));
         }
         assert(v.size() == header.nRecords());
