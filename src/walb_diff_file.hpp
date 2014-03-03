@@ -173,11 +173,10 @@ public:
     }
     void writeDiff(const walb_diff_record &rec0, std::vector<char> &&data0) {
         checkWrittenHeader();
-        const RecordWrapConst rec(&rec0);
         IoData io;
         io.set(rec0);
         io.moveFrom(std::move(data0));
-        check(rec, io);
+        check(rec0, io);
 
         /* Try to add. */
         if (pack_.add(rec0)) {
@@ -199,16 +198,15 @@ public:
      * @data IO data.
      */
     void compressAndWriteDiff(const walb_diff_record &rec, const char *data) {
-        const RecordWrapConst rec0(&rec);
-        if (rec0.isCompressed()) {
+        if (isCompressedRec(rec)) {
             writeDiff(rec, data);
             return;
         }
         IoWrap io0;
-        io0.set(rec, data, rec0.dataSize());
-        check(rec0, io0);
+        io0.set(rec, data, rec.data_size);
+        check(rec, io0);
 
-        if (!rec0.isNormal()) {
+        if (!isNormalRec(rec)) {
             assert(io0.empty());
             writeDiff(rec, {});
             return;
@@ -266,25 +264,10 @@ private:
         }
     }
 private:
-    /**
-     * Check record and IO pair.
-     */
-    void check(UNUSED const RecordWrapConst &rec, UNUSED const IoWrap &io) const {
-        assert(rec.isValid());
-        assert(io.isValid());
-        assert(rec.dataSize() == io.size);
-        if (rec.isNormal()) {
-            assert(rec.compressionType() == io.compressionType);
-            assert(rec.ioBlocks() == io.ioBlocks);
-            assert(rec.checksum() == io.calcChecksum());
-        } else {
-            assert(io.empty());
-        }
-    }
     void check(UNUSED const walb_diff_record &rec, UNUSED const IoWrap &io) const {
         assert(isValidRec(rec));
         assert(io.isValid());
-        assert(sizeof(rec) == io.size);
+        assert(rec.data_size == io.size);
         if (isNormalRec(rec)) {
             assert(rec.compression_type == io.compressionType);
             assert(rec.io_blocks == io.ioBlocks);
@@ -389,7 +372,7 @@ public:
         if (!rec.isValid()) {
 #ifdef DEBUG
             rec.print(::stderr);
-            const RecordWrapConst rec1(&pack_.record(recIdx_));
+            const Rec& rec1 = static_cast<const Rec&>(pack_.record(recIdx_));
             rec1.print(::stderr);
 #endif
             throw RT_ERR("Invalid record.");

@@ -338,10 +338,10 @@ public:
         uint32_t dataOffset = 0;
         for (size_t i = 0; i < pack_.nRecords(); i++) {
             /* Copy each IO data. */
-            const RecordWrapConst rec(&pack_.record(i));
-            uint32_t dataSize = rec.dataSize();
-            assert(rec.dataOffset() == dataOffset);
-            if (rec.isNormal()) {
+            const walb_diff_record& rec = pack_.record(i);
+            uint32_t dataSize = rec.data_size;
+            assert(rec.data_offset == dataOffset);
+            if (isNormalRec(rec)) {
                 assert(0 < dataSize);
                 ::memcpy(p, data(i), dataSize);
                 p += dataSize;
@@ -403,20 +403,19 @@ public:
         }
         return add(rec.record(), data);
     }
-    bool add(const struct walb_diff_record &rec0, const char *data) {
-        const RecordWrapConst rec(&rec0);
-        assert(rec.isValid());
-        size_t dSize = rec.dataSize();
+    bool add(const struct walb_diff_record &rec, const char *data) {
+        assert(isValidRec(rec));
+        size_t dSize = rec.data_size;
         if (!packh_.canAdd(dSize)) return false;
 
-        bool isNormal = rec.isNormal();
+        bool isNormal = isNormalRec(rec);
 #ifdef WALB_DEBUG
         if (isNormal) {
-            assert(rec.checksum() == cybozu::util::calcChecksum(data, dSize, 0));
+            assert(rec.checksum == cybozu::util::calcChecksum(data, dSize, 0));
         }
 #endif
         /* r must be true because we called canAdd() before. */
-        bool r = packh_.add(rec0);
+        bool r = packh_.add(rec);
         if (r && isNormal) extendAndCopy(data, dSize);
         return r;
     }
