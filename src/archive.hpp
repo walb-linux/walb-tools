@@ -136,6 +136,16 @@ inline void checkNoActionRunning(const std::string &volId, const char *msg)
     }
 }
 
+inline void verifyNotStopping(const std::string &volId, const char *msg)
+{
+    int stopState = getArchiveVolState(volId).stopState;
+    if (stopState != NotStopping) {
+        cybozu::Exception e(msg);
+        e << "must be NotStopping" << volId << stopState;
+        throw e;
+    }
+}
+
 inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const std::vector<std::string> v =
@@ -404,6 +414,31 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     }
 
     pkt.write("ok");
+}
+
+/**
+ * params[0]: volId.
+ *
+ * !!!CAUSION!!!
+ * This is for test and debug.
+ */
+inline void c2aReloadMetadataServer(protocol::ServerParams &p)
+{
+    const char * const FUNC_NAME = "c2aReloadMetadataServer";
+    const std::vector<std::string> v =
+        protocol::recvStrVec(p.sock, 1, FUNC_NAME, false);
+    const std::string &volId = v[0];
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volId, FUNC_NAME);
+    checkNoActionRunning(volId, FUNC_NAME);
+    {
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
+        wdiffs.reload();
+    }
+    packet::Ack(p.sock).send();
 }
 
 /**

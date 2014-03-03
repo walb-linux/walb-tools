@@ -138,4 +138,15 @@ inline void c2sSnapshotClient(protocol::ClientParams &/*p*/)
     // QQQ
 }
 
+/**
+ * params[0]: volId.
+ *
+ * !!!CAUSION!!!
+ * THis is for test and debug.
+ */
+inline void c2aReloadMetadataClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 1, "c2aReloadMetadataClient");
+}
+
 } // namespace walb

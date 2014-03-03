@@ -56,6 +56,7 @@ void runClient(Option &opt)
         { "stop", c2xStopClient },
         { "archive-info", c2pArchiveInfoClient },
         { "snapshot", c2sSnapshotClient },
+        { "dbg-reload-metadata", c2aReloadMetadataClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
 }

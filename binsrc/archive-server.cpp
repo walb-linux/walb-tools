@@ -45,6 +45,7 @@ public:
             { "dirty-full-sync", x2aDirtyFullSyncServer },
             { "restore", c2aRestoreServer },
             { "wdiff-transfer", x2aWdiffTransferServer },
+            { "dbg-reload-metadata", c2aReloadMetadataServer },
         };
         protocol::serverDispatch(
             sock_, nodeId_, forceQuit_, procStat_, h);
