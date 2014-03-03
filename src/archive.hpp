@@ -29,10 +29,13 @@ struct ArchiveVolState
     StateMachine sm;
     ActionCounters actionCounters;
 
+    MetaDiffManager diffMgr;
+
     explicit ArchiveVolState(const std::string& volId)
         : stopState(NotStopping)
         , sm(mu)
-        , actionCounters(mu) {
+        , actionCounters(mu)
+        , diffMgr() {
         const struct StateMachine::Pair tbl[] = {
             { aClear, atInitVol },
             { atInitVol, aSyncReady },
@@ -85,9 +88,11 @@ const ArchiveSingleton& ga = getArchiveGlobal();
 
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, diffMgr);
     if (volInfo.existsVolDir()) {
         sm.set(volInfo.getState());
+        WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());
+        wdiffs.reload();
     } else {
         sm.set(aClear);
     }
@@ -111,7 +116,9 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     } else {
         // for a volume
         const std::string &volId = params[0];
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
+                               getArchiveVolState(volId).diffMgr);
         pkt.write("ok");
         pkt.write(volInfo.getStatusAsStrVec());
     }
@@ -141,7 +148,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
     {
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, "c2ainitVolServer");
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.init();
         tran.commit(aSyncReady);
     }
@@ -163,7 +170,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
     {
         StateMachineTransaction tran(sm, currSt, atClearVol, "c2aClearVolServer");
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.clear();
         tran.commit(aClear);
     }
@@ -188,7 +195,8 @@ inline void c2aStartServer(protocol::ServerParams &p)
     StateMachine &sm = getArchiveVolState(volId).sm;
     {
         StateMachineTransaction tran(sm, aStopped, atStart, "c2aStartServer");
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
+                               getArchiveVolState(volId).diffMgr);
         const std::string st = volInfo.getState();
         if (st != aStopped) {
             throw cybozu::Exception("c2aStartServer:not Stopped state") << st;
@@ -241,7 +249,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
 
     StateMachineTransaction tran(sm, aArchived, atStop, "c2aStopServer");
     ul.unlock();
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     const std::string fst = volInfo.getState();
     if (fst != aArchived) {
         throw cybozu::Exception("c2aStopServer:not Archived state") << fst;
@@ -289,7 +297,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     {
         StateMachineTransaction tran(sm, aSyncReady, atFullSync, "x2aDirtyFullSyncServer");
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         const std::string st = volInfo.getState();
         if (st != aSyncReady) {
             throw cybozu::Exception("x2aDirtyFullSyncServer:state is not SyncReady") << st;
@@ -385,7 +393,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 
     ActionCounterTransaction tran(volSt.actionCounters, volId);
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
     // TODO: volinfo.restore(gid, volSt.forceStop, p.forceQuit);
     if (!volInfo.restore(gid)) {

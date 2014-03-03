@@ -2,7 +2,7 @@
 #include <cassert>
 #include <map>
 #include <vector>
-#include <deque>
+#include <mutex>
 #include <time.h>
 #include "cybozu/serializer.hpp"
 #include "cybozu/file.hpp"
@@ -19,9 +19,24 @@
 
 namespace walb {
 
+inline std::vector<MetaDiff> loadWdiffMetadata(const std::string &dirPath)
+{
+    std::vector<MetaDiff> ret;
+    std::vector<cybozu::FileInfo> list;
+    if (!cybozu::GetFileList(list, dirPath, "wdiff")) {
+        throw std::runtime_error("GetFileList failed.");
+    }
+    for (cybozu::FileInfo &info : list) {
+        if (info.name == "." || info.name == ".." || !info.isFile)
+            continue;
+        MetaDiff diff = parseDiffFileName(info.name);
+        ret.push_back(diff);
+    }
+    return ret;
+}
+
 /**
  * Manager for walb diff files.
- * This is not thread-safe.
  *
  * Wdiff files:
  *   See meta.hpp for wdiff file name format.
@@ -29,19 +44,13 @@ namespace walb {
 class WalbDiffFiles
 {
 private:
-    cybozu::FilePath dir_;
-    MetaDiffManager mgr_;
+    MetaDiffManager &mgr_; // thread-safe.
+    const cybozu::FilePath dir_;
 
 public:
-    /**
-     * @dirStr a directory that contains wdiff files.
-     * @isContiguous:
-     *   true for server data. must be contiguous.
-     *   false for proxy data. must not be contiguous but newer.
-     */
-    explicit WalbDiffFiles(const std::string &dirStr, bool doMakeDir = true)
-        : dir_(dirStr), mgr_() {
-        if (doMakeDir) walb::util::makeDir(dir_.str(), "WalbDiffFiles");
+    WalbDiffFiles(MetaDiffManager &mgr, const std::string &dirStr, bool doesMakeDir = false)
+        : mgr_(mgr), dir_(dirStr) {
+        if (doesMakeDir) walb::util::makeDir(dir_.str(), "WalbDiffFiles");
     }
     DISABLE_COPY_AND_ASSIGN(WalbDiffFiles);
     DISABLE_MOVE(WalbDiffFiles);
@@ -142,23 +151,8 @@ public:
      * searching "*.wdiff" files.
      * It's heavy operation.
      */
-    void reloadMetadata() {
-        std::vector<MetaDiff> v;
-        std::vector<cybozu::FileInfo> list;
-        if (!cybozu::GetFileList(list, dir_.str(), "wdiff")) {
-            throw std::runtime_error("GetFileList failed.");
-        }
-        for (cybozu::FileInfo &info : list) {
-            if (info.name == "." || info.name == ".." || !info.isFile)
-                continue;
-            MetaDiff diff = parseDiffFileName(info.name);
-            v.push_back(diff);
-        }
-
-        mgr_.clear();
-        for (const MetaDiff &diff : v) {
-            mgr_.add(diff);
-        }
+    void reload() {
+        mgr_.reset(loadWdiffMetadata(dir_.str()));
     }
     const cybozu::FilePath &dirPath() const {
         return dir_;

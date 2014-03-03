@@ -46,11 +46,12 @@ const char *const atStart = "Start";
  */
 class ArchiveVolInfo
 {
+public:
+    const cybozu::FilePath volDir;
 private:
-    const cybozu::FilePath volDir_;
     const std::string vgName_;
     const std::string volId_;
-    mutable WalbDiffFiles wdiffs_;
+    WalbDiffFiles wdiffs_;
 
 public:
     /**
@@ -59,11 +60,11 @@ public:
      * @vgName volume group name.
      */
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
-                   const std::string &vgName)
-        : volDir_(cybozu::FilePath(baseDirStr) + volId)
+                   const std::string &vgName, MetaDiffManager &diffMgr)
+        : volDir(cybozu::FilePath(baseDirStr) + volId)
         , vgName_(vgName)
         , volId_(volId)
-        , wdiffs_(volDir_.str(), false) {
+        , wdiffs_(diffMgr, volDir.str()) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
             throw cybozu::Exception("ArchiveVolInfo:Directory not found: " + baseDirStr);
@@ -74,12 +75,9 @@ public:
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
         }
-        if (existsVolDir()) {
-            wdiffs_.reloadMetadata();
-        }
     }
     void init() {
-        util::makeDir(volDir_.str(), "ArchiveVolInfo::init", true);
+        util::makeDir(volDir.str(), "ArchiveVolInfo::init", true);
         setUuid(cybozu::Uuid());
         setMetaState(MetaState());
         setState(aSyncReady);
@@ -94,24 +92,27 @@ public:
         if (lvExists()) {
             getLv().remove();
         }
-        if (!volDir_.rmdirRecursive()) {
+        wdiffs_.clearDir();
+#if 0 // wdiffs_.clearDir() includes the following operation.
+        if (!volDir.rmdirRecursive()) {
             throw cybozu::Exception("ArchiveVolInfo::clear:rmdir recursively failed.");
         }
+#endif
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;
-        util::loadFile(volDir_, "uuid", uuid);
+        util::loadFile(volDir, "uuid", uuid);
         return uuid;
     }
     void setUuid(const cybozu::Uuid &uuid) {
-        util::saveFile(volDir_, "uuid", uuid);
+        util::saveFile(volDir, "uuid", uuid);
     }
     void setMetaState(const MetaState &st) {
-        util::saveFile(volDir_, "base", st);
+        util::saveFile(volDir, "base", st);
     }
     MetaState getMetaState() const {
         MetaState st;
-        util::loadFile(volDir_, "base", st);
+        util::loadFile(volDir, "base", st);
         return st;
     }
     void setState(const std::string& newState)
@@ -121,7 +122,7 @@ public:
         };
         for (const char *p : tbl) {
             if (newState == p) {
-                util::saveFile(volDir_, "state", newState);
+                util::saveFile(volDir, "state", newState);
                 return;
             }
         }
@@ -129,7 +130,7 @@ public:
     }
     std::string getState() const {
         std::string st;
-        util::loadFile(volDir_, "state", st);
+        util::loadFile(volDir, "state", st);
         return st;
     }
     bool existsVolDir() const {
@@ -200,7 +201,6 @@ public:
                 if (!op.open(getDiffPath(diff).str(), O_RDONLY)) {
                     retryNum++;
                     if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
-                    wdiffs_.reloadMetadata();
                     ops.clear();
                     goto retry;
                 }
@@ -261,12 +261,15 @@ public:
 
         MetaState st2 = walb::apply(st0, metaDiffList);
         setMetaState(st2);
+
+        // QQQ
+        // Remove applied wdiff files.
+
         return true;
     }
     std::vector<std::string> getStatusAsStrVec() const {
         std::vector<std::string> v;
         auto &fmt = cybozu::util::formatString;
-        wdiffs_.reloadMetadata();
 
         v.push_back(fmt("volId %s", volId_.c_str()));
         uint64_t sizeLb = 0; // TODO
@@ -321,7 +324,7 @@ private:
      * Full path of the wdiff file of a corresponding meta diff.
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
-        return volDir_ + cybozu::FilePath(createDiffFileName(diff));
+        return volDir + cybozu::FilePath(createDiffFileName(diff));
     }
 #if 0 // XXX
     /**
@@ -341,14 +344,6 @@ private:
         }
         lv.resize(newSizeLb);
     }
-    bool initialized() const {
-        /* now editing */
-        return false;
-    }
-    const WalbDiffFiles &diffs() const {
-        assert(wdiffsP_);
-        return *wdiffsP_;
-    }
     /**
      * Get restored snapshots.
      */
@@ -364,45 +359,6 @@ private:
             }
         }
         return map;
-    }
-    /**
-     * Get the latest snapshot which may be dirty.
-     * RETURN:
-     *   meta snap of the latest snapshot.
-     */
-    MetaSnap getLatestSnapshot() const {
-#if 0
-        std::vector<MetaDiff> v = wdiffsP_->listDiff();
-        return v.empty() ? baseRecord_ : getSnapFromDiff(v.last());
-#else
-        return wdiffsP_->latest();
-#endif
-    }
-    /**
-     * Get the oldest snapshot which may be dirty.
-     * RETURN:
-     *   meta snap of the oldest snapshot.
-     */
-    MetaSnap getOldestSnapshot() const {
-        return baseRecord_;
-    }
-    /**
-     * Get the latest clean snapshot.
-     *
-     * RETURN:
-     *   gid that means the latest clean snapshot.
-     *   uint64_t(-1) means that there is no clean snapshot.
-     */
-    uint64_t getLatestCleanSnapshot() const {
-        std::vector<MetaDiff> v = wdiffsP_->listDiff();
-        auto it = v.crbegin();
-        while (it != v.crend()) {
-            const MetaDiff &diff = *it;
-            if (diff.isClean()) return diff.snap1().gid0();
-            ++it;
-        }
-        if (baseRecord_.isClean()) return baseRecord_.gid0();
-        return uint64_t(-1);
     }
     template <typename OutputStream>
     void print(OutputStream &os) const {
@@ -433,7 +389,7 @@ private:
         }
         os << "----------end----------" << std::endl;
     }
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         std::stringstream ss;
         print(ss);
         std::string s(ss.str());
@@ -441,47 +397,6 @@ private:
             throw cybozu::Exception("fwrite failed.");
         }
         ::fflush(fp);
-    }
-    void print() const { print(::stdout); }
-    /**
-     * Create a restore volume as a snapshot.
-     * You must apply diff(s) by yourself.
-     *
-     * @gid restored snapshot will indicates the gid.
-     */
-    bool restore(uint64_t gid = uint64_t(-1)) {
-        if (gid == uint64_t(-1)) {
-            gid = getLatestCleanSnapshot();
-            if (gid == uint64_t(-1)) return false;
-        }
-        ::printf("target restore gid %" PRIu64 "\n", gid); /* debug */
-        if (!canRestore(gid)) return false;
-        std::string snapName = restoredSnapshotName(gid);
-        if (getLv().hasSnapshot(snapName)) return false;
-        cybozu::lvm::Lv snap = getLv().takeSnapshot(snapName);
-        return snap.exists();
-    }
-    /**
-     * Whether a specified gid can be restored.
-     * That means wdiffs has the clean snaphsot for the gid.
-     */
-    bool canRestore(uint64_t gid) const {
-        ::printf("canRestore begin\n"); /* debug */
-        MetaSnap snap = baseRecord_;
-        snap.print(); /* debug */
-        for (const MetaDiff &diff : wdiffsP_->listDiff()) {
-            if (diff.snap0().gid0() < snap.gid0()) {
-                /* skip old diffs. */
-                continue;
-            }
-            if (gid < diff.snap1().gid0()) break;
-            diff.print(); /* debug */
-            assert(canApply(snap, diff));
-            snap = walb::apply(snap, diff);
-            snap.print(); /* debug */
-        }
-        ::printf("canRestore end\n"); /* debug */
-        return snap.isClean() && snap.gid0() == gid;
     }
     /**
      * Drop a restored snapshot.
@@ -493,54 +408,6 @@ private:
         }
         getLv().getSnapshot(snapName).remove();
         return true;
-    }
-    /**
-     * This is what to do for application.
-     * DO NOT CALL THIS really.
-     *
-     * Apply all diffs before gid into the original lv.
-     * Applied diff will be deleted after the application completed successfully.
-     */
-    void apply(uint64_t gid) {
-        throw cybozu::Exception("Do not call this.");
-
-        std::vector<MetaDiff> diffV = diffsToApply(gid);
-        if (diffV.empty()) return;
-        MetaDiff diff = diffV[0];
-        for (size_t i = 1; i < diffV.size(); i++) {
-            if (!canMerge(diff, diffV[i])) {
-                throw cybozu::Exception("could not merge.");
-            }
-            diff = merge(diff, diffV[i]);
-        }
-        std::vector<cybozu::FilePath> pathV;
-        for (MetaDiff &diff : diffV) {
-            pathV.push_back(getDiffPath(diff));
-        }
-
-        /*
-         * Try to open all files in the pathV.
-         */
-
-        startToApply(diff);
-
-        /*
-         * Apply the wdiff file indicated by the pathV.
-         */
-
-        finishToApply(diff);
-    }
-    /**
-     * @gid threshold gid. That indicates all diffs
-     * which gid1 is not greater than a specified gid.
-     *
-     * RETURN:
-     *   a list of meta diff to apply.
-     */
-    std::vector<MetaDiff> diffsToApply(uint64_t gid) {
-        MetaSnap oldest = getOldestSnapshot();
-        if (gid <= oldest.gid0()) return {};
-        return wdiffsP_->listDiff(oldest.gid0(), gid);
     }
     /**
      * Update the base record to be dirty to start wdiffs application.
@@ -569,85 +436,6 @@ private:
      */
     void add(const MetaDiff &diff) {
         if (!wdiffsP_->add(diff)) throw RT_ERR("diff add failed.");
-    }
-    /**
-     * Get wdiff candidates for consolidation.
-     * You must consolidate them by yourself.
-     * After consolidation completed,
-     * you must call finishToConsolidate(diff) where
-     * the diff is consolidate(returned diff list).
-     *
-     * @ts0, @ts1: timestamp range [ts0, ts1).
-     *
-     * RETURN:
-     *   Consolidate candidates whose average file size is the smallest.
-     *   canConsolidate(returned) must be true.
-     *   {} if there is no diffs to consolidate.
-     */
-    std::vector<MetaDiff> candidatesToConsolidate(uint64_t ts0, uint64_t ts1) const {
-        std::vector<MetaDiff> v;
-        std::vector<std::vector<MetaDiff> > vv;
-        std::vector<std::pair<uint64_t, uint64_t> > stat;
-        uint64_t total = 0;
-
-        auto insert = [&]() {
-            assert(!v.empty());
-            stat.emplace_back(total, v.size());
-            assert(canConsolidate(v));
-            vv.push_back(std::move(v));
-            v.clear();
-            total = 0;
-        };
-
-        /*
-         * Split wdiff file list where each list can be consolidated.
-         */
-        for (MetaDiff &diff : wdiffsP_->listDiffInTimeRange(ts0, ts1)) {
-            if (!v.empty() && !canMerge(v.back(), diff)) insert();
-            v.push_back(diff);
-            total += wdiffsP_->getDiffFileSize(diff);
-        }
-        if (!v.empty()) insert();
-        if (vv.empty()) return {};
-        assert(vv.size() == stat.size());
-        std::vector<double> avgV;
-        for (auto &pair : stat) {
-            avgV.push_back(double(pair.first) / double(pair.second));
-        }
-        assert(vv.size() == avgV.size());
-
-        /*
-         * Choose the wdiff list whose average size is the smallest.
-         */
-        size_t idx = 0;
-        double min = avgV[0];
-        while (vv[idx].size() == 1 && idx < avgV.size()) {
-            idx++;
-            min = avgV[idx];
-        }
-        if (idx == avgV.size()) return {};
-        for (size_t i = idx + 1; i < avgV.size(); i++) {
-            if (1 < vv[i].size() && avgV[i] < min) {
-                idx = i;
-                min = avgV[i];
-            }
-        }
-        if (1 < vv[idx].size()) {
-            return std::move(vv[idx]);
-        } else {
-            return {};
-        }
-    }
-    /**
-     * Finish to consolidate.
-     * (1) insert the corresponding meta diff.
-     * (2) delete dangling diffs.
-     */
-    void finishToConsolidate(const MetaDiff &diff) {
-        if (!wdiffsP_->consolidate(diff.snap0().gid0(), diff.snap1().gid0())) {
-            throw cybozu::Exception("Consolidate failed.");
-        }
-        wdiffsP_->cleanup();
     }
 private:
     cybozu::FilePath baseRecordPath() const {

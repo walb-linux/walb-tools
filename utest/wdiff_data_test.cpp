@@ -9,7 +9,8 @@ CYBOZU_TEST_AUTO(consolidate)
     cybozu::FilePath fp("test_wdiff_files_dir0");
     TestDirectory testDir(fp.str(), true);
 
-    walb::WalbDiffFiles diffFiles(fp.str());
+    walb::MetaDiffManager mgr;
+    walb::WalbDiffFiles diffFiles(mgr, fp.str());
     walb::MetaDiff diff;
     setDiff(diff, 0, 1, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     setDiff(diff, 1, 2, true);  diffFiles.add(diff); createDiffFile(diffFiles, diff);
@@ -52,7 +53,7 @@ CYBOZU_TEST_AUTO(consolidate)
     CYBOZU_TEST_EQUAL(diffFiles.listName().size(), 0);
 
     setDiff(diff, 5, 127, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
-    diffFiles.reloadMetadata();
+    diffFiles.reload();
     std::vector<walb::MetaDiff> diffV = diffFiles.listDiff();
     CYBOZU_TEST_EQUAL(diffV.size(), 1);
     CYBOZU_TEST_EQUAL(diffV[0].snapB.gidB, 5);
@@ -68,7 +69,8 @@ CYBOZU_TEST_AUTO(notCongiguous)
     cybozu::FilePath fp("test_wdiff_files_dir1");
     TestDirectory testDir(fp.str(), true);
 
-    walb::WalbDiffFiles diffFiles(fp.str());
+    walb::MetaDiffManager mgr;
+    walb::WalbDiffFiles diffFiles(mgr, fp.str());
     walb::MetaDiff diff;
     setDiff(diff, 0, 1, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
     setDiff(diff, 2, 3, false); diffFiles.add(diff); createDiffFile(diffFiles, diff);
