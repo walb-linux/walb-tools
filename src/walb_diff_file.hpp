@@ -199,15 +199,16 @@ public:
      * @data IO data.
      */
     void compressAndWriteDiff(const walb_diff_record &rec, const char *data) {
-        if (isCompressedRec(rec)) {
+        const RecordWrapConst rec0(&rec);
+        if (rec0.isCompressed()) {
             writeDiff(rec, data);
             return;
         }
         IoWrap io0;
-        io0.set(rec, data, sizeof(rec));
-        check(rec, io0);
+        io0.set(rec, data, rec0.dataSize());
+        check(rec0, io0);
 
-        if (!isNormalRec(rec)) {
+        if (!rec0.isNormal()) {
             assert(io0.empty());
             writeDiff(rec, {});
             return;

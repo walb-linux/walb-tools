@@ -174,7 +174,7 @@ inline bool isDiscardRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
 }
 inline bool isCompressedRec(const walb_diff_record& rec) {
-	return rec.compression_type != ::WALB_DIFF_CMPR_NONE;
+    return rec.compression_type != ::WALB_DIFF_CMPR_NONE;
 }
 inline bool isNormalRec(const walb_diff_record& rec) {
     return !isAllZeroRec(rec) && !isDiscardRec(rec);
