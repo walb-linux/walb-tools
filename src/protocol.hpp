@@ -54,17 +54,14 @@ struct ClientParams
 {
     cybozu::Socket &sock;
     ProtocolLogger &logger;
-    const std::atomic<bool> &forceQuit;
     const std::vector<std::string> &params;
 
     ClientParams(
         cybozu::Socket &sock0,
         ProtocolLogger &logger0,
-        const std::atomic<bool> &forceQuit0,
         const std::vector<std::string> &params0)
         : sock(sock0)
         , logger(logger0)
-        , forceQuit(forceQuit0)
         , params(params0) {
     }
 };
@@ -76,7 +73,7 @@ using ClientHandler = void (*)(ClientParams &);
 
 inline void clientDispatch(
     const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
-    const std::atomic<bool> &forceQuit, const std::vector<std::string> &params,
+    const std::vector<std::string> &params,
     const std::map<std::string, ClientHandler> &handlers)
 {
     if (protocolName == "force-shutdown" || protocolName == "graceful-shutdown") {
@@ -85,7 +82,7 @@ inline void clientDispatch(
     auto it = handlers.find(protocolName);
     if (it != handlers.cend()) {
         ClientHandler h = it->second;
-        ClientParams p(sock, logger, forceQuit, params);
+        ClientParams p(sock, logger, params);
         h(p);
     } else {
         throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;

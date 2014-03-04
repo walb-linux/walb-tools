@@ -41,7 +41,6 @@ void runClient(Option &opt)
 {
     cybozu::Socket sock;
     sock.connect(opt.addr, opt.port);
-    std::atomic<bool> forceQuit(false);
     std::string serverId = protocol::run1stNegotiateAsClient(
         sock, opt.ctrlId, opt.cmd);
     ProtocolLogger logger(opt.ctrlId, serverId);
@@ -58,7 +57,7 @@ void runClient(Option &opt)
         { "snapshot", c2sSnapshotClient },
         { "dbg-reload-metadata", c2aReloadMetadataClient },
     };
-    protocol::clientDispatch(opt.cmd, sock, logger, forceQuit, opt.params, h);
+    protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);
 }
 
 } // namespace walb
