@@ -47,8 +47,7 @@ public:
             { "wdiff-transfer", x2aWdiffTransferServer },
             { "dbg-reload-metadata", c2aReloadMetadataServer },
         };
-        protocol::serverDispatch(
-            sock_, nodeId_, forceQuit_, procStat_, h);
+        protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }
 };
 
@@ -106,10 +105,10 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeArchive(opt);
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
         return std::make_shared<ArchiveRequestWorker>(
-            std::move(sock), ga.nodeId, forceQuit, procStat);
+            std::move(sock), ga.nodeId, procStat);
     };
 
     server::MultiThreadedServer server(

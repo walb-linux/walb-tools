@@ -316,7 +316,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
                 uint64_t remainingLb = sizeLb;
                 while (0 < remainingLb) {
-                    if (volSt.stopState == ForceStopping || p.forceQuit) {
+                    if (volSt.stopState == ForceStopping || gs.forceQuit) {
                         logger.warn("c2sFullSyncServer:force stopped");
                         // TODO: stop monitoring.
                         return;

@@ -22,14 +22,14 @@
 #include "walb_diff_pack.hpp"
 #include "walb_diff_compressor.hpp"
 
-namespace walb {
-
 namespace local
 {
 std::string baseDirStr;
 } // local
 
-class WdiffRequestWorker : public walb::server::RequestWorker
+using namespace walb;
+
+class WdiffRequestWorker : public server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
@@ -49,7 +49,7 @@ public:
 
         std::string name; // not used
         cybozu::Uuid uuid;
-        walb::MetaDiff diff;
+        MetaDiff diff;
         uint16_t maxIoBlocks;
         packet.read(name);
         packet.read(uuid);
@@ -90,7 +90,7 @@ public:
 private:
     bool checkParams(Logger &logger,
         const std::string &name,
-        const walb::MetaDiff &diff) const {
+        const MetaDiff &diff) const {
 
         if (name.empty()) {
             logger.error("name is empty.");
@@ -100,15 +100,15 @@ private:
         return true;
     }
     void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger) {
-        walb::packet::StreamControl ctrl(sock);
+        packet::StreamControl ctrl(sock);
         while (ctrl.isNext()) {
-            walb::diff::PackHeader packH;
+            diff::PackHeader packH;
             sock.read(packH.rawData(), packH.rawSize());
             if (!packH.isValid()) {
                 logAndThrow(logger, "recvAndWriteDiffs:bad packH");
             }
             for (size_t i = 0; i < packH.nRecords(); i++) {
-                walb::diff::IoData io;
+                diff::IoData io;
                 const walb_diff_record& rec = packH.record(i);
                 io.set(rec);
                 if (rec.data_size == 0) {
@@ -137,8 +137,6 @@ private:
         throw cybozu::Exception(msg);
     }
 };
-
-} // namespace walb
 
 struct Option : cybozu::Option
 {
@@ -170,16 +168,16 @@ int main(int argc, char *argv[]) try
     if (!baseDir.stat().isDirectory()) {
         throw RT_ERR("%s is not directory.", baseDir.cStr());
     }
-    walb::local::baseDirStr = opt.baseDirStr;
+    local::baseDirStr = opt.baseDirStr;
 
     auto createReqWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ProcessStatus> &flag) {
-        return std::make_shared<walb::WdiffRequestWorker>(
-            std::move(sock), opt.nodeId, forceQuit, flag);
+        cybozu::Socket &&sock,
+        std::atomic<server::ProcessStatus> &flag) {
+        return std::make_shared<WdiffRequestWorker>(
+            std::move(sock), opt.nodeId, flag);
     };
     std::atomic<bool> forceQuit;
-    walb::server::MultiThreadedServer server(forceQuit, 1);
+    server::MultiThreadedServer server(forceQuit, 1);
     server.run(opt.port, createReqWorker);
     return 0;
 } catch (std::exception &e) {

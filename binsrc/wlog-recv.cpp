@@ -16,14 +16,14 @@
 #include "net_util.hpp"
 #include "wlog_send.hpp"
 
-namespace walb {
-
 namespace local
 {
 std::string baseDirStr;
 } // local
 
-class WlogRequestWorker : public walb::server::RequestWorker
+using namespace walb;
+
+class WlogRequestWorker : public server::RequestWorker
 {
 public:
     using RequestWorker :: RequestWorker;
@@ -43,7 +43,7 @@ public:
 
         std::string name;
         cybozu::Uuid uuid;
-        walb::MetaDiff diff;
+        MetaDiff diff;
         uint32_t pbs, salt;
         uint64_t bgnLsid, endLsid;
         packet.read(name);
@@ -93,7 +93,7 @@ private:
     bool checkParams(Logger &logger,
         const std::string &name,
         const cybozu::Uuid &,
-        const walb::MetaDiff &diff,
+        const MetaDiff &diff,
         uint32_t pbs, uint32_t,
         uint64_t bgnLsid, uint64_t endLsid) const {
 
@@ -139,8 +139,6 @@ private:
     }
 };
 
-} // namespace walb
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -170,16 +168,16 @@ int main(int argc, char *argv[]) try
     if (!baseDir.stat().isDirectory()) {
         throw RT_ERR("%s is not directory.", baseDir.cStr());
     }
-    walb::local::baseDirStr = baseDir.str();
+    local::baseDirStr = baseDir.str();
 
     auto createReqWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ProcessStatus> &flag) {
-        return std::make_shared<walb::WlogRequestWorker>(
-            std::move(sock), opt.nodeId, forceQuit, flag);
+        cybozu::Socket &&sock,
+        std::atomic<server::ProcessStatus> &procStat) {
+        return std::make_shared<WlogRequestWorker>(
+            std::move(sock), opt.nodeId, procStat);
     };
     std::atomic<bool> forceQuit;
-    walb::server::MultiThreadedServer server(forceQuit, 1);
+    server::MultiThreadedServer server(forceQuit, 1);
     server.run(opt.port, createReqWorker);
 
 } catch (std::exception &e) {

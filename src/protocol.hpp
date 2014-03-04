@@ -156,18 +156,15 @@ struct ServerParams
 {
     cybozu::Socket &sock;
 	const std::string& clientId;
-    const std::atomic<bool> &forceQuit;
     std::atomic<walb::server::ProcessStatus> &procStat;
 
     ServerParams(
-        cybozu::Socket &sock0,
+        cybozu::Socket &sock,
         const std::string &clientId,
-        const std::atomic<bool> &forceQuit0,
-        std::atomic<walb::server::ProcessStatus> &procStat0)
-        : sock(sock0)
+        std::atomic<walb::server::ProcessStatus> &procStat)
+        : sock(sock)
 		, clientId(clientId)
-        , forceQuit(forceQuit0)
-        , procStat(procStat0) {
+        , procStat(procStat) {
     }
 };
 
@@ -181,7 +178,6 @@ using ServerHandler = void (*)(ServerParams &);
  */
 inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
-    const std::atomic<bool> &forceQuit,
     std::atomic<walb::server::ProcessStatus> &procStat,
     const std::map<std::string, ServerHandler> &handlers) noexcept
 {
@@ -201,7 +197,7 @@ inline void serverDispatch(
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            ServerParams p(sock, clientId, forceQuit, procStat);
+            ServerParams p(sock, clientId, procStat);
             h(p);
         } else {
             throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;

@@ -35,7 +35,7 @@ private:
 public:
     using RequestWorkerGenerator =
         std::function<std::shared_ptr<cybozu::thread::Runnable>(
-            cybozu::Socket &&, const std::atomic<bool> &, std::atomic<ProcessStatus> &)>;
+            cybozu::Socket &&, std::atomic<ProcessStatus> &)>;
 
     MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0)
         : maxNumThreads_(maxNumThreads), forceQuit_(forceQuit) {
@@ -51,7 +51,7 @@ public:
             if (st != ProcessStatus::RUNNING) break;
             cybozu::Socket sock;
             ssock.accept(sock);
-            pool.add(gen(std::move(sock), forceQuit_, st));
+            pool.add(gen(std::move(sock), st));
             logErrors(pool.gc());
             //LOGi("pool size %zu", pool.size());
         }
@@ -82,15 +82,12 @@ class RequestWorker : public cybozu::thread::Runnable
 protected:
     cybozu::Socket sock_;
     std::string nodeId_;
-    const std::atomic<bool> &forceQuit_;
     std::atomic<ProcessStatus> &procStat_;
 public:
     RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  const std::atomic<bool> &forceQuit,
                   std::atomic<ProcessStatus> &procStat)
         : sock_(std::move(sock))
         , nodeId_(nodeId)
-        , forceQuit_(forceQuit)
         , procStat_(procStat) {}
     void operator()() noexcept override try {
         run();

@@ -43,8 +43,7 @@ public:
             { "clear-vol", c2pClearVolServer },
             { "wlog-transfer", s2pWlogTransferServer },
         };
-        protocol::serverDispatch(
-            sock_, nodeId_, forceQuit_, procStat_, h);
+        protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }
 };
 
@@ -127,12 +126,13 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeProxy(opt);
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
         return std::make_shared<ProxyRequestWorker>(
-            std::move(sock), gp.nodeId, forceQuit, procStat);
+            std::move(sock), gp.nodeId, procStat);
     };
-    server::MultiThreadedServer server(getProxyGlobal().forceQuit, opt.maxConnections);
+    server::MultiThreadedServer server(
+        getProxyGlobal().forceQuit, opt.maxConnections);
     server.run(opt.port, createRequestWorker);
     finalizeProxy();
 

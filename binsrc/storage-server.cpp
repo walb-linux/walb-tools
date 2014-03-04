@@ -47,8 +47,7 @@ public:
             { "full-bkp", c2sFullSyncServer },
             { "snapshot", c2sSnapshotServer },
         };
-        protocol::serverDispatch(
-            sock_, nodeId_, forceQuit_, procStat_, h);
+        protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }
 };
 
@@ -116,10 +115,10 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeStorage(opt);
     auto createRequestWorker = [&](
-        cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
+        cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
         return std::make_shared<StorageRequestWorker>(
-            std::move(sock), gs.nodeId, forceQuit, procStat);
+            std::move(sock), gs.nodeId, procStat);
     };
     server::MultiThreadedServer server(getStorageGlobal().forceQuit, opt.maxConnections);
     server.run(opt.port, createRequestWorker);

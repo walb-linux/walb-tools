@@ -332,7 +332,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
             uint64_t c = 0;
             uint64_t remainingLb = sizeLb;
             while (0 < remainingLb) {
-                if (volSt.stopState == ForceStopping || p.forceQuit) {
+                if (volSt.stopState == ForceStopping || ga.forceQuit) {
                     logger.warn("x2aDirtyFullSyncServer:force stopped:%s", volId.c_str());
                     return;
                 }
@@ -412,7 +412,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
-    // TODO: volinfo.restore(gid, volSt.forceStop, p.forceQuit);
+    // TODO: volinfo.restore(gid, volSt.forceStop, ga.forceQuit);
     if (!volInfo.restore(gid)) {
         cybozu::Exception e("c2aRestoreServer:restore failed");
         e << volId << gid;
