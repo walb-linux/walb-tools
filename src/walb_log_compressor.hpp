@@ -147,7 +147,7 @@ private:
 class CompressWorker : public cybozu::thread::Runnable
 {
 private:
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
     BoundedQ &inQ_; /* Uncompressed data. */
     BoundedQ &outQ_; /* Compressed data (may include uncompressed data). */
 public:
@@ -180,7 +180,7 @@ public:
 class UncompressWorker : public cybozu::thread::Runnable
 {
 private:
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
     BoundedQ &inQ_; /* Compressed data (may include uncompressed data). */
     BoundedQ &outQ_; /* Uncompressed data. */
 public:

@@ -140,7 +140,7 @@ CYBOZU_TEST_AUTO(BoundedQueue)
 
 CYBOZU_TEST_AUTO(BoundedQueueMove)
 {
-    cybozu::thread::BoundedQueue<std::unique_ptr<int>, true> q(10);
+    cybozu::thread::BoundedQueue<std::unique_ptr<int> > q(10);
     std::exception_ptr ep0, ep1;
     int total = 0;
 

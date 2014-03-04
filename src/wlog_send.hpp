@@ -23,7 +23,7 @@ namespace wlog_send {
 static const std::string PROTOCOL_NAME("wlog-send");
 
 using Block = std::shared_ptr<uint8_t>;
-using BoundedQ = cybozu::thread::BoundedQueue<log::CompressedData, true>;
+using BoundedQ = cybozu::thread::BoundedQueue<log::CompressedData>;
 static constexpr size_t Q_SIZE = 10; /* TODO: do not hard cord. */
 
 class SharedData : public walb::protocol::ProtocolData

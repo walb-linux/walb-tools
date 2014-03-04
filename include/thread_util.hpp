@@ -558,8 +558,7 @@ private:
  * Thread-safe bounded queue.
  *
  * T is type of items.
- *   You should use integer types or copyable classes, or shared pointers.
- * Movable: specify non-zero if T must be movable instead of copyable.
+ * T must be movable or copyable, and possibly default constructible.
  *
  * CAUSION:
  *   If you push 'end data' as T, you can use
@@ -569,23 +568,23 @@ private:
  *   You had better use the pattern.
  *   T t; while (q.pop(t)) { use(t); }
  */
-template <typename T, bool Movable = false>
+template <typename T>
 class BoundedQueue /* final */
 {
 private:
-    struct MovableT {
+    struct IsMovableT {
         static const bool value =
             std::is_move_assignable<T>::value &&
             std::is_move_constructible<T>::value;
     };
-    struct CopyableT {
+    struct IsCopyableT {
         static const bool value =
             std::is_copy_assignable<T>::value &&
             std::is_copy_constructible<T>::value;
     };
-    using Satisfy = typename std::conditional<Movable, MovableT, CopyableT>::type;
-    static_assert(Satisfy::value,
+    static_assert(IsMovableT::value || IsCopyableT::value,
                   "T is neither movable nor copyable.");
+
     size_t size_;
     std::queue<T> queue_;
     mutable std::mutex mutex_;
@@ -594,8 +593,7 @@ private:
     bool isClosed_;
     bool isFailed_;
 
-    using lock = std::unique_lock<std::mutex>;
-    using TRef = typename std::conditional<Movable, T&&, const T&>::type;
+    using AutoLock = std::unique_lock<std::mutex>;
 
 public:
     class ClosedError : public std::exception {
@@ -618,7 +616,7 @@ public:
         , condFull_()
         , isClosed_(false)
         , isFailed_(false) {
-        checkSize();
+        verifySize();
     }
     /**
      * Default constructor.
@@ -641,58 +639,48 @@ public:
      * Change bounded size.
      */
     void resize(size_t size) {
-        lock lk(mutex_);
+        AutoLock lk(mutex_);
         size_ = size;
-        checkSize();
+        verifySize();
     }
     /**
      * Push an item.
      * This may block if the queue is full.
-     * The item will be moved if Movable is true, or copied.
+     * This is for movable T.
      */
-    void push(TRef t) {
-        lock lk(mutex_);
-        checkFailedError();
-        if (isClosed_) throw ClosedError();
-        while (!isFailed_ && !isClosed_ && isFull()) condFull_.wait(lk);
-        checkFailedError();
-        if (isClosed_) throw ClosedError();
-
-        bool isEmpty0 = isEmpty();
-        queue_.push(static_cast<TRef>(t));
-        if (isEmpty0) { condEmpty_.notify_all(); }
+    void push(T &&t) {
+        static_assert(IsMovableT::value, "T is not movable.");
+        pushInner(std::move(t));
+    }
+    /**
+     * This is for copyable T.
+     */
+    void push(const T &t) {
+        static_assert(IsCopyableT::value, "T is not copyable.");
+        pushInner(t);
     }
     /**
      * Pop an item.
      * This may block if the queue is empty.
+     * The popped value is moved to an argument if T is movable, or copied.
      * RETURN:
-     *   popped value. (moved if Movable is true, or copied).
+     *   true if pop succeeded, false otherwise.
      */
-    T pop() {
-        lock lk(mutex_);
-        checkFailedError();
-        if (isClosed_ && isEmpty()) throw ClosedError();
-        while (!isFailed_ && !isClosed_ && isEmpty()) condEmpty_.wait(lk);
-        checkFailedError();
-        if (isClosed_ && isEmpty()) throw ClosedError();
-
-        bool isFull0 = isFull();
-        T t = static_cast<TRef>(queue_.front());
-        queue_.pop();
-        if (isFull0) condFull_.notify_all();
-        return t;
+    bool pop(T &t) {
+        using TRef = typename std::conditional<IsMovableT::value, T&&, T&>::type;
+        return popInner(static_cast<TRef>(t));
     }
     /**
      * Pop an item.
-     * This does not throw ClosedError, return false instead.
+     * This will throw ClosedError, instead returning false.
+     * Default constructor required for T.
      */
-    bool pop(T &t) {
-        try {
-            t = pop();
-            return true;
-        } catch (ClosedError &) {
-            return false;
-        }
+    T pop() {
+        static_assert(std::is_default_constructible<T>::value,
+                      "T is not default constructible");
+        T t;
+        if (!pop(t)) throw ClosedError();
+        return t;
     }
     /**
      * You must call this when you have no more items to push.
@@ -700,8 +688,8 @@ public:
      * The pop() will not fail until queue will be empty.
      */
     void sync() {
-        lock lk(mutex_);
-        checkFailedError();
+        AutoLock lk(mutex_);
+        verifyFailed();
         isClosed_ = true;
         condEmpty_.notify_all();
         condFull_.notify_all();
@@ -711,8 +699,8 @@ public:
      */
     __attribute__((deprecated))
     bool isEnd() const {
-        lock lk(mutex_);
-        checkFailedError();
+        AutoLock lk(mutex_);
+        verifyFailed();
         return isClosed_ && isEmpty();
     }
     /**
@@ -723,7 +711,7 @@ public:
      * Current size of the queue.
      */
     size_t size() const {
-        lock lk(mutex_);
+        AutoLock lk(mutex_);
         return queue_.size();
     }
     /**
@@ -731,7 +719,7 @@ public:
      * Blockded threads will be waken up and will throw FailedError.
      */
     void fail() noexcept {
-        lock lk(mutex_);
+        AutoLock lk(mutex_);
         if (isFailed_) return;
         isClosed_ = true;
         isFailed_ = true;
@@ -745,11 +733,39 @@ private:
     bool isEmpty() const {
         return queue_.empty();
     }
-    void checkFailedError() const {
+    void verifyFailed() const {
         if (isFailed_) throw FailedError();
     }
-    void checkSize() const {
+    void verifySize() const {
         if (size_ < 2) throw std::runtime_error("queue size must be more than 1.");
+    }
+    template <typename U>
+    void pushInner(U &&t) {
+        AutoLock lk(mutex_);
+        verifyFailed();
+        if (isClosed_) throw ClosedError();
+        while (!isFailed_ && !isClosed_ && isFull()) condFull_.wait(lk);
+        verifyFailed();
+        if (isClosed_) throw ClosedError();
+
+        bool isEmpty0 = isEmpty();
+        queue_.push(std::forward<U>(t));
+        if (isEmpty0) { condEmpty_.notify_all(); }
+    }
+    template <typename U>
+    bool popInner(U &&t) {
+        AutoLock lk(mutex_);
+        verifyFailed();
+        if (isClosed_ && isEmpty()) return false;
+        while (!isFailed_ && !isClosed_ && isEmpty()) condEmpty_.wait(lk);
+        verifyFailed();
+        if (isClosed_ && isEmpty()) return false;
+
+        bool isFull0 = isFull();
+        t = std::forward<U>(queue_.front());
+        queue_.pop();
+        if (isFull0) condFull_.notify_all();
+        return true;
     }
 };
 

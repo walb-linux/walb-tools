@@ -62,7 +62,7 @@ uint32_t calcCsum(const walb::log::CompressedData &data)
 
 CYBOZU_TEST_AUTO(compressor)
 {
-    using BoundedQ = cybozu::thread::BoundedQueue<walb::log::CompressedData, true>;
+    using BoundedQ = cybozu::thread::BoundedQueue<walb::log::CompressedData>;
     size_t qs = 10;
     BoundedQ q0(qs), q1(qs), q2(qs);
 

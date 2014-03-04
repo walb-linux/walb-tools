@@ -89,7 +89,7 @@ private:
     std::atomic<bool> isEnd_;
     std::atomic<bool> isFailed_;
 
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
 
     class SendWorker : public cybozu::thread::Runnable
     {
@@ -236,7 +236,7 @@ private:
     std::atomic<bool> isEnd_;
     std::atomic<bool> isFailed_;
 
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
 
     class RecvWorker : public cybozu::thread::Runnable
     {
