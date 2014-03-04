@@ -104,11 +104,18 @@ struct ProxySingleton
         static ProxySingleton instance;
         return instance;
     }
+
+    /**
+     * Read-only except for daemon initialization.
+     */
     std::string nodeId;
     std::string baseDirStr;
 
+    /**
+     * Writable and must be thread-safe.
+     */
+    std::atomic<bool> forceQuit;
     AtomicMap<ProxyVolState> stMap;
-
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<util::DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
 };

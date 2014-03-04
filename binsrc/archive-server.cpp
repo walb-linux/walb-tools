@@ -26,7 +26,7 @@ const std::string DEFAULT_BASE_DIR = "/var/forest/walb/archive";
 const std::string DEFAULT_LOG_FILE = "-";
 const std::string DEFAULT_VG = "vg";
 
-namespace walb {
+using namespace walb;
 
 /**
  * Request worker.
@@ -52,22 +52,22 @@ public:
     }
 };
 
-} // namespace walb
-
 struct Option : cybozu::Option
 {
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
+    size_t maxConnections;
 
     Option() {
-        walb::ArchiveSingleton &a = walb::getArchiveGlobal();
+        ArchiveSingleton &a = getArchiveGlobal();
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
+        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
@@ -76,13 +76,13 @@ struct Option : cybozu::Option
     }
     std::string logFilePath() const {
         if (logFileStr == "-") return logFileStr;
-        return (cybozu::FilePath(walb::ga.baseDirStr) + logFileStr).str();
+        return (cybozu::FilePath(ga.baseDirStr) + logFileStr).str();
     }
 };
 
 void initializeArchive(Option &/*opt*/)
 {
-    walb::util::makeDir(walb::ga.baseDirStr, "archiveServer", false);
+    util::makeDir(ga.baseDirStr, "archiveServer", false);
 
     // Start task dispatcher thread.
 
@@ -103,15 +103,17 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeArchive(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ProcessStatus> &procStat) {
-        return std::make_shared<walb::ArchiveRequestWorker>(
-            std::move(sock), walb::ga.nodeId, forceQuit, procStat);
+        std::atomic<server::ProcessStatus> &procStat) {
+        return std::make_shared<ArchiveRequestWorker>(
+            std::move(sock), ga.nodeId, forceQuit, procStat);
     };
-    walb::server::MultiThreadedServer server;
+
+    server::MultiThreadedServer server(
+        getArchiveGlobal().forceQuit, opt.maxConnections);
     server.run(opt.port, createRequestWorker);
     finalizeArchive();
 

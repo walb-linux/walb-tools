@@ -178,7 +178,8 @@ int main(int argc, char *argv[]) try
         return std::make_shared<walb::WlogRequestWorker>(
             std::move(sock), opt.nodeId, forceQuit, flag);
     };
-    walb::server::MultiThreadedServer server(1);
+    std::atomic<bool> forceQuit;
+    walb::server::MultiThreadedServer server(forceQuit, 1);
     server.run(opt.port, createReqWorker);
 
 } catch (std::exception &e) {

@@ -72,10 +72,17 @@ struct ArchiveSingleton
         return instance;
     }
 
+    /**
+     * Read-only except for daemon initialization.
+     */
     std::string nodeId;
     std::string baseDirStr;
     std::string volumeGroup;
 
+    /**
+     * Writable and must be thread-safe.
+     */
+    std::atomic<bool> forceQuit;
     AtomicMap<ArchiveVolState> stMap;
 };
 

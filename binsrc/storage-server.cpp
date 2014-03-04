@@ -28,7 +28,7 @@ const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb/storage";
 const std::string DEFAULT_LOG_FILE = "-";
 
-namespace walb {
+using namespace walb;
 
 /**
  * Request worker.
@@ -52,8 +52,6 @@ public:
     }
 };
 
-} // namespace walb
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -61,6 +59,7 @@ struct Option : cybozu::Option
     std::string archiveDStr;
     std::string multiProxyDStr;
     bool isDebug;
+    size_t maxConnections;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
@@ -68,33 +67,35 @@ struct Option : cybozu::Option
         appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
         appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
+        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
 
-        walb::StorageSingleton &s = walb::getStorageGlobal();
+        StorageSingleton &s = getStorageGlobal();
         appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
+        appendOpt(&s.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
 
         appendHelp("h");
     }
     std::string logFilePath() const {
         if (logFileStr == "-") return logFileStr;
-        return (cybozu::FilePath(walb::gs.baseDirStr) + logFileStr).str();
+        return (cybozu::FilePath(gs.baseDirStr) + logFileStr).str();
     }
 };
 
 void initSingleton(Option &opt)
 {
-    walb::StorageSingleton &s = walb::getStorageGlobal();
+    StorageSingleton &s = getStorageGlobal();
 
-    s.archive = walb::util::parseSocketAddr(opt.archiveDStr);
-    s.proxyV = walb::util::parseMultiSocketAddr(opt.multiProxyDStr);
+    s.archive = util::parseSocketAddr(opt.archiveDStr);
+    s.proxyV = util::parseMultiSocketAddr(opt.multiProxyDStr);
 
     // QQQ
 }
 
 void initializeStorage(Option &opt)
 {
-    walb::util::makeDir(walb::gs.baseDirStr, "storageServer", false);
+    util::makeDir(gs.baseDirStr, "storageServer", false);
     initSingleton(opt);
 
     // QQQ
@@ -112,15 +113,15 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeStorage(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ProcessStatus> &procStat) {
-        return std::make_shared<walb::StorageRequestWorker>(
-            std::move(sock), walb::gs.nodeId, forceQuit, procStat);
+        std::atomic<server::ProcessStatus> &procStat) {
+        return std::make_shared<StorageRequestWorker>(
+            std::move(sock), gs.nodeId, forceQuit, procStat);
     };
-    walb::server::MultiThreadedServer server;
+    server::MultiThreadedServer server(getStorageGlobal().forceQuit, opt.maxConnections);
     server.run(opt.port, createRequestWorker);
     finalizeStorage();
 

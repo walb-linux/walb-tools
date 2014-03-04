@@ -71,7 +71,6 @@ struct Option : cybozu::Option
         appendOpt(&retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
         appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
-
         ProxySingleton &p = getProxyGlobal();
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
         std::string hostName = cybozu::net::getHostName();
@@ -133,7 +132,7 @@ int main(int argc, char *argv[]) try
         return std::make_shared<ProxyRequestWorker>(
             std::move(sock), gp.nodeId, forceQuit, procStat);
     };
-    server::MultiThreadedServer server(opt.maxConnections);
+    server::MultiThreadedServer server(getProxyGlobal().forceQuit, opt.maxConnections);
     server.run(opt.port, createRequestWorker);
     finalizeProxy();
 

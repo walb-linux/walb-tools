@@ -30,32 +30,34 @@ class MultiThreadedServer
 {
 private:
     const size_t maxNumThreads_;
+    std::atomic<bool> &forceQuit_;
 
 public:
     using RequestWorkerGenerator =
         std::function<std::shared_ptr<cybozu::thread::Runnable>(
             cybozu::Socket &&, const std::atomic<bool> &, std::atomic<ProcessStatus> &)>;
 
-    explicit MultiThreadedServer(size_t maxNumThreads = 0)
-        : maxNumThreads_(maxNumThreads) {}
+    MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0)
+        : maxNumThreads_(maxNumThreads), forceQuit_(forceQuit) {
+    }
     void run(uint16_t port, const RequestWorkerGenerator &gen) noexcept {
+        forceQuit_ = false;
         cybozu::Socket ssock;
         ssock.bind(port);
         cybozu::thread::ThreadRunnerPool<> pool(maxNumThreads_);
         std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
-        std::atomic<bool> forceQuit(false);
         while (st == ProcessStatus::RUNNING) {
             while (!ssock.queryAccept() && st == ProcessStatus::RUNNING) {}
             if (st != ProcessStatus::RUNNING) break;
             cybozu::Socket sock;
             ssock.accept(sock);
-            pool.add(gen(std::move(sock), forceQuit, st));
+            pool.add(gen(std::move(sock), forceQuit_, st));
             logErrors(pool.gc());
             //LOGi("pool size %zu", pool.size());
         }
         if (st == ProcessStatus::FORCE_SHUTDOWN) {
             size_t nCanceled = pool.cancelAll();
-            forceQuit = true;
+            forceQuit_ = true;
             LOGi("Canceled %zu tasks.", nCanceled);
         }
         logErrors(pool.gc());
@@ -65,13 +67,7 @@ public:
 private:
     void logErrors(std::vector<std::exception_ptr> &&v) {
         for (std::exception_ptr ep : v) {
-            try {
-                std::rethrow_exception(ep);
-            } catch (std::exception &e) {
-                LOGe("REQUEST_WORKER_ERROR: %s.", e.what());
-            } catch (...) {
-                LOGe("REQUEST_WORKER_ERROR: an unknown error.");
-            }
+            LOGe("REQUEST_WORKER_ERROR:%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
         }
     }
 };

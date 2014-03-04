@@ -57,10 +57,20 @@ struct StorageSingleton
         static StorageSingleton instance;
         return instance;
     }
+
+    /**
+     * Read-only except for daemon initialization.
+     */
+    size_t maxBackgroundTasks;
     cybozu::SocketAddr archive;
     std::vector<cybozu::SocketAddr> proxyV;
     std::string nodeId;
     std::string baseDirStr;
+
+    /**
+     * Writable and must be thread-safe.
+     */
+    std::atomic<bool> forceQuit;
     walb::AtomicMap<StorageVolState> stMap;
 };
 
