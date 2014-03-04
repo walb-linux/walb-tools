@@ -25,7 +25,7 @@ const uint16_t DEFAULT_LISTEN_PORT = 5000;
 const std::string DEFAULT_BASE_DIR = "/var/forest/walb/proxy";
 const std::string DEFAULT_LOG_FILE = "-";
 
-namespace walb {
+using namespace walb;
 
 /**
  * Request worker.
@@ -48,8 +48,6 @@ public:
     }
 };
 
-} // namespace walb
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -66,15 +64,15 @@ struct Option : cybozu::Option
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxConnections, walb::DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
-        appendOpt(&maxBackgroundTasks, walb::DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
-        appendOpt(&maxWdiffSendMb, walb::DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
-        appendOpt(&waitForRetry, walb::DEFAULT_WAIT_FOR_RETRY, "waitForRetry", "Waiting time for next retry [sec].");
-        appendOpt(&retryTimeout, walb::DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
+        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
+        appendOpt(&maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
+        appendOpt(&waitForRetry, DEFAULT_WAIT_FOR_RETRY, "waitForRetry", "Waiting time for next retry [sec].");
+        appendOpt(&retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
         appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
 
-        walb::ProxySingleton &p = walb::getProxyGlobal();
+        ProxySingleton &p = getProxyGlobal();
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&p.nodeId, hostName, "id", "node identifier");
@@ -83,20 +81,20 @@ struct Option : cybozu::Option
     }
     std::string logFilePath() const {
         if (logFileStr == "-") return logFileStr;
-        return (cybozu::FilePath(walb::gp.baseDirStr) + logFileStr).str();
+        return (cybozu::FilePath(gp.baseDirStr) + logFileStr).str();
     }
 };
 
 void initSingleton(Option &/*opt*/)
 {
-    //walb::ProxySingleton &p = walb::ProxySingleton::getInstance();
+    //ProxySingleton &p = ProxySingleton::getInstance();
 
     // QQQ
 }
 
 void initializeProxy(Option &opt)
 {
-    walb::util::makeDir(walb::gp.baseDirStr, "proxyServer", false);
+    util::makeDir(gp.baseDirStr, "proxyServer", false);
     initSingleton(opt);
 
     // Check all the volumes directories.
@@ -106,15 +104,16 @@ void initializeProxy(Option &opt)
     //   If master/*.wdiff exist,
     //   check they have been copied to the each archive directory.
 
-    // Prepare a task queue.
     // Start a task dispatch thread.
-
-    // QQQ
+    ProxySingleton &g = getProxyGlobal();
+    g.dispatcher.reset(new util::DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
 }
 
 void finalizeProxy()
 {
     // Stop the task dispatch thread.
+    ProxySingleton &g = getProxyGlobal();
+    g.dispatcher.reset();
 
     // QQQ
 }
@@ -126,15 +125,15 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    walb::util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    util::setLogSetting(opt.logFilePath(), opt.isDebug);
     initializeProxy(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock, const std::atomic<bool> &forceQuit,
-        std::atomic<walb::server::ProcessStatus> &procStat) {
-        return std::make_shared<walb::ProxyRequestWorker>(
-            std::move(sock), walb::gp.nodeId, forceQuit, procStat);
+        std::atomic<server::ProcessStatus> &procStat) {
+        return std::make_shared<ProxyRequestWorker>(
+            std::move(sock), gp.nodeId, forceQuit, procStat);
     };
-    walb::server::MultiThreadedServer server(opt.maxConnections);
+    server::MultiThreadedServer server(opt.maxConnections);
     server.run(opt.port, createRequestWorker);
     finalizeProxy();
 

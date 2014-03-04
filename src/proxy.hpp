@@ -7,6 +7,7 @@
 #include "proxy_vol_info.hpp"
 #include "wdiff_data.hpp"
 #include "host_info.hpp"
+#include "task_queue.hpp"
 
 namespace walb {
 
@@ -65,6 +66,38 @@ private:
     void initInner(const std::string &volId);
 };
 
+struct ProxyTask
+{
+    std::string volId;
+    std::string archiveId;
+
+    bool operator==(const ProxyTask &rhs) const {
+        return volId == rhs.volId && archiveId == rhs.archiveId;
+    }
+    bool operator<(const ProxyTask &rhs) const {
+        int c = volId.compare(rhs.volId);
+        if (c < 0) return true;
+        if (c > 0) return false;
+        return archiveId < rhs.archiveId;
+    }
+};
+
+class ProxyWorker : cybozu::thread::Runnable
+{
+private:
+    const ProxyTask task_;
+
+public:
+    ProxyWorker(const ProxyTask &task) : task_(task) {
+    }
+    /**
+     * You can throw an exception.
+     */
+    void operator()() override {
+        // QQQ
+    }
+};
+
 struct ProxySingleton
 {
     static ProxySingleton& getInstance() {
@@ -75,6 +108,9 @@ struct ProxySingleton
     std::string baseDirStr;
 
     AtomicMap<ProxyVolState> stMap;
+
+    TaskQueue<ProxyTask> taskQueue;
+    std::unique_ptr<util::DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
 };
 
 inline ProxySingleton& getProxyGlobal()

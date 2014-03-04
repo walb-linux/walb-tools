@@ -17,6 +17,9 @@
 #include "fileio_serializer.hpp"
 #include "uuid.hpp"
 #include "constant.hpp"
+#include "task_queue.hpp"
+#include "thread_util.hpp"
+#include "walb_logger.hpp"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
@@ -174,5 +177,60 @@ void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_T
     }
     throw cybozu::Exception(msg) << "timeout" << timeout;
 }
+
+template <typename Task, typename Worker>
+class DispatchTask
+{
+private:
+    std::atomic<bool> shouldStop;
+    TaskQueue<Task> &tq;
+    size_t maxBackgroundTasks;
+    std::thread th;
+
+public:
+    DispatchTask(TaskQueue<Task> &tq,
+                 size_t maxBackgroundTasks)
+        : shouldStop(false)
+        , tq(tq)
+        , maxBackgroundTasks(maxBackgroundTasks)
+        , th(std::ref(*this)) {
+    }
+    ~DispatchTask() noexcept {
+        shouldStop = true;
+        th.join();
+    }
+    void operator()() noexcept try {
+#if 0
+        cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
+        Task task;
+        while (!shouldStop) {
+            bool doWait = false;
+            if (pool.getNumActiveThreads() >= maxBackgroundTasks) {
+                doWait = true;
+            }
+            if (!doWait) {
+                doWait = !tq.pop(task);
+            }
+            if (doWait) {
+                util::sleepMs(1000);
+                continue;
+            }
+            pool.add(std::make_shared<Worker>(task));
+            for (std::exception_ptr ep : pool.gc()) {
+                LOGe("%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
+            }
+        }
+        for (std::exception_ptr ep : pool.waitForAll()) {
+            LOGe("%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
+        }
+#endif
+    } catch (std::exception &e) {
+        LOGe("dispatchTask:%s", e.what());
+        ::exit(1);
+    } catch (...) {
+        LOGe("dispatchTask:other error");
+        ::exit(1);
+    }
+};
 
 }} // walb::util
