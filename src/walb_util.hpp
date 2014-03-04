@@ -200,7 +200,6 @@ public:
         th.join();
     }
     void operator()() noexcept try {
-#if 0
         cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
         Task task;
         while (!shouldStop) {
@@ -223,7 +222,6 @@ public:
         for (std::exception_ptr ep : pool.waitForAll()) {
             LOGe("%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
         }
-#endif
     } catch (std::exception &e) {
         LOGe("dispatchTask:%s", e.what());
         ::exit(1);
