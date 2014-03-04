@@ -112,7 +112,7 @@ public:
                 ::close(inFd_);
             }
         };
-        cybozu::thread::ThreadRunnerSet thSet;
+        cybozu::thread::ThreadRunnerSet<> thSet;
         thSet.add(std::make_shared<Worker0>(pipe0.fdW(), config_));
         thSet.add(std::make_shared<Worker1>(pipe0.fdR(), pipe1.fdW()));
         thSet.add(std::make_shared<Worker2>(pipe1.fdR(), mem_));

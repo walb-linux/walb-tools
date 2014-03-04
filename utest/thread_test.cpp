@@ -23,7 +23,7 @@ struct Worker : public cybozu::thread::Runnable
 
 CYBOZU_TEST_AUTO(unlimitedPool)
 {
-    cybozu::thread::ThreadRunnerPool pool;
+    cybozu::thread::ThreadRunnerPool<Worker> pool;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
         pool.add(std::make_shared<Worker>(i, rand()));
@@ -34,7 +34,7 @@ CYBOZU_TEST_AUTO(unlimitedPool)
 
 CYBOZU_TEST_AUTO(fixedPool)
 {
-    cybozu::thread::ThreadRunnerPool pool(5);
+    cybozu::thread::ThreadRunnerPool<Worker> pool(5);
     std::vector<uint32_t> v;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
@@ -51,7 +51,7 @@ CYBOZU_TEST_AUTO(fixedPoolCancel)
 {
     const int POOL_SIZE = 5;
     const int N_TASKS = 15;
-    cybozu::thread::ThreadRunnerPool pool(POOL_SIZE);
+    cybozu::thread::ThreadRunnerPool<Worker> pool(POOL_SIZE);
     std::vector<uint32_t> v;
     for (int i = 0; i < N_TASKS; i++) {
         uint32_t id = pool.add(std::make_shared<Worker>(i, 200));
@@ -87,7 +87,7 @@ struct FailWorker : public cybozu::thread::Runnable
 
 CYBOZU_TEST_AUTO(poolWithFailWorker)
 {
-    cybozu::thread::ThreadRunnerPool pool;
+    cybozu::thread::ThreadRunnerPool<FailWorker> pool;
     std::vector<uint32_t> v;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {

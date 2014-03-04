@@ -89,13 +89,7 @@ private:
     std::atomic<bool> isEnd_;
     std::atomic<bool> isFailed_;
 
-    cybozu::thread::ThreadRunner compressor_;
-    cybozu::thread::ThreadRunner sender_;
-    size_t recIdx_;
-
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
-    BoundedQ q0_; /* input to compressor_ */
-    BoundedQ q1_; /* compressor_ to sender_. */
 
     class SendWorker : public cybozu::thread::Runnable
     {
@@ -123,6 +117,14 @@ private:
             inQ_.fail();
         }
     };
+
+    cybozu::thread::ThreadRunner<CompressWorker> compressor_;
+    cybozu::thread::ThreadRunner<SendWorker> sender_;
+    size_t recIdx_;
+
+    BoundedQ q0_; /* input to compressor_ */
+    BoundedQ q1_; /* compressor_ to sender_. */
+
 public:
     Sender(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
@@ -234,13 +236,7 @@ private:
     std::atomic<bool> isEnd_;
     std::atomic<bool> isFailed_;
 
-    cybozu::thread::ThreadRunner receiver_;
-    cybozu::thread::ThreadRunner uncompressor_;
-    size_t recIdx_;
-
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData, true>;
-    BoundedQ q0_; /* receiver_ to uncompressor_ */
-    BoundedQ q1_; /* uncompressor_ to output. */
 
     class RecvWorker : public cybozu::thread::Runnable
     {
@@ -270,6 +266,14 @@ private:
             outQ_.fail();
         }
     };
+
+    cybozu::thread::ThreadRunner<RecvWorker> receiver_;
+    cybozu::thread::ThreadRunner<UncompressWorker> uncompressor_;
+    size_t recIdx_;
+
+    BoundedQ q0_; /* receiver_ to uncompressor_ */
+    BoundedQ q1_; /* uncompressor_ to output. */
+
 public:
     Receiver(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)

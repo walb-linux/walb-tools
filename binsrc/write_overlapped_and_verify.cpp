@@ -232,7 +232,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     for (size_t i = 0; i < config.numThreads(); i++) {
         v.push_back(std::make_shared<Worker>(config, blocks0));
     }
-    cybozu::thread::ThreadRunnerSet thSet;
+    cybozu::thread::ThreadRunnerSet<Worker> thSet;
     for (std::shared_ptr<Worker> &w : v) {
         thSet.add(w);
     }

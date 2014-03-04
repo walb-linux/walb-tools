@@ -132,20 +132,23 @@ public:
  * Thread runner.
  * This is not thread-safe.
  */
+template <typename Worker = Runnable>
 class ThreadRunner /* final */
 {
 private:
-    std::shared_ptr<Runnable> runnableP_;
+    static_assert(std::is_base_of<Runnable, Worker>::value,
+                  "Worker is not derived from Runnable.");
+    std::shared_ptr<Worker> workerP_;
     std::shared_ptr<std::thread> threadP_;
 
 public:
     ThreadRunner() : ThreadRunner(nullptr) {}
-    explicit ThreadRunner(const std::shared_ptr<Runnable>& runnableP)
-        : runnableP_(runnableP)
+    explicit ThreadRunner(const std::shared_ptr<Worker> &workerP)
+        : workerP_(workerP)
         , threadP_() {}
     ThreadRunner(const ThreadRunner &rhs) = delete;
     ThreadRunner(ThreadRunner &&rhs)
-        : runnableP_(rhs.runnableP_)
+        : workerP_(rhs.workerP_)
         , threadP_(std::move(rhs.threadP_)) {}
     ~ThreadRunner() noexcept {
         try {
@@ -154,7 +157,7 @@ public:
     }
     ThreadRunner &operator=(const ThreadRunner &rhs) = delete;
     ThreadRunner &operator=(ThreadRunner &&rhs) {
-        runnableP_ = std::move(rhs.runnableP_);
+        workerP_ = std::move(rhs.workerP_);
         threadP_ = std::move(rhs.threadP_);
         return *this;
     }
@@ -162,19 +165,17 @@ public:
      * You must join() before calling this
      * when you try to reuse the instance.
      */
-    void set(const std::shared_ptr<Runnable>& runnableP) {
+    void set(const std::shared_ptr<Worker>& workerP) {
         if (threadP_) throw std::runtime_error("threadP must be null.");
-        runnableP_ = runnableP;
+        workerP_ = workerP;
     }
-
     /**
      * Start a thread.
      */
     void start() {
         /* You need std::ref(). */
-        threadP_.reset(new std::thread(std::ref(*runnableP_)));
+        threadP_.reset(new std::thread(std::ref(*workerP_)));
     }
-
     /**
      * Wait for the thread done.
      * You will get an exception thrown in the thread running.
@@ -183,7 +184,7 @@ public:
         if (!threadP_) { return; }
         threadP_->join();
         threadP_.reset();
-        runnableP_->get();
+        workerP_->get();
     }
     /**
      * Wait for the thread done.
@@ -199,47 +200,44 @@ public:
         }
         return ep;
     }
-
     /**
      * Check whether you can join the thread just now.
      */
     bool canJoin() const {
-        return runnableP_->isEnd();
+        return workerP_->isEnd();
     }
 };
 
 /**
  * Manage ThreadRunners in bulk.
  */
+template <typename Worker = Runnable>
 class ThreadRunnerSet /* final */
 {
 private:
-    std::vector<ThreadRunner> v_;
+    static_assert(std::is_base_of<Runnable, Worker>::value,
+                  "Worker is not derived from Runnable.");
+    using Runner = ThreadRunner<Worker>;
+    std::vector<Runner > v_;
 
 public:
-    ThreadRunnerSet() : v_() {}
-    ~ThreadRunnerSet() noexcept {}
-
-    void add(ThreadRunner &&runner) {
+    void add(Runner &&runner) {
         v_.push_back(std::move(runner));
     }
-
-    void add(const std::shared_ptr<Runnable>& runnableP) {
-        v_.push_back(ThreadRunner(runnableP));
+    void add(const std::shared_ptr<Worker>& workerP) {
+        v_.push_back(Runner(workerP));
     }
-
     void start() {
-        for (ThreadRunner &r : v_) {
+        for (Runner &r : v_) {
             r.start();
         }
     }
-
     /**
      * Wait for all threads.
      */
     std::vector<std::exception_ptr> join() {
         std::vector<std::exception_ptr> v;
-        for (ThreadRunner &r : v_) {
+        for (Runner &r : v_) {
             try {
                 r.join();
             } catch (...) {
@@ -262,9 +260,12 @@ public:
  * (4) You can call waitForAll() to wait for all tasks to be done.
  * (5) You can call gc() to get results of finished tasks.
  */
+template <typename Worker = Runnable>
 class ThreadRunnerPool /* final */
 {
 private:
+    static_assert(std::is_base_of<Runnable, Worker>::value,
+                  "Worker is not derived from Runnable.");
     /**
      * A task contains its unique id and a runnable object.
      * Not copyable, but movable.
@@ -273,28 +274,28 @@ private:
     {
     private:
         uint32_t id_;
-        std::shared_ptr<Runnable> runnable_;
+        std::shared_ptr<Worker> worker_;
     public:
-        Task() : id_(uint32_t(-1)), runnable_() {}
-        Task(uint32_t id, const std::shared_ptr<Runnable>& runnable)
-            : id_(id), runnable_(runnable) {}
+        Task() : id_(uint32_t(-1)), worker_() {}
+        Task(uint32_t id, const std::shared_ptr<Worker>& worker)
+            : id_(id), worker_(worker) {}
         Task(const Task &rhs) = delete;
-        Task(Task &&rhs) : id_(rhs.id_), runnable_(std::move(rhs.runnable_)) {}
+        Task(Task &&rhs) : id_(rhs.id_), worker_(std::move(rhs.worker_)) {}
         Task &operator=(const Task &rhs) = delete;
         Task &operator=(Task &&rhs) {
             id_ = rhs.id_;
             rhs.id_ = uint32_t(-1);
-            runnable_ = std::move(rhs.runnable_);
+            worker_ = std::move(rhs.worker_);
             return *this;
         }
         uint32_t id() const { return id_; }
-        bool isValid() const { return id_ != uint32_t(-1) && runnable_; }
+        bool isValid() const { return id_ != uint32_t(-1) && worker_; }
         std::exception_ptr run() noexcept {
             assert(isValid());
             std::exception_ptr ep;
             try {
-                (*runnable_)();
-                runnable_->get();
+                (*worker_)();
+                worker_->get();
             } catch (...) {
                 ep = std::current_exception();
             }
@@ -359,7 +360,7 @@ private:
     };
 
     /* Threads container. You must call gcThread() to collect finished threads. */
-    std::list<ThreadRunner> runners_;
+    std::list<ThreadRunner<TaskWorker> > runners_;
     std::atomic<size_t> numActiveThreads_;
 
     /* Task container.
@@ -398,9 +399,9 @@ public:
     /**
      * Add a runnable task to be executed in the pool.
      */
-    uint32_t add(const std::shared_ptr<Runnable>& runnableP) {
+    uint32_t add(const std::shared_ptr<Worker> &worker) {
         std::lock_guard<std::mutex> lk(mutex_);
-        return addNolock(runnableP);
+        return addNolock(worker);
     }
     /**
      * Try to cancel a task if it has not started yet.
@@ -481,6 +482,9 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         return readyQ_.size() + running_.size() + done_.size();
     }
+    /**
+     * Number of running tasks in the pool.
+     */
     size_t getNumActiveThreads() const {
         return numActiveThreads_;
     }
@@ -502,16 +506,16 @@ private:
     void makeThread() {
         auto wp = std::make_shared<TaskWorker>(readyQ_, ready_, running_, done_, mutex_, cv_);
         wp->setCallback([this]() { numActiveThreads_--; });
-        ThreadRunner runner(wp);
+        ThreadRunner<TaskWorker> runner(wp);
         runner.start();
         runners_.push_back(std::move(runner));
         numActiveThreads_++;
     }
-    uint32_t addNolock(const std::shared_ptr<Runnable>& runnableP) {
-        assert(runnableP);
+    uint32_t addNolock(const std::shared_ptr<Worker>& worker) {
+        assert(worker);
         uint32_t id = id_++;
         if (id_ == uint32_t(-1)) id_ = 0;
-        readyQ_.push_back(Task(id, runnableP));
+        readyQ_.push_back(Task(id, worker));
         __attribute__((unused)) auto pair = ready_.insert(id);
         assert(pair.second);
         if (shouldMakeThread()) {
@@ -538,7 +542,7 @@ private:
         return v;
     }
     void gcThread() {
-        std::list<ThreadRunner>::iterator it = runners_.begin();
+        typename std::list<ThreadRunner<TaskWorker> >::iterator it = runners_.begin();
         while (it != runners_.end()) {
             if (it->canJoin()) {
                 it->join(); /* never throw an exception that is related to tasks. */
@@ -569,6 +573,19 @@ template <typename T, bool Movable = false>
 class BoundedQueue /* final */
 {
 private:
+    struct MovableT {
+        static const bool value =
+            std::is_move_assignable<T>::value &&
+            std::is_move_constructible<T>::value;
+    };
+    struct CopyableT {
+        static const bool value =
+            std::is_copy_assignable<T>::value &&
+            std::is_copy_constructible<T>::value;
+    };
+    using Satisfy = typename std::conditional<Movable, MovableT, CopyableT>::type;
+    static_assert(Satisfy::value,
+                  "T is neither movable nor copyable.");
     size_t size_;
     std::queue<T> queue_;
     mutable std::mutex mutex_;

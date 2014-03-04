@@ -119,7 +119,7 @@ CYBOZU_TEST_AUTO(compressor)
     auto w1 = std::make_shared<walb::log::CompressWorker>(q0, q1);
     auto w2 = std::make_shared<walb::log::UncompressWorker>(q1, q2);
     auto w3 = std::make_shared<Consumer>(q2, csumV1);
-    cybozu::thread::ThreadRunnerSet thSet;
+    cybozu::thread::ThreadRunnerSet<> thSet;
     thSet.add(w0);
     thSet.add(w1);
     thSet.add(w2);

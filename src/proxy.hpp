@@ -82,7 +82,7 @@ struct ProxyTask
     }
 };
 
-class ProxyWorker : cybozu::thread::Runnable
+class ProxyWorker : public cybozu::thread::Runnable
 {
 private:
     const ProxyTask task_;

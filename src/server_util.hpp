@@ -41,7 +41,7 @@ public:
     void run(uint16_t port, const RequestWorkerGenerator &gen) noexcept {
         cybozu::Socket ssock;
         ssock.bind(port);
-        cybozu::thread::ThreadRunnerPool pool(maxNumThreads_);
+        cybozu::thread::ThreadRunnerPool<> pool(maxNumThreads_);
         std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
         std::atomic<bool> forceQuit(false);
         while (st == ProcessStatus::RUNNING) {
