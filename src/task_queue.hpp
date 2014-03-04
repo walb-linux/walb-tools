@@ -72,7 +72,7 @@ public:
         AutoLock lk(mu_);
         typename Rmap::iterator itr = rmap_.begin();
         if (itr == rmap_.end()) return false;
-        if (Clock::now() < itr->first) return false;
+        if (!isStopped_ && Clock::now() < itr->first) return false;
         task = itr->second;
         rmap_.erase(itr);
         map_.erase(task);
@@ -104,8 +104,6 @@ public:
         }
     }
 private:
-    void insertToRmap(const Task &task, TimePoint ts) {
-    }
     void eraseFromRmap(const Task &task, TimePoint ts) {
         typename Rmap::iterator itr, end;
         std::tie(itr, end) = rmap_.equal_range(ts);
