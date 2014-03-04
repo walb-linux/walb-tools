@@ -28,19 +28,13 @@ namespace walb {
 /**
  * Convert a logpack data to a diff data.
  *
- * PackIo: PackIoWrapConst, PackIoWrap, or PackIoRaw<>.
- *
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
  */
-template <class PackIo>
-bool convertLogToDiff(
-    const PackIo &packIo, diff::Record &mrec, diff::IoData &diffIo)
+inline bool convertLogToDiff(
+    const log::Record& rec, const log::BlockData& blockD, diff::Record &mrec, diff::IoData &diffIo)
 {
-    const log::Record &rec = packIo.record();
-    const log::BlockData &blockD = packIo.blockData();
-
     /* Padding */
     if (rec.isPadding()) return false;
 
@@ -208,7 +202,7 @@ private:
 
             diff::RecordRaw diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(packIo, diffRec, diffIo)) {
+            if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.ioBlocks();
             }

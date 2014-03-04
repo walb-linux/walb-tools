@@ -168,8 +168,7 @@ public:
         assert(recIdx < header.nRecords());
         const RecordWrapConst rec(&header, recIdx);
 #ifdef DEBUG
-        const PackIoWrapConst packIo(&rec, &blockD);
-        assert(packIo.isValid());
+        assert(isValidRecordAndBlockData(rec, blockD));
 #endif
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockD, false);
@@ -330,8 +329,9 @@ public:
             blockD.setPbs(pbs_);
             blockD.resize(0);
         }
-        const PackIoWrapConst packIo(&rec, &blockD);
-        if (!packIo.isValid()) throw std::runtime_error("Popped IO is invalid.");
+        if (!isValidRecordAndBlockData(rec, blockD)) {
+            throw cybozu::Exception("popIo:Popped IO is invalid.");
+        }
         recIdx_++;
     }
     /**
