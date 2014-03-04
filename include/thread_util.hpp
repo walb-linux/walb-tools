@@ -481,6 +481,9 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         return readyQ_.size() + running_.size() + done_.size();
     }
+    size_t getNumActiveThreads() const {
+        return numActiveThreads_;
+    }
 private:
     bool isReadyOrRunning(uint32_t id) const {
         return ready_.find(id) != ready_.end() ||
@@ -841,5 +844,15 @@ public:
         seqMutexN_.unlock();
     }
 };
+
+inline std::string exceptionPtrToStr(std::exception_ptr ep)
+try {
+    std::rethrow_exception(ep);
+    return "exceptionPtrToStr:no error";
+} catch (std::exception &e) {
+    return e.what();
+} catch (...) {
+    return "exceptionPtrToStr:other error";
+}
 
 }} // namespace cybozu::thread
