@@ -1,14 +1,14 @@
 #include "cybozu/test.hpp"
-#include "state_map.hpp"
+#include "atomic_map.hpp"
 
 struct State {
     std::string id;
     State(const std::string& id) : id(id) {}
 };
 
-CYBOZU_TEST_AUTO(StateMap)
+CYBOZU_TEST_AUTO(AtomicMap)
 {
-    walb::StateMap<State> m;
+    walb::AtomicMap<State> m;
     {
         State& s = m.get("abc");
         CYBOZU_TEST_EQUAL(s.id, "abc");
@@ -30,10 +30,10 @@ struct A
     }
 };
 
-CYBOZU_TEST_AUTO(StateMapException)
+CYBOZU_TEST_AUTO(AtomicMapException)
 {
     using AutoLock = std::lock_guard<std::recursive_mutex>;
-    walb::StateMap<A> stMap;
+    walb::AtomicMap<A> stMap;
     g_b = true;
     try {
         A &a = stMap.get("vol0");

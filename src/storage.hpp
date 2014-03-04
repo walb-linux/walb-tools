@@ -1,7 +1,7 @@
 #pragma once
 #include "protocol.hpp"
 #include "storage_vol_info.hpp"
-#include "state_map.hpp"
+#include "atomic_map.hpp"
 #include "state_machine.hpp"
 #include "constant.hpp"
 #include <snappy.h>
@@ -61,7 +61,7 @@ struct StorageSingleton
     std::vector<cybozu::SocketAddr> proxyV;
     std::string nodeId;
     std::string baseDirStr;
-    walb::StateMap<StorageVolState> stMap;
+    walb::AtomicMap<StorageVolState> stMap;
 };
 
 inline StorageSingleton& getStorageGlobal()

@@ -6,7 +6,7 @@
 #include "file_path.hpp"
 #include "host_info.hpp"
 #include "meta.hpp"
-#include "state_map.hpp"
+#include "atomic_map.hpp"
 #include "wdiff_data.hpp"
 
 namespace walb {
@@ -35,7 +35,7 @@ public:
     const std::string volId;
 private:
     MetaDiffManager &diffMgr_;
-    StateMap<MetaDiffManager> &diffMgrMap_;
+    AtomicMap<MetaDiffManager> &diffMgrMap_;
 
 public:
     /**
@@ -43,7 +43,7 @@ public:
      * @volId volume identifier.
      */
     ProxyVolInfo(const std::string &baseDirStr, const std::string &volId,
-                 MetaDiffManager &diffMgr, StateMap<MetaDiffManager> &diffMgrMap)
+                 MetaDiffManager &diffMgr, AtomicMap<MetaDiffManager> &diffMgrMap)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
         , diffMgr_(diffMgr), diffMgrMap_(diffMgrMap) {

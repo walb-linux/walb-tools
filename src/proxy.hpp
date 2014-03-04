@@ -2,7 +2,7 @@
 #include "walb_util.hpp"
 #include "protocol.hpp"
 #include "state_machine.hpp"
-#include "state_map.hpp"
+#include "atomic_map.hpp"
 #include "action_counter.hpp"
 #include "proxy_vol_info.hpp"
 #include "wdiff_data.hpp"
@@ -18,7 +18,7 @@ struct ProxyVolState
     ActionCounters ac; // archive name is action identifier here.
 
     MetaDiffManager diffMgr; // for the master.
-    StateMap<MetaDiffManager> diffMgrMap; // for each archive.
+    AtomicMap<MetaDiffManager> diffMgrMap; // for each archive.
 
     /**
      * This is protected by state machine.
@@ -74,7 +74,7 @@ struct ProxySingleton
     std::string nodeId;
     std::string baseDirStr;
 
-    StateMap<ProxyVolState> stMap;
+    AtomicMap<ProxyVolState> stMap;
 };
 
 inline ProxySingleton& getProxyGlobal()

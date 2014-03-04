@@ -6,7 +6,7 @@
 #include "walb/block_size.h"
 #include "state_machine.hpp"
 #include "action_counter.hpp"
-#include "state_map.hpp"
+#include "atomic_map.hpp"
 #include "constant.hpp"
 
 namespace walb {
@@ -76,7 +76,7 @@ struct ArchiveSingleton
     std::string baseDirStr;
     std::string volumeGroup;
 
-    StateMap<ArchiveVolState> stMap;
+    AtomicMap<ArchiveVolState> stMap;
 };
 
 inline ArchiveSingleton& getArchiveGlobal()

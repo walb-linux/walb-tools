@@ -47,8 +47,8 @@ LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
 all: build
 build: $(BINARIES)
 
-test: $(TEST_BINARIES)
-test_all: $(TEST_BINARIES)
+utest: $(TEST_BINARIES)
+utest_all: $(TEST_BINARIES)
 	@for t in $(TEST_BINARIES); do \
 	    ./$$t; \
 	done 2>&1 |tee test.log |grep ^ctest:name

@@ -8,7 +8,7 @@
 namespace walb {
 
 template<class State>
-class StateMap {
+class AtomicMap {
     std::mutex mu_;
     using Map = std::map<std::string, std::unique_ptr<State>>;
     using AutoLock = std::lock_guard<std::mutex>;
