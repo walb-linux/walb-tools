@@ -106,7 +106,7 @@ inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
 {
     const StrVec v = cybozu::Split(addrPort, ':', 2);
     if (v.size() != 2) {
-        throw cybozu::Exception("parse error") << addrPort;
+        throw cybozu::Exception("parseSocketAddr:parse error") << addrPort;
     }
     return cybozu::SocketAddr(v[0], static_cast<uint16_t>(cybozu::atoi(v[1])));
 }
@@ -121,7 +121,7 @@ inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &m
     return ret;
 }
 
-void setLogSetting(const std::string &pathStr, bool isDebug)
+inline void setLogSetting(const std::string &pathStr, bool isDebug)
 {
     if (pathStr == "-") {
         cybozu::SetLogFILE(::stderr);
@@ -178,6 +178,23 @@ void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_T
     throw cybozu::Exception(msg) << "timeout" << timeout;
 }
 
+/**
+ * This instance starts a worker thread in the constructor,
+ * and joins it in the destructor.
+ *
+ * The worker thread will pop tasks from a task queue and
+ * run them using a thread pool.
+ * Number of concurrent running tasks will be limited by
+ * maxBackgroundTasks parameter.
+ *
+ * User can specify Task data and Worker function object.
+ *
+ * Task must satisfy TaskQueue constraint.
+ * See TaskQueue definition.
+ *
+ * Worker must have constructor of type (*)(const Task &),
+ * and operator()() of type void (*)().
+ */
 template <typename Task, typename Worker>
 class DispatchTask
 {
