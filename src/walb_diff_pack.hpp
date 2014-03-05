@@ -205,31 +205,33 @@ public:
     bool isValid(std::string *errMsg = nullptr) const {
         return isValid(true, errMsg);
     }
-    bool isValid(bool checkHeaderCsum, std::string *errMsg = nullptr) const {
-        auto err = [&errMsg](const char *fmt, ...) {
-            if (!errMsg) throw std::exception();
-            std::string msg;
-            va_list args;
-            va_start(args, fmt);
-            try { msg = cybozu::util::formatStringV(fmt, args); } catch (...) {}
-            va_end(args);
-            *errMsg = msg;
-            throw std::exception();
-        };
-        try {
-            PackHeader packh((char *)&header());
-            if (checkHeaderCsum && !packh.isValid()) err("pack header invalid.");
+    bool isValid(bool checkHeaderCsum, std::string *errMsg = nullptr) const try {
+        std::string err;
+        PackHeader packh((char *)&header());
+        if (checkHeaderCsum && !packh.isValid()) {
+            err = "pack header invalid.";
+        } else {
             for (size_t i = 0; i < packh.nRecords(); i++) {
                 const walb_diff_record& rec = packh.record(i);
-                if (!isValidRec(rec)) err("record invalid: %zu.", i);
+                if (!isValidRec(rec)) {
+                    err = cybozu::util::formatString("record invalid: %zu.", i);
+                    goto err_exit;
+                }
                 uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
-                if (csum != rec.checksum) err("checksum of %zu differ %08x %08x."
+                if (csum != rec.checksum) {
+                    err = cybozu::util::formatString("checksum of %zu differ %08x %08x."
                                                 , i, rec.checksum, csum);
+                    goto err_exit;
+                }
             }
             return true;
-        } catch (std::exception &) {
-            return false;
         }
+    err_exit:
+        if (errMsg) *errMsg = std::move(err);
+        return false;
+    } catch (std::exception &e) {
+        if (errMsg) *errMsg = e.what();
+        return false;
     }
 };
 
