@@ -174,23 +174,25 @@ public:
             uint64_t addr0 = rec_.ioAddress();
             uint64_t addr1 = rec_.endIoAddress() - blks1;
 
-            RecordRaw rec0(rec_), rec1(rec_);
-            rec0.setIoAddress(addr0);
-            rec0.setIoBlocks(blks0);
-            rec1.setIoAddress(addr1);
-            rec1.setIoBlocks(blks1);
+            walb_diff_record rec0 = rec_.record();
+            walb_diff_record rec1 = rec_.record();
+            rec0.io_address = addr0;
+            rec0.io_blocks = blks0;
+            rec1.io_address = addr1;
+            rec1.io_blocks = blks1;
 
             size_t size0 = 0;
             size_t size1 = 0;
-            if (rec_.isNormal()) {
+			const bool recIsNormal = rec_.isNormal();
+            if (recIsNormal) {
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
             }
-            rec0.setDataSize(size0);
-            rec1.setDataSize(size1);
+            rec0.data_size = size0;
+            rec1.data_size = size1;
 
             std::vector<char> data0(size0), data1(size1);
-            if (rec_.isNormal()) {
+            if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
                 ::memcpy(&data0[0], io_.rawData(), size0);
@@ -222,10 +224,10 @@ public:
             uint16_t rblks = rec_.endIoAddress() - rhs.rec_.ioAddress();
             assert(rhs.rec_.ioAddress() + rblks == rec_.endIoAddress());
 
-            RecordRaw rec(rec_);
+            walb_diff_record rec = rec_.record();
             /* rec.ioAddress() does not change. */
-            rec.setIoBlocks(rec_.ioBlocks() - rblks);
-            assert(rec.endIoAddress() == rhs.rec_.ioAddress());
+            rec.io_blocks = rec_.ioBlocks() - rblks;
+            assert(endIoAddressRec(rec) == rhs.rec_.ioAddress());
 
             size_t size = 0;
             if (rec_.isNormal()) {
@@ -234,7 +236,7 @@ public:
             std::vector<char> data(size);
             if (rec_.isNormal()) {
                 assert(rec_.dataSize() == io_.size);
-                rec.setDataSize(size);
+                rec.data_size = size;
                 ::memcpy(&data[0], io_.rawData(), size);
             }
 
