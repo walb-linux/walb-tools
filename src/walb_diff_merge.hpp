@@ -35,7 +35,7 @@ private:
         std::string wdiffPath_;
         mutable walb::diff::Reader reader_;
         std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
-        mutable RecordRaw rec_;
+        mutable walb_diff_record rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
@@ -43,23 +43,23 @@ private:
         explicit Wdiff(const std::string &wdiffPath)
             : wdiffPath_(wdiffPath), reader_(wdiffPath, O_RDONLY)
             , headerP_(reader_.readHeader())
-            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+			initRec(rec_);
         }
         explicit Wdiff(int fd)
             : wdiffPath_(), reader_(fd)
             , headerP_(reader_.readHeader())
-            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+			initRec(rec_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
         walb::diff::FileHeaderWrap &header() { return *headerP_; }
-        const RecordRaw &front() {
+        const walb_diff_record &front() {
             fill();
             assert(isFilled_);
             return rec_;
@@ -68,7 +68,7 @@ private:
             if (isEnd()) return;
 
             /* for check */
-            uint64_t endIoAddr0 = rec_.endIoAddress();
+            const uint64_t endIoAddr0 = endIoAddressRec(rec_);
 
             assert(isFilled_);
             io = std::move(io_);
@@ -76,7 +76,7 @@ private:
             fill();
 
             /* for check */
-            if (!isEnd() && rec_.ioAddress() < endIoAddr0) {
+            if (!isEnd() && rec_.io_address < endIoAddr0) {
                 throw RT_ERR("Invalid wdiff: IOs must be sorted and not overlapped each other.");
             }
         }
@@ -93,7 +93,7 @@ private:
         uint64_t currentAddress() const {
             if (isEnd()) return uint64_t(-1);
             assert(isFilled_);
-            return rec_.ioAddress();
+            return rec_.io_address;
         }
     private:
         void fill() const {
@@ -101,7 +101,7 @@ private:
             if (reader_.readAndUncompressDiff(rec_, io_)) {
                 isFilled_ = true;
             } else {
-                rec_.clearExists();
+                clearExistsRec(rec_);
                 io_ = DiffIo();
                 isFilled_ = false;
                 isEnd_ = true;
@@ -235,8 +235,9 @@ public:
             }
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-                RecordRaw rec(wdiffs_[i]->front());
-                assert(rec.isValid());
+				// copy rec because reference is invalid after calling wdiffs_[i]->pop
+                const walb_diff_record rec = wdiffs_[i]->front();
+                assert(isValidRec(rec));
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
                     wdiffs_[i]->pop(io);
@@ -288,14 +289,14 @@ private:
             }
         }
     }
-    void mergeIo(const RecordRaw &rec, DiffIo &&io) {
-        assert(!rec.isCompressed());
+    void mergeIo(const walb_diff_record &rec, DiffIo &&io) {
+        assert(!isCompressedRec(rec));
         wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
-    bool canMergeIo(size_t i, const RecordRaw &rec) {
+    bool canMergeIo(size_t i, const walb_diff_record &rec) {
         if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
-            if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {
+            if (!(endIoAddressRec(rec) <= wdiffs_[j]->currentAddress())) {
                 return false;
             }
         }
