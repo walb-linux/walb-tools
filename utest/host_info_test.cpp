@@ -37,10 +37,18 @@ CYBOZU_TEST_AUTO(hostInfo)
         cybozu::util::FileReader reader(fpath.str(), O_RDONLY);
         cybozu::load(hostx, reader);
         CYBOZU_TEST_EQUAL(host, hostx);
-        CYBOZU_TEST_EQUAL(host.name, hostx.name);
-        CYBOZU_TEST_EQUAL(host.addr, hostx.addr);
-        CYBOZU_TEST_EQUAL(host.port, hostx.port);
-        CYBOZU_TEST_EQUAL(host.compressionType, hostx.compressionType);
-        CYBOZU_TEST_EQUAL(host.compressionLevel, hostx.compressionLevel);
     }
+
+    walb::HostInfo hi0, hi1, hi2;
+    hi0.parse("host0 192.168.1.1:5000 snappy:5");
+    hi1.parse("host0   192.168.1.1:5000   snappy:5");
+    hi2.parse("host0", "192.168.1.1:5000", "snappy:5");
+    CYBOZU_TEST_EQUAL(hi0, hi1);
+    CYBOZU_TEST_EQUAL(hi0, hi2);
+
+    hi0.parse("host0 192.168.1.1:5000 lzma:9");
+    hi0.parse("host0 192.168.1.1:5000 gzip:9");
+    hi0.parse("host0 192.168.1.1:5000 none:9");
+    CYBOZU_TEST_EXCEPTION(hi0.parse("host0 192.168.1.1:5000 xxx:9"), cybozu::Exception);
+    CYBOZU_TEST_EXCEPTION(hi0.parse("host0 192.168.1.1:5000 snappy:10"), cybozu::Exception);
 }

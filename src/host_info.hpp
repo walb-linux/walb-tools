@@ -5,6 +5,7 @@
 #include "walb_diff_base.hpp"
 #include "cybozu/serializer.hpp"
 #include "cybozu/exception.hpp"
+#include "cybozu/string_operation.hpp"
 
 namespace walb {
 
@@ -25,10 +26,14 @@ struct HostInfo
         : name(name), addr(addr), port(port)
         , compressionType(type), compressionLevel(level) {}
     bool operator==(const HostInfo &rhs) const {
-        return name == rhs.name;
+        return name == rhs.name && addr == rhs.addr &&
+            port == rhs.port && compressionType == rhs.compressionType &&
+            compressionLevel == rhs.compressionLevel;
     }
     bool operator!=(const HostInfo &rhs) const {
-        return name != rhs.name;
+        return name != rhs.name || addr != rhs.addr ||
+            port != rhs.port || compressionType != rhs.compressionType ||
+            compressionLevel != rhs.compressionLevel;
     }
     void verify() const {
         if (name.empty()) {
@@ -62,11 +67,121 @@ struct HostInfo
         cybozu::load(compressionType, is);
         cybozu::load(compressionLevel, is);
     }
+    std::string str() const;
+    void parse(const std::string &, const std::string &, const std::string &);
+    void parse(const std::string &);
     friend inline std::ostream &operator<<(std::ostream &os, const HostInfo &s) {
-        os << s.name << "(" << s.addr << ":" << s.port << ")"
-           << s.compressionType << ":" << s.compressionLevel;
+        os << s.str();
         return os;
     }
 };
+
+namespace host_info_local {
+
+struct Pair
+{
+    std::string typeStr;
+    int type;
+};
+
+static const Pair compressionTypeTable[] = {
+    { "none", ::WALB_DIFF_CMPR_NONE },
+    { "snappy", ::WALB_DIFF_CMPR_SNAPPY },
+    { "gzip", ::WALB_DIFF_CMPR_GZIP },
+    { "lzma", ::WALB_DIFF_CMPR_LZMA },
+};
+
+} // namespace host_info_local
+
+inline int parseCompressionType(const std::string &typeStr)
+{
+    namespace lo = host_info_local;
+    for (const lo::Pair &p : lo::compressionTypeTable) {
+        if (p.typeStr == typeStr) {
+            return p.type;
+        }
+    }
+    throw cybozu::Exception("parseCompressionType:wrong type") << typeStr;
+}
+
+inline const std::string &compressionTypeToStr(int type)
+{
+    namespace lo = host_info_local;
+    for (const lo::Pair &p : lo::compressionTypeTable) {
+        if (p.type == type) {
+            return p.typeStr;
+        }
+    }
+    throw cybozu::Exception("compressionTypeToStr:wrong type") << type;
+}
+
+/**
+ * Parse three strings into a HostInfo.
+ */
+inline HostInfo parseHostInfo(
+    const std::string &archiveId, const std::string &addrPort,
+    const std::string &compressOpt)
+{
+    HostInfo hi;
+    hi.name = archiveId;
+    {
+        std::vector<std::string> v = cybozu::Split(addrPort, ':', 2);
+        if (v.size() != 2) {
+            throw cybozu::Exception("parseHostInfo:parse error") << addrPort;
+        }
+        hi.addr = v[0];
+        hi.port = static_cast<uint16_t>(cybozu::atoi(v[1]));
+    }
+    {
+        std::vector<std::string> v = cybozu::Split(compressOpt, ':', 2);
+        if (v.size() != 2) {
+            throw cybozu::Exception("parseHostInfo:parse error") << compressOpt;
+        }
+        hi.compressionType = parseCompressionType(v[0]);
+        hi.compressionLevel = static_cast<uint8_t>(cybozu::atoi(v[1]));
+    }
+    hi.verify();
+    return hi;
+}
+
+/**
+ * Parse a string into a HostInfo.
+ * Input string is like "archiveId addr:port compressionType:compresionLevel".
+ */
+inline HostInfo parseHostInfo(const std::string &s)
+{
+    HostInfo hi;
+    std::vector<std::string> v = cybozu::Split(s, ' ');
+    auto itr = std::remove_if(v.begin(), v.end(), [](const std::string &s) {
+            return s.empty();
+        });
+    v.erase(itr, v.end());
+    if (v.size() != 3) {
+        throw cybozu::Exception("parseHostInfo:not 3 tokens.")
+            << s;
+    }
+    return parseHostInfo(v[0], v[1], v[2]);
+}
+
+inline void HostInfo::parse(
+    const std::string &archiveId, const std::string &addrPort,
+    const std::string &compressOpt)
+{
+    *this = parseHostInfo(archiveId, addrPort, compressOpt);
+}
+
+inline void HostInfo::parse(const std::string &s)
+{
+    *this = parseHostInfo(s);
+}
+
+inline std::string HostInfo::str() const
+{
+    return cybozu::util::formatString(
+        "%s %s:%u %s:%u"
+        , name.c_str(), addr.c_str(), port
+        , compressionTypeToStr(compressionType).c_str()
+        , compressionLevel);
+}
 
 } //namespace walb
