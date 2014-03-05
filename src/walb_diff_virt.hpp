@@ -213,11 +213,11 @@ private:
         }
     }
     uint64_t currentDiffAddr() const {
-        return recIo_.record().ioAddress() + offInIo_;
+        return recIo_.record2().io_address + offInIo_;
     }
     uint16_t currentDiffBlocks() const {
-        assert(offInIo_ <= recIo_.record().ioBlocks());
-        return recIo_.record().ioBlocks() - offInIo_;
+        assert(offInIo_ <= recIo_.record2().io_blocks);
+        return recIo_.record2().io_blocks - offInIo_;
     }
 
     static std::shared_ptr<char> allocateBufForSkipStatic(bool isInputFdSeekable) {

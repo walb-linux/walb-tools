@@ -99,13 +99,12 @@ std::vector<std::vector<char> > generateRawPacks()
     };
 
     /* Convert memory data to raw pack list. */
-    walb::diff::MemoryData::ConstIterator it = mem0.constIterator();
-    it.begin();
-    while (it.isValid()) {
-        //it.record().printOneline(); /* debug */
-        addIo(it.record().record(), it.rawData(), it.rawSize());
-        it.next();
-    }
+    const walb::diff::MemoryData::Map& map = mem0.getMap();
+	for (const auto& i : map) {
+		const walb::diff::RecIo& recIo = i.second;
+		if (!walb::diff::isValidRec(recIo.record2())) break;
+		addIo(recIo.record2(), recIo.io().rawData(), recIo.io().size);
+	}
     packh.updateChecksum();
     packV0.push_back(std::move(packRaw));
     //::printf("Number of packs: %zu\n", packV0.size());
