@@ -56,10 +56,8 @@ private:
     }
 };
 
-using DiffRec = walb::diff::RecordRaw;
 using DiffIo = walb::diff::IoData;
 using DiffHeader = walb::diff::FileHeaderWrap;
-using DiffRecPtr = std::shared_ptr<DiffRec>;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
 
@@ -207,15 +205,15 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const DiffRec &rec, const DiffIoPtr ioP) {
-        const uint64_t ioAddr = rec.ioAddress();
-        const uint16_t ioBlocks = rec.ioBlocks();
+    void executeDiffIo(const walb_diff_record& rec, const DiffIoPtr ioP) {
+        const uint64_t ioAddr = rec.io_address;
+        const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
-        if (rec.isAllZero()) {
+        if (walb::diff::isAllZeroRec(rec)) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
             if (isSuccess) { outStat_.nIoAllZero++; }
             inStat_.nIoAllZero++;
-        } else if (rec.isDiscard()) {
+        } else if (walb::diff::isDiscardRec(rec)) {
             if (config_.isDiscard()) {
                 isSuccess = executeDiscardIo(ioAddr, ioBlocks);
             } else if (config_.isZeroDiscard()) {
@@ -227,7 +225,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
-            assert(rec.isNormal());
+            assert(walb::diff::isNormalRec(rec));
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }
@@ -237,7 +235,7 @@ public:
             outStat_.nBlocks += ioBlocks;
         } else {
             ::printf("Failed to redo: ");
-            rec.printOneline();
+            walb::diff::printOnelineRec(rec);
         }
         inStat_.nBlocks += ioBlocks;
     }
@@ -257,12 +255,12 @@ public:
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
-        DiffRec rec;
+        walb_diff_record rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
-            if (!rec.isValid()) {
+            if (!walb::diff::isValidRec(rec)) {
                 ::printf("Invalid record: ");
-                rec.printOneline();
+                walb::diff::printOnelineRec(rec);
             }
             if (!io.isValid()) {
                 ::printf("Invalid io: ");

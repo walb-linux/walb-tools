@@ -8,6 +8,7 @@
  */
 #include <memory>
 #include <cinttypes>
+#include "walb_diff.h"
 
 namespace block_diff {
 
@@ -54,6 +55,10 @@ public:
     bool isOverlapped(const BlockDiffKey &rhs) const {
         return ioAddress() < rhs.ioAddress() + rhs.ioBlocks() &&
             rhs.ioAddress() < ioAddress() + ioBlocks();
+    }
+    bool isOverlapped(const walb_diff_record &rhs) const {
+        return ioAddress() < rhs.io_address + rhs.io_blocks &&
+            rhs.io_address < ioAddress() + ioBlocks();
     }
 
     bool isOverwrittenBy(const BlockDiffKey &rhs) const {

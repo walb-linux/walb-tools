@@ -99,47 +99,15 @@ std::vector<std::vector<char> > generateRawPacks()
     };
 
     /* Convert memory data to raw pack list. */
-    walb::diff::MemoryData::ConstIterator it = mem0.constIterator();
-    it.begin();
-    while (it.isValid()) {
-        //it.record().printOneline(); /* debug */
-        addIo(it.record().record(), it.rawData(), it.rawSize());
-        it.next();
-    }
+    const walb::diff::MemoryData::Map& map = mem0.getMap();
+	for (const auto& i : map) {
+		const walb::diff::RecIo& recIo = i.second;
+		addIo(recIo.record2(), recIo.io().rawData(), recIo.io().size);
+	}
     packh.updateChecksum();
     packV0.push_back(std::move(packRaw));
     //::printf("Number of packs: %zu\n", packV0.size());
 
-#if 0
-    /* debug */
-    ::printf("-------------------------------\n");
-    for (std::vector<char> &pk : packV0) {
-        ::printf("pack size %zu\n", pk.size()); /* debug */
-        //printPackRaw(&pk[0]);
-
-        walb::diff::PackHeader packh0;
-        packh0.resetBuffer(&pk[0]);
-        for (size_t i = 0; i < packh0.nRecords(); i++) {
-            const walb::diff::RecordRaw rec(packh0.record(i));
-            const char *rawData
-                = &pk[::WALB_DIFF_PACK_SIZE + rec.dataOffset()];
-            if (rec.compressionType() == ::WALB_DIFF_CMPR_SNAPPY) {
-                walb::diff::IoData io0;
-                if (rec.isNormal()) {
-                    io0.setIoBlocks(rec.ioBlocks());
-                    io0.copyFrom(rawData, rec.dataSize());
-                }
-                walb::diff::IoData io1 = io0.compress(::WALB_DIFF_CMPR_SNAPPY);
-                if (rec.isNormal()) {
-                    rec.printOneline();
-                    io0.printOneline();
-                    io1.printOneline();
-                }
-            }
-        }
-    }
-    ::printf("-------------------------------\n");
-#endif
     return packV0;
 }
 

@@ -164,7 +164,10 @@ public:
     }
 };
 
-inline bool doesExistRec(const walb_diff_record& rec) {
+inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
+    return rec.io_address + rec.io_blocks;
+}
+inline bool existsRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
 }
 inline bool isAllZeroRec(const walb_diff_record& rec) {
@@ -180,7 +183,7 @@ inline bool isNormalRec(const walb_diff_record& rec) {
     return !isAllZeroRec(rec) && !isDiscardRec(rec);
 }
 inline bool isValidRec(const walb_diff_record& rec) {
-    if (!doesExistRec(rec)) {
+    if (!existsRec(rec)) {
         LOGd("Does not exist.\n");
         return false;
     }
@@ -214,19 +217,40 @@ inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
        "isDiscard: %d\n",
        rec.io_address, rec.io_blocks,
        rec.compression_type, rec.data_offset, rec.data_size,
-       rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+       rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
 }
 inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
     ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
         rec.io_address, rec.io_blocks,
         rec.compression_type, rec.data_offset, rec.data_size,
-        rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+        rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+}
+inline void initRec(walb_diff_record& rec) {
+    ::memset(&rec, 0, sizeof(struct walb_diff_record));
+    rec.flags = WALB_DIFF_FLAG(EXIST);
+}
+inline void setExistsRec(walb_diff_record& rec) {
+    rec.flags |= WALB_DIFF_FLAG(EXIST);
+}
+inline void clearExistsRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(EXIST);
+}
+inline void setNormalRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
+}
+inline void setAllZeroRec(walb_diff_record& rec) {
+    rec.flags |= WALB_DIFF_FLAG(ALLZERO);
+    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
+}
+inline void setDiscardRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+    rec.flags |= WALB_DIFF_FLAG(DISCARD);
 }
 
-struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
+struct DiffRecord : public block_diff::BlockDiffKey2<walb_diff_record> {
     void init() {
-        ::memset(this, 0, sizeof(walb_diff_record));
-        setExists();
+        initRec(*this);
     }
 //    uint64_t ioAddress() const override { return io_address; }
 //    uint16_t ioBlocks() const override { return io_blocks; }
@@ -239,7 +263,7 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
 //    uint32_t dataSize() const { return data_size; }
 //    uint32_t checksum() const { return checksum; }
 
-    bool exists() const { return doesExistRec(*this); }
+    bool exists() const { return existsRec(*this); }
     bool isAllZero() const { return isAllZeroRec(*this); }
     bool isDiscard() const { return isDiscardRec(*this); }
     bool isNormal() const { return isNormalRec(*this); }
@@ -248,24 +272,11 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
     void print(::FILE *fp = ::stdout) const { printRec(*this, fp); }
     void printOneline(::FILE *fp = ::stdout) const { printOnelineRec(*this, fp); }
 
-    void setExists() {
-        flags |= WALB_DIFF_FLAG(EXIST);
-    }
-    void clearExists() {
-        flags &= ~WALB_DIFF_FLAG(EXIST);
-    }
-    void setNormal() {
-        flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setAllZero() {
-        flags |= WALB_DIFF_FLAG(ALLZERO);
-        flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setDiscard() {
-        flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        flags |= WALB_DIFF_FLAG(DISCARD);
-    }
+    void setExists() { setExistsRec(*this); }
+    void clearExists() { clearExistsRec(*this); }
+    void setNormal() { setNormalRec(*this); }
+    void setAllZero() { setAllZeroRec(*this); }
+    void setDiscard() { setDiscardRec(*this); }
 };
 
 /**
@@ -314,70 +325,47 @@ public:
             throw RT_ERR("size is invalid.");
         }
     }
-
-    /**
-     * Split a record into two records
-     * where the first record's ioBlocks will be a specified one.
-     *
-     * CAUSION:
-     *   The checksum of splitted records will be invalid state.
-     *   Only non-compressed records can be splitted.
-     */
-    std::pair<RecordRaw, RecordRaw> split(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
-            throw RT_ERR("split: ioBlocks0 is out or range.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("split: compressed data can not be splitted.");
-        }
-        RecordRaw r0(*this), r1(*this);
-        uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
-        r0.setIoBlocks(ioBlocks0);
-        r1.setIoBlocks(ioBlocks1);
-        r1.setIoAddress(ioAddress() + ioBlocks0);
-        if (isNormal()) {
-            r0.setDataSize(ioBlocks0 * LOGICAL_BLOCK_SIZE);
-            r1.setDataSize(ioBlocks1 * LOGICAL_BLOCK_SIZE);
-        }
-        return {r0, r1};
-    }
-    /**
-     * Split a record into several records
-     * where all splitted records' ioBlocks will be <= a specified one.
-     *
-     * CAUSION:
-     *   The checksum of splitted records will be invalid state.
-     *   Only non-compressed records can be splitted.
-     */
-    std::vector<RecordRaw> splitAll(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0) {
-            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("splitAll: compressed data can not be splitted.");
-        }
-        std::vector<RecordRaw> v;
-        uint64_t addr = ioAddress();
-        uint16_t remaining = ioBlocks();
-        while (0 < remaining) {
-            uint16_t blks = std::min(ioBlocks0, remaining);
-            v.emplace_back(*this);
-            v.back().setIoAddress(addr);
-            v.back().setIoBlocks(blks);
-            if (isNormal()) {
-                v.back().setDataSize(blks * LOGICAL_BLOCK_SIZE);
-            }
-            addr += blks;
-            remaining -= blks;
-        }
-        assert(!v.empty());
-        return v;
-    }
 private:
     void check() const {
         if (!isValid()) throw RT_ERR("invalid record.");
     }
 };
+
+/**
+ * Split a record into several records
+ * where all splitted records' ioBlocks will be <= a specified one.
+ *
+ * CAUSION:
+ *   The checksum of splitted records will be invalid state.
+ *   Only non-compressed records can be splitted.
+ */
+std::vector<walb_diff_record> splitAll(const walb_diff_record& rec, uint16_t ioBlocks0) {
+    if (ioBlocks0 == 0) {
+        throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
+    }
+    if (isCompressedRec(rec)) {
+        throw cybozu::Exception("splitAll: compressed data can not be splitted.");
+    }
+    std::vector<walb_diff_record> v;
+    uint64_t addr = rec.io_address;
+    uint16_t remaining = rec.io_blocks;
+    const bool isNormal = isNormalRec(rec);
+    while (remaining > 0) {
+        uint16_t blks = std::min(ioBlocks0, remaining);
+        v.push_back(walb_diff_record());
+        walb_diff_record& r = v.back();
+        r = rec;
+        r.io_address = addr;
+        r.io_blocks = blks;
+        if (isNormal) {
+            r.data_size = blks * LOGICAL_BLOCK_SIZE;
+        }
+        addr += blks;
+        remaining -= blks;
+    }
+    assert(!v.empty());
+    return v;
+}
 
 /**
  * Io data.

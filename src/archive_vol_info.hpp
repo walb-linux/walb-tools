@@ -174,6 +174,7 @@ public:
      * (3) rename the lvm snapshot.
      */
     bool restore(uint64_t gid) {
+        using namespace walb::diff;
         cybozu::lvm::Lv lv = getLv();
         const std::string targetName = restoredSnapshotName(gid);
         const std::string tmpLvName = targetName + "_tmp";
@@ -217,10 +218,10 @@ public:
         cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
         std::vector<char> zero;
         while (merger.pop(recIo)) {
-            diff::RecordRaw& raw = recIo.record();
-            assert(!raw.isCompressed());
-            const uint64_t ioAddress = raw.ioAddress();
-            const uint64_t ioBlocks = raw.ioBlocks();
+            const walb_diff_record& rec = recIo.record().record();
+            assert(!isCompressedRec(rec));
+            const uint64_t ioAddress = rec.io_address;
+            const uint64_t ioBlocks = rec.io_blocks;;
             LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
             const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
             const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
@@ -229,7 +230,7 @@ public:
 
             const char *data;
             // Curently a discard IO is converted to an all-zero IO.
-            if (raw.isAllZero() || raw.isDiscard()) {
+            if (isAllZeroRec(rec) || isDiscardRec(rec)) {
                 if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
                 data = &zero[0];
             } else {

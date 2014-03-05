@@ -212,12 +212,12 @@ public:
             return;
         }
 
-        RecordRaw rec1(rec);
         IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setDataSize(io1.size);
-        rec1.setChecksum(io1.calcChecksum());
-        writeDiff(rec1.record(), io1.forMove());
+        walb_diff_record rec1 = rec;
+        rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
+        rec1.data_size = io1.size;
+        rec1.checksum = io1.calcChecksum();
+        writeDiff(rec1, io1.forMove());
     }
 
     /**
@@ -365,19 +365,22 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(Record &rec, IoData &io) {
+    bool readDiff(walb_diff_record &rec, IoData &io) {
         if (!canRead()) return false;
-        ::memcpy(rec.rawData(), &pack_.record(recIdx_), sizeof(struct walb_diff_record));
+        rec = pack_.record(recIdx_);
 
-        if (!rec.isValid()) {
+        if (!isValidRec(rec)) {
 #ifdef DEBUG
-            rec.print(::stderr);
+            printRec(rec);
             printRec(pack_.record(recIdx_));
 #endif
             throw RT_ERR("Invalid record.");
         }
         readDiffIo(rec, io);
         return true;
+    }
+    bool readDiff(Record &rec, IoData &io) {
+        return readDiff(rec.record(), io);
     }
 
     /**
@@ -386,28 +389,27 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(Record &rec, IoData &io) {
-        RecordRaw rec0;
+    bool readAndUncompressDiff(walb_diff_record &rec, IoData &io) {
         IoData io0;
-        if (!readDiff(rec0, io0)) {
-            rec0.clearExists();
-            rec = rec0;
+        if (!readDiff(rec, io0)) {
+            clearExistsRec(rec);
             io = std::move(io0);
             return false;
         }
-        if (!rec0.isCompressed()) {
-            rec = rec0;
+        if (!isCompressedRec(rec)) {
             io = std::move(io0);
             return true;
         }
-        rec = rec0;
         io = uncompressIoData(io0);
-        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        rec.setDataSize(io.size);
-        rec.setChecksum(io.calcChecksum());
-        assert(rec.isValid());
+        rec.compression_type = ::WALB_DIFF_CMPR_NONE;
+        rec.data_size = io.size;
+        rec.checksum = io.calcChecksum();
+        assert(diff::isValidRec(rec));
         assert(io.isValid());
         return true;
+    }
+    bool readAndUncompressDiff(Record &rec, IoData &io) {
+        return readAndUncompressDiff(rec.record(), io);
     }
 
     bool canRead() {
@@ -439,20 +441,20 @@ public:
      *
      * If rec.dataSize() == 0, io will not be changed.
      */
-    void readDiffIo(const Record &rec, IoData &io) {
-        if (rec.dataOffset() != totalSize_) {
-            throw RT_ERR("data offset invalid %u %u.", rec.dataOffset(), totalSize_);
+    void readDiffIo(const walb_diff_record &rec, IoData &io) {
+        if (rec.data_offset != totalSize_) {
+            throw RT_ERR("data offset invalid %u %u.", rec.data_offset, totalSize_);
         }
-        const size_t recSize = rec.dataSize();
+        const size_t recSize = rec.data_size;
         if (recSize > 0) {
-            io.setBlocksAndType(rec.ioBlocks(), rec.compressionType());
+            io.setBlocksAndType(rec.io_blocks, rec.compression_type);
             io.setByWritter(recSize, [&](char *p) {
                 fdr_.read(p, recSize);
                 return recSize;
             });
             const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
-            if (rec.checksum() != csum) {
-                throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum(), csum);
+            if (rec.checksum != csum) {
+                throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
             }
             totalSize_ += recSize;
         }

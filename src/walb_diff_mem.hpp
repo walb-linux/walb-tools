@@ -26,32 +26,32 @@ private:
     IoData io_;
 public:
     RecordRaw &record() { return rec_; }
-    const RecordRaw &record() const { return rec_; }
+    const walb_diff_record &record2() const { return rec_.record(); }
 
     IoData &io() { return io_; }
     const IoData &io() const { return io_; }
 
-    void copyFrom(const RecordRaw &rec, const IoData &io) {
+    void copyFrom(const walb_diff_record &rec, const IoData &io) {
         rec_ = rec;
-        if (rec.isNormal()) {
+        if (isNormalRec(rec)) {
             io_ = io;
         } else {
             io_.clear();
         }
     }
-    void moveFrom(const RecordRaw &rec, IoData &&io) {
+    void moveFrom(const walb_diff_record &rec, IoData &&io) {
         rec_ = rec;
-        if (rec.isNormal()) {
+        if (isNormalRec(rec)) {
             io_ = std::move(io);
         } else {
             io_.clear();
         }
     }
-    void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
+    void moveFrom(const walb_diff_record &rec, std::vector<char> &&data) {
         rec_ = rec;
-        if (rec.isNormal()) {
-            io_.ioBlocks = rec.ioBlocks();
-            io_.compressionType = rec.compressionType();
+        if (isNormalRec(rec)) {
+            io_.ioBlocks = rec.io_blocks;
+            io_.compressionType = rec.compression_type;
             io_.moveFrom(std::move(data));
         } else {
             io_.clear();
@@ -112,7 +112,7 @@ public:
         assert(isValid());
         std::vector<RecIo> v;
 
-        std::vector<RecordRaw> recV = rec_.splitAll(ioBlocks);
+        std::vector<walb_diff_record> recV = diff::splitAll(rec_.record(), ioBlocks);
         std::vector<IoData> ioV;
         if (rec_.isNormal()) {
             ioV = splitIoDataAll(io_, ioBlocks);
@@ -165,23 +165,25 @@ public:
             uint64_t addr0 = rec_.ioAddress();
             uint64_t addr1 = rec_.endIoAddress() - blks1;
 
-            RecordRaw rec0(rec_), rec1(rec_);
-            rec0.setIoAddress(addr0);
-            rec0.setIoBlocks(blks0);
-            rec1.setIoAddress(addr1);
-            rec1.setIoBlocks(blks1);
+            walb_diff_record rec0 = rec_.record();
+            walb_diff_record rec1 = rec_.record();
+            rec0.io_address = addr0;
+            rec0.io_blocks = blks0;
+            rec1.io_address = addr1;
+            rec1.io_blocks = blks1;
 
             size_t size0 = 0;
             size_t size1 = 0;
-            if (rec_.isNormal()) {
+			const bool recIsNormal = rec_.isNormal();
+            if (recIsNormal) {
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
             }
-            rec0.setDataSize(size0);
-            rec1.setDataSize(size1);
+            rec0.data_size = size0;
+            rec1.data_size = size1;
 
             std::vector<char> data0(size0), data1(size1);
-            if (rec_.isNormal()) {
+            if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
                 ::memcpy(&data0[0], io_.rawData(), size0);
@@ -213,10 +215,10 @@ public:
             uint16_t rblks = rec_.endIoAddress() - rhs.rec_.ioAddress();
             assert(rhs.rec_.ioAddress() + rblks == rec_.endIoAddress());
 
-            RecordRaw rec(rec_);
+            walb_diff_record rec = rec_.record();
             /* rec.ioAddress() does not change. */
-            rec.setIoBlocks(rec_.ioBlocks() - rblks);
-            assert(rec.endIoAddress() == rhs.rec_.ioAddress());
+            rec.io_blocks = rec_.ioBlocks() - rblks;
+            assert(endIoAddressRec(rec) == rhs.rec_.ioAddress());
 
             size_t size = 0;
             if (rec_.isNormal()) {
@@ -225,7 +227,7 @@ public:
             std::vector<char> data(size);
             if (rec_.isNormal()) {
                 assert(rec_.dataSize() == io_.size);
-                rec.setDataSize(size);
+                rec.data_size = size;
                 ::memcpy(&data[0], io_.rawData(), size);
             }
 
@@ -245,9 +247,9 @@ public:
         assert(rec_.ioAddress() + rblks == rhs.rec_.endIoAddress());
         size_t off = rblks * LOGICAL_BLOCK_SIZE;
 
-        RecordRaw rec(rec_);
-        rec.setIoAddress(rec_.ioAddress() + rblks);
-        rec.setIoBlocks(rec_.ioBlocks() - rblks);
+        walb_diff_record rec = rec_.record();
+        rec.io_address = rec_.ioAddress() + rblks;
+        rec.io_blocks = rec_.ioBlocks() - rblks;
 
         size_t size = 0;
         if (rec_.isNormal()) {
@@ -256,10 +258,10 @@ public:
         std::vector<char> data(size);
         if (rec_.isNormal()) {
             assert(rec_.dataSize() == io_.size);
-            rec.setDataSize(size);
+            rec.data_size = size;
             ::memcpy(&data[0], io_.rawData() + off, size);
         }
-        assert(rhs.rec_.endIoAddress() == rec.ioAddress());
+        assert(rhs.rec_.endIoAddress() == rec.io_address);
         RecIo r;
         r.moveFrom(rec, std::move(data));
         r.updateChecksum();
@@ -275,9 +277,11 @@ public:
  */
 class MemoryData
 {
+public:
+    using Map = std::map<uint64_t, RecIo>;
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
-    std::map<uint64_t, RecIo> map_;
+    Map map_;
     struct walb_diff_file_header h_;
     FileHeaderWrap fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
@@ -294,21 +298,25 @@ public:
     void add(const Record &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
         add(rec, IoData(io), maxIoBlocks);
     }
-    void add(const Record &rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+    void add(const Record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+        add(rec.record(), std::move(io), maxIoBlocks);
+    }
+    void add(const walb_diff_record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+        const DiffRecord& _rec = static_cast<const DiffRecord&>(rec);
         /* Decide key range to search. */
-        uint64_t addr0 = rec.ioAddress();
+        uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
             addr0 = 0;
         } else {
             addr0 -= fileH_.getMaxIoBlocks();
         }
         /* Search overlapped items. */
-        uint64_t addr1 = rec.endIoAddress();
+        uint64_t addr1 = endIoAddressRec(rec);
         std::queue<RecIo> q;
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-            if (r.record().isOverlapped(rec)) {
+            if (r.record().isOverlapped(_rec)) {
                 nIos_--;
                 nBlocks_ -= r.record().ioBlocks();
                 q.push(std::move(r));
@@ -335,9 +343,9 @@ public:
         nIos_++;
         nBlocks_ += r0.record().ioBlocks();
         std::vector<RecIo> rv;
-        if (0 < maxIoBlocks && maxIoBlocks < rec.ioBlocks()) {
+        if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
-        } else if (maxIoBlocks_ < rec.ioBlocks()) {
+        } else if (maxIoBlocks_ < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks_);
         } else {
             rv.push_back(std::move(r0));
@@ -352,8 +360,8 @@ public:
     void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecordRaw &rec = it->second.record();
-            rec.printOneline(fp);
+            const walb_diff_record &rec = it->second.record2();
+            printOnelineRec(rec, fp);
             ++it;
         }
     }
@@ -364,8 +372,8 @@ public:
         uint64_t nIos = 0;
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecordRaw &rec = it->second.record();
-            nBlocks += rec.ioBlocks();
+            const walb_diff_record &rec = it->second.record2();
+            nBlocks += rec.io_blocks;
             nIos++;
             ++it;
         }
@@ -387,9 +395,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record().record(), r.io().rawData());
+                writer.compressAndWriteDiff(r.record2(), r.io().rawData());
             } else {
-                writer.writeDiff(r.record().record(), r.io().rawData());
+                writer.writeDiff(r.record2(), r.io().rawData());
             }
             ++it;
         }
@@ -398,7 +406,7 @@ public:
     void readFrom(int inFd) {
         Reader reader(inFd);
         reader.readHeader(fileH_);
-        RecordRaw rec;
+        walb_diff_record rec;
         IoData io;
         while (reader.readAndUncompressDiff(rec, io)) {
             add(rec, std::move(io));
@@ -415,14 +423,14 @@ public:
     }
     void checkNoOverlappedAndSorted() const {
         auto it = map_.cbegin();
-        const RecordRaw *prev = nullptr;
+        const walb_diff_record *prev = nullptr;
         while (it != map_.cend()) {
-            const RecordRaw *curr = &it->second.record();
+            const walb_diff_record *curr = &it->second.record2();
             if (prev) {
-                if (!(prev->ioAddress() < curr->ioAddress())) {
+                if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");
                 }
-                if (!(prev->endIoAddress() <= curr->ioAddress())) {
+                if (!(endIoAddressRec(*prev) <= curr->io_address)) {
                     throw RT_ERR("Overlapped records exist.");
                 }
             }
@@ -430,114 +438,17 @@ public:
             ++it;
         }
     }
-
-    using Map = std::map<uint64_t, RecIo>;
-    template <typename Base, typename MapIterator>
-    class IteratorBase {
-    protected:
-        Base *mem_;
-        MapIterator it_;
-    public:
-        explicit IteratorBase(Base *mem)
-            : mem_(mem)
-            , it_() {
-            assert(mem);
+    const Map& getMap() const { return map_; }
+    Map& getMap() { return map_; }
+	void eraseMap(Map::iterator& i)
+	{
+        nIos_--;
+        nBlocks_ -= i->second.record2().io_blocks;
+        i = map_.erase(i);
+        if (map_.empty()) {
+            fileH_.resetMaxIoBlocks();
         }
-        IteratorBase(const IteratorBase &rhs)
-            : mem_(rhs.mem_)
-            , it_(rhs.it_) {
-        }
-        virtual ~IteratorBase() noexcept = default;
-        IteratorBase &operator=(const IteratorBase &rhs) {
-            mem_ = rhs.mem_;
-            it_ = rhs.it_;
-            return *this;
-        }
-        bool isValid() const { return it_ != mem_->map_.end(); }
-        void begin() { it_ = mem_->map_.begin(); }
-        void end() { it_ = mem_->map_.end(); }
-        void next() { ++it_; }
-        void prev() { --it_; }
-        void lowerBound(uint64_t addr) {
-            it_ = mem_->map_.lower_bound(addr);
-        }
-        void upperBound(uint64_t addr) {
-            it_ = mem_->map_.upper_bound(addr);
-        }
-        const RecordRaw &record() const {
-            checkValid();
-            return it_->second.record();
-        }
-        const char *rawData() const {
-            checkValid();
-            return it_->second.io().rawData();
-        }
-        uint32_t rawSize() const {
-            checkValid();
-            return it_->second.io().size;
-        }
-    protected:
-        void checkValid() const {
-            if (!isValid()) {
-                throw RT_ERR("Invalid iterator position.");
-            }
-        }
-    };
-    class ConstIterator
-        : public IteratorBase<const MemoryData, Map::const_iterator>
-    {
-    public:
-        explicit ConstIterator(const MemoryData *mem)
-            : IteratorBase<const MemoryData, Map::const_iterator>(mem) {
-        }
-        ConstIterator(const ConstIterator &rhs)
-            : IteratorBase<const MemoryData, Map::const_iterator>(rhs) {
-        }
-        ~ConstIterator() noexcept override = default;
-
-    };
-    class Iterator
-        : public IteratorBase<MemoryData, Map::iterator>
-    {
-    public:
-        explicit Iterator(MemoryData *mem)
-            : IteratorBase<MemoryData, Map::iterator>(mem) {
-        }
-        Iterator(const Iterator &rhs)
-            : IteratorBase<MemoryData, Map::iterator>(rhs) {
-        }
-        ~Iterator() noexcept override = default;
-        RecordRaw &record() {
-            checkValid();
-            return it_->second.record();
-        }
-        char *rawData() {
-            checkValid();
-            return it_->second.io().rawData();
-        }
-        /**
-         * Erase the item on the iterator.
-         * The iterator will indicate the next of the removed item.
-         */
-        void erase() {
-            checkValid();
-            mem_->nIos_--;
-            mem_->nBlocks_ -= it_->second.record().ioBlocks();
-            it_ = mem_->map_.erase(it_);
-            if (mem_->map_.empty()) {
-                mem_->fileH_.resetMaxIoBlocks();
-            }
-        }
-        RecIo &recIo() {
-            return it_->second;
-        }
-    };
-    Iterator iterator() {
-        return Iterator(this);
-    }
-    ConstIterator constIterator() const {
-        return ConstIterator(this);
-    }
+	}
 };
 
 }} //namespace walb::diff
