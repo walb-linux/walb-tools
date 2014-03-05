@@ -111,7 +111,6 @@ void sendWdiff(cybozu::Socket &sock,
 
     walb::packet::StreamControl ctrl(sock);
     walb::diff::RecIo recIo;
-#if 1
     const size_t maxPushedNum = opt.threadNum * 2 - 1;
     walb::ConverterQueue conv(maxPushedNum, opt.threadNum, true, opt.compType);
     walb::diff::Packer packer;
@@ -142,18 +141,6 @@ void sendWdiff(cybozu::Socket &sock,
         ctrl.next();
         sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
     }
-#else
-    while (merger.pop(recIo)) {
-        ctrl.next();
-        const walb::diff::RecordRaw& recRaw = recIo.record();
-        const walb_diff_record& rec = recRaw.record();
-        sock.write(&rec, sizeof(rec));
-        if (recRaw.dataSize() > 0) {
-            const walb::diff::IoData& io = recIo.io();
-            sock.write(io.rawData(), recRaw.dataSize());
-        }
-    }
-#endif
     ctrl.end();
     walb::packet::Ack ack(sock);
     ack.recv();

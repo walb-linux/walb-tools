@@ -56,7 +56,6 @@ private:
     }
 };
 
-using RecordRaw = walb::diff::RecordRaw;
 using DiffIo = walb::diff::IoData;
 using DiffHeader = walb::diff::FileHeaderWrap;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
@@ -206,16 +205,15 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const walb_diff_record& _rec, const DiffIoPtr ioP) {
-        static const walb::diff::DiffRecord& rec = static_cast<const walb::diff::DiffRecord&>(_rec);
+    void executeDiffIo(const walb_diff_record& rec, const DiffIoPtr ioP) {
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
-        if (rec.isAllZero()) {
+        if (walb::diff::isAllZeroRec(rec)) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
             if (isSuccess) { outStat_.nIoAllZero++; }
             inStat_.nIoAllZero++;
-        } else if (rec.isDiscard()) {
+        } else if (walb::diff::isDiscardRec(rec)) {
             if (config_.isDiscard()) {
                 isSuccess = executeDiscardIo(ioAddr, ioBlocks);
             } else if (config_.isZeroDiscard()) {
@@ -227,7 +225,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
-            assert(rec.isNormal());
+            assert(walb::diff::isNormalRec(rec));
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }
@@ -237,7 +235,7 @@ public:
             outStat_.nBlocks += ioBlocks;
         } else {
             ::printf("Failed to redo: ");
-            rec.printOneline();
+            walb::diff::printOnelineRec(rec);
         }
         inStat_.nBlocks += ioBlocks;
     }
@@ -257,12 +255,12 @@ public:
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
-        RecordRaw rec;
+        walb_diff_record rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
-            if (!rec.isValid()) {
+            if (!walb::diff::isValidRec(rec)) {
                 ::printf("Invalid record: ");
-                rec.printOneline();
+                walb::diff::printOnelineRec(rec);
             }
             if (!io.isValid()) {
                 ::printf("Invalid io: ");
@@ -270,7 +268,7 @@ public:
             }
             auto ioP = std::make_shared<DiffIo>();
             *ioP = std::move(io);
-            executeDiffIo(rec.record(), ioP);
+            executeDiffIo(rec, ioP);
         }
         ::printf("Input statistics:\n");
         inStat_.print();
