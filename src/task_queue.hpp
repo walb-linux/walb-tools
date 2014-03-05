@@ -7,6 +7,9 @@
 
 namespace walb {
 
+/**
+ * Task must be copyable and have operators "==" and "<".
+ */
 template <typename Task>
 class TaskQueue
 {

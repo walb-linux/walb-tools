@@ -91,6 +91,7 @@ public:
     ProxyWorker(const ProxyTask &task) : task_(task) {
     }
     /**
+     * This will do wdiff send to an archive server.
      * You can throw an exception.
      */
     void operator()() override {
