@@ -165,20 +165,20 @@ private:
      */
     size_t readWdiff(void *data, size_t blks) {
         assert(recIo_.isValid());
-        const walb::diff::RecordRaw &rec = recIo_.record();
+        const walb_diff_record& rec = recIo_.record().record();
         const walb::diff::IoData &io = recIo_.io();
-        assert(offInIo_ < rec.ioBlocks());
-        if (rec.isNormal()) {
+        assert(offInIo_ < rec.io_blocks);
+        if (isNormalRec(rec)) {
             assert(!io.isCompressed());
             size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
             ::memcpy(data, io.rawData() + off, blks * LOGICAL_BLOCK_SIZE);
         } else {
             /* Read zero image for both ALL_ZERO and DISCARD.. */
-            assert(rec.isDiscard() || rec.isAllZero());
+            assert(isDiscardRec(rec) || isAllZeroRec(rec));
             ::memset(data, 0, blks * LOGICAL_BLOCK_SIZE);
         }
         offInIo_ += blks;
-        assert(offInIo_ <= rec.ioBlocks());
+        assert(offInIo_ <= rec.io_blocks);
         skipBase(blks);
         addr_ += blks;
         return blks * LOGICAL_BLOCK_SIZE;
@@ -201,10 +201,10 @@ private:
      */
     void fillDiffIo() {
         if (emptyWdiff_ || isEndDiff_) return;
-        walb::diff::RecordRaw &rec = recIo_.record();
+        const walb_diff_record& rec = recIo_.record().record();
         /* At beginning time, rec.ioBlocks() returns 0. */
-        assert(offInIo_ <= rec.ioBlocks());
-        if (offInIo_ == rec.ioBlocks()) {
+        assert(offInIo_ <= rec.io_blocks);
+        if (offInIo_ == rec.io_blocks) {
             offInIo_ = 0;
             if (!merger_.pop(recIo_)) {
                 isEndDiff_ = true;
