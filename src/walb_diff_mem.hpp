@@ -31,32 +31,41 @@ public:
     IoData &io() { return io_; }
     const IoData &io() const { return io_; }
 
-    void copyFrom(const RecordRaw &rec, const IoData &io) {
+    void copyFrom(const walb_diff_record &rec, const IoData &io) {
         rec_ = rec;
-        if (rec.isNormal()) {
+        if (isNormalRec(rec)) {
             io_ = io;
         } else {
             io_.clear();
         }
     }
-    void moveFrom(const RecordRaw &rec, IoData &&io) {
+    void copyFrom(const RecordRaw &rec, const IoData &io) {
+		copyFrom(rec.record(), io);
+	}
+    void moveFrom(const walb_diff_record &rec, IoData &&io) {
         rec_ = rec;
-        if (rec.isNormal()) {
+        if (isNormalRec(rec)) {
             io_ = std::move(io);
         } else {
             io_.clear();
         }
     }
-    void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
+    void moveFrom(const RecordRaw &rec, IoData &&io) {
+		moveFrom(rec.record(), std::move(io));
+	}
+    void moveFrom(const walb_diff_record &rec, std::vector<char> &&data) {
         rec_ = rec;
-        if (rec.isNormal()) {
-            io_.ioBlocks = rec.ioBlocks();
-            io_.compressionType = rec.compressionType();
+        if (isNormalRec(rec)) {
+            io_.ioBlocks = rec.io_blocks;
+            io_.compressionType = rec.compression_type;
             io_.moveFrom(std::move(data));
         } else {
             io_.clear();
         }
     }
+    void moveFrom(const RecordRaw &rec, std::vector<char> &&data) {
+		moveFrom(rec.record(), std::move(data));
+	}
 
     void updateChecksum() {
         rec_.setChecksum(io_.calcChecksum());
@@ -419,14 +428,14 @@ public:
     }
     void checkNoOverlappedAndSorted() const {
         auto it = map_.cbegin();
-        const RecordRaw *prev = nullptr;
+        const walb_diff_record *prev = nullptr;
         while (it != map_.cend()) {
-            const RecordRaw *curr = &it->second.record();
+            const walb_diff_record *curr = &it->second.record().record();
             if (prev) {
-                if (!(prev->ioAddress() < curr->ioAddress())) {
+                if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");
                 }
-                if (!(prev->endIoAddress() <= curr->ioAddress())) {
+                if (!(endIoAddressRec(*prev) <= curr->io_address)) {
                     throw RT_ERR("Overlapped records exist.");
                 }
             }
