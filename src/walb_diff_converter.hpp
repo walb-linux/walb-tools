@@ -102,10 +102,6 @@ class Converter /* final */
 private:
     using Block = std::shared_ptr<uint8_t>;
     using LogpackHeader = log::PackHeaderRaw;
-    using LogpackHeaderPtr = std::shared_ptr<LogpackHeader>;
-    using DiffRecord = RecordRaw;
-    using DiffRecordPtr = std::shared_ptr<DiffRecord>;
-    using DiffIo = IoData;
 
 public:
     Converter() = default;
@@ -201,7 +197,7 @@ private:
             reader.readLog(packIo);
 
             diff::RecordRaw diffRec;
-            DiffIo diffIo;
+            IoData diffIo;
             if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.ioBlocks();

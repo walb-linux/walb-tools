@@ -164,6 +164,9 @@ public:
     }
 };
 
+inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
+    return rec.io_address + rec.io_blocks;
+}
 inline bool existsRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
 }
@@ -245,10 +248,9 @@ inline void setDiscardRec(walb_diff_record& rec) {
     rec.flags |= WALB_DIFF_FLAG(DISCARD);
 }
 
-struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
+struct DiffRecord : public block_diff::BlockDiffKey2<walb_diff_record> {
     void init() {
-        ::memset(this, 0, sizeof(walb_diff_record));
-        setExists();
+        initRec(*this);
     }
 //    uint64_t ioAddress() const override { return io_address; }
 //    uint16_t ioBlocks() const override { return io_blocks; }
@@ -270,24 +272,11 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
     void print(::FILE *fp = ::stdout) const { printRec(*this, fp); }
     void printOneline(::FILE *fp = ::stdout) const { printOnelineRec(*this, fp); }
 
-    void setExists() {
-        flags |= WALB_DIFF_FLAG(EXIST);
-    }
-    void clearExists() {
-        flags &= ~WALB_DIFF_FLAG(EXIST);
-    }
-    void setNormal() {
-        flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setAllZero() {
-        flags |= WALB_DIFF_FLAG(ALLZERO);
-        flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setDiscard() {
-        flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        flags |= WALB_DIFF_FLAG(DISCARD);
-    }
+    void setExists() { setExistsRec(*this); }
+    void clearExists() { clearExistsRec(*this); }
+    void setNormal() { setNormalRec(*this); }
+    void setAllZero() { setAllZeroRec(*this); }
+    void setDiscard() { setDiscardRec(*this); }
 };
 
 /**

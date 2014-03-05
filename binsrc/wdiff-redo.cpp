@@ -56,10 +56,9 @@ private:
     }
 };
 
-using DiffRec = walb::diff::RecordRaw;
+using RecordRaw = walb::diff::RecordRaw;
 using DiffIo = walb::diff::IoData;
 using DiffHeader = walb::diff::FileHeaderWrap;
-using DiffRecPtr = std::shared_ptr<DiffRec>;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
 
@@ -207,7 +206,7 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const DiffRec &rec, const DiffIoPtr ioP) {
+    void executeDiffIo(const RecordRaw &rec, const DiffIoPtr ioP) {
         const uint64_t ioAddr = rec.ioAddress();
         const uint16_t ioBlocks = rec.ioBlocks();
         bool isSuccess = false;
@@ -257,7 +256,7 @@ public:
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
-        DiffRec rec;
+        RecordRaw rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
             if (!rec.isValid()) {

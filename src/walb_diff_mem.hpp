@@ -294,21 +294,25 @@ public:
     void add(const Record &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
         add(rec, IoData(io), maxIoBlocks);
     }
-    void add(const Record &rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+    void add(const Record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+        add(rec.record(), std::move(io), maxIoBlocks);
+    }
+    void add(const walb_diff_record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+        const DiffRecord& _rec = static_cast<const DiffRecord&>(rec);
         /* Decide key range to search. */
-        uint64_t addr0 = rec.ioAddress();
+        uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
             addr0 = 0;
         } else {
             addr0 -= fileH_.getMaxIoBlocks();
         }
         /* Search overlapped items. */
-        uint64_t addr1 = rec.endIoAddress();
+        uint64_t addr1 = endIoAddressRec(rec);
         std::queue<RecIo> q;
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-            if (r.record().isOverlapped(rec)) {
+            if (r.record().isOverlapped(_rec)) {
                 nIos_--;
                 nBlocks_ -= r.record().ioBlocks();
                 q.push(std::move(r));
@@ -335,9 +339,9 @@ public:
         nIos_++;
         nBlocks_ += r0.record().ioBlocks();
         std::vector<RecIo> rv;
-        if (0 < maxIoBlocks && maxIoBlocks < rec.ioBlocks()) {
+        if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
-        } else if (maxIoBlocks_ < rec.ioBlocks()) {
+        } else if (maxIoBlocks_ < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks_);
         } else {
             rv.push_back(std::move(r0));
