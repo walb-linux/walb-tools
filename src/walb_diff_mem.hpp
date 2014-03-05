@@ -356,8 +356,8 @@ public:
     void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecordRaw &rec = it->second.record();
-            rec.printOneline(fp);
+            const walb_diff_record &rec = it->second.record().record();
+            printOnelineRec(rec, fp);
             ++it;
         }
     }
@@ -368,8 +368,8 @@ public:
         uint64_t nIos = 0;
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecordRaw &rec = it->second.record();
-            nBlocks += rec.ioBlocks();
+            const walb_diff_record &rec = it->second.record().record();
+            nBlocks += rec.io_blocks;
             nIos++;
             ++it;
         }
@@ -402,7 +402,7 @@ public:
     void readFrom(int inFd) {
         Reader reader(inFd);
         reader.readHeader(fileH_);
-        RecordRaw rec;
+        walb_diff_record rec;
         IoData io;
         while (reader.readAndUncompressDiff(rec, io)) {
             add(rec, std::move(io));
