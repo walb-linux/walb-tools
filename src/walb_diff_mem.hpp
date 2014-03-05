@@ -438,98 +438,17 @@ public:
             ++it;
         }
     }
-
-    template <typename Base, typename MapIterator>
-    class IteratorBase {
-    protected:
-        Base *mem_;
-        MapIterator it_;
-    public:
-        explicit IteratorBase(Base *mem)
-            : mem_(mem)
-            , it_() {
-            assert(mem);
-        }
-        IteratorBase(const IteratorBase &rhs)
-            : mem_(rhs.mem_)
-            , it_(rhs.it_) {
-        }
-        virtual ~IteratorBase() noexcept = default;
-        IteratorBase &operator=(const IteratorBase &rhs) {
-            mem_ = rhs.mem_;
-            it_ = rhs.it_;
-            return *this;
-        }
-        bool isValid() const { return it_ != mem_->map_.end(); }
-        void begin() { it_ = mem_->map_.begin(); }
-        void end() { it_ = mem_->map_.end(); }
-        void next() { ++it_; }
-        void prev() { --it_; }
-        void lowerBound(uint64_t addr) {
-            it_ = mem_->map_.lower_bound(addr);
-        }
-        void upperBound(uint64_t addr) {
-            it_ = mem_->map_.upper_bound(addr);
-        }
-        const RecordRaw &record() const {
-            checkValid();
-            return it_->second.record();
-        }
-        const char *rawData() const {
-            checkValid();
-            return it_->second.io().rawData();
-        }
-        uint32_t rawSize() const {
-            checkValid();
-            return it_->second.io().size;
-        }
-    protected:
-        void checkValid() const {
-            if (!isValid()) {
-                throw RT_ERR("Invalid iterator position.");
-            }
-        }
-    };
-    class Iterator
-        : public IteratorBase<MemoryData, Map::iterator>
-    {
-    public:
-        explicit Iterator(MemoryData *mem)
-            : IteratorBase<MemoryData, Map::iterator>(mem) {
-        }
-        Iterator(const Iterator &rhs)
-            : IteratorBase<MemoryData, Map::iterator>(rhs) {
-        }
-        ~Iterator() noexcept override = default;
-        RecordRaw &record() {
-            checkValid();
-            return it_->second.record();
-        }
-        char *rawData() {
-            checkValid();
-            return it_->second.io().rawData();
-        }
-        /**
-         * Erase the item on the iterator.
-         * The iterator will indicate the next of the removed item.
-         */
-        void erase() {
-            checkValid();
-            mem_->nIos_--;
-            mem_->nBlocks_ -= it_->second.record().ioBlocks();
-            it_ = mem_->map_.erase(it_);
-            if (mem_->map_.empty()) {
-                mem_->fileH_.resetMaxIoBlocks();
-            }
-        }
-        RecIo &recIo() {
-            return it_->second;
-        }
-    };
-    Iterator iterator() {
-        return Iterator(this);
-    }
     const Map& getMap() const { return map_; }
+    Map& getMap() { return map_; }
+	void eraseMap(Map::iterator& i)
+	{
+        nIos_--;
+        nBlocks_ -= i->second.record2().io_blocks;
+        i = map_.erase(i);
+        if (map_.empty()) {
+            fileH_.resetMaxIoBlocks();
+        }
+	}
 };
 
 }} //namespace walb::diff

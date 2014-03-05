@@ -260,13 +260,13 @@ private:
      * to a specified queue.
      */
     void moveToQueueUpto(uint64_t maxAddr) {
-        auto it = wdiffMem_.iterator();
-        it.begin();
-        while (it.isValid() && it.record().endIoAddress() <= maxAddr) {
-            walb::diff::RecIo r = std::move(it.recIo());
-            assert(r.isValid());
-            mergedQ_.push(std::move(r));
-            it.erase();
+        MemoryData::Map& map = wdiffMem_.getMap();
+        auto i = map.begin();
+        while (i != map.end()) {
+            RecIo& recIo = i->second;
+            if (endIoAddressRec(recIo.record2()) > maxAddr) break;
+            mergedQ_.push(std::move(recIo));
+            wdiffMem_.eraseMap(i);
         }
     }
     uint64_t getMinCurrentAddress() const {
