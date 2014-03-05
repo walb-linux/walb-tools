@@ -164,7 +164,7 @@ public:
     }
 };
 
-inline bool doesExistRec(const walb_diff_record& rec) {
+inline bool existsRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
 }
 inline bool isAllZeroRec(const walb_diff_record& rec) {
@@ -180,7 +180,7 @@ inline bool isNormalRec(const walb_diff_record& rec) {
     return !isAllZeroRec(rec) && !isDiscardRec(rec);
 }
 inline bool isValidRec(const walb_diff_record& rec) {
-    if (!doesExistRec(rec)) {
+    if (!existsRec(rec)) {
         LOGd("Does not exist.\n");
         return false;
     }
@@ -214,13 +214,35 @@ inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
        "isDiscard: %d\n",
        rec.io_address, rec.io_blocks,
        rec.compression_type, rec.data_offset, rec.data_size,
-       rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+       rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
 }
 inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
     ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
         rec.io_address, rec.io_blocks,
         rec.compression_type, rec.data_offset, rec.data_size,
-        rec.checksum, doesExistRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+        rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
+}
+inline void initRec(walb_diff_record& rec) {
+    ::memset(&rec, 0, sizeof(struct walb_diff_record));
+    rec.flags = WALB_DIFF_FLAG(EXIST);
+}
+inline void setExistsRec(walb_diff_record& rec) {
+    rec.flags |= WALB_DIFF_FLAG(EXIST);
+}
+inline void clearExistsRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(EXIST);
+}
+inline void setNormalRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
+}
+inline void setAllZeroRec(walb_diff_record& rec) {
+    rec.flags |= WALB_DIFF_FLAG(ALLZERO);
+    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
+}
+inline void setDiscardRec(walb_diff_record& rec) {
+    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
+    rec.flags |= WALB_DIFF_FLAG(DISCARD);
 }
 
 struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
@@ -239,7 +261,7 @@ struct Rec : public block_diff::BlockDiffKey2<walb_diff_record> {
 //    uint32_t dataSize() const { return data_size; }
 //    uint32_t checksum() const { return checksum; }
 
-    bool exists() const { return doesExistRec(*this); }
+    bool exists() const { return existsRec(*this); }
     bool isAllZero() const { return isAllZeroRec(*this); }
     bool isDiscard() const { return isDiscardRec(*this); }
     bool isNormal() const { return isNormalRec(*this); }
