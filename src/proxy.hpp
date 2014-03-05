@@ -168,6 +168,16 @@ inline void ProxyVolState::initInner(const std::string &volId)
     }
 }
 
+inline ProxyVolState &getProxyVolState(const std::string &volId)
+{
+    return getProxyGlobal().stMap.get(volId);
+}
+
+inline void verifyNotStopping(const std::string &volId, const char *msg)
+{
+    util::verifyNotStopping(getProxyVolState(volId).stopState, volId, msg);
+}
+
 inline void c2pStatusServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
@@ -196,6 +206,48 @@ inline void c2pStopServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
+namespace proxy_local {
+
+inline void getArchiveInfo(const std::string &/*archiveId*/, HostInfo &/*hi*/)
+{
+    // QQQ
+}
+
+inline void addArchiveInfo(const std::string &/*archiveId*/, const HostInfo &/*hi*/)
+{
+    // QQQ
+}
+
+inline void deleteArchiveInfo(const std::string &/*archiveId*/)
+{
+    // QQQ
+}
+
+inline void updateArchiveInfo(const std::string &/*archiveId*/, const HostInfo &/*hi*/)
+{
+    // QQQ
+}
+
+template <typename Func>
+inline void runAndReplyOkOrErr(packet::Packet &pkt, const char *msg, Func func)
+{
+    bool failed = false;
+    std::string errMsg;
+    try {
+        func();
+    } catch (std::exception &e) {
+        failed = true;
+        errMsg = e.what();
+    }
+    if (failed) {
+        pkt.write(errMsg);
+        throw cybozu::Exception(msg) << errMsg;
+    }
+    pkt.write("ok");
+}
+
+} // namespace proxy_local
+
 /**
  * params:
  *   [0]: volId
@@ -208,9 +260,45 @@ inline void c2pStopServer(protocol::ServerParams &/*p*/)
  *       X is AddArchiveInfo/DeleteArchiveInfo/UpdateArchiveInfo.
  *   (3) Stopped --> DeleteArchiveInfo --> Clear
  */
-inline void c2pArchiveInfoServer(protocol::ServerParams &/*p*/)
+inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char * const FUNC = "c2pArchiveInfoServer";
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const std::string &cmd = v[0];
+    const std::string &archiveId = v[1];
+
+    if (cmd == "add" || cmd == "update") {
+        packet::Packet pkt(p.sock);
+        HostInfo hi;
+        pkt.read(hi);
+        hi.verify();
+        if (cmd == "add") {
+            proxy_local::runAndReplyOkOrErr(
+                pkt, FUNC,
+                [&]() { proxy_local::addArchiveInfo(archiveId, hi); });
+        } else {
+            proxy_local::runAndReplyOkOrErr(
+                pkt, FUNC,
+                [&]() { proxy_local::updateArchiveInfo(archiveId, hi); });
+        }
+        return;
+    }
+    if (cmd == "get" || cmd == "delete") {
+        packet::Packet pkt(p.sock);
+        HostInfo hi;
+        if (cmd == "get") {
+            proxy_local::runAndReplyOkOrErr(
+                pkt, FUNC,
+                [&]() { proxy_local::getArchiveInfo(archiveId, hi); });
+            pkt.write(hi);
+        } else {
+            proxy_local::runAndReplyOkOrErr(
+                pkt, FUNC,
+                [&]() { proxy_local::deleteArchiveInfo(archiveId); });
+        }
+        return;
+    }
+    throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
 }
 
 /**

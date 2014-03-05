@@ -248,4 +248,16 @@ public:
     }
 };
 
+inline void verifyNotStopping(
+    const std::atomic<int> &stopState,
+    const std::string &volId, const char *msg)
+{
+    int st = stopState.load();
+    if (st != NotStopping) {
+        cybozu::Exception e(msg);
+        e << "must be NotStopping" << volId << st;
+        throw e;
+    }
+}
+
 }} // walb::util

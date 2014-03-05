@@ -145,12 +145,7 @@ inline void verifyNoActionRunning(const std::string &volId, const char *msg)
 
 inline void verifyNotStopping(const std::string &volId, const char *msg)
 {
-    int stopState = getArchiveVolState(volId).stopState;
-    if (stopState != NotStopping) {
-        cybozu::Exception e(msg);
-        e << "must be NotStopping" << volId << stopState;
-        throw e;
-    }
+    util::verifyNotStopping(getArchiveVolState(volId).stopState, volId, msg);
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)
