@@ -117,8 +117,7 @@ void sendWdiff(cybozu::Socket &sock,
     walb::diff::Packer packer;
     size_t pushedNum = 0;
     while (merger.pop(recIo)) {
-        const walb::diff::RecordRaw& recRaw = recIo.record();
-        const walb_diff_record& rec = recRaw.record();
+        const walb_diff_record& rec = recIo.record().record();
         const walb::diff::IoData& io = recIo.io();
         if (packer.add(rec, io.rawData())) {
             continue;

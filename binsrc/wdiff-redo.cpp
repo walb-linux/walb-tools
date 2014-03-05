@@ -206,9 +206,10 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const RecordRaw &rec, const DiffIoPtr ioP) {
-        const uint64_t ioAddr = rec.ioAddress();
-        const uint16_t ioBlocks = rec.ioBlocks();
+    void executeDiffIo(const walb_diff_record& _rec, const DiffIoPtr ioP) {
+        static const walb::diff::DiffRecord& rec = static_cast<const walb::diff::DiffRecord&>(_rec);
+        const uint64_t ioAddr = rec.io_address;
+        const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
         if (rec.isAllZero()) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
@@ -269,7 +270,7 @@ public:
             }
             auto ioP = std::make_shared<DiffIo>();
             *ioP = std::move(io);
-            executeDiffIo(rec, ioP);
+            executeDiffIo(rec.record(), ioP);
         }
         ::printf("Input statistics:\n");
         inStat_.print();

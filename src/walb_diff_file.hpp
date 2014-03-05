@@ -386,26 +386,27 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(Record &rec, IoData &io) {
+    bool readAndUncompressDiff(Record &_rec, IoData &io) {
+        walb_diff_record& rec = _rec.record();
         RecordRaw rec0;
         IoData io0;
         if (!readDiff(rec0, io0)) {
             rec0.clearExists();
-            rec = rec0;
+            rec = rec0.record();
             io = std::move(io0);
             return false;
         }
         if (!rec0.isCompressed()) {
-            rec = rec0;
+            rec = rec0.record();
             io = std::move(io0);
             return true;
         }
-        rec = rec0;
+        rec = rec0.record();
         io = uncompressIoData(io0);
-        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-        rec.setDataSize(io.size);
-        rec.setChecksum(io.calcChecksum());
-        assert(rec.isValid());
+        rec.compression_type = ::WALB_DIFF_CMPR_NONE;
+        rec.data_size = io.size;
+        rec.checksum = io.calcChecksum();
+        assert(diff::isValidRec(rec));
         assert(io.isValid());
         return true;
     }
