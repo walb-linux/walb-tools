@@ -130,11 +130,10 @@ public:
      */
     bool add(const struct walb_diff_record &inRec) {
 #ifdef DEBUG
-        RecordRaw r(reinterpret_cast<const char *>(&inRec), sizeof(inRec));
-        assert(r.isValid());
+        assert(isValidRec(inRec));
 #endif
         if (!canAdd(inRec.data_size)) { return false; }
-        struct walb_diff_record &outRec = record(header().n_records);
+        walb_diff_record &outRec = record(header().n_records);
         outRec = inRec;
         outRec.data_offset = header().total_size;
         header().n_records++;
@@ -163,8 +162,8 @@ public:
                   , h.total_size);
         for (size_t i = 0; i < h.n_records; i++) {
             ::fprintf(fp, "record %zu: ", i);
-            RecordRaw rec(reinterpret_cast<const char *>(&record(i)), sizeof(record(i)));
-            rec.printOneline(fp);
+            const walb_diff_record& rec = record(i);
+            printOnelineRec(rec, fp);
         }
     }
 
@@ -221,11 +220,11 @@ public:
             PackHeader packh((char *)&header());
             if (checkHeaderCsum && !packh.isValid()) err("pack header invalid.");
             for (size_t i = 0; i < packh.nRecords(); i++) {
-                walb::diff::RecordRaw rec(packh.record(i));
-                if (!rec.isValid()) err("record invalid: %zu.", i);
-                uint32_t csum = cybozu::util::calcChecksum(data(i), rec.dataSize(), 0);
-                if (csum != rec.checksum()) err("checksum of %zu differ %08x %08x."
-                                                , i, rec.checksum(), csum);
+                const walb_diff_record& rec = packh.record(i);
+                if (!isValidRec(rec)) err("record invalid: %zu.", i);
+                uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
+                if (csum != rec.checksum) err("checksum of %zu differ %08x %08x."
+                                                , i, rec.checksum, csum);
             }
             return true;
         } catch (std::exception &) {
