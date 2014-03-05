@@ -212,12 +212,12 @@ public:
             return;
         }
 
-        RecordRaw rec1(rec);
         IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setCompressionType(::WALB_DIFF_CMPR_SNAPPY);
-        rec1.setDataSize(io1.size);
-        rec1.setChecksum(io1.calcChecksum());
-        writeDiff(rec1.record(), io1.forMove());
+        walb_diff_record rec1 = rec;
+        rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
+        rec1.data_size = io1.size;
+        rec1.checksum = io1.calcChecksum();
+        writeDiff(rec1, io1.forMove());
     }
 
     /**
