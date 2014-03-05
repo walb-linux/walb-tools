@@ -112,7 +112,7 @@ public:
         assert(isValid());
         std::vector<RecIo> v;
 
-        std::vector<RecordRaw> recV = rec_.splitAll(ioBlocks);
+        std::vector<walb_diff_record> recV = diff::splitAll(rec_.record(), ioBlocks);
         std::vector<IoData> ioV;
         if (rec_.isNormal()) {
             ioV = splitIoDataAll(io_, ioBlocks);

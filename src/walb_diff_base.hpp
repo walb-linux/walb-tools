@@ -314,70 +314,47 @@ public:
             throw RT_ERR("size is invalid.");
         }
     }
-
-    /**
-     * Split a record into two records
-     * where the first record's ioBlocks will be a specified one.
-     *
-     * CAUSION:
-     *   The checksum of splitted records will be invalid state.
-     *   Only non-compressed records can be splitted.
-     */
-    std::pair<RecordRaw, RecordRaw> split(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0 || ioBlocks() <= ioBlocks0) {
-            throw RT_ERR("split: ioBlocks0 is out or range.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("split: compressed data can not be splitted.");
-        }
-        RecordRaw r0(*this), r1(*this);
-        uint16_t ioBlocks1 = ioBlocks() - ioBlocks0;
-        r0.setIoBlocks(ioBlocks0);
-        r1.setIoBlocks(ioBlocks1);
-        r1.setIoAddress(ioAddress() + ioBlocks0);
-        if (isNormal()) {
-            r0.setDataSize(ioBlocks0 * LOGICAL_BLOCK_SIZE);
-            r1.setDataSize(ioBlocks1 * LOGICAL_BLOCK_SIZE);
-        }
-        return {r0, r1};
-    }
-    /**
-     * Split a record into several records
-     * where all splitted records' ioBlocks will be <= a specified one.
-     *
-     * CAUSION:
-     *   The checksum of splitted records will be invalid state.
-     *   Only non-compressed records can be splitted.
-     */
-    std::vector<RecordRaw> splitAll(uint16_t ioBlocks0) const {
-        if (ioBlocks0 == 0) {
-            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
-        }
-        if (isCompressed()) {
-            throw RT_ERR("splitAll: compressed data can not be splitted.");
-        }
-        std::vector<RecordRaw> v;
-        uint64_t addr = ioAddress();
-        uint16_t remaining = ioBlocks();
-        while (0 < remaining) {
-            uint16_t blks = std::min(ioBlocks0, remaining);
-            v.emplace_back(*this);
-            v.back().setIoAddress(addr);
-            v.back().setIoBlocks(blks);
-            if (isNormal()) {
-                v.back().setDataSize(blks * LOGICAL_BLOCK_SIZE);
-            }
-            addr += blks;
-            remaining -= blks;
-        }
-        assert(!v.empty());
-        return v;
-    }
 private:
     void check() const {
         if (!isValid()) throw RT_ERR("invalid record.");
     }
 };
+
+/**
+ * Split a record into several records
+ * where all splitted records' ioBlocks will be <= a specified one.
+ *
+ * CAUSION:
+ *   The checksum of splitted records will be invalid state.
+ *   Only non-compressed records can be splitted.
+ */
+std::vector<walb_diff_record> splitAll(const walb_diff_record& rec, uint16_t ioBlocks0) {
+    if (ioBlocks0 == 0) {
+        throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
+    }
+    if (isCompressedRec(rec)) {
+        throw cybozu::Exception("splitAll: compressed data can not be splitted.");
+    }
+    std::vector<walb_diff_record> v;
+    uint64_t addr = rec.io_address;
+    uint16_t remaining = rec.io_blocks;
+    const bool isNormal = isNormalRec(rec);
+    while (remaining > 0) {
+        uint16_t blks = std::min(ioBlocks0, remaining);
+        v.push_back(walb_diff_record());
+        walb_diff_record& r = v.back();
+        r = rec;
+        r.io_address = addr;
+        r.io_blocks = blks;
+        if (isNormal) {
+            r.data_size = blks * LOGICAL_BLOCK_SIZE;
+        }
+        addr += blks;
+        remaining -= blks;
+    }
+    assert(!v.empty());
+    return v;
+}
 
 /**
  * Io data.
