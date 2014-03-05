@@ -1,6 +1,7 @@
 #pragma once
 #include "protocol.hpp"
 #include "constant.hpp"
+#include "host_info.hpp"
 
 namespace walb {
 
@@ -124,17 +125,54 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
  * <cmprType>: compression type. none, snappy, gzip, or lzma.
  * <cmprLevel>: compression level. integer from 0 to 9.
  */
-inline void c2pArchiveInfoClient(protocol::ClientParams &/*p*/)
+inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 {
-    // QQQ
+    const char * const FUNC = "c2pArchiveInfoClient";
+    if (p.params.size() < 2) {
+        throw cybozu::Exception(FUNC) << "invalid params";
+    }
+    const std::string &cmd = p.params[0];
+    const std::string &archiveId = p.params[1];
+    protocol::sendStrVec(p.sock, {cmd, archiveId}, 2, FUNC, false);
+
+    if (cmd == "add" || cmd == "update") {
+        if (p.params.size() != 4) {
+            throw cybozu::Exception(FUNC) << "lack of parameters";
+        }
+        const std::string &addrPort = p.params[2];
+        const std::string &compressOpt = p.params[3];
+        HostInfo hi = parseHostInfo(archiveId, addrPort, compressOpt);
+        packet::Packet pkt(p.sock);
+        pkt.write(hi);
+        std::string res;
+        pkt.read(res);
+        if (res != "ok") {
+            throw cybozu::Exception(FUNC) << "command failed" << res;
+        }
+        return;
+    }
+    if (cmd == "get" || cmd == "delete") {
+        packet::Packet pkt(p.sock);
+        std::string res;
+        pkt.read(res);
+        if (res != "ok") {
+            throw cybozu::Exception(FUNC) << "get failed" << res;
+        }
+        if (cmd == "delete") return;
+        HostInfo hi;
+        pkt.read(hi);
+        hi.verify();
+        std::cout << hi << std::endl;
+        return;
+    }
+    throw cybozu::Exception(FUNC) << "invlid comand" << cmd;
 }
 
 /**
- *
+ * Take a snapshot which will be restorable at the archive site.
  */
 inline void c2sSnapshotClient(protocol::ClientParams &/*p*/)
 {
-
     // QQQ
 }
 
