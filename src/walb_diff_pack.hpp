@@ -389,20 +389,20 @@ public:
         if (!packh_.canAdd(dSize)) return false;
 
         bool isZero = isAllZero(data, dSize);
-        diff::RecordRaw rec;
-        rec.setIoAddress(ioAddr);
-        rec.setIoBlocks(ioBlocks);
-        rec.setCompressionType(::WALB_DIFF_CMPR_NONE);
+        walb_diff_record rec;
+        rec.io_address = ioAddr;
+        rec.io_blocks = ioBlocks;
+        rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         if (isZero) {
-            rec.setAllZero();
-            rec.setDataSize(0);
-            rec.setChecksum(0);
+            setAllZeroRec(rec);
+            rec.data_size = 0;
+            rec.checksum = 0;
         } else {
-            rec.setNormal();
-            rec.setDataSize(dSize);
-            rec.setChecksum(cybozu::util::calcChecksum(data, dSize, 0));
+            setNormalRec(rec);
+            rec.data_size = dSize;
+            rec.checksum = cybozu::util::calcChecksum(data, dSize, 0);
         }
-        return add(rec.record(), data);
+        return add(rec, data);
     }
     bool add(const struct walb_diff_record &rec, const char *data) {
         assert(isValidRec(rec));
