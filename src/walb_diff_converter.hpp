@@ -33,28 +33,28 @@ namespace walb {
  *   true if the pack IO is normal IO or discard or allzero.
  */
 inline bool convertLogToDiff(
-    const log::Record& rec, const log::BlockData& blockD, diff::Record &mrec, diff::IoData &diffIo)
+    const log::Record& rec, const log::BlockData& blockD, walb_diff_record& mrec, diff::IoData &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;
 
-    mrec.init();
-    mrec.setIoAddress(rec.offset());
-    mrec.setIoBlocks(rec.ioSizeLb());
+    diff::initRec(mrec);
+    mrec.io_address = rec.offset();
+    mrec.io_blocks = rec.ioSizeLb();
 
     /* Discard */
     if (rec.isDiscard()) {
-        mrec.setDiscard();
-        mrec.setDataSize(0);
-        diffIo.set(mrec.record());
+        diff::setDiscardRec(mrec);
+        mrec.data_size = 0;
+        diffIo.set(mrec);
         return true;
     }
 
     /* AllZero */
     if (blockD.calcIsAllZero(rec.ioSizeLb())) {
-        mrec.setAllZero();
-        mrec.setDataSize(0);
-        diffIo.set(mrec.record());
+        diff::setAllZeroRec(mrec);
+        mrec.data_size = 0;
+        diffIo.set(mrec);
         return true;
     }
 
@@ -78,16 +78,16 @@ inline bool convertLogToDiff(
     }
     assert(remaining == 0);
     assert(off == ioSizeB);
-    diffIo.set(mrec.record());
+    diffIo.set(mrec);
     diffIo.moveFrom(std::move(buf));
 
     /* Compression. (currently NONE). */
-    mrec.setCompressionType(::WALB_DIFF_CMPR_NONE);
-    mrec.setDataOffset(0);
-    mrec.setDataSize(ioSizeB);
+    mrec.compression_type = ::WALB_DIFF_CMPR_NONE;
+    mrec.data_offset = 0;
+    mrec.data_size = ioSizeB;
 
     /* Checksum. */
-    mrec.setChecksum(diffIo.calcChecksum());
+    mrec.checksum = diffIo.calcChecksum();
 
     return true;
 }
@@ -196,11 +196,11 @@ private:
             }
             reader.readLog(packIo);
 
-            diff::RecordRaw diffRec;
+            walb_diff_record diffRec;
             IoData diffIo;
             if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
-                writtenBlocks += diffRec.ioBlocks();
+                writtenBlocks += diffRec.io_blocks;
             }
         }
 
