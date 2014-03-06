@@ -21,7 +21,6 @@ const char *const ptStop = "Stop";
 const char *const ptClearVol = "ClearVol";
 const char *const ptAddArchiveInfo = "AddArchiveInfo";
 const char *const ptDeleteArchiveInfo = "DeleteArchiveInfo";
-const char *const ptUpdateArchiveInfo = "UpdateArchiveInfo";
 const char *const ptWlogRecv = "WlogRecv";
 
 /**
@@ -59,7 +58,11 @@ public:
      * Create volume directory
      */
     void init() {
-        // QQQ
+        util::makeDir(volDir.str(), "ProxyVolInfo::init:makdir failed", true);
+        setState(pStopped);
+        setSizeLb(0);
+        util::makeDir(getMasterDir().str(), "ProxyVolInfo::init:makedir failed", true);
+        util::makeDir(getSlaveDir().str(), "ProxyVolInfo::init:makedir failed", true);
     }
     bool existsArchiveInfo(const std::string &name) const {
         if (!getArchiveInfoPath(name).stat().isFile()) {
@@ -109,7 +112,6 @@ public:
      *   All data inside the directory will be removed.
      */
     void clear() {
-        // Delete all related lvm volumes and snapshots.
         if (!volDir.rmdirRecursive()) {
             throw cybozu::Exception("ProxyVolInfo::clear:rmdir recursively failed.");
         }
@@ -131,6 +133,14 @@ public:
         std::string st;
         util::loadFile(volDir, "state", st);
         return st;
+    }
+    void setSizeLb(uint64_t sizeLb) {
+        util::saveFile(volDir, "size", sizeLb);
+    }
+    uint64_t getSizeLb() const {
+        uint64_t sizeLb;
+        util::loadFile(volDir, "size", sizeLb);
+        return sizeLb;
     }
     bool existsVolDir() const {
         return volDir.stat().isDirectory();
@@ -204,8 +214,11 @@ public:
     cybozu::FilePath getMasterDir() const {
         return volDir + "master";
     }
+    cybozu::FilePath getSlaveDir() const {
+        return volDir + "slave";
+    }
     cybozu::FilePath getSlaveDir(const std::string &name) const {
-        return volDir + "slave" + name;
+        return getSlaveDir() + name;
     }
 private:
     /**

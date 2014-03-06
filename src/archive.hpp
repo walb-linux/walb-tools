@@ -200,10 +200,12 @@ inline void c2aStartServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
 
     ArchiveVolState& volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
     verifyNoArchiveActionRunning(volSt.ac, FUNC);
     StateMachine &sm = volSt.sm;
     {
         StateMachineTransaction tran(sm, aStopped, atStart, FUNC);
+        ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
                                getArchiveVolState(volId).diffMgr);
         const std::string st = volInfo.getState();

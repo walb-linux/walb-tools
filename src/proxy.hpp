@@ -8,6 +8,7 @@
 #include "wdiff_data.hpp"
 #include "host_info.hpp"
 #include "task_queue.hpp"
+#include "walb_util.hpp"
 
 namespace walb {
 
@@ -26,11 +27,11 @@ struct ProxyVolState
      * In Started/WlogRecv state, this is read-only and accessed by multiple threads.
      * Otherwise, this is writable and accessed by only one thread.
      */
-    std::vector<std::string> archiveList;
+    std::set<std::string> archiveSet;
 
     explicit ProxyVolState(const std::string &volId)
         : stopState(NotStopping), sm(mu), ac(mu)
-        , diffMgr(), diffMgrMap(), archiveList() {
+        , diffMgr(), diffMgrMap(), archiveSet() {
         const struct StateMachine::Pair tbl[] = {
             { pClear, ptAddArchiveInfo },
             { ptAddArchiveInfo, pStopped },
@@ -40,9 +41,6 @@ struct ProxyVolState
 
             { pStopped, ptAddArchiveInfo },
             { ptAddArchiveInfo, pStopped },
-
-            { pStopped, ptUpdateArchiveInfo },
-            { ptUpdateArchiveInfo, pStopped },
 
             { pStopped, ptDeleteArchiveInfo },
             { ptDeleteArchiveInfo, pStopped },
@@ -150,13 +148,13 @@ inline void ProxyVolState::initInner(const std::string &volId)
     for (const std::string &name : volInfo.getArchiveNameList()) {
         HostInfo hi = volInfo.getArchiveInfo(name);
         hi.verify();
-        archiveList.push_back(name);
+        archiveSet.insert(name);
         volInfo.reloadSlave(name);
     }
     // Retry to make hard links of wdiff files in the master directory.
     std::vector<MetaDiff> diffV = volInfo.getAllDiffsInMaster();
     for (const MetaDiff &d : diffV) {
-        for (const std::string &name : archiveList) {
+        for (const std::string &name : archiveSet) {
             volInfo.tryToMakeHardlinkInSlave(d, name);
         }
     }
@@ -173,9 +171,9 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
-inline void verifyNotStopping(const std::string &volId, const char *msg)
+inline void verifyNoActionRunning(ProxyVolState &/*volSt*/, const char */*msg*/)
 {
-    util::verifyNotStopping(getProxyVolState(volId).stopState, volId, msg);
+    // QQQ
 }
 
 inline void c2pStatusServer(protocol::ServerParams &/*p*/)
@@ -208,27 +206,59 @@ inline void c2pStopServer(protocol::ServerParams &/*p*/)
 
 namespace proxy_local {
 
-inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &/*hi*/)
+inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &hi)
 {
     const char *const FUNC = __func__;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-//    verifyNoActionRunning(volId, "c2aInitVolServer");
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
+    if (!volInfo.existsArchiveInfo(archiveName)) {
+        throw cybozu::Exception(FUNC) << "archive info not exists" << archiveName;
+    }
+    hi = volInfo.getArchiveInfo(archiveName);
 }
 
-inline void addArchiveInfo(const std::string&, const std::string &/*archiveName*/, const HostInfo &/*hi*/)
+inline void addArchiveInfo(const std::string &volId, const std::string &archiveName, const HostInfo &hi, bool ensureNotExistance)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt, FUNC);
+    const std::string &curr = volSt.sm.get(); // pStopped or pClear
+    {
+        StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
+        ul.unlock();
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
+        if (curr == pClear) {
+            assert(volSt.archiveSet.empty());
+            volInfo.init();
+        }
+        volInfo.addArchiveInfo(archiveName, hi, ensureNotExistance);
+        ul.lock();
+        volSt.archiveSet.insert(archiveName);
+        tran.commit(pStopped);
+    }
 }
 
-inline void deleteArchiveInfo(const std::string &, const std::string &/*archiveName*/)
+inline void deleteArchiveInfo(const std::string &volId, const std::string &archiveName)
 {
-    // QQQ
-}
-
-inline void updateArchiveInfo(const std::string& , const std::string &/*archiveName*/, const HostInfo &/*hi*/)
-{
-    // QQQ
+    const char *const FUNC = __func__;
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt, FUNC);
+    {
+        StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
+        volSt.archiveSet.erase(archiveName);
+        bool isClear = volSt.archiveSet.empty();
+        ul.unlock();
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
+        volInfo.deleteArchiveInfo(archiveName);
+        if (isClear) volInfo.clear();
+        tran.commit(isClear ? pClear : pStopped);
+    }
 }
 
 template <typename Func>
@@ -277,15 +307,10 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
         HostInfo hi;
         pkt.read(hi);
         hi.verify();
-        if (cmd == "add") {
-            proxy_local::runAndReplyOkOrErr(
-                pkt, FUNC,
-                [&]() { proxy_local::addArchiveInfo(volId, archiveName, hi); });
-        } else {
-            proxy_local::runAndReplyOkOrErr(
-                pkt, FUNC,
-                [&]() { proxy_local::updateArchiveInfo(volId, archiveName, hi); });
-        }
+        const bool ensureNotExistance = cmd == "add";
+        proxy_local::runAndReplyOkOrErr(
+            pkt, FUNC,
+            [&]() { proxy_local::addArchiveInfo(volId, archiveName, hi, ensureNotExistance); });
         return;
     }
     if (cmd == "get" || cmd == "delete") {
