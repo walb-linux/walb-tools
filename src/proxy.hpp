@@ -210,6 +210,7 @@ namespace proxy_local {
 
 inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &/*hi*/)
 {
+    const char *const FUNC = __func__;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
 //    verifyNoActionRunning(volId, "c2aInitVolServer");
