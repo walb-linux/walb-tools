@@ -22,8 +22,10 @@ public:
     }
     /**
      * Get values atomically.
+     * C must be Container<std::string> type.
      */
-    std::vector<int> getValues(const std::vector<std::string> &nameV) const {
+    template <typename C>
+    std::vector<int> getValues(const C &nameV) const {
         AutoLock lk(mu_);
         std::vector<int> ret;
         for (const std::string &name : nameV) {

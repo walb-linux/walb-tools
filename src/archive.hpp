@@ -138,7 +138,7 @@ inline void verifyNotStopping(const std::string &volId, const char *msg)
 
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
 {
-    util::verifyNoActionRunning(ac, {aMerge, aApply, aRestore, aReplSync}, msg);
+    util::verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)

@@ -261,17 +261,22 @@ inline void verifyNotStopping(
     }
 }
 
-inline void verifyNoActionRunning(const ActionCounters& ac, const StrVec& actions, const char *msg)
+/**
+ * C must be Container<std::string> type.
+ */
+template <typename C>
+void verifyNoActionRunning(const ActionCounters& ac, const C& actions, const char *msg)
 {
     std::vector<int> v = ac.getValues(actions);
     assert(v.size() == actions.size());
-    if (!std::all_of(v.begin(), v.end(), [](int i) { return i == 0; })) {
-		cybozu::Exception e(msg);
-		e << "there are running actions";
-		for (size_t i = 0; i < actions.size(); i++) {
-			e << (actions[i] + "=" + cybozu::itoa(v[i]));
-		}
-		throw e;
+    for (size_t i = 0; i < v.size(); i++) {
+        if (v[i] != 0) {
+            typename C::const_iterator itr = actions.begin();
+            std::advance(itr, i);
+            throw cybozu::Exception(msg)
+                 << "there are running action"
+                 << *itr << v[i];
+        }
     }
 }
 

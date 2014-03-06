@@ -164,13 +164,6 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
-inline void verifyNoProxyActionRunning(ProxyVolState &volSt, const char *msg)
-{
-    UniqueLock ul(volSt.mu);
-    StrVec v(volSt.archiveSet.begin(), volSt.archiveSet.end());
-    util::verifyNoActionRunning(volSt.ac, v, msg);
-}
-
 inline void c2pStatusServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
@@ -193,7 +186,7 @@ inline void c2pStartServer(protocol::ServerParams &p)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoProxyActionRunning(volSt, FUNC);
+    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
         // TODO: enqueue backgrond tasks for the volume.
@@ -267,7 +260,7 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoProxyActionRunning(volSt, FUNC);
+    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &curr = volSt.sm.get(); // pStopped or pClear
     {
         StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
@@ -285,7 +278,7 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoProxyActionRunning(volSt, FUNC);
+    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
         ul.unlock();
@@ -384,7 +377,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoProxyActionRunning(volSt, FUNC);
+    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
         volSt.archiveSet.clear();
