@@ -256,6 +256,7 @@ public:
         wdiffH->print();
 
         walb_diff_record rec;
+		walb::diff::initRec(rec);
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
             if (!walb::diff::isValidRec(rec)) {
