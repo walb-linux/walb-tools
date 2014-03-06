@@ -147,7 +147,7 @@ CYBOZU_TEST_AUTO(oldOrNew)
  */
 walb::MetaDiff randDiff(const walb::MetaSnap &snap)
 {
-    snap.check();
+    snap.verify();
     cybozu::util::Random<uint32_t> rand;
     uint64_t b0, e0, b1, e1;
     bool isDirty = rand() % 3 == 0;
@@ -178,7 +178,7 @@ walb::MetaDiff randDiff(const walb::MetaSnap &snap)
     ret.canMerge = true;
     ret.snapB.set(b0, e0);
     ret.snapE.set(b1, e1);
-    ret.check();
+    ret.verify();
     assert(canApply(snap, ret));
     ret.canMerge = (rand() % 2 == 0);
     return ret;
