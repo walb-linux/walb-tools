@@ -14,31 +14,27 @@ namespace walb {
  */
 struct HostInfo
 {
-    std::string name; /* must be unique in the system. */
     std::string addr; /* what cybozu::SocketAddr can treat. */
     uint16_t port;
     uint8_t compressionType; /* wdiff compression type. */
     uint8_t compressionLevel; /* wdiff compression level. */
 
-    HostInfo() : HostInfo("", "", 0) {}
-    HostInfo(const std::string &name, const std::string &addr, uint16_t port,
-               uint8_t type = ::WALB_DIFF_CMPR_SNAPPY, uint8_t level = 0)
-        : name(name), addr(addr), port(port)
+    HostInfo() : HostInfo("", 0) {}
+    HostInfo(const std::string &addr, uint16_t port,
+             uint8_t type = ::WALB_DIFF_CMPR_SNAPPY, uint8_t level = 0)
+        : addr(addr), port(port)
         , compressionType(type), compressionLevel(level) {}
     bool operator==(const HostInfo &rhs) const {
-        return name == rhs.name && addr == rhs.addr &&
-            port == rhs.port && compressionType == rhs.compressionType &&
-            compressionLevel == rhs.compressionLevel;
+        return addr == rhs.addr && port == rhs.port
+            && compressionType == rhs.compressionType
+            && compressionLevel == rhs.compressionLevel;
     }
     bool operator!=(const HostInfo &rhs) const {
-        return name != rhs.name || addr != rhs.addr ||
-            port != rhs.port || compressionType != rhs.compressionType ||
-            compressionLevel != rhs.compressionLevel;
+        return addr != rhs.addr || port != rhs.port
+            || compressionType != rhs.compressionType
+            || compressionLevel != rhs.compressionLevel;
     }
     void verify() const {
-        if (name.empty()) {
-            throw cybozu::Exception("HostInfo::verify::name is empty");
-        }
         if (addr.empty()) {
             throw cybozu::Exception("HostInfo::verify::addr is empty");
         }
@@ -53,7 +49,6 @@ struct HostInfo
     }
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::save(os, name);
         cybozu::save(os, addr);
         cybozu::save(os, port);
         cybozu::save(os, compressionType);
@@ -61,7 +56,6 @@ struct HostInfo
     }
     template <typename InputStream>
     void load(InputStream &is) {
-        cybozu::load(name, is);
         cybozu::load(addr, is);
         cybozu::load(port, is);
         cybozu::load(compressionType, is);
@@ -69,7 +63,7 @@ struct HostInfo
         verify();
     }
     std::string str() const;
-    void parse(const std::string &, const std::string &, const std::string &);
+    void parse(const std::string &, const std::string &);
     void parse(const std::string &);
     friend inline std::ostream &operator<<(std::ostream &os, const HostInfo &s) {
         os << s.str();
@@ -120,11 +114,9 @@ inline const std::string &compressionTypeToStr(int type)
  * Parse three strings into a HostInfo.
  */
 inline HostInfo parseHostInfo(
-    const std::string &archiveId, const std::string &addrPort,
-    const std::string &compressOpt)
+    const std::string &addrPort, const std::string &compressOpt)
 {
     HostInfo hi;
-    hi.name = archiveId;
     {
         std::vector<std::string> v = cybozu::Split(addrPort, ':', 2);
         if (v.size() != 2) {
@@ -147,7 +139,7 @@ inline HostInfo parseHostInfo(
 
 /**
  * Parse a string into a HostInfo.
- * Input string is like "archiveId addr:port compressionType:compresionLevel".
+ * Input string is like "addr:port compressionType:compresionLevel".
  */
 inline HostInfo parseHostInfo(const std::string &s)
 {
@@ -157,18 +149,17 @@ inline HostInfo parseHostInfo(const std::string &s)
             return s.empty();
         });
     v.erase(itr, v.end());
-    if (v.size() != 3) {
-        throw cybozu::Exception("parseHostInfo:not 3 tokens.")
+    if (v.size() != 2) {
+        throw cybozu::Exception("parseHostInfo:not 2 tokens.")
             << s;
     }
-    return parseHostInfo(v[0], v[1], v[2]);
+    return parseHostInfo(v[0], v[1]);
 }
 
 inline void HostInfo::parse(
-    const std::string &archiveId, const std::string &addrPort,
-    const std::string &compressOpt)
+    const std::string &addrPort, const std::string &compressOpt)
 {
-    *this = parseHostInfo(archiveId, addrPort, compressOpt);
+    *this = parseHostInfo(addrPort, compressOpt);
 }
 
 inline void HostInfo::parse(const std::string &s)
@@ -179,8 +170,8 @@ inline void HostInfo::parse(const std::string &s)
 inline std::string HostInfo::str() const
 {
     return cybozu::util::formatString(
-        "%s %s:%u %s:%u"
-        , name.c_str(), addr.c_str(), port
+        "%s:%u %s:%u"
+        , addr.c_str(), port
         , compressionTypeToStr(compressionType).c_str()
         , compressionLevel);
 }

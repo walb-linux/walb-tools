@@ -141,7 +141,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         }
         const std::string &addrPort = p.params[2];
         const std::string &compressOpt = p.params[3];
-        HostInfo hi = parseHostInfo(archiveId, addrPort, compressOpt);
+        HostInfo hi = parseHostInfo(addrPort, compressOpt);
         packet::Packet pkt(p.sock);
         pkt.write(hi);
         std::string res;
@@ -161,7 +161,6 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         if (cmd == "delete") return;
         HostInfo hi;
         pkt.read(hi);
-        hi.verify();
         std::cout << hi << std::endl;
         return;
     }

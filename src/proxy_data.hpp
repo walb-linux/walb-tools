@@ -131,8 +131,7 @@ public:
     const HostInfo &getServer(const std::string &name) const {
         return serverMap_.at(name);
     }
-    void addServer(const HostInfo &server) {
-        const std::string &name = server.name;
+    void addServer(const std::string &name, const HostInfo &server) {
         assert(!existsServer(name));
         emplace(name, server);
         saveServerRecord(name);
@@ -215,10 +214,8 @@ private:
             cybozu::util::FileReader reader(fp.str(), O_RDONLY);
             HostInfo server;
             cybozu::load(server, reader);
-            if (removeSuffix(info.name, ".server") != server.name) {
-                throw std::runtime_error("server name invalid.");
-            }
-            emplace(server.name, server);
+            std::string name = removeSuffix(info.name, ".server");
+            emplace(name, server);
         }
     }
     void emplace(const std::string &name, const HostInfo &server) {

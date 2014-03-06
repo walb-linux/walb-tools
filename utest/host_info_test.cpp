@@ -8,16 +8,16 @@ CYBOZU_TEST_AUTO(hostInfo)
     std::string testDirStr("hostInfoTest");
     TestDirectory testDir(testDirStr, true);
 
-    walb::HostInfo host0("host0", "192.168.1.100", 5000);
-    walb::HostInfo host1("host1", "192.168.1.101", 5001);
-    walb::HostInfo host2("host2", "192.168.1.102", 5002);
+    walb::HostInfo host0("192.168.1.100", 5000);
+    walb::HostInfo host1("192.168.1.101", 5001);
+    walb::HostInfo host2("192.168.1.102", 5002);
 
     host0.verify();
     host1.verify();
     host2.verify();
 
     {
-        walb::HostInfo host("host0", "192.168.1.100", 5000);
+        walb::HostInfo host("192.168.1.100", 5000);
         host.compressionLevel = 10;
         CYBOZU_TEST_EXCEPTION(host.verify(), cybozu::Exception);
     }
@@ -40,15 +40,15 @@ CYBOZU_TEST_AUTO(hostInfo)
     }
 
     walb::HostInfo hi0, hi1, hi2;
-    hi0.parse("host0 192.168.1.1:5000 snappy:5");
-    hi1.parse("host0   192.168.1.1:5000   snappy:5");
-    hi2.parse("host0", "192.168.1.1:5000", "snappy:5");
+    hi0.parse("192.168.1.1:5000 snappy:5");
+    hi1.parse("  192.168.1.1:5000   snappy:5   ");
+    hi2.parse("192.168.1.1:5000", "snappy:5");
     CYBOZU_TEST_EQUAL(hi0, hi1);
     CYBOZU_TEST_EQUAL(hi0, hi2);
 
-    hi0.parse("host0 192.168.1.1:5000 lzma:9");
-    hi0.parse("host0 192.168.1.1:5000 gzip:9");
-    hi0.parse("host0 192.168.1.1:5000 none:9");
-    CYBOZU_TEST_EXCEPTION(hi0.parse("host0 192.168.1.1:5000 xxx:9"), cybozu::Exception);
-    CYBOZU_TEST_EXCEPTION(hi0.parse("host0 192.168.1.1:5000 snappy:10"), cybozu::Exception);
+    hi0.parse("192.168.1.1:5000 lzma:9");
+    hi0.parse("192.168.1.1:5000 gzip:9");
+    hi0.parse("192.168.1.1:5000 none:9");
+    CYBOZU_TEST_EXCEPTION(hi0.parse("192.168.1.1:5000 xxx:9"), cybozu::Exception);
+    CYBOZU_TEST_EXCEPTION(hi0.parse("192.168.1.1:5000 snappy:10"), cybozu::Exception);
 }
