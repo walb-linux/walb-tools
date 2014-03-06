@@ -23,6 +23,9 @@ const char *const ptAddArchiveInfo = "AddArchiveInfo";
 const char *const ptDeleteArchiveInfo = "DeleteArchiveInfo";
 const char *const ptWlogRecv = "WlogRecv";
 
+const char *const ArchiveSuffix = ".archive";
+const char *const ArchiveExtension = "archive";
+
 /**
  * Data manager for a volume in a proxy daemon.
  * This is not thread-safe.
@@ -73,8 +76,6 @@ public:
     void loadAllArchiveInfo() {
         reloadMaster();
         for (const std::string &name : getArchiveNameList()) {
-            HostInfo hi = getArchiveInfo(name);
-            hi.verify();
             archiveSet_.insert(name);
             reloadSlave(name);
         }
@@ -95,8 +96,7 @@ public:
         return true;
     }
     void addArchiveInfo(const std::string& name, const HostInfo &hi, bool ensureNotExistance) {
-        hi.verify();
-        util::saveFile(volDir, name + ".archive", hi);
+        util::saveFile(volDir, name + ArchiveSuffix, hi);
         util::makeDir(getSlaveDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
         archiveSet_.insert(name);
@@ -109,8 +109,7 @@ public:
     }
     HostInfo getArchiveInfo(const std::string &name) const {
         HostInfo hi;
-        util::loadFile(volDir, name + ".archive", hi);
-        hi.verify();
+        util::loadFile(volDir, name + ArchiveSuffix, hi);
         return hi;
     }
     /**
@@ -226,23 +225,18 @@ private:
         return volDir + cybozu::FilePath(createDiffFileName(diff));
     }
     cybozu::FilePath getArchiveInfoPath(const std::string &name) const {
-        return volDir + cybozu::FilePath(name + ".archive");
+        return volDir + cybozu::FilePath(name + ArchiveSuffix);
     }
     /**
      * Get list of name of all the archive servers.
      */
     std::vector<std::string> getArchiveNameList() const {
-        std::vector<std::string> ret, fnameV;
-        fnameV = util::getFileNameList(volDir.str(), "archive");
+        std::vector<std::string> bnameV, fnameV;
+        fnameV = util::getFileNameList(volDir.str(), ArchiveExtension);
         for (const std::string &fname : fnameV) {
-            size_t n = fname.find(".archive");
-            if (n == std::string::npos) {
-                throw cybozu::Exception("ProxyVolInfo::getArchiveNameList")
-                    << "filename extention is not '.archive'";
-            }
-            ret.push_back(fname.substr(0, n));
+            bnameV.push_back(cybozu::GetBaseName(fname));
         }
-        return ret;
+        return bnameV;
     }
     /**
      * Reload metada for the mater.

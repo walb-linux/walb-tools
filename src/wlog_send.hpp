@@ -39,9 +39,9 @@ protected:
     uint64_t endLsid_; /* -1 means unknown. */
 public:
     using ProtocolData::ProtocolData;
-    void checkParams() const {
+    void verifyParams() const {
         if (name_.empty()) logAndThrow("name param empty.");
-        diff_.check();
+        diff_.verify();
         if (!::is_valid_pbs(pbs_)) logAndThrow("Invalid pbs.");
         if (endLsid_ < bgnLsid_) logAndThrow("Invalid lsids.");
     }
@@ -101,7 +101,7 @@ public:
         salt_ = salt;
         bgnLsid_ = bgnLsid;
         endLsid_ = endLsid;
-        checkParams();
+        verifyParams();
     }
     /**
      * Prepare worker threads.
@@ -194,7 +194,7 @@ private:
         packet.read(salt_);
         packet.read(bgnLsid_);
         packet.read(endLsid_);
-        checkParams();
+        verifyParams();
         packet::Answer ans(sock_);
         ProxyData pd(baseDir_.str(), name_);
         if (pd.getServerNameList().empty()) {

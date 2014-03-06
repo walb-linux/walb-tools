@@ -219,8 +219,7 @@ inline void c2pStopServer(protocol::ServerParams &p)
 
     UniqueLock ul(volSt.mu);
     util::waitUntil(ul, [&]() {
-            StrVec actions(volSt.archiveSet.begin(), volSt.archiveSet.end());
-            if (!volSt.ac.isAllZero(actions)) return false;
+            if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
             const std::string &st = volSt.sm.get();
             return st == pStopped || st == pStarted || st == pClear;
         }, FUNC);
@@ -262,14 +261,13 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
     util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &curr = volSt.sm.get(); // pStopped or pClear
-    {
-        StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
-        ul.unlock();
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-        if (curr == pClear) volInfo.init();
-        volInfo.addArchiveInfo(archiveName, hi, ensureNotExistance);
-        tran.commit(pStopped);
-    }
+
+    StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
+    ul.unlock();
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    if (curr == pClear) volInfo.init();
+    volInfo.addArchiveInfo(archiveName, hi, ensureNotExistance);
+    tran.commit(pStopped);
 }
 
 inline void deleteArchiveInfo(const std::string &volId, const std::string &archiveName)
@@ -279,34 +277,15 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
     util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
-    {
-        StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
-        ul.unlock();
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-        volInfo.deleteArchiveInfo(archiveName);
-        ul.lock();
-        bool shouldClear = volInfo.notExistsArchiveInfo();
-        if (shouldClear) volInfo.clear();
-        tran.commit(shouldClear ? pClear : pStopped);
-    }
-}
 
-template <typename Func>
-inline void runAndReplyOkOrErr(packet::Packet &pkt, const char *msg, Func func)
-{
-    bool failed = false;
-    std::string errMsg;
-    try {
-        func();
-    } catch (std::exception &e) {
-        failed = true;
-        errMsg = e.what();
-    }
-    if (failed) {
-        pkt.write(errMsg);
-        throw cybozu::Exception(msg) << errMsg;
-    }
-    pkt.write("ok");
+    StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
+    ul.unlock();
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    volInfo.deleteArchiveInfo(archiveName);
+    ul.lock();
+    bool shouldClear = volInfo.notExistsArchiveInfo();
+    if (shouldClear) volInfo.clear();
+    tran.commit(shouldClear ? pClear : pStopped);
 }
 
 } // namespace proxy_local
@@ -332,31 +311,27 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
     const std::string &cmd = v[1];
     const std::string &archiveName = v[2];
 
-    if (cmd == "add" || cmd == "update") {
-        packet::Packet pkt(p.sock);
+    packet::Packet pkt(p.sock);
+    try {
         HostInfo hi;
-        pkt.read(hi);
-        hi.verify();
-        const bool ensureNotExistance = cmd == "add";
-        proxy_local::runAndReplyOkOrErr(
-            pkt, FUNC,
-            [&]() { proxy_local::addArchiveInfo(volId, archiveName, hi, ensureNotExistance); });
-        return;
-    }
-    if (cmd == "get" || cmd == "delete") {
-        packet::Packet pkt(p.sock);
-        HostInfo hi;
-        if (cmd == "get") {
-            proxy_local::runAndReplyOkOrErr(
-                pkt, FUNC,
-                [&]() { proxy_local::getArchiveInfo(volId, archiveName, hi); });
+        if (cmd == "add" || cmd == "update") {
+            pkt.read(hi);
+            proxy_local::addArchiveInfo(volId, archiveName, hi, cmd == "add");
+            pkt.write("ok");
+            return;
+        } else if (cmd == "get") {
+            proxy_local::getArchiveInfo(volId, archiveName, hi);
+            pkt.write("ok");
             pkt.write(hi);
-        } else {
-            proxy_local::runAndReplyOkOrErr(
-                pkt, FUNC,
-                [&]() { proxy_local::deleteArchiveInfo(volId, archiveName); });
+            return;
+        } else if (cmd == "delete") {
+            proxy_local::deleteArchiveInfo(volId, archiveName);
+            pkt.write("ok");
+            return;
         }
-        return;
+    } catch (std::exception &e) {
+        pkt.write(std::string(FUNC) + e.what());
+        throw;
     }
     throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
 }

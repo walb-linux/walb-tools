@@ -21,7 +21,7 @@ protected:
     MetaSnap snap_;
 public:
     using ProtocolData::ProtocolData;
-    void checkParams() const {
+    void verifyParams() const {
         if (name_.empty()) logAndThrow("name param empty.");
         if (sizeLb_ == 0) logAndThrow("sizeLb param is zero.");
         if (bulkLb_ == 0) logAndThrow("bulkLb param is zero.");

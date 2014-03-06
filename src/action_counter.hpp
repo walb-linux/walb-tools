@@ -37,7 +37,8 @@ public:
         AutoLock lk(mu_);
         return *get(name);
     }
-    bool isAllZero(const std::vector<std::string> &nameV) const {
+    template <typename C>
+    bool isAllZero(const C &nameV) const {
         std::vector<int> v = getValues(nameV);
         return std::all_of(v.begin(), v.end(), [](int i) { return i == 0; });
     }

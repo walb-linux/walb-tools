@@ -66,6 +66,7 @@ struct HostInfo
         cybozu::load(port, is);
         cybozu::load(compressionType, is);
         cybozu::load(compressionLevel, is);
+        verify();
     }
     std::string str() const;
     void parse(const std::string &, const std::string &, const std::string &);

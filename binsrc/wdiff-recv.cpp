@@ -62,7 +62,7 @@ public:
         logger.debug("diff %s", diff.str().c_str());
 
         packet::Answer ans(sock_);
-        if (!checkParams(logger, name, diff)) {
+        if (!isValidParams(logger, name)) {
             ans.ng(1, "error for test.");
             return;
         }
@@ -88,15 +88,12 @@ public:
         ack.send();
     }
 private:
-    bool checkParams(Logger &logger,
-        const std::string &name,
-        const MetaDiff &diff) const {
-
+    bool isValidParams(Logger &logger,
+        const std::string &name) const {
         if (name.empty()) {
             logger.error("name is empty.");
             return false;
         }
-        diff.check();
         return true;
     }
     void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger) {

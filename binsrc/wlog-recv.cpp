@@ -63,7 +63,7 @@ public:
         logger.debug("endLsid %" PRIu64 "", endLsid);
 
         packet::Answer ans(sock_);
-        if (!checkParams(logger, name, uuid, diff, pbs, salt, bgnLsid, endLsid)) {
+        if (!isValidParams(logger, name, uuid, diff, pbs, salt, bgnLsid, endLsid)) {
             ans.ng(1, "error for test.");
             return;
         }
@@ -90,7 +90,7 @@ public:
         ack.send();
     }
 private:
-    bool checkParams(Logger &logger,
+    bool isValidParams(Logger &logger,
         const std::string &name,
         const cybozu::Uuid &,
         const MetaDiff &diff,
@@ -101,7 +101,7 @@ private:
             logger.error("name is empty.");
             return false;
         }
-        diff.check();
+        diff.verify();
         if (!::is_valid_pbs(pbs)) {
             logger.error("invalid pbs.");
             return false;

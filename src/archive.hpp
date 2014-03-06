@@ -242,7 +242,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
     StateMachine &sm = volSt.sm;
 
     util::waitUntil(ul, [&]() {
-            bool go = volSt.ac.isAllZero({aMerge, aApply, aRestore, aReplSync});
+            bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
             if (!go) return false;
             const std::string &st = sm.get();
             return st == aClear || st == aSyncReady || st == aArchived || st == aStopped;

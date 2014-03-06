@@ -137,7 +137,7 @@ struct MetaSnap
         this->gidB = gidB;
         this->gidE = gidE;
     }
-    void check() const {
+    void verify() const {
         if (preamble != META_SNAP_PREAMBLE) {
             throw cybozu::Exception("MetaSnap::check:wrong preamble") << preamble;
         }
@@ -164,6 +164,7 @@ struct MetaSnap
         cybozu::load(preamble, is);
         cybozu::load(gidB, is);
         cybozu::load(gidE, is);
+        verify();
     }
     /**
      * For cybozu serializer.
@@ -223,12 +224,12 @@ struct MetaDiff
     bool isDirty() const {
         return snapB.isDirty() || snapE.isDirty();
     }
-    void check() const {
+    void verify() const {
         if (preamble != META_DIFF_PREAMBLE) {
             throw cybozu::Exception("MetaDiff::check:wrong preamble") << preamble;
         }
-        snapB.check();
-        snapE.check();
+        snapB.verify();
+        snapE.verify();
         if (snapB.gidB >= snapE.gidB) {
             throw cybozu::Exception("MetaDiff::broken progress constraint")
                 << snapB.str() << snapE.str();
@@ -258,6 +259,7 @@ struct MetaDiff
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
         cybozu::load(snapE, is);
+        verify();
     }
     /**
      * For cybozu serializer.
@@ -318,12 +320,12 @@ struct MetaState
     bool operator!=(const MetaState &rhs) const {
         return !operator==(rhs);
     }
-    void check() const {
+    void verify() const {
         if (preamble != META_STATE_PREAMBLE) {
             throw cybozu::Exception("MetaState::check:wrong preamble") << preamble;
         }
-        snapB.check();
-        snapE.check();
+        snapB.verify();
+        snapE.verify();
         if (isApplying && snapB.gidB >= snapE.gidB) {
             throw cybozu::Exception("MetaState::broken progress constraint")
                 << snapB.str() << snapE.str();
@@ -352,6 +354,7 @@ struct MetaState
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
         cybozu::load(snapE, is);
+        verify();
     }
     /**
      * For cybozu serializer.
@@ -381,7 +384,7 @@ struct MetaLsidGid
         : preamble(META_LSIDGID_PREAMBLE)
         , canMerge(false), timestamp(0), lsid(-1), gid(-1) {
     }
-    void check() const {
+    void verify() const {
         if (preamble != META_LSIDGID_PREAMBLE) {
             throw cybozu::Exception("MetaLsidGid::check:wrong preamble") << preamble;
         }
@@ -406,6 +409,7 @@ struct MetaLsidGid
         cybozu::load(timestamp, is);
         cybozu::load(lsid, is);
         cybozu::load(gid, is);
+        verify();
     }
     /**
      * For cybozu serializer.
@@ -679,7 +683,7 @@ inline MetaDiff parseDiffFileName(const std::string &name)
     default:
         throw cybozu::Exception("parseDiffFileName:parse failure3") << name;
     }
-    diff.check();
+    diff.verify();
     return diff;
 }
 
@@ -688,7 +692,6 @@ inline MetaDiff parseDiffFileName(const std::string &name)
  */
 inline std::string createDiffFileName(const MetaDiff &diff)
 {
-    diff.check();
     std::vector<uint64_t> v;
     if (diff.isDirty()) {
         v.push_back(diff.snapB.gidB);
