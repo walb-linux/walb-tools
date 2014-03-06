@@ -3,6 +3,8 @@
 #include <memory>
 #include <mutex>
 #include <cassert>
+#include <vector>
+#include <string>
 #include "cybozu/exception.hpp"
 
 namespace walb {
@@ -10,7 +12,7 @@ namespace walb {
 template<class Value>
 class AtomicMap
 {
-    std::mutex mu_;
+    mutable std::mutex mu_;
     using Map = std::map<std::string, std::unique_ptr<Value>>;
     using AutoLock = std::lock_guard<std::mutex>;
     Map map_;
@@ -26,6 +28,14 @@ public:
             assert(maked);
         }
         return *itr->second;
+    }
+    std::vector<std::string> getKeyList() const {
+        AutoLock al(mu_);
+        std::vector<std::string> ret;
+        for (const typename Map::value_type &p : map_) {
+            ret.push_back(p.first);
+        }
+        return ret;
     }
     // We can not remove instances of Value
     // because we can not ensure uniqueness of Value instance per id.
