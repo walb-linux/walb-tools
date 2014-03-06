@@ -1047,6 +1047,20 @@ public:
         }
         return v;
     }
+    size_t size() const {
+        AutoLock lk(mu_);
+        return mmap_.size();
+    }
+    std::pair<uint64_t, uint64_t> getMinMaxGid() const {
+        uint64_t min = 0, max = 0;
+        AutoLock lk(mu_);
+        for (const auto &p : mmap_) {
+            const MetaDiff &d = p.second;
+            if (min < d.snapB.gidB) min = d.snapB.gidB;
+            if (max < d.snapE.gidB) max = d.snapE.gidB;
+        }
+        return {min, max};
+    }
 private:
     void addNolock(const MetaDiff &diff) {
         uint64_t b = diff.snapB.gidB;
