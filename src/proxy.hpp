@@ -29,6 +29,18 @@ struct ProxyVolState
      */
     std::set<std::string> archiveSet;
 
+    /**
+     * Timestamp of the latest wdiff received from a storage server.
+     * Lock of mu is required to access this.
+     */
+    uint64_t ts;
+    /**
+     * Timestamp of the latest wdiff sent to each archive server.
+     * Lock of mu is required to access this.
+     * Key is archiveName, value is the corresponding timestamp.
+     */
+    std::map<std::string, uint64_t> tsMap;
+
     explicit ProxyVolState(const std::string &volId)
         : stopState(NotStopping), sm(mu), ac(mu)
         , diffMgr(), diffMgrMap(), archiveSet() {
@@ -164,9 +176,88 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
-inline void c2pStatusServer(protocol::ServerParams &/*p*/)
+namespace proxy_local {
+
+inline StrVec getAllStateStrVec()
 {
+    StrVec ret;
+    auto &fmt = cybozu::util::formatString;
+
+    for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+        const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        const std::string state = volSt.sm.get();
+
+        ul.unlock();
+        const uint64_t totalSize = volInfo.getTotalDiffFileSize();
+        const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
+        ul.lock();
+
+        ret.push_back(
+            fmt("%s %s %z %s %s"
+                , volId.c_str(), state.c_str()
+                , volSt.diffMgr.size()
+                , totalSizeStr.c_str()
+                , cybozu::unixTimeToStr(volSt.ts).c_str()));
+
+        const StrVec archiveList(volSt.archiveSet.begin(), volSt.archiveSet.end());
+        const std::vector<int> actionNum = volSt.ac.getValues(archiveList);
+        assert(actionNum.size() == archiveList.size());
+        for (size_t i = 0; i < archiveList.size(); i++) {
+            const std::string &aName = archiveList[i];
+            const MetaDiffManager &mgr = volSt.diffMgrMap.get(aName);
+
+            ul.unlock();
+            const uint64_t totalSize = volInfo.getTotalDiffFileSize(aName);
+            const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
+            ul.lock();
+
+            uint64_t minGid, maxGid;
+            std::tie(minGid, maxGid) = mgr.getMinMaxGid();
+            ret.push_back(
+                fmt("  %s %s %zu %s %" PRIu64 " %" PRIu64 " %s"
+                    , aName.c_str()
+                    , actionNum[i] == 0 ? "None" : "WdiffSend"
+                    , mgr.size(), totalSizeStr.c_str(), minGid, maxGid
+                    , cybozu::unixTimeToStr(volSt.ts).c_str()));
+        }
+    }
+    return ret;
+}
+
+inline StrVec getVolStateStrVec(const std::string &/*volId*/)
+{
+
     // QQQ
+    return {};
+}
+
+} // namespace proxy_local
+
+/**
+ * params:
+ *   [0]: volId or none.
+ */
+inline void c2pStatusServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+    packet::Packet pkt(p.sock);
+    try {
+        StrVec stStrV;
+        if (v.empty()) {
+            stStrV = proxy_local::getAllStateStrVec();
+        } else {
+            const std::string &volId = v[0];
+            stStrV = proxy_local::getVolStateStrVec(volId);
+        }
+        pkt.write("ok");
+        pkt.write(stStrV);
+    } catch (std::exception &e) {
+        pkt.write(std::string(FUNC) + e.what());
+        throw;
+    }
 }
 
 /**

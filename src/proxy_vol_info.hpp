@@ -214,15 +214,33 @@ public:
     cybozu::FilePath getSlaveDir() const {
         return volDir + "slave";
     }
-    cybozu::FilePath getSlaveDir(const std::string &name) const {
-        return getSlaveDir() + name;
+    cybozu::FilePath getSlaveDir(const std::string &archiveName) const {
+        return getSlaveDir() + archiveName;
+    }
+    /**
+     * Get total diff size.
+     * getTotalDiffFileSize() means master wdiff files.
+     *
+     * RETURN:
+     *   [byte]
+     */
+    uint64_t getTotalDiffFileSize(const std::string &archiveName = "") const {
+        const MetaDiffManager *p = &diffMgr_;
+        if (!archiveName.empty()) p = &diffMgrMap_.get(archiveName);
+        uint64_t total = 0;
+        for (const MetaDiff &d : p->getAll()) {
+            total += getDiffPath(d, archiveName).stat().size();
+        }
+        return total;
     }
 private:
-    /**
-     * Full path of the wdiff file of a corresponding meta diff.
-     */
-    cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
-        return volDir + cybozu::FilePath(createDiffFileName(diff));
+    cybozu::FilePath getDiffPath(const MetaDiff &diff, const std::string &archiveName = "") const {
+        const std::string fname = createDiffFileName(diff);
+        if (archiveName.empty()) {
+            return getMasterDir() + fname;
+        } else {
+            return getSlaveDir(archiveName) + fname;
+        }
     }
     cybozu::FilePath getArchiveInfoPath(const std::string &name) const {
         return volDir + cybozu::FilePath(name + ArchiveSuffix);
@@ -248,8 +266,8 @@ private:
     /**
      * Reload meta data for an archive.
      */
-    void reloadSlave(const std::string &name) {
-        WalbDiffFiles wdiffs(diffMgrMap_.get(name), getSlaveDir(name).str());
+    void reloadSlave(const std::string &archiveName) {
+        WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getSlaveDir(archiveName).str());
         wdiffs.reload();
     }
 };
