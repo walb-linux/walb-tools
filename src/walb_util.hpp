@@ -18,6 +18,7 @@
 #include "uuid.hpp"
 #include "constant.hpp"
 #include "task_queue.hpp"
+#include "action_counter.hpp"
 #include "thread_util.hpp"
 #include "walb_logger.hpp"
 #include "cybozu/exception.hpp"
@@ -257,6 +258,21 @@ inline void verifyNotStopping(
         cybozu::Exception e(msg);
         e << "must be NotStopping" << volId << st;
         throw e;
+    }
+}
+//    std::vector<int> v = ac.getValues({aMerge, aApply, aRestore, aReplSync});
+
+inline void verifyNoActionRunning(const ActionCounters& ac, const StrVec& actions, const char *msg)
+{
+    std::vector<int> v = ac.getValues(actions);
+    assert(v.size() == actions.size());
+    if (!std::all_of(v.begin(), v.end(), [](int i) { return i == 0; })) {
+		cybozu::Exception e(msg);
+		e << "there are running actions";
+		for (size_t i = 0; i < actions.size(); i++) {
+			e << (actions[i] + "=" + cybozu::itoa(v[i]));
+		}
+		throw e;
     }
 }
 

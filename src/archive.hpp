@@ -131,34 +131,28 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     }
 }
 
-inline void verifyNoActionRunning(const std::string &volId, const char *msg)
-{
-    ActionCounters &ac = getArchiveVolState(volId).ac;
-    std::vector<int> v = ac.getValues({aMerge, aApply, aRestore, aReplSync});
-    assert(v.size() == 4);
-    if (!std::all_of(v.begin(), v.end(), [](int i) { return i == 0; })) {
-        throw cybozu::Exception(msg)
-            << "there are running actions"
-            << v[0] << v[1] << v[2] << v[3];
-    }
-}
-
 inline void verifyNotStopping(const std::string &volId, const char *msg)
 {
     util::verifyNotStopping(getArchiveVolState(volId).stopState, volId, msg);
 }
 
+inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
+{
+    util::verifyNoActionRunning(ac, {aMerge, aApply, aRestore, aReplSync}, msg);
+}
+
 inline void c2aInitVolServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 1, "c2aInitVolServer", false);
+        protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNoActionRunning(volId, "c2aInitVolServer");
+    verifyNoArchiveActionRunning(volSt.ac, FUNC);
     {
-        StateMachineTransaction tran(volSt.sm, aClear, atInitVol, "c2ainitVolServer");
+        StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
         ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.init();
@@ -170,17 +164,18 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 
 inline void c2aClearVolServer(protocol::ServerParams &p)
 {
-    StrVec v = protocol::recvStrVec(p.sock, 1, "c2aClearVolServer", false);
+    const char *FUNC = __func__;
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    verifyNoActionRunning(volId, "c2aClearVolServer");
+    verifyNoArchiveActionRunning(volSt.ac, FUNC);
     StateMachine &sm = volSt.sm;
     const std::string &currSt = sm.get(); // Stopped or SyncReady.
     {
-        StateMachineTransaction tran(sm, currSt, atClearVol, "c2aClearVolServer");
+        StateMachineTransaction tran(sm, currSt, atClearVol, FUNC);
         ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.clear();
@@ -190,7 +185,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    logger.info("c2aClearVolServer: cleared volId %s", volId.c_str());
+    logger.info("%s: cleared volId %s", FUNC, volId.c_str());
 }
 
 /**
@@ -199,19 +194,21 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
  */
 inline void c2aStartServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, "c2aStopServer", false);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
-    verifyNoActionRunning(volId, "c2aStartServer");
-    StateMachine &sm = getArchiveVolState(volId).sm;
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    verifyNoArchiveActionRunning(volSt.ac, FUNC);
+    StateMachine &sm = volSt.sm;
     {
-        StateMachineTransaction tran(sm, aStopped, atStart, "c2aStartServer");
+        StateMachineTransaction tran(sm, aStopped, atStart, FUNC);
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
                                getArchiveVolState(volId).diffMgr);
         const std::string st = volInfo.getState();
         if (st != aStopped) {
-            throw cybozu::Exception("c2aStartServer:not Stopped state") << st;
+            throw cybozu::Exception(FUNC) << "not Stopped state" << st;
         }
         volInfo.setState(aArchived);
         tran.commit(aArchived);
@@ -276,6 +273,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
  */
 inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
 
     walb::packet::Packet sPack(p.sock);
@@ -284,7 +282,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     uint64_t sizeLb, curTime, bulkLb;
     sPack.read(hostType);
     if (hostType != "storageD" && hostType != "archiveD") {
-        throw cybozu::Exception("x2aDirtyFullSyncServer:invalid hostType") << hostType;
+        throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
     }
     sPack.read(volId);
     sPack.read(uuid);
@@ -292,15 +290,15 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     sPack.read(curTime);
     sPack.read(bulkLb);
     if (bulkLb == 0) {
-        throw cybozu::Exception("x2aDirtyFullSyncServer:bulkLb is zero");
+        throw cybozu::Exception(FUNC) << "bulkLb is zero";
     }
 
-    verifyNoActionRunning(volId, "x2aDirtyFullSyncServer");
     ArchiveVolState &volSt = getArchiveVolState(volId);
+    verifyNoArchiveActionRunning(volSt.ac, FUNC);
 
     if (volSt.stopState != NotStopping) {
-        cybozu::Exception e("x2aDirtyFullSyncServer:notStopping");
-        e << volId << volSt.stopState;
+        cybozu::Exception e(FUNC);
+        e << "notStopping" << volId << volSt.stopState;
         sPack.write(e.what());
         throw e;
     }
@@ -426,15 +424,15 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
  */
 inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 {
-    const char * const FUNC_NAME = "c2aReloadMetadataServer";
+    const char * const FUNC = "c2aReloadMetadataServer";
     const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 1, FUNC_NAME, false);
+        protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volId, FUNC_NAME);
-    verifyNoActionRunning(volId, FUNC_NAME);
+    verifyNotStopping(volId, FUNC);
+    verifyNoArchiveActionRunning(volSt.ac, FUNC);
     {
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());

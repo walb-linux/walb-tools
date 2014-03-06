@@ -70,20 +70,16 @@ public:
         }
         return true;
     }
-    void addArchiveInfo(const HostInfo &hi) {
+    void addArchiveInfo(const std::string& name, const HostInfo &hi, bool ensureNotExistance) {
         hi.verify();
-        util::saveFile(volDir, hi.name + ".archive", hi);
-        util::makeDir(getSlaveDir(hi.name).str(),
-                      "ProxyVolInfo::addArchiveInfo", true);
+        util::saveFile(volDir, name + ".archive", hi);
+        util::makeDir(getSlaveDir(name).str(),
+                      "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
     }
     void deleteArchiveInfo(const std::string &name) {
         diffMgrMap_.get(name).clear();
         getSlaveDir(name).rmdirRecursive();
         getArchiveInfoPath(name).remove();
-    }
-    void updateArchiveInfo(const HostInfo &hi) {
-        hi.verify();
-        util::saveFile(volDir, hi.name + ".archive", hi);
     }
     HostInfo getArchiveInfo(const std::string &name) const {
         HostInfo hi;

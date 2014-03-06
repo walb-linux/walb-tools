@@ -69,16 +69,16 @@ private:
 struct ProxyTask
 {
     std::string volId;
-    std::string archiveId;
+    std::string archiveName;
 
     bool operator==(const ProxyTask &rhs) const {
-        return volId == rhs.volId && archiveId == rhs.archiveId;
+        return volId == rhs.volId && archiveName == rhs.archiveName;
     }
     bool operator<(const ProxyTask &rhs) const {
         int c = volId.compare(rhs.volId);
         if (c < 0) return true;
         if (c > 0) return false;
-        return archiveId < rhs.archiveId;
+        return archiveName < rhs.archiveName;
     }
 };
 
@@ -208,22 +208,24 @@ inline void c2pStopServer(protocol::ServerParams &/*p*/)
 
 namespace proxy_local {
 
-inline void getArchiveInfo(const std::string &/*archiveId*/, HostInfo &/*hi*/)
+inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &/*hi*/)
+{
+    ProxyVolState& volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+//    verifyNoActionRunning(volId, "c2aInitVolServer");
+}
+
+inline void addArchiveInfo(const std::string&, const std::string &/*archiveName*/, const HostInfo &/*hi*/)
 {
     // QQQ
 }
 
-inline void addArchiveInfo(const std::string &/*archiveId*/, const HostInfo &/*hi*/)
+inline void deleteArchiveInfo(const std::string &, const std::string &/*archiveName*/)
 {
     // QQQ
 }
 
-inline void deleteArchiveInfo(const std::string &/*archiveId*/)
-{
-    // QQQ
-}
-
-inline void updateArchiveInfo(const std::string &/*archiveId*/, const HostInfo &/*hi*/)
+inline void updateArchiveInfo(const std::string& , const std::string &/*archiveName*/, const HostInfo &/*hi*/)
 {
     // QQQ
 }
@@ -252,7 +254,8 @@ inline void runAndReplyOkOrErr(packet::Packet &pkt, const char *msg, Func func)
  * params:
  *   [0]: volId
  *   [1]: add/delete/update as string
- *   [2]: serialized HostInfo data. (add/update only)
+ *   [2]: archive name
+ *   [3]: serialized HostInfo data. (add/update only)
  *
  * State transition.
  *   (1) Clear --> AddArchiveInfo --> Stopped
@@ -263,9 +266,10 @@ inline void runAndReplyOkOrErr(packet::Packet &pkt, const char *msg, Func func)
 inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 {
     const char * const FUNC = "c2pArchiveInfoServer";
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
-    const std::string &cmd = v[0];
-    const std::string &archiveId = v[1];
+    StrVec v = protocol::recvStrVec(p.sock, 3, FUNC, false);
+    const std::string &volId = v[0];
+    const std::string &cmd = v[1];
+    const std::string &archiveName = v[2];
 
     if (cmd == "add" || cmd == "update") {
         packet::Packet pkt(p.sock);
@@ -275,11 +279,11 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
         if (cmd == "add") {
             proxy_local::runAndReplyOkOrErr(
                 pkt, FUNC,
-                [&]() { proxy_local::addArchiveInfo(archiveId, hi); });
+                [&]() { proxy_local::addArchiveInfo(volId, archiveName, hi); });
         } else {
             proxy_local::runAndReplyOkOrErr(
                 pkt, FUNC,
-                [&]() { proxy_local::updateArchiveInfo(archiveId, hi); });
+                [&]() { proxy_local::updateArchiveInfo(volId, archiveName, hi); });
         }
         return;
     }
@@ -289,12 +293,12 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
         if (cmd == "get") {
             proxy_local::runAndReplyOkOrErr(
                 pkt, FUNC,
-                [&]() { proxy_local::getArchiveInfo(archiveId, hi); });
+                [&]() { proxy_local::getArchiveInfo(volId, archiveName, hi); });
             pkt.write(hi);
         } else {
             proxy_local::runAndReplyOkOrErr(
                 pkt, FUNC,
-                [&]() { proxy_local::deleteArchiveInfo(archiveId); });
+                [&]() { proxy_local::deleteArchiveInfo(volId, archiveName); });
         }
         return;
     }
