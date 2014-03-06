@@ -226,8 +226,9 @@ inline void c2aStartServer(protocol::ServerParams &p)
  */
 inline void c2aStopServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, "c2aStopServer", false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const bool isForce = (int)cybozu::atoi(v[1]) != 0;
 
@@ -235,21 +236,17 @@ inline void c2aStopServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 
     util::Stopper stopper(volSt.stopState, isForce);
-    if (!stopper.isSuccess()) {
-        return;
-    }
+    if (!stopper.isSuccess()) return;
 
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
 
     util::waitUntil(ul, [&]() {
             bool go = volSt.ac.isAllZero({aMerge, aApply, aRestore, aReplSync});
-            if (go) {
-                const std::string &st = sm.get();
-                go = st == atHashSync || st == atWdiffRecv || st == atFullSync;
-            }
-            return go;
-        }, "c2aStopServer");
+            if (!go) return false;
+            const std::string &st = sm.get();
+            return st == aClear || st == aSyncReady || st == aArchived || st == aStopped;
+        }, FUNC);
 
     const std::string &st = sm.get();
     logger.info("Tasks have been stopped volId: %s state: %s"
@@ -258,12 +255,12 @@ inline void c2aStopServer(protocol::ServerParams &p)
         return;
     }
 
-    StateMachineTransaction tran(sm, aArchived, atStop, "c2aStopServer");
+    StateMachineTransaction tran(sm, aArchived, atStop, FUNC);
     ul.unlock();
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     const std::string fst = volInfo.getState();
     if (fst != aArchived) {
-        throw cybozu::Exception("c2aStopServer:not Archived state") << fst;
+        throw cybozu::Exception(FUNC) << "not Archived state" << fst;
     }
     volInfo.setState(aStopped);
     tran.commit(aStopped);

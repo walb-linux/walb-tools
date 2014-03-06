@@ -135,22 +135,15 @@ inline void ProxyVolState::initInner(const std::string &volId)
     cybozu::FilePath volDir(gp.baseDirStr);
     volDir += volId;
 
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, diffMgr, diffMgrMap);
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, diffMgr, diffMgrMap, archiveSet);
     if (!volInfo.existsVolDir()) {
         sm.set(pClear);
         return;
     }
 
     sm.set(volInfo.getState());
-    volInfo.reloadMaster();
-    // Load host info if exist.
-    // Load wdiff meta data for master and each archive directory.
-    for (const std::string &name : volInfo.getArchiveNameList()) {
-        HostInfo hi = volInfo.getArchiveInfo(name);
-        hi.verify();
-        archiveSet.insert(name);
-        volInfo.reloadSlave(name);
-    }
+    volInfo.loadAllArchiveInfo();
+
     // Retry to make hard links of wdiff files in the master directory.
     std::vector<MetaDiff> diffV = volInfo.getAllDiffsInMaster();
     for (const MetaDiff &d : diffV) {
@@ -171,9 +164,11 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
-inline void verifyNoActionRunning(ProxyVolState &/*volSt*/, const char */*msg*/)
+inline void verifyNoProxyActionRunning(ProxyVolState &volSt, const char *msg)
 {
-    // QQQ
+    UniqueLock ul(volSt.mu);
+    StrVec v(volSt.archiveSet.begin(), volSt.archiveSet.end());
+    util::verifyNoActionRunning(volSt.ac, v, msg);
 }
 
 inline void c2pStatusServer(protocol::ServerParams &/*p*/)
@@ -187,21 +182,68 @@ inline void c2pStatusServer(protocol::ServerParams &/*p*/)
  *
  * State transition: Stopped --> Start --> Started.
  */
-inline void c2pStartServer(protocol::ServerParams &/*p*/)
+inline void c2pStartServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    packet::Packet pkt(p.sock);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const std::string &volId = v[0];
+    packet::Ack(p.sock).send();
+
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoProxyActionRunning(volSt, FUNC);
+    {
+        StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
+        // TODO: enqueue backgrond tasks for the volume.
+        tran.commit(pStarted);
+    }
 }
 
 /**
  * params:
  *   [0]: volId
+ *   [1]: isForce
  *
  * State transition: Started --> Stop --> Stopped.
  * In addition, this will stop all background tasks before changing state.
  */
-inline void c2pStopServer(protocol::ServerParams &/*p*/)
+inline void c2pStopServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const std::string &volId = v[0];
+    const bool isForce = static_cast<int>(cybozu::atoi(v[1])) != 0;
+
+    ProxyVolState &volSt = getProxyVolState(volId);
+    packet::Ack(p.sock).send();
+
+    util::Stopper stopper(volSt.stopState, isForce);
+    if (!stopper.isSuccess()) return;
+
+    // TODO: clear all related tasks from the task queue.
+
+    UniqueLock ul(volSt.mu);
+    util::waitUntil(ul, [&]() {
+            StrVec actions(volSt.archiveSet.begin(), volSt.archiveSet.end());
+            if (!volSt.ac.isAllZero(actions)) return false;
+            const std::string &st = volSt.sm.get();
+            return st == pStopped || st == pStarted || st == pClear;
+        }, FUNC);
+
+    const std::string &st = volSt.sm.get();
+    if (st != pStarted) return;
+
+    StateMachineTransaction tran(volSt.sm, pStarted, ptStop, FUNC);
+    ul.unlock();
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    const std::string fst = volInfo.getState();
+    if (fst != pStarted) {
+        throw cybozu::Exception(FUNC) << "not Started state" << fst;
+    }
+    volInfo.setState(pStopped);
+    tran.commit(pStopped);
 }
 
 namespace proxy_local {
@@ -212,7 +254,7 @@ inline void getArchiveInfo(const std::string& volId, const std::string &archiveN
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
     if (!volInfo.existsArchiveInfo(archiveName)) {
         throw cybozu::Exception(FUNC) << "archive info not exists" << archiveName;
     }
@@ -225,19 +267,14 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoActionRunning(volSt, FUNC);
+    verifyNoProxyActionRunning(volSt, FUNC);
     const std::string &curr = volSt.sm.get(); // pStopped or pClear
     {
         StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
         ul.unlock();
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
-        if (curr == pClear) {
-            assert(volSt.archiveSet.empty());
-            volInfo.init();
-        }
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        if (curr == pClear) volInfo.init();
         volInfo.addArchiveInfo(archiveName, hi, ensureNotExistance);
-        ul.lock();
-        volSt.archiveSet.insert(archiveName);
         tran.commit(pStopped);
     }
 }
@@ -248,16 +285,16 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoActionRunning(volSt, FUNC);
+    verifyNoProxyActionRunning(volSt, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
-        volSt.archiveSet.erase(archiveName);
-        bool isClear = volSt.archiveSet.empty();
         ul.unlock();
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap);
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         volInfo.deleteArchiveInfo(archiveName);
-        if (isClear) volInfo.clear();
-        tran.commit(isClear ? pClear : pStopped);
+        ul.lock();
+        bool shouldClear = volInfo.notExistsArchiveInfo();
+        if (shouldClear) volInfo.clear();
+        tran.commit(shouldClear ? pClear : pStopped);
     }
 }
 
@@ -337,9 +374,25 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
  *
  * State transition: stopped --> ClearVol --> clear.
  */
-inline void c2pClearVolServer(protocol::ServerParams &/*p*/)
+inline void c2pClearVolServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const std::string &volId = v[0];
+    packet::Ack(p.sock).send();
+
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoProxyActionRunning(volSt, FUNC);
+    {
+        StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
+        volSt.archiveSet.clear();
+        ul.unlock();
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        volInfo.clear();
+        tran.commit(pClear);
+    }
 }
 
 /**

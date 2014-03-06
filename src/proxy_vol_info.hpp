@@ -35,6 +35,7 @@ public:
 private:
     MetaDiffManager &diffMgr_;
     AtomicMap<MetaDiffManager> &diffMgrMap_;
+    std::set<std::string> &archiveSet_;
 
 public:
     /**
@@ -42,10 +43,12 @@ public:
      * @volId volume identifier.
      */
     ProxyVolInfo(const std::string &baseDirStr, const std::string &volId,
-                 MetaDiffManager &diffMgr, AtomicMap<MetaDiffManager> &diffMgrMap)
+                 MetaDiffManager &diffMgr, AtomicMap<MetaDiffManager> &diffMgrMap,
+                 std::set<std::string> &archiveSet)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
-        , diffMgr_(diffMgr), diffMgrMap_(diffMgrMap) {
+        , diffMgr_(diffMgr), diffMgrMap_(diffMgrMap)
+        , archiveSet_(archiveSet) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
             throw cybozu::Exception("ProxyVolInfo:Directory not found") << baseDirStr;
@@ -64,7 +67,25 @@ public:
         util::makeDir(getMasterDir().str(), "ProxyVolInfo::init:makedir failed", true);
         util::makeDir(getSlaveDir().str(), "ProxyVolInfo::init:makedir failed", true);
     }
+    /**
+     * Load wdiff meta data for master and each archive directory.
+     */
+    void loadAllArchiveInfo() {
+        reloadMaster();
+        for (const std::string &name : getArchiveNameList()) {
+            HostInfo hi = getArchiveInfo(name);
+            hi.verify();
+            archiveSet_.insert(name);
+            reloadSlave(name);
+        }
+    }
+    bool notExistsArchiveInfo() const {
+        return archiveSet_.empty();
+    }
     bool existsArchiveInfo(const std::string &name) const {
+        if (archiveSet_.find(name) == archiveSet_.cend()) {
+            return false;
+        }
         if (!getArchiveInfoPath(name).stat().isFile()) {
             return false;
         }
@@ -78,11 +99,13 @@ public:
         util::saveFile(volDir, name + ".archive", hi);
         util::makeDir(getSlaveDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
+        archiveSet_.insert(name);
     }
     void deleteArchiveInfo(const std::string &name) {
         diffMgrMap_.get(name).clear();
         getSlaveDir(name).rmdirRecursive();
         getArchiveInfoPath(name).remove();
+        archiveSet_.erase(name);
     }
     HostInfo getArchiveInfo(const std::string &name) const {
         HostInfo hi;
@@ -91,27 +114,16 @@ public:
         return hi;
     }
     /**
-     * Get list of name of all the archive servers.
-     */
-    std::vector<std::string> getArchiveNameList() const {
-        std::vector<std::string> ret, fnameV;
-        fnameV = util::getFileNameList(volDir.str(), "archive");
-        for (const std::string &fname : fnameV) {
-            size_t n = fname.find(".archive");
-            if (n == std::string::npos) {
-                throw cybozu::Exception("ProxyVolInfo::getArchiveNameList")
-                    << "filename extention is not '.archive'";
-            }
-            ret.push_back(fname.substr(0, n));
-        }
-        return ret;
-    }
-    /**
      * CAUSION:
      *   The volume will be removed if exists.
      *   All data inside the directory will be removed.
      */
     void clear() {
+        for (const std::string &archiveName : archiveSet_) {
+            diffMgrMap_.get(archiveName).clear();
+        }
+        diffMgr_.clear();
+        archiveSet_.clear();
         if (!volDir.rmdirRecursive()) {
             throw cybozu::Exception("ProxyVolInfo::clear:rmdir recursively failed.");
         }
@@ -167,20 +179,6 @@ public:
         // QQQ
         return {};
     }
-    /**
-     * Reload metada for the mater.
-     */
-    void reloadMaster() {
-        WalbDiffFiles wdiffs(diffMgr_, getMasterDir().str());
-        wdiffs.reload();
-    }
-    /**
-     * Reload meta data for an archive.
-     */
-    void reloadSlave(const std::string &name) {
-        WalbDiffFiles wdiffs(diffMgrMap_.get(name), getSlaveDir(name).str());
-        wdiffs.reload();
-    }
     std::vector<MetaDiff> getAllDiffsInMaster() const {
         return diffMgr_.getAll();
     }
@@ -229,6 +227,36 @@ private:
     }
     cybozu::FilePath getArchiveInfoPath(const std::string &name) const {
         return volDir + cybozu::FilePath(name + ".archive");
+    }
+    /**
+     * Get list of name of all the archive servers.
+     */
+    std::vector<std::string> getArchiveNameList() const {
+        std::vector<std::string> ret, fnameV;
+        fnameV = util::getFileNameList(volDir.str(), "archive");
+        for (const std::string &fname : fnameV) {
+            size_t n = fname.find(".archive");
+            if (n == std::string::npos) {
+                throw cybozu::Exception("ProxyVolInfo::getArchiveNameList")
+                    << "filename extention is not '.archive'";
+            }
+            ret.push_back(fname.substr(0, n));
+        }
+        return ret;
+    }
+    /**
+     * Reload metada for the mater.
+     */
+    void reloadMaster() {
+        WalbDiffFiles wdiffs(diffMgr_, getMasterDir().str());
+        wdiffs.reload();
+    }
+    /**
+     * Reload meta data for an archive.
+     */
+    void reloadSlave(const std::string &name) {
+        WalbDiffFiles wdiffs(diffMgrMap_.get(name), getSlaveDir(name).str());
+        wdiffs.reload();
     }
 };
 
