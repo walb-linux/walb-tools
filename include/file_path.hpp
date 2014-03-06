@@ -73,6 +73,7 @@ public:
         return S_ISLNK(st_.st_mode);
     }
     uint64_t size() const {
+        if (isFailed_) return 0;
         return uint64_t(st_.st_size);
     }
 };
