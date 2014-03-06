@@ -260,7 +260,6 @@ inline void verifyNotStopping(
         throw e;
     }
 }
-//    std::vector<int> v = ac.getValues({aMerge, aApply, aRestore, aReplSync});
 
 inline void verifyNoActionRunning(const ActionCounters& ac, const StrVec& actions, const char *msg)
 {

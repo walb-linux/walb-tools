@@ -379,36 +379,37 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
  */
 inline void c2aRestoreServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, "c2aRestoreServer", false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    StateMachine &sm = volSt.sm;
-    const std::string &st0 = sm.get();
-    bool matched = false;
-    for (const char *const st1 : {aArchived, atHashSync, atWdiffRecv}) {
-        if (st0 == st1) {
-            matched = true;
+    UniqueLock ul(volSt.mu);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    const StateMachine &sm = volSt.sm;
+    {
+        const std::string &cur = sm.get();
+        const std::array<const char*, 3> tbl = {aArchived, atHashSync, atWdiffRecv};
+        if (!std::any_of(tbl.begin(), tbl.end(), [&](const char *s) { return cur == s; })) {
+            cybozu::Exception e(FUNC);
+            e << "state is not matched" << volId << cur;
+            pkt.write(e.what());
+            throw e;
         }
-    }
-    if (!matched) {
-        cybozu::Exception e("c2aRestoreServer:state is not matched");
-        e << volId << st0;
-        pkt.write(e.what());
-        throw e;
     }
 
     ActionCounterTransaction tran(volSt.ac, volId);
+    ul.unlock();
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
     // TODO: volinfo.restore(gid, volSt.forceStop, ga.forceQuit);
     if (!volInfo.restore(gid)) {
-        cybozu::Exception e("c2aRestoreServer:restore failed");
-        e << volId << gid;
+        cybozu::Exception e(FUNC);
+        e << "restore failed" << volId << gid;
         pkt.write(e.what());
         throw e;
     }
@@ -424,14 +425,14 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
  */
 inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 {
-    const char * const FUNC = "c2aReloadMetadataServer";
+    const char * const FUNC = __func__;
     const std::vector<std::string> v =
         protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volId, FUNC);
+    util::verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoArchiveActionRunning(volSt.ac, FUNC);
     {
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
