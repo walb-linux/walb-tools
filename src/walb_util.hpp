@@ -15,7 +15,6 @@
 #include "tmp_file_serializer.hpp"
 #include "fileio.hpp"
 #include "fileio_serializer.hpp"
-#include "uuid.hpp"
 #include "constant.hpp"
 #include "task_queue.hpp"
 #include "action_counter.hpp"
@@ -28,6 +27,7 @@
 #include "cybozu/atoi.hpp"
 #include "cybozu/log.hpp"
 #include "cybozu/file.hpp"
+#include "cybozu/serializer.hpp"
 
 namespace walb {
 

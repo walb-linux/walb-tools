@@ -272,6 +272,7 @@ struct MetaDiff
         cybozu::save(os, snapB);
         cybozu::save(os, snapE);
     }
+    void merge(const MetaDiff &rhs);
 };
 
 /**
@@ -502,16 +503,19 @@ inline bool canMerge(const MetaDiff &diff0, const MetaDiff &diff1)
     return diff1.canMerge && canApply(diff0.snapE, diff1);
 }
 
+inline void MetaDiff::merge(const MetaDiff& rhs)
+{
+    if (!walb::canMerge(*this, rhs)) {
+        throw cybozu::Exception("merge:can not merge") << *this << rhs;
+    }
+    snapE = apply(snapE, rhs);
+    timestamp = rhs.timestamp;
+}
+
 inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1)
 {
-    MetaDiff ret;
-    if (!canMerge(diff0, diff1)) {
-        throw cybozu::Exception("merge:can not merge") << diff0 << diff1;
-    }
-    ret.snapB = diff0.snapB;
-    ret.snapE = apply(diff0.snapE, diff1);
-    ret.canMerge = diff0.canMerge;
-    ret.timestamp = diff1.timestamp;
+    MetaDiff ret = diff0;
+    ret.merge(diff1);
     return ret;
 }
 

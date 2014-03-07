@@ -9,6 +9,7 @@
 #include "host_info.hpp"
 #include "task_queue.hpp"
 #include "walb_util.hpp"
+#include "walb_diff_merge.hpp"
 
 namespace walb {
 
@@ -97,6 +98,9 @@ class ProxyWorker : public cybozu::thread::Runnable
 private:
     const ProxyTask task_;
 
+    bool setupMerger(diff::Merger& merger, std::vector<cybozu::util::FileOpener>& ops, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+
+
 public:
     ProxyWorker(const ProxyTask &task) : task_(task) {
     }
@@ -104,9 +108,7 @@ public:
      * This will do wdiff send to an archive server.
      * You can throw an exception.
      */
-    void operator()() override {
-        // QQQ
-    }
+    void operator()() override;
 };
 
 struct ProxySingleton
@@ -121,6 +123,7 @@ struct ProxySingleton
      */
     std::string nodeId;
     std::string baseDirStr;
+    size_t maxWdiffSendMb;
 
     /**
      * Writable and must be thread-safe.
@@ -465,6 +468,139 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
 inline void s2pWlogTransferServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
+}
+
+inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<cybozu::util::FileOpener>& ops, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+{
+    const int maxRetryNum = 10;
+    int retryNum = 0;
+    cybozu::Uuid uuid;
+retry:
+    {
+        const std::vector<MetaDiff> metaDiffList = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
+        if (metaDiffList.empty()) {
+            return false;
+        }
+        // apply wdiff files indicated by metaDiffList to lvSnap.
+        for (const MetaDiff& diff : metaDiffList) {
+            cybozu::util::FileOpener op;
+            if (!op.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
+                retryNum++;
+                if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
+                ops.clear();
+                goto retry;
+            }
+            diff::Reader reader(op.fd());
+            diff::FileHeaderRaw header;
+            reader.readHeaderWithoutReadingPackHeader(header);
+            if (ops.empty()) {
+                uuid = header.getUuid2();
+                mergedDiff = diff;
+            } else if (uuid != header.getUuid2()) {
+                break;
+            }
+            mergedDiff.merge(diff);
+            if (lseek(op.fd(), 0, SEEK_SET) < 0) throw cybozu::Exception("ProxyWorker:setupMerger") << cybozu::ErrorNo();
+            ops.push_back(std::move(op));
+        }
+    }
+    std::vector<int> fds;
+    for (cybozu::util::FileOpener& op : ops) {
+        fds.push_back(op.fd());
+    }
+    merger.addWdiffs(fds);
+    return true;
+}
+
+inline void ProxyWorker::operator()() {
+    const std::string& volId = task_.volId;
+    const std::string& archiveName = task_.archiveName;
+    ProxyVolState& volSt = getProxyVolState(volId);
+
+#if 0
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+
+    std::vector<cybozu::util::FileOpener> ops;
+    diff::Merger merger;
+    MetaDiff mergedDiff;
+    {
+        MetaDiffManager& mgr = volSt.diffMgrMap.get(archiveName);
+        if (!setupMerger(merge, ops, mergedDiff, volInfo, archiveName)) {
+            LOGi("no need to send wdiffs %s:%s", volId.c_str(), archiveName.c_str());
+            return;
+        }
+    }
+
+    const HostInfo hi = volInfo.getArchiveInfo(archiveName);
+    cybozu::Socket aSock;
+    aSock.connect(hi.addr, hi.port);
+    const std::string serverId = walb::protocol::run1stNegotiateAsClient(aSock, gp.nodeId, "wdiff-transfer");
+    walb::packet::Packet aPack(aSock);
+
+    walb::ProtocolLogger logger(gp.nodeId, serverId);
+
+    const walb::diff::FileHeaderWrap& fileH = merger.header();
+
+    /* wdiff-send negotiation */
+    walb::packet::Packet packet(sock);
+    packet.write(volId);
+    packet.write("proxy");
+    packet.write(fileH.getUuid2());
+    packet.write(fileH.getMaxIoBlocks());
+    packet.write(proxyVolInfo.getSizeLb());
+    packet.write(mergedDiff);
+QQQ
+0
+    {
+        walb::packet::Answer ans(sock);
+        int err; std::string msg;
+        if (!ans.recv(&err, &msg)) {
+            logger.error("negotiation failed: %d %s", err, msg.c_str());
+            throw cybozu::Exception("sendWdiff:negotiation") << err << msg;
+        }
+    }
+
+    /* Send diff packs. */
+
+    walb::packet::StreamControl ctrl(sock);
+    walb::diff::RecIo recIo;
+    const size_t maxPushedNum = opt.threadNum * 2 - 1;
+    walb::ConverterQueue conv(maxPushedNum, opt.threadNum, true, opt.compType);
+    walb::diff::Packer packer;
+    size_t pushedNum = 0;
+    while (merger.pop(recIo)) {
+        const walb_diff_record& rec = recIo.record().record();
+        const walb::diff::IoData& io = recIo.io();
+        if (packer.add(rec, io.rawData())) {
+            continue;
+        }
+        conv.push(packer.getPackAsUniquePtr());
+        pushedNum++;
+        packer.reset();
+        packer.add(rec, io.rawData());
+        if (pushedNum < maxPushedNum) {
+            continue;
+        }
+        std::unique_ptr<char[]> p = conv.pop();
+        ctrl.next();
+        sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+        pushedNum--;
+    }
+    if (!packer.empty()) {
+        conv.push(packer.getPackAsUniquePtr());
+    }
+    conv.quit();
+    while (std::unique_ptr<char[]> p = conv.pop()) {
+        ctrl.next();
+        sock.write(p.get(), walb::diff::PackHeader(p.get()).wholePackSize());
+    }
+    ctrl.end();
+    walb::packet::Ack ack(sock);
+    ack.recv();
+
+    /* The wdiff-send protocol has finished.
+       You can close the socket. */
+#endif
 }
 
 } // walb

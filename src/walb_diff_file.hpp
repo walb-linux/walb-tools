@@ -7,6 +7,7 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include "walb_diff_pack.hpp"
+#include "uuid.hpp"
 
 namespace walb {
 namespace diff {
@@ -26,6 +27,7 @@ public:
     uint32_t getChecksum() const { return h_.checksum; }
     uint16_t getMaxIoBlocks() const { return h_.max_io_blocks; }
     const uint8_t *getUuid() const { return &h_.uuid[0]; }
+    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&h_.uuid[0]); }
 
     void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
         if (getMaxIoBlocks() < ioBlocks) {

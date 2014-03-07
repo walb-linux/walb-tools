@@ -174,8 +174,7 @@ public:
      *   MetaDiff list that can be merged.
      *   which will be sent to the server.
      */
-    std::vector<MetaDiff> getDiffListToSend(const std::string &/*archiveName*/, uint64_t /*size*/) {
-        // QQQ
+    std::vector<MetaDiff> getDiffListToSend(const std::string &/*archiveName*/, uint64_t /*size*/) const {
         return {};
     }
     std::vector<MetaDiff> getAllDiffsInMaster() const {
@@ -233,7 +232,6 @@ public:
         }
         return total;
     }
-private:
     cybozu::FilePath getDiffPath(const MetaDiff &diff, const std::string &archiveName = "") const {
         const std::string fname = createDiffFileName(diff);
         if (archiveName.empty()) {
@@ -242,6 +240,7 @@ private:
             return getSlaveDir(archiveName) + fname;
         }
     }
+private:
     cybozu::FilePath getArchiveInfoPath(const std::string &name) const {
         return volDir + cybozu::FilePath(name + ArchiveSuffix);
     }
