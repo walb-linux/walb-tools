@@ -25,6 +25,7 @@
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
 #include "cybozu/atoi.hpp"
+#include "cybozu/itoa.hpp"
 #include "cybozu/log.hpp"
 #include "cybozu/file.hpp"
 #include "cybozu/serializer.hpp"
@@ -278,6 +279,20 @@ void verifyNoActionRunning(const ActionCounters& ac, const C& actions, const cha
                  << *itr << v[i];
         }
     }
+}
+
+/**
+ * Hex string.
+ */
+inline std::string binaryToStr(const void *data, size_t size)
+{
+    std::string s;
+    const uint8_t *p = static_cast<const uint8_t *>(data);
+    s.resize(size * 2);
+    for (size_t i = 0; i < size; i++) {
+        cybozu::itohex(&s[i * 2], 2, p[i], false);
+    }
+    return s;
 }
 
 }} // walb::util

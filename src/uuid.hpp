@@ -30,18 +30,9 @@ public:
     const void *rawData() const { return data_; }
     void *rawData() { return data_; }
     static size_t rawSize() { return UUID_SIZE; }
-    /**
-     * Hex string.
-     */
-    std::string inline str() const {
-         std::string s;
-         s.resize(UUID_SIZE * 2);
-         for (size_t i = 0; i < UUID_SIZE; i++) {
-             cybozu::itohex(&s[i * 2], 2, data_[i], false);
-         }
-         return s;
+    std::string str() const {
+        return walb::util::binaryToStr(&data_[0], UUID_SIZE);
     }
-
     void set(const void *data) {
         ::memcpy(data_, data, UUID_SIZE);
     }

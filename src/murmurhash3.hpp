@@ -10,6 +10,7 @@
 #include "cybozu/itoa.hpp"
 #include "cybozu/serializer.hpp"
 #include "util.hpp"
+#include "walb_util.hpp"
 #include <cstdio>
 #include <cassert>
 #include <string>
@@ -23,12 +24,7 @@ const size_t HASH_SIZE = 16; /* 128 bits */
 struct Hash {
     uint8_t data[HASH_SIZE];
     std::string str() const {
-        std::string s;
-        s.resize(HASH_SIZE * 2);
-        for (size_t i = 0; i < HASH_SIZE; i++) {
-            cybozu::itohex(&s[i * 2], 2, data[i], false);
-        }
-        return s;
+        return walb::util::binaryToStr(&data[0], HASH_SIZE);
     }
     template <class InputStream>
     void load(InputStream &is) {
