@@ -181,7 +181,7 @@ namespace proxy_local {
 inline StrVec getAllStateStrVec()
 {
     StrVec ret;
-    auto &fmt = cybozu::util::formatString;
+    const auto &fmt = cybozu::util::formatString;
 
     for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
         ProxyVolState &volSt = getProxyVolState(volId);
@@ -189,10 +189,8 @@ inline StrVec getAllStateStrVec()
         const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         const std::string state = volSt.sm.get();
 
-        ul.unlock();
         const uint64_t totalSize = volInfo.getTotalDiffFileSize();
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-        ul.lock();
 
         ret.push_back(
             fmt("%s %s %z %s %s"
@@ -201,17 +199,13 @@ inline StrVec getAllStateStrVec()
                 , totalSizeStr.c_str()
                 , cybozu::unixTimeToStr(volSt.ts).c_str()));
 
-        const StrVec archiveList(volSt.archiveSet.begin(), volSt.archiveSet.end());
-        const std::vector<int> actionNum = volSt.ac.getValues(archiveList);
-        assert(actionNum.size() == archiveList.size());
-        for (size_t i = 0; i < archiveList.size(); i++) {
-            const std::string &aName = archiveList[i];
+        const std::vector<int> actionNum = volSt.ac.getValues(volSt.archiveSet);
+        size_t i = 0;
+        for (const auto& aName : volSt.archiveSet) {
             const MetaDiffManager &mgr = volSt.diffMgrMap.get(aName);
 
-            ul.unlock();
             const uint64_t totalSize = volInfo.getTotalDiffFileSize(aName);
             const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-            ul.lock();
 
             uint64_t minGid, maxGid;
             std::tie(minGid, maxGid) = mgr.getMinMaxGid();
@@ -221,6 +215,7 @@ inline StrVec getAllStateStrVec()
                     , actionNum[i] == 0 ? "None" : "WdiffSend"
                     , mgr.size(), totalSizeStr.c_str(), minGid, maxGid
                     , cybozu::unixTimeToStr(volSt.ts).c_str()));
+            i++;
         }
     }
     return ret;
