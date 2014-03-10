@@ -20,6 +20,7 @@
 #include "action_counter.hpp"
 #include "thread_util.hpp"
 #include "walb_logger.hpp"
+#include "time.hpp"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
@@ -289,6 +290,15 @@ inline std::string binaryToStr(const void *data, size_t size)
         cybozu::itohex(&s[i * 2], 2, p[i], false);
     }
     return s;
+}
+
+std::string timeToPrintable(uint64_t ts)
+{
+    if (ts == 0) {
+        return "---";
+    } else {
+        return cybozu::unixTimeToStr(ts);
+    }
 }
 
 }} // walb::util
