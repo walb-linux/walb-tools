@@ -54,8 +54,6 @@ struct Option : cybozu::Option
     bool isDebug;
     size_t maxConnections;
     size_t maxBackgroundTasks;
-    size_t waitForRetry;
-    size_t retryTimeout;
     bool isStopped;
     Option() {
         ProxySingleton &p = getProxyGlobal();
@@ -66,8 +64,8 @@ struct Option : cybozu::Option
         appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
         appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
         appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
-        appendOpt(&waitForRetry, DEFAULT_WAIT_FOR_RETRY, "waitForRetry", "Waiting time for next retry [sec].");
-        appendOpt(&retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
+        appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
+        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
         appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
