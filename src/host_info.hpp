@@ -18,33 +18,46 @@ struct HostInfo
     uint16_t port;
     uint8_t compressionType; /* wdiff compression type. */
     uint8_t compressionLevel; /* wdiff compression level. */
+    uint8_t compressionNumCPU; /* number of compression threads. */
 
     HostInfo() : HostInfo("", 0) {}
     HostInfo(const std::string &addr, uint16_t port,
-             uint8_t type = ::WALB_DIFF_CMPR_SNAPPY, uint8_t level = 0)
+             uint8_t type = ::WALB_DIFF_CMPR_SNAPPY, uint8_t level = 0,
+             uint8_t compressionNumCPU = 1)
         : addr(addr), port(port)
-        , compressionType(type), compressionLevel(level) {}
+        , compressionType(type), compressionLevel(level)
+        , compressionNumCPU(compressionNumCPU) {}
     bool operator==(const HostInfo &rhs) const {
         return addr == rhs.addr && port == rhs.port
             && compressionType == rhs.compressionType
-            && compressionLevel == rhs.compressionLevel;
+            && compressionLevel == rhs.compressionLevel
+            && compressionNumCPU == rhs.compressionNumCPU;
     }
     bool operator!=(const HostInfo &rhs) const {
         return addr != rhs.addr || port != rhs.port
             || compressionType != rhs.compressionType
-            || compressionLevel != rhs.compressionLevel;
+            || compressionLevel != rhs.compressionLevel
+            || compressionNumCPU != rhs.compressionNumCPU;
     }
     void verify() const {
+        const char *const msg = "HostInfo::verify";
         if (addr.empty()) {
-            throw cybozu::Exception("HostInfo::verify::addr is empty");
+            throw cybozu::Exception(msg) << "addr is empty";
         }
         if (compressionType >= ::WALB_DIFF_CMPR_MAX) {
-            throw cybozu::Exception("HostInfo::verify:invalid compression type")
+            throw cybozu::Exception(msg)
+                << "invalid compression type"
                 << compressionType;
         }
         if (compressionLevel > 9) {
-            throw cybozu::Exception("HostInfo::verify::invalid compression level")
+            throw cybozu::Exception(msg)
+                << "invalid compression level"
                 << compressionLevel;
+        }
+        if (compressionNumCPU == 0) {
+            throw cybozu::Exception(msg)
+                << "invalid compression num cpu"
+                << compressionNumCPU;
         }
     }
     template <typename OutputStream>
@@ -53,6 +66,7 @@ struct HostInfo
         cybozu::save(os, port);
         cybozu::save(os, compressionType);
         cybozu::save(os, compressionLevel);
+        cybozu::save(os, compressionNumCPU);
     }
     template <typename InputStream>
     void load(InputStream &is) {
@@ -60,6 +74,7 @@ struct HostInfo
         cybozu::load(port, is);
         cybozu::load(compressionType, is);
         cybozu::load(compressionLevel, is);
+        cybozu::load(compressionNumCPU, is);
         verify();
     }
     std::string str() const;
@@ -126,12 +141,14 @@ inline HostInfo parseHostInfo(
         hi.port = static_cast<uint16_t>(cybozu::atoi(v[1]));
     }
     {
-        std::vector<std::string> v = cybozu::Split(compressOpt, ':', 2);
-        if (v.size() != 2) {
-            throw cybozu::Exception("parseHostInfo:parse error") << compressOpt;
+        std::vector<std::string> v = cybozu::Split(compressOpt, ':', 3);
+        if (v.size() != 3) {
+            throw cybozu::Exception("parseHostInfo:parse error")
+                << compressOpt;
         }
         hi.compressionType = parseCompressionType(v[0]);
         hi.compressionLevel = static_cast<uint8_t>(cybozu::atoi(v[1]));
+        hi.compressionNumCPU = static_cast<uint8_t>(cybozu::atoi(v[2]));
     }
     hi.verify();
     return hi;
@@ -170,10 +187,11 @@ inline void HostInfo::parse(const std::string &s)
 inline std::string HostInfo::str() const
 {
     return cybozu::util::formatString(
-        "%s:%u %s:%u"
+        "%s:%u %s:%u:%u"
         , addr.c_str(), port
         , compressionTypeToStr(compressionType).c_str()
-        , compressionLevel);
+        , compressionLevel
+        , compressionNumCPU);
 }
 
 } //namespace walb

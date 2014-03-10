@@ -571,12 +571,9 @@ namespace proxy_local {
 inline void sendWdiffs(
     cybozu::Socket &sock, diff::Merger &merger, const HostInfo &hi)
 {
-    // TODO
-    //const size_t nCPU = hi.compressionNumCPU;
-    const size_t nCPU = 2;
-
     packet::StreamControl ctrl(sock);
     diff::RecIo recIo;
+    const size_t nCPU = hi.compressionNumCPU;
     const size_t maxPushedNum = nCPU * 2 - 1;
     ConverterQueue conv(maxPushedNum, nCPU, true,
                         hi.compressionType, hi.compressionLevel);
