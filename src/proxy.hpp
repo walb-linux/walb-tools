@@ -196,7 +196,7 @@ inline StrVec getAllStateStrVec()
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
 
         ret.push_back(
-            fmt("%s %s %z %s %s"
+            fmt("%s %s %zu %s %s"
                 , volId.c_str(), state.c_str()
                 , volSt.diffMgr.size()
                 , totalSizeStr.c_str()
@@ -224,11 +224,63 @@ inline StrVec getAllStateStrVec()
     return ret;
 }
 
-inline StrVec getVolStateStrVec(const std::string &/*volId*/)
+inline StrVec getVolStateStrVec(const std::string &volId)
 {
+    StrVec ret;
+    const auto &fmt = cybozu::util::formatString;
 
-    // QQQ
-    return {};
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+
+    const std::string state = volSt.sm.get();
+    const size_t num = volSt.diffMgr.size();
+    const uint64_t totalSize = volInfo.getTotalDiffFileSize();
+    const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
+    const std::string tsStr = cybozu::unixTimeToStr(volSt.ts);
+
+    ret.push_back(fmt("volId %s", volId.c_str()));
+    ret.push_back(fmt("state %s", state.c_str()));
+    ret.push_back(fmt("num %zu", num));
+    ret.push_back(fmt("totalSize %zu", totalSizeStr.c_str()));
+    ret.push_back(fmt("timestamp %s", tsStr.c_str()));
+
+    const std::vector<int> actionNum = volSt.ac.getValues(volSt.archiveSet);
+    size_t i = 0;
+    for (const std::string& aName : volSt.archiveSet) {
+        const MetaDiffManager &mgr = volSt.diffMgrMap.get(aName);
+        const HostInfo hi = volInfo.getArchiveInfo(aName);
+
+        ret.push_back(fmt("archive %s %s", aName.c_str(), hi.str().c_str()));
+        ret.push_back(fmt("  action %s", actionNum[i] == 0 ? "None" : "WdiffSend"));
+        ret.push_back(fmt("  num %zu", mgr.size()));
+
+        const std::vector<MetaDiff> diffV = mgr.getAll();
+        uint64_t totalSize = 0;
+        StrVec wdiffStrV;
+        uint64_t minTs = -1;
+        for (const MetaDiff &diff : diffV) {
+            const uint64_t fsize = volInfo.getDiffFileSize(diff, aName);
+            const std::string fsizeStr = cybozu::util::toUnitIntString(fsize);
+            wdiffStrV.push_back(
+                fmt("  wdiff %s %d %s %s"
+                    , diff.str().c_str()
+                    , diff.canMerge ? 1 : 0
+                    , cybozu::unixTimeToStr(diff.timestamp).c_str()
+                    , fsizeStr.c_str()));
+            totalSize += fsize;
+            if (minTs > diff.timestamp) minTs = diff.timestamp;
+        }
+        const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
+        ret.push_back(fmt("  totalSize %s", totalSizeStr.c_str()));
+        uint64_t sendDelay = 0;
+        if (!diffV.empty()) sendDelay = ::time(0) - minTs;
+        ret.push_back(fmt("  wdiffSendDelay %" PRIu64 "", sendDelay));
+        for (const std::string &s : wdiffStrV) ret.push_back(s);
+
+        i++;
+    }
+    return ret;
 }
 
 } // namespace proxy_local
