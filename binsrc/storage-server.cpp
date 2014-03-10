@@ -86,8 +86,8 @@ void initSingleton(Option &opt)
 {
     StorageSingleton &s = getStorageGlobal();
 
-    s.archive = util::parseSocketAddr(opt.archiveDStr);
-    s.proxyV = util::parseMultiSocketAddr(opt.multiProxyDStr);
+    s.archive = parseSocketAddr(opt.archiveDStr);
+    s.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
 
     // QQQ
 }

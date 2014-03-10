@@ -13,9 +13,30 @@
 #include "packet.hpp"
 #include "util.hpp"
 #include "walb_logger.hpp"
+#include "walb_util.hpp"
 #include "server_util.hpp"
 
 namespace walb {
+
+inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
+{
+    const StrVec v = cybozu::Split(addrPort, ':', 2);
+    if (v.size() != 2) {
+        throw cybozu::Exception("parseSocketAddr:parse error") << addrPort;
+    }
+    return cybozu::SocketAddr(v[0], static_cast<uint16_t>(cybozu::atoi(v[1])));
+}
+
+inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &multiAddrPort)
+{
+    std::vector<cybozu::SocketAddr> ret;
+    const StrVec v = cybozu::Split(multiAddrPort, ',');
+    for (const std::string &addrPort : v) {
+        ret.emplace_back(parseSocketAddr(addrPort));
+    }
+    return ret;
+}
+
 namespace protocol {
 
 /**

@@ -131,14 +131,9 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     }
 }
 
-inline void verifyNotStopping(const std::string &volId, const char *msg)
-{
-    util::verifyNotStopping(getArchiveVolState(volId).stopState, volId, msg);
-}
-
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
 {
-    util::verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
+    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)
@@ -235,13 +230,13 @@ inline void c2aStopServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     packet::Ack(p.sock).send();
 
-    util::Stopper stopper(volSt.stopState, isForce);
+    Stopper stopper(volSt.stopState, isForce);
     if (!stopper.isSuccess()) return;
 
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
 
-    util::waitUntil(ul, [&]() {
+    waitUntil(ul, [&]() {
             bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
             if (!go) return false;
             const std::string &st = sm.get();
@@ -387,7 +382,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     const StateMachine &sm = volSt.sm;
     {
         const std::string &cur = sm.get();
@@ -431,7 +426,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoArchiveActionRunning(volSt.ac, FUNC);
     {
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);

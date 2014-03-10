@@ -101,7 +101,7 @@ void initializeProxy(Option &opt)
 
     // Start a task dispatch thread.
     ProxySingleton &g = getProxyGlobal();
-    g.dispatcher.reset(new util::DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
+    g.dispatcher.reset(new DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
 }
 
 void finalizeProxy()

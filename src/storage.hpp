@@ -205,7 +205,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
     StorageVolState &volSt = getStorageVolState(volId);
     packet::Ack(p.sock).send();
 
-    util::Stopper stopper(volSt.stopState, isForce);
+    Stopper stopper(volSt.stopState, isForce);
     if (!stopper.isSuccess()) {
         return;
     }
@@ -213,7 +213,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
 
-    util::waitUntil(ul, [&]() {
+    waitUntil(ul, [&]() {
             const std::string &st = sm.get();
             return st == stFullSync || st == stHashSync || st == stWlogSend || st == stWlogRemove;
         }, "c2sStopServer");

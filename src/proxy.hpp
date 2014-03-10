@@ -134,7 +134,7 @@ struct ProxySingleton
     std::atomic<bool> forceQuit;
     AtomicMap<ProxyVolState> stMap;
     TaskQueue<ProxyTask> taskQueue;
-    std::unique_ptr<util::DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
+    std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
 };
 
 inline ProxySingleton& getProxyGlobal()
@@ -327,8 +327,8 @@ inline void c2pStartServer(protocol::ServerParams &p)
 
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
         // TODO: enqueue backgrond tasks for the volume.
@@ -354,13 +354,13 @@ inline void c2pStopServer(protocol::ServerParams &p)
     ProxyVolState &volSt = getProxyVolState(volId);
     packet::Ack(p.sock).send();
 
-    util::Stopper stopper(volSt.stopState, isForce);
+    Stopper stopper(volSt.stopState, isForce);
     if (!stopper.isSuccess()) return;
 
     // TODO: clear all related tasks from the task queue.
 
     UniqueLock ul(volSt.mu);
-    util::waitUntil(ul, [&]() {
+    waitUntil(ul, [&]() {
             if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
             const std::string &st = volSt.sm.get();
             return st == pStopped || st == pStarted || st == pClear;
@@ -387,7 +387,7 @@ inline void getArchiveInfo(const std::string& volId, const std::string &archiveN
     const char *const FUNC = __func__;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
     if (!volInfo.existsArchiveInfo(archiveName)) {
         throw cybozu::Exception(FUNC) << "archive info not exists" << archiveName;
@@ -400,8 +400,8 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &curr = volSt.sm.get(); // pStopped or pClear
 
     StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
@@ -417,8 +417,8 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
 
     StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
     ul.unlock();
@@ -493,8 +493,8 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
 
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
-    util::verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     {
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
         volSt.archiveSet.clear();
@@ -620,7 +620,7 @@ inline void ProxyWorker::operator()() {
     const std::string& archiveName = task_.archiveName;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    util::verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     {
         const std::string st = volSt.sm.get();
         if (st != pStarted) throw cybozu::Exception(FUNC) << "bad state" << st;
