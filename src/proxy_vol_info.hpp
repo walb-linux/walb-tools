@@ -202,10 +202,6 @@ public:
      * Delete a diff file from the master directory.
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */
-  
-    DEPRECATED void deleteDiffsFromMaster(const std::vector<MetaDiff> &diffV) {
-		deleteDiffs(diffV);
-    }
     void deleteDiffs(const std::vector<MetaDiff> &diffV, const std::string& archiveName = "") {
 		const bool isMaster = archiveName.empty();
         MetaDiffManager& mgr = isMaster ? diffMgr_ : diffMgrMap_.get(archiveName);
