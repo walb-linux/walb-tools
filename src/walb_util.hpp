@@ -76,11 +76,7 @@ void makeDir(const std::string &dirStr, const char *msg,
 inline std::vector<std::string> getFileNameList(const std::string &dirStr, const char *ext)
 {
     std::vector<std::string> ret;
-    std::vector<cybozu::FileInfo> list;
-    if (!cybozu::GetFileList(list, dirStr, ext)) {
-        throw cybozu::Exception("GetFileList failed")
-            << dirStr << ext;
-    }
+    std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
     for (cybozu::FileInfo &info : list) {
         if (info.name == "." || info.name == ".." || !info.isFile)
             continue;
