@@ -208,12 +208,8 @@ public:
                 ops.push_back(std::move(op));
             }
         }
-        std::vector<int> fds;
-        for (cybozu::util::FileOpener& op : ops) {
-            fds.push_back(op.fd());
-        }
         diff::Merger merger;
-        merger.addWdiffs(fds);
+        merger.addWdiffs(std::move(ops));
         diff::RecIo recIo;
         cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
         std::vector<char> zero;

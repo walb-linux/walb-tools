@@ -99,7 +99,7 @@ class ProxyWorker : public cybozu::thread::Runnable
 private:
     const ProxyTask task_;
 
-    bool setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, std::vector<cybozu::util::FileOpener>& ops, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+    bool setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 
 public:
@@ -523,11 +523,12 @@ inline void s2pWlogTransferServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
-inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, std::vector<cybozu::util::FileOpener>& ops, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
 {
     const int maxRetryNum = 10;
     int retryNum = 0;
     cybozu::Uuid uuid;
+    std::vector<cybozu::util::FileOpener> ops;
 retry:
     {
         diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
@@ -558,11 +559,7 @@ retry:
             ops.push_back(std::move(op));
         }
     }
-    std::vector<int> fds;
-    for (cybozu::util::FileOpener& op : ops) {
-        fds.push_back(op.fd());
-    }
-    merger.addWdiffs(fds);
+    merger.addWdiffs(std::move(ops));
     return true;
 }
 
@@ -625,11 +622,10 @@ inline void ProxyWorker::operator()() {
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
-    std::vector<cybozu::util::FileOpener> ops;
     std::vector<MetaDiff> diffV;
     diff::Merger merger;
     MetaDiff mergedDiff;
-    if (!setupMerger(merger, diffV, ops, mergedDiff, volInfo, archiveName)) {
+    if (!setupMerger(merger, diffV, mergedDiff, volInfo, archiveName)) {
         LOGi("no need to send wdiffs %s:%s", volId.c_str(), archiveName.c_str());
         return;
     }

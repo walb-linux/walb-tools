@@ -17,6 +17,7 @@
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
+#include "fileio.hpp"
 
 namespace walb {
 namespace diff {
@@ -33,6 +34,7 @@ private:
     class Wdiff {
     private:
         std::string wdiffPath_;
+        cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
         std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
         mutable walb_diff_record rec_;
@@ -41,20 +43,27 @@ private:
         mutable bool isEnd_;
     public:
         explicit Wdiff(const std::string &wdiffPath)
-            : wdiffPath_(wdiffPath), reader_(wdiffPath, O_RDONLY)
+            : wdiffPath_(wdiffPath)
+            , fop_(wdiffPath, O_RDONLY)
+            , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
 			initRec(rec_);
         }
-        explicit Wdiff(int fd)
-            : wdiffPath_(), reader_(fd)
+        /**
+         * You must open the file before calling this constructor.
+         */
+        explicit Wdiff(cybozu::util::FileOpener &&fop)
+            : wdiffPath_()
+            , fop_(std::move(fop))
+            , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
-			initRec(rec_);
+            initRec(rec_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
@@ -166,10 +175,11 @@ public:
             addWdiff(s);
         }
     }
-    void addWdiffs(const std::vector<int>& fds) {
-        for (int fd : fds) {
-            wdiffs_.emplace_back(new Wdiff(fd));
+    void addWdiffs(std::vector<cybozu::util::FileOpener> &&ops) {
+        for (cybozu::util::FileOpener &op : ops) {
+            wdiffs_.emplace_back(new Wdiff(std::move(op)));
         }
+        ops.clear();
     }
     /**
      * Merge input wdiff files and put them into output fd.
