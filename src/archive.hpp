@@ -180,7 +180,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    logger.info("%s: cleared volId %s", FUNC, volId.c_str());
+    logger.info() << FUNC << "cleared volId" << volId;
 }
 
 /**
@@ -244,8 +244,9 @@ inline void c2aStopServer(protocol::ServerParams &p)
         }, FUNC);
 
     const std::string &st = sm.get();
-    logger.info("Tasks have been stopped volId: %s state: %s"
-                , volId.c_str(), st.c_str());
+    logger.info() << "Tasks have been stopped"
+                  << "volId" << volId
+                  << "state" << st;
     if (st != aArchived) {
         return;
     }
@@ -294,13 +295,13 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 
     StateMachine &sm = volSt.sm;
     {
-        StateMachineTransaction tran(sm, aSyncReady, atFullSync, "x2aDirtyFullSyncServer");
+        StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
         ul.unlock();
 
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         const std::string st = volInfo.getState();
         if (st != aSyncReady) {
-            throw cybozu::Exception("x2aDirtyFullSyncServer:state is not SyncReady") << st;
+            throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
         }
         volInfo.createLv(sizeLb);
         sPack.write("ok");
@@ -316,7 +317,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
             uint64_t remainingLb = sizeLb;
             while (0 < remainingLb) {
                 if (volSt.stopState == ForceStopping || ga.forceQuit) {
-                    logger.warn("x2aDirtyFullSyncServer:force stopped:%s", volId.c_str());
+                    logger.warn() << FUNC << "force stopped" << volId;
                     return;
                 }
                 const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
@@ -324,19 +325,21 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
                 size_t encSize;
                 sPack.read(encSize);
                 if (encSize == 0) {
-                    throw cybozu::Exception("x2aDirtyFullSyncServer:encSize is zero");
+                    throw cybozu::Exception(FUNC) << "encSize is zero";
                 }
                 encBuf.resize(encSize);
                 sPack.read(&encBuf[0], encSize);
                 size_t decSize;
                 if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
-                    throw cybozu::Exception("x2aDirtyFullSyncServer:GetUncompressedLength") << encSize;
+                    throw cybozu::Exception(FUNC)
+                        << "GetUncompressedLength" << encSize;
                 }
                 if (decSize != size) {
-                    throw cybozu::Exception("x2aDirtyFullSyncServer:decSize differs") << decSize << size;
+                    throw cybozu::Exception(FUNC)
+                        << "decSize differs" << decSize << size;
                 }
                 if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
-                    throw cybozu::Exception("x2aDirtyFullSyncServer:RawUncompress");
+                    throw cybozu::Exception(FUNC) << "RawUncompress";
                 }
                 bd.write(&buf[0], size);
                 remainingLb -= lb;
@@ -447,7 +450,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
         if (!packH.isValid()) {
             cybozu::Exception e(FUNC);
             e << "bad packH";
-            logger.errorThrow(e);
+            logger.throwError(e);
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
             diff::IoData io;
@@ -461,13 +464,13 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
             if (!io.isValid()) {
                 cybozu::Exception e(FUNC);
                 e << "bad io";
-                logger.errorThrow(e);
+                logger.throwError(e);
             }
             uint32_t csum = io.calcChecksum();
             if (csum != rec.checksum) {
                 cybozu::Exception e(FUNC);
                 e << "bad io checksum" << csum << rec.checksum;
-                logger.errorThrow(e);
+                logger.throwError(e);
             }
             writer.writeDiff(rec, io.forMove());
         }
@@ -510,10 +513,11 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     MetaDiff diff;
     pkt.read(diff);
 
-    logger.debug("volId %s", volId.c_str());
-    logger.debug("uuid %s", uuid.str().c_str());
-    logger.debug("maxIoBlocks %u", maxIoBlocks);
-    logger.debug("diff %s", diff.str().c_str());
+    logger.debug()
+        << "volId" << volId << "\n"
+        << "uuid" << uuid << "\n"
+        << "maxIoBlocks" << maxIoBlocks << "\n"
+        << "diff" << diff;
 
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -521,20 +525,20 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     if (!volInfo.existsVolDir()) {
         const char *msg = "archive-not-found";
-        logger.info("%s %s", volId.c_str(), msg);
+        logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
     StateMachine &sm = volSt.sm;
     if (sm.get() == aStopped) {
         const char *msg = "stopped";
-        logger.info("%s %s", volId.c_str(), msg);
+        logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
     if (clientType == "proxy" && volInfo.getUuid() != uuid) {
         const char *msg = "different-uuid";
-        logger.info("%s %s", volId.c_str(), msg);
+        logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
@@ -544,7 +548,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 
     if (rel != Relation::APPLICABLE_DIFF) {
         const char *msg = getRelationStr(rel);
-        logger.info("%s %s", volId.c_str(), msg);
+        logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
@@ -563,9 +567,9 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
     fileH.setUuid(uuid.rawData());
     writer.writeHeader(fileH);
-    logger.debug("%s write header.", FUNC);
+    logger.debug() << FUNC << "write header";
     proxy_local::recvAndWriteDiffs(p.sock, writer, logger);
-    logger.debug("%s close.", FUNC);
+    logger.debug() << FUNC << "close";
     writer.close();
     tmpFile.save(fPath.str());
 
