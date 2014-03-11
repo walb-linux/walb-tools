@@ -58,6 +58,7 @@ public:
             write(pri, "Logger::write() error.");
         }
     }
+
 #ifdef __GNUC__
     void writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept __attribute__((format(printf, 3, 4)));
     #define WALB_LOGGER_FORMAT_ATTR __attribute__((format(printf, 2, 3)))
@@ -79,6 +80,14 @@ public:
     void info(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void warn(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void error(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
+
+    void writeAndThrow(cybozu::LogPriority pri, const cybozu::Exception &e) const {
+        write(pri, e.what());
+        throw e;
+    }
+    void errorThrow(const cybozu::Exception &e) const {
+        writeAndThrow(cybozu::LogError, e);
+    }
 };
 
 inline void Logger::writeF(cybozu::LogPriority pri, const char *format, ...) const noexcept {

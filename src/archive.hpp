@@ -434,14 +434,20 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 
 namespace proxy_local {
 
-void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger) {
-#if 0
+/**
+ * Wdiff header has been written already before calling this.
+ */
+inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger)
+{
+    const char *const FUNC = __func__;
     packet::StreamControl ctrl(sock);
     while (ctrl.isNext()) {
         diff::PackHeader packH;
         sock.read(packH.rawData(), packH.rawSize());
         if (!packH.isValid()) {
-            logAndThrow(logger, "recvAndWriteDiffs:bad packH");
+            cybozu::Exception e(FUNC);
+            e << "bad packH";
+            logger.errorThrow(e);
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
             diff::IoData io;
@@ -453,20 +459,27 @@ void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logge
             }
             sock.read(io.rawData(), rec.data_size);
             if (!io.isValid()) {
-                logAndThrow(logger, "recvAndWriteDiffs:bad io");
+                cybozu::Exception e(FUNC);
+                e << "bad io";
+                logger.errorThrow(e);
             }
-            if (io.calcChecksum() != rec.checksum) {
-                logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
+            uint32_t csum = io.calcChecksum();
+            if (csum != rec.checksum) {
+                cybozu::Exception e(FUNC);
+                e << "bad io checksum" << csum << rec.checksum;
+                logger.errorThrow(e);
             }
             writer.writeDiff(rec, io.forMove());
         }
         ctrl.reset();
     }
     if (!ctrl.isEnd()) {
-        throw cybozu::Exception("recvAndWriteDiffs:bad ctrl not end");
+        cybozu::Exception e(FUNC);
+        e << "bad ctrl not end";
+        throw e;
     }
-#endif
 }
+
 } // proxy_local
 /**
  *
