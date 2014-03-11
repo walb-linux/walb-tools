@@ -8,6 +8,7 @@
  */
 #include "cybozu/log.hpp"
 #include "util.hpp"
+#include <sstream>
 #include <map>
 
 #ifdef DEBUG
@@ -87,6 +88,47 @@ public:
     }
     void errorThrow(const cybozu::Exception &e) const {
         writeAndThrow(cybozu::LogError, e);
+    }
+
+    template <cybozu::LogPriority priority>
+    struct Sync
+    {
+    private:
+        const Logger &logger_;
+        std::string s_;
+    public:
+        explicit Sync(const Logger& logger) : logger_(logger) {}
+        ~Sync() noexcept {
+            if (!s_.empty()) {
+                logger_.write(priority, s_);
+            }
+        }
+        Sync(Sync&& rhs)
+            : logger_(rhs.logger_), s_(std::move(rhs.s_)) {}
+        template <typename T>
+        Sync& operator<<(const T& t) {
+            std::ostringstream os;
+            if (!s_.empty()) os << ':';
+            os << t;
+            s_ += os.str();
+            return *this;
+        }
+    };
+    using DebugSync = Sync<cybozu::LogDebug>;
+    using InfoSync = Sync<cybozu::LogInfo>;
+    using WarnSync = Sync<cybozu::LogWarning>;
+    using ErrorSync = Sync<cybozu::LogError>;
+
+    DebugSync debug() const { return DebugSync(*this); }
+    InfoSync info() const { return InfoSync(*this); }
+    WarnSync warn() const { return WarnSync(*this); }
+    ErrorSync error() const { return ErrorSync(*this); }
+
+    template <typename T>
+    InfoSync operator<<(const T& t) const {
+        InfoSync s(*this);
+        s << t;
+        return s;
     }
 };
 
