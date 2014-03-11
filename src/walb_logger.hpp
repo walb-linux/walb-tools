@@ -9,7 +9,6 @@
 #include "cybozu/log.hpp"
 #include "util.hpp"
 #include <sstream>
-#include <map>
 
 #ifdef DEBUG
 #define LOGd(...) LOGd2(__VA_ARGS__, "")
@@ -82,11 +81,13 @@ public:
     void warn(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void error(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
 
-    void writeAndThrow(cybozu::LogPriority pri, const cybozu::Exception &e) const {
+    template <typename E>
+    void writeAndThrow(cybozu::LogPriority pri, const E &e) const {
         write(pri, e.what());
         throw e;
     }
-    void throwError(const cybozu::Exception &e) const {
+    template <typename E>
+    void throwError(const E &e) const {
         writeAndThrow(cybozu::LogError, e);
     }
 
@@ -173,15 +174,16 @@ namespace logger_local {
 
 inline const char *getPriStr(cybozu::LogPriority pri)
 {
-    static const std::map<int, std::string> priMap = {
+    static const std::pair<int, const char *> tbl[] = {
         { cybozu::LogDebug, "DEBUG" },
         { cybozu::LogInfo, "INFO" },
         { cybozu::LogWarning, "WARNING" },
         { cybozu::LogError, "ERROR" },
     };
-    std::map<int, std::string>::const_iterator itr = priMap.find(pri);
-    assert(itr != priMap.cend());
-    return itr->second.c_str();
+    for (const std::pair<int, const char *> &p : tbl) {
+        if (pri == p.first) return p.second;
+    }
+    throw cybozu::Exception("getPriStr:bug");
 }
 
 } // namespace logger_local
