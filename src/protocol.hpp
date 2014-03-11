@@ -18,6 +18,24 @@
 
 namespace walb {
 
+/**
+ * Protocol name list.
+ */
+const char *const statusPN = "status";
+const char *const initVolPN = "init-vol";
+const char *const clearVolPN = "clear-vol";
+const char *const startPN = "start";
+const char *const stopPN = "stop";
+const char *const fullBkpPN = "full-bkp";
+const char *const snapshotPN = "snapshot";
+const char *const archiveInfoPN = "archive-info";
+const char *const wlogTransferPN = "wlog-transfer";
+const char *const dirtyFullSyncPN = "dirty-full-sync";
+const char *const restorePN = "restore";
+const char *const wdiffTransferPN = "wdiff-transfer";
+const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
+
+
 inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
 {
     const StrVec v = cybozu::Split(addrPort, ':', 2);

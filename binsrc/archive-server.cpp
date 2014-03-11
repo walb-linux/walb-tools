@@ -37,15 +37,15 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
-            { "status", c2aStatusServer },
-            { "init-vol", c2aInitVolServer },
-            { "clear-vol", c2aClearVolServer },
-            { "start", c2aStartServer },
-            { "stop", c2aStopServer },
-            { "dirty-full-sync", x2aDirtyFullSyncServer },
-            { "restore", c2aRestoreServer },
-            { "wdiff-transfer", x2aWdiffTransferServer },
-            { "dbg-reload-metadata", c2aReloadMetadataServer },
+            { statusPN, c2aStatusServer },
+            { initVolPN, c2aInitVolServer },
+            { clearVolPN, c2aClearVolServer },
+            { startPN, c2aStartServer },
+            { stopPN, c2aStopServer },
+            { dirtyFullSyncPN, x2aDirtyFullSyncServer },
+            { restorePN, c2aRestoreServer },
+            { wdiffTransferPN, x2aWdiffTransferServer },
+            { dbgReloadMetadataPN, c2aReloadMetadataServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }

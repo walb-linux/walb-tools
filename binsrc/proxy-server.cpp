@@ -36,12 +36,12 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
-            { "status", c2pStatusServer },
-            { "start", c2pStartServer },
-            { "stop", c2pStopServer },
-            { "archive-info", c2pArchiveInfoServer },
-            { "clear-vol", c2pClearVolServer },
-            { "wlog-transfer", s2pWlogTransferServer },
+            { statusPN, c2pStatusServer },
+            { startPN, c2pStartServer },
+            { stopPN, c2pStopServer },
+            { archiveInfoPN, c2pArchiveInfoServer },
+            { clearVolPN, c2pClearVolServer },
+            { wlogTransferPN, s2pWlogTransferServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }

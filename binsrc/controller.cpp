@@ -46,16 +46,16 @@ void runClient(Option &opt)
     ProtocolLogger logger(opt.ctrlId, serverId);
 
     const std::map<std::string, protocol::ClientHandler> h = {
-        { "status", c2xGetStrVecClient },
-        { "init-vol", c2xInitVolClient },
-        { "clear-vol", c2xClearVolClient },
-        { "full-bkp", c2sFullSyncClient },
-        { "restore", c2aRestoreClient },
-        { "start", c2xStartClient },
-        { "stop", c2xStopClient },
-        { "archive-info", c2pArchiveInfoClient },
-        { "snapshot", c2sSnapshotClient },
-        { "dbg-reload-metadata", c2aReloadMetadataClient },
+        { statusPN, c2xGetStrVecClient },
+        { initVolPN, c2xInitVolClient },
+        { clearVolPN, c2xClearVolClient },
+        { fullBkpPN, c2sFullSyncClient },
+        { restorePN, c2aRestoreClient },
+        { startPN, c2xStartClient },
+        { stopPN, c2xStopClient },
+        { archiveInfoPN, c2pArchiveInfoClient },
+        { snapshotPN, c2sSnapshotClient },
+        { dbgReloadMetadataPN, c2aReloadMetadataClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);
 }
