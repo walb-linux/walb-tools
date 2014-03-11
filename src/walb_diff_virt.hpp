@@ -165,7 +165,7 @@ private:
      */
     size_t readWdiff(void *data, size_t blks) {
         assert(recIo_.isValid());
-        const walb_diff_record& rec = recIo_.record().record();
+        const walb_diff_record& rec = recIo_.record2();
         const walb::diff::IoData &io = recIo_.io();
         assert(offInIo_ < rec.io_blocks);
         if (isNormalRec(rec)) {
@@ -201,7 +201,7 @@ private:
      */
     void fillDiffIo() {
         if (emptyWdiff_ || isEndDiff_) return;
-        const walb_diff_record& rec = recIo_.record().record();
+        const walb_diff_record& rec = recIo_.record2();
         /* At beginning time, rec.ioBlocks() returns 0. */
         assert(offInIo_ <= rec.io_blocks);
         if (offInIo_ == rec.io_blocks) {

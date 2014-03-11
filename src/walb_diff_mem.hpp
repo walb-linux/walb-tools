@@ -25,7 +25,6 @@ private:
     RecordRaw rec_;
     IoData io_;
 public:
-    RecordRaw &record() { return rec_; }
     const walb_diff_record &record2() const { return rec_.record(); }
 
     IoData &io() { return io_; }
@@ -316,9 +315,10 @@ public:
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-            if (r.record().isOverlapped(_rec)) {
+			const DiffRecord& dr = static_cast<const DiffRecord&>(r.record2());
+            if (dr.isOverlapped(_rec)) {
                 nIos_--;
-                nBlocks_ -= r.record().ioBlocks();
+                nBlocks_ -= dr.io_blocks;
                 q.push(std::move(r));
                 it = map_.erase(it);
             } else {
@@ -332,16 +332,17 @@ public:
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
+				const walb_diff_record& dr = r.record2();
                 nIos_++;
-                nBlocks_ += r.record().ioBlocks();
-                uint64_t addr = r.record().ioAddress();
+                nBlocks_ += dr.io_blocks;
+                uint64_t addr = dr.io_address;
                 map_.emplace(addr, std::move(r));
             }
             q.pop();
         }
         /* Insert the item. */
         nIos_++;
-        nBlocks_ += r0.record().ioBlocks();
+        nBlocks_ += r0.record2().io_blocks;
         std::vector<RecIo> rv;
         if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
@@ -351,8 +352,8 @@ public:
             rv.push_back(std::move(r0));
         }
         for (RecIo &r : rv) {
-            uint64_t addr = r.record().ioAddress();
-            uint16_t blks = r.record().ioBlocks();
+            uint64_t addr = r.record2().io_address;
+            uint16_t blks = r.record2().io_blocks;
             map_.emplace(addr, std::move(r));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
