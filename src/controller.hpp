@@ -11,13 +11,14 @@ namespace walb {
  */
 inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
+    const char *const FUNC = __func__;
     packet::Packet packet(p.sock);
     packet.write(p.params);
 
     std::string st;
     packet.read(st);
     if (st != "ok") {
-        throw cybozu::Exception("c2xGetStrVecClient:not ok") << st;
+        throw cybozu::Exception(FUNC) << "not ok" << st;
     }
 
     std::vector<std::string> v;
@@ -71,28 +72,31 @@ inline void c2xStopClient(protocol::ClientParams &p)
 
 inline void c2sFullSyncClient(protocol::ClientParams &p)
 {
+    const char *const FUNC = __func__;
     if (p.params.size() != 1 && p.params.size() != 2) {
-        throw cybozu::Exception("c2sFullSyncClient:bad size param") << p.params.size();
+        throw cybozu::Exception(FUNC) << "bad size param" << p.params.size();
     }
     std::vector<std::string> v;
     if (p.params[0].empty()) {
-        throw cybozu::Exception("c2sFullSyncClient:empty volId");
+        throw cybozu::Exception(FUNC) << "empty volId";
     }
     v.push_back(p.params[0]);
     uint64_t bulkLb = walb::DEFAULT_BULK_LB;
     if (p.params.size() == 2) {
         bulkLb = cybozu::atoi(p.params[1]);
-        if (bulkLb == 0) throw cybozu::Exception("c2sFullSyncClient:zero bulkLb");
+        if (bulkLb == 0) {
+            throw cybozu::Exception(FUNC) << "zero bulkLb";
+        }
     }
     v.push_back(cybozu::itoa(bulkLb));
     LOGd("sendStrVec");
-    protocol::sendStrVec(p.sock, v, 2, "c2sFullSyncClient", false);
+    protocol::sendStrVec(p.sock, v, 2, FUNC, false);
 
     std::string st;
     packet::Packet packet(p.sock);
     packet.read(st);
     if (st != "ok") {
-        throw cybozu::Exception("c2sFullSyncClient:not ok") << st;
+        throw cybozu::Exception(FUNC) << "not ok" << st;
     }
 }
 
@@ -102,13 +106,14 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
  */
 inline void c2aRestoreClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, "c2aRestoreClient", false);
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 2, FUNC, false);
     packet::Packet pkt(p.sock);
 
     std::string s;
     pkt.read(s);
     if (s != "ok") {
-        throw cybozu::Exception("c2aRestoreClient:failed") << s;
+        throw cybozu::Exception(FUNC) << "failed" << s;
     }
 }
 
@@ -127,7 +132,7 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
  */
 inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 {
-    const char * const FUNC = "c2pArchiveInfoClient";
+    const char * const FUNC = __func__;
     if (p.params.size() < 2) {
         throw cybozu::Exception(FUNC) << "invalid params";
     }

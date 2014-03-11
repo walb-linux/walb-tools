@@ -128,13 +128,14 @@ inline void c2sStatusServer(protocol::ServerParams &p)
 
 inline void c2sInitVolServer(protocol::ServerParams &p)
 {
-    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sInitVolServer", false);
+    const char *const FUNC = __func__;
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const std::string &wdevPathName = v[1];
 
     StateMachine &sm = getStorageVolState(volId).sm;
     {
-        StateMachineTransaction tran(sm, sClear, stInitVol, "c2sInitVolServer");
+        StateMachineTransaction tran(sm, sClear, stInitVol, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
         volInfo.init();
         tran.commit(sSyncReady);
@@ -142,17 +143,20 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.info("c2sInitVolServer: initialize volId %s wdev %s", volId.c_str(), wdevPathName.c_str());
+    logger.info() << FUNC << "initialize"
+                  << "volId" << volId
+                  << "wdev" << wdevPathName;
 }
 
 inline void c2sClearVolServer(protocol::ServerParams &p)
 {
-    StrVec v = protocol::recvStrVec(p.sock, 1, "c2sClearVolServer", false);
+    const char *const FUNC = __func__;
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
 
     StateMachine &sm = getStorageVolState(volId).sm;
     {
-        StateMachineTransaction tran(sm, sSyncReady, stClearVol, "c2sClearVolServer");
+        StateMachineTransaction tran(sm, sSyncReady, stClearVol, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.clear();
         tran.commit(sClear);
@@ -161,7 +165,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.info("c2sClearVolServer: cleared volId %s", volId.c_str());
+    logger.info() << FUNC << "cleared volId" << volId;
 }
 
 /**
@@ -248,15 +252,14 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
 inline void c2sFullSyncServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
 
-    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sFullSyncServer", false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string& volId = v[0];
     const uint64_t bulkLb = cybozu::atoi(v[1]);
     const uint64_t curTime = ::time(0);
-    LOGd("volId %s bulkLb %" PRIu64 " curTime %" PRIu64 ""
-         , volId.c_str(), bulkLb, curTime);
-    const std::string& nodeId = gs.nodeId;
+    logger.debug() << volId << bulkLb << curTime;
     std::string archiveId;
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
@@ -265,21 +268,21 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     StorageVolState &volSt = getStorageVolState(volId);
 
     if (volSt.stopState != NotStopping) {
-        cybozu::Exception e("c2sFullSyncServer:Stopping");
-        e << volId << volSt.stopState;
+        cybozu::Exception e(FUNC);
+        e << "Stopping" << volId << volSt.stopState;
         cPack.write(e.what());
         throw e;
     }
 
     StateMachine &sm = volSt.sm;
     {
-        StateMachineTransaction tran0(sm, sSyncReady, stFullSync, "c2sFullSyncServer");
+        StateMachineTransaction tran0(sm, sSyncReady, stFullSync, FUNC);
 
         volInfo.resetWlog(0);
 
         const uint64_t sizeLb = getSizeLb(volInfo.getWdevPath());
         const cybozu::Uuid uuid = volInfo.getUuid();
-        LOGd("sizeLb %" PRIu64 " uuid %s", sizeLb, uuid.str().c_str());
+        logger.debug() << sizeLb << uuid;
 
         // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
 
@@ -302,8 +305,8 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
                     cPack.write("ok");
                     p.sock.close();
                 } else {
-                    cybozu::Exception e("c2sFullSyncServer:bad response");
-                    e << archiveId << res;
+                    cybozu::Exception e(FUNC);
+                    e << "bad response" << archiveId << res;
                     cPack.write(e.what());
                     throw e;
                 }
@@ -317,7 +320,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
                 uint64_t remainingLb = sizeLb;
                 while (0 < remainingLb) {
                     if (volSt.stopState == ForceStopping || gs.forceQuit) {
-                        logger.warn("c2sFullSyncServer:force stopped");
+                        logger.warn() << FUNC << "force stopped";
                         // TODO: stop monitoring.
                         return;
                     }
@@ -341,14 +344,14 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         }
         tran0.commit(sStopped);
 
-        StateMachineTransaction tran1(sm, sStopped, stStartMaster, "c2sFullSyncServer");
+        StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
         volInfo.setState(sMaster);
         tran1.commit(sMaster);
     }
 
     // TODO: If thrown an error, someone must stop monitoring task.
 
-    LOGi("c2sFullSyncServer done, ctrl:%s storage:%s archive:%s", p.clientId.c_str(), nodeId.c_str(), archiveId.c_str());
+    logger.info() << FUNC << "done" << "archive" << archiveId;
 }
 
 /**

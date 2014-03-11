@@ -86,10 +86,9 @@ inline std::string run1stNegotiateAsClient(
     int err;
     std::string msg;
     if (!ans.recv(&err, &msg)) {
-        std::string s = cybozu::util::formatString(
-            "received NG: err %d msg %s", err, msg.c_str());
-        logger.error(s);
-        throw std::runtime_error(s);
+        cybozu::Exception e("received NG");
+        e << "err" << err << "msg" << msg;
+        logger.throwError(e);
     }
     return serverId;
 }
@@ -190,7 +189,7 @@ inline bool run1stNegotiateAsServer(
         return true;
     }
     ans.ok();
-    logger.info("initial negotiation succeeded: %s", protocolName.c_str());
+    logger.info() << "initial negotiation succeeded" << protocolName;
     return false;
 
     /* Here command existance has not been checked yet. */
@@ -250,7 +249,7 @@ inline void serverDispatch(
             throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;
         }
     } catch (std::exception &e) {
-        logger.error("%s", e.what());
+        logger.error() << e.what();
     } catch (...) {
         logger.error("serverDispatch: other error.");
     }

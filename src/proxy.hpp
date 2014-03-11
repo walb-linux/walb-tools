@@ -700,25 +700,23 @@ inline void ProxyWorker::operator()() {
         ul.lock();
         if (curTs - volSt.lastWlogRecievedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
-            logger.error("%s", e.what());
-            throw e;
+            logger.throwError(e);
         }
         e << res << "delay time" << gp.delaySecForRetry;
-        logger.info("%s", e.what());
+        logger.info() << e.what();
         getProxyGlobal().taskQueue.pushForce(task_, gp.delaySecForRetry * 1000);
         return;
     }
     if (res == "different-uuid" || res == "too-old-diff") {
         e << res;
-        logger.info("%s", e.what());
+        logger.info() << e.what();
         volInfo.deleteDiffs(diffV, archiveName);
         getProxyGlobal().taskQueue.pushForce(task_, 0);
         return;
     }
     // archive-not-found, not-applicable-diff
     e << res;
-    logger.error("%s", e.what());
-    throw e;
+    logger.throwError(e);
 }
 
 } // walb
