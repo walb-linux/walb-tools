@@ -626,8 +626,10 @@ public:
      * Disable copy/move constructors.
      */
     BoundedQueue(const BoundedQueue &rhs) = delete;
-    BoundedQueue(BoundedQueue &&rhs) = delete;
-    ~BoundedQueue() noexcept = default;
+	BoundedQueue(BoundedQueue &&rhs) = delete;
+#ifndef _MSC_VER
+	~BoundedQueue() noexcept = delete;
+#endif
 
     /**
      * Disable copy/move.
@@ -697,8 +699,10 @@ public:
     /**
      * Check if there is no more items and push() will be never called.
      */
-    __attribute__((deprecated))
-    bool isEnd() const {
+#ifdef __GNUC__
+	__attribute__((deprecated))
+#endif
+		bool isEnd() const {
         AutoLock lk(mutex_);
         verifyFailed();
         return isClosed_ && isEmpty();

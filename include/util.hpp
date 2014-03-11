@@ -23,10 +23,15 @@
 
 #include <sys/time.h>
 
+#ifdef _MSC_VER
+#define UNUSED
+#define DEPRECATED
+#else
 #define UNUSED __attribute__((unused))
 #define DEPRECATED __attribute__((deprecated))
+#endif
 
-#define RT_ERR(fmt, args...)                                    \
+#define RT_ERR(fmt, args,...)                                    \
     std::runtime_error(cybozu::util::formatString(fmt, ##args))
 
 #define CHECKx(cond) cybozu::util::checkCond(cond, __func__, __LINE__)
