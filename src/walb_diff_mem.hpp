@@ -22,16 +22,16 @@ namespace diff {
 class RecIo /* final */
 {
 private:
-    RecordRaw rec_;
+	DiffRecord rec_;
     IoData io_;
 public:
-    const walb_diff_record &record2() const { return rec_.record(); }
+    const walb_diff_record &record2() const { return rec_; }
 
     IoData &io() { return io_; }
     const IoData &io() const { return io_; }
 
     void copyFrom(const walb_diff_record &rec, const IoData &io) {
-        rec_ = rec;
+        rec_ = static_cast<const DiffRecord&>(rec);
         if (isNormalRec(rec)) {
             io_ = io;
         } else {
@@ -39,7 +39,7 @@ public:
         }
     }
     void moveFrom(const walb_diff_record &rec, IoData &&io) {
-        rec_ = rec;
+        rec_ = static_cast<const DiffRecord&>(rec);
         if (isNormalRec(rec)) {
             io_ = std::move(io);
         } else {
@@ -47,7 +47,7 @@ public:
         }
     }
     void moveFrom(const walb_diff_record &rec, std::vector<char> &&data) {
-        rec_ = rec;
+        rec_ = static_cast<const DiffRecord&>(rec);
         if (isNormalRec(rec)) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
@@ -58,11 +58,11 @@ public:
     }
 
     void updateChecksum() {
-        rec_.setChecksum(io_.calcChecksum());
+        rec_.checksum = io_.calcChecksum();
     }
 
     bool isValid(bool isChecksum = false) const {
-        if (!rec_.isValid()) {
+        if (!isValidRec(rec_)) {
             LOGd("rec is not valid.\n");
             return false;
         }
@@ -70,27 +70,27 @@ public:
             LOGd("io is not valid.\n");
             return false;
         }
-        if (!rec_.isNormal()) {
+        if (!isNormalRec(rec_)) {
             if (io_.ioBlocks != 0) {
                 LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
                 return false;
             }
             return true;
         }
-        if (rec_.ioBlocks() != io_.ioBlocks) {
-            LOGd("ioSize invalid %u %u\n", rec_.ioBlocks(), io_.ioBlocks);
+        if (rec_.io_blocks != io_.ioBlocks) {
+            LOGd("ioSize invalid %u %u\n", rec_.io_blocks, io_.ioBlocks);
             return false;
         }
-        if (rec_.dataSize() != io_.size) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.dataSize(), io_.size);
+        if (rec_.data_size != io_.size) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.size);
             return false;
         }
         if (rec_.isCompressed()) {
             LOGd("RecIo does not support compressed data.\n");
             return false;
         }
-        if (isChecksum && rec_.checksum() != io_.calcChecksum()) {
-            LOGd("checksum invalid %0x %0x\n", rec_.checksum(), io_.calcChecksum());
+        if (isChecksum && rec_.checksum != io_.calcChecksum()) {
+            LOGd("checksum invalid %0x %0x\n", rec_.checksum, io_.calcChecksum());
             return false;
         }
         return true;
@@ -111,9 +111,9 @@ public:
         assert(isValid());
         std::vector<RecIo> v;
 
-        std::vector<walb_diff_record> recV = diff::splitAll(rec_.record(), ioBlocks);
+        std::vector<walb_diff_record> recV = diff::splitAll(rec_, ioBlocks);
         std::vector<IoData> ioV;
-        if (rec_.isNormal()) {
+        if (isNormalRec(rec_)) {
             ioV = splitIoDataAll(io_, ioBlocks);
         } else {
             ioV.resize(recV.size());
@@ -159,13 +159,13 @@ public:
          * oooooo + __xx__ = ooxxoo
          */
         if (rhs.rec_.isOverwrittenBy(rec_)) {
-            uint16_t blks0 = rhs.rec_.ioAddress() - rec_.ioAddress();
+            uint16_t blks0 = rhs.rec_.io_address - rec_.io_address;
             uint16_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
-            uint64_t addr0 = rec_.ioAddress();
+            uint64_t addr0 = rec_.io_address;
             uint64_t addr1 = rec_.endIoAddress() - blks1;
 
-            walb_diff_record rec0 = rec_.record();
-            walb_diff_record rec1 = rec_.record();
+            walb_diff_record rec0 = rec_;
+            walb_diff_record rec1 = rec_;
             rec0.io_address = addr0;
             rec0.io_blocks = blks0;
             rec1.io_address = addr1;
@@ -183,8 +183,8 @@ public:
 
             std::vector<char> data0(size0), data1(size1);
             if (recIsNormal) {
-                size_t off1 = (addr1 - rec_.ioAddress()) * LOGICAL_BLOCK_SIZE;
-                assert(size0 + rhs.rec_.ioBlocks() * LOGICAL_BLOCK_SIZE + size1 == rec_.dataSize());
+                size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
+                assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
                 ::memcpy(&data0[0], io_.rawData(), size0);
                 ::memcpy(&data1[0], io_.rawData() + off1, size1);
             }
@@ -209,15 +209,15 @@ public:
          * Pattern 3:
          * oooo__ + __xxxx = ooxxxx
          */
-        if (rec_.ioAddress() < rhs.rec_.ioAddress()) {
-            assert(rhs.rec_.ioAddress() < rec_.endIoAddress());
-            uint16_t rblks = rec_.endIoAddress() - rhs.rec_.ioAddress();
-            assert(rhs.rec_.ioAddress() + rblks == rec_.endIoAddress());
+        if (rec_.io_address < rhs.rec_.io_address) {
+            assert(rhs.rec_.io_address < rec_.endIoAddress());
+            uint16_t rblks = rec_.endIoAddress() - rhs.rec_.io_address;
+            assert(rhs.rec_.io_address + rblks == rec_.endIoAddress());
 
-            walb_diff_record rec = rec_.record();
+            walb_diff_record rec = rec_;
             /* rec.ioAddress() does not change. */
-            rec.io_blocks = rec_.ioBlocks() - rblks;
-            assert(endIoAddressRec(rec) == rhs.rec_.ioAddress());
+            rec.io_blocks = rec_.io_blocks - rblks;
+            assert(endIoAddressRec(rec) == rhs.rec_.io_address);
 
             size_t size = 0;
             if (rec_.isNormal()) {
@@ -225,7 +225,7 @@ public:
             }
             std::vector<char> data(size);
             if (rec_.isNormal()) {
-                assert(rec_.dataSize() == io_.size);
+                assert(rec_.data_size == io_.size);
                 rec.data_size = size;
                 ::memcpy(&data[0], io_.rawData(), size);
             }
@@ -241,14 +241,14 @@ public:
          * Pattern 4:
          * __oooo + xxxx__ = xxxxoo
          */
-        assert(rec_.ioAddress() < rhs.rec_.endIoAddress());
-        uint16_t rblks = rhs.rec_.endIoAddress() - rec_.ioAddress();
-        assert(rec_.ioAddress() + rblks == rhs.rec_.endIoAddress());
+        assert(rec_.io_address < rhs.rec_.endIoAddress());
+        uint16_t rblks = rhs.rec_.endIoAddress() - rec_.io_address;
+        assert(rec_.io_address + rblks == rhs.rec_.endIoAddress());
         size_t off = rblks * LOGICAL_BLOCK_SIZE;
 
-        walb_diff_record rec = rec_.record();
-        rec.io_address = rec_.ioAddress() + rblks;
-        rec.io_blocks = rec_.ioBlocks() - rblks;
+        walb_diff_record rec = rec_;
+        rec.io_address = rec_.io_address + rblks;
+        rec.io_blocks = rec_.io_blocks - rblks;
 
         size_t size = 0;
         if (rec_.isNormal()) {
@@ -256,7 +256,7 @@ public:
         }
         std::vector<char> data(size);
         if (rec_.isNormal()) {
-            assert(rec_.dataSize() == io_.size);
+            assert(rec_.data_size == io_.size);
             rec.data_size = size;
             ::memcpy(&data[0], io_.rawData() + off, size);
         }

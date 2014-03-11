@@ -280,58 +280,6 @@ struct DiffRecord : public block_diff::BlockDiffKey2<walb_diff_record> {
 };
 
 /**
- * Class for struct walb_diff_record.
- */
-class RecordRaw : public Record
-{
-private:
-    struct walb_diff_record rec_;
-
-public:
-    struct walb_diff_record &record() override { return rec_; }
-    const struct walb_diff_record &record() const override { return rec_; }
-
-    /**
-     * Default.
-     */
-    RecordRaw() : Record(), rec_() { init(); }
-    /**
-     * Clone.
-     */
-    RecordRaw(const RecordRaw &rec, bool isCheck = true)
-        : Record(), rec_(rec.rec_) {
-        if (isCheck) check();
-    }
-    /**
-     * Convert.
-     */
-    RecordRaw(const struct walb_diff_record &rawRec, bool isCheck = true)
-        : Record(), rec_(rawRec) {
-        if (isCheck) check();
-    }
-    /**
-     * Convert.
-     */
-    RecordRaw(const Record &rec, bool isCheck = true)
-        : Record(), rec_(rec.record()) {
-        if (isCheck) check();
-    }
-    /**
-     * For raw data.
-     */
-    RecordRaw(const char *data, size_t size)
-        : Record(), rec_(*reinterpret_cast<const struct walb_diff_record *>(data)) {
-        if (size != sizeof(rec_)) {
-            throw RT_ERR("size is invalid.");
-        }
-    }
-private:
-    void check() const {
-        if (!isValid()) throw RT_ERR("invalid record.");
-    }
-};
-
-/**
  * Split a record into several records
  * where all splitted records' ioBlocks will be <= a specified one.
  *
