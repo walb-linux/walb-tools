@@ -86,7 +86,7 @@ public:
         write(pri, e.what());
         throw e;
     }
-    void errorThrow(const cybozu::Exception &e) const {
+    void throwError(const cybozu::Exception &e) const {
         writeAndThrow(cybozu::LogError, e);
     }
 
