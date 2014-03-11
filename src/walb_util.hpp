@@ -72,9 +72,10 @@ inline std::vector<std::string> getFileNameList(const std::string &dirStr, const
 {
     std::vector<std::string> ret;
     std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
-    for (cybozu::FileInfo &info : list) {
-        if (info.name == "." || info.name == ".." || !info.isFile)
+    for (const cybozu::FileInfo &info : list) {
+        if (!info.isFile()) {
             continue;
+        }
         ret.push_back(info.name);
     }
     return ret;
