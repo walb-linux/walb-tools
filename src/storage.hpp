@@ -289,7 +289,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
             aSock.connect(archive);
             archiveId = walb::protocol::run1stNegotiateAsClient(aSock, gs.nodeId, "dirty-full-sync");
             walb::packet::Packet aPack(aSock);
-            aPack.write("storageD");
+            aPack.write(storageHT);
             aPack.write(volId);
             aPack.write(uuid);
             aPack.write(sizeLb);

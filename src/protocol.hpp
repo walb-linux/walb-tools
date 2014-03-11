@@ -19,6 +19,14 @@
 namespace walb {
 
 /**
+ * Host type.
+ */
+const char *const controllerHT = "controller";
+const char *const storageHT = "storage";
+const char *const proxyHT = "proxy";
+const char *const archiveHT = "archive";
+
+/**
  * Protocol name list.
  */
 const char *const statusPN = "status";

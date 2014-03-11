@@ -275,7 +275,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     cybozu::Uuid uuid;
     uint64_t sizeLb, curTime, bulkLb;
     sPack.read(hostType);
-    if (hostType != "storageD" && hostType != "archiveD") {
+    if (hostType != storageHT && hostType != archiveHT) {
         throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
     }
     sPack.read(volId);
