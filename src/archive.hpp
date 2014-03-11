@@ -436,12 +436,135 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
 }
 
+namespace proxy_local {
+
+void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger) {
+#if 0
+    packet::StreamControl ctrl(sock);
+    while (ctrl.isNext()) {
+        diff::PackHeader packH;
+        sock.read(packH.rawData(), packH.rawSize());
+        if (!packH.isValid()) {
+            logAndThrow(logger, "recvAndWriteDiffs:bad packH");
+        }
+        for (size_t i = 0; i < packH.nRecords(); i++) {
+            diff::IoData io;
+            const walb_diff_record& rec = packH.record(i);
+            io.set(rec);
+            if (rec.data_size == 0) {
+                writer.writeDiff(rec, {});
+                continue;
+            }
+            sock.read(io.rawData(), rec.data_size);
+            if (!io.isValid()) {
+                logAndThrow(logger, "recvAndWriteDiffs:bad io");
+            }
+            if (io.calcChecksum() != rec.checksum) {
+                logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
+            }
+            writer.writeDiff(rec, io.forMove());
+        }
+        ctrl.reset();
+    }
+    if (!ctrl.isEnd()) {
+        throw cybozu::Exception("recvAndWriteDiffs:bad ctrl not end");
+    }
+#endif
+}
+} // proxy_local
 /**
  *
  */
-inline void x2aWdiffTransferServer(protocol::ServerParams &/*p*/)
+inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char * const FUNC = __func__;
+
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+
+    packet::Packet pkt(p.sock);
+    std::string volId;
+    pkt.read(volId);
+    if (volId.empty()) {
+        throw cybozu::Exception(FUNC) << "empty volId";
+    }
+    std::string clientType;
+    pkt.read(clientType);
+    if (clientType != "proxy" && clientType != "archive") {
+        throw cybozu::Exception(FUNC) << "bad clientType" << clientType;
+    }
+    cybozu::Uuid uuid;
+    pkt.read(uuid);
+    uint16_t maxIoBlocks;
+    pkt.read(maxIoBlocks);
+    uint64_t sizeLb;
+    pkt.read(sizeLb);
+    MetaDiff diff;
+    pkt.read(diff);
+
+    logger.debug("volId %s", volId.c_str());
+    logger.debug("uuid %s", uuid.str().c_str());
+    logger.debug("maxIoBlocks %u", maxIoBlocks);
+    logger.debug("diff %s", diff.str().c_str());
+
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    if (!volInfo.existsVolDir()) {
+        const char *msg = "archive-not-found";
+        logger.info("%s %s", volId.c_str(), msg);
+        pkt.write(msg);
+        return;
+    }
+    StateMachine &sm = volSt.sm;
+    if (sm.get() == aStopped) {
+        const char *msg = "stopped";
+        logger.info("%s %s", volId.c_str(), msg);
+        pkt.write(msg);
+        return;
+    }
+    if (clientType == "proxy" && volInfo.getUuid() != uuid) {
+        const char *msg = "different-uuid";
+        logger.info("%s %s", volId.c_str(), msg);
+        pkt.write(msg);
+        return;
+    }
+    const MetaState metaState = volInfo.getMetaState();
+    const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
+    const Relation rel = getRelation(latestSnap, diff);
+
+    if (rel != Relation::APPLICABLE_DIFF) {
+        const char *msg = getRelationStr(rel);
+        logger.info("%s %s", volId.c_str(), msg);
+        pkt.write(msg);
+        return;
+    }
+    pkt.write("ok");
+
+    StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
+    ul.unlock();
+
+    const std::string fName = createDiffFileName(diff);
+    const std::string baseDir = volInfo.volDir.str();
+    cybozu::TmpFile tmpFile(baseDir);
+    cybozu::FilePath fPath(baseDir);
+    fPath += fName;
+    diff::Writer writer(tmpFile.fd());
+    diff::FileHeaderRaw fileH;
+    fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
+    fileH.setUuid(uuid.rawData());
+    writer.writeHeader(fileH);
+    logger.debug("%s write header.", FUNC);
+    proxy_local::recvAndWriteDiffs(p.sock, writer, logger);
+    logger.debug("%s close.", FUNC);
+    writer.close();
+    tmpFile.save(fPath.str());
+
+    ul.lock();
+    volSt.diffMgr.add(diff);
+    tran.commit(aArchived);
+
+    packet::Ack(p.sock).send();
 }
 
 } // walb

@@ -207,8 +207,7 @@ private:
             throw std::runtime_error("GetFileList failed.");
         }
         for (cybozu::FileInfo &info : list) {
-            if (info.name == ".." || info.name == "." || !info.isFile)
-                continue;
+            if (!info.isFile()) continue;
             ::printf("hoge: [%s]\n", info.name.c_str()); /* debug */
             cybozu::FilePath fp = getDir() + cybozu::FilePath(info.name);
             cybozu::util::FileReader reader(fp.str(), O_RDONLY);
