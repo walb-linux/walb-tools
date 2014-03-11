@@ -288,18 +288,14 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     }
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoArchiveActionRunning(volSt.ac, FUNC);
-
-    if (volSt.stopState != NotStopping) {
-        cybozu::Exception e(FUNC);
-        e << "notStopping" << volId << volSt.stopState;
-        sPack.write(e.what());
-        throw e;
-    }
 
     StateMachine &sm = volSt.sm;
     {
         StateMachineTransaction tran(sm, aSyncReady, atFullSync, "x2aDirtyFullSyncServer");
+        ul.unlock();
 
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         const std::string st = volInfo.getState();
