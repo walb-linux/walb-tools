@@ -627,9 +627,6 @@ public:
      */
     BoundedQueue(const BoundedQueue &rhs) = delete;
 	BoundedQueue(BoundedQueue &&rhs) = delete;
-#ifndef _MSC_VER
-	~BoundedQueue() noexcept = delete;
-#endif
 
     /**
      * Disable copy/move.

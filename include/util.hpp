@@ -31,8 +31,8 @@
 #define DEPRECATED __attribute__((deprecated))
 #endif
 
-#define RT_ERR(fmt, args,...)                                    \
-    std::runtime_error(cybozu::util::formatString(fmt, ##args))
+#define RT_ERR(...)                                             \
+    std::runtime_error(cybozu::util::formatString(__VA_ARGS__))
 
 #define CHECKx(cond) cybozu::util::checkCond(cond, __func__, __LINE__)
 

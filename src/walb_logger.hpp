@@ -11,20 +11,21 @@
 #include <map>
 
 #ifdef DEBUG
-#define LOGd(fmt, args...)                                              \
-    cybozu::PutLog(cybozu::LogDebug, "DEBUG (%s:%d) " fmt, __func__, __LINE__, ##args)
+#define LOGd(...) LOGd2(__VA_ARGS__, "")
+#define LOGd2(fmt, ...) \
+    cybozu::PutLog(cybozu::LogDebug, "DEBUG (%s:%d) " fmt "%s", __func__, __LINE__, __VA_ARGS__)
 #else
-#define LOGd(fmt, args...)
+#define LOGd(...)
 #endif
 
-#define LOGi(fmt, args...) cybozu::PutLog(cybozu::LogInfo, "INFO " fmt, ##args)
-#define LOGw(fmt, args...) cybozu::PutLog(cybozu::LogWarning, "WARNING " fmt, ##args)
-#define LOGe(fmt, args...) cybozu::PutLog(cybozu::LogError, "ERROR " fmt, ##args)
+#define LOGi(...) cybozu::PutLog(cybozu::LogInfo, "INFO " __VA_ARGS__)
+#define LOGw(...) cybozu::PutLog(cybozu::LogWarning, "WARNING " __VA_ARGS__)
+#define LOGe(...) cybozu::PutLog(cybozu::LogError, "ERROR " __VA_ARGS__)
 
-#define LOGd_(fmt, args...)
-#define LOGi_(fmt, args...)
-#define LOGw_(fmt, args...)
-#define LOGe_(fmt, args...)
+#define LOGd_(...)
+#define LOGi_(...)
+#define LOGw_(...)
+#define LOGe_(...)
 
 namespace walb {
 
