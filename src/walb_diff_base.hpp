@@ -194,34 +194,29 @@ class IoData
 public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
-    const char *data;
-    size_t size;
-private:
+//    const char *data;
+//    size_t size;
     /* You must call resetData() for consistency of
        data and size after changing data_. */
-    std::vector<char> data_;
+    std::vector<char> data;
+private:
 public:
 
     IoData()
         : ioBlocks(0), compressionType(::WALB_DIFF_CMPR_NONE)
-        , data(nullptr), size(0)
-        , data_() {}
-    IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data_(rhs.data_) {
-        resetData();
+        , data() {}
+    IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
     }
-    IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data_(std::move(rhs.data_)) {
-        resetData();
+    IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
     }
     IoData(uint16_t ioBlocks, int compressionType, const char *data = 0, size_t size = 0) {
         setBlocksAndType(ioBlocks, compressionType);
-        if (data) data_.assign(data, data + size);
-        resetData();
+        if (data) this->data.assign(data, data + size);
     }
     void clear() {
         ioBlocks = 0;
         compressionType = ::WALB_DIFF_CMPR_NONE;
-        data_.clear();
-        resetData();
+        data.clear();
     }
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
@@ -236,34 +231,21 @@ public:
             compressionType = ::WALB_DIFF_CMPR_NONE;
         }
     }
-    void set(const walb_diff_record &rec0, const char *data, size_t size) {
-        set0(rec0);
-        this->data = data;
-        this->size = size;
-    }
 
     bool isValid() const {
         if (empty()) {
-            if (data != nullptr || size != 0) {
+            if (!data.empty()) {
                 LOGd("Data is not empty.\n");
                 return false;
             }
             return true;
         } else {
             if (isCompressed()) {
-                if (data == nullptr) {
-                    LOGd("data pointer is null\n");
-                    return false;
-                }
-                if (size == 0) {
-                    LOGd("data size is not 0: %zu\n", size);
-                    return false;
-                }
                 return true;
             } else {
-                if (size != ioBlocks * LOGICAL_BLOCK_SIZE) {
+                if (data.size() != ioBlocks * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , size, ioBlocks * LOGICAL_BLOCK_SIZE);
+                         , data.size(), ioBlocks * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -276,18 +258,17 @@ public:
      */
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
-        assert(data);
-        assert(size > 0);
-        return cybozu::util::calcChecksum(data, size, 0);
+        return cybozu::util::calcChecksum(&data[0], data.size(), 0);
     }
 
     /**
      * Calculate whether all-zero or not.
      */
     bool calcIsAllZero() const {
+        const size_t size = data.size();
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(data, size);
+        return cybozu::util::calcIsAllZero(&data[0], size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -298,14 +279,14 @@ public:
                   "checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , size
+                  , data.size()
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , size
+                  , data.size()
                   , calcChecksum());
     }
     void setBlocksAndType(uint16_t ioBlocks, int compressionType) {
@@ -320,50 +301,37 @@ public:
     */
     template<class Writter>
     void setByWritter(size_t reserveSize, Writter writter) {
-        data_.resize(reserveSize);
-        size_t writtenSize = writter(&data_[0]);
-        data_.resize(writtenSize);
-        resetData();
+        data.resize(reserveSize);
+        if (reserveSize == 0) return;
+        size_t writtenSize = writter(&data[0]);
+        data.resize(writtenSize);
     }
 
     IoData &operator=(const IoData &rhs) {
         setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
-        data_ = rhs.data_;
-        resetData();
+        data = rhs.data;
         return *this;
     }
     IoData &operator=(IoData &&rhs) {
         setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
-        data_ = std::move(rhs.data_);
-        resetData();
+        data = std::move(rhs.data);
         return *this;
     }
 
     void set(const struct walb_diff_record &rec0) {
         set0(rec0);
-        data_.resize(rec0.data_size);
-        resetData();
+        data.resize(rec0.data_size);
     }
 
     void moveFrom(std::vector<char> &&data) {
-        data_ = std::move(data);
-        resetData();
+        this->data = std::move(data);
     }
-    const char *rawData() const { return &data_[0]; }
-    char *rawData() { return &data_[0]; }
+    const char *rawData() const { return &data[0]; }
+    char *rawData() { return &data[0]; }
     std::vector<char> forMove() {
-        std::vector<char> v = std::move(data_);
-        data_.clear();
-        resetData();
+        std::vector<char> v;
+        v.swap(data);
         return v;
-    }
-private:
-    /**
-     * You must call this after changing data_.
-     */
-    void resetData() {
-        data = &data_[0];
-        size = data_.size();
     }
 };
 
@@ -402,7 +370,7 @@ inline IoData uncompressIoData(const IoData &io0)
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
     IoData io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
     io1.setByWritter(decSize, [&](char *p) {
-        size_t size = dec.run(p, decSize, io0.data, io0.size);
+        size_t size = dec.run(p, decSize, &io0.data[0], io0.data.size());
         if (size != decSize) {
             throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
         }
@@ -434,11 +402,11 @@ inline std::vector<IoData> splitIoDataAll(const IoData &io0, uint16_t ioBlocks0)
     while (0 < remaining) {
         uint16_t blks = std::min(remaining, ioBlocks0);
         size_t size = blks * LOGICAL_BLOCK_SIZE;
-        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, io0.data + off, size);
+        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &io0.data[off], size);
         remaining -= blks;
         off += size;
     }
-    assert(off == io0.size);
+    assert(off == io0.data.size());
     assert(!v.empty());
 
     return v;

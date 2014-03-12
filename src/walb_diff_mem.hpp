@@ -80,8 +80,8 @@ public:
             LOGd("ioSize invalid %u %u\n", rec_.io_blocks, io_.ioBlocks);
             return false;
         }
-        if (rec_.data_size != io_.size) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.size);
+        if (rec_.data_size != io_.data.size()) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.data.size());
             return false;
         }
         if (isCompressedRec(rec_)) {
@@ -221,11 +221,11 @@ public:
 
             size_t size = 0;
             if (isNormalRec(rec_)) {
-                size = io_.size - rblks * LOGICAL_BLOCK_SIZE;
+                size = io_.data.size() - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data(size);
             if (isNormalRec(rec_)) {
-                assert(rec_.data_size == io_.size);
+                assert(rec_.data_size == io_.data.size());
                 rec.data_size = size;
                 ::memcpy(&data[0], io_.rawData(), size);
             }
@@ -254,11 +254,11 @@ public:
         size_t size = 0;
         const bool isNormal = isNormalRec(rec_);
         if (isNormal) {
-            size = io_.size - off;
+            size = io_.data.size() - off;
         }
         std::vector<char> data(size);
         if (isNormal) {
-            assert(rec_.data_size == io_.size);
+            assert(rec_.data_size == io_.data.size());
             rec.data_size = size;
             ::memcpy(&data[0], io_.rawData() + off, size);
         }

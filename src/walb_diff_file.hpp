@@ -213,7 +213,7 @@ public:
         IoData io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
         walb_diff_record rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
-        rec1.data_size = io1.size;
+        rec1.data_size = io1.data.size();
         rec1.checksum = io1.calcChecksum();
         writeDiff(rec1, io1.forMove());
     }
@@ -242,8 +242,8 @@ private:
             IoData io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.rawData(), io0.size);
-            total += io0.size;
+            fdw_.write(io0.rawData(), io0.data.size());
+            total += io0.data.size();
         }
         assert(total == pack_.totalSize());
         pack_.reset();
@@ -265,7 +265,7 @@ private:
     void check(UNUSED const walb_diff_record &rec, UNUSED const IoData &io) const {
         assert(isValidRec(rec));
         assert(io.isValid());
-        assert(rec.data_size == io.size);
+        assert(rec.data_size == io.data.size());
         if (isNormalRec(rec)) {
             assert(rec.compression_type == io.compressionType);
             assert(rec.io_blocks == io.ioBlocks);
@@ -397,7 +397,7 @@ public:
         }
         io = uncompressIoData(io0);
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
-        rec.data_size = io.size;
+        rec.data_size = io.data.size();
         rec.checksum = io.calcChecksum();
         assert(diff::isValidRec(rec));
         assert(io.isValid());
@@ -444,7 +444,7 @@ public:
                 fdr_.read(p, recSize);
                 return recSize;
             });
-            const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
+            const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.data.size(), 0);
             if (rec.checksum != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
             }
