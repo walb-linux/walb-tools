@@ -259,6 +259,38 @@ inline void c2sStopServer(protocol::ServerParams &p)
     }
 }
 
+namespace storage_local {
+
+/**
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool sendDirtyFullImage(
+    packet::Packet &pkt, StorageVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
+{
+    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
+    cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
+    std::string encBuf;
+
+    uint64_t remainingLb = sizeLb;
+    while (0 < remainingLb) {
+        if (stopState == ForceStopping || gs.forceQuit) {
+            return false;
+        }
+        uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
+        size_t size = lb * LOGICAL_BLOCK_SIZE;
+        bd.read(&buf[0], size);
+        const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
+        pkt.write(encSize);
+        pkt.write(&encBuf[0], encSize);
+        remainingLb -= lb;
+    }
+    return true;
+}
+
+} // storage_local
+
 inline void c2sFullSyncServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -275,88 +307,66 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     packet::Packet cPack(p.sock);
 
     StorageVolState &volSt = getStorageVolState(volId);
-
-    if (volSt.stopState != NotStopping) {
-        cybozu::Exception e(FUNC);
-        e << "Stopping" << volId << volSt.stopState;
-        cPack.write(e.what());
-        throw e;
-    }
-
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     StateMachine &sm = volSt.sm;
+
+    StateMachineTransaction tran0(sm, sSyncReady, stFullSync, FUNC);
+    ul.unlock();
+
+    volInfo.resetWlog(0);
+
+    const uint64_t sizeLb = getSizeLb(volInfo.getWdevPath());
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    logger.debug() << sizeLb << uuid;
+
+    // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
+
+    const cybozu::SocketAddr& archive = gs.archive;
     {
-        StateMachineTransaction tran0(sm, sSyncReady, stFullSync, FUNC);
-
-        volInfo.resetWlog(0);
-
-        const uint64_t sizeLb = getSizeLb(volInfo.getWdevPath());
-        const cybozu::Uuid uuid = volInfo.getUuid();
-        logger.debug() << sizeLb << uuid;
-
-        // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
-
-        const cybozu::SocketAddr& archive = gs.archive;
+        cybozu::Socket aSock;
+        aSock.connect(archive);
+        archiveId = walb::protocol::run1stNegotiateAsClient(aSock, gs.nodeId, "dirty-full-sync");
+        walb::packet::Packet aPack(aSock);
+        aPack.write(storageHT);
+        aPack.write(volId);
+        aPack.write(uuid);
+        aPack.write(sizeLb);
+        aPack.write(curTime);
+        aPack.write(bulkLb);
         {
-            cybozu::Socket aSock;
-            aSock.connect(archive);
-            archiveId = walb::protocol::run1stNegotiateAsClient(aSock, gs.nodeId, "dirty-full-sync");
-            walb::packet::Packet aPack(aSock);
-            aPack.write(storageHT);
-            aPack.write(volId);
-            aPack.write(uuid);
-            aPack.write(sizeLb);
-            aPack.write(curTime);
-            aPack.write(bulkLb);
-            {
-                std::string res;
-                aPack.read(res);
-                if (res == "ok") {
-                    cPack.write("ok");
-                    p.sock.close();
-                } else {
-                    cybozu::Exception e(FUNC);
-                    e << "bad response" << archiveId << res;
-                    cPack.write(e.what());
-                    throw e;
-                }
+            std::string res;
+            aPack.read(res);
+            if (res == "ok") {
+                cPack.write("ok");
+                p.sock.close();
+            } else {
+                cybozu::Exception e(FUNC);
+                e << "bad response" << archiveId << res;
+                cPack.write(e.what());
+                throw e;
             }
-            // (7) in storage-daemon.txt
-            {
-                std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-                cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
-                std::string encBuf;
-
-                uint64_t remainingLb = sizeLb;
-                while (0 < remainingLb) {
-                    if (volSt.stopState == ForceStopping || gs.forceQuit) {
-                        logger.warn() << FUNC << "force stopped" << volId;
-                        // TODO: stop monitoring.
-                        return;
-                    }
-                    uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
-                    size_t size = lb * LOGICAL_BLOCK_SIZE;
-                    bd.read(&buf[0], size);
-                    const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
-                    aPack.write(encSize);
-                    aPack.write(&encBuf[0], encSize);
-                    remainingLb -= lb;
-                }
-            }
-            // (8), (9) in storage-daemon.txt
-            {
-                // TODO take a snapshot
-                uint64_t gidB = 0, gidE = 1;
-                aPack.write(gidB);
-                aPack.write(gidE);
-            }
-            walb::packet::Ack(aSock).recv();
         }
-        tran0.commit(sStopped);
-
-        StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
-        volInfo.setState(sMaster);
-        tran1.commit(sMaster);
+        // (7) in storage-daemon.txt
+        if (!storage_local::sendDirtyFullImage(aPack, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+            logger.warn() << FUNC << "force stopped" << volId;
+            // TODO: stop monitoring.
+            return;
+        }
+        // (8), (9) in storage-daemon.txt
+        {
+            // TODO take a snapshot
+            uint64_t gidB = 0, gidE = 1;
+            aPack.write(gidB);
+            aPack.write(gidE);
+        }
+        walb::packet::Ack(aSock).recv();
     }
+    tran0.commit(sStopped);
+
+    StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
+    volInfo.setState(sMaster);
+    tran1.commit(sMaster);
 
     // TODO: If thrown an error, someone must stop monitoring task.
 
