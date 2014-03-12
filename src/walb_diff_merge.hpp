@@ -195,7 +195,7 @@ public:
         RecIo d;
         while (pop(d)) {
             assert(d.isValid());
-            writer.compressAndWriteDiff(d.record(), d.io().rawData());
+            writer.compressAndWriteDiff(d.record(), d.io().data.data());
         }
 
         writer.flush();

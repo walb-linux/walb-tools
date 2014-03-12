@@ -611,13 +611,13 @@ inline void sendWdiffs(
     while (merger.pop(recIo)) {
         const walb_diff_record& rec = recIo.record();
         const diff::IoData& io = recIo.io();
-        if (packer.add(rec, io.rawData())) {
+        if (packer.add(rec, io.data.data())) {
             continue;
         }
         conv.push(packer.getPackAsUniquePtr());
         pushedNum++;
         packer.reset();
-        packer.add(rec, io.rawData());
+        packer.add(rec, io.data.data());
         if (pushedNum < maxPushedNum) {
             continue;
         }

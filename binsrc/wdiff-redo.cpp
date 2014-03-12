@@ -116,7 +116,7 @@ public:
         if (bd_.getDeviceSize() < oft + size) { return false; }
 
         //::printf("issue %zu %zu %p\n", oft, size, ioP->rawData()); /* debug */
-        bd_.write(oft, size, ioP->rawData());
+        bd_.write(oft, size, ioP->data.data());
         return true;
     }
 

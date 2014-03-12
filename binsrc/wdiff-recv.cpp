@@ -112,7 +112,7 @@ private:
                     writer.writeDiff(rec, {});
                     continue;
                 }
-                sock.read(io.rawData(), rec.data_size);
+                sock.read(io.data.data(), rec.data_size);
                 if (!io.isValid()) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io");
                 }

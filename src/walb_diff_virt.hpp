@@ -171,7 +171,7 @@ private:
         if (isNormalRec(rec)) {
             assert(!io.isCompressed());
             size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
-            ::memcpy(data, io.rawData() + off, blks * LOGICAL_BLOCK_SIZE);
+            ::memcpy(data, io.data.data() + off, blks * LOGICAL_BLOCK_SIZE);
         } else {
             /* Read zero image for both ALL_ZERO and DISCARD.. */
             assert(isDiscardRec(rec) || isAllZeroRec(rec));

@@ -315,7 +315,7 @@ public:
      *   nullptr for non-normal IOs such as ALL_ZERO and DISCARD.
      */
     const char *data(size_t i) const override {
-        return ios_[i].rawData();
+        return ios_[i].data.data();
     }
     /**
      * Generate memory pack.

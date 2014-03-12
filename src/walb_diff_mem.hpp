@@ -184,8 +184,10 @@ public:
             if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
-                ::memcpy(&data0[0], io_.rawData(), size0);
-                ::memcpy(&data1[0], io_.rawData() + off1, size1);
+                const char *p = io_.data.data();
+                data0.assign(p, p + size0);
+                p += off1;
+                data1.assign(p, p + size1);
             }
 
             if (0 < blks0) {
@@ -223,11 +225,12 @@ public:
             if (isNormalRec(rec_)) {
                 size = io_.data.size() - rblks * LOGICAL_BLOCK_SIZE;
             }
-            std::vector<char> data(size);
+            std::vector<char> data;
             if (isNormalRec(rec_)) {
                 assert(rec_.data_size == io_.data.size());
                 rec.data_size = size;
-                ::memcpy(&data[0], io_.rawData(), size);
+                const char *p = io_.data.data();
+                data.assign(p, p + size);
             }
 
             RecIo r;
@@ -256,11 +259,12 @@ public:
         if (isNormal) {
             size = io_.data.size() - off;
         }
-        std::vector<char> data(size);
+        std::vector<char> data;
         if (isNormal) {
             assert(rec_.data_size == io_.data.size());
             rec.data_size = size;
-            ::memcpy(&data[0], io_.rawData() + off, size);
+            const char *p = io_.data.data() + off;
+            data.assign(p, p + size);
         }
         assert(rhsEndIoAddr == rec.io_address);
         RecIo r;
@@ -390,9 +394,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record(), r.io().rawData());
+                writer.compressAndWriteDiff(r.record(), r.io().data.data());
             } else {
-                writer.writeDiff(r.record(), r.io().rawData());
+                writer.writeDiff(r.record(), r.io().data.data());
             }
             ++it;
         }
