@@ -23,8 +23,6 @@ wdev-poll
 lvm-mgr
 wlog-send
 wlog-recv
-wdiff-send
-wdiff-recv
 storage-server
 proxy-server
 archive-server
