@@ -68,17 +68,31 @@ void makeDir(const std::string &dirStr, const char *msg,
     }
 }
 
-inline std::vector<std::string> getFileNameList(const std::string &dirStr, const char *ext)
+namespace walb_util_local {
+
+inline std::vector<std::string> getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "")
 {
     std::vector<std::string> ret;
     std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
     for (const cybozu::FileInfo &info : list) {
-        if (!info.isFile()) {
-            continue;
+        if ((isDir && info.isDirectory()) ||
+            (!isDir && info.isFile())) {
+            ret.push_back(info.name);
         }
-        ret.push_back(info.name);
     }
     return ret;
+}
+
+} // walb_util_local
+
+inline std::vector<std::string> getDirNameList(const std::string &dirStr)
+{
+    return walb_util_local::getDirEntNameList(dirStr, true);
+}
+
+inline std::vector<std::string> getFileNameList(const std::string &dirStr, const char *ext)
+{
+    return walb_util_local::getDirEntNameList(dirStr, false, ext);
 }
 
 template <typename T>
