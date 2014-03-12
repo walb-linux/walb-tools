@@ -270,6 +270,60 @@ inline void c2aStopServer(protocol::ServerParams &p)
     tran.commit(aStopped);
 }
 
+namespace archive_local {
+
+/**
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool recvDirtyFullImage(
+    packet::Packet &pkt, ArchiveVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
+{
+    const char *const FUNC = __func__;
+    const std::string lvPath = volInfo.getLv().path().str();
+    cybozu::util::BlockDevice bd(lvPath, O_RDWR);
+    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
+    std::vector<char> encBuf;
+
+    uint64_t c = 0;
+    uint64_t remainingLb = sizeLb;
+    while (0 < remainingLb) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
+        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
+        const size_t size = lb * LOGICAL_BLOCK_SIZE;
+        size_t encSize;
+        pkt.read(encSize);
+        if (encSize == 0) {
+            throw cybozu::Exception(FUNC) << "encSize is zero";
+        }
+        encBuf.resize(encSize);
+        pkt.read(&encBuf[0], encSize);
+        size_t decSize;
+        if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
+            throw cybozu::Exception(FUNC)
+                << "GetUncompressedLength" << encSize;
+        }
+        if (decSize != size) {
+            throw cybozu::Exception(FUNC)
+                << "decSize differs" << decSize << size;
+        }
+        if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
+            throw cybozu::Exception(FUNC) << "RawUncompress";
+        }
+        bd.write(&buf[0], size);
+        remainingLb -= lb;
+        c++;
+    }
+    LOGs.debug() << "number of received packets" << c;
+    bd.fdatasync();
+    return true;
+}
+
+} // archive_local
+
 /**
  * Execute dirty full sync protocol as server.
  * Client is storage server or another archive server.
@@ -279,19 +333,19 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
 
-    walb::packet::Packet sPack(p.sock);
+    walb::packet::Packet pkt(p.sock);
     std::string hostType, volId;
     cybozu::Uuid uuid;
     uint64_t sizeLb, curTime, bulkLb;
-    sPack.read(hostType);
+    pkt.read(hostType);
     if (hostType != storageHT && hostType != archiveHT) {
         throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
     }
-    sPack.read(volId);
-    sPack.read(uuid);
-    sPack.read(sizeLb);
-    sPack.read(curTime);
-    sPack.read(bulkLb);
+    pkt.read(volId);
+    pkt.read(uuid);
+    pkt.read(sizeLb);
+    pkt.read(curTime);
+    pkt.read(bulkLb);
     if (bulkLb == 0) {
         throw cybozu::Exception(FUNC) << "bulkLb is zero";
     }
@@ -302,75 +356,36 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     verifyNoArchiveActionRunning(volSt.ac, FUNC);
 
     StateMachine &sm = volSt.sm;
-    {
-        StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
-        ul.unlock();
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-        const std::string st = volInfo.getState();
-        if (st != aSyncReady) {
-            throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
-        }
-        volInfo.createLv(sizeLb);
-        sPack.write("ok");
+    StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
+    ul.unlock();
 
-        // recv and write.
-        {
-            std::string lvPath = volInfo.getLv().path().str();
-            cybozu::util::BlockDevice bd(lvPath, O_RDWR);
-            std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-            std::vector<char> encBuf;
-
-            uint64_t c = 0;
-            uint64_t remainingLb = sizeLb;
-            while (0 < remainingLb) {
-                if (volSt.stopState == ForceStopping || ga.forceQuit) {
-                    logger.warn() << FUNC << "force stopped" << volId;
-                    return;
-                }
-                const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
-                const size_t size = lb * LOGICAL_BLOCK_SIZE;
-                size_t encSize;
-                sPack.read(encSize);
-                if (encSize == 0) {
-                    throw cybozu::Exception(FUNC) << "encSize is zero";
-                }
-                encBuf.resize(encSize);
-                sPack.read(&encBuf[0], encSize);
-                size_t decSize;
-                if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
-                    throw cybozu::Exception(FUNC)
-                        << "GetUncompressedLength" << encSize;
-                }
-                if (decSize != size) {
-                    throw cybozu::Exception(FUNC)
-                        << "decSize differs" << decSize << size;
-                }
-                if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
-                    throw cybozu::Exception(FUNC) << "RawUncompress";
-                }
-                bd.write(&buf[0], size);
-                remainingLb -= lb;
-                c++;
-            }
-            logger.info("received %" PRIu64 " packets.", c);
-            bd.fdatasync();
-            logger.info("dirty-full-sync %s done.", volId.c_str());
-        }
-
-        uint64_t gidB, gidE;
-        sPack.read(gidB);
-        sPack.read(gidE);
-
-        walb::MetaSnap snap(gidB, gidE);
-        walb::MetaState state(snap, curTime);
-        volInfo.setMetaState(state);
-
-        volInfo.setUuid(uuid);
-        volInfo.setState(aArchived);
-
-        tran.commit(aArchived);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    const std::string st = volInfo.getState();
+    if (st != aSyncReady) {
+        throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
     }
+    volInfo.createLv(sizeLb);
+    pkt.write("ok");
+
+    if (!archive_local::recvDirtyFullImage(pkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+        logger.warn() << FUNC << "force stopped" << volId;
+        return;
+    }
+    logger.info() << "dirty-full-sync done" << volId;
+
+    uint64_t gidB, gidE;
+    pkt.read(gidB);
+    pkt.read(gidE);
+
+    walb::MetaSnap snap(gidB, gidE);
+    walb::MetaState state(snap, curTime);
+    volInfo.setMetaState(state);
+
+    volInfo.setUuid(uuid);
+    volInfo.setState(aArchived);
+
+    tran.commit(aArchived);
 
     walb::packet::Ack(p.sock).send();
 }
