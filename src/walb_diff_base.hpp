@@ -309,9 +309,6 @@ public:
         data.resize(rec.data_size);
     }
 
-    void moveFrom(std::vector<char> &&data) {
-        this->data = std::move(data);
-    }
     const char *rawData() const { return &data[0]; }
     char *rawData() { return &data[0]; }
 };

@@ -50,7 +50,7 @@ public:
         if (isNormalRec(rec)) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
-            io_.moveFrom(std::move(data));
+            io_.data.swap(data);
         } else {
             io_.clear();
         }

@@ -177,7 +177,7 @@ public:
         checkWrittenHeader();
         IoData io;
         io.set(rec0);
-        io.moveFrom(std::move(data0));
+        io.data.swap(data0);
         check(rec0, io);
 
         /* Try to add. */

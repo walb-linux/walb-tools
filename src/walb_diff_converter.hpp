@@ -79,7 +79,7 @@ inline bool convertLogToDiff(
     assert(remaining == 0);
     assert(off == ioSizeB);
     diffIo.set(mrec);
-    diffIo.moveFrom(std::move(buf));
+    diffIo.data.swap(buf);
 
     /* Compression. (currently NONE). */
     mrec.compression_type = ::WALB_DIFF_CMPR_NONE;

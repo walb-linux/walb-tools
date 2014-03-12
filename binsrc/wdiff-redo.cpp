@@ -283,7 +283,7 @@ private:
         ioP->ioBlocks = ioBlocks;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         zeroMem_.resize(size);
-        ioP->moveFrom(std::move(zeroMem_.forMove()));
+        ioP->data = zeroMem_.forMove();
         bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
         zeroMem_.moveFrom(std::move(ioP->data));
         return ret;
