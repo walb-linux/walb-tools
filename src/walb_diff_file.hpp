@@ -381,9 +381,6 @@ public:
         readDiffIo(rec, io);
         return true;
     }
-    bool readDiff(Record &rec, IoData &io) {
-        return readDiff(rec.record(), io);
-    }
 
     /**
      * Read a diff IO and uncompress it.
@@ -409,9 +406,6 @@ public:
         assert(diff::isValidRec(rec));
         assert(io.isValid());
         return true;
-    }
-    bool readAndUncompressDiff(Record &rec, IoData &io) {
-        return readAndUncompressDiff(rec.record(), io);
     }
 
     bool canRead() {

@@ -29,141 +29,6 @@ static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 namespace walb {
 namespace diff {
 
-/**
- * Interface.
- */
-class Record : public block_diff::BlockDiffKey
-{
-public:
-
-    Record() = default;
-    Record(const Record &rhs) = delete;
-    DISABLE_MOVE(Record);
-    Record &operator=(const Record &rhs) {
-        record() = rhs.record();
-        return *this;
-    }
-    virtual ~Record() noexcept = default;
-
-    /*
-     * You must implement these member functions.
-     */
-    virtual const struct walb_diff_record &record() const = 0;
-    virtual struct walb_diff_record &record() = 0;
-
-    /*
-     * Utilities.
-     */
-    void init() {
-        ::memset(&record(), 0, sizeof(struct walb_diff_record));
-        setExists();
-    }
-    template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(&record()); }
-    template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(&record()); }
-
-    uint64_t ioAddress() const override { return record().io_address; }
-    uint16_t ioBlocks() const override { return record().io_blocks; }
-    uint64_t endIoAddress() const { return ioAddress() + ioBlocks(); }
-    size_t rawSize() const override { return sizeof(struct walb_diff_record); }
-    const char *rawData() const override { return ptr<char>(); }
-    char *rawData() { return ptr<char>(); }
-
-    uint8_t compressionType() const { return record().compression_type; }
-    bool isCompressed() const { return compressionType() != ::WALB_DIFF_CMPR_NONE; }
-    uint32_t dataOffset() const { return record().data_offset; }
-    uint32_t dataSize() const { return record().data_size; }
-    uint32_t checksum() const { return record().checksum; }
-
-    bool exists() const {
-        return (record().flags & WALB_DIFF_FLAG(EXIST)) != 0;
-    }
-    bool isAllZero() const {
-        return (record().flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
-    }
-    bool isDiscard() const {
-        return (record().flags & WALB_DIFF_FLAG(DISCARD)) != 0;
-    }
-    bool isNormal() const {
-        return !isAllZero() && !isDiscard();
-    }
-
-    bool isValid() const {
-        if (!exists()) {
-            LOGd("Does not exist.\n");
-            return false;
-        }
-        if (!isNormal()) {
-            if (isAllZero() && isDiscard()) {
-                LOGd("allzero and discard flag is exclusive.\n");
-                return false;
-            }
-            if (dataSize() != 0) {
-                LOGd("dataSize must be 0.\n");
-            }
-            return true;
-        }
-        if (::WALB_DIFF_CMPR_MAX <= compressionType()) {
-            LOGd("compression type is invalid.\n");
-            return false;
-        }
-        if (ioBlocks() == 0) {
-            LOGd("ioBlocks() must not be 0 for normal IO.\n");
-            return false;
-        }
-        return true;
-    }
-
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "----------\n"
-                  "ioAddress: %" PRIu64 "\n"
-                  "ioBlocks: %u\n"
-                  "compressionType: %u\n"
-                  "dataOffset: %u\n"
-                  "dataSize: %u\n"
-                  "checksum: %08x\n"
-                  "exists: %d\n"
-                  "isAllZero: %d\n"
-                  "isDiscard: %d\n",
-                  ioAddress(), ioBlocks(),
-                  compressionType(), dataOffset(), dataSize(),
-                  checksum(), exists(), isAllZero(), isDiscard());
-    }
-    void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
-                  ioAddress(), ioBlocks(),
-                  compressionType(), dataOffset(), dataSize(),
-                  checksum(), exists(), isAllZero(), isDiscard());
-    }
-
-    void setIoAddress(uint64_t ioAddress) { record().io_address = ioAddress; }
-    void setIoBlocks(uint16_t ioBlocks) { record().io_blocks = ioBlocks; }
-    void setCompressionType(uint8_t type) { record().compression_type = type; }
-    void setDataOffset(uint32_t offset) { record().data_offset = offset; }
-    void setDataSize(uint32_t size) { record().data_size = size; }
-    void setChecksum(uint32_t csum) { record().checksum = csum; }
-
-    void setExists() {
-        record().flags |= WALB_DIFF_FLAG(EXIST);
-    }
-    void clearExists() {
-        record().flags &= ~WALB_DIFF_FLAG(EXIST);
-    }
-    void setNormal() {
-        record().flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        record().flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setAllZero() {
-        record().flags |= WALB_DIFF_FLAG(ALLZERO);
-        record().flags &= ~WALB_DIFF_FLAG(DISCARD);
-    }
-    void setDiscard() {
-        record().flags &= ~WALB_DIFF_FLAG(ALLZERO);
-        record().flags |= WALB_DIFF_FLAG(DISCARD);
-    }
-};
-
 inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
     return rec.io_address + rec.io_blocks;
 }
@@ -247,21 +112,25 @@ inline void setDiscardRec(walb_diff_record& rec) {
     rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
     rec.flags |= WALB_DIFF_FLAG(DISCARD);
 }
+inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
+    return rhs.io_address <= lhs.io_address &&
+        lhs.io_address + lhs.io_blocks <= rhs.io_address + rhs.io_blocks;
+}
 
-struct DiffRecord : public block_diff::BlockDiffKey2<walb_diff_record> {
+inline bool isOverlapped(const walb_diff_record& lhs, const walb_diff_record &rhs) {
+    return lhs.io_address < rhs.io_address + rhs.io_blocks &&
+        rhs.io_address < lhs.io_address + lhs.io_blocks;
+}
+
+/*
+    you can change this class with walb_diff_record safely
+*/
+struct DiffRecord : public walb_diff_record {
     void init() {
         initRec(*this);
     }
-//    uint64_t ioAddress() const override { return io_address; }
-//    uint16_t ioBlocks() const override { return io_blocks; }
     uint64_t endIoAddress() const { return io_address + io_blocks; }
-//    size_t rawSize() const override { return sizeof(struct walb_diff_record); }
-
-//    uint8_t compressionType() const { return record().compression_type; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
-//    uint32_t dataOffset() const { return data_offset; }
-//    uint32_t dataSize() const { return data_size; }
-//    uint32_t checksum() const { return checksum; }
 
     bool exists() const { return existsRec(*this); }
     bool isAllZero() const { return isAllZeroRec(*this); }
@@ -277,6 +146,8 @@ struct DiffRecord : public block_diff::BlockDiffKey2<walb_diff_record> {
     void setNormal() { setNormalRec(*this); }
     void setAllZero() { setAllZeroRec(*this); }
     void setDiscard() { setDiscardRec(*this); }
+	bool isOverwrittenBy(const walb_diff_record &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
+    bool isOverlapped(const walb_diff_record &rhs) const { return diff::isOverlapped(*this, rhs); }
 };
 
 /**
