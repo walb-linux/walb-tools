@@ -195,20 +195,6 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
-inline StrVec getProxyVolList()
-{
-    StrVec fnameV, volIdV;
-    fnameV = util::getDirNameList(gp.baseDirStr);
-    for (const std::string &fname : fnameV) {
-        cybozu::FilePath fpath(gp.baseDirStr);
-        fpath += fname;
-        if (fpath.stat().isDirectory()) {
-            volIdV.push_back(fname);
-        }
-    }
-    return volIdV;
-}
-
 namespace proxy_local {
 
 inline StrVec getAllStateStrVec()
@@ -336,6 +322,15 @@ inline void c2pStatusServer(protocol::ServerParams &p)
         pkt.write(std::string(FUNC) + e.what());
         throw;
     }
+}
+
+inline void c2pListVolServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    StrVec v = util::getDirNameList(gp.baseDirStr);
+    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    logger.debug() << FUNC << "succeeded";
 }
 
 inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false)

@@ -126,6 +126,15 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2sListVolServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    StrVec v = util::getDirNameList(gs.baseDirStr);
+    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    logger.debug() << FUNC << "succeeded";
+}
+
 inline void c2sInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;

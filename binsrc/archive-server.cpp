@@ -38,6 +38,7 @@ public:
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
             { statusPN, c2aStatusServer },
+            { listVolPN, c2aListVolServer },
             { initVolPN, c2aInitVolServer },
             { clearVolPN, c2aClearVolServer },
             { startPN, c2aStartServer },

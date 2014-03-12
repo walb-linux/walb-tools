@@ -37,6 +37,7 @@ public:
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
             { statusPN, c2pStatusServer },
+            { listVolPN, c2pListVolServer },
             { startPN, c2pStartServer },
             { stopPN, c2pStopServer },
             { archiveInfoPN, c2pArchiveInfoServer },
@@ -85,7 +86,7 @@ void initializeProxy(Option &opt)
     util::makeDir(gp.baseDirStr, "proxyServer", false);
 
     // Start/stop each volume.
-    for (const std::string &volId : getProxyVolList()) {
+    for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
         try {
             if (opt.isStopped) {
                 stopProxyVol(volId, true);

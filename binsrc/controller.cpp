@@ -47,6 +47,7 @@ void runClient(Option &opt)
 
     const std::map<std::string, protocol::ClientHandler> h = {
         { statusPN, c2xGetStrVecClient },
+        { listVolPN, c2xListVolClient },
         { initVolPN, c2xInitVolClient },
         { clearVolPN, c2xClearVolClient },
         { fullBkpPN, c2sFullSyncClient },

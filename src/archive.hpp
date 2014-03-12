@@ -131,6 +131,15 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2aListVolServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    StrVec v = util::getDirNameList(ga.baseDirStr);
+    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    logger.debug() << FUNC << "succeeded";
+}
+
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
 {
     verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
