@@ -177,7 +177,7 @@ public:
         checkWrittenHeader();
         IoData io;
         io.set(rec0);
-        io.moveFrom(std::move(data0));
+        io.data.swap(data0);
         check(rec0, io);
 
         /* Try to add. */
@@ -204,22 +204,18 @@ public:
             writeDiff(rec, data);
             return;
         }
-        IoWrap io0;
-        io0.set(rec, data, rec.data_size);
-        check(rec, io0);
-
         if (!isNormalRec(rec)) {
-            assert(io0.empty());
             writeDiff(rec, {});
             return;
         }
 
-        IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
+        // QQQ refactor later
+        IoData io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
         walb_diff_record rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
-        rec1.data_size = io1.size;
+        rec1.data_size = io1.data.size();
         rec1.checksum = io1.calcChecksum();
-        writeDiff(rec1, io1.forMove());
+        writeDiff(rec1, std::move(io1.data));
     }
 
     /**
@@ -246,8 +242,8 @@ private:
             IoData io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.rawData(), io0.size);
-            total += io0.size;
+            fdw_.write(io0.data.data(), io0.data.size());
+            total += io0.data.size();
         }
         assert(total == pack_.totalSize());
         pack_.reset();
@@ -266,10 +262,10 @@ private:
         }
     }
 private:
-    void check(UNUSED const walb_diff_record &rec, UNUSED const IoWrap &io) const {
+    void check(UNUSED const walb_diff_record &rec, UNUSED const IoData &io) const {
         assert(isValidRec(rec));
         assert(io.isValid());
-        assert(rec.data_size == io.size);
+        assert(rec.data_size == io.data.size());
         if (isNormalRec(rec)) {
             assert(rec.compression_type == io.compressionType);
             assert(rec.io_blocks == io.ioBlocks);
@@ -381,9 +377,6 @@ public:
         readDiffIo(rec, io);
         return true;
     }
-    bool readDiff(Record &rec, IoData &io) {
-        return readDiff(rec.record(), io);
-    }
 
     /**
      * Read a diff IO and uncompress it.
@@ -404,14 +397,11 @@ public:
         }
         io = uncompressIoData(io0);
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
-        rec.data_size = io.size;
+        rec.data_size = io.data.size();
         rec.checksum = io.calcChecksum();
         assert(diff::isValidRec(rec));
         assert(io.isValid());
         return true;
-    }
-    bool readAndUncompressDiff(Record &rec, IoData &io) {
-        return readAndUncompressDiff(rec.record(), io);
     }
 
     bool canRead() {
@@ -449,12 +439,11 @@ public:
         }
         const size_t recSize = rec.data_size;
         if (recSize > 0) {
-            io.setBlocksAndType(rec.io_blocks, rec.compression_type);
-            io.setByWritter(recSize, [&](char *p) {
-                fdr_.read(p, recSize);
-                return recSize;
-            });
-            const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.size, 0);
+            io.ioBlocks = rec.io_blocks;
+            io.compressionType = rec.compression_type;
+            io.data.resize(recSize);
+            fdr_.read(io.data.data(), recSize);
+            const uint32_t csum = cybozu::util::calcChecksum(io.data.data(), recSize, 0);
             if (rec.checksum != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
             }

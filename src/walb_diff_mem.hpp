@@ -22,16 +22,15 @@ namespace diff {
 class RecIo /* final */
 {
 private:
-	DiffRecord rec_;
+	walb_diff_record rec_;
     IoData io_;
 public:
-    const walb_diff_record &record2() const { return rec_; }
+    const walb_diff_record &record() const { return rec_; }
 
-    IoData &io() { return io_; }
     const IoData &io() const { return io_; }
 
     void copyFrom(const walb_diff_record &rec, const IoData &io) {
-        rec_ = static_cast<const DiffRecord&>(rec);
+        rec_ = rec;
         if (isNormalRec(rec)) {
             io_ = io;
         } else {
@@ -39,7 +38,7 @@ public:
         }
     }
     void moveFrom(const walb_diff_record &rec, IoData &&io) {
-        rec_ = static_cast<const DiffRecord&>(rec);
+        rec_ = rec;
         if (isNormalRec(rec)) {
             io_ = std::move(io);
         } else {
@@ -47,11 +46,11 @@ public:
         }
     }
     void moveFrom(const walb_diff_record &rec, std::vector<char> &&data) {
-        rec_ = static_cast<const DiffRecord&>(rec);
+        rec_ = rec;
         if (isNormalRec(rec)) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
-            io_.moveFrom(std::move(data));
+            io_.data.swap(data);
         } else {
             io_.clear();
         }
@@ -81,11 +80,11 @@ public:
             LOGd("ioSize invalid %u %u\n", rec_.io_blocks, io_.ioBlocks);
             return false;
         }
-        if (rec_.data_size != io_.size) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.size);
+        if (rec_.data_size != io_.data.size()) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.data.size());
             return false;
         }
-        if (rec_.isCompressed()) {
+        if (isCompressedRec(rec_)) {
             LOGd("RecIo does not support compressed data.\n");
             return false;
         }
@@ -97,7 +96,7 @@ public:
     }
 
     void print(::FILE *fp) const {
-        rec_.printOneline(fp);
+        printOnelineRec(rec_, fp);
         io_.printOneline(fp);
     }
 
@@ -142,7 +141,7 @@ public:
     std::vector<RecIo> minus(const RecIo &rhs) const {
         assert(isValid(true));
         assert(rhs.isValid(true));
-        if (!rec_.isOverlapped(rhs.rec_)) {
+        if (!isOverlapped(rec_, rhs.rec_)) {
             throw RT_ERR("Non-overlapped.");
         }
         std::vector<RecIo> v;
@@ -150,7 +149,7 @@ public:
          * Pattern 1:
          * __oo__ + xxxxxx = xxxxxx
          */
-        if (rec_.isOverwrittenBy(rhs.rec_)) {
+        if (isOverwrittenBy(rec_, rhs.rec_)) {
             /* Empty */
             return v;
         }
@@ -158,11 +157,11 @@ public:
          * Pattern 2:
          * oooooo + __xx__ = ooxxoo
          */
-        if (rhs.rec_.isOverwrittenBy(rec_)) {
+        if (isOverwrittenBy(rhs.rec_, rec_)) {
             uint16_t blks0 = rhs.rec_.io_address - rec_.io_address;
-            uint16_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
+            uint16_t blks1 = endIoAddressRec(rec_) - endIoAddressRec(rhs.rec_);
             uint64_t addr0 = rec_.io_address;
-            uint64_t addr1 = rec_.endIoAddress() - blks1;
+            uint64_t addr1 = endIoAddressRec(rec_) - blks1;
 
             walb_diff_record rec0 = rec_;
             walb_diff_record rec1 = rec_;
@@ -173,7 +172,7 @@ public:
 
             size_t size0 = 0;
             size_t size1 = 0;
-			const bool recIsNormal = rec_.isNormal();
+			const bool recIsNormal = isNormalRec(rec_);
             if (recIsNormal) {
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
@@ -185,8 +184,10 @@ public:
             if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
-                ::memcpy(&data0[0], io_.rawData(), size0);
-                ::memcpy(&data1[0], io_.rawData() + off1, size1);
+                const char *p = io_.data.data();
+                data0.assign(p, p + size0);
+                p += off1;
+                data1.assign(p, p + size1);
             }
 
             if (0 < blks0) {
@@ -210,24 +211,26 @@ public:
          * oooo__ + __xxxx = ooxxxx
          */
         if (rec_.io_address < rhs.rec_.io_address) {
-            assert(rhs.rec_.io_address < rec_.endIoAddress());
-            uint16_t rblks = rec_.endIoAddress() - rhs.rec_.io_address;
-            assert(rhs.rec_.io_address + rblks == rec_.endIoAddress());
+            const uint64_t endIoAddr = endIoAddressRec(rec_);
+            assert(rhs.rec_.io_address < endIoAddr);
+            uint16_t rblks = endIoAddr - rhs.rec_.io_address;
+            assert(rhs.rec_.io_address + rblks == endIoAddr);
 
             walb_diff_record rec = rec_;
-            /* rec.ioAddress() does not change. */
+            /* rec.io_address does not change. */
             rec.io_blocks = rec_.io_blocks - rblks;
             assert(endIoAddressRec(rec) == rhs.rec_.io_address);
 
             size_t size = 0;
-            if (rec_.isNormal()) {
-                size = io_.size - rblks * LOGICAL_BLOCK_SIZE;
+            if (isNormalRec(rec_)) {
+                size = io_.data.size() - rblks * LOGICAL_BLOCK_SIZE;
             }
-            std::vector<char> data(size);
-            if (rec_.isNormal()) {
-                assert(rec_.data_size == io_.size);
+            std::vector<char> data;
+            if (isNormalRec(rec_)) {
+                assert(rec_.data_size == io_.data.size());
                 rec.data_size = size;
-                ::memcpy(&data[0], io_.rawData(), size);
+                const char *p = io_.data.data();
+                data.assign(p, p + size);
             }
 
             RecIo r;
@@ -241,9 +244,10 @@ public:
          * Pattern 4:
          * __oooo + xxxx__ = xxxxoo
          */
-        assert(rec_.io_address < rhs.rec_.endIoAddress());
-        uint16_t rblks = rhs.rec_.endIoAddress() - rec_.io_address;
-        assert(rec_.io_address + rblks == rhs.rec_.endIoAddress());
+        const uint64_t rhsEndIoAddr = endIoAddressRec(rhs.rec_);
+        assert(rec_.io_address < rhsEndIoAddr);
+        uint16_t rblks = rhsEndIoAddr - rec_.io_address;
+        assert(rec_.io_address + rblks == rhsEndIoAddr);
         size_t off = rblks * LOGICAL_BLOCK_SIZE;
 
         walb_diff_record rec = rec_;
@@ -251,16 +255,18 @@ public:
         rec.io_blocks = rec_.io_blocks - rblks;
 
         size_t size = 0;
-        if (rec_.isNormal()) {
-            size = io_.size - off;
+        const bool isNormal = isNormalRec(rec_);
+        if (isNormal) {
+            size = io_.data.size() - off;
         }
-        std::vector<char> data(size);
-        if (rec_.isNormal()) {
-            assert(rec_.data_size == io_.size);
+        std::vector<char> data;
+        if (isNormal) {
+            assert(rec_.data_size == io_.data.size());
             rec.data_size = size;
-            ::memcpy(&data[0], io_.rawData() + off, size);
+            const char *p = io_.data.data() + off;
+            data.assign(p, p + size);
         }
-        assert(rhs.rec_.endIoAddress() == rec.io_address);
+        assert(rhsEndIoAddr == rec.io_address);
         RecIo r;
         r.moveFrom(rec, std::move(data));
         r.updateChecksum();
@@ -294,14 +300,7 @@ public:
     ~MemoryData() noexcept = default;
     bool empty() const { return map_.empty(); }
 
-    void add(const Record &rec, const IoData &io, uint16_t maxIoBlocks = 0) {
-        add(rec, IoData(io), maxIoBlocks);
-    }
-    void add(const Record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
-        add(rec.record(), std::move(io), maxIoBlocks);
-    }
     void add(const walb_diff_record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
-        const DiffRecord& _rec = static_cast<const DiffRecord&>(rec);
         /* Decide key range to search. */
         uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -315,10 +314,9 @@ public:
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-			const DiffRecord& dr = static_cast<const DiffRecord&>(r.record2());
-            if (dr.isOverlapped(_rec)) {
+            if (isOverlapped(r.record(), rec)) {
                 nIos_--;
-                nBlocks_ -= dr.io_blocks;
+                nBlocks_ -= r.record().io_blocks;
                 q.push(std::move(r));
                 it = map_.erase(it);
             } else {
@@ -332,7 +330,7 @@ public:
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
-				const walb_diff_record& dr = r.record2();
+				const walb_diff_record& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
                 uint64_t addr = dr.io_address;
@@ -342,7 +340,7 @@ public:
         }
         /* Insert the item. */
         nIos_++;
-        nBlocks_ += r0.record2().io_blocks;
+        nBlocks_ += r0.record().io_blocks;
         std::vector<RecIo> rv;
         if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
@@ -352,8 +350,8 @@ public:
             rv.push_back(std::move(r0));
         }
         for (RecIo &r : rv) {
-            uint64_t addr = r.record2().io_address;
-            uint16_t blks = r.record2().io_blocks;
+            uint64_t addr = r.record().io_address;
+            uint16_t blks = r.record().io_blocks;
             map_.emplace(addr, std::move(r));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
@@ -361,7 +359,7 @@ public:
     void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record2();
+            const walb_diff_record &rec = it->second.record();
             printOnelineRec(rec, fp);
             ++it;
         }
@@ -373,7 +371,7 @@ public:
         uint64_t nIos = 0;
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record2();
+            const walb_diff_record &rec = it->second.record();
             nBlocks += rec.io_blocks;
             nIos++;
             ++it;
@@ -396,9 +394,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record2(), r.io().rawData());
+                writer.compressAndWriteDiff(r.record(), r.io().data.data());
             } else {
-                writer.writeDiff(r.record2(), r.io().rawData());
+                writer.writeDiff(r.record(), r.io().data.data());
             }
             ++it;
         }
@@ -426,7 +424,7 @@ public:
         auto it = map_.cbegin();
         const walb_diff_record *prev = nullptr;
         while (it != map_.cend()) {
-            const walb_diff_record *curr = &it->second.record2();
+            const walb_diff_record *curr = &it->second.record();
             if (prev) {
                 if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");
@@ -444,7 +442,7 @@ public:
 	void eraseMap(Map::iterator& i)
 	{
         nIos_--;
-        nBlocks_ -= i->second.record2().io_blocks;
+        nBlocks_ -= i->second.record().io_blocks;
         i = map_.erase(i);
         if (map_.empty()) {
             fileH_.resetMaxIoBlocks();

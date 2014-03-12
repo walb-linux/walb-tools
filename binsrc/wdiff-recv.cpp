@@ -112,14 +112,14 @@ private:
                     writer.writeDiff(rec, {});
                     continue;
                 }
-                sock.read(io.rawData(), rec.data_size);
+                sock.read(io.data.data(), rec.data_size);
                 if (!io.isValid()) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io");
                 }
                 if (io.calcChecksum() != rec.checksum) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
                 }
-                writer.writeDiff(rec, io.forMove());
+                writer.writeDiff(rec, std::move(io.data));
             }
             ctrl.reset();
         }

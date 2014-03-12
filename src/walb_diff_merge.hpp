@@ -195,7 +195,7 @@ public:
         RecIo d;
         while (pop(d)) {
             assert(d.isValid());
-            writer.compressAndWriteDiff(d.record2(), d.io().rawData());
+            writer.compressAndWriteDiff(d.record(), d.io().data.data());
         }
 
         writer.flush();
@@ -274,7 +274,7 @@ private:
         auto i = map.begin();
         while (i != map.end()) {
             RecIo& recIo = i->second;
-            if (endIoAddressRec(recIo.record2()) > maxAddr) break;
+            if (endIoAddressRec(recIo.record()) > maxAddr) break;
             mergedQ_.push(std::move(recIo));
             wdiffMem_.eraseMap(i);
         }

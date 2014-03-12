@@ -110,13 +110,13 @@ public:
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(ioP->size == size);
+        assert(ioP->data.size() == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }
 
         //::printf("issue %zu %zu %p\n", oft, size, ioP->rawData()); /* debug */
-        bd_.write(oft, size, ioP->rawData());
+        bd_.write(oft, size, ioP->data.data());
         return true;
     }
 
@@ -283,9 +283,9 @@ private:
         ioP->ioBlocks = ioBlocks;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         zeroMem_.resize(size);
-        ioP->moveFrom(std::move(zeroMem_.forMove()));
+        ioP->data = zeroMem_.forMove();
         bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
-        zeroMem_.moveFrom(ioP->forMove());
+        zeroMem_.moveFrom(std::move(ioP->data));
         return ret;
     }
 

@@ -460,7 +460,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
                 writer.writeDiff(rec, {});
                 continue;
             }
-            sock.read(io.rawData(), rec.data_size);
+            sock.read(io.data.data(), rec.data_size);
             if (!io.isValid()) {
                 cybozu::Exception e(FUNC);
                 e << "bad io";
@@ -472,7 +472,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
                 e << "bad io checksum" << csum << rec.checksum;
                 logger.throwError(e);
             }
-            writer.writeDiff(rec, io.forMove());
+            writer.writeDiff(rec, std::move(io.data));
         }
         ctrl.reset();
     }
