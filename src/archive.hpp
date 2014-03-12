@@ -439,12 +439,20 @@ namespace proxy_local {
 
 /**
  * Wdiff header has been written already before calling this.
+ *
+ * RETURN:
+ *   false if force stopped.
  */
-inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger &logger)
+inline bool recvAndWriteDiffs(
+    cybozu::Socket &sock, diff::Writer &writer,
+    Logger &logger, const std::atomic<int> &stopState)
 {
     const char *const FUNC = __func__;
     packet::StreamControl ctrl(sock);
     while (ctrl.isNext()) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
         diff::PackHeader packH;
         sock.read(packH.rawData(), packH.rawSize());
         if (!packH.isValid()) {
@@ -481,6 +489,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
         e << "bad ctrl not end";
         throw e;
     }
+    return true;
 }
 
 } // proxy_local
@@ -572,7 +581,10 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     fileH.setUuid(uuid.rawData());
     writer.writeHeader(fileH);
     logger.debug() << FUNC << "write header";
-    proxy_local::recvAndWriteDiffs(p.sock, writer, logger);
+    if (!proxy_local::recvAndWriteDiffs(p.sock, writer, logger, volSt.stopState)) {
+        logger.warn() << FUNC << "force stopped" << volId;
+        return;
+    }
     logger.debug() << FUNC << "close";
     writer.close();
     tmpFile.save(fPath.str());

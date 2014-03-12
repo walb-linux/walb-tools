@@ -652,8 +652,14 @@ retry:
 
 namespace proxy_local {
 
-inline void sendWdiffs(
-    cybozu::Socket &sock, diff::Merger &merger, const HostInfo &hi)
+/**
+ *
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool sendWdiffs(
+    cybozu::Socket &sock, diff::Merger &merger, const HostInfo &hi,
+    const std::atomic<int> &stopState)
 {
     packet::StreamControl ctrl(sock);
     diff::RecIo recIo;
@@ -664,6 +670,9 @@ inline void sendWdiffs(
     diff::Packer packer;
     size_t pushedNum = 0;
     while (merger.pop(recIo)) {
+        if (stopState == ForceStopping || gp.forceQuit) {
+            return false;
+        }
         const walb_diff_record& rec = recIo.record();
         const diff::IoData& io = recIo.io();
         if (packer.add(rec, io.data.data())) {
@@ -691,6 +700,7 @@ inline void sendWdiffs(
     }
     ctrl.end();
     packet::Ack(sock).recv();
+    return true;
 }
 
 } // namespace proxy_local
@@ -739,7 +749,10 @@ inline void ProxyWorker::operator()()
     std::string res;
     pkt.read(res);
     if (res == "ok") {
-        proxy_local::sendWdiffs(sock, merger, hi);
+        if (!proxy_local::sendWdiffs(sock, merger, hi, volSt.stopState)) {
+            logger.warn() << FUNC << "force stopped" << volId;
+            return;
+        }
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();
@@ -808,6 +821,5 @@ inline void c2pResizeServer(protocol::ServerParams &p)
         throw;
     }
 }
-
 
 } // walb
