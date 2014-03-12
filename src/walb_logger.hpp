@@ -27,6 +27,8 @@
 #define LOGw_(...)
 #define LOGe_(...)
 
+#define LOGs walb::SimpleLogger()
+
 namespace walb {
 
 /**
