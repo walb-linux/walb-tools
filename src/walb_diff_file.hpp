@@ -204,17 +204,13 @@ public:
             writeDiff(rec, data);
             return;
         }
-        IoWrap io0;
-        io0.set(rec, data, rec.data_size);
-        check(rec, io0);
-
         if (!isNormalRec(rec)) {
-            assert(io0.empty());
             writeDiff(rec, {});
             return;
         }
 
-        IoData io1 = compressIoData(io0, ::WALB_DIFF_CMPR_SNAPPY);
+        // QQQ refactor later
+        IoData io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
         walb_diff_record rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
         rec1.data_size = io1.size;

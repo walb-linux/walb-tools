@@ -391,22 +391,19 @@ private:
  * Compress an IO data.
  * Supported algorithms: snappy.
  */
-inline IoData compressIoData(const IoWrap &io0, int type)
+
+inline IoData compressIoData(const walb_diff_record& rec, const char *data, int type)
 {
-    if (io0.isCompressed()) {
-        throw RT_ERR("Could not compress already compressed diff IO.");
-    }
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
-        throw RT_ERR("Currently only snappy is supported.");
+        throw cybozu::Exception("compressIoData:Currently only snappy is supported.");
     }
-    if (io0.ioBlocks == 0) {
+    if (rec.io_blocks == 0) {
         return IoData();
     }
-    assert(io0.isValid());
-    IoData io1(io0.ioBlocks, type);
-    io1.setByWritter(snappy::MaxCompressedLength(io0.size), [&](char *p) {
+    IoData io1(rec.io_blocks, type);
+    io1.setByWritter(snappy::MaxCompressedLength(rec.data_size), [&](char *p) {
         size_t size;
-        snappy::RawCompress(io0.data, io0.size, p, &size);
+        snappy::RawCompress(data, rec.data_size, p, &size);
         return size;
     });
     return io1;
