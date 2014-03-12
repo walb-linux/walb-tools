@@ -262,7 +262,7 @@ private:
         }
     }
 private:
-    void check(UNUSED const walb_diff_record &rec, UNUSED const IoWrap &io) const {
+    void check(UNUSED const walb_diff_record &rec, UNUSED const IoData &io) const {
         assert(isValidRec(rec));
         assert(io.isValid());
         assert(rec.data_size == io.size);

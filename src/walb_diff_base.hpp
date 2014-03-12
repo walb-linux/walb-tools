@@ -413,7 +413,7 @@ inline IoData compressIoData(const walb_diff_record& rec, const char *data, int 
  * Uncompress an IO data.
  * Supported algorithms: snappy.
  */
-inline IoData uncompressIoData(const IoWrap &io0)
+inline IoData uncompressIoData(const IoData &io0)
 {
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
@@ -438,7 +438,7 @@ inline IoData uncompressIoData(const IoWrap &io0)
  * CAUSION:
  *   Compressed IO can not be splitted.
  */
-inline std::vector<IoData> splitIoDataAll(const IoWrap &io0, uint16_t ioBlocks0)
+inline std::vector<IoData> splitIoDataAll(const IoData &io0, uint16_t ioBlocks0)
 {
     if (ioBlocks0 == 0) {
         throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
