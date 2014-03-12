@@ -187,6 +187,7 @@ public:
         th.join();
     }
     void operator()() noexcept try {
+        LOGs.info() << "dispatchTask begin";
         cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
         Task task;
         while (!shouldStop) {
@@ -201,6 +202,7 @@ public:
                 util::sleepMs(1000);
                 continue;
             }
+            LOGs.debug() << "dispatchTask dispatch task" << task;
             pool.add(std::make_shared<Worker>(task));
             for (std::exception_ptr ep : pool.gc()) {
                 LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
@@ -209,6 +211,7 @@ public:
         for (std::exception_ptr ep : pool.waitForAll()) {
             LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
         }
+        LOGs.info() << "dispatchTask end";
     } catch (std::exception &e) {
         LOGs.error() << "dispatchTask" << e.what();
         ::exit(1);

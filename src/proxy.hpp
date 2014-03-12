@@ -95,6 +95,15 @@ struct ProxyTask
         if (c > 0) return false;
         return archiveName < rhs.archiveName;
     }
+    std::string str() const {
+        std::ostringstream ss;
+        ss << "(" << volId << "," << archiveName << ")";
+        return ss.str();
+    }
+    friend std::ostream& operator<<(std::ostream& os, const ProxyTask& task) {
+        os << task.str();
+        return os;
+    }
 };
 
 class ProxyWorker : public cybozu::thread::Runnable
@@ -214,7 +223,7 @@ inline StrVec getAllStateStrVec()
         const std::string state = volSt.sm.get();
         const uint64_t totalSize = volInfo.getTotalDiffFileSize();
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-        const std::string tsStr = cybozu::unixTimeToStr(volSt.lastWlogRecievedTime);
+        const std::string tsStr = util::timeToPrintable(volSt.lastWlogRecievedTime);
         ret.push_back(
             fmt("%s %s %zu %s %s"
                 , volId.c_str(), state.c_str(), volSt.diffMgr.size()
@@ -228,7 +237,7 @@ inline StrVec getAllStateStrVec()
             const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
             uint64_t minGid, maxGid;
             std::tie(minGid, maxGid) = mgr.getMinMaxGid();
-            const std::string tsStr = cybozu::unixTimeToStr(volSt.lastWdiffSentTimeMap[archiveName]);
+            const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
             ret.push_back(
                 fmt("  %s %s %zu %s %" PRIu64 " %" PRIu64 " %s"
                     , archiveName.c_str()
@@ -254,12 +263,12 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     const size_t num = volSt.diffMgr.size();
     const uint64_t totalSize = volInfo.getTotalDiffFileSize();
     const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-    const std::string tsStr = cybozu::unixTimeToStr(volSt.lastWlogRecievedTime);
+    const std::string tsStr = util::timeToPrintable(volSt.lastWlogRecievedTime);
 
     ret.push_back(fmt("volId %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
     ret.push_back(fmt("num %zu", num));
-    ret.push_back(fmt("totalSize %zu", totalSizeStr.c_str()));
+    ret.push_back(fmt("totalSize %s", totalSizeStr.c_str()));
     ret.push_back(fmt("timestamp %s", tsStr.c_str()));
 
     const std::vector<int> actionNum = volSt.ac.getValues(volSt.archiveSet);
@@ -267,7 +276,7 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     for (const std::string& archiveName : volSt.archiveSet) {
         const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
         const HostInfo hi = volInfo.getArchiveInfo(archiveName);
-        const std::string tsStr = walb::util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
+        const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
 
         ret.push_back(fmt("archive %s %s", archiveName.c_str(), hi.str().c_str()));
         ret.push_back(fmt("  action %s", actionNum[i] == 0 ? "None" : "WdiffSend"));
@@ -406,6 +415,8 @@ inline void c2pStartServer(protocol::ServerParams &p)
 
     packet::Ack(p.sock).send();
     startProxyVol(volId);
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    logger.info() << "start succeeded" << volId;
 }
 
 /**
@@ -425,9 +436,20 @@ inline void c2pStopServer(protocol::ServerParams &p)
 
     packet::Ack(p.sock).send();
     stopProxyVol(volId, isForce);
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    logger.info() << "stop succeeded" << volId << isForce;
 }
 
 namespace proxy_local {
+
+inline void listArchiveInfo(const std::string &volId, StrVec &archiveNameV)
+{
+    const char *const FUNC = __func__;
+    ProxyVolState& volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    archiveNameV.assign(volSt.archiveSet.begin(), volSt.archiveSet.end());
+}
 
 inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &hi)
 {
@@ -481,8 +503,8 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
 
 /**
  * params:
- *   [0]: volId
- *   [1]: add/delete/update as string
+ *   [0]: add/delete/update/get/info as string
+ *   [1]: volId
  *   [2]: archive name
  *   [3]: serialized HostInfo data. (add/update only)
  *
@@ -495,27 +517,44 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
 inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 {
     const char * const FUNC = "c2pArchiveInfoServer";
-    StrVec v = protocol::recvStrVec(p.sock, 3, FUNC, false);
-    const std::string &volId = v[0];
-    const std::string &cmd = v[1];
-    const std::string &archiveName = v[2];
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const std::string &cmd = v[0];
+    const std::string &volId = v[1];
+
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    logger.debug() << cmd << volId;
 
     packet::Packet pkt(p.sock);
     try {
+        std::string archiveName;
         HostInfo hi;
         if (cmd == "add" || cmd == "update") {
+            pkt.read(archiveName);
             pkt.read(hi);
+            logger.debug() << archiveName << hi;
             proxy_local::addArchiveInfo(volId, archiveName, hi, cmd == "add");
+            logger.info() << "archive-info add/update succeeded" << volId << archiveName << hi;
             pkt.write("ok");
             return;
         } else if (cmd == "get") {
+            pkt.read(archiveName);
             proxy_local::getArchiveInfo(volId, archiveName, hi);
+            logger.info() << "archive-info get succeeded" << volId << archiveName << hi;
             pkt.write("ok");
             pkt.write(hi);
             return;
         } else if (cmd == "delete") {
+            pkt.read(archiveName);
             proxy_local::deleteArchiveInfo(volId, archiveName);
+            logger.info() << "archive-info delete succeeded" << volId << archiveName;
             pkt.write("ok");
+            return;
+        } else if (cmd == "list") {
+            StrVec v;
+            proxy_local::listArchiveInfo(volId, v);
+            logger.info() << "archive-info list succeeded" << volId << v.size();
+            pkt.write("ok");
+            pkt.write(v);
             return;
         }
     } catch (std::exception &e) {
@@ -550,6 +589,8 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         volInfo.clear();
         tran.commit(pClear);
     }
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    logger.info() << "clearVol succeeded" << volId;
 }
 
 /**

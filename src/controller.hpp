@@ -117,15 +117,24 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
     }
 }
 
+namespace ctrl_local {
+
+inline void verifyEnoughParameters(const StrVec& params, size_t num, const char *msg)
+{
+    if (params.size() < num) {
+        throw cybozu::Exception(msg) << "not enough parameters";
+    }
+}
+
+} // ctrl_local
+
 /**
  * pattern (1)
- *   get <archiveId>
+ *   list <volId>
  * pattern (2)
- *   add <archiveId> <addr>:<port> <cmprType>:<cmprLevel>
+ *   get/delete <volId> <archiveId>
  * pattern (3)
- *   update <archiveId> <addr>:<port> <cmprType>:<cmprLevel>
- * pattern (4)
- *   delete <archiveId>
+ *   add/update <volId> <archiveId> <addr>:<port> <cmprType>:<cmprLevel>:<cmprNumCPU>
  *
  * <cmprType>: compression type. none, snappy, gzip, or lzma.
  * <cmprLevel>: compression level. integer from 0 to 9.
@@ -133,43 +142,45 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
 inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 {
     const char * const FUNC = __func__;
-    if (p.params.size() < 2) {
-        throw cybozu::Exception(FUNC) << "invalid params";
-    }
+    ctrl_local::verifyEnoughParameters(p.params, 2, FUNC);
     const std::string &cmd = p.params[0];
-    const std::string &archiveId = p.params[1];
-    protocol::sendStrVec(p.sock, {cmd, archiveId}, 2, FUNC, false);
-
+    const std::string &volId = p.params[1];
+    protocol::sendStrVec(p.sock, {cmd, volId}, 2, FUNC, false);
+    packet::Packet pkt(p.sock);
+    if (cmd != "list") {
+        ctrl_local::verifyEnoughParameters(p.params, 3, FUNC);
+        const std::string &archiveId = p.params[2];
+        pkt.write(archiveId);
+    }
     if (cmd == "add" || cmd == "update") {
-        if (p.params.size() != 4) {
-            throw cybozu::Exception(FUNC) << "lack of parameters";
-        }
-        const std::string &addrPort = p.params[2];
-        const std::string &compressOpt = p.params[3];
+        ctrl_local::verifyEnoughParameters(p.params, 5, FUNC);
+        const std::string &addrPort = p.params[3];
+        const std::string &compressOpt = p.params[4];
         HostInfo hi = parseHostInfo(addrPort, compressOpt);
-        packet::Packet pkt(p.sock);
+        LOGs.debug() << hi;
         pkt.write(hi);
-        std::string res;
-        pkt.read(res);
-        if (res != "ok") {
-            throw cybozu::Exception(FUNC) << "command failed" << res;
+    }
+
+    std::string res;
+    pkt.read(res);
+    if (res != "ok") {
+        throw cybozu::Exception(FUNC) << "command failed" << res;
+    }
+
+    if (cmd == "list") {
+        StrVec v;
+        pkt.read(v);
+        for (const std::string& s : v) {
+            std::cout << s << std::endl;
         }
         return;
     }
-    if (cmd == "get" || cmd == "delete") {
-        packet::Packet pkt(p.sock);
-        std::string res;
-        pkt.read(res);
-        if (res != "ok") {
-            throw cybozu::Exception(FUNC) << "get failed" << res;
-        }
-        if (cmd == "delete") return;
+    if (cmd == "get") {
         HostInfo hi;
         pkt.read(hi);
         std::cout << hi << std::endl;
         return;
     }
-    throw cybozu::Exception(FUNC) << "invlid comand" << cmd;
 }
 
 /**
