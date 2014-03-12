@@ -513,11 +513,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     MetaDiff diff;
     pkt.read(diff);
 
-    logger.debug()
-        << "volId" << volId << "\n"
-        << "uuid" << uuid << "\n"
-        << "maxIoBlocks" << maxIoBlocks << "\n"
-        << "diff" << diff;
+    logger.debug() << FUNC << volId << uuid << maxIoBlocks << sizeLb << diff;
 
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -541,6 +537,15 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         logger.info() << msg << volId;
         pkt.write(msg);
         return;
+    }
+    const uint64_t curSizeLb = volInfo.getLv().sizeLb();
+    if (curSizeLb < sizeLb) {
+        const char *msg = "large-lv-size";
+        pkt.write(msg);
+        return;
+    }
+    if (sizeLb < curSizeLb) {
+        logger.warn() << "small lv size" << volId << sizeLb << curSizeLb;
     }
     const MetaState metaState = volInfo.getMetaState();
     const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
