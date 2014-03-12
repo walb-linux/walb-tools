@@ -441,10 +441,8 @@ public:
         if (recSize > 0) {
             io.ioBlocks = rec.io_blocks;
             io.compressionType = rec.compression_type;
-            io.setByWritter(recSize, [&](char *p) {
-                fdr_.read(p, recSize);
-                return recSize;
-            });
+            io.data.resize(recSize);
+            fdr_.read(&io.data[0], recSize);
             const uint32_t csum = cybozu::util::calcChecksum(io.rawData(), io.data.size(), 0);
             if (rec.checksum != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);

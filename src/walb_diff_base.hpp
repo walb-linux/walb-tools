@@ -268,19 +268,6 @@ public:
                   , data.size()
                   , calcChecksum());
     }
-    /*
-        set data
-        return written size
-        don't write larger than reserveSize
-        size_t setter(char *data);
-    */
-    template<class Writter>
-    void setByWritter(size_t reserveSize, Writter writter) {
-        data.resize(reserveSize);
-        if (reserveSize == 0) return;
-        size_t writtenSize = writter(&data[0]);
-        data.resize(writtenSize);
-    }
 
     void swap(IoData& rhs) noexcept {
         std::swap(ioBlocks, rhs.ioBlocks);
@@ -327,11 +314,10 @@ inline IoData compressIoData(const walb_diff_record& rec, const char *data, int 
         return IoData();
     }
     IoData io1(rec.io_blocks, type);
-    io1.setByWritter(snappy::MaxCompressedLength(rec.data_size), [&](char *p) {
-        size_t size;
-        snappy::RawCompress(data, rec.data_size, p, &size);
-        return size;
-    });
+    io1.data.resize(snappy::MaxCompressedLength(rec.data_size));
+    size_t compressedSize;
+    snappy::RawCompress(data, rec.data_size, &io1.data[0], &compressedSize);
+    io1.data.resize(compressedSize);
     return io1;
 }
 
@@ -347,13 +333,11 @@ inline IoData uncompressIoData(const IoData &io0)
     walb::Uncompressor dec(io0.compressionType);
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
     IoData io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
-    io1.setByWritter(decSize, [&](char *p) {
-        size_t size = dec.run(p, decSize, &io0.data[0], io0.data.size());
-        if (size != decSize) {
-            throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
-        }
-        return decSize;
-    });
+    io1.data.resize(decSize);
+    size_t size = dec.run(&io1.data[0], decSize, &io0.data[0], io0.data.size());
+    if (size != decSize) {
+        throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
+    }
     return io1;
 }
 
