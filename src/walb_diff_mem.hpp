@@ -27,7 +27,6 @@ private:
 public:
     const walb_diff_record &record() const { return rec_; }
 
-    IoData &io() { return io_; }
     const IoData &io() const { return io_; }
 
     void copyFrom(const walb_diff_record &rec, const IoData &io) {
