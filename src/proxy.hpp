@@ -176,13 +176,28 @@ inline void ProxyVolState::initInner(const std::string &volId)
     // Here the master directory must contain no wdiff file.
     if (!diffMgr.getAll().empty()) {
         throw cybozu::Exception("ProxyVolState::initInner")
-            << "there are wdiff files in the master directory";
+            << "there are wdiff files in the master directory"
+            << volId;
     }
 }
 
 inline ProxyVolState &getProxyVolState(const std::string &volId)
 {
     return getProxyGlobal().stMap.get(volId);
+}
+
+inline StrVec getProxyVolList()
+{
+    StrVec fnameV, volIdV;
+    fnameV = util::getDirNameList(gp.baseDirStr);
+    for (const std::string &fname : fnameV) {
+        cybozu::FilePath fpath(gp.baseDirStr);
+        fpath += fname;
+        if (fpath.stat().isDirectory()) {
+            volIdV.push_back(fname);
+        }
+    }
+    return volIdV;
 }
 
 namespace proxy_local {
@@ -640,8 +655,9 @@ inline void sendWdiffs(
 
 } // namespace proxy_local
 
-inline void ProxyWorker::operator()() {
-    const char *const FUNC = "ProxyWorker:operator()";
+inline void ProxyWorker::operator()()
+{
+    const char *const FUNC = "ProxyWorker::operator()";
     const std::string& volId = task_.volId;
     const std::string& archiveName = task_.archiveName;
     ProxyVolState& volSt = getProxyVolState(volId);
@@ -667,15 +683,15 @@ inline void ProxyWorker::operator()() {
     ActionCounterTransaction trans(volSt.ac, archiveName);
     ul.unlock();
     sock.connect(hi.addr, hi.port);
-    const std::string serverId = walb::protocol::run1stNegotiateAsClient(sock, gp.nodeId, "wdiff-transfer");
-    walb::packet::Packet aPack(sock);
+    const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
+    packet::Packet aPack(sock);
 
-    walb::ProtocolLogger logger(gp.nodeId, serverId);
+    ProtocolLogger logger(gp.nodeId, serverId);
 
-    const walb::diff::FileHeaderWrap& fileH = merger.header();
+    const diff::FileHeaderWrap& fileH = merger.header();
 
     /* wdiff-send negotiation */
-    walb::packet::Packet pkt(sock);
+    packet::Packet pkt(sock);
     pkt.write(volId);
     pkt.write("proxy");
     pkt.write(fileH.getUuid2());
@@ -714,7 +730,13 @@ inline void ProxyWorker::operator()() {
         getProxyGlobal().taskQueue.pushForce(task_, 0);
         return;
     }
-    // archive-not-found, not-applicable-diff
+    /**
+     * archive-not-found, not-applicable-diff, large-lv-size
+     *
+     * The background task will stop, even if it is on started state.
+     * Wlog-transfer protocol will kick it again,
+     * or you must stop and start by yourself.
+     */
     e << res;
     logger.throwError(e);
 }

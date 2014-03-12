@@ -484,9 +484,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
 }
 
 } // proxy_local
-/**
- *
- */
+
 inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
@@ -541,6 +539,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     const uint64_t curSizeLb = volInfo.getLv().sizeLb();
     if (curSizeLb < sizeLb) {
         const char *msg = "large-lv-size";
+        logger.error() << msg << volId;
         pkt.write(msg);
         return;
     }

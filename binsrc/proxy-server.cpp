@@ -80,24 +80,24 @@ struct Option : cybozu::Option
     }
 };
 
-void initSingleton(Option &/*opt*/)
-{
-    //ProxySingleton &p = ProxySingleton::getInstance();
-
-    // QQQ
-}
-
 void initializeProxy(Option &opt)
 {
     util::makeDir(gp.baseDirStr, "proxyServer", false);
-    initSingleton(opt);
 
-    // Check all the volumes directories.
-    // For each volume:
-    //   If opt.stop is true, set stopped state for the volume.
-    //   Otherwise, set started state for the volume and enqueue a background task.
-    //   If master/*.wdiff exist,
-    //   check they have been copied to the each archive directory.
+    // Start/stop each volume.
+    for (const std::string &volId : getProxyVolList()) {
+        try {
+            if (opt.isStopped) {
+                stopProxyVol(volId, true);
+            } else {
+                startProxyVol(volId, true);
+            }
+        } catch (std::exception &e) {
+            SimpleLogger().error()
+                << "initializeProxy:start/stop failed"
+                << volId << e.what();
+        }
+    }
 
     // Start a task dispatch thread.
     ProxySingleton &g = getProxyGlobal();
@@ -108,6 +108,7 @@ void finalizeProxy()
 {
     // Stop the task dispatch thread.
     ProxySingleton &g = getProxyGlobal();
+    g.taskQueue.quit();
     g.dispatcher.reset();
 
     // QQQ

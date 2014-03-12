@@ -203,14 +203,14 @@ public:
             }
             pool.add(std::make_shared<Worker>(task));
             for (std::exception_ptr ep : pool.gc()) {
-                LOGe("%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
+                LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
             }
         }
         for (std::exception_ptr ep : pool.waitForAll()) {
-            LOGe("%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
+            LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
         }
     } catch (std::exception &e) {
-        LOGe("dispatchTask:%s", e.what());
+        LOGs.error() << "dispatchTask" << e.what();
         ::exit(1);
     } catch (...) {
         LOGe("dispatchTask:other error");
