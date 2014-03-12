@@ -187,20 +187,42 @@ std::vector<walb_diff_record> splitAll(const walb_diff_record& rec, uint16_t ioB
 }
 
 /**
- * Io data.
- * This does not manage data array.
+ * Block diff for an IO.
  */
-struct IoWrap
+class IoData
 {
+public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     const char *data;
     size_t size;
+private:
+    /* You must call resetData() for consistency of
+       data and size after changing data_. */
+    std::vector<char> data_;
+public:
 
-    IoWrap()
+    IoData()
         : ioBlocks(0), compressionType(::WALB_DIFF_CMPR_NONE)
-        , data(nullptr), size(0) {}
-
+        , data(nullptr), size(0)
+        , data_() {}
+    IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data_(rhs.data_) {
+        resetData();
+    }
+    IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data_(std::move(rhs.data_)) {
+        resetData();
+    }
+    IoData(uint16_t ioBlocks, int compressionType, const char *data = 0, size_t size = 0) {
+        setBlocksAndType(ioBlocks, compressionType);
+        if (data) data_.assign(data, data + size);
+        resetData();
+    }
+    void clear() {
+        ioBlocks = 0;
+        compressionType = ::WALB_DIFF_CMPR_NONE;
+        data_.clear();
+        resetData();
+    }
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const { return ioBlocks == 0; }
@@ -286,39 +308,6 @@ struct IoWrap
                   , size
                   , calcChecksum());
     }
-};
-
-/**
- * Block diff for an IO.
- */
-class IoData : public IoWrap
-{
-private:
-    /* You must call resetData() for consistency of
-       data and size after changing data_. */
-    std::vector<char> data_;
-
-public:
-    IoData()
-        : IoWrap()
-        , data_() {}
-    IoData(const IoData &rhs) : IoWrap(rhs), data_(rhs.data_) {
-        resetData();
-    }
-    IoData(IoData &&rhs) : IoWrap(rhs), data_(std::move(rhs.data_)) {
-        resetData();
-    }
-    IoData(uint16_t ioBlocks, int compressionType, const char *data = 0, size_t size = 0) {
-        setBlocksAndType(ioBlocks, compressionType);
-        if (data) data_.assign(data, data + size);
-        resetData();
-    }
-    void clear() {
-        ioBlocks = 0;
-        compressionType = ::WALB_DIFF_CMPR_NONE;
-        data_.clear();
-        resetData();
-    }
     void setBlocksAndType(uint16_t ioBlocks, int compressionType) {
         this->ioBlocks = ioBlocks;
         this->compressionType = compressionType;
@@ -351,18 +340,9 @@ public:
     }
 
     void set(const struct walb_diff_record &rec0) {
-        IoWrap::set0(rec0);
+        set0(rec0);
         data_.resize(rec0.data_size);
         resetData();
-    }
-
-    bool isValid() const {
-        if (!IoWrap::isValid()) return false;
-        if (data != &data_[0] || size != data_.size()) {
-            LOGd("resetData() must be called.\n");
-            return false;
-        }
-        return true;
     }
 
     void moveFrom(std::vector<char> &&data) {
