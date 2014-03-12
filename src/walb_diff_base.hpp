@@ -194,24 +194,13 @@ class IoData
 public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
-//    const char *data;
-//    size_t size;
-    /* You must call resetData() for consistency of
-       data and size after changing data_. */
     std::vector<char> data;
-private:
-public:
 
-    IoData()
-        : ioBlocks(0), compressionType(::WALB_DIFF_CMPR_NONE)
-        , data() {}
+    explicit IoData(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
+    }
     IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
     }
     IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
-    }
-    IoData(uint16_t ioBlocks, int compressionType, const char *data = 0, size_t size = 0) {
-        setBlocksAndType(ioBlocks, compressionType);
-        if (data) this->data.assign(data, data + size);
     }
     void clear() {
         ioBlocks = 0;
@@ -221,16 +210,6 @@ public:
     bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
 
     bool empty() const { return ioBlocks == 0; }
-
-    void set0(const walb_diff_record &rec) {
-        if (isNormalRec(rec)) {
-            ioBlocks = rec.io_blocks;
-            compressionType = rec.compression_type;
-        } else {
-            ioBlocks = 0;
-            compressionType = ::WALB_DIFF_CMPR_NONE;
-        }
-    }
 
     bool isValid() const {
         if (empty()) {
@@ -289,10 +268,6 @@ public:
                   , data.size()
                   , calcChecksum());
     }
-    void setBlocksAndType(uint16_t ioBlocks, int compressionType) {
-        this->ioBlocks = ioBlocks;
-        this->compressionType = compressionType;
-    }
     /*
         set data
         return written size
@@ -307,20 +282,31 @@ public:
         data.resize(writtenSize);
     }
 
+    void swap(IoData& rhs) noexcept {
+        std::swap(ioBlocks, rhs.ioBlocks);
+        std::swap(compressionType, rhs.compressionType);
+        data.swap(rhs.data);
+    }
     IoData &operator=(const IoData &rhs) {
-        setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
+        ioBlocks = rhs.ioBlocks;
+        compressionType = rhs.compressionType;
         data = rhs.data;
         return *this;
     }
     IoData &operator=(IoData &&rhs) {
-        setBlocksAndType(rhs.ioBlocks, rhs.compressionType);
-        data = std::move(rhs.data);
+        swap(rhs);
         return *this;
     }
 
-    void set(const struct walb_diff_record &rec0) {
-        set0(rec0);
-        data.resize(rec0.data_size);
+    void set(const struct walb_diff_record &rec) {
+        if (isNormalRec(rec)) {
+            ioBlocks = rec.io_blocks;
+            compressionType = rec.compression_type;
+        } else {
+            ioBlocks = 0;
+            compressionType = ::WALB_DIFF_CMPR_NONE;
+        }
+        data.resize(rec.data_size);
     }
 
     void moveFrom(std::vector<char> &&data) {
@@ -328,11 +314,6 @@ public:
     }
     const char *rawData() const { return &data[0]; }
     char *rawData() { return &data[0]; }
-    std::vector<char> forMove() {
-        std::vector<char> v;
-        v.swap(data);
-        return v;
-    }
 };
 
 /**

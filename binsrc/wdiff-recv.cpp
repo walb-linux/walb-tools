@@ -119,7 +119,7 @@ private:
                 if (io.calcChecksum() != rec.checksum) {
                     logAndThrow(logger, "recvAndWriteDiffs:bad io checksum");
                 }
-                writer.writeDiff(rec, io.forMove());
+                writer.writeDiff(rec, std::move(io.data));
             }
             ctrl.reset();
         }

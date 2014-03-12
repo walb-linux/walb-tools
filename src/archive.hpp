@@ -472,7 +472,7 @@ inline void recvAndWriteDiffs(cybozu::Socket &sock, diff::Writer &writer, Logger
                 e << "bad io checksum" << csum << rec.checksum;
                 logger.throwError(e);
             }
-            writer.writeDiff(rec, io.forMove());
+            writer.writeDiff(rec, std::move(io.data));
         }
         ctrl.reset();
     }

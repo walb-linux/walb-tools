@@ -215,7 +215,7 @@ public:
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
         rec1.data_size = io1.data.size();
         rec1.checksum = io1.calcChecksum();
-        writeDiff(rec1, io1.forMove());
+        writeDiff(rec1, std::move(io1.data));
     }
 
     /**
@@ -439,7 +439,8 @@ public:
         }
         const size_t recSize = rec.data_size;
         if (recSize > 0) {
-            io.setBlocksAndType(rec.io_blocks, rec.compression_type);
+            io.ioBlocks = rec.io_blocks;
+            io.compressionType = rec.compression_type;
             io.setByWritter(recSize, [&](char *p) {
                 fdr_.read(p, recSize);
                 return recSize;

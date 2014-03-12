@@ -285,7 +285,7 @@ private:
         zeroMem_.resize(size);
         ioP->moveFrom(std::move(zeroMem_.forMove()));
         bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
-        zeroMem_.moveFrom(ioP->forMove());
+        zeroMem_.moveFrom(std::move(ioP->data));
         return ret;
     }
 
