@@ -269,8 +269,9 @@ public:
         auto &fmt = cybozu::util::formatString;
 
         v.push_back(fmt("volId %s", volId_.c_str()));
-        uint64_t sizeLb = 0; // TODO
-        v.push_back(fmt("size %" PRIu64 "", sizeLb));
+        uint64_t sizeLb = getLv().sizeLb();
+        const std::string sizeStr = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
+        v.push_back(fmt("size %" PRIu64 " %s", sizeLb, sizeStr.c_str()));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         std::string st = getState();

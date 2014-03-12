@@ -207,11 +207,28 @@ inline void c2sSnapshotClient(protocol::ClientParams &/*p*/)
  * params[0]: volId.
  *
  * !!!CAUSION!!!
- * THis is for test and debug.
+ * This is for test and debug.
  */
 inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 1, "c2aReloadMetadataClient");
+}
+
+/**
+ * params[0]: volId
+ * params[1]: size [byte] suffix k/m/g can be used.
+ */
+inline void c2xResizeClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 2, FUNC, false);
+
+    packet::Packet pkt(p.sock);
+    std::string res;
+    pkt.read(res);
+    if (res != "ok") {
+        throw cybozu::Exception(FUNC) << "failed" << res;
+    }
 }
 
 } // namespace walb

@@ -47,6 +47,7 @@ public:
             { restorePN, c2aRestoreServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataPN, c2aReloadMetadataServer },
+            { resizePN, c2aResizeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }

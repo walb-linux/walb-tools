@@ -210,10 +210,11 @@ inline void c2sStartServer(protocol::ServerParams &p)
  */
 inline void c2sStopServer(protocol::ServerParams &p)
 {
-    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sStopServer", false);
+    const char *const FUNC = __func__;
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const int isForceInt = cybozu::atoi(v[1]);
-    UNUSED const bool isForce = (isForceInt != 0);
+    const bool isForce = (isForceInt != 0);
 
     StorageVolState &volSt = getStorageVolState(volId);
     packet::Ack(p.sock).send();
@@ -227,12 +228,11 @@ inline void c2sStopServer(protocol::ServerParams &p)
     StateMachine &sm = volSt.sm;
 
     waitUntil(ul, [&]() {
-            const std::string &st = sm.get();
-            return st == stFullSync || st == stHashSync || st == stWlogSend || st == stWlogRemove;
-        }, "c2sStopServer");
+            return isStateIn(sm.get(), {stFullSync, stHashSync, stWlogSend, stWlogRemove});
+        }, FUNC);
 
     const std::string st = sm.get();
-    if (st != sMaster || st != sSlave) {
+    if (!isStateIn(st, {sMaster, sSlave})) {
         /* For SyncReady state (after FullSync and HashSync canceled),
            there is nothing to do. */
         return;
@@ -240,7 +240,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     if (st == sMaster) {
-        StateMachineTransaction tran(sm, sMaster, stStopMaster, "c2sStopServer");
+        StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
         ul.unlock();
 
         // TODO: stop monitoring.
@@ -249,7 +249,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
         tran.commit(sStopped);
     } else {
         assert(st == sSlave);
-        StateMachineTransaction tran(sm, sSlave, stStopSlave, "c2sStopServer");
+        StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
         ul.unlock();
 
         // TODO: stop monitoring.

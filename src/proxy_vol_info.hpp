@@ -174,8 +174,10 @@ public:
      *   MetaDiff list that can be merged.
      *   which will be sent to the server.
      */
-    std::vector<MetaDiff> getDiffListToSend(const std::string &/*archiveName*/, uint64_t /*size*/) const {
-        return {};
+    std::vector<MetaDiff> getDiffListToSend(const std::string &archiveName, uint64_t size) const {
+        MetaDiffManager &mgr = diffMgrMap_.get(archiveName);
+        WalbDiffFiles wdiffs(mgr, getSlaveDir(archiveName).str());
+        return wdiffs.getDiffListToSend(size);
     }
     std::vector<MetaDiff> getAllDiffsInMaster() const {
         return diffMgr_.getAll();
@@ -188,7 +190,7 @@ public:
         std::string fname = createDiffFileName(diff);
         cybozu::FilePath oldPath = getMasterDir() + fname;
         cybozu::FilePath newPath = getSlaveDir(name) + fname;
-        if (oldPath.stat().exists()) {
+        if (!oldPath.stat().exists()) {
             // Do nothing.
             return;
         }

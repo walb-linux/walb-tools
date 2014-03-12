@@ -176,7 +176,9 @@ inline void ProxyVolState::initInner(const std::string &volId)
 
     // Retry to make hard links of wdiff files in the master directory.
     std::vector<MetaDiff> diffV = volInfo.getAllDiffsInMaster();
+    LOGs.debug() << "found diffs" << volId << diffV.size(); // debug
     for (const MetaDiff &d : diffV) {
+        LOGs.debug() << "try to make hard link" << d; // debug
         for (const std::string &name : archiveSet) {
             volInfo.tryToMakeHardlinkInSlave(d, name);
         }
@@ -633,11 +635,13 @@ retry:
             if (ops.empty()) {
                 uuid = header.getUuid2();
                 mergedDiff = diff;
-            } else if (uuid != header.getUuid2()) {
-                diffV.resize(ops.size());
-                break;
+            } else {
+                if (uuid != header.getUuid2()) {
+                    diffV.resize(ops.size());
+                    break;
+                }
+                mergedDiff.merge(diff);
             }
-            mergedDiff.merge(diff);
             if (lseek(op.fd(), 0, SEEK_SET) < 0) throw cybozu::Exception("ProxyWorker:setupMerger") << cybozu::ErrorNo();
             ops.push_back(std::move(op));
         }
@@ -699,10 +703,7 @@ inline void ProxyWorker::operator()()
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
-    {
-        const std::string st = volSt.sm.get();
-        if (st != pStarted) throw cybozu::Exception(FUNC) << "bad state" << st;
-    }
+    verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
@@ -729,7 +730,7 @@ inline void ProxyWorker::operator()()
     /* wdiff-send negotiation */
     packet::Packet pkt(sock);
     pkt.write(volId);
-    pkt.write("proxy");
+    pkt.write(proxyHT);
     pkt.write(fileH.getUuid2());
     pkt.write(fileH.getMaxIoBlocks());
     pkt.write(volInfo.getSizeLb());
@@ -776,5 +777,37 @@ inline void ProxyWorker::operator()()
     e << res;
     logger.throwError(e);
 }
+
+/**
+ * This is for test and debug.
+ */
+inline void c2pResizeServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    packet::Packet pkt(p.sock);
+    try {
+        const std::string &volId = v[0];
+        const uint64_t sizeLb = cybozu::util::fromUnitIntString(v[1]) / LOGICAL_BLOCK_SIZE;
+
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(volSt.sm.get(), {pStopped}, FUNC);
+
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        const uint64_t oldSizeLb = volInfo.getSizeLb();
+        volInfo.setSizeLb(sizeLb);
+
+        pkt.write("ok");
+        logger.info() << FUNC << "resize succeeded" << oldSizeLb << sizeLb;
+
+    } catch (std::exception &e) {
+        pkt.write(e.what());
+        throw;
+    }
+}
+
 
 } // walb

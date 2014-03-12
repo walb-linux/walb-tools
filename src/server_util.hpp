@@ -186,6 +186,11 @@ public:
         shouldStop = true;
         th.join();
     }
+    void logErrors(const std::vector<std::exception_ptr> &v) const {
+        for (const std::exception_ptr &ep : v) {
+            LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
+        }
+    }
     void operator()() noexcept try {
         LOGs.info() << "dispatchTask begin";
         cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
@@ -199,18 +204,15 @@ public:
                 doWait = !tq.pop(task);
             }
             if (doWait) {
+                logErrors(pool.gc());
                 util::sleepMs(1000);
                 continue;
             }
             LOGs.debug() << "dispatchTask dispatch task" << task;
             pool.add(std::make_shared<Worker>(task));
-            for (std::exception_ptr ep : pool.gc()) {
-                LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
-            }
+            logErrors(pool.gc());
         }
-        for (std::exception_ptr ep : pool.waitForAll()) {
-            LOGs.error() << cybozu::thread::exceptionPtrToStr(ep);
-        }
+        logErrors(pool.waitForAll());
         LOGs.info() << "dispatchTask end";
     } catch (std::exception &e) {
         LOGs.error() << "dispatchTask" << e.what();
@@ -230,6 +232,25 @@ inline void verifyNotStopping(
         cybozu::Exception e(msg);
         e << "must be NotStopping" << volId << st;
         throw e;
+    }
+}
+
+/**
+ * RETURN:
+ *   true if a specified state is found in a specified list.
+ */
+inline bool isStateIn(const std::string &state, const std::vector<std::string> &v)
+{
+    for (const std::string &st : v) {
+        if (state == st) return true;
+    }
+    return false;
+}
+
+inline void verifyStateIn(const std::string &state, const std::vector<std::string> &v, const char *msg)
+{
+    if (!isStateIn(state, v)) {
+        throw cybozu::Exception(msg) << "bad state" << state;
     }
 }
 

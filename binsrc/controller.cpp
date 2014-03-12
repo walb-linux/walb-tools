@@ -56,6 +56,7 @@ void runClient(Option &opt)
         { stopPN, c2xStopClient },
         { archiveInfoPN, c2pArchiveInfoClient },
         { snapshotPN, c2sSnapshotClient },
+        { resizePN, c2xResizeClient },
         { dbgReloadMetadataPN, c2aReloadMetadataClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);

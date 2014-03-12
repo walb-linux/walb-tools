@@ -248,8 +248,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
     waitUntil(ul, [&]() {
             bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
             if (!go) return false;
-            const std::string &st = sm.get();
-            return st == aClear || st == aSyncReady || st == aArchived || st == aStopped;
+            return isStateIn(sm.get(), {aClear, aSyncReady, aArchived, aStopped});
         }, FUNC);
 
     const std::string &st = sm.get();
@@ -388,35 +387,27 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    const StateMachine &sm = volSt.sm;
-    {
-        const std::string &cur = sm.get();
-        const std::array<const char*, 3> tbl = {aArchived, atHashSync, atWdiffRecv};
-        if (!std::any_of(tbl.begin(), tbl.end(), [&](const char *s) { return cur == s; })) {
-            cybozu::Exception e(FUNC);
-            e << "state is not matched" << volId << cur;
-            pkt.write(e.what());
-            throw e;
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        const StateMachine &sm = volSt.sm;
+        verifyStateIn(sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
+
+        ActionCounterTransaction tran(volSt.ac, volId);
+        ul.unlock();
+
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        // TODO: volinfo.restore(gid, volSt.forceStop, ga.forceQuit);
+        if (!volInfo.restore(gid)) {
+            throw cybozu::Exception(FUNC) << "restore failed" << volId << gid;
         }
-    }
+        pkt.write("ok");
 
-    ActionCounterTransaction tran(volSt.ac, volId);
-    ul.unlock();
-
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-
-    // TODO: volinfo.restore(gid, volSt.forceStop, ga.forceQuit);
-    if (!volInfo.restore(gid)) {
-        cybozu::Exception e(FUNC);
-        e << "restore failed" << volId << gid;
+    } catch (std::exception &e) {
         pkt.write(e.what());
-        throw e;
+        throw;
     }
-
-    pkt.write("ok");
 }
 
 /**
@@ -508,7 +499,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     }
     std::string clientType;
     pkt.read(clientType);
-    if (clientType != "proxy" && clientType != "archive") {
+    if (clientType != proxyHT && clientType != archiveHT) {
         throw cybozu::Exception(FUNC) << "bad clientType" << clientType;
     }
     cybozu::Uuid uuid;
@@ -591,6 +582,11 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     tran.commit(aArchived);
 
     packet::Ack(p.sock).send();
+}
+
+inline void c2aResizeServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
 }
 
 } // walb

@@ -43,6 +43,7 @@ public:
             { archiveInfoPN, c2pArchiveInfoServer },
             { clearVolPN, c2pClearVolServer },
             { wlogTransferPN, s2pWlogTransferServer },
+            { resizePN, c2pResizeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }
