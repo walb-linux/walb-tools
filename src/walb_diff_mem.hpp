@@ -25,7 +25,7 @@ private:
 	walb_diff_record rec_;
     IoData io_;
 public:
-    const walb_diff_record &record2() const { return rec_; }
+    const walb_diff_record &record() const { return rec_; }
 
     IoData &io() { return io_; }
     const IoData &io() const { return io_; }
@@ -311,9 +311,9 @@ public:
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-            if (isOverlapped(r.record2(), rec)) {
+            if (isOverlapped(r.record(), rec)) {
                 nIos_--;
-                nBlocks_ -= r.record2().io_blocks;
+                nBlocks_ -= r.record().io_blocks;
                 q.push(std::move(r));
                 it = map_.erase(it);
             } else {
@@ -327,7 +327,7 @@ public:
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
-				const walb_diff_record& dr = r.record2();
+				const walb_diff_record& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
                 uint64_t addr = dr.io_address;
@@ -337,7 +337,7 @@ public:
         }
         /* Insert the item. */
         nIos_++;
-        nBlocks_ += r0.record2().io_blocks;
+        nBlocks_ += r0.record().io_blocks;
         std::vector<RecIo> rv;
         if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
@@ -347,8 +347,8 @@ public:
             rv.push_back(std::move(r0));
         }
         for (RecIo &r : rv) {
-            uint64_t addr = r.record2().io_address;
-            uint16_t blks = r.record2().io_blocks;
+            uint64_t addr = r.record().io_address;
+            uint16_t blks = r.record().io_blocks;
             map_.emplace(addr, std::move(r));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }
@@ -356,7 +356,7 @@ public:
     void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record2();
+            const walb_diff_record &rec = it->second.record();
             printOnelineRec(rec, fp);
             ++it;
         }
@@ -368,7 +368,7 @@ public:
         uint64_t nIos = 0;
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record2();
+            const walb_diff_record &rec = it->second.record();
             nBlocks += rec.io_blocks;
             nIos++;
             ++it;
@@ -391,9 +391,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record2(), r.io().rawData());
+                writer.compressAndWriteDiff(r.record(), r.io().rawData());
             } else {
-                writer.writeDiff(r.record2(), r.io().rawData());
+                writer.writeDiff(r.record(), r.io().rawData());
             }
             ++it;
         }
@@ -421,7 +421,7 @@ public:
         auto it = map_.cbegin();
         const walb_diff_record *prev = nullptr;
         while (it != map_.cend()) {
-            const walb_diff_record *curr = &it->second.record2();
+            const walb_diff_record *curr = &it->second.record();
             if (prev) {
                 if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");
@@ -439,7 +439,7 @@ public:
 	void eraseMap(Map::iterator& i)
 	{
         nIos_--;
-        nBlocks_ -= i->second.record2().io_blocks;
+        nBlocks_ -= i->second.record().io_blocks;
         i = map_.erase(i);
         if (map_.empty()) {
             fileH_.resetMaxIoBlocks();

@@ -165,7 +165,7 @@ private:
      */
     size_t readWdiff(void *data, size_t blks) {
         assert(recIo_.isValid());
-        const walb_diff_record& rec = recIo_.record2();
+        const walb_diff_record& rec = recIo_.record();
         const walb::diff::IoData &io = recIo_.io();
         assert(offInIo_ < rec.io_blocks);
         if (isNormalRec(rec)) {
@@ -201,7 +201,7 @@ private:
      */
     void fillDiffIo() {
         if (emptyWdiff_ || isEndDiff_) return;
-        const walb_diff_record& rec = recIo_.record2();
+        const walb_diff_record& rec = recIo_.record();
         /* At beginning time, rec.ioBlocks() returns 0. */
         assert(offInIo_ <= rec.io_blocks);
         if (offInIo_ == rec.io_blocks) {
@@ -213,11 +213,11 @@ private:
         }
     }
     uint64_t currentDiffAddr() const {
-        return recIo_.record2().io_address + offInIo_;
+        return recIo_.record().io_address + offInIo_;
     }
     uint16_t currentDiffBlocks() const {
-        assert(offInIo_ <= recIo_.record2().io_blocks);
-        return recIo_.record2().io_blocks - offInIo_;
+        assert(offInIo_ <= recIo_.record().io_blocks);
+        return recIo_.record().io_blocks - offInIo_;
     }
 
     static std::shared_ptr<char> allocateBufForSkipStatic(bool isInputFdSeekable) {
