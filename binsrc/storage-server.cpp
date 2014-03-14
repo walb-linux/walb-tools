@@ -60,6 +60,7 @@ struct Option : cybozu::Option
     std::string multiProxyDStr;
     bool isDebug;
     size_t maxConnections;
+    size_t maxBackgroundTasks;
     Option() {
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
@@ -73,7 +74,7 @@ struct Option : cybozu::Option
         appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
-        appendOpt(&s.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
 
         appendHelp("h");
     }
@@ -83,27 +84,28 @@ struct Option : cybozu::Option
     }
 };
 
-void initSingleton(Option &opt)
-{
-    StorageSingleton &s = getStorageGlobal();
-
-    s.archive = parseSocketAddr(opt.archiveDStr);
-    s.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
-
-    // QQQ
-}
-
 void initializeStorage(Option &opt)
 {
     util::makeDir(gs.baseDirStr, "storageServer", false);
-    initSingleton(opt);
+    StorageSingleton &g = getStorageGlobal();
+    g.archive = parseSocketAddr(opt.archiveDStr);
+    g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
 
     // QQQ
+
+    g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
+    g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
 }
 
 void finalizeStorage()
 {
-    // QQQ
+    StorageSingleton &g = getStorageGlobal();
+
+    g.wdevMonitor->join();
+    g.wdevMonitor.reset();
+
+    g.taskQueue.quit();
+    g.dispatcher.reset();
 }
 
 int main(int argc, char *argv[]) try

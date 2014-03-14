@@ -115,7 +115,7 @@ private:
 
 
 public:
-    ProxyWorker(const ProxyTask &task) : task_(task) {
+    explicit ProxyWorker(const ProxyTask &task) : task_(task) {
     }
     /**
      * This will do wdiff send to an archive server.

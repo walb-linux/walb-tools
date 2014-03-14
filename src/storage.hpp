@@ -51,6 +51,33 @@ private:
     void initInner(const std::string& volId);
 };
 
+class StorageWorker : public cybozu::thread::Runnable
+{
+public:
+    const std::string volId;
+    explicit StorageWorker(const std::string &volId) : volId(volId) {
+    }
+    void operator()();
+    // QQQ
+};
+
+class EpollManager
+{
+private:
+    std::mutex mu_;
+
+public:
+    ~EpollManager() noexcept {
+        // clear all targets.
+    }
+    void add(const std::string &/*volId*/, const std::string &/*path*/) {
+        // QQQ
+    }
+    void del(const std::string &/*volId*/) {
+        // QQQ
+    }
+};
+
 struct StorageSingleton
 {
     static StorageSingleton& getInstance() {
@@ -61,7 +88,6 @@ struct StorageSingleton
     /**
      * Read-only except for daemon initialization.
      */
-    size_t maxBackgroundTasks;
     cybozu::SocketAddr archive;
     std::vector<cybozu::SocketAddr> proxyV;
     std::string nodeId;
@@ -72,6 +98,11 @@ struct StorageSingleton
      */
     std::atomic<bool> forceQuit;
     walb::AtomicMap<StorageVolState> stMap;
+    TaskQueue<std::string> taskQueue;
+    std::unique_ptr<DispatchTask<std::string, StorageWorker> > dispatcher;
+    std::unique_ptr<std::thread> wdevMonitor;
+    //EpollManager epollManager;
+    //WalbLogPoller ??
 };
 
 inline StorageSingleton& getStorageGlobal()
@@ -379,6 +410,61 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 inline void c2sSnapshotServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
+}
+
+namespace storage_local {
+
+inline uint64_t extractAndSendWlog(const std::string &/*volId*/)
+{
+    // QQQ
+    return -1;
+}
+
+/**
+ * Delete all wlogs which lsid is less than a specifeid lsid.
+ * Given INVALID_LSID, all existing wlogs will be deleted.
+ *
+ * RETURN:
+ *   true if all the wlogs have been deleted.
+ */
+inline bool deleteWlogs(uint64_t /*lsid*/ = INVALID_LSID)
+{
+    // QQQ
+    return false;
+}
+
+} // storage_local
+
+inline void StorageWorker::operator()()
+{
+    const char *const FUNC = "StorageWorker::operator()";
+    StorageVolState& volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    const std::string st = volSt.sm.get();
+    verifyStateIn(st, {sMaster, sSlave}, FUNC);
+
+    if (st == sMaster) {
+        StateMachineTransaction tran(volSt.sm, sMaster, stWlogSend);
+        ul.unlock();
+        uint64_t lsid = storage_local::extractAndSendWlog(volId);
+        const bool isEmpty = storage_local::deleteWlogs(lsid);
+        if (!isEmpty) getStorageGlobal().taskQueue.push(volId);
+        tran.commit(sMaster);
+    } else { // sSlave
+        StateMachineTransaction tran(volSt.sm, sSlave, stWlogRemove);
+        ul.unlock();
+        storage_local::deleteWlogs();
+        tran.commit(sSlave);
+    }
+    // QQQ
+}
+
+inline void wdevMonitorWorker()
+{
+    ;
+    // QQQ
+
 }
 
 } // walb
