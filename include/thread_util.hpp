@@ -411,7 +411,7 @@ public:
      */
     bool cancel(uint32_t id) {
         std::lock_guard<std::mutex> lk(mutex_);
-        __attribute__((unused)) size_t n = ready_.erase(id);
+        __attribute__((unused)) const size_t n = ready_.erase(id);
         auto it = readyQ_.begin();
         while (it != readyQ_.end()) {
             if (it->id() == id) {
