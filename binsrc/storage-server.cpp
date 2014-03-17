@@ -101,6 +101,7 @@ void finalizeStorage()
 {
     StorageSingleton &g = getStorageGlobal();
 
+    g.quitMonitor = true;
     g.wdevMonitor->join();
     g.wdevMonitor.reset();
 

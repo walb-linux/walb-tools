@@ -160,9 +160,9 @@ public:
     /**
      * Get list of wdevName and polling fd.
      */
-    std::vector<std::pair<std::string, int> > list() const {
+    std::vector<std::pair<std::string, int>> list() const {
         std::lock_guard<std::mutex> lk(mutex_);
-        std::vector<std::pair<std::string, int> > v;
+        std::vector<std::pair<std::string, int>> v;
         for (const auto &p : fdMap_) {
             v.push_back(p);
         }

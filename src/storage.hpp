@@ -9,6 +9,14 @@
 
 namespace walb {
 
+inline std::string getWdevNameFromWdevPath(const std::string& wdevPath)
+{
+    // wdevPath = "/dev/walb/" + wdevName
+    const std::string prefix = "/dev/walb/";
+    if (wdevPath.find(prefix) != 0) throw cybozu::Exception("getWdevNameFromWdevPath:bad name") << wdevPath;
+    return wdevPath.substr(prefix.size());
+}
+
 struct StorageVolState {
     std::recursive_mutex mu;
     std::atomic<int> stopState;
@@ -83,15 +91,55 @@ struct StorageSingleton
     std::atomic<bool> forceQuit;
     walb::AtomicMap<StorageVolState> stMap;
     TaskQueue<std::string> taskQueue;
-    std::unique_ptr<DispatchTask<std::string, StorageWorker> > dispatcher;
+    std::unique_ptr<DispatchTask<std::string, StorageWorker>> dispatcher;
     std::unique_ptr<std::thread> wdevMonitor;
+    std::atomic<bool> quitMonitor;
     LogDevMonitor logDevMonitor;
+
+    using Str2Str = std::map<std::string, std::string>;
+    using AutoLock = std::lock_guard<std::mutex>;
+    void addWdevName(const std::string& wdevName, const std::string& volId)
+    {
+        AutoLock al(wdevName2VolIdMutex);
+        Str2Str::iterator i;
+        bool maked;
+        std::tie(i, maked) = wdevName2volId.insert(std::make_pair(wdevName, volId));
+        if (!maked) throw cybozu::Exception("StorageSingleton:addWdevName:already exists") << wdevName << volId;
+    }
+    void delWdevName(const std::string& wdevName)
+    {
+        AutoLock al(wdevName2VolIdMutex);
+        Str2Str::iterator i = wdevName2volId.find(wdevName);
+        if (i == wdevName2volId.end()) throw cybozu::Exception("StorageSingleton:delWdevName:not found") << wdevName;
+        wdevName2volId.erase(i);
+    }
+    std::string getVolIdFromWdevName(const std::string& wdevName) const
+    {
+        AutoLock al(wdevName2VolIdMutex);
+        Str2Str::const_iterator i = wdevName2volId.find(wdevName);
+        if (i == wdevName2volId.cend()) throw cybozu::Exception("StorageSingleton:getWvolIdFromWdevName:not found") << wdevName;
+        return i->second;
+    }
+private:
+    mutable std::mutex wdevName2VolIdMutex;
+    Str2Str wdevName2volId;
 };
 
 inline StorageSingleton& getStorageGlobal()
 {
     return StorageSingleton::getInstance();
 }
+
+namespace storage_local {
+inline void startMonitoring(const std::string& wdevPath, const std::string& volId)
+{
+    getStorageGlobal().addWdevName(getWdevNameFromWdevPath(wdevPath), volId);
+}
+inline void stopMonitoring(const std::string& wdevPath)
+{
+    getStorageGlobal().delWdevName(getWdevNameFromWdevPath(wdevPath));
+}
+} // storage_local
 
 const StorageSingleton& gs = getStorageGlobal();
 
@@ -181,6 +229,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
     {
         StateMachineTransaction tran(sm, sSyncReady, stClearVol, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string wdevPathName = volInfo.getWdevPath();
         volInfo.clear();
         tran.commit(sClear);
     }
@@ -206,13 +255,13 @@ inline void c2sStartServer(protocol::ServerParams &p)
         StateMachineTransaction tran(sm, sStopped, stStartMaster, "c2sStartServer");
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.setState(sMaster);
-        // TODO: start monitoring of the target walb device.
+        storage_local::startMonitoring(volInfo.getWdevPath(), volId);
         tran.commit(sMaster);
     } else {
         StateMachineTransaction tran(sm, sSyncReady, stStartSlave, "c2sStartServer");
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.setState(sSlave);
-        // TODO: start monitoring of the target walb device.
+        storage_local::startMonitoring(volInfo.getWdevPath(), volId);
         tran.commit(sSlave);
     }
     packet::Ack(p.sock).send();
@@ -257,7 +306,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
         ul.unlock();
 
-        // TODO: stop monitoring.
+        storage_local::stopMonitoring(volInfo.getWdevPath());
 
         volInfo.setState(sStopped);
         tran.commit(sStopped);
@@ -266,7 +315,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
         ul.unlock();
 
-        // TODO: stop monitoring.
+        storage_local::stopMonitoring(volInfo.getWdevPath());
 
         volInfo.setState(sSyncReady);
         tran.commit(sSyncReady);
@@ -443,11 +492,24 @@ inline void StorageWorker::operator()()
     // QQQ
 }
 
-inline void wdevMonitorWorker()
+inline void wdevMonitorWorker() noexcept
 {
-    ;
-    // QQQ
-
+    StorageSingleton& g = getStorageGlobal();
+    const int timeoutMs = 1000;
+    while (!g.quitMonitor) {
+        try {
+            const StrVec v = g.logDevMonitor.poll(timeoutMs);
+            if (v.empty()) continue;
+            for (const std::string& wdevName : v) {
+                const std::string volId = g.getVolIdFromWdevName(wdevName);
+                g.taskQueue.push(volId);
+            }
+        } catch (std::exception& e) {
+            LOGs.error() << "wdevMonitorWorker" << e.what();
+        } catch (...) {
+            LOGs.error() << "wdevMonitorWorker:unknown error";
+        }
+    }
 }
 
 } // walb
