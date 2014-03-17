@@ -10,7 +10,7 @@
 
 #include "cybozu/option.hpp"
 #include "util.hpp"
-#include "walb_log_poll.hpp"
+#include "log_dev_monitor.hpp"
 
 struct Option : public cybozu::Option
 {

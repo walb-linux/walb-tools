@@ -5,7 +5,7 @@
 #include "state_machine.hpp"
 #include "constant.hpp"
 #include <snappy.h>
-#include "walb_log_poll.hpp"
+#include "log_dev_monitor.hpp"
 
 namespace walb {
 
@@ -85,8 +85,7 @@ struct StorageSingleton
     TaskQueue<std::string> taskQueue;
     std::unique_ptr<DispatchTask<std::string, StorageWorker> > dispatcher;
     std::unique_ptr<std::thread> wdevMonitor;
-    //EpollManager epollManager;
-    //WalbLogMonitor ??
+    LogDevMonitor logDevMonitor;
 };
 
 inline StorageSingleton& getStorageGlobal()
