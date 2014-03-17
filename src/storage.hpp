@@ -451,10 +451,23 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 /**
  * Take a snapshot to restore in archive hosts.
  */
-inline void c2sSnapshotServer(protocol::ServerParams &/*p*/)
+inline void c2sSnapshotServer(protocol::ServerParams &p)
 {
-    // QQQ
-    // storage_local::takeSnapshot();
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
+    try {
+        const uint64_t gid = storage_local::takeSnapshot(volId, false);
+        pkt.write("ok");
+        pkt.write(gid);
+        logger.info() << FUNC << "taking snapshot succeeded" << volId << gid;
+    } catch (std::exception &e) {
+        logger.error() << FUNC << "taking snapshot failed" << volId << e.what();
+        pkt.write(e.what());
+        throw;
+    }
 }
 
 namespace storage_local {

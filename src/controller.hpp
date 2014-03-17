@@ -197,10 +197,26 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 
 /**
  * Take a snapshot which will be restorable at the archive site.
+ *
+ * params[0]: volId.
+ *
+ * Print the gid of the snapshot.
  */
-inline void c2sSnapshotClient(protocol::ClientParams &/*p*/)
+inline void c2sSnapshotClient(protocol::ClientParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 1, FUNC, false);
+    packet::Packet pkt(p.sock);
+
+    std::string res;
+    pkt.read(res);
+    if (res != "ok") {
+        throw cybozu::Exception(FUNC) << "failed" << res;
+    }
+
+    uint64_t gid;
+    pkt.read(gid);
+    ::printf("%" PRIu64 "\n", gid);
 }
 
 /**
