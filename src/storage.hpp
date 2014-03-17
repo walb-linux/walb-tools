@@ -352,6 +352,18 @@ inline bool sendDirtyFullImage(
     return true;
 }
 
+/**
+ * @isMergeable
+ *   true, the snapshot will be removed.
+ * RETURN:
+ *   Gid of the taken snapshot.
+ */
+inline uint64_t takeSnapshot(const std::string &/*volId*/, bool /*isMergeable*/)
+{
+    // QQQ
+    return -1;
+}
+
 } // storage_local
 
 inline void c2sFullSyncServer(protocol::ServerParams &p)
@@ -442,6 +454,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 inline void c2sSnapshotServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
+    // storage_local::takeSnapshot();
 }
 
 namespace storage_local {
@@ -459,7 +472,7 @@ inline uint64_t extractAndSendWlog(const std::string &/*volId*/)
  * RETURN:
  *   true if all the wlogs have been deleted.
  */
-inline bool deleteWlogs(uint64_t /*lsid*/ = INVALID_LSID)
+inline bool deleteWlogs(const std::string &/*volId*/, uint64_t /*lsid*/ = INVALID_LSID)
 {
     // QQQ
     return false;
@@ -480,13 +493,13 @@ inline void StorageWorker::operator()()
         StateMachineTransaction tran(volSt.sm, sMaster, stWlogSend);
         ul.unlock();
         uint64_t lsid = storage_local::extractAndSendWlog(volId);
-        const bool isEmpty = storage_local::deleteWlogs(lsid);
+        const bool isEmpty = storage_local::deleteWlogs(volId, lsid);
         if (!isEmpty) getStorageGlobal().taskQueue.push(volId);
         tran.commit(sMaster);
     } else { // sSlave
         StateMachineTransaction tran(volSt.sm, sSlave, stWlogRemove);
         ul.unlock();
-        storage_local::deleteWlogs();
+        storage_local::deleteWlogs(volId);
         tran.commit(sSlave);
     }
     // QQQ
