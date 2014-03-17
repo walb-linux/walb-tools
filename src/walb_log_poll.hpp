@@ -75,7 +75,7 @@ public:
  *     invoke another tasks with returned wdev name list.
  *   Thread i: call add()/del() when the control command received.
  */
-class WalbLogPoller
+class WalbLogMonitor
 {
 private:
     mutable std::mutex mutex_;
@@ -85,7 +85,7 @@ private:
     std::map<int, std::string> nameMap_; /* fd, name. */
 
 public:
-    explicit WalbLogPoller(unsigned int maxEvents = 1)
+    explicit WalbLogMonitor(unsigned int maxEvents = 1)
         : mutex_()
         , efd_(::epoll_create(maxEvents), "epoll_create failed.")
         , ev_(maxEvents)
@@ -93,7 +93,7 @@ public:
         , nameMap_() {
         assert(0 < maxEvents);
     }
-    ~WalbLogPoller() noexcept {
+    ~WalbLogMonitor() noexcept {
         auto it = fdMap_.begin();
         while (it != fdMap_.end()) {
             int fd = it->second;

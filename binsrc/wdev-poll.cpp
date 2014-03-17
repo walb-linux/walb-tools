@@ -25,7 +25,7 @@ struct Option : public cybozu::Option
     }
 };
 
-void pollWorker(std::atomic<bool> &flag, walb::log::WalbLogPoller &poller)
+void pollWorker(std::atomic<bool> &flag, walb::log::WalbLogMonitor &poller)
 {
     try {
         while (!flag.load()) {
@@ -75,7 +75,7 @@ std::vector<std::string> commandReader(FILE *fp)
     return v;
 }
 
-bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogPoller &poller)
+bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogMonitor &poller)
 {
     if (cmds.empty() || cmds[0] == "quit") return false;
 
@@ -111,7 +111,7 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogPolle
 int main(int argc, char *argv[])
 {
     try {
-        walb::log::WalbLogPoller poller;
+        walb::log::WalbLogMonitor poller;
 
         Option opt;
         if (!opt.parse(argc, argv)) {

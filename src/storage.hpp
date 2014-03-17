@@ -5,6 +5,7 @@
 #include "state_machine.hpp"
 #include "constant.hpp"
 #include <snappy.h>
+#include "walb_log_poll.hpp"
 
 namespace walb {
 
@@ -61,23 +62,6 @@ public:
     // QQQ
 };
 
-class EpollManager
-{
-private:
-    std::mutex mu_;
-
-public:
-    ~EpollManager() noexcept {
-        // clear all targets.
-    }
-    void add(const std::string &/*volId*/, const std::string &/*path*/) {
-        // QQQ
-    }
-    void del(const std::string &/*volId*/) {
-        // QQQ
-    }
-};
-
 struct StorageSingleton
 {
     static StorageSingleton& getInstance() {
@@ -102,7 +86,7 @@ struct StorageSingleton
     std::unique_ptr<DispatchTask<std::string, StorageWorker> > dispatcher;
     std::unique_ptr<std::thread> wdevMonitor;
     //EpollManager epollManager;
-    //WalbLogPoller ??
+    //WalbLogMonitor ??
 };
 
 inline StorageSingleton& getStorageGlobal()
