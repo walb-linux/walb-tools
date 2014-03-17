@@ -158,7 +158,7 @@ public:
     {
         cybozu::disable_warning_unused_variable(gid);
         // TODO
-        resetWal(wdevPath_.str());
+        device::resetWal(wdevPath_.str());
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;

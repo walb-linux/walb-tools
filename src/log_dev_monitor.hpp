@@ -20,21 +20,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "cybozu/exception.hpp"
+#include "wdev_util.hpp"
 
 namespace walb {
-
-/**
- * Get polling path.
- *
- * @wdevName walb device name.
- * RETURN:
- *   full path of polling target.
- */
-std::string getPollingPath(const std::string &wdevName)
-{
-    return cybozu::util::formatString(
-        "/sys/block/walb!%s/walb/lsids", wdevName.c_str());
-}
 
 /**
  * This is thread safe.
@@ -219,7 +207,7 @@ private:
      *   false when some error occurs.
      */
     bool addNolock(const std::string &wdevName) {
-        std::string path = getPollingPath(wdevName);
+        std::string path = device::getPollingPath(wdevName);
         Fd fd(::open(path.c_str(), O_RDONLY), std::string("addNolock:can't open ") + path);
 
         if (!addName(wdevName, fd())) return false;

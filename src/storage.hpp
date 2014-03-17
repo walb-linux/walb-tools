@@ -6,16 +6,9 @@
 #include "constant.hpp"
 #include <snappy.h>
 #include "log_dev_monitor.hpp"
+#include "wdev_util.hpp"
 
 namespace walb {
-
-inline std::string getWdevNameFromWdevPath(const std::string& wdevPath)
-{
-    // wdevPath = "/dev/walb/" + wdevName
-    const std::string prefix = "/dev/walb/";
-    if (wdevPath.find(prefix) != 0) throw cybozu::Exception("getWdevNameFromWdevPath:bad name") << wdevPath;
-    return wdevPath.substr(prefix.size());
-}
 
 struct StorageVolState {
     std::recursive_mutex mu;
@@ -133,11 +126,11 @@ inline StorageSingleton& getStorageGlobal()
 namespace storage_local {
 inline void startMonitoring(const std::string& wdevPath, const std::string& volId)
 {
-    getStorageGlobal().addWdevName(getWdevNameFromWdevPath(wdevPath), volId);
+    getStorageGlobal().addWdevName(device::getWdevNameFromWdevPath(wdevPath), volId);
 }
 inline void stopMonitoring(const std::string& wdevPath)
 {
-    getStorageGlobal().delWdevName(getWdevNameFromWdevPath(wdevPath));
+    getStorageGlobal().delWdevName(device::getWdevNameFromWdevPath(wdevPath));
 }
 } // storage_local
 
@@ -391,7 +384,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     volInfo.resetWlog(0);
 
-    const uint64_t sizeLb = getSizeLb(volInfo.getWdevPath());
+    const uint64_t sizeLb = device::getSizeLb(volInfo.getWdevPath());
     const cybozu::Uuid uuid = volInfo.getUuid();
     logger.debug() << sizeLb << uuid;
 
@@ -458,6 +451,12 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
+
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    verifyStateIn(st, {sMaster, sStopped}, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     try {
         const uint64_t gid = storage_local::takeSnapshot(volId, false);
         pkt.write("ok");
