@@ -72,7 +72,7 @@ inline bool isDeviceAvailable(const cybozu::FilePath &path) {
  * RETURN:
  *   stdout of lvm command.
  */
-std::string callLvm(
+inline std::string callLvm(
     const std::string &cmd, const std::string &options,
     const std::vector<std::string> &args = {})
 {
@@ -84,7 +84,7 @@ std::string callLvm(
     return cybozu::process::call(cmd, args0);
 }
 
-void sleepMs(unsigned int ms)
+inline void sleepMs(unsigned int ms)
 {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
@@ -94,7 +94,7 @@ void sleepMs(unsigned int ms)
  * RETURN:
  *   parsed size [logical block].
  */
-uint64_t parseSizeLb(const std::string &s) {
+inline uint64_t parseSizeLb(const std::string &s) {
     uint64_t size = cybozu::atoi(s);
     if (size % LBS != 0) {
         throw std::runtime_error("size must be multiples of logical block size.");
@@ -105,7 +105,7 @@ uint64_t parseSizeLb(const std::string &s) {
 /**
  * Create lvm size option.
  */
-std::string getSizeOpt(uint64_t sizeLb) {
+inline std::string getSizeOpt(uint64_t sizeLb) {
     return std::string("--size=") + cybozu::itoa(sizeLb * LBS) + "b";
 }
 
@@ -114,7 +114,7 @@ std::string getSizeOpt(uint64_t sizeLb) {
  *   true when available,
  *   false in timeout.
  */
-bool waitForDeviceAvailable(cybozu::FilePath &path)
+inline bool waitForDeviceAvailable(cybozu::FilePath &path)
 {
     const size_t timeoutMs = 5000;
     const size_t intervalMs = 100;
@@ -363,7 +363,7 @@ Lv createSnapshot(
  * Rename a volume or snapshot.
  * "lvrename vg oldlv newlv"
  */
-void renameLv(
+inline void renameLv(
     const std::string &vgName,
     const std::string &oldLvName, const std::string &newLvName)
 {
@@ -373,7 +373,7 @@ void renameLv(
 /**
  * Remove a volume or a snapshot.
  */
-void remove(const std::string &pathStr)
+inline void remove(const std::string &pathStr)
 {
     cybozu::FilePath path(pathStr);
     if (!path.stat().exists()) {
@@ -387,7 +387,7 @@ void remove(const std::string &pathStr)
 /**
  * Resize a volume.
  */
-void resize(const std::string &pathStr, uint64_t newSizeLb)
+inline void resize(const std::string &pathStr, uint64_t newSizeLb)
 {
     cybozu::process::call("/sbin/lvresize", {
         "-f", /* force volume shrink */
@@ -404,7 +404,7 @@ void resize(const std::string &pathStr, uint64_t newSizeLb)
  *   Volume list including snapshots.
  * @arg "" or vgName or volumePath.
  */
-LvList listLv(const std::string &arg = "")
+inline LvList listLv(const std::string &arg = "")
 {
     LvList list;
     std::vector<std::string> args;
@@ -433,7 +433,7 @@ LvList listLv(const std::string &arg = "")
  *   Volume list not including snapshots.
  * @arg "" or vgName or volumePath.
  */
-LvMap getLvMap(const std::string &arg)
+inline LvMap getLvMap(const std::string &arg)
 {
     LvMap map;
     for (Lv &lv : listLv(arg)) {
@@ -448,17 +448,17 @@ LvMap getLvMap(const std::string &arg)
  * RETURN:
  *   True when the volume with the name exists.
  */
-bool exists(const std::string &vgName, const std::string &name)
+inline bool exists(const std::string &vgName, const std::string &name)
 {
     return !find(vgName, name).empty();
 }
 
-bool lvExists(const std::string &vgName, const std::string &lvName)
+inline bool lvExists(const std::string &vgName, const std::string &lvName)
 {
     return !findLv(vgName, lvName).empty();
 }
 
-bool snapExists(const std::string &vgName, const std::string &snapName)
+inline bool snapExists(const std::string &vgName, const std::string &snapName)
 {
     return !findSnap(vgName, snapName).empty();
 }
@@ -471,7 +471,7 @@ bool snapExists(const std::string &vgName, const std::string &snapName)
  * RETURN:
  *   logical volume or snapshot list.
  */
-LvList find(const std::string &vgName, const std::string &name)
+inline LvList find(const std::string &vgName, const std::string &name)
 {
     LvList list;
     for (Lv &lv : listLv(vgName)) {
@@ -483,7 +483,7 @@ LvList find(const std::string &vgName, const std::string &name)
 /**
  * Find logical volumes.
  */
-LvList findLv(const std::string &vgName, const std::string &lvName)
+inline LvList findLv(const std::string &vgName, const std::string &lvName)
 {
     LvList list;
     for (Lv &lv : listLv(vgName)) {
@@ -497,7 +497,7 @@ LvList findLv(const std::string &vgName, const std::string &lvName)
 /**
  * Find snapshots.
  */
-LvList findSnap(const std::string &vgName, const std::string &snapName)
+inline LvList findSnap(const std::string &vgName, const std::string &snapName)
 {
     LvList list;
     for (Lv &lv : listLv(vgName)) {
@@ -511,7 +511,7 @@ LvList findSnap(const std::string &vgName, const std::string &snapName)
 /**
  * Get logical volume object using a device path.
  */
-Lv locate(const std::string &pathStr)
+inline Lv locate(const std::string &pathStr)
 {
     LvList list = listLv(pathStr);
     if (list.empty()) {
@@ -520,7 +520,7 @@ Lv locate(const std::string &pathStr)
     return list.front();
 }
 
-Lv locate(const std::string &vgName, const std::string &name)
+inline Lv locate(const std::string &vgName, const std::string &name)
 {
     return locate(getLvmPath(vgName, name).str());
 }
@@ -529,7 +529,7 @@ Lv locate(const std::string &vgName, const std::string &name)
  * RETURN:
  *   volume group list.
  */
-VgList listVg()
+inline VgList listVg()
 {
     VgList list;
     std::string result
@@ -551,7 +551,7 @@ VgList listVg()
 /**
  * Get a volume group.
  */
-Vg getVg(const std::string &vgName)
+inline Vg getVg(const std::string &vgName)
 {
     for (Vg &vg : listVg()) {
         if (vg.name() == vgName) return vg;
@@ -559,7 +559,7 @@ Vg getVg(const std::string &vgName)
     throw std::runtime_error("VG not found.");
 }
 
-bool vgExists(const std::string &vgName)
+inline bool vgExists(const std::string &vgName)
 {
     for (Vg &vg : listVg()) {
         if (vg.name() == vgName) return true;

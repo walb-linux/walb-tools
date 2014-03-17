@@ -64,7 +64,7 @@ private:
 /**
  * @fd 0, 1, or 2.
  */
-void redirectToNullDev(int fd)
+inline void redirectToNullDev(int fd)
 {
     int flags = (fd == 0 ? O_RDONLY : O_WRONLY);
     int tmpFd = ::open("/dev/null", flags);
@@ -79,7 +79,7 @@ void redirectToNullDev(int fd)
 /**
  * Close all file descriptors except for 0, 1, and 2.
  */
-void closeAllFileDescriptors()
+inline void closeAllFileDescriptors()
 {
     int maxFd = ::sysconf(_SC_OPEN_MAX);
     maxFd = maxFd < 0 ? 1024 : maxFd;
@@ -91,7 +91,7 @@ void closeAllFileDescriptors()
 /**
  * Create command line arguments for execv().
  */
-std::vector<char *> prepareArgv(const std::string &cmd, const std::vector<std::string> &args)
+inline std::vector<char *> prepareArgv(const std::string &cmd, const std::vector<std::string> &args)
 {
     std::vector<char *> argv;
     argv.push_back(const_cast<char *>(cmd.c_str()));
@@ -105,7 +105,7 @@ std::vector<char *> prepareArgv(const std::string &cmd, const std::vector<std::s
 /**
  * Call another command and get stdout as a result.
  */
-std::string call(const std::string& cmd, const std::vector<std::string> &args)
+inline std::string call(const std::string& cmd, const std::vector<std::string> &args)
 {
     Pipe pipe0;
     pid_t cpid;
