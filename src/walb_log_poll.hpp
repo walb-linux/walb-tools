@@ -22,7 +22,6 @@
 #include "cybozu/exception.hpp"
 
 namespace walb {
-namespace log {
 
 /**
  * Get polling path.
@@ -37,36 +36,6 @@ std::string getPollingPath(const std::string &wdevName)
         "/sys/block/walb!%s/walb/lsids", wdevName.c_str());
 }
 
-class Fd
-{
-    int fd;
-    bool doAutoClose_;
-    Fd(const Fd&) = delete;
-    void operator=(const Fd&) = delete;
-public:
-    /**
-     * check fd if errMsg is set
-     */
-    explicit Fd(int fd, const std::string& errMsg = "")
-        : fd(fd)
-        , doAutoClose_(true)
-    {
-        if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
-    }
-    void close() {
-        if (fd < 0) return;
-        if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
-        fd = -1;
-    }
-    void dontClose() {
-        doAutoClose_ = false;
-    }
-    ~Fd() noexcept {
-        if (fd < 0 || !doAutoClose_) return;
-        ::close(fd);
-    }
-    int operator()() const noexcept { return fd; }
-};
 /**
  * This is thread safe.
  *
@@ -75,9 +44,39 @@ public:
  *     invoke another tasks with returned wdev name list.
  *   Thread i: call add()/del() when the control command received.
  */
-class WalbLogMonitor
+class LogDevMonitor
 {
 private:
+    class Fd
+    {
+        int fd;
+        bool doAutoClose_;
+        Fd(const Fd&) = delete;
+        void operator=(const Fd&) = delete;
+    public:
+        /**
+         * check fd if errMsg is set
+         */
+        explicit Fd(int fd, const std::string& errMsg = "")
+            : fd(fd)
+            , doAutoClose_(true)
+        {
+            if (!errMsg.empty() && fd < 0) throw cybozu::Exception(errMsg) << cybozu::ErrorNo();
+        }
+        void close() {
+            if (fd < 0) return;
+            if (::close(fd) < 0) throw cybozu::Exception("walb:log:Fd:close") << errno;
+            fd = -1;
+        }
+        void dontClose() {
+            doAutoClose_ = false;
+        }
+        ~Fd() noexcept {
+            if (fd < 0 || !doAutoClose_) return;
+            ::close(fd);
+        }
+        int operator()() const noexcept { return fd; }
+    };
     mutable std::mutex mutex_;
     Fd efd_;
     std::vector<struct epoll_event> ev_;
@@ -85,7 +84,7 @@ private:
     std::map<int, std::string> nameMap_; /* fd, name. */
 
 public:
-    explicit WalbLogMonitor(unsigned int maxEvents = 1)
+    explicit LogDevMonitor(unsigned int maxEvents = 1)
         : mutex_()
         , efd_(::epoll_create(maxEvents), "epoll_create failed.")
         , ev_(maxEvents)
@@ -93,7 +92,7 @@ public:
         , nameMap_() {
         assert(0 < maxEvents);
     }
-    ~WalbLogMonitor() noexcept {
+    ~LogDevMonitor() noexcept {
         auto it = fdMap_.begin();
         while (it != fdMap_.end()) {
             int fd = it->second;
@@ -251,4 +250,4 @@ private:
     }
 };
 
-}} //namespace walb::log
+} //namespace walb

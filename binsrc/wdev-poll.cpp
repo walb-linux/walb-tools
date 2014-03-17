@@ -25,11 +25,11 @@ struct Option : public cybozu::Option
     }
 };
 
-void pollWorker(std::atomic<bool> &flag, walb::log::WalbLogMonitor &poller)
+void pollWorker(std::atomic<bool> &flag, walb::LogDevMonitor &monitor)
 {
     try {
         while (!flag.load()) {
-            auto v = poller.poll(1000);
+            auto v = monitor.poll(1000);
             ::printf("got %zu\n", v.size());
             for (std::string &s : v) {
                 ::printf("wdev %s\n", s.c_str());
@@ -75,7 +75,7 @@ std::vector<std::string> commandReader(FILE *fp)
     return v;
 }
 
-bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogMonitor &poller)
+bool commandRunner(const std::vector<std::string> &cmds, walb::LogDevMonitor &monitor)
 {
     if (cmds.empty() || cmds[0] == "quit") return false;
 
@@ -86,19 +86,19 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogMonit
     }
     if (cmdType == "addForce") {
         ::printf("addForce '%s'(%zu)\n", wdevName.c_str(), wdevName.size());
-        if (!poller.addForce(wdevName)) {
+        if (!monitor.addForce(wdevName)) {
             ::printf("addForce failed.\n");
         }
     } else if (cmdType == "add") {
         ::printf("add '%s'(%zu)\n", wdevName.c_str(), wdevName.size());
-        if (!poller.add(wdevName)) {
+        if (!monitor.add(wdevName)) {
             ::printf("add failed.\n");
         }
     } else if (cmdType == "del") {
         ::printf("del '%s'(%zu)\n", wdevName.c_str(), wdevName.size());
-        poller.del(wdevName);
+        monitor.del(wdevName);
     } else if (cmdType == "list") {
-        for (auto &p : poller.list()) {
+        for (auto &p : monitor.list()) {
             ::printf("%s %d\n", p.first.c_str(), p.second);
         }
     } else {
@@ -111,7 +111,7 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::log::WalbLogMonit
 int main(int argc, char *argv[])
 {
     try {
-        walb::log::WalbLogMonitor poller;
+        walb::LogDevMonitor monitor;
 
         Option opt;
         if (!opt.parse(argc, argv)) {
@@ -119,10 +119,10 @@ int main(int argc, char *argv[])
         }
         std::atomic<bool> flag(false);
 
-        std::thread th(pollWorker, std::ref(flag), std::ref(poller));
+        std::thread th(pollWorker, std::ref(flag), std::ref(monitor));
         while (true) {
             std::vector<std::string> cmds = commandReader(::stdin);
-            if (!commandRunner(cmds, poller)) {
+            if (!commandRunner(cmds, monitor)) {
                 break;
             }
         }
