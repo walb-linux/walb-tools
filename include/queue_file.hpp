@@ -9,6 +9,7 @@
 #include <string>
 #include <exception>
 #include <algorithm>
+#include <sstream>
 #include <cstdio>
 #include <limits>
 #include <sys/mman.h>
@@ -41,118 +42,56 @@ struct QueueRecordHeader
 {
     uint32_t preamble; /* Preample of the queue record. */
     uint32_t checksum; /* checksum of data. The salt is stored in the queue file header. */
-    uint32_t size; /* data size [byte].
-                    * The highest bit menas delete flag.
-                      0 means end mark. */
-} __attribute__((packed));
+    uint32_t dataSize; /* data size [byte]. */
+    uint32_t toPrev; /* offset difference to previous record [byte]. */
 
-/**
- * QueueRecordHeader operator.
- */
-class QueueRecordHeaderOp
-{
-private:
-    QueueRecordHeader *rec_;
-
-public:
-    QueueRecordHeaderOp(QueueRecordHeader *rec)
-        : rec_(nullptr) {
-        reset(rec);
-    }
-    QueueRecordHeaderOp(const QueueRecordHeader *rec)
-        : QueueRecordHeaderOp(const_cast<QueueRecordHeader*>(rec)) {
-    }
-    virtual ~QueueRecordHeaderOp() noexcept {
-    }
-    void print() const {
-        ::printf("preamble %" PRIu32 " (%08x)\n"
-                 "checksum %" PRIu32 " (%08x)\n"
-                 "size     %" PRIu32 " (%08x)\n"
-                 , rec_->preamble, rec_->preamble
-                 , rec_->checksum, rec_->checksum
-                 , rec_->size, rec_->size);
-    }
-    void reset(QueueRecordHeader *rec) {
-        if (rec == nullptr) {
-            throw std::runtime_error("rec is null.");
-        }
-        rec_ = rec;
-    }
     void init() {
-        rec_->preamble = QUEUE_PREAMBLE;
-        rec_->checksum = 0;
-        rec_->size = 0;
+        preamble = QUEUE_PREAMBLE;
+        checksum = 0;
+        dataSize = 0;
+        toPrev = 0;
+    }
+    std::string str() const {
+        return cybozu::util::formatString(
+            "preamble %" PRIu32 " (%08x) "
+            "checksum %" PRIu32 " (%08x) "
+            "dataSize %" PRIu32 " (%08x) "
+            "toPrev   %" PRIu32 " (%08x) "
+            , preamble, preamble
+            , checksum, checksum
+            , dataSize, dataSize
+            , toPrev, toPrev)
+            + cybozu::util::byteArrayToStr(data(), dataSize);
     }
     bool isValid() const {
-        return rec_->preamble == QUEUE_PREAMBLE;
+        return preamble == QUEUE_PREAMBLE;
     }
-    bool isEndMark() const {
-        return rec_->size == 0;
-    }
-    bool isDeleted() const {
-        return (rec_->size & 0x80000000) != 0;
-    }
-    uint32_t dataSize() const {
-        return rec_->size & ~0x80000000;
-    }
-    void setDeleted() {
-        rec_->size |= 0x80000000;
-    }
-    void setDataSize(uint32_t size) {
-        if ((size & 0x80000000) != 0) {
-            throw std::runtime_error("size must be < 2^31.");
+    void verify() const {
+        if (!isValid()) {
+            throw std::runtime_error(std::string("invalid record:") + str());
         }
-        if (size == 0) {
-            throw std::runtime_error("size must not be 0.");
-        }
-        rec_->size &= 0x80000000;
-        rec_->size |= size;
-    }
-    void setChecksum(const void *data, uint32_t salt) {
-        rec_->checksum = calcChecksum(data, dataSize(), salt);
-    }
-    uint32_t checksum() const {
-        return rec_->checksum;
-    }
-    QueueRecordHeader* getNext() {
-        if (isEndMark()) {
-            return nullptr;
-        }
-        return reinterpret_cast<QueueRecordHeader*>(
-            reinterpret_cast<uint8_t*>(rec_) + totalSize());
-    }
-    const QueueRecordHeader* getNext() const {
-        if (isEndMark()) {
-            return nullptr;
-        }
-        return reinterpret_cast<const QueueRecordHeader*>(
-            reinterpret_cast<const uint8_t*>(rec_) + totalSize());
-    }
-    bool goNext() {
-        QueueRecordHeader *rec = getNext();
-        if (rec == nullptr) {
-            return false;
-        }
-        rec_ = rec;
-        return true;
-    }
-    template <typename T>
-    T* dataPtr() {
-        return reinterpret_cast<T*>(
-            reinterpret_cast<uint8_t*>(rec_) + headerSize());
-    }
-    template <typename T>
-    const T* dataPtr() const {
-        return reinterpret_cast<const T*>(
-            reinterpret_cast<const uint8_t*>(rec_) + headerSize());
     }
     uint32_t headerSize() const {
         return sizeof(QueueRecordHeader);
     }
     uint32_t totalSize() const {
-        return headerSize() + dataSize();
+        return headerSize() + dataSize;
     }
-};
+    QueueRecordHeader& prev() { return *(QueueRecordHeader *)(prevPtr()); }
+    const QueueRecordHeader& prev() const { return *(const QueueRecordHeader *)(prevPtr()); }
+    QueueRecordHeader& next() { return *(QueueRecordHeader *)(nextPtr()); }
+    const QueueRecordHeader& next() const { return *(const QueueRecordHeader *)(nextPtr()); }
+    void *data() { return (uint8_t *)this + headerSize(); }
+    const void *data() const { return (const uint8_t *)this + headerSize(); }
+
+private:
+    uintptr_t nextPtr() const {
+        return (uintptr_t)this + totalSize();
+    }
+    uintptr_t prevPtr() const {
+        return (uintptr_t)this - toPrev;
+    }
+} __attribute__((packed));
 
 /**
  * A queue file with fixed-size records.
@@ -161,7 +100,7 @@ public:
  *   1st QueueFileHeader
  *   2nd QueueFileHeader
  *   [QueueRecordHeader, byte array (record data)] * n
- *   QueueRecordHeader (end mark)
+ *   QueueRecordHeader (end stub. for toPrev only)
  */
 class QueueFile
 {
@@ -179,84 +118,89 @@ public:
     QueueFile(const std::string& filePath, int flags, int mode)
         : mmappedFile_(sizeof(QueueFileHeader) * 2 + sizeof(QueueRecordHeader),
                        filePath, flags, mode)
-        , lock_(filePath){
+        , lock_(filePath) {
         init(true);
     }
-    virtual ~QueueFile() noexcept {
+    ~QueueFile() noexcept {
         try {
             sync();
         } catch (...) {
         }
     }
-    void push(const void *data, uint32_t size) {
-        if (size == 0) {
-            throw std::runtime_error("can not push zero-size data.");
-        }
+    void pushBack(const void *data, uint32_t size) {
         mmappedFile_.resize(getRequiredFileSize(size));
-        QueueRecordHeaderOp recOp(&record(header_.endOffset));
-        recOp.init();
-        recOp.setDataSize(size);
-        recOp.setChecksum(data, header_.salt);
-        ::memcpy(recOp.dataPtr<void>(), data, size);
-        header_.endOffset += recOp.totalSize();
-        if (!recOp.goNext()) assert(false);
-        recOp.init(); /* end mark. */
+        QueueRecordHeader &rec = record(header_.endOffset);
+        const uint32_t toPrev = rec.toPrev;
+        rec.init();
+        rec.dataSize = size;
+        rec.checksum = calcChecksum(data, size, header_.salt);
+        rec.toPrev = toPrev;
+        rec.next().init();
+        rec.next().toPrev = rec.totalSize();
+        ::memcpy(rec.data(), data, size);
+        header_.endOffset += rec.totalSize();
     }
     /**
      * T must be copyable.
      */
     template <typename T>
-    void push(const T& t) {
-        push(&t, sizeof(t));
+    void pushBack(const T& t) {
+        pushBack(&t, sizeof(t));
     }
-    void push(const std::string& s) {
-        if (s.empty()) {
-            std::runtime_error("can not push empty strings.");
-        }
-        push(&s[0], s.size());
+    void pushBack(const std::string& s) {
+        pushBack(&s[0], s.size());
     }
+    void pushBack(const char *s) {
+        pushBack(std::string(s));
+    }
+#if 0
+    void pushFront(const void *data, uint32_t size) {}
+    template <typename T>
+    void pushFront(const T& t) {}
+    void pushFront(const std::string& s) {}
+    void pushFront(const char *s) {}
+#endif
     bool empty() const {
-        gcFront();
         return header_.beginOffset == header_.endOffset;
     }
-    template <typename CharT>
-    void front(std::vector<CharT>& v) const {
-        gcFront();
-        assert(!empty());
-        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        assert(!recOp.isEndMark());
-        v.resize(recOp.dataSize());
-        ::memcpy(&v[0], recOp.dataPtr<void>(), recOp.dataSize());
-    }
-    void front(std::string& s) const {
-        gcFront();
-        assert(!empty());
-        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        assert(!recOp.isEndMark());
-        s.resize(recOp.dataSize());
-        ::memcpy(&s[0], recOp.dataPtr<void>(), recOp.dataSize());
-    }
     void front(void *data, uint32_t size) const {
-        gcFront();
-        assert(!empty());
-        const QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        assert(!recOp.isEndMark());
-        if (recOp.dataSize() != size) {
-            throw std::runtime_error("front(): data size differs.");
-        }
-        ::memcpy(data, recOp.dataPtr<void>(), size);
+        verifyNotEmpty(__func__);
+        const QueueRecordHeader &rec = record(header_.beginOffset);
+        verifySizeEquality(rec.dataSize, size, __func__);
+        ::memcpy(data, rec.data(), size);
     }
-    /**
-     * T must be copyable.
-     */
     template <typename T>
     void front(T& data) const {
         front(&data, sizeof(data));
     }
-    void pop() {
-        QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        recOp.setDeleted();
-        gcFront();
+    void front(std::string& s) const {
+        const QueueRecordHeader &rec = record(header_.beginOffset);
+        s.resize(rec.dataSize);
+        ::memcpy(&s[0], rec.data(), s.size());
+    }
+    void back(void *data, uint32_t size) const {
+        verifyNotEmpty(__func__);
+        const QueueRecordHeader &rec = record(header_.endOffset).prev();
+        verifySizeEquality(rec.dataSize, size, __func__);
+        ::memcpy(data, rec.data(), size);
+    }
+    template <typename T>
+    void back(T& data) const {
+        back(&data, sizeof(data));
+    }
+    void back(std::string& s) const {
+        const QueueRecordHeader &rec = record(header_.endOffset).prev();
+        s.resize(rec.dataSize);
+        ::memcpy(&s[0], rec.data(), s.size());
+    }
+    void popFront() {
+        verifyNotEmpty(__func__);
+        QueueRecordHeader &rec = record(header_.beginOffset);
+        header_.beginOffset += rec.totalSize();
+    }
+    void popBack() {
+        verifyNotEmpty(__func__);
+        header_.endOffset -= record(header_.endOffset).toPrev;
     }
     void printOffsets() const {
         ::printf("begin %" PRIu64 " end %" PRIu64 "\n"
@@ -277,34 +221,34 @@ public:
      * There must be enough space of the front area to copy whole data.
      */
     void gc() {
-        gcFront();
-        uint64_t bgn = header_.beginOffset;
-        uint64_t end = header_.endOffset;
+        const uint64_t bgn = header_.beginOffset;
+        const uint64_t end = header_.endOffset + sizeof(QueueRecordHeader);
         assert(bgn <= end);
-        uint64_t len = end - bgn;
+        const uint64_t len = end - bgn;
 
-        if (bgn < len + sizeof(QueueRecordHeader)) {
+        if (bgn < len) {
             /* There is not enough space. */
             return;
         }
 
         /* Sync current begin/end offset. */
         sync();
-        /* Copy data to the front. */
+        /* Copy data. */
         ::memcpy(&record(0), &record(bgn), len);
-        QueueRecordHeaderOp recOp(&record(len));
-        recOp.init(); /* end mark */
         sync();
         /* Update the file header. */
-        header_.beginOffset = 0;
-        header_.endOffset = len;
+        {
+            // These must be atomic.
+            header_.beginOffset = 0;
+            header_.endOffset = len - sizeof(QueueRecordHeader);
+        }
         sync();
         /* Truncate the file. */
         mmappedFile_.resize(getRequiredFileSize(0));
         sync();
     }
 
-    template <class It, class Qf>
+    template <class It, class Qf, class RecHeader>
     class IteratorT
     {
     protected:
@@ -322,14 +266,23 @@ public:
             offset_ = rhs.offset_;
         }
         It &operator++() {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            offset_ += recOp.totalSize();
+            RecHeader &rec = qf_->record(offset_);
+            offset_ += rec.totalSize();
             return static_cast<It&>(*this);
         }
         It operator++(int) {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
             It ret(qf_, offset_);
-            offset_ += recOp.totalSize();
+            ++(*this);
+            return ret;
+        }
+        It &operator--() {
+            RecHeader &rec = qf_->record(offset_);
+            offset_ -= rec.toPrev;
+            return static_cast<It&>(*this);
+        }
+        It operator--(int) {
+            It ret(qf_, offset_);
+            --(*this);
             return ret;
         }
         bool operator==(const It &rhs) const {
@@ -339,73 +292,33 @@ public:
             return offset_ != rhs.offset_;
         }
         bool isValid() const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            if (!recOp.isValid()) {
-                return false;
-            }
-            uint32_t csum = calcChecksum(
-                recOp.dataPtr<void>(), recOp.dataSize(), qf_->header_.salt);
-            if (csum != recOp.checksum()) {
-                return false;
-            }
+            const RecHeader &rec = qf_->record(offset_);
+            if (!rec.isValid()) return false;
+            const uint32_t csum = calcChecksum(rec.data(), rec.dataSize, qf_->header_.salt);
+            if (csum != rec.checksum) return false;
             return true;
         }
-        template <typename CharT>
-        void get(std::vector<CharT>& v) const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            assert(isValid());
-            v.resize(recOp.dataSize());
-            ::memcpy(&v[0], recOp.dataPtr<void>(), recOp.dataSize());
-        }
         void get(std::string& s) const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            assert(isValid());
-            s.resize(recOp.dataSize());
-            ::memcpy(&s[0], recOp.dataPtr<void>(), recOp.dataSize());
+            const RecHeader &rec = qf_->record(offset_);
+            s.resize(rec.dataSize);
+            ::memcpy(&s[0], rec.data(), s.size());
         }
         void get(void *data, uint32_t size) const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            assert(isValid());
-            if (recOp.dataSize() != size) {
-                throw std::runtime_error("QueueIterator::get(): invalid size.");
-            }
-            ::memcpy(data, recOp.dataPtr<void>(), size);
+            const RecHeader &rec = qf_->record(offset_);
+            qf_->verifySizeEquality(rec.dataSize, size, __func__);
+            ::memcpy(data, rec.data(), size);
         }
         /* T must be copyable. */
         template <typename T>
         void get(T& t) const { get(&t, sizeof(t)); }
-        bool isEndMark() const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            return recOp.isEndMark();
-        }
-        bool isDeleted() const {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            return recOp.isDeleted();
-        }
     };
 
-    struct ConstIterator : public IteratorT<ConstIterator, const QueueFile>
+    struct ConstIterator : public IteratorT<ConstIterator, const QueueFile, const QueueRecordHeader>
     {
         using IteratorT :: IteratorT;
     };
-    struct Iterator : public IteratorT<Iterator, QueueFile>
-    {
-        using IteratorT :: IteratorT;
-
-        /**
-         * After calling this functions,
-         * You must call gc() for readers not to see the deleted records.
-         */
-        void setDeleted() {
-            QueueRecordHeaderOp recOp(&qf_->record(offset_));
-            recOp.setDeleted();
-        }
-    };
-
     ConstIterator cbegin() const { return ConstIterator(this, header_.beginOffset); }
     ConstIterator cend() const { return ConstIterator(this, header_.endOffset); }
-    Iterator begin() { return Iterator(this, header_.beginOffset); }
-    Iterator end() { return Iterator(this, header_.endOffset); }
     ConstIterator begin() const { return cbegin(); }
     ConstIterator end() const { return cend(); }
 
@@ -421,8 +334,8 @@ private:
             header_.salt = rand();
             header_.beginOffset = 0;
             header_.endOffset = 0;
-            QueueRecordHeaderOp recOp(&record(0));
-            recOp.init();
+            QueueRecordHeader &rec = record(0);
+            rec.init();
             sync();
             return;
         }
@@ -436,8 +349,6 @@ private:
         if (!isValidFileHeader()) {
             std::runtime_error("Both header data broken.");
         }
-        header_.endOffset = calcEndOffset(); /* The order is important. end -> begin. */
-        header_.beginOffset = calcBeginOffset();
         sync();
     }
     bool isValidFileHeader() const {
@@ -461,53 +372,21 @@ private:
         return *reinterpret_cast<QueueRecordHeader*>(
             ptr<uint8_t>() + sizeof(QueueFileHeader) * 2 + offset);
     }
-    uint64_t calcBeginOffset() const {
-        uint64_t offset = header_.beginOffset;
-        while (offset < header_.endOffset) {
-            const QueueRecordHeaderOp recOp(&record(offset));
-            if (!recOp.isValid() ||
-                calcChecksum(recOp.dataPtr<void>(), recOp.dataSize(), header_.salt)
-                != recOp.checksum()) {
-                throw std::runtime_error("Found invalid record.");
-            }
-            if (!recOp.isDeleted()) {
-                break;
-            }
-            offset += recOp.totalSize();
-        }
-        return offset;
-    }
-    uint64_t calcEndOffset() const {
-        uint64_t offset = header_.endOffset;
-        while (offset + sizeof(QueueRecordHeader) < mmappedFile_.size()) {
-            const QueueRecordHeaderOp recOp(&record(offset));
-            if (recOp.isEndMark()) {
-                break;
-            }
-            if (!recOp.isValid() ||
-                calcChecksum(recOp.dataPtr<void>(), recOp.dataSize(), header_.salt)
-                != recOp.checksum()) {
-                throw std::runtime_error("Found invalid record.");
-            }
-            offset += recOp.totalSize();
-        }
-        return offset;
-    }
     uint64_t getRequiredFileSize(uint64_t size) const {
         return sizeof(QueueFileHeader) * 2 + header_.endOffset /* current size except end mark. */
-            + ((size == 0) ? 0 : (sizeof(QueueRecordHeader) + size)) /* for a record. */
-            + sizeof(QueueRecordHeader); /* for end mark. */
+            + sizeof(QueueRecordHeader) + size /* for a record. */
+            + sizeof(QueueRecordHeader); /* for end stub. */
     }
-    /**
-     * GC deleted records at the front of the queue.
-     * After calling this, the front().isDeleted() must be false if exists.
-     */
-    void gcFront() const {
-        if (header_.beginOffset == header_.endOffset) return;
-        QueueRecordHeaderOp recOp(&record(header_.beginOffset));
-        while (!recOp.isEndMark() && recOp.isDeleted()) {
-            header_.beginOffset += recOp.totalSize();
-            recOp.goNext();
+    void verifySizeEquality(uint32_t x, uint32_t y, const char *msg) const {
+        if (x != y) {
+            std::stringstream ss;
+            ss << msg << ":data size differs:" << x << ":" << y;
+            throw std::runtime_error(ss.str());
+        }
+    }
+    void verifyNotEmpty(const std::string& msg) const {
+        if (empty()) {
+            throw std::runtime_error(msg + ":empty");
         }
     }
 };

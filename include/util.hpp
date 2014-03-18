@@ -185,24 +185,32 @@ std::string toUnitIntString(uint64_t val)
     }
 }
 
+inline std::string byteArrayToStr(const void *data, size_t size)
+{
+    std::string s;
+    s.resize(size * 2 + 1);
+    for (size_t i = 0; i < size; i++) {
+        ::snprintf(&s[i * 2], 3, "%02x", ((const uint8_t *)data)[i]);
+    }
+    s.resize(size * 2);
+    return s;
+}
+
 /**
  * Print byte array as hex list.
  */
-template <typename ByteType>
-void printByteArray(::FILE *fp, ByteType *data, size_t size)
+void printByteArray(::FILE *fp, const void *data, size_t size)
 {
     for (size_t i = 0; i < size; i++) {
-        ::fprintf(fp, "%02x", static_cast<uint8_t>(data[i]));
-
+        ::fprintf(fp, "%02x", ((const uint8_t *)data)[i]);
         if (i % 64 == 63) { ::fprintf(fp, "\n"); }
     }
     if (size % 64 != 0) { ::fprintf(fp, "\n"); }
 }
 
-template <typename ByteType>
-void printByteArray(ByteType *data, size_t size)
+void printByteArray(const void *data, size_t size)
 {
-    printByteArray<ByteType>(::stdout, data, size);
+    printByteArray(::stdout, data, size);
 }
 
 /**

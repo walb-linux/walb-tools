@@ -20,3 +20,4 @@ action_counter_test
 state_machine_test
 host_info_test
 task_queue_test
+queue_file_test
