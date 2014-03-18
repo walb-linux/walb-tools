@@ -19,7 +19,7 @@
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "util.hpp"
-#include "walb_log_dev.hpp"
+#include "wdev_log.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
 

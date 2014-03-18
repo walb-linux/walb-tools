@@ -26,7 +26,7 @@
 #include "util.hpp"
 #include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
-#include "walb_log_dev.hpp"
+#include "wdev_log.hpp"
 
 /**
  * Command line configuration.
