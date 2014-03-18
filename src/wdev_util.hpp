@@ -169,12 +169,19 @@ inline bool isOverflow(const std::string& wdevPath)
     return ctl.val_int != 0;
 }
 
-inline void eraseWal(const std::string& wdevPath)
+inline void eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LSID)
 {
+    const char *const FUNC = __func__;
     if (isOverflow(wdevPath)) {
-        throw cybozu::Exception("eraseWal") << "overflow" << wdevPath;
+        throw cybozu::Exception(FUNC) << "overflow" << wdevPath;
     }
-    uint64_t lsid = getPermanentLsid(wdevPath);
+    const uint64_t permanentLsid = getPermanentLsid(wdevPath);
+    const uint64_t oldestLsid = getOldestLsid(wdevPath);
+    if (lsid == INVALID_LSID) lsid = permanentLsid;
+    if (!(oldestLsid < lsid && lsid <= permanentLsid)) {
+        throw cybozu::Exception(FUNC)
+            << "invalid lsid" << oldestLsid << lsid << permanentLsid;
+    }
     local::setOldestLsid(wdevPath, lsid);
 }
 

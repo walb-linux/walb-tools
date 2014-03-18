@@ -447,7 +447,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     verifyNotStopping(volSt.stopState, volId, FUNC);
     try {
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        const uint64_t gid = volInfo.takeSnapshot(false, gs.maxWlogSendMb);
+        const uint64_t gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
         pkt.write("ok");
         pkt.write(gid);
         logger.info() << FUNC << "taking snapshot succeeded" << volId << gid;

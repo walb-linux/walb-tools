@@ -189,42 +189,80 @@ public:
     /**
      * Take a snapshot by pushing a record to the queue file.
      *
-     * @isMergeable
-     *   true, the snapshot will be removed by merging diffs.
      * @maxWlogSendMb
      *   maximum wlog size to send at once [MiB]
      *
      * RETURN:
      *   gid of the snapshot.
      */
-    uint64_t takeSnapshot(bool isMergeable, uint64_t maxWlogSendMb) {
+    uint64_t takeSnapshot(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
-        const uint32_t pbs = device::getWldev(getWdevName()).getPhysicalBlockSize();
-        const uint64_t maxWlogSendPb = maxWlogSendMb * (MEBI / pbs);
-        if (maxWlogSendPb == 0) {
-            throw cybozu::Exception(FUNC) << "maxWlogSendPb must be positive";
-        }
+        const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        MetaLsidGid pre;
+        return takeSnapshotDetail(maxWlogSendPb, false, qf);
+    }
+    struct WlogTransferInfo {
+        MetaDiff diff;
+        MetaLsidGid rec;
+        uint32_t pbs;
+        uint32_t salt;
+        uint64_t sizeLb;
+        uint64_t beginLsid;
+        uint64_t endLsid;
+    };
+    uint64_t searchLogpackHeader(uint64_t /*startLsid*/) const {
+        // QQQ
+        return -1;
+    }
+    WlogTransferInfo prepareWlogTransfer(uint64_t maxWlogSendMb) {
+        const char *const FUNC = __func__;
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        MetaLsidGid rec0 = getDoneRecord();
+        const uint64_t lsid0 = device::getOldestLsid(getWdevPath());
+        if (lsid0 < rec0.lsid) device::eraseWal(getWdevPath(), rec0.lsid);
+        MetaLsidGid rec1;
+        for (;;) {
+            if (qf.empty()) break;
+            qf.back(rec1);
+            rec1.verify();
+            if ((rec1.lsid < rec0.lsid) || (rec0.lsid == rec1.lsid && rec1.gid <= rec0.gid)) {
+                qf.popBack();
+                continue;
+            }
+            break;
+        }
+        const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
         if (qf.empty()) {
-            pre = getDoneRecord();
+            takeSnapshotDetail(maxWlogSendPb, true, qf);
+            qf.back(rec1);
+            rec1.verify();
+        }
+        assert(rec0.gid < rec1.gid);
+
+        WlogTransferInfo info;
+        info.beginLsid = rec0.lsid;
+        if (rec1.lsid <= info.beginLsid + maxWlogSendPb) {
+            info.endLsid = rec1.lsid;
         } else {
-            qf.front(pre);
-            pre.verify();
+            info.endLsid = std::min(rec1.lsid, searchLogpackHeader(info.beginLsid + maxWlogSendPb));
         }
-        const std::string wdevPath = wdevPath_.str();
-        const uint64_t lsid = device::getPermanentLsid(wdevPath);
-        if (device::isOverflow(wdevPath)) {
-            throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
+        assert(info.beginLsid <= info.endLsid);
+        assert(info.endLsid <= rec1.lsid);
+
+        info.rec.lsid = info.endLsid;
+        info.diff.snapB.set(rec0.gid);
+        if (info.endLsid < rec1.lsid) {
+            info.diff.snapE.set(rec0.gid + 1);
+            info.rec.gid = rec0.gid + 1;
+            info.rec.isMergeable = true;
+        } else { // info.endLsid == rec1.lsid
+            info.diff.snapE.set(rec1.gid);
+            info.rec.gid = rec1.gid;
+            info.rec.isMergeable = rec1.isMergeable;
         }
-        if (pre.lsid > lsid) {
-            throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
-        }
-        const uint64_t gid = pre.gid + (lsid - pre.lsid + maxWlogSendPb) / maxWlogSendPb;
-        assert(pre.gid < gid);
-        qf.pushFront(MetaLsidGid(lsid, gid, isMergeable, ::time(0)));
-        qf.sync();
-        return gid;
+        info.diff.timestamp = rec1.timestamp;
+        info.diff.isMergeable = rec0.isMergeable;
+        return info;
     }
 private:
     void loadWdevPath() {
@@ -257,6 +295,40 @@ private:
     }
     cybozu::FilePath queuePath() const {
         return volDir_ + "queue";
+    }
+    uint64_t convertMibToPb(uint64_t mib) const {
+        const uint32_t pbs = device::getWldev(getWdevName()).getPhysicalBlockSize();
+        return mib * (MEBI / pbs);
+    }
+    uint64_t getMaxWlogSendPb(uint64_t maxWlogSendMb, const char *msg) const {
+        const uint64_t maxWlogSendPb = convertMibToPb(maxWlogSendMb);
+        if (maxWlogSendPb == 0) {
+            throw cybozu::Exception(msg) << "maxWlogSendPb must be positive";
+        }
+        return maxWlogSendPb;
+    }
+    uint64_t takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, cybozu::util::QueueFile& qf) {
+        const char *const FUNC = __func__;
+        MetaLsidGid pre;
+        if (qf.empty()) {
+            pre = getDoneRecord();
+        } else {
+            qf.front(pre);
+            pre.verify();
+        }
+        const std::string wdevPath = wdevPath_.str();
+        const uint64_t lsid = device::getPermanentLsid(wdevPath);
+        if (device::isOverflow(wdevPath)) {
+            throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
+        }
+        if (pre.lsid > lsid) {
+            throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
+        }
+        const uint64_t gid = pre.gid + (lsid - pre.lsid + maxWlogSendPb) / maxWlogSendPb;
+        assert(pre.gid < gid);
+        qf.pushFront(MetaLsidGid(lsid, gid, isMergeable, ::time(0)));
+        qf.sync();
+        return gid;
     }
 #if 0 // XXX
     /**
