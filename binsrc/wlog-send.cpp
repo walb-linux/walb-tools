@@ -28,7 +28,7 @@ struct Option : cybozu::Option
     uint64_t gid;
     std::vector<std::string> wlogPathV;
     std::string clientId;
-    bool canNotMerge;
+    bool isNotMergeable;
     std::string timeStampStr;
 
     Option() {
@@ -38,7 +38,7 @@ struct Option : cybozu::Option
         appendParamVec(&wlogPathV, "wlog_path_list", "wlog path list");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&clientId, hostName, "id", "client identifier");
-        appendBoolOpt(&canNotMerge, "m", "clear canMerge flag.");
+        appendBoolOpt(&isNotMergeable, "m", "clear isMergeable flag.");
         appendOpt(&timeStampStr, "", "t", "timestamp in YYYYmmddHHMMSS format.");
         appendHelp("h");
     }
@@ -126,7 +126,7 @@ try {
         diff.snapE.gidB = gid + 1;
         diff.snapE.gidE = gid + 1;
         diff.timestamp = ts;
-        diff.canMerge = !opt.canNotMerge;
+        diff.isMergeable = !opt.isNotMergeable;
         cybozu::Socket sock;
         sock.connect(host, port);
         sendWlog(sock, opt.clientId, opt.name, fo.fd(), diff);

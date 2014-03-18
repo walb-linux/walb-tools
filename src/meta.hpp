@@ -183,7 +183,7 @@ struct MetaSnap
 struct MetaDiff
 {
     uint16_t preamble;
-    bool canMerge;
+    bool isMergeable;
 
     /* This is timestamp of snapshot after applying the diff. */
     uint64_t timestamp;
@@ -192,13 +192,13 @@ struct MetaDiff
 
     MetaDiff()
         : MetaDiff(MetaSnap(), MetaSnap()) {}
-    MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool canMerge = false, uint64_t ts = 0)
-        : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), canMerge, ts) {}
-    MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool canMerge = false, uint64_t ts = 0)
-        : MetaDiff(MetaSnap(b), MetaSnap(e), canMerge, ts) {}
-    MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool canMerge = false, uint64_t ts = 0)
+    MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool isMergeable = false, uint64_t ts = 0)
+        : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), isMergeable, ts) {}
+    MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool isMergeable = false, uint64_t ts = 0)
+        : MetaDiff(MetaSnap(b), MetaSnap(e), isMergeable, ts) {}
+    MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool isMergeable = false, uint64_t ts = 0)
         : preamble(META_DIFF_PREAMBLE)
-        , canMerge(canMerge), timestamp(ts)
+        , isMergeable(isMergeable), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     bool operator==(const MetaDiff &rhs) const {
         return snapB == rhs.snapB && snapE == rhs.snapE;
@@ -241,7 +241,7 @@ struct MetaDiff
         auto s = b + "-->" + e;
         if (verbose) {
             s += cybozu::util::formatString(
-                " (%d %s)", canMerge ? 1 : 0, cybozu::unixTimeToStr(timestamp).c_str());
+                " (%d %s)", isMergeable ? 1 : 0, cybozu::unixTimeToStr(timestamp).c_str());
         }
         return s;
     }
@@ -255,7 +255,7 @@ struct MetaDiff
     template <typename InputStream>
     void load(InputStream &is) {
         cybozu::load(preamble, is);
-        cybozu::load(canMerge, is);
+        cybozu::load(isMergeable, is);
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
         cybozu::load(snapE, is);
@@ -267,7 +267,7 @@ struct MetaDiff
     template <typename OutputStream>
     void save(OutputStream &os) const {
         cybozu::save(os, preamble);
-        cybozu::save(os, canMerge);
+        cybozu::save(os, isMergeable);
         cybozu::save(os, timestamp);
         cybozu::save(os, snapB);
         cybozu::save(os, snapE);
@@ -376,14 +376,14 @@ struct MetaState
 struct MetaLsidGid
 {
     uint16_t preamble;
-    bool canMerge;
+    bool isMergeable;
     uint64_t timestamp; /* unix time */
     uint64_t lsid; /* log sequence id. */
     uint64_t gid; /* generation id. */
 
     MetaLsidGid()
         : preamble(META_LSIDGID_PREAMBLE)
-        , canMerge(false), timestamp(0), lsid(-1), gid(-1) {
+        , isMergeable(false), timestamp(0), lsid(-1), gid(-1) {
     }
     void verify() const {
         if (preamble != META_LSIDGID_PREAMBLE) {
@@ -393,8 +393,8 @@ struct MetaLsidGid
     std::string str() const {
         std::string ts = cybozu::unixTimeToStr(timestamp);
         return cybozu::util::formatString(
-            "LsidGid timestamp %s canMerge %d lsid %" PRIu64 " gid %" PRIu64 ""
-            , ts.c_str(), canMerge, lsid, gid);
+            "LsidGid timestamp %s isMergeable %d lsid %" PRIu64 " gid %" PRIu64 ""
+            , ts.c_str(), isMergeable, lsid, gid);
     }
     friend inline std::ostream &operator<<(std::ostream &os, const MetaLsidGid &lg) {
         os << lg.str();
@@ -406,7 +406,7 @@ struct MetaLsidGid
     template <typename InputStream>
     void load(InputStream &is) {
         cybozu::load(preamble, is);
-        cybozu::load(canMerge, is);
+        cybozu::load(isMergeable, is);
         cybozu::load(timestamp, is);
         cybozu::load(lsid, is);
         cybozu::load(gid, is);
@@ -418,7 +418,7 @@ struct MetaLsidGid
     template <typename OutputStream>
     void save(OutputStream &os) const {
         cybozu::save(os, preamble);
-        cybozu::save(os, canMerge);
+        cybozu::save(os, isMergeable);
         cybozu::save(os, timestamp);
         cybozu::save(os, lsid);
         cybozu::save(os, gid);
@@ -511,7 +511,7 @@ inline MetaSnap apply(const MetaSnap &snap, const std::vector<MetaDiff> &v)
 
 inline bool canMerge(const MetaDiff &diff0, const MetaDiff &diff1)
 {
-    return diff1.canMerge && canApply(diff0.snapE, diff1);
+    return diff1.isMergeable && canApply(diff0.snapE, diff1);
 }
 
 inline void MetaDiff::merge(const MetaDiff& rhs)
@@ -655,8 +655,8 @@ inline MetaDiff parseDiffFileName(const std::string &name)
     if (s[14] != '-') {
         throw cybozu::Exception("parseDiffFileName:parse failure1") << name;
     }
-    /* can_merge */
-    diff.canMerge = s[15] != '0';
+    /* isMergeable */
+    diff.isMergeable = s[15] != '0';
     if (s[16] != '-') {
         throw cybozu::Exception("parseDiffFileName:parse failure2") << name;
     }
@@ -720,7 +720,7 @@ inline std::string createDiffFileName(const MetaDiff &diff)
     std::string s;
     s += cybozu::unixTimeToStr(diff.timestamp);
     s += '-';
-    s += diff.canMerge ? '1' : '0';
+    s += diff.isMergeable ? '1' : '0';
     for (uint64_t gid : v) {
         s += '-';
         s += cybozu::util::intToHexStr(gid);

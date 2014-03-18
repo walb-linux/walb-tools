@@ -303,7 +303,7 @@ public:
         for (const MetaDiff &d : dv) {
             size_t size = wdiffs_.getDiffFileSize(d);
             v.push_back(fmt("wdiff %s %d %" PRIu64 " %s"
-                            , d.str().c_str(), d.canMerge ? 1 : 0, size
+                            , d.str().c_str(), d.isMergeable ? 1 : 0, size
                             , cybozu::unixTimeToStr(d.timestamp).c_str()));
         }
         return v;

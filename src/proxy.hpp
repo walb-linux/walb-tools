@@ -281,7 +281,7 @@ inline StrVec getVolStateStrVec(const std::string &volId)
             wdiffStrV.push_back(
                 fmt("  wdiff %s %d %s %s"
                     , diff.str().c_str()
-                    , diff.canMerge ? 1 : 0
+                    , diff.isMergeable ? 1 : 0
                     , cybozu::unixTimeToStr(diff.timestamp).c_str()
                     , fsizeStr.c_str()));
             totalSize += fsize;

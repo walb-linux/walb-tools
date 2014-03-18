@@ -34,13 +34,13 @@ public:
     }
 };
 
-void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool canMerge)
+void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool isMergeable)
 {
     diff.snapB.gidB = gid0;
     diff.snapB.gidE = gid0;
     diff.snapE.gidB = gid1;
     diff.snapE.gidE = gid1;
-    diff.canMerge = canMerge;
+    diff.isMergeable = isMergeable;
 };
 
 void createDiffFile(const walb::WalbDiffFiles &diffFiles, walb::MetaDiff &diff)

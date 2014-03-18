@@ -6,7 +6,7 @@
 CYBOZU_TEST_AUTO(diff)
 {
     walb::MetaDiff d0({0, 0}, {1, 2}), d1(1, 2);
-    d1.canMerge = true;
+    d1.isMergeable = true;
     CYBOZU_TEST_ASSERT(walb::canMerge(d0, d1));
     walb::MetaDiff d2 = walb::merge(d0, d1);
     CYBOZU_TEST_ASSERT(d2 == walb::MetaDiff(0, 2));
@@ -175,12 +175,12 @@ walb::MetaDiff randDiff(const walb::MetaSnap &snap)
         e1 = b1;
     }
     walb::MetaDiff ret;
-    ret.canMerge = true;
+    ret.isMergeable = true;
     ret.snapB.set(b0, e0);
     ret.snapE.set(b1, e1);
     ret.verify();
     assert(canApply(snap, ret));
-    ret.canMerge = (rand() % 2 == 0);
+    ret.isMergeable = (rand() % 2 == 0);
     return ret;
 }
 
@@ -203,7 +203,7 @@ void testContains()
     for (size_t i = 0; i < 10; i++) {
         walb::MetaDiff d = randDiff(snap);
         snap = apply(snap, d);
-        d.canMerge = true;
+        d.isMergeable = true;
         v.push_back(d);
     }
 #if 0

@@ -492,6 +492,9 @@ inline bool deleteWlogs(const std::string &/*volId*/, uint64_t /*lsid*/ = INVALI
 
 } // storage_local
 
+/**
+ * Run wlog-trnasfer or wlog-remove for a specified volume.
+ */
 inline void StorageWorker::operator()()
 {
     const char *const FUNC = "StorageWorker::operator()";
