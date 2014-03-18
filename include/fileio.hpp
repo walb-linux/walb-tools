@@ -242,7 +242,7 @@ public:
         std::swap(lbs_, rhs.lbs_);
         std::swap(pbs_, rhs.pbs_);
     }
-    explicit BlockDevice(BlockDevice&& rhs)
+    BlockDevice(BlockDevice&& rhs)
         : BlockDevice() {
         swap(rhs);
     }
