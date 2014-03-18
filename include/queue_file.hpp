@@ -182,6 +182,7 @@ public:
         front(&data, sizeof(data));
     }
     void front(std::string& s) const {
+        verifyNotEmpty(__func__);
         const QueueRecordHeader &rec = record(header_.beginOffset);
         s.resize(rec.dataSize);
         ::memcpy(&s[0], rec.data(), s.size());
@@ -197,6 +198,7 @@ public:
         back(&data, sizeof(data));
     }
     void back(std::string& s) const {
+        verifyNotEmpty(__func__);
         const QueueRecordHeader &rec = record(header_.endOffset).prev();
         s.resize(rec.dataSize);
         ::memcpy(&s[0], rec.data(), s.size());
@@ -213,6 +215,10 @@ public:
     void printOffsets() const {
         ::printf("begin %" PRIu64 " end %" PRIu64 "\n"
                  , header_.beginOffset, header_.endOffset); //debug
+    }
+    void clear() {
+        header_.beginOffset = header_.endOffset;
+        record(header_.endOffset).toPrev = 0;
     }
     void sync() {
         updateFileHeaderChecksum();
