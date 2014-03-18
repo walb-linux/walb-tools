@@ -82,7 +82,7 @@ class WlogExtractor
 {
 private:
     const uint64_t beginLsid_, endLsid_;
-    walb::device::AsyncDevReader ldevReader_;
+    walb::device::AsyncWldevReader ldevReader_;
     walb::device::SuperBlock &super_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
     bool isVerbose_;

@@ -233,7 +233,7 @@ private:
 /**
  * Walb log device reader using aio.
  */
-class AsyncDevReader
+class AsyncWldevReader
 {
 private:
     cybozu::util::BlockDevice bd_;
@@ -255,7 +255,7 @@ public:
      * @bufferSize buffer size to read ahead [byte].
      * @maxIoSize max IO size [byte].
      */
-    AsyncDevReader(const std::string &wldevPath,
+    AsyncWldevReader(const std::string &wldevPath,
                    uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
                    uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
         : bd_(wldevPath.c_str(), O_RDONLY | O_DIRECT)
@@ -278,7 +278,7 @@ public:
             throw RT_ERR("maxIoSize must be more than physical block size.");
         }
     }
-    ~AsyncDevReader() noexcept {
+    ~AsyncWldevReader() noexcept {
         while (!ioQ_.empty()) {
             try {
                 uint32_t aioKey, ioPb;
