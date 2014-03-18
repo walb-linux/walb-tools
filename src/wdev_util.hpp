@@ -22,10 +22,11 @@ namespace local {
 
 inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl, int openFlag)
 {
+    const char *const FUNC = __func__;
     cybozu::util::FileOpener f(wdevPath, openFlag);
     int ret = ::ioctl(f.fd(), WALB_IOCTL_WDEV, ctl);
     if (ret < 0) {
-        throw cybozu::Exception("invokeWdevIoctl:ioctl") << cybozu::ErrorNo();
+        throw cybozu::Exception(FUNC) << "ioctl error" << cybozu::ErrorNo();
     }
 }
 
@@ -59,6 +60,9 @@ inline void setOldestLsid(const std::string& wdevPath, uint64_t lsid)
     local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
 }
 
+/**
+ * Parse "XXX:YYY" string where XXX is major id and YYY is minor id.
+ */
 inline std::pair<uint32_t, uint32_t> parseDeviceIdStr(const std::string& devIdStr)
 {
     const char *const FUNC = __func__;
@@ -72,19 +76,26 @@ inline std::pair<uint32_t, uint32_t> parseDeviceIdStr(const std::string& devIdSt
 }
 
 /**
+ * Replace charactor x to y in a string.
+ */
+inline void replaceChar(std::string &s, const char x, const char y)
+{
+    for (;;) {
+        size_t n = s.find(x);
+        if (n == std::string::npos) break;
+        s[n] = y;
+    }
+}
+
+/**
  * Get block device path from major and minor id using lsblk command.
  */
 inline std::string getDevPathFromId(uint32_t major, uint32_t minor)
 {
     const char *const FUNC = __func__;
-    const std::string cmd = "/bin/lsblk";
-    const std::vector<std::string> args = {
-        "-l", "-n", "-r", "-o", "KNAME,MAJ:MIN",
-    };
-    const std::string res = cybozu::process::call(cmd, args);
-
-    const std::vector<std::string> lines = cybozu::Split(res, '\n');
-    for (const std::string& line : lines) {
+    const std::string res = cybozu::process::call(
+        "/bin/lsblk", { "-l", "-n", "-r", "-o", "KNAME,MAJ:MIN" });
+    for (const std::string& line : cybozu::Split(res, '\n')) {
         const std::vector<std::string> v = cybozu::Split(line, ' ');
         if (v.size() != 2) {
             throw cybozu::Exception(FUNC) << "lsblk output parse error" << line;
@@ -92,19 +103,14 @@ inline std::string getDevPathFromId(uint32_t major, uint32_t minor)
         std::string name = v[0];
         uint32_t majorX, minorX;
         std::tie(majorX, minorX) = local::parseDeviceIdStr(v[1]);
-        if (major == majorX && minor == minorX) {
-            for (;;) {
-                size_t n = name.find('!');
-                if (n == std::string::npos) break;
-                name[n] = '/';
-            }
-            cybozu::FilePath path("/dev");
-            path += name;
-            if (!path.stat().exists()) {
-                throw cybozu::Exception(FUNC) << "not exists" << path.str();
-            }
-            return path.str();
+        if (major != majorX || minor != minorX) continue;
+        replaceChar(name, '!', '/');
+        cybozu::FilePath path("/dev");
+        path += name;
+        if (!path.stat().exists()) {
+            throw cybozu::Exception(FUNC) << "not exists" << path.str();
         }
+        return path.str();
     }
     throw cybozu::Exception(FUNC) << "not found" << major << minor;
 }

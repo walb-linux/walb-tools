@@ -25,7 +25,7 @@
 #include "walb_log.h"
 
 namespace walb {
-namespace log {
+namespace device {
 
 constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
 constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
@@ -412,4 +412,4 @@ private:
     }
 };
 
-}} //namespace walb::log
+}} //namespace walb::device

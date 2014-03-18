@@ -83,7 +83,7 @@ private:
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
-    walb::log::SuperBlock super_;
+    walb::device::SuperBlock super_;
     const unsigned int pbs_;
     const uint32_t salt_;
     const unsigned int BUFFER_SIZE_;

@@ -105,7 +105,7 @@ private:
     using PackHeader = walb::log::PackHeaderRaw;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using FdReader = cybozu::util::FdReader;
-    using SuperBlock = walb::log::SuperBlock;
+    using SuperBlock = walb::device::SuperBlock;
 
 public:
     WalbLogRestorer(const Config& config)
