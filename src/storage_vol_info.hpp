@@ -53,10 +53,10 @@ public:
     /**
      * For initialization.
      */
-    StorageVolInfo(const std::string &baseDirStr, const std::string &volId, const std::string &wdevPathName)
+    StorageVolInfo(const std::string &baseDirStr, const std::string &volId, const std::string &wdevPath)
         : volDir_(cybozu::FilePath(baseDirStr) + volId)
         , volId_(volId)
-        , wdevPath_(wdevPathName) {
+        , wdevPath_(wdevPath) {
         verifyBaseDirExistance(baseDirStr);
         verifyWdevPathExistance();
     }
@@ -79,14 +79,16 @@ public:
         LOGd("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
         util::makeDir(volDir_.str(), "StorageVolInfo", true);
         {
-            cybozu::FilePath queueFile = volDir_ + "queue";
-            cybozu::util::QueueFile qf(queueFile.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+            cybozu::util::QueueFile qf(queuePath().str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
             qf.sync();
         }
         util::saveFile(volDir_, "path", wdevPath_.str());
         setState(sSyncReady);
-        util::saveFile(volDir_, "done", ""); // TODO
-        util::saveFile(volDir_, "uuid", cybozu::Uuid());
+        const uint64_t lsid = 0; // TODO
+        const uint64_t gid = 0; // TODO
+        MetaLsidGid doneRec(lsid, gid, false, 0);
+        setDoneRecord(doneRec);
+        setUuid(cybozu::Uuid());
     }
     /**
      * Clear all the volume information.
@@ -165,8 +167,52 @@ public:
         util::loadFile(volDir_, "uuid", uuid);
         return uuid;
     }
+    void setUuid(const cybozu::Uuid &uuid) {
+        util::saveFile(volDir_, "uuid", uuid);
+    }
     std::string getWdevPath() const { return wdevPath_.str(); }
-
+    std::string getWdevName() const {
+        return device::getWdevNameFromWdevPath(wdevPath_.str());
+    }
+    /**
+     * Take a snapshot by pushing a record to the queue file.
+     *
+     * @isMergeable
+     *   true, the snapshot will be removed by merging diffs.
+     * @maxWlogSendMb
+     *   maximum wlog size to send at once [MiB]
+     *
+     * RETURN:
+     *   gid of the snapshot.
+     */
+    uint64_t takeSnapshot(bool isMergeable, uint64_t maxWlogSendMb) {
+        const char *const FUNC = __func__;
+        const uint32_t pbs = device::getPhysicalBlockSize(getWdevName());
+        const uint64_t maxWlogSendPb = maxWlogSendMb * (MEBI / pbs);
+        if (maxWlogSendPb == 0) {
+            throw cybozu::Exception(FUNC) << "maxWlogSendPb must be positive";
+        }
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        MetaLsidGid pre;
+        if (qf.empty()) {
+            pre = getDoneRecord();
+        } else {
+            qf.front(pre);
+        }
+        const std::string wdevPath = wdevPath_.str();
+        const uint64_t lsid = device::getPermanentLsid(wdevPath);
+        if (device::isOverflow(wdevPath)) {
+            throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
+        }
+        if (pre.lsid > lsid) {
+            throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
+        }
+        const uint64_t gid = pre.gid + (lsid - pre.lsid + maxWlogSendPb) / maxWlogSendPb;
+        assert(pre.gid < gid);
+        qf.pushFront(MetaLsidGid(lsid, gid, isMergeable, ::time(0)));
+        qf.sync();
+        return gid;
+    }
 private:
     void loadWdevPath() {
         std::string s;
@@ -188,7 +234,18 @@ private:
             throw cybozu::Exception("StorageVolInfo:not directory") << baseDir.str();
         }
     }
-#if 0
+    void setDoneRecord(const MetaLsidGid &rec) {
+        util::saveFile(volDir_, "done", rec);
+    }
+    MetaLsidGid getDoneRecord() const {
+        MetaLsidGid rec;
+        util::loadFile(volDir_, "done", rec);
+        return rec;
+    }
+    cybozu::FilePath queuePath() const {
+        return volDir_ + "queue";
+    }
+#if 0 // XXX
     /**
      * @sizePb [physical block]
      */
@@ -286,9 +343,6 @@ private:
     cybozu::FilePath doneRecordPath() const {
         return dirPath() + cybozu::FilePath("done");
     }
-    cybozu::FilePath queuePath() const {
-        return dirPath() + cybozu::FilePath("queue");
-    }
     /**
      * Scan the queue and set nextGid_ and nextLsid_.
      */
@@ -360,7 +414,7 @@ private:
         assert(!it.isEndMark());
         it.get(rec.rawData(), rec.rawSize());
     }
-#endif
+#endif // XXX
 };
 
 } //namespace walb

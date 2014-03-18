@@ -77,6 +77,7 @@ struct StorageSingleton
     std::vector<cybozu::SocketAddr> proxyV;
     std::string nodeId;
     std::string baseDirStr;
+    uint64_t maxWlogSendMb;
 
     /**
      * Writable and must be thread-safe.
@@ -195,12 +196,12 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
-    const std::string &wdevPathName = v[1];
+    const std::string &wdevPath = v[1];
 
     StateMachine &sm = getStorageVolState(volId).sm;
     {
         StateMachineTransaction tran(sm, sClear, stInitVol, FUNC);
-        StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPathName);
+        StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);
     }
@@ -209,7 +210,7 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
     ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.info() << FUNC << "initialize"
                   << "volId" << volId
-                  << "wdev" << wdevPathName;
+                  << "wdev" << wdevPath;
 }
 
 inline void c2sClearVolServer(protocol::ServerParams &p)
@@ -222,7 +223,6 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
     {
         StateMachineTransaction tran(sm, sSyncReady, stClearVol, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        const std::string wdevPathName = volInfo.getWdevPath();
         volInfo.clear();
         tran.commit(sClear);
     }
@@ -345,18 +345,6 @@ inline bool sendDirtyFullImage(
     return true;
 }
 
-/**
- * @isMergeable
- *   true, the snapshot will be removed.
- * RETURN:
- *   Gid of the taken snapshot.
- */
-inline uint64_t takeSnapshot(const std::string &/*volId*/, bool /*isMergeable*/)
-{
-    // QQQ
-    return -1;
-}
-
 } // storage_local
 
 inline void c2sFullSyncServer(protocol::ServerParams &p)
@@ -458,7 +446,8 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     verifyStateIn(st, {sMaster, sStopped}, FUNC);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     try {
-        const uint64_t gid = storage_local::takeSnapshot(volId, false);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const uint64_t gid = volInfo.takeSnapshot(false, gs.maxWlogSendMb);
         pkt.write("ok");
         pkt.write(gid);
         logger.info() << FUNC << "taking snapshot succeeded" << volId << gid;

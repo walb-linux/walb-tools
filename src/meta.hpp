@@ -381,9 +381,11 @@ struct MetaLsidGid
     uint64_t lsid; /* log sequence id. */
     uint64_t gid; /* generation id. */
 
-    MetaLsidGid()
+    MetaLsidGid(uint64_t lsid, uint64_t gid, bool isMergeable, uint64_t timestamp)
         : preamble(META_LSIDGID_PREAMBLE)
-        , isMergeable(false), timestamp(0), lsid(-1), gid(-1) {
+        , isMergeable(isMergeable), timestamp(timestamp), lsid(lsid), gid(gid) {
+    }
+    MetaLsidGid() : MetaLsidGid(-1, -1, false, 0) {
     }
     void verify() const {
         if (preamble != META_LSIDGID_PREAMBLE) {

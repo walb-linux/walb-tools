@@ -75,6 +75,7 @@ struct Option : cybozu::Option
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
         appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
+        appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "maxWlogSendMb", "max wlog size to send at once.");
 
         appendHelp("h");
     }
