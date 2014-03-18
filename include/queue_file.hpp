@@ -51,8 +51,8 @@ struct QueueRecordHeader
         dataSize = 0;
         toPrev = 0;
     }
-    std::string str() const {
-        return cybozu::util::formatString(
+    std::string str(bool verbose = false) const {
+        std::string s = cybozu::util::formatString(
             "preamble %" PRIu32 " (%08x) "
             "checksum %" PRIu32 " (%08x) "
             "dataSize %" PRIu32 " (%08x) "
@@ -60,8 +60,9 @@ struct QueueRecordHeader
             , preamble, preamble
             , checksum, checksum
             , dataSize, dataSize
-            , toPrev, toPrev)
-            + cybozu::util::byteArrayToStr(data(), dataSize);
+            , toPrev, toPrev);
+        if (verbose) s += cybozu::util::byteArrayToStr(data(), dataSize);
+        return s;
     }
     bool isValid() const {
         return preamble == QUEUE_PREAMBLE;
@@ -116,7 +117,7 @@ public:
         init(false);
     }
     QueueFile(const std::string& filePath, int flags, int mode)
-        : mmappedFile_(sizeof(QueueFileHeader) * 2 + sizeof(QueueRecordHeader),
+        : mmappedFile_(getFileHeaderSize() + sizeof(QueueRecordHeader),
                        filePath, flags, mode)
         , lock_(filePath) {
         init(true);
@@ -127,6 +128,10 @@ public:
         } catch (...) {
         }
     }
+    static uint64_t getFileHeaderSize() {
+        return sizeof(QueueFileHeader) * 2;
+    }
+
     void pushBack(const void *data, uint32_t size) {
         mmappedFile_.resize(getRequiredFileSize(size));
         QueueRecordHeader &rec = record(header_.endOffset);
@@ -144,22 +149,25 @@ public:
      * T must be copyable.
      */
     template <typename T>
-    void pushBack(const T& t) {
-        pushBack(&t, sizeof(t));
+    void pushBack(const T& t) { pushBack(&t, sizeof(t)); }
+    void pushBack(const std::string& s) { pushBack(&s[0], s.size()); }
+    void pushBack(const char *s) { pushBack(std::string(s)); }
+    void pushFront(const void *data, uint32_t size) {
+        const uint32_t totalSize = sizeof(QueueRecordHeader) + size;
+        reserveFrontSpace(totalSize);
+        QueueRecordHeader &rec = record(header_.beginOffset);
+        QueueRecordHeader &prev = record(header_.beginOffset - totalSize);
+        prev.init();
+        prev.dataSize = size;
+        prev.checksum = calcChecksum(data, size, header_.salt);
+        ::memcpy(prev.data(), data, size);
+        rec.toPrev = totalSize;
+        header_.beginOffset -= totalSize;
     }
-    void pushBack(const std::string& s) {
-        pushBack(&s[0], s.size());
-    }
-    void pushBack(const char *s) {
-        pushBack(std::string(s));
-    }
-#if 0
-    void pushFront(const void *data, uint32_t size) {}
     template <typename T>
-    void pushFront(const T& t) {}
-    void pushFront(const std::string& s) {}
-    void pushFront(const char *s) {}
-#endif
+    void pushFront(const T& t) { pushFront(&t, sizeof(t)); }
+    void pushFront(const std::string& s) { pushFront(&s[0], s.size()); }
+    void pushFront(const char *s) { pushFront(std::string(s)); }
     bool empty() const {
         return header_.beginOffset == header_.endOffset;
     }
@@ -247,6 +255,33 @@ public:
         mmappedFile_.resize(getRequiredFileSize(0));
         sync();
     }
+    void reserveFrontSpace(uint64_t size) {
+        if (size <= header_.beginOffset) {
+            /* Nothing to do */
+            return;
+        }
+
+        const uint64_t bgn = header_.beginOffset;
+        const uint64_t end = header_.endOffset + sizeof(QueueRecordHeader);
+        assert(bgn <= end);
+        const uint64_t len = end - bgn;
+        const uint64_t newBgn = std::max(end, size);
+
+        /* Sync current begin/end offset. */
+        sync();
+        /* Grow the file */
+        mmappedFile_.resize(getFileHeaderSize() + newBgn + len);
+        /* Copy data. */
+        ::memcpy(&record(newBgn), &record(bgn), len);
+        sync();
+        /* Update the file header. */
+        {
+            // These must be atomic.
+            header_.beginOffset = newBgn;
+            header_.endOffset = newBgn + len - sizeof(QueueRecordHeader);
+        }
+        sync();
+    }
 
     template <class It, class Qf, class RecHeader>
     class IteratorT
@@ -322,6 +357,26 @@ public:
     ConstIterator begin() const { return cbegin(); }
     ConstIterator end() const { return cend(); }
 
+    /**
+     * for test.
+     */
+    void verifyAll() const {
+        // Forward
+        uint64_t off = header_.beginOffset;
+        while (off < header_.endOffset) {
+            const QueueRecordHeader &rec = record(off);
+            verifyRec(rec);
+            off += rec.totalSize();
+        }
+        // Backward
+        off = header_.endOffset;
+        for (;;) {
+            const QueueRecordHeader &rec = record(off);
+            if (off != header_.endOffset) verifyRec(rec);
+            if (off == header_.beginOffset) break;
+            off -= rec.toPrev;
+        }
+    }
 private:
     template <typename T>
     T* ptr() { return mmappedFile_.ptr<T>(); }
@@ -387,6 +442,15 @@ private:
     void verifyNotEmpty(const std::string& msg) const {
         if (empty()) {
             throw std::runtime_error(msg + ":empty");
+        }
+    }
+    void verifyRec(const QueueRecordHeader& rec) const {
+        rec.verify();
+        const uint32_t csum = calcChecksum(rec.data(), rec.dataSize, header_.salt);
+        if (rec.checksum != csum) {
+            std::stringstream ss;
+            ss << "invalid checksum checksum:" << rec.checksum << ":" << csum;
+            throw std::runtime_error(ss.str());
         }
     }
 };

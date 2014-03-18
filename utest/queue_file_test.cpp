@@ -31,6 +31,7 @@ CYBOZU_TEST_AUTO(queueFile)
         qf.pushBack(2);
         qf.pushBack("xxx");
         qf.pushBack("yyyy");
+        qf.verifyAll();
 
         int i; std::string s;
         qf.front(i);
@@ -53,6 +54,7 @@ CYBOZU_TEST_AUTO(queueFile)
         qf.pushBack(1);
         qf.pushBack(2);
         qf.pushBack(3);
+        qf.verifyAll();
 
         int i;
         qf.back(i);
@@ -66,12 +68,20 @@ CYBOZU_TEST_AUTO(queueFile)
         qf.popBack();
         CYBOZU_TEST_ASSERT(qf.empty());
     }
+}
+
+CYBOZU_TEST_AUTO(queueFileItr)
+{
+    TmpQueueFile tqf("tmp_queue");
+    cybozu::util::QueueFile& qf = tqf.ref();
+
     {
         qf.pushBack(1);
         qf.pushBack(2);
         qf.pushBack(3);
         qf.pushBack(4);
         qf.pushBack(5);
+        qf.verifyAll();
 
         int i;
         cybozu::util::QueueFile::ConstIterator itr = qf.begin();
@@ -94,21 +104,50 @@ CYBOZU_TEST_AUTO(queueFileGc)
     TmpQueueFile tqf("tmp_queue");
     cybozu::util::QueueFile& qf = tqf.ref();
 
-
     for (size_t i = 0; i < 100; i++) {
         qf.pushBack(i);
     }
+    qf.verifyAll();
     for (size_t i = 0; i < 100; i++) {
         qf.popFront();
     }
+    qf.verifyAll();
     for (size_t i = 0; i < 50; i++) {
         qf.pushBack(i);
     }
+    qf.verifyAll();
     qf.gc();
+    qf.verifyAll();
     for (size_t i = 0; i < 50; i++) {
         size_t j;
         qf.front(j);
         CYBOZU_TEST_EQUAL(j, i);
         qf.popFront();
     }
+    CYBOZU_TEST_ASSERT(qf.empty());
+}
+
+CYBOZU_TEST_AUTO(queueFilePushFront)
+{
+    TmpQueueFile tqf("tmp_queue");
+    cybozu::util::QueueFile& qf = tqf.ref();
+
+    for (size_t i = 0; i < 100; i++) {
+        qf.pushFront(i);
+        qf.pushBack(i);
+        qf.verifyAll();
+    }
+    for (size_t i = 100; i > 0; i--) {
+        size_t j;
+        qf.front(j);
+        CYBOZU_TEST_EQUAL(j, i - 1);
+        qf.popFront();
+        qf.back(j);
+        CYBOZU_TEST_EQUAL(j, i - 1);
+        qf.popBack();
+        qf.verifyAll();
+    }
+    CYBOZU_TEST_ASSERT(qf.empty());
+    qf.gc();
+    CYBOZU_TEST_ASSERT(qf.empty());
 }
