@@ -47,7 +47,7 @@ private:
     std::shared_ptr<uint8_t> data_;
 
 public:
-    SuperBlock(cybozu::util::BlockDevice& bd)
+    explicit SuperBlock(cybozu::util::BlockDevice& bd)
         : bd_(bd)
         , pbs_(bd.getPhysicalBlockSize())
         , offset_(get1stSuperBlockOffsetStatic(pbs_))

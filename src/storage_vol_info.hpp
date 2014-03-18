@@ -11,6 +11,7 @@
 #include "uuid.hpp"
 #include "walb_util.hpp"
 #include "wdev_util.hpp"
+#include "wdev_log.hpp"
 
 namespace walb {
 
@@ -158,9 +159,20 @@ public:
     }
     void resetWlog(uint64_t gid)
     {
-        cybozu::disable_warning_unused_variable(gid);
-        // TODO
         device::resetWal(wdevPath_.str());
+        setDoneRecord(MetaLsidGid(0, gid, false, ::time(0)));
+        {
+            cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+            qf.clear();
+            qf.sync();
+        }
+        {
+            cybozu::Uuid uuid;
+            cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
+            device::SuperBlock super(bd);
+            uuid.set(super.getUuid());
+            setUuid(uuid);
+        }
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;
@@ -187,7 +199,7 @@ public:
      */
     uint64_t takeSnapshot(bool isMergeable, uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
-        const uint32_t pbs = device::getPhysicalBlockSize(getWdevName());
+        const uint32_t pbs = device::getWldev(getWdevName()).getPhysicalBlockSize();
         const uint64_t maxWlogSendPb = maxWlogSendMb * (MEBI / pbs);
         if (maxWlogSendPb == 0) {
             throw cybozu::Exception(FUNC) << "maxWlogSendPb must be positive";
@@ -198,6 +210,7 @@ public:
             pre = getDoneRecord();
         } else {
             qf.front(pre);
+            pre.verify();
         }
         const std::string wdevPath = wdevPath_.str();
         const uint64_t lsid = device::getPermanentLsid(wdevPath);
@@ -247,59 +260,6 @@ private:
     }
 #if 0 // XXX
     /**
-     * @sizePb [physical block]
-     */
-    void setLogSizePerDiff(uint64_t sizePb) {
-        assert(0 < sizePb);
-        sizePb_ = sizePb;
-    }
-    /**
-     * take a snapshot.
-     *
-     * RETURN:
-     *   gid range.
-     */
-    std::pair<uint64_t, uint64_t> takeSnapshot(uint64_t lsid, bool canMerge) {
-        /* Determine gid range. */
-        if (lsid < nextLsid_) throw std::runtime_error("bad lsid.");
-        uint64_t n = 1 + (lsid - nextLsid_) / sizePb_;
-        uint64_t gid0 = nextGid_;
-        uint64_t gid1 = nextGid_ + n;
-
-        /* Timestamp */
-        time_t ts = ::time(nullptr);
-        if (ts == time_t(-1)) std::runtime_error("time() failed.");
-
-        /* Generate a record. */
-        MetaSnap rec;
-        rec.setSnap(gid0, gid1);
-        rec.setLsid(lsid);
-        rec.setTimestamp(ts);
-        rec.setCanMerge(canMerge);
-
-        addRecord(rec);
-        return {gid0, gid1};
-    }
-    cybozu::FilePath dirPath() const {
-        return baseDir_ + cybozu::FilePath(name_);
-    }
-    bool empty() const {
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        return qf.empty();
-    }
-    MetaSnap front() const {
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        MetaSnap rec;
-        qf.front(rec.raw);
-        return rec;
-    }
-    void pop() {
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        qf.front(doneRec_.rawData(), doneRec_.rawSize());
-        qf.pop();
-        saveDoneRecord();
-    }
-    /**
      * Remove old records which corresponding wlogs has been transferred.
      */
     void removeBefore(uint64_t gid) {
@@ -319,100 +279,6 @@ private:
         }
         qf.gc();
         saveDoneRecord();
-    }
-    /**
-     * for debug.
-     */
-    std::vector<MetaSnap> getAllRecords() const {
-        std::vector<MetaSnap> v;
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        cybozu::util::QueueFile::ConstIterator it = qf.cbegin();
-        while (!it.isEndMark()) {
-            if (it.isDeleted()) {
-                ++it;
-                continue;
-            }
-            MetaSnap rec;
-            getRecordFromIterator(rec, it);
-            v.push_back(rec);
-            ++it;
-        }
-        return v;
-    }
-private:
-    cybozu::FilePath doneRecordPath() const {
-        return dirPath() + cybozu::FilePath("done");
-    }
-    /**
-     * Scan the queue and set nextGid_ and nextLsid_.
-     */
-    void initScanQueue(cybozu::util::QueueFile &qf) {
-        qf.gc();
-        cybozu::util::QueueFile::ConstIterator it = qf.cbegin();
-        MetaSnap prev;
-        while (!it.isEndMark()) {
-            std::vector<uint8_t> v;
-            MetaSnap rec;
-            if (it.isValid() && !it.isDeleted()) {
-                getRecordFromIterator(rec, it);
-                if (!rec.isValid()) {
-                    throw std::runtime_error("queue broken.");
-                }
-                if (it != qf.cbegin()) {
-                    if (!(prev.gid1() == rec.gid0())) {
-                        throw std::runtime_error("queue broken.");
-                    }
-                    if (!(prev.lsid() <= rec.lsid())) {
-                        throw std::runtime_error("queue broken.");
-                    }
-                }
-                assert(rec.gid0() < rec.gid1());
-                nextGid_ = std::max(nextGid_, rec.gid1());
-                nextLsid_ = std::max(nextLsid_, rec.lsid());
-            }
-            ++it;
-            prev = rec;
-        }
-    }
-    void initDoneRecord(uint64_t lsid) {
-        doneRec_.init();
-        doneRec_.setSnap(0);
-        doneRec_.setTimestamp(::time(nullptr));
-        doneRec_.setLsid(lsid);
-        doneRec_.setCanMerge(true);
-        saveDoneRecord();
-        nextGid_ = 0;
-        nextLsid_ = lsid;
-    }
-    void loadDoneRecord() {
-        cybozu::util::FileReader reader(doneRecordPath().str(), O_RDONLY);
-        cybozu::load(doneRec_, reader);
-        if (!doneRec_.isValid()) {
-            throw std::runtime_error("read done record is not valid.");
-        }
-    }
-    void saveDoneRecord() const {
-        cybozu::TmpFile tmpFile(dirPath().str());
-        cybozu::save(tmpFile, doneRec_);
-        tmpFile.save(doneRecordPath().str());
-    }
-    void addRecord(const MetaSnap &rec) {
-        assert(rec.isValid());
-        if (nextGid_ != rec.gid0()) {
-            throw std::runtime_error("addRecord: gid0 invalid.");
-        }
-        if (rec.lsid() < nextLsid_) {
-            throw std::runtime_error("addREcord: lsid invalid.");
-        }
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        qf.push(rec.rawData(), rec.rawSize());
-        nextGid_ = rec.gid1();
-        nextLsid_ = rec.lsid();
-    }
-    template <class QueueIterator>
-    void getRecordFromIterator(MetaSnap &rec, QueueIterator &it) const {
-        assert(!it.isEndMark());
-        it.get(rec.rawData(), rec.rawSize());
     }
 #endif // XXX
 };

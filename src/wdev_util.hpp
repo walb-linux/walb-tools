@@ -243,10 +243,11 @@ inline std::string getWdevNameFromWdevPath(const std::string& wdevPath)
     return wdevPath.substr(WDEV_PATH_PREFIX.size());
 }
 
-inline uint32_t getPhysicalBlockSize(const std::string& wdevName)
+inline cybozu::util::BlockDevice getWldev(const std::string& wdevName, bool isRead = true)
 {
-    cybozu::util::BlockDevice bd(getWldevPathFromWdevName(wdevName), O_RDONLY);
-    return bd.getPhysicalBlockSize();
+    return cybozu::util::BlockDevice(
+        getWldevPathFromWdevName(wdevName),
+        (isRead ? O_RDONLY : O_RDWR) | O_DIRECT);
 }
 
 }} // walb::device
