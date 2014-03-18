@@ -19,7 +19,7 @@ namespace cybozu {
  * RETURN:
  *   difference of localtime() and gmtime() [sec].
  */
-int32_t localTimeDiff()
+inline int32_t localTimeDiff()
 {
     time_t now = ::time(nullptr);
     struct tm tm0, tm1;
@@ -45,7 +45,7 @@ int32_t localTimeDiff()
 /**
  * Convert time_t value to time string as UTC.
  */
-std::string unixTimeToStr(time_t ts)
+inline std::string unixTimeToStr(time_t ts)
 {
     struct tm tm;
     if (::gmtime_r(&ts, &tm) == nullptr) {
@@ -63,7 +63,7 @@ std::string unixTimeToStr(time_t ts)
 /**
  * Convert time string as UTC to time_t value.
  */
-time_t strToUnixTime(const std::string &ts)
+inline time_t strToUnixTime(const std::string &ts)
 {
     if (ts.size() != 14) {
         throw std::runtime_error("invalid time string.");

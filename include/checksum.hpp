@@ -19,7 +19,7 @@ namespace util {
  * @size data size.
  * @csum result of previous call, or salt.
  */
-uint32_t checksumPartial(const void *data, size_t size, uint32_t csum)
+inline uint32_t checksumPartial(const void *data, size_t size, uint32_t csum)
 {
     const char *p = reinterpret_cast<const char *>(data);
     while (sizeof(uint32_t) <= size) {
@@ -40,7 +40,7 @@ uint32_t checksumPartial(const void *data, size_t size, uint32_t csum)
 /**
  * Finish checksum calculation.
  */
-uint32_t checksumFinish(uint32_t csum)
+inline uint32_t checksumFinish(uint32_t csum)
 {
     return ~csum + 1;
 }
@@ -48,7 +48,7 @@ uint32_t checksumFinish(uint32_t csum)
 /**
  * Get checksum of a byte array.
  */
-uint32_t calcChecksum(const void *data, size_t size, uint32_t salt)
+inline uint32_t calcChecksum(const void *data, size_t size, uint32_t salt)
 {
     return checksumFinish(checksumPartial(data, size, salt));
 }

@@ -50,7 +50,7 @@ namespace util {
 /**
  * Formst string with va_list.
  */
-std::string formatStringV(const char *format, va_list ap)
+inline std::string formatStringV(const char *format, va_list ap)
 {
     char *p = nullptr;
     int ret = ::vasprintf(&p, format, ap);
@@ -68,7 +68,7 @@ std::string formatStringV(const char *format, va_list ap)
 /**
  * Create a std::string using printf() like formatting.
  */
-std::string formatString(const char * format, ...)
+inline std::string formatString(const char * format, ...)
 {
     std::string s;
     std::exception_ptr ep;
@@ -136,7 +136,7 @@ private:
 /**
  * Convert size string with unit suffix to unsigned integer.
  */
-uint64_t fromUnitIntString(const std::string &valStr)
+inline uint64_t fromUnitIntString(const std::string &valStr)
 {
     if (valStr.empty()) throw RT_ERR("Invalid argument.");
     char *endp;
@@ -166,7 +166,7 @@ uint64_t fromUnitIntString(const std::string &valStr)
  *   p: 2^50
  *   e: 2^60
  */
-std::string toUnitIntString(uint64_t val)
+inline std::string toUnitIntString(uint64_t val)
 {
     uint64_t mask = (1ULL << 10) - 1;
     const char units[] = " kmgtpezy";
@@ -199,7 +199,7 @@ inline std::string byteArrayToStr(const void *data, size_t size)
 /**
  * Print byte array as hex list.
  */
-void printByteArray(::FILE *fp, const void *data, size_t size)
+inline void printByteArray(::FILE *fp, const void *data, size_t size)
 {
     for (size_t i = 0; i < size; i++) {
         ::fprintf(fp, "%02x", ((const uint8_t *)data)[i]);
@@ -208,7 +208,7 @@ void printByteArray(::FILE *fp, const void *data, size_t size)
     if (size % 64 != 0) { ::fprintf(fp, "\n"); }
 }
 
-void printByteArray(const void *data, size_t size)
+inline void printByteArray(const void *data, size_t size)
 {
     printByteArray(::stdout, data, size);
 }
@@ -259,7 +259,7 @@ bool hexStrToInt(const std::string &hexStr, IntType &i)
 /**
  * Trim first and last spaces from a string.
  */
-std::string trimSpace(const std::string &str, const std::string &spaces = " \t\r\n")
+inline std::string trimSpace(const std::string &str, const std::string &spaces = " \t\r\n")
 {
     auto isSpace = [&](char c) -> bool {
         for (char space : spaces) {
@@ -285,7 +285,7 @@ std::string trimSpace(const std::string &str, const std::string &spaces = " \t\r
 /**
  * Split a string with separators.
  */
-std::vector<std::string> splitString(
+inline std::vector<std::string> splitString(
     const std::string &str, const std::string &separators, bool isTrimSpace = true)
 {
     auto isSep = [&](int c) -> bool {
@@ -318,12 +318,12 @@ std::vector<std::string> splitString(
     return v;
 }
 
-bool hasPrefix(const std::string &name, const std::string &prefix)
+inline bool hasPrefix(const std::string &name, const std::string &prefix)
 {
     return name.substr(0, prefix.size()) == prefix;
 }
 
-std::string removePrefix(const std::string &name, const std::string &prefix)
+inline std::string removePrefix(const std::string &name, const std::string &prefix)
 {
     assert(hasPrefix(name, prefix));
     return name.substr(prefix.size());
@@ -335,7 +335,7 @@ std::string removePrefix(const std::string &name, const std::string &prefix)
  * RETURN:
  *   prefix like "XXX_".
  */
-std::string getPrefix(const std::string &name, const std::string &base)
+inline std::string getPrefix(const std::string &name, const std::string &base)
 {
     size_t s0 = name.size();
     size_t s1 = base.size();
@@ -364,7 +364,7 @@ void printList(const C &container)
     std::cout << "]" << std::endl;
 }
 
-bool calcIsAllZero(const void *data, size_t size)
+inline bool calcIsAllZero(const void *data, size_t size)
 {
     assert(data);
     const char *p = (const char *)data;

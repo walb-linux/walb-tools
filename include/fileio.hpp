@@ -455,7 +455,7 @@ private:
 /**
  * Create a file if it does not exist.
  */
-void createEmptyFile(const std::string &path, mode_t mode = 0644)
+inline void createEmptyFile(const std::string &path, mode_t mode = 0644)
 {
     struct stat st;
     if (::stat(path.c_str(), &st) == 0) return;

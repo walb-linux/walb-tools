@@ -19,7 +19,7 @@
 namespace cybozu {
 namespace net {
 
-std::string getHostName()
+inline std::string getHostName()
 {
     std::string s;
     s.resize(1024);
@@ -33,7 +33,7 @@ std::string getHostName()
 /**
  * parse "HOST:PORT" format.
  */
-std::pair<std::string, uint16_t> parseHostPortStr(const std::string &s)
+inline std::pair<std::string, uint16_t> parseHostPortStr(const std::string &s)
 {
     auto throwError = [&]() {
         std::string msg = cybozu::util::formatString(
