@@ -557,6 +557,14 @@ inline void readLogIo(device::AsyncWldevReader &reader, log::PackHeaderRaw &pack
     reader.readAhead();
 }
 
+inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t logpackPb, const char *msg)
+{
+    if (maxWlogSendPb < logpackPb) {
+        throw cybozu::Exception(msg)
+            << "maxWlogSendPb is too small" << maxWlogSendPb << logpackPb;
+    }
+}
+
 /**
  * RETURN:
  *   lsid that lsids of all the transferred wlogs are less than.
@@ -620,7 +628,8 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
     for (;;) {
         if (lsid == lsidLimit) break;
         readLogPackHeader(reader, packH, lsid, FUNC);
-        const uint64_t nextLsid = lsid + packH.header().total_io_size;
+        verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);
+        const uint64_t nextLsid =  packH.nextLogpackLsid();
         if (lsidLimit < nextLsid) break;
         sender.pushHeader(packH);
         for (size_t i = 0; i < packH.header().n_records; i++) {
