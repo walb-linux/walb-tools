@@ -128,13 +128,13 @@ public:
      *   true when added successfully.
      *   false when pack is full.
      */
-    bool add(const walb_diff_record &inRec) {
+    bool add(const walb::DiffRecord &inRec) {
 #ifdef DEBUG
-        assert(isValidRec(inRec));
+        assert(inRec.isValid());
 #endif
         if (!canAdd(inRec.data_size)) { return false; }
         DiffRecord &outRec = record(header().n_records);
-        outRec = static_cast<const DiffRecord&>(inRec);
+        outRec = inRec;
         outRec.data_offset = header().total_size;
         header().n_records++;
         header().total_size += inRec.data_size;
@@ -213,7 +213,7 @@ public:
         } else {
             for (size_t i = 0; i < packh.nRecords(); i++) {
                 const DiffRecord& rec = packh.record(i);
-                if (!isValidRec(rec)) {
+                if (!rec.isValid()) {
                     err = cybozu::util::formatString("record invalid: %zu.", i);
                     goto err_exit;
                 }
@@ -405,7 +405,7 @@ public:
         return add(rec, data);
     }
     bool add(const DiffRecord &rec, const char *data) {
-        assert(isValidRec(rec));
+        assert(rec.isValid());
         size_t dSize = rec.data_size;
         if (!packh_.canAdd(dSize)) return false;
 

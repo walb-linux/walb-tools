@@ -32,9 +32,11 @@ namespace diff {
 inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
     return rec.io_address + rec.io_blocks;
 }
+#if 0
 inline bool existsRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
 }
+#endif
 inline bool isAllZeroRec(const walb_diff_record& rec) {
     return (rec.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
 }
@@ -46,55 +48,6 @@ inline bool isCompressedRec(const walb_diff_record& rec) {
 }
 inline bool isNormalRec(const walb_diff_record& rec) {
     return !isAllZeroRec(rec) && !isDiscardRec(rec);
-}
-inline bool isValidRec(const walb_diff_record& rec) {
-    if (!existsRec(rec)) {
-        LOGd("Does not exist.\n");
-        return false;
-    }
-    if (!isNormalRec(rec)) {
-        if (isAllZeroRec(rec) && isDiscardRec(rec)) {
-            LOGd("allzero and discard flag is exclusive.\n");
-            return false;
-        }
-        return true;
-    }
-    if (::WALB_DIFF_CMPR_MAX <= rec.compression_type) {
-        LOGd("compression type is invalid.\n");
-        return false;
-    }
-    if (rec.io_blocks == 0) {
-        LOGd("ioBlocks() must not be 0 for normal IO.\n");
-        return false;
-    }
-    return true;
-}
-#if 0
-inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
-    ::fprintf(fp, "----------\n"
-       "ioAddress: %" PRIu64 "\n"
-       "ioBlocks: %u\n"
-       "compressionType: %u\n"
-       "dataOffset: %u\n"
-       "dataSize: %u\n"
-       "checksum: %08x\n"
-       "exists: %d\n"
-       "isAllZero: %d\n"
-       "isDiscard: %d\n",
-       rec.io_address, rec.io_blocks,
-       rec.compression_type, rec.data_offset, rec.data_size,
-       rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
-}
-inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
-    ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
-        rec.io_address, rec.io_blocks,
-        rec.compression_type, rec.data_offset, rec.data_size,
-        rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
-}
-#endif
-inline void initRec(walb_diff_record& rec) {
-    ::memset(&rec, 0, sizeof(struct walb_diff_record));
-    rec.flags = WALB_DIFF_FLAG(EXIST);
 }
 inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
     return rhs.io_address <= lhs.io_address &&
@@ -122,11 +75,34 @@ struct DiffRecord : public walb_diff_record {
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const { return (flags & WALB_DIFF_FLAG(EXIST)) != 0; }
+    bool exists() const {
+        return (flags & WALB_DIFF_FLAG(EXIST)) != 0;
+    }
     bool isAllZero() const { return diff::isAllZeroRec(*this); }
     bool isDiscard() const { return diff::isDiscardRec(*this); }
     bool isNormal() const { return diff::isNormalRec(*this); }
-    bool isValid() const { return diff::isValidRec(*this); }
+    bool isValid() const {
+        if (!exists()) {
+            LOGd("Does not exist.\n");
+            return false;
+        }
+        if (!isNormal()) {
+            if (isAllZero() && isDiscard()) {
+                LOGd("allzero and discard flag is exclusive.\n");
+                return false;
+            }
+            return true;
+        }
+        if (::WALB_DIFF_CMPR_MAX <= compression_type) {
+            LOGd("compression type is invalid.\n");
+            return false;
+        }
+        if (io_blocks == 0) {
+            LOGd("ioBlocks() must not be 0 for normal IO.\n");
+            return false;
+        }
+        return true;
+    }
 
     void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "----------\n"

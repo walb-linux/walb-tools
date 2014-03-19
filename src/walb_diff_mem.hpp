@@ -61,7 +61,7 @@ public:
     }
 
     bool isValid(bool isChecksum = false) const {
-        if (!isValidRec(rec_)) {
+        if (!rec_.isValid()) {
             LOGd("rec is not valid.\n");
             return false;
         }

@@ -73,7 +73,7 @@ std::vector<std::vector<char>> generateRawPacks()
     walb::diff::PackHeader packh(&packRaw[0]);
     packh.reset();
 
-    auto addIo = [&](const walb_diff_record &rec, const char *data, size_t size) {
+    auto addIo = [&](const walb::DiffRecord &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
         //if (!packh.add(rec)) {
         if (10 <= packh.nRecords() || !packh.add(rec)) {

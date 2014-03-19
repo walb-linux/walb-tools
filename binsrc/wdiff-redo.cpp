@@ -258,7 +258,7 @@ public:
         walb::DiffRecord rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
-            if (!walb::diff::isValidRec(rec)) {
+            if (!rec.isValid()) {
                 ::printf("Invalid record: ");
                 rec.printOneline();
             }

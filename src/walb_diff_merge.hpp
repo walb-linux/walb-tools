@@ -247,7 +247,7 @@ public:
                 assert(!wdiffs_[i]->isEnd());
 				// copy rec because reference is invalid after calling wdiffs_[i]->pop
                 const DiffRecord rec = wdiffs_[i]->front();
-                assert(isValidRec(rec));
+                assert(rec.isValid());
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
                     wdiffs_[i]->pop(io);

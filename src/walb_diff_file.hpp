@@ -178,7 +178,6 @@ public:
         IoData io;
         io.set(rec0);
         io.data.swap(data0);
-        check(rec0, io);
 
         /* Try to add. */
         if (pack_.add(rec0)) {
@@ -259,19 +258,6 @@ private:
     void checkWrittenHeader() const {
         if (!isWrittenHeader_) {
             throw RT_ERR("Call writeHeader() before calling writeDiff().");
-        }
-    }
-private:
-    void check(UNUSED const DiffRecord &rec, UNUSED const IoData &io) const {
-        assert(isValidRec(rec));
-        assert(io.isValid());
-        assert(rec.data_size == io.data.size());
-        if (isNormalRec(rec)) {
-            assert(rec.compression_type == io.compressionType);
-            assert(rec.io_blocks == io.ioBlocks);
-            assert(rec.checksum == io.calcChecksum());
-        } else {
-            assert(io.empty());
         }
     }
 };
@@ -367,7 +353,7 @@ public:
         if (!canRead()) return false;
         rec = pack_.record(recIdx_);
 
-        if (!isValidRec(rec)) {
+        if (!rec.isValid()) {
 #ifdef DEBUG
             rec.print();
             pack_.record(recIdx_).print();
@@ -399,7 +385,7 @@ public:
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         rec.data_size = io.data.size();
         rec.checksum = io.calcChecksum();
-        assert(diff::isValidRec(rec));
+        assert(rec.isValid());
         assert(io.isValid());
         return true;
     }

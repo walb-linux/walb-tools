@@ -24,7 +24,7 @@ int main(UNUSED int argc, UNUSED char *argv[])
         walb::DiffRecord rec;
         walb::diff::IoData io;
         while (wdiffR.readDiff(rec, io)) {
-            if (!isValidRec(rec)) {
+            if (!rec.isValid()) {
                 ::printf("Invalid record: ");
             }
             rec.printOneline();
