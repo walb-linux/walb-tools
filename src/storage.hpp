@@ -577,10 +577,11 @@ inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t lo
 inline uint64_t extractAndSendWlog(const std::string &volId)
 {
     const char *const FUNC = __func__;
+    StorageVolState &volSt = getStorageVolState(volId);
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     MetaLsidGid rec0, rec1;
-    std::tie(rec0, rec1) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
-
+    uint64_t lsidLimit;
+    std::tie(rec0, rec1, lsidLimit) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
     const std::string wdevPath = volInfo.getWdevPath();
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
     const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
@@ -589,7 +590,6 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
     const uint32_t salt = reader.super().getLogChecksumSalt();
     const uint64_t maxWlogSendPb = gs.maxWlogSendMb * MEBI / pbs;
     const uint64_t lsidB = rec0.lsid;
-    const uint64_t lsidLimit = std::min(lsidB + maxWlogSendPb, rec1.lsid);
     const cybozu::Uuid uuid = volInfo.getUuid();
     const uint64_t sizeLb = device::getSizeLb(wdevPath);
 
@@ -608,9 +608,11 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
             pkt.write(sizeLb);
             std::string res;
             pkt.read(res);
-            if (res != "ok") throw cybozu::Exception(FUNC) << res;
-            isAvailable = true;
-            break;
+            if (res == "ok") {
+                isAvailable = true;
+                break;
+            }
+            LOGs.warn() << FUNC << res;
         } catch (std::exception &e) {
             LOGs.warn() << e.what();
         }
@@ -631,6 +633,9 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
     log::BlockDataShared blockD(pbs);
     uint64_t lsid = lsidB;
     for (;;) {
+        if (volSt.stopState == ForceStopping || gs.forceQuit) {
+            throw cybozu::Exception(FUNC) << "force stopped" << volId;
+        }
         if (lsid == lsidLimit) break;
         readLogPackHeader(reader, packH, lsid, FUNC);
         verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);

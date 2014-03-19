@@ -203,12 +203,11 @@ public:
     }
     /**
      * RETURN:
-     *   target lsid range and gid range by two MetaLsidGids: rec0 and rec1.
-     *   If rec0.gid + 1 == rec1.gid, all wlogs of the range (rec0.lsid, rec1.lsid)
-     *   must be transferred at once.
-     *   If rec0.lsid == rec1.lsid, empty wlog must be transferred.
+     *   target lsid/gid range by two MetaLsidGids: rec0 and rec1,
+     *   and lsidLimit as uint64_t value.
+     *   Do not transfer logpacks which lsid >= lsidLimit.
      */
-    std::pair<MetaLsidGid, MetaLsidGid> prepareWlogTransfer(uint64_t maxWlogSendMb) {
+    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t> prepareWlogTransfer(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid rec0 = getDoneRecord();
@@ -236,7 +235,14 @@ public:
                 << "invalid MetaLsidGidRecord" << rec0 << rec1;
         }
         assert(rec0.gid < rec1.gid);
-        return std::make_pair(rec0, rec1);
+
+        uint64_t lsidLimit;
+        if (rec0.gid + 1 == rec1.gid) {
+            lsidLimit = rec1.lsid;
+        } else {
+            lsidLimit = std::min(rec0.lsid + maxWlogSendPb, rec1.lsid);
+        }
+        return std::make_tuple(rec0, rec1, lsidLimit);
     }
     MetaDiff getTransferDiff(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) const {
         MetaDiff diff;
