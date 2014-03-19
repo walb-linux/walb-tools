@@ -168,13 +168,13 @@ private:
         const DiffRecord& rec = recIo_.record();
         const walb::diff::IoData &io = recIo_.io();
         assert(offInIo_ < rec.io_blocks);
-        if (isNormalRec(rec)) {
+        if (rec.isNormal()) {
             assert(!io.isCompressed());
             size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
             ::memcpy(data, io.data.data() + off, blks * LOGICAL_BLOCK_SIZE);
         } else {
             /* Read zero image for both ALL_ZERO and DISCARD.. */
-            assert(isDiscardRec(rec) || isAllZeroRec(rec));
+            assert(rec.isDiscard() || rec.isAllZero());
             ::memset(data, 0, blks * LOGICAL_BLOCK_SIZE);
         }
         offInIo_ += blks;

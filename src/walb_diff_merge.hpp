@@ -300,7 +300,7 @@ private:
         }
     }
     void mergeIo(const DiffRecord &rec, DiffIo &&io) {
-        assert(!isCompressedRec(rec));
+        assert(!rec.isCompressed());
         wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
     bool canMergeIo(size_t i, const DiffRecord &rec) {

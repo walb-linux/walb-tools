@@ -199,11 +199,11 @@ public:
      * @data IO data.
      */
     void compressAndWriteDiff(const DiffRecord &rec, const char *data) {
-        if (isCompressedRec(rec)) {
+        if (rec.isCompressed()) {
             writeDiff(rec, data);
             return;
         }
-        if (!isNormalRec(rec)) {
+        if (!rec.isNormal()) {
             writeDiff(rec, {});
             return;
         }
@@ -377,7 +377,7 @@ public:
             io = std::move(io0);
             return false;
         }
-        if (!isCompressedRec(rec)) {
+        if (!rec.isCompressed()) {
             io = std::move(io0);
             return true;
         }

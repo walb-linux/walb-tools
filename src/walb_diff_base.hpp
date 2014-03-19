@@ -32,23 +32,7 @@ namespace diff {
 inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
     return rec.io_address + rec.io_blocks;
 }
-#if 0
-inline bool existsRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
-}
-#endif
-inline bool isAllZeroRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
-}
-inline bool isDiscardRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
-}
-inline bool isCompressedRec(const walb_diff_record& rec) {
-    return rec.compression_type != ::WALB_DIFF_CMPR_NONE;
-}
-inline bool isNormalRec(const walb_diff_record& rec) {
-    return !isAllZeroRec(rec) && !isDiscardRec(rec);
-}
+
 inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
     return rhs.io_address <= lhs.io_address &&
         lhs.io_address + lhs.io_blocks <= rhs.io_address + rhs.io_blocks;
@@ -78,9 +62,11 @@ struct DiffRecord : public walb_diff_record {
     bool exists() const {
         return (flags & WALB_DIFF_FLAG(EXIST)) != 0;
     }
-    bool isAllZero() const { return diff::isAllZeroRec(*this); }
-    bool isDiscard() const { return diff::isDiscardRec(*this); }
-    bool isNormal() const { return diff::isNormalRec(*this); }
+    bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
+    bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
+    bool isNormal() const {
+        return !isAllZero() && !isDiscard();
+    }
     bool isValid() const {
         if (!exists()) {
             LOGd("Does not exist.\n");
@@ -156,13 +142,13 @@ std::vector<DiffRecord> splitAll(const DiffRecord& rec, uint16_t ioBlocks0) {
     if (ioBlocks0 == 0) {
         throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
     }
-    if (isCompressedRec(rec)) {
+    if (rec.isCompressed()) {
         throw cybozu::Exception("splitAll: compressed data can not be splitted.");
     }
     std::vector<DiffRecord> v;
     uint64_t addr = rec.io_address;
     uint16_t remaining = rec.io_blocks;
-    const bool isNormal = isNormalRec(rec);
+    const bool isNormal = rec.isNormal();
     while (remaining > 0) {
         uint16_t blks = std::min(ioBlocks0, remaining);
         v.push_back(DiffRecord());
@@ -280,7 +266,7 @@ public:
     }
 
     void set(const DiffRecord &rec) {
-        if (isNormalRec(rec)) {
+        if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
         } else {

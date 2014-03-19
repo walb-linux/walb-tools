@@ -209,11 +209,11 @@ public:
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
-        if (walb::diff::isAllZeroRec(rec)) {
+        if (rec.isAllZero()) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
             if (isSuccess) { outStat_.nIoAllZero++; }
             inStat_.nIoAllZero++;
-        } else if (walb::diff::isDiscardRec(rec)) {
+        } else if (rec.isDiscard()) {
             if (config_.isDiscard()) {
                 isSuccess = executeDiscardIo(ioAddr, ioBlocks);
             } else if (config_.isZeroDiscard()) {
@@ -225,7 +225,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
-            assert(walb::diff::isNormalRec(rec));
+            assert(rec.isNormal());
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }

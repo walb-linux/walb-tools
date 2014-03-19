@@ -31,7 +31,7 @@ public:
 
     void copyFrom(const DiffRecord &rec, const IoData &io) {
         rec_ = rec;
-        if (isNormalRec(rec)) {
+        if (rec.isNormal()) {
             io_ = io;
         } else {
             io_.clear();
@@ -39,7 +39,7 @@ public:
     }
     void moveFrom(const DiffRecord &rec, IoData &&io) {
         rec_ = rec;
-        if (isNormalRec(rec)) {
+        if (rec.isNormal()) {
             io_ = std::move(io);
         } else {
             io_.clear();
@@ -47,7 +47,7 @@ public:
     }
     void moveFrom(const DiffRecord &rec, std::vector<char> &&data) {
         rec_ = rec;
-        if (isNormalRec(rec)) {
+        if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
             io_.data.swap(data);
@@ -69,7 +69,7 @@ public:
             LOGd("io is not valid.\n");
             return false;
         }
-        if (!isNormalRec(rec_)) {
+        if (!rec_.isNormal()) {
             if (io_.ioBlocks != 0) {
                 LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
                 return false;
@@ -84,7 +84,7 @@ public:
             LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.data.size());
             return false;
         }
-        if (isCompressedRec(rec_)) {
+        if (rec_.isCompressed()) {
             LOGd("RecIo does not support compressed data.\n");
             return false;
         }
@@ -112,7 +112,7 @@ public:
 
         std::vector<DiffRecord> recV = diff::splitAll(rec_, ioBlocks);
         std::vector<IoData> ioV;
-        if (isNormalRec(rec_)) {
+        if (rec_.isNormal()) {
             ioV = splitIoDataAll(io_, ioBlocks);
         } else {
             ioV.resize(recV.size());
@@ -172,7 +172,7 @@ public:
 
             size_t size0 = 0;
             size_t size1 = 0;
-			const bool recIsNormal = isNormalRec(rec_);
+			const bool recIsNormal = rec_.isNormal();
             if (recIsNormal) {
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
@@ -222,11 +222,11 @@ public:
             assert(endIoAddressRec(rec) == rhs.rec_.io_address);
 
             size_t size = 0;
-            if (isNormalRec(rec_)) {
+            if (rec_.isNormal()) {
                 size = io_.data.size() - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data;
-            if (isNormalRec(rec_)) {
+            if (rec_.isNormal()) {
                 assert(rec_.data_size == io_.data.size());
                 rec.data_size = size;
                 const char *p = io_.data.data();
@@ -255,7 +255,7 @@ public:
         rec.io_blocks = rec_.io_blocks - rblks;
 
         size_t size = 0;
-        const bool isNormal = isNormalRec(rec_);
+        const bool isNormal = rec_.isNormal();
         if (isNormal) {
             size = io_.data.size() - off;
         }

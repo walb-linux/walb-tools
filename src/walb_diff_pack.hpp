@@ -342,7 +342,7 @@ public:
             const DiffRecord& rec = pack_.record(i);
             uint32_t dataSize = rec.data_size;
             assert(rec.data_offset == dataOffset);
-            if (isNormalRec(rec)) {
+            if (rec.isNormal()) {
                 assert(0 < dataSize);
                 ::memcpy(p, data(i), dataSize);
                 p += dataSize;
@@ -409,7 +409,7 @@ public:
         size_t dSize = rec.data_size;
         if (!packh_.canAdd(dSize)) return false;
 
-        bool isNormal = isNormalRec(rec);
+        bool isNormal = rec.isNormal();
 #ifdef WALB_DEBUG
         if (isNormal) {
             assert(rec.checksum == cybozu::util::calcChecksum(data, dSize, 0));
