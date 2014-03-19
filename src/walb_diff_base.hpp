@@ -149,7 +149,6 @@ struct DiffRecord : public walb_diff_record {
     }
 };
 
-
 /**
  * Block diff for an IO.
  */
@@ -159,8 +158,8 @@ public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
-    const char *get() const { return get(); }
-    char *get() { return get(); }
+    const char *get() const { return data.data(); }
+    char *get() { return data.data(); }
     size_t getSize() const { return data.size(); }
 
     explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
@@ -189,9 +188,9 @@ public:
             if (isCompressed()) {
                 return true;
             } else {
-                if (data.size() != ioBlocks * LOGICAL_BLOCK_SIZE) {
+                if (getSize() != ioBlocks * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , data.size(), ioBlocks * LOGICAL_BLOCK_SIZE);
+                         , getSize(), ioBlocks * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -204,14 +203,14 @@ public:
      */
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
-        return cybozu::util::calcChecksum(get(), data.size(), 0);
+        return cybozu::util::calcChecksum(get(), getSize(), 0);
     }
 
     /**
      * Calculate whether all-zero or not.
      */
     bool calcIsAllZero() const {
-        const size_t size = data.size();
+        const size_t size = getSize();
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
         return cybozu::util::calcIsAllZero(get(), size);
@@ -225,14 +224,14 @@ public:
                   "checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , data.size()
+                  , getSize()
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , data.size()
+                  , getSize()
                   , calcChecksum());
     }
 
@@ -288,7 +287,7 @@ public:
             remaining -= blks;
             off += size;
         }
-        assert(off == data.size());
+        assert(off == getSize());
         assert(!v.empty());
         return v;
     }
@@ -330,7 +329,7 @@ inline DiffIo uncompressIoData(const DiffIo &io0)
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
     DiffIo io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
     io1.data.resize(decSize);
-    size_t size = dec.run(io1.get(), decSize, io0.get(), io0.data.size());
+    size_t size = dec.run(io1.get(), decSize, io0.get(), io0.getSize());
     if (size != decSize) {
         throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
     }

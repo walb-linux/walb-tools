@@ -212,7 +212,7 @@ public:
         DiffIo io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
         DiffRecord rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
-        rec1.data_size = io1.data.size();
+        rec1.data_size = io1.getSize();
         rec1.checksum = io1.calcChecksum();
         writeDiff(rec1, std::move(io1.data));
     }
@@ -241,8 +241,8 @@ private:
             DiffIo io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.get(), io0.data.size());
-            total += io0.data.size();
+            fdw_.write(io0.get(), io0.getSize());
+            total += io0.getSize();
         }
         assert(total == pack_.totalSize());
         pack_.reset();
@@ -383,7 +383,7 @@ public:
         }
         io = uncompressIoData(io0);
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
-        rec.data_size = io.data.size();
+        rec.data_size = io.getSize();
         rec.checksum = io.calcChecksum();
         assert(rec.isValid());
         assert(io.isValid());

@@ -80,8 +80,8 @@ public:
             LOGd("ioSize invalid %u %u\n", rec_.io_blocks, io_.ioBlocks);
             return false;
         }
-        if (rec_.data_size != io_.data.size()) {
-            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.data.size());
+        if (rec_.data_size != io_.getSize()) {
+            LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.getSize());
             return false;
         }
         if (rec_.isCompressed()) {
@@ -223,11 +223,11 @@ public:
 
             size_t size = 0;
             if (rec_.isNormal()) {
-                size = io_.data.size() - rblks * LOGICAL_BLOCK_SIZE;
+                size = io_.getSize() - rblks * LOGICAL_BLOCK_SIZE;
             }
             std::vector<char> data;
             if (rec_.isNormal()) {
-                assert(rec_.data_size == io_.data.size());
+                assert(rec_.data_size == io_.getSize());
                 rec.data_size = size;
                 const char *p = io_.get();
                 data.assign(p, p + size);
@@ -257,11 +257,11 @@ public:
         size_t size = 0;
         const bool isNormal = rec_.isNormal();
         if (isNormal) {
-            size = io_.data.size() - off;
+            size = io_.getSize() - off;
         }
         std::vector<char> data;
         if (isNormal) {
-            assert(rec_.data_size == io_.data.size());
+            assert(rec_.data_size == io_.getSize());
             rec.data_size = size;
             const char *p = io_.get() + off;
             data.assign(p, p + size);
