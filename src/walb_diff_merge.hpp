@@ -110,7 +110,7 @@ private:
             if (reader_.readAndUncompressDiff(rec_, io_)) {
                 isFilled_ = true;
             } else {
-                clearExistsRec(rec_);
+                rec_.clearExists();
                 io_ = DiffIo();
                 isFilled_ = false;
                 isEnd_ = true;

@@ -38,13 +38,13 @@ inline bool convertLogToDiff(
     /* Padding */
     if (rec.isPadding()) return false;
 
-    diff::initRec(mrec);
+    mrec.init();
     mrec.io_address = rec.offset();
     mrec.io_blocks = rec.ioSizeLb();
 
     /* Discard */
     if (rec.isDiscard()) {
-        diff::setDiscardRec(mrec);
+        mrec.setDiscard();
         mrec.data_size = 0;
         diffIo.set(mrec);
         return true;
@@ -52,7 +52,7 @@ inline bool convertLogToDiff(
 
     /* AllZero */
     if (blockD.calcIsAllZero(rec.ioSizeLb())) {
-        diff::setAllZeroRec(mrec);
+        mrec.setAllZero();
         mrec.data_size = 0;
         diffIo.set(mrec);
         return true;

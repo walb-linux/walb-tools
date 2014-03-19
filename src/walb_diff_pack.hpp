@@ -394,11 +394,11 @@ public:
         rec.io_blocks = ioBlocks;
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         if (isZero) {
-            setAllZeroRec(rec);
+            rec.setAllZero();
             rec.data_size = 0;
             rec.checksum = 0;
         } else {
-            setNormalRec(rec);
+            rec.setNormal();
             rec.data_size = dSize;
             rec.checksum = cybozu::util::calcChecksum(data, dSize, 0);
         }

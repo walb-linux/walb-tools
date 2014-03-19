@@ -387,7 +387,7 @@ public:
     bool readAndUncompressDiff(DiffRecord &rec, IoData &io) {
         IoData io0;
         if (!readDiff(rec, io0)) {
-            clearExistsRec(rec);
+            rec.clearExists();
             io = std::move(io0);
             return false;
         }

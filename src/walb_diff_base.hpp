@@ -94,24 +94,6 @@ inline void initRec(walb_diff_record& rec) {
     ::memset(&rec, 0, sizeof(struct walb_diff_record));
     rec.flags = WALB_DIFF_FLAG(EXIST);
 }
-inline void setExistsRec(walb_diff_record& rec) {
-    rec.flags |= WALB_DIFF_FLAG(EXIST);
-}
-inline void clearExistsRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(EXIST);
-}
-inline void setNormalRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
-}
-inline void setAllZeroRec(walb_diff_record& rec) {
-    rec.flags |= WALB_DIFF_FLAG(ALLZERO);
-    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
-}
-inline void setDiscardRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-    rec.flags |= WALB_DIFF_FLAG(DISCARD);
-}
 inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
     return rhs.io_address <= lhs.io_address &&
         lhs.io_address + lhs.io_blocks <= rhs.io_address + rhs.io_blocks;
@@ -142,11 +124,20 @@ struct DiffRecord : public walb_diff_record {
     void print(::FILE *fp = ::stdout) const { diff::printRec(*this, fp); }
     void printOneline(::FILE *fp = ::stdout) const { diff::printOnelineRec(*this, fp); }
 
-    void setExists() { diff::setExistsRec(*this); }
-    void clearExists() { diff::clearExistsRec(*this); }
-    void setNormal() { diff::setNormalRec(*this); }
-    void setAllZero() { diff::setAllZeroRec(*this); }
-    void setDiscard() { diff::setDiscardRec(*this); }
+    void setExists() { flags |= WALB_DIFF_FLAG(EXIST); }
+    void clearExists() { flags &= ~WALB_DIFF_FLAG(EXIST); }
+    void setNormal() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setAllZero() {
+        flags |= WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setDiscard() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags |= WALB_DIFF_FLAG(DISCARD);
+    }
 	bool isOverwrittenBy(const DiffRecord &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
     bool isOverlapped(const DiffRecord &rhs) const { return diff::isOverlapped(*this, rhs); }
 };

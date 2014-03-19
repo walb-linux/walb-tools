@@ -45,7 +45,7 @@ public:
             walb::diff::initRec(rec);
             rec.io_address = ioAddr;
             rec.io_blocks = blks;
-            walb::diff::setNormalRec(rec);
+            rec.setNormal();
             rec.data_size = blks * LOGICAL_BLOCK_SIZE;
             uint32_t csum = cybozu::util::calcChecksum(
                 &buf0_[0], blks * LOGICAL_BLOCK_SIZE, 0);
