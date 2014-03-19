@@ -113,7 +113,7 @@ public:
         std::vector<DiffRecord> recV = rec_.splitAll(ioBlocks);
         std::vector<DiffIo> ioV;
         if (rec_.isNormal()) {
-            ioV = splitIoDataAll(io_, ioBlocks);
+            ioV = io_.splitIoDataAll(ioBlocks);
         } else {
             ioV.resize(recV.size());
         }

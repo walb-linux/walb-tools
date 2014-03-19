@@ -159,6 +159,9 @@ public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
+    const char *get() const { return data.data(); }
+    char *get() { return data.data(); }
+    size_t getSize() const { return data.size(); }
 
     explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
     }
@@ -259,6 +262,36 @@ public:
         }
         data.resize(rec.data_size);
     }
+    /**
+     * Split an IO into multiple IOs
+     * each of which io size is not more than a specified one.
+     *
+     * CAUSION:
+     *   Compressed IO can not be splitted.
+     */
+    std::vector<DiffIo> splitIoDataAll(uint16_t ioBlocks0) const
+    {
+        if (ioBlocks0 == 0) {
+            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("splitAll: compressed IO can not be splitted.");
+        }
+        assert(isValid());
+        std::vector<DiffIo> v;
+        uint16_t remaining = ioBlocks;
+        size_t off = 0;
+        while (0 < remaining) {
+            uint16_t blks = std::min(remaining, ioBlocks0);
+            size_t size = blks * LOGICAL_BLOCK_SIZE;
+            v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &data[off], size);
+            remaining -= blks;
+            off += size;
+        }
+        assert(off == data.size());
+        assert(!v.empty());
+        return v;
+    }
 };
 
 namespace diff {
@@ -302,39 +335,6 @@ inline DiffIo uncompressIoData(const DiffIo &io0)
         throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
     }
     return io1;
-}
-
-/**
- * Split an IO into multiple IOs
- * each of which io size is not more than a specified one.
- *
- * CAUSION:
- *   Compressed IO can not be splitted.
- */
-inline std::vector<DiffIo> splitIoDataAll(const DiffIo &io0, uint16_t ioBlocks0)
-{
-    if (ioBlocks0 == 0) {
-        throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
-    }
-    if (io0.isCompressed()) {
-        throw RT_ERR("splitAll: compressed IO can not be splitted.");
-    }
-    assert(io0.isValid());
-
-    std::vector<DiffIo> v;
-    uint16_t remaining = io0.ioBlocks;
-    size_t off = 0;
-    while (0 < remaining) {
-        uint16_t blks = std::min(remaining, ioBlocks0);
-        size_t size = blks * LOGICAL_BLOCK_SIZE;
-        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &io0.data[off], size);
-        remaining -= blks;
-        off += size;
-    }
-    assert(off == io0.data.size());
-    assert(!v.empty());
-
-    return v;
 }
 
 }} //namesapce walb::diff
