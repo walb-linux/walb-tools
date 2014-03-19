@@ -202,23 +202,28 @@ public:
         return takeSnapshotDetail(maxWlogSendPb, false, qf);
     }
     /**
+     * Calling order:
+     *   (1) prepareWlogTransfer()
+     *   (2) getTransferDiff()
+     *   (3) finishWlogTransfer()
+     *
      * RETURN:
-     *   target lsid/gid range by two MetaLsidGids: rec0 and rec1,
+     *   target lsid/gid range by two MetaLsidGids: recB and recE,
      *   and lsidLimit as uint64_t value.
      *   Do not transfer logpacks which lsid >= lsidLimit.
      */
     std::tuple<MetaLsidGid, MetaLsidGid, uint64_t> prepareWlogTransfer(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        MetaLsidGid rec0 = getDoneRecord();
+        MetaLsidGid recB = getDoneRecord();
         const uint64_t lsid0 = device::getOldestLsid(getWdevPath());
-        if (lsid0 < rec0.lsid) device::eraseWal(getWdevPath(), rec0.lsid);
-        MetaLsidGid rec1;
+        if (lsid0 < recB.lsid) device::eraseWal(getWdevPath(), recB.lsid);
+        MetaLsidGid recE;
         for (;;) {
             if (qf.empty()) break;
-            qf.back(rec1);
-            rec1.verify();
-            if ((rec1.lsid < rec0.lsid) || (rec0.lsid == rec1.lsid && rec1.gid <= rec0.gid)) {
+            qf.back(recE);
+            recE.verify();
+            if ((recE.lsid < recB.lsid) || (recB.lsid == recE.lsid && recE.gid <= recB.gid)) {
                 qf.popBack();
                 continue;
             }
@@ -227,23 +232,27 @@ public:
         const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
         if (qf.empty()) {
             takeSnapshotDetail(maxWlogSendPb, true, qf);
-            qf.back(rec1);
-            rec1.verify();
+            qf.back(recE);
+            recE.verify();
         }
-        if (!(rec0.lsid <= rec1.lsid)) {
+        if (!(recB.lsid <= recE.lsid)) {
             throw cybozu::Exception(FUNC)
-                << "invalid MetaLsidGidRecord" << rec0 << rec1;
+                << "invalid MetaLsidGidRecord" << recB << recE;
         }
-        assert(rec0.gid < rec1.gid);
+        assert(recB.gid < recE.gid);
 
         uint64_t lsidLimit;
-        if (rec0.gid + 1 == rec1.gid) {
-            lsidLimit = rec1.lsid;
+        if (recB.gid + 1 == recE.gid) {
+            lsidLimit = recE.lsid;
         } else {
-            lsidLimit = std::min(rec0.lsid + maxWlogSendPb, rec1.lsid);
+            lsidLimit = std::min(recB.lsid + maxWlogSendPb, recE.lsid);
         }
-        return std::make_tuple(rec0, rec1, lsidLimit);
+        return std::make_tuple(recB, recE, lsidLimit);
     }
+    /**
+     * RETURN:
+     *   generated diff will be transferred to a proxy daemon.
+     */
     MetaDiff getTransferDiff(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) const {
         MetaDiff diff;
         diff.snapB.set(recB.gid);
@@ -258,7 +267,7 @@ public:
         return diff;
     }
     /**
-     * rec0 and rec1 must not be changed between calling
+     * recB and recE must not be changed between calling
      * prepareWlogTransfer() and finishWlogTransfer().
      */
     void finishWlogTransfer(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) {
