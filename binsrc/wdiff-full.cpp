@@ -41,7 +41,7 @@ public:
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            walb_diff_record rec;
+            walb::DiffRecord rec;
             walb::diff::initRec(rec);
             rec.io_address = ioAddr;
             rec.io_blocks = blks;

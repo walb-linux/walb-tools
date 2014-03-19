@@ -477,7 +477,7 @@ inline bool recvAndWriteDiffs(
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
             diff::IoData io;
-            const walb_diff_record& rec = packH.record(i);
+            const DiffRecord& rec = packH.record(i);
             io.set(rec);
             if (rec.data_size == 0) {
                 writer.writeDiff(rec, {});

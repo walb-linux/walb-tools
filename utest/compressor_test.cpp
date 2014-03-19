@@ -61,19 +61,19 @@ void printPackRaw(char *packRaw)
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
 }
 
-std::vector<std::vector<char> > generateRawPacks()
+std::vector<std::vector<char>> generateRawPacks()
 {
     walb::log::Generator::Config cfg = createConfig();
     walb::diff::Generator g(cfg);
     g.generate();
     walb::diff::MemoryData &mem0 = g.data();
 
-    std::vector<std::vector<char> > packV0;
+    std::vector<std::vector<char>> packV0;
     std::vector<char> packRaw(::WALB_DIFF_PACK_SIZE);
     walb::diff::PackHeader packh(&packRaw[0]);
     packh.reset();
 
-    auto addIo = [&](const struct walb_diff_record &rec, const char *data, size_t size) {
+    auto addIo = [&](const walb_diff_record &rec, const char *data, size_t size) {
         //packh.print(); /* debug */
         //if (!packh.add(rec)) {
         if (10 <= packh.nRecords() || !packh.add(rec)) {

@@ -247,7 +247,7 @@ private:
         for (size_t i = 0; i < packH.nRecords(); i++) {
             receiver_.popIo(packH.header(), i, blockD);
             const log::RecordWrapConst lrec(&packH, i);
-            walb_diff_record drec;
+            DiffRecord drec;
             diff::IoData dio;
             if (convertLogToDiff(lrec, blockD, drec, dio)) {
                 wdiffM.add(drec, std::move(dio));

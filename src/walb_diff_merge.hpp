@@ -37,7 +37,7 @@ private:
         cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
         std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
-        mutable walb_diff_record rec_;
+        mutable DiffRecord rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
@@ -68,7 +68,7 @@ private:
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
         walb::diff::FileHeaderWrap &header() { return *headerP_; }
-        const walb_diff_record &front() {
+        const DiffRecord &front() {
             fill();
             assert(isFilled_);
             return rec_;
@@ -246,7 +246,7 @@ public:
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
 				// copy rec because reference is invalid after calling wdiffs_[i]->pop
-                const walb_diff_record rec = wdiffs_[i]->front();
+                const DiffRecord rec = wdiffs_[i]->front();
                 assert(isValidRec(rec));
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
@@ -299,11 +299,11 @@ private:
             }
         }
     }
-    void mergeIo(const walb_diff_record &rec, DiffIo &&io) {
+    void mergeIo(const DiffRecord &rec, DiffIo &&io) {
         assert(!isCompressedRec(rec));
         wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
-    bool canMergeIo(size_t i, const walb_diff_record &rec) {
+    bool canMergeIo(size_t i, const DiffRecord &rec) {
         if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
             if (!(endIoAddressRec(rec) <= wdiffs_[j]->currentAddress())) {

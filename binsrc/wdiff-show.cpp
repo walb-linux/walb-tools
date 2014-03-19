@@ -21,7 +21,7 @@ int main(UNUSED int argc, UNUSED char *argv[])
         wdiffH->print();
 
         /* now editing */
-        walb_diff_record rec;
+        walb::DiffRecord rec;
         walb::diff::IoData io;
         while (wdiffR.readDiff(rec, io)) {
             if (!isValidRec(rec)) {

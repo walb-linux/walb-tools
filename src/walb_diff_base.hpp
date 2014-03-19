@@ -122,34 +122,36 @@ inline bool isOverlapped(const walb_diff_record& lhs, const walb_diff_record &rh
         rhs.io_address < lhs.io_address + lhs.io_blocks;
 }
 
+} // walb::diff
 /*
-    you can change this class with walb_diff_record safely
+    you can change this class with DiffRecord safely
 */
 struct DiffRecord : public walb_diff_record {
     void init() {
-        initRec(*this);
+        diff::initRec(*this);
     }
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const { return existsRec(*this); }
-    bool isAllZero() const { return isAllZeroRec(*this); }
-    bool isDiscard() const { return isDiscardRec(*this); }
-    bool isNormal() const { return isNormalRec(*this); }
-    bool isValid() const { return isValidRec(*this); }
+    bool exists() const { return diff::existsRec(*this); }
+    bool isAllZero() const { return diff::isAllZeroRec(*this); }
+    bool isDiscard() const { return diff::isDiscardRec(*this); }
+    bool isNormal() const { return diff::isNormalRec(*this); }
+    bool isValid() const { return diff::isValidRec(*this); }
 
-    void print(::FILE *fp = ::stdout) const { printRec(*this, fp); }
-    void printOneline(::FILE *fp = ::stdout) const { printOnelineRec(*this, fp); }
+    void print(::FILE *fp = ::stdout) const { diff::printRec(*this, fp); }
+    void printOneline(::FILE *fp = ::stdout) const { diff::printOnelineRec(*this, fp); }
 
-    void setExists() { setExistsRec(*this); }
-    void clearExists() { clearExistsRec(*this); }
-    void setNormal() { setNormalRec(*this); }
-    void setAllZero() { setAllZeroRec(*this); }
-    void setDiscard() { setDiscardRec(*this); }
-	bool isOverwrittenBy(const walb_diff_record &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
-    bool isOverlapped(const walb_diff_record &rhs) const { return diff::isOverlapped(*this, rhs); }
+    void setExists() { diff::setExistsRec(*this); }
+    void clearExists() { diff::clearExistsRec(*this); }
+    void setNormal() { diff::setNormalRec(*this); }
+    void setAllZero() { diff::setAllZeroRec(*this); }
+    void setDiscard() { diff::setDiscardRec(*this); }
+	bool isOverwrittenBy(const DiffRecord &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
+    bool isOverlapped(const DiffRecord &rhs) const { return diff::isOverlapped(*this, rhs); }
 };
 
+namespace diff {
 /**
  * Split a record into several records
  * where all splitted records' ioBlocks will be <= a specified one.
@@ -158,21 +160,21 @@ struct DiffRecord : public walb_diff_record {
  *   The checksum of splitted records will be invalid state.
  *   Only non-compressed records can be splitted.
  */
-std::vector<walb_diff_record> splitAll(const walb_diff_record& rec, uint16_t ioBlocks0) {
+std::vector<DiffRecord> splitAll(const DiffRecord& rec, uint16_t ioBlocks0) {
     if (ioBlocks0 == 0) {
         throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
     }
     if (isCompressedRec(rec)) {
         throw cybozu::Exception("splitAll: compressed data can not be splitted.");
     }
-    std::vector<walb_diff_record> v;
+    std::vector<DiffRecord> v;
     uint64_t addr = rec.io_address;
     uint16_t remaining = rec.io_blocks;
     const bool isNormal = isNormalRec(rec);
     while (remaining > 0) {
         uint16_t blks = std::min(ioBlocks0, remaining);
-        v.push_back(walb_diff_record());
-        walb_diff_record& r = v.back();
+        v.push_back(DiffRecord());
+        DiffRecord& r = v.back();
         r = rec;
         r.io_address = addr;
         r.io_blocks = blks;
@@ -285,7 +287,7 @@ public:
         return *this;
     }
 
-    void set(const struct walb_diff_record &rec) {
+    void set(const DiffRecord &rec) {
         if (isNormalRec(rec)) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
@@ -302,7 +304,7 @@ public:
  * Supported algorithms: snappy.
  */
 
-inline IoData compressIoData(const walb_diff_record& rec, const char *data, int type)
+inline IoData compressIoData(const DiffRecord& rec, const char *data, int type)
 {
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
         throw cybozu::Exception("compressIoData:Currently only snappy is supported.");

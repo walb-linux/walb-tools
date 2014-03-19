@@ -22,14 +22,14 @@ namespace diff {
 class RecIo /* final */
 {
 private:
-	walb_diff_record rec_;
+	DiffRecord rec_;
     IoData io_;
 public:
-    const walb_diff_record &record() const { return rec_; }
+    const DiffRecord &record() const { return rec_; }
 
     const IoData &io() const { return io_; }
 
-    void copyFrom(const walb_diff_record &rec, const IoData &io) {
+    void copyFrom(const DiffRecord &rec, const IoData &io) {
         rec_ = rec;
         if (isNormalRec(rec)) {
             io_ = io;
@@ -37,7 +37,7 @@ public:
             io_.clear();
         }
     }
-    void moveFrom(const walb_diff_record &rec, IoData &&io) {
+    void moveFrom(const DiffRecord &rec, IoData &&io) {
         rec_ = rec;
         if (isNormalRec(rec)) {
             io_ = std::move(io);
@@ -45,7 +45,7 @@ public:
             io_.clear();
         }
     }
-    void moveFrom(const walb_diff_record &rec, std::vector<char> &&data) {
+    void moveFrom(const DiffRecord &rec, std::vector<char> &&data) {
         rec_ = rec;
         if (isNormalRec(rec)) {
             io_.ioBlocks = rec.io_blocks;
@@ -110,7 +110,7 @@ public:
         assert(isValid());
         std::vector<RecIo> v;
 
-        std::vector<walb_diff_record> recV = diff::splitAll(rec_, ioBlocks);
+        std::vector<DiffRecord> recV = diff::splitAll(rec_, ioBlocks);
         std::vector<IoData> ioV;
         if (isNormalRec(rec_)) {
             ioV = splitIoDataAll(io_, ioBlocks);
@@ -163,8 +163,8 @@ public:
             uint64_t addr0 = rec_.io_address;
             uint64_t addr1 = endIoAddressRec(rec_) - blks1;
 
-            walb_diff_record rec0 = rec_;
-            walb_diff_record rec1 = rec_;
+            DiffRecord rec0 = rec_;
+            DiffRecord rec1 = rec_;
             rec0.io_address = addr0;
             rec0.io_blocks = blks0;
             rec1.io_address = addr1;
@@ -216,7 +216,7 @@ public:
             uint16_t rblks = endIoAddr - rhs.rec_.io_address;
             assert(rhs.rec_.io_address + rblks == endIoAddr);
 
-            walb_diff_record rec = rec_;
+            DiffRecord rec = rec_;
             /* rec.io_address does not change. */
             rec.io_blocks = rec_.io_blocks - rblks;
             assert(endIoAddressRec(rec) == rhs.rec_.io_address);
@@ -250,7 +250,7 @@ public:
         assert(rec_.io_address + rblks == rhsEndIoAddr);
         size_t off = rblks * LOGICAL_BLOCK_SIZE;
 
-        walb_diff_record rec = rec_;
+        DiffRecord rec = rec_;
         rec.io_address = rec_.io_address + rblks;
         rec.io_blocks = rec_.io_blocks - rblks;
 
@@ -300,7 +300,7 @@ public:
     ~MemoryData() noexcept = default;
     bool empty() const { return map_.empty(); }
 
-    void add(const walb_diff_record& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+    void add(const DiffRecord& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -330,7 +330,7 @@ public:
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
-				const walb_diff_record& dr = r.record();
+				const DiffRecord& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
                 uint64_t addr = dr.io_address;
@@ -359,7 +359,7 @@ public:
     void print(::FILE *fp = ::stdout) const {
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record();
+            const DiffRecord &rec = it->second.record();
             printOnelineRec(rec, fp);
             ++it;
         }
@@ -371,7 +371,7 @@ public:
         uint64_t nIos = 0;
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const walb_diff_record &rec = it->second.record();
+            const DiffRecord &rec = it->second.record();
             nBlocks += rec.io_blocks;
             nIos++;
             ++it;
@@ -405,7 +405,7 @@ public:
     void readFrom(int inFd) {
         Reader reader(inFd);
         reader.readHeader(fileH_);
-        walb_diff_record rec;
+        DiffRecord rec;
         IoData io;
         while (reader.readAndUncompressDiff(rec, io)) {
             add(rec, std::move(io));
@@ -422,9 +422,9 @@ public:
     }
     void checkNoOverlappedAndSorted() const {
         auto it = map_.cbegin();
-        const walb_diff_record *prev = nullptr;
+        const DiffRecord *prev = nullptr;
         while (it != map_.cend()) {
-            const walb_diff_record *curr = &it->second.record();
+            const DiffRecord *curr = &it->second.record();
             if (prev) {
                 if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");

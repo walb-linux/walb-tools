@@ -673,7 +673,7 @@ inline bool sendWdiffs(
         if (stopState == ForceStopping || gp.forceQuit) {
             return false;
         }
-        const walb_diff_record& rec = recIo.record();
+        const DiffRecord& rec = recIo.record();
         const diff::IoData& io = recIo.io();
         if (packer.add(rec, io.data.data())) {
             continue;

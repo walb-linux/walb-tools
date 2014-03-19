@@ -205,7 +205,7 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const walb_diff_record& rec, const DiffIoPtr ioP) {
+    void executeDiffIo(const walb::DiffRecord& rec, const DiffIoPtr ioP) {
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
@@ -255,7 +255,7 @@ public:
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
-        walb_diff_record rec;
+        walb::DiffRecord rec;
 		walb::diff::initRec(rec);
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {

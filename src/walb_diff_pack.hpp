@@ -82,13 +82,13 @@ public:
     const struct walb_diff_pack &header() const {
         return *reinterpret_cast<const struct walb_diff_pack *>(&buf_[0]);
     }
-    struct walb_diff_record &record(size_t i) {
+    DiffRecord &record(size_t i) {
         checkRange(i);
-        return header().record[i];
+        return static_cast<DiffRecord&>(header().record[i]);
     }
-    const struct walb_diff_record &record(size_t i) const {
+    const DiffRecord &record(size_t i) const {
         checkRange(i);
-        return header().record[i];
+        return static_cast<const DiffRecord&>(header().record[i]);
     }
 
     uint16_t nRecords() const { return header().n_records; }
@@ -128,13 +128,13 @@ public:
      *   true when added successfully.
      *   false when pack is full.
      */
-    bool add(const struct walb_diff_record &inRec) {
+    bool add(const walb_diff_record &inRec) {
 #ifdef DEBUG
         assert(isValidRec(inRec));
 #endif
         if (!canAdd(inRec.data_size)) { return false; }
-        walb_diff_record &outRec = record(header().n_records);
-        outRec = inRec;
+        DiffRecord &outRec = record(header().n_records);
+        outRec = static_cast<const DiffRecord&>(inRec);
         outRec.data_offset = header().total_size;
         header().n_records++;
         header().total_size += inRec.data_size;
@@ -162,7 +162,7 @@ public:
                   , h.total_size);
         for (size_t i = 0; i < h.n_records; i++) {
             ::fprintf(fp, "record %zu: ", i);
-            const walb_diff_record& rec = record(i);
+            const DiffRecord& rec = record(i);
             printOnelineRec(rec, fp);
         }
     }
@@ -212,7 +212,7 @@ public:
             err = "pack header invalid.";
         } else {
             for (size_t i = 0; i < packh.nRecords(); i++) {
-                const walb_diff_record& rec = packh.record(i);
+                const DiffRecord& rec = packh.record(i);
                 if (!isValidRec(rec)) {
                     err = cybozu::util::formatString("record invalid: %zu.", i);
                     goto err_exit;
@@ -339,7 +339,7 @@ public:
         uint32_t dataOffset = 0;
         for (size_t i = 0; i < pack_.nRecords(); i++) {
             /* Copy each IO data. */
-            const walb_diff_record& rec = pack_.record(i);
+            const DiffRecord& rec = pack_.record(i);
             uint32_t dataSize = rec.data_size;
             assert(rec.data_offset == dataOffset);
             if (isNormalRec(rec)) {
@@ -389,7 +389,7 @@ public:
         if (!packh_.canAdd(dSize)) return false;
 
         bool isZero = isAllZero(data, dSize);
-        walb_diff_record rec;
+        DiffRecord rec;
         rec.io_address = ioAddr;
         rec.io_blocks = ioBlocks;
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
@@ -404,7 +404,7 @@ public:
         }
         return add(rec, data);
     }
-    bool add(const struct walb_diff_record &rec, const char *data) {
+    bool add(const DiffRecord &rec, const char *data) {
         assert(isValidRec(rec));
         size_t dSize = rec.data_size;
         if (!packh_.canAdd(dSize)) return false;

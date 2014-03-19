@@ -169,11 +169,11 @@ public:
      * @rec record.
      * @data0 IO data.
      */
-    void writeDiff(const walb_diff_record &rec0, const char *data0) {
+    void writeDiff(const DiffRecord &rec0, const char *data0) {
         std::vector<char> data(data0, data0 + rec0.data_size);
         writeDiff(rec0, std::move(data));
     }
-    void writeDiff(const walb_diff_record &rec0, std::vector<char> &&data0) {
+    void writeDiff(const DiffRecord &rec0, std::vector<char> &&data0) {
         checkWrittenHeader();
         IoData io;
         io.set(rec0);
@@ -199,7 +199,7 @@ public:
      * @rec record.
      * @data IO data.
      */
-    void compressAndWriteDiff(const walb_diff_record &rec, const char *data) {
+    void compressAndWriteDiff(const DiffRecord &rec, const char *data) {
         if (isCompressedRec(rec)) {
             writeDiff(rec, data);
             return;
@@ -211,7 +211,7 @@ public:
 
         // QQQ refactor later
         IoData io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
-        walb_diff_record rec1 = rec;
+        DiffRecord rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
         rec1.data_size = io1.data.size();
         rec1.checksum = io1.calcChecksum();
@@ -262,7 +262,7 @@ private:
         }
     }
 private:
-    void check(UNUSED const walb_diff_record &rec, UNUSED const IoData &io) const {
+    void check(UNUSED const DiffRecord &rec, UNUSED const IoData &io) const {
         assert(isValidRec(rec));
         assert(io.isValid());
         assert(rec.data_size == io.data.size());
@@ -363,7 +363,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(walb_diff_record &rec, IoData &io) {
+    bool readDiff(DiffRecord &rec, IoData &io) {
         if (!canRead()) return false;
         rec = pack_.record(recIdx_);
 
@@ -384,7 +384,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(walb_diff_record &rec, IoData &io) {
+    bool readAndUncompressDiff(DiffRecord &rec, IoData &io) {
         IoData io0;
         if (!readDiff(rec, io0)) {
             clearExistsRec(rec);
@@ -433,7 +433,7 @@ public:
      *
      * If rec.dataSize() == 0, io will not be changed.
      */
-    void readDiffIo(const walb_diff_record &rec, IoData &io) {
+    void readDiffIo(const DiffRecord &rec, IoData &io) {
         if (rec.data_offset != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.data_offset, totalSize_);
         }

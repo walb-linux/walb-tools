@@ -214,7 +214,7 @@ public:
         cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
         std::vector<char> zero;
         while (merger.pop(recIo)) {
-            const walb_diff_record& rec = recIo.record();
+            const DiffRecord& rec = recIo.record();
             assert(!isCompressedRec(rec));
             const uint64_t ioAddress = rec.io_address;
             const uint64_t ioBlocks = rec.io_blocks;;
