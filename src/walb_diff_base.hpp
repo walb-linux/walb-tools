@@ -159,8 +159,8 @@ public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
-    const char *get() const { return data.data(); }
-    char *get() { return data.data(); }
+    const char *get() const { return get(); }
+    char *get() { return get(); }
     size_t getSize() const { return data.size(); }
 
     explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
@@ -204,7 +204,7 @@ public:
      */
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
-        return cybozu::util::calcChecksum(data.data(), data.size(), 0);
+        return cybozu::util::calcChecksum(get(), data.size(), 0);
     }
 
     /**
@@ -214,7 +214,7 @@ public:
         const size_t size = data.size();
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(data.data(), size);
+        return cybozu::util::calcIsAllZero(get(), size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -312,7 +312,7 @@ inline DiffIo compressIoData(const DiffRecord& rec, const char *data, int type)
     DiffIo io1(rec.io_blocks, type);
     io1.data.resize(snappy::MaxCompressedLength(rec.data_size));
     size_t compressedSize;
-    snappy::RawCompress(data, rec.data_size, io1.data.data(), &compressedSize);
+    snappy::RawCompress(data, rec.data_size, io1.get(), &compressedSize);
     io1.data.resize(compressedSize);
     return io1;
 }
@@ -330,7 +330,7 @@ inline DiffIo uncompressIoData(const DiffIo &io0)
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
     DiffIo io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
     io1.data.resize(decSize);
-    size_t size = dec.run(io1.data.data(), decSize, io0.data.data(), io0.data.size());
+    size_t size = dec.run(io1.get(), decSize, io0.get(), io0.data.size());
     if (size != decSize) {
         throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
     }

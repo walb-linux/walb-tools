@@ -184,7 +184,7 @@ public:
             if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
-                const char *p = io_.data.data();
+                const char *p = io_.get();
                 data0.assign(p, p + size0);
                 p += off1;
                 data1.assign(p, p + size1);
@@ -229,7 +229,7 @@ public:
             if (rec_.isNormal()) {
                 assert(rec_.data_size == io_.data.size());
                 rec.data_size = size;
-                const char *p = io_.data.data();
+                const char *p = io_.get();
                 data.assign(p, p + size);
             }
 
@@ -263,7 +263,7 @@ public:
         if (isNormal) {
             assert(rec_.data_size == io_.data.size());
             rec.data_size = size;
-            const char *p = io_.data.data() + off;
+            const char *p = io_.get() + off;
             data.assign(p, p + size);
         }
         assert(rhsEndIoAddr == rec.io_address);
@@ -394,9 +394,9 @@ public:
             const RecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
-                writer.compressAndWriteDiff(r.record(), r.io().data.data());
+                writer.compressAndWriteDiff(r.record(), r.io().get());
             } else {
-                writer.writeDiff(r.record(), r.io().data.data());
+                writer.writeDiff(r.record(), r.io().get());
             }
             ++it;
         }

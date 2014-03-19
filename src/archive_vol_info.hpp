@@ -230,7 +230,7 @@ public:
                 if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
                 data = &zero[0];
             } else {
-                data = recIo.io().data.data();
+                data = recIo.io().get();
             }
             bd.write(ioAddrB, ioSizeB, data);
         }

@@ -102,7 +102,7 @@ std::vector<std::vector<char>> generateRawPacks()
     const walb::diff::MemoryData::Map& map = mem0.getMap();
 	for (const auto& i : map) {
 		const walb::diff::RecIo& recIo = i.second;
-		addIo(recIo.record(), recIo.io().data.data(), recIo.io().data.size());
+		addIo(recIo.record(), recIo.io().get(), recIo.io().data.size());
 	}
     packh.updateChecksum();
     packV0.push_back(std::move(packRaw));

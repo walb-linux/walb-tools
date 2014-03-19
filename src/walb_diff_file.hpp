@@ -241,7 +241,7 @@ private:
             DiffIo io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.data.data(), io0.data.size());
+            fdw_.write(io0.get(), io0.data.size());
             total += io0.data.size();
         }
         assert(total == pack_.totalSize());
@@ -428,8 +428,8 @@ public:
             io.ioBlocks = rec.io_blocks;
             io.compressionType = rec.compression_type;
             io.data.resize(recSize);
-            fdr_.read(io.data.data(), recSize);
-            const uint32_t csum = cybozu::util::calcChecksum(io.data.data(), recSize, 0);
+            fdr_.read(io.get(), recSize);
+            const uint32_t csum = cybozu::util::calcChecksum(io.get(), recSize, 0);
             if (rec.checksum != csum) {
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
             }

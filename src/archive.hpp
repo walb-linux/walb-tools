@@ -483,7 +483,7 @@ inline bool recvAndWriteDiffs(
                 writer.writeDiff(rec, {});
                 continue;
             }
-            sock.read(io.data.data(), rec.data_size);
+            sock.read(io.get(), rec.data_size);
             if (!io.isValid()) {
                 cybozu::Exception e(FUNC);
                 e << "bad io";

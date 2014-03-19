@@ -675,13 +675,13 @@ inline bool sendWdiffs(
         }
         const DiffRecord& rec = recIo.record();
         const DiffIo& io = recIo.io();
-        if (packer.add(rec, io.data.data())) {
+        if (packer.add(rec, io.get())) {
             continue;
         }
         conv.push(packer.getPackAsUniquePtr());
         pushedNum++;
         packer.reset();
-        packer.add(rec, io.data.data());
+        packer.add(rec, io.get());
         if (pushedNum < maxPushedNum) {
             continue;
         }
