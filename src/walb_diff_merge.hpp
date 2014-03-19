@@ -77,7 +77,7 @@ private:
             if (isEnd()) return;
 
             /* for check */
-            const uint64_t endIoAddr0 = endIoAddressRec(rec_);
+            const uint64_t endIoAddr0 = rec_.endIoAddress();
 
             assert(isFilled_);
             io = std::move(io_);
@@ -274,7 +274,7 @@ private:
         auto i = map.begin();
         while (i != map.end()) {
             RecIo& recIo = i->second;
-            if (endIoAddressRec(recIo.record()) > maxAddr) break;
+            if (recIo.record().endIoAddress() > maxAddr) break;
             mergedQ_.push(std::move(recIo));
             wdiffMem_.eraseMap(i);
         }
@@ -306,7 +306,7 @@ private:
     bool canMergeIo(size_t i, const DiffRecord &rec) {
         if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
-            if (!(endIoAddressRec(rec) <= wdiffs_[j]->currentAddress())) {
+            if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {
                 return false;
             }
         }

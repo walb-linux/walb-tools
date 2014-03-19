@@ -27,25 +27,9 @@ static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 
 namespace walb {
-namespace diff {
 
-inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
-    return rec.io_address + rec.io_blocks;
-}
-
-inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
-    return rhs.io_address <= lhs.io_address &&
-        lhs.io_address + lhs.io_blocks <= rhs.io_address + rhs.io_blocks;
-}
-
-inline bool isOverlapped(const walb_diff_record& lhs, const walb_diff_record &rhs) {
-    return lhs.io_address < rhs.io_address + rhs.io_blocks &&
-        rhs.io_address < lhs.io_address + lhs.io_blocks;
-}
-
-} // walb::diff
 /*
-    you can change this class with DiffRecord safely
+    you can freely cast this class to DiffRecord safely and vice versa.
 */
 struct DiffRecord : public walb_diff_record {
     DiffRecord()
@@ -125,8 +109,14 @@ struct DiffRecord : public walb_diff_record {
         flags &= ~WALB_DIFF_FLAG(ALLZERO);
         flags |= WALB_DIFF_FLAG(DISCARD);
     }
-	bool isOverwrittenBy(const DiffRecord &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
-    bool isOverlapped(const DiffRecord &rhs) const { return diff::isOverlapped(*this, rhs); }
+	bool isOverwrittenBy(const DiffRecord &rhs) const {
+        return rhs.io_address <= io_address &&
+            io_address + io_blocks <= rhs.io_address + rhs.io_blocks;
+    }
+    bool isOverlapped(const DiffRecord &rhs) const {
+        return io_address < rhs.io_address + rhs.io_blocks &&
+            rhs.io_address < io_address + io_blocks;
+    }
 };
 
 namespace diff {

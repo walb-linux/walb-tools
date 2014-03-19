@@ -141,7 +141,7 @@ public:
     std::vector<RecIo> minus(const RecIo &rhs) const {
         assert(isValid(true));
         assert(rhs.isValid(true));
-        if (!isOverlapped(rec_, rhs.rec_)) {
+        if (!rec_.isOverlapped(rhs.rec_)) {
             throw RT_ERR("Non-overlapped.");
         }
         std::vector<RecIo> v;
@@ -149,7 +149,7 @@ public:
          * Pattern 1:
          * __oo__ + xxxxxx = xxxxxx
          */
-        if (isOverwrittenBy(rec_, rhs.rec_)) {
+        if (rec_.isOverwrittenBy(rhs.rec_)) {
             /* Empty */
             return v;
         }
@@ -157,11 +157,11 @@ public:
          * Pattern 2:
          * oooooo + __xx__ = ooxxoo
          */
-        if (isOverwrittenBy(rhs.rec_, rec_)) {
+        if (rhs.rec_.isOverwrittenBy(rec_)) {
             uint16_t blks0 = rhs.rec_.io_address - rec_.io_address;
-            uint16_t blks1 = endIoAddressRec(rec_) - endIoAddressRec(rhs.rec_);
+            uint16_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
             uint64_t addr0 = rec_.io_address;
-            uint64_t addr1 = endIoAddressRec(rec_) - blks1;
+            uint64_t addr1 = rec_.endIoAddress() - blks1;
 
             DiffRecord rec0 = rec_;
             DiffRecord rec1 = rec_;
@@ -211,7 +211,7 @@ public:
          * oooo__ + __xxxx = ooxxxx
          */
         if (rec_.io_address < rhs.rec_.io_address) {
-            const uint64_t endIoAddr = endIoAddressRec(rec_);
+            const uint64_t endIoAddr = rec_.endIoAddress();
             assert(rhs.rec_.io_address < endIoAddr);
             uint16_t rblks = endIoAddr - rhs.rec_.io_address;
             assert(rhs.rec_.io_address + rblks == endIoAddr);
@@ -219,7 +219,7 @@ public:
             DiffRecord rec = rec_;
             /* rec.io_address does not change. */
             rec.io_blocks = rec_.io_blocks - rblks;
-            assert(endIoAddressRec(rec) == rhs.rec_.io_address);
+            assert(rec.endIoAddress() == rhs.rec_.io_address);
 
             size_t size = 0;
             if (rec_.isNormal()) {
@@ -244,7 +244,7 @@ public:
          * Pattern 4:
          * __oooo + xxxx__ = xxxxoo
          */
-        const uint64_t rhsEndIoAddr = endIoAddressRec(rhs.rec_);
+        const uint64_t rhsEndIoAddr = rhs.rec_.endIoAddress();
         assert(rec_.io_address < rhsEndIoAddr);
         uint16_t rblks = rhsEndIoAddr - rec_.io_address;
         assert(rec_.io_address + rblks == rhsEndIoAddr);
@@ -309,12 +309,12 @@ public:
             addr0 -= fileH_.getMaxIoBlocks();
         }
         /* Search overlapped items. */
-        uint64_t addr1 = endIoAddressRec(rec);
+        uint64_t addr1 = rec.endIoAddress();
         std::queue<RecIo> q;
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
             RecIo &r = it->second;
-            if (isOverlapped(r.record(), rec)) {
+            if (r.record().isOverlapped(rec)) {
                 nIos_--;
                 nBlocks_ -= r.record().io_blocks;
                 q.push(std::move(r));
@@ -429,7 +429,7 @@ public:
                 if (!(prev->io_address < curr->io_address)) {
                     throw RT_ERR("Not sorted.");
                 }
-                if (!(endIoAddressRec(*prev) <= curr->io_address)) {
+                if (!(prev->endIoAddress() <= curr->io_address)) {
                     throw RT_ERR("Overlapped records exist.");
                 }
             }
