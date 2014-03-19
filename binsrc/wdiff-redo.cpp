@@ -235,7 +235,7 @@ public:
             outStat_.nBlocks += ioBlocks;
         } else {
             ::printf("Failed to redo: ");
-            walb::diff::printOnelineRec(rec);
+            rec.printOneline();
         }
         inStat_.nBlocks += ioBlocks;
     }
@@ -256,12 +256,11 @@ public:
         wdiffH->print();
 
         walb::DiffRecord rec;
-		walb::diff::initRec(rec);
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
             if (!walb::diff::isValidRec(rec)) {
                 ::printf("Invalid record: ");
-                walb::diff::printOnelineRec(rec);
+                rec.printOneline();
             }
             if (!io.isValid()) {
                 ::printf("Invalid io: ");

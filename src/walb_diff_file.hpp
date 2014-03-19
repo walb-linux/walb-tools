@@ -369,8 +369,8 @@ public:
 
         if (!isValidRec(rec)) {
 #ifdef DEBUG
-            printRec(rec);
-            printRec(pack_.record(recIdx_));
+            rec.print();
+            pack_.record(recIdx_).print();
 #endif
             throw RT_ERR("Invalid record.");
         }

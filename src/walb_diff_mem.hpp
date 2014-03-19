@@ -96,7 +96,7 @@ public:
     }
 
     void print(::FILE *fp) const {
-        printOnelineRec(rec_, fp);
+        rec_.printOneline(fp);
         io_.printOneline(fp);
     }
 
@@ -360,7 +360,7 @@ public:
         auto it = map_.cbegin();
         while (it != map_.cend()) {
             const DiffRecord &rec = it->second.record();
-            printOnelineRec(rec, fp);
+            rec.printOneline(fp);
             ++it;
         }
     }

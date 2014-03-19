@@ -69,6 +69,7 @@ inline bool isValidRec(const walb_diff_record& rec) {
     }
     return true;
 }
+#if 0
 inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
     ::fprintf(fp, "----------\n"
        "ioAddress: %" PRIu64 "\n"
@@ -90,6 +91,7 @@ inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
         rec.compression_type, rec.data_offset, rec.data_size,
         rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
 }
+#endif
 inline void initRec(walb_diff_record& rec) {
     ::memset(&rec, 0, sizeof(struct walb_diff_record));
     rec.flags = WALB_DIFF_FLAG(EXIST);
@@ -109,21 +111,44 @@ inline bool isOverlapped(const walb_diff_record& lhs, const walb_diff_record &rh
     you can change this class with DiffRecord safely
 */
 struct DiffRecord : public walb_diff_record {
+    DiffRecord()
+    {
+        init();
+    }
     void init() {
-        diff::initRec(*this);
+        ::memset(this, 0, sizeof(struct walb_diff_record));
+        flags = WALB_DIFF_FLAG(EXIST);
     }
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const { return diff::existsRec(*this); }
+    bool exists() const { return (flags & WALB_DIFF_FLAG(EXIST)) != 0; }
     bool isAllZero() const { return diff::isAllZeroRec(*this); }
     bool isDiscard() const { return diff::isDiscardRec(*this); }
     bool isNormal() const { return diff::isNormalRec(*this); }
     bool isValid() const { return diff::isValidRec(*this); }
 
-    void print(::FILE *fp = ::stdout) const { diff::printRec(*this, fp); }
-    void printOneline(::FILE *fp = ::stdout) const { diff::printOnelineRec(*this, fp); }
-
+    void print(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "----------\n"
+           "ioAddress: %" PRIu64 "\n"
+           "ioBlocks: %u\n"
+           "compressionType: %u\n"
+           "dataOffset: %u\n"
+           "dataSize: %u\n"
+           "checksum: %08x\n"
+           "exists: %d\n"
+           "isAllZero: %d\n"
+           "isDiscard: %d\n",
+           io_address, io_blocks,
+           compression_type, data_offset, data_size,
+           checksum, exists(), isAllZero(), isDiscard());
+    }
+    void printOneline(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
+            io_address, io_blocks,
+            compression_type, data_offset, data_size,
+            checksum, exists(), isAllZero(), isDiscard());
+    }
     void setExists() { flags |= WALB_DIFF_FLAG(EXIST); }
     void clearExists() { flags &= ~WALB_DIFF_FLAG(EXIST); }
     void setNormal() {

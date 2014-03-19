@@ -27,7 +27,7 @@ int main(UNUSED int argc, UNUSED char *argv[])
             if (!isValidRec(rec)) {
                 ::printf("Invalid record: ");
             }
-            printOnelineRec(rec);
+            rec.printOneline();
         }
         return 0;
     } catch (std::exception &e) {

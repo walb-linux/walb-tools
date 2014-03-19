@@ -163,7 +163,7 @@ public:
         for (size_t i = 0; i < h.n_records; i++) {
             ::fprintf(fp, "record %zu: ", i);
             const DiffRecord& rec = record(i);
-            printOnelineRec(rec, fp);
+            rec.printOneline(fp);
         }
     }
 

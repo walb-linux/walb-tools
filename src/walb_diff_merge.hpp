@@ -47,10 +47,10 @@ private:
             , fop_(wdiffPath, O_RDONLY)
             , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
+            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
-			initRec(rec_);
         }
         /**
          * You must open the file before calling this constructor.
@@ -60,10 +60,10 @@ private:
             , fop_(std::move(fop))
             , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
+            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
-            initRec(rec_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
