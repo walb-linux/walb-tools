@@ -43,14 +43,10 @@ struct DiffRecord : public walb_diff_record {
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const {
-        return (flags & WALB_DIFF_FLAG(EXIST)) != 0;
-    }
+    bool exists() const { return (flags & WALB_DIFF_FLAG(EXIST)) != 0; }
     bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
     bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
-    bool isNormal() const {
-        return !isAllZero() && !isDiscard();
-    }
+    bool isNormal() const { return !isAllZero() && !isDiscard(); }
     bool isValid() const {
         if (!exists()) {
             LOGd("Does not exist.\n");
@@ -117,44 +113,43 @@ struct DiffRecord : public walb_diff_record {
         return io_address < rhs.io_address + rhs.io_blocks &&
             rhs.io_address < io_address + io_blocks;
     }
+    /**
+     * Split a record into several records
+     * where all splitted records' ioBlocks will be <= a specified one.
+     *
+     * CAUSION:
+     *   The checksum of splitted records will be invalid state.
+     *   Only non-compressed records can be splitted.
+     */
+    std::vector<DiffRecord> splitAll(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0) {
+            throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw cybozu::Exception("splitAll: compressed data can not be splitted.");
+        }
+        std::vector<DiffRecord> v;
+        uint64_t addr = io_address;
+        uint16_t remaining = io_blocks;
+        const bool isNormal = this->isNormal();
+        while (remaining > 0) {
+            uint16_t blks = std::min(ioBlocks0, remaining);
+            v.push_back(*this);
+            DiffRecord& r = v.back();
+            r.io_address = addr;
+            r.io_blocks = blks;
+            if (isNormal) {
+                r.data_size = blks * LOGICAL_BLOCK_SIZE;
+            }
+            addr += blks;
+            remaining -= blks;
+        }
+        assert(!v.empty());
+        return v;
+    }
 };
 
 namespace diff {
-/**
- * Split a record into several records
- * where all splitted records' ioBlocks will be <= a specified one.
- *
- * CAUSION:
- *   The checksum of splitted records will be invalid state.
- *   Only non-compressed records can be splitted.
- */
-std::vector<DiffRecord> splitAll(const DiffRecord& rec, uint16_t ioBlocks0) {
-    if (ioBlocks0 == 0) {
-        throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
-    }
-    if (rec.isCompressed()) {
-        throw cybozu::Exception("splitAll: compressed data can not be splitted.");
-    }
-    std::vector<DiffRecord> v;
-    uint64_t addr = rec.io_address;
-    uint16_t remaining = rec.io_blocks;
-    const bool isNormal = rec.isNormal();
-    while (remaining > 0) {
-        uint16_t blks = std::min(ioBlocks0, remaining);
-        v.push_back(DiffRecord());
-        DiffRecord& r = v.back();
-        r = rec;
-        r.io_address = addr;
-        r.io_blocks = blks;
-        if (isNormal) {
-            r.data_size = blks * LOGICAL_BLOCK_SIZE;
-        }
-        addr += blks;
-        remaining -= blks;
-    }
-    assert(!v.empty());
-    return v;
-}
 
 /**
  * Block diff for an IO.

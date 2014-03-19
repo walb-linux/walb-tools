@@ -110,7 +110,7 @@ public:
         assert(isValid());
         std::vector<RecIo> v;
 
-        std::vector<DiffRecord> recV = diff::splitAll(rec_, ioBlocks);
+        std::vector<DiffRecord> recV = rec_.splitAll(ioBlocks);
         std::vector<IoData> ioV;
         if (rec_.isNormal()) {
             ioV = splitIoDataAll(io_, ioBlocks);
