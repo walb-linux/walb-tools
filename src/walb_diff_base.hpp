@@ -27,180 +27,146 @@ static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
 
 namespace walb {
-namespace diff {
-
-inline uint64_t endIoAddressRec(const walb_diff_record& rec) {
-    return rec.io_address + rec.io_blocks;
-}
-inline bool existsRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(EXIST)) != 0;
-}
-inline bool isAllZeroRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(ALLZERO)) != 0;
-}
-inline bool isDiscardRec(const walb_diff_record& rec) {
-    return (rec.flags & WALB_DIFF_FLAG(DISCARD)) != 0;
-}
-inline bool isCompressedRec(const walb_diff_record& rec) {
-    return rec.compression_type != ::WALB_DIFF_CMPR_NONE;
-}
-inline bool isNormalRec(const walb_diff_record& rec) {
-    return !isAllZeroRec(rec) && !isDiscardRec(rec);
-}
-inline bool isValidRec(const walb_diff_record& rec) {
-    if (!existsRec(rec)) {
-        LOGd("Does not exist.\n");
-        return false;
-    }
-    if (!isNormalRec(rec)) {
-        if (isAllZeroRec(rec) && isDiscardRec(rec)) {
-            LOGd("allzero and discard flag is exclusive.\n");
-            return false;
-        }
-        return true;
-    }
-    if (::WALB_DIFF_CMPR_MAX <= rec.compression_type) {
-        LOGd("compression type is invalid.\n");
-        return false;
-    }
-    if (rec.io_blocks == 0) {
-        LOGd("ioBlocks() must not be 0 for normal IO.\n");
-        return false;
-    }
-    return true;
-}
-inline void printRec(const walb_diff_record& rec, ::FILE *fp = ::stdout) {
-    ::fprintf(fp, "----------\n"
-       "ioAddress: %" PRIu64 "\n"
-       "ioBlocks: %u\n"
-       "compressionType: %u\n"
-       "dataOffset: %u\n"
-       "dataSize: %u\n"
-       "checksum: %08x\n"
-       "exists: %d\n"
-       "isAllZero: %d\n"
-       "isDiscard: %d\n",
-       rec.io_address, rec.io_blocks,
-       rec.compression_type, rec.data_offset, rec.data_size,
-       rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
-}
-inline void printOnelineRec(const walb_diff_record& rec, FILE *fp = stdout) {
-    ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
-        rec.io_address, rec.io_blocks,
-        rec.compression_type, rec.data_offset, rec.data_size,
-        rec.checksum, existsRec(rec), isAllZeroRec(rec), isDiscardRec(rec));
-}
-inline void initRec(walb_diff_record& rec) {
-    ::memset(&rec, 0, sizeof(struct walb_diff_record));
-    rec.flags = WALB_DIFF_FLAG(EXIST);
-}
-inline void setExistsRec(walb_diff_record& rec) {
-    rec.flags |= WALB_DIFF_FLAG(EXIST);
-}
-inline void clearExistsRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(EXIST);
-}
-inline void setNormalRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
-}
-inline void setAllZeroRec(walb_diff_record& rec) {
-    rec.flags |= WALB_DIFF_FLAG(ALLZERO);
-    rec.flags &= ~WALB_DIFF_FLAG(DISCARD);
-}
-inline void setDiscardRec(walb_diff_record& rec) {
-    rec.flags &= ~WALB_DIFF_FLAG(ALLZERO);
-    rec.flags |= WALB_DIFF_FLAG(DISCARD);
-}
-inline bool isOverwrittenBy(const walb_diff_record& lhs, const walb_diff_record &rhs) {
-    return rhs.io_address <= lhs.io_address &&
-        lhs.io_address + lhs.io_blocks <= rhs.io_address + rhs.io_blocks;
-}
-
-inline bool isOverlapped(const walb_diff_record& lhs, const walb_diff_record &rhs) {
-    return lhs.io_address < rhs.io_address + rhs.io_blocks &&
-        rhs.io_address < lhs.io_address + lhs.io_blocks;
-}
 
 /*
-    you can change this class with walb_diff_record safely
+    you can freely cast this class to DiffRecord safely and vice versa.
 */
 struct DiffRecord : public walb_diff_record {
+    DiffRecord()
+    {
+        init();
+    }
     void init() {
-        initRec(*this);
+        ::memset(this, 0, sizeof(struct walb_diff_record));
+        flags = WALB_DIFF_FLAG(EXIST);
     }
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const { return existsRec(*this); }
-    bool isAllZero() const { return isAllZeroRec(*this); }
-    bool isDiscard() const { return isDiscardRec(*this); }
-    bool isNormal() const { return isNormalRec(*this); }
-    bool isValid() const { return isValidRec(*this); }
-
-    void print(::FILE *fp = ::stdout) const { printRec(*this, fp); }
-    void printOneline(::FILE *fp = ::stdout) const { printOnelineRec(*this, fp); }
-
-    void setExists() { setExistsRec(*this); }
-    void clearExists() { clearExistsRec(*this); }
-    void setNormal() { setNormalRec(*this); }
-    void setAllZero() { setAllZeroRec(*this); }
-    void setDiscard() { setDiscardRec(*this); }
-	bool isOverwrittenBy(const walb_diff_record &rhs) const { return diff::isOverwrittenBy(*this, rhs); }
-    bool isOverlapped(const walb_diff_record &rhs) const { return diff::isOverlapped(*this, rhs); }
-};
-
-/**
- * Split a record into several records
- * where all splitted records' ioBlocks will be <= a specified one.
- *
- * CAUSION:
- *   The checksum of splitted records will be invalid state.
- *   Only non-compressed records can be splitted.
- */
-std::vector<walb_diff_record> splitAll(const walb_diff_record& rec, uint16_t ioBlocks0) {
-    if (ioBlocks0 == 0) {
-        throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
-    }
-    if (isCompressedRec(rec)) {
-        throw cybozu::Exception("splitAll: compressed data can not be splitted.");
-    }
-    std::vector<walb_diff_record> v;
-    uint64_t addr = rec.io_address;
-    uint16_t remaining = rec.io_blocks;
-    const bool isNormal = isNormalRec(rec);
-    while (remaining > 0) {
-        uint16_t blks = std::min(ioBlocks0, remaining);
-        v.push_back(walb_diff_record());
-        walb_diff_record& r = v.back();
-        r = rec;
-        r.io_address = addr;
-        r.io_blocks = blks;
-        if (isNormal) {
-            r.data_size = blks * LOGICAL_BLOCK_SIZE;
+    bool exists() const { return (flags & WALB_DIFF_FLAG(EXIST)) != 0; }
+    bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
+    bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
+    bool isNormal() const { return !isAllZero() && !isDiscard(); }
+    bool isValid() const {
+        if (!exists()) {
+            LOGd("Does not exist.\n");
+            return false;
         }
-        addr += blks;
-        remaining -= blks;
+        if (!isNormal()) {
+            if (isAllZero() && isDiscard()) {
+                LOGd("allzero and discard flag is exclusive.\n");
+                return false;
+            }
+            return true;
+        }
+        if (::WALB_DIFF_CMPR_MAX <= compression_type) {
+            LOGd("compression type is invalid.\n");
+            return false;
+        }
+        if (io_blocks == 0) {
+            LOGd("ioBlocks() must not be 0 for normal IO.\n");
+            return false;
+        }
+        return true;
     }
-    assert(!v.empty());
-    return v;
-}
+
+    void print(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "----------\n"
+           "ioAddress: %" PRIu64 "\n"
+           "ioBlocks: %u\n"
+           "compressionType: %u\n"
+           "dataOffset: %u\n"
+           "dataSize: %u\n"
+           "checksum: %08x\n"
+           "exists: %d\n"
+           "isAllZero: %d\n"
+           "isDiscard: %d\n",
+           io_address, io_blocks,
+           compression_type, data_offset, data_size,
+           checksum, exists(), isAllZero(), isDiscard());
+    }
+    void printOneline(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
+            io_address, io_blocks,
+            compression_type, data_offset, data_size,
+            checksum, exists(), isAllZero(), isDiscard());
+    }
+    void setExists() { flags |= WALB_DIFF_FLAG(EXIST); }
+    void clearExists() { flags &= ~WALB_DIFF_FLAG(EXIST); }
+    void setNormal() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setAllZero() {
+        flags |= WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setDiscard() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags |= WALB_DIFF_FLAG(DISCARD);
+    }
+	bool isOverwrittenBy(const DiffRecord &rhs) const {
+        return rhs.io_address <= io_address &&
+            io_address + io_blocks <= rhs.io_address + rhs.io_blocks;
+    }
+    bool isOverlapped(const DiffRecord &rhs) const {
+        return io_address < rhs.io_address + rhs.io_blocks &&
+            rhs.io_address < io_address + io_blocks;
+    }
+    /**
+     * Split a record into several records
+     * where all splitted records' ioBlocks will be <= a specified one.
+     *
+     * CAUSION:
+     *   The checksum of splitted records will be invalid state.
+     *   Only non-compressed records can be splitted.
+     */
+    std::vector<DiffRecord> splitAll(uint16_t ioBlocks0) const {
+        if (ioBlocks0 == 0) {
+            throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw cybozu::Exception("splitAll: compressed data can not be splitted.");
+        }
+        std::vector<DiffRecord> v;
+        uint64_t addr = io_address;
+        uint16_t remaining = io_blocks;
+        const bool isNormal = this->isNormal();
+        while (remaining > 0) {
+            uint16_t blks = std::min(ioBlocks0, remaining);
+            v.push_back(*this);
+            DiffRecord& r = v.back();
+            r.io_address = addr;
+            r.io_blocks = blks;
+            if (isNormal) {
+                r.data_size = blks * LOGICAL_BLOCK_SIZE;
+            }
+            addr += blks;
+            remaining -= blks;
+        }
+        assert(!v.empty());
+        return v;
+    }
+};
 
 /**
  * Block diff for an IO.
  */
-class IoData
+class DiffIo
 {
 public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
+    const char *get() const { return data.data(); }
+    char *get() { return data.data(); }
+    size_t getSize() const { return data.size(); }
 
-    explicit IoData(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
+    explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
     }
-    IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
+    DiffIo(const DiffIo &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
     }
-    IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
+    DiffIo(DiffIo &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
     }
     void clear() {
         ioBlocks = 0;
@@ -222,9 +188,9 @@ public:
             if (isCompressed()) {
                 return true;
             } else {
-                if (data.size() != ioBlocks * LOGICAL_BLOCK_SIZE) {
+                if (getSize() != ioBlocks * LOGICAL_BLOCK_SIZE) {
                     LOGd("dataSize is not the same: %zu %u\n"
-                         , data.size(), ioBlocks * LOGICAL_BLOCK_SIZE);
+                         , getSize(), ioBlocks * LOGICAL_BLOCK_SIZE);
                     return false;
                 }
                 return true;
@@ -237,17 +203,17 @@ public:
      */
     uint32_t calcChecksum() const {
         if (empty()) { return 0; }
-        return cybozu::util::calcChecksum(data.data(), data.size(), 0);
+        return cybozu::util::calcChecksum(get(), getSize(), 0);
     }
 
     /**
      * Calculate whether all-zero or not.
      */
     bool calcIsAllZero() const {
-        const size_t size = data.size();
+        const size_t size = getSize();
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(data.data(), size);
+        return cybozu::util::calcIsAllZero(get(), size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -258,35 +224,35 @@ public:
                   "checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , data.size()
+                  , getSize()
                   , calcChecksum());
     }
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
                   , ioBlocks
                   , compressionType
-                  , data.size()
+                  , getSize()
                   , calcChecksum());
     }
 
-    void swap(IoData& rhs) noexcept {
+    void swap(DiffIo& rhs) noexcept {
         std::swap(ioBlocks, rhs.ioBlocks);
         std::swap(compressionType, rhs.compressionType);
         data.swap(rhs.data);
     }
-    IoData &operator=(const IoData &rhs) {
+    DiffIo &operator=(const DiffIo &rhs) {
         ioBlocks = rhs.ioBlocks;
         compressionType = rhs.compressionType;
         data = rhs.data;
         return *this;
     }
-    IoData &operator=(IoData &&rhs) {
+    DiffIo &operator=(DiffIo &&rhs) {
         swap(rhs);
         return *this;
     }
 
-    void set(const struct walb_diff_record &rec) {
-        if (isNormalRec(rec)) {
+    void set(const DiffRecord &rec) {
+        if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
         } else {
@@ -295,25 +261,57 @@ public:
         }
         data.resize(rec.data_size);
     }
+    /**
+     * Split an IO into multiple IOs
+     * each of which io size is not more than a specified one.
+     *
+     * CAUSION:
+     *   Compressed IO can not be splitted.
+     */
+    std::vector<DiffIo> splitIoDataAll(uint16_t ioBlocks0) const
+    {
+        if (ioBlocks0 == 0) {
+            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+        }
+        if (isCompressed()) {
+            throw RT_ERR("splitAll: compressed IO can not be splitted.");
+        }
+        assert(isValid());
+        std::vector<DiffIo> v;
+        uint16_t remaining = ioBlocks;
+        size_t off = 0;
+        while (0 < remaining) {
+            uint16_t blks = std::min(remaining, ioBlocks0);
+            size_t size = blks * LOGICAL_BLOCK_SIZE;
+            v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &data[off], size);
+            remaining -= blks;
+            off += size;
+        }
+        assert(off == getSize());
+        assert(!v.empty());
+        return v;
+    }
 };
+
+namespace diff {
 
 /**
  * Compress an IO data.
  * Supported algorithms: snappy.
  */
 
-inline IoData compressIoData(const walb_diff_record& rec, const char *data, int type)
+inline DiffIo compressIoData(const DiffRecord& rec, const char *data, int type)
 {
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
         throw cybozu::Exception("compressIoData:Currently only snappy is supported.");
     }
     if (rec.io_blocks == 0) {
-        return IoData();
+        return DiffIo();
     }
-    IoData io1(rec.io_blocks, type);
+    DiffIo io1(rec.io_blocks, type);
     io1.data.resize(snappy::MaxCompressedLength(rec.data_size));
     size_t compressedSize;
-    snappy::RawCompress(data, rec.data_size, io1.data.data(), &compressedSize);
+    snappy::RawCompress(data, rec.data_size, io1.get(), &compressedSize);
     io1.data.resize(compressedSize);
     return io1;
 }
@@ -322,53 +320,20 @@ inline IoData compressIoData(const walb_diff_record& rec, const char *data, int 
  * Uncompress an IO data.
  * Supported algorithms: snappy.
  */
-inline IoData uncompressIoData(const IoData &io0)
+inline DiffIo uncompressIoData(const DiffIo &io0)
 {
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
     walb::Uncompressor dec(io0.compressionType);
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
-    IoData io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
+    DiffIo io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
     io1.data.resize(decSize);
-    size_t size = dec.run(io1.data.data(), decSize, io0.data.data(), io0.data.size());
+    size_t size = dec.run(io1.get(), decSize, io0.get(), io0.getSize());
     if (size != decSize) {
         throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
     }
     return io1;
-}
-
-/**
- * Split an IO into multiple IOs
- * each of which io size is not more than a specified one.
- *
- * CAUSION:
- *   Compressed IO can not be splitted.
- */
-inline std::vector<IoData> splitIoDataAll(const IoData &io0, uint16_t ioBlocks0)
-{
-    if (ioBlocks0 == 0) {
-        throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
-    }
-    if (io0.isCompressed()) {
-        throw RT_ERR("splitAll: compressed IO can not be splitted.");
-    }
-    assert(io0.isValid());
-
-    std::vector<IoData> v;
-    uint16_t remaining = io0.ioBlocks;
-    size_t off = 0;
-    while (0 < remaining) {
-        uint16_t blks = std::min(remaining, ioBlocks0);
-        size_t size = blks * LOGICAL_BLOCK_SIZE;
-        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &io0.data[off], size);
-        remaining -= blks;
-        off += size;
-    }
-    assert(off == io0.data.size());
-    assert(!v.empty());
-
-    return v;
 }
 
 }} //namesapce walb::diff

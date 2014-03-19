@@ -214,8 +214,8 @@ public:
         cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
         std::vector<char> zero;
         while (merger.pop(recIo)) {
-            const walb_diff_record& rec = recIo.record();
-            assert(!isCompressedRec(rec));
+            const DiffRecord& rec = recIo.record();
+            assert(!rec.isCompressed());
             const uint64_t ioAddress = rec.io_address;
             const uint64_t ioBlocks = rec.io_blocks;;
             LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
@@ -226,11 +226,11 @@ public:
 
             const char *data;
             // Curently a discard IO is converted to an all-zero IO.
-            if (isAllZeroRec(rec) || isDiscardRec(rec)) {
+            if (rec.isAllZero() || rec.isDiscard()) {
                 if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
                 data = &zero[0];
             } else {
-                data = recIo.io().data.data();
+                data = recIo.io().get();
             }
             bd.write(ioAddrB, ioSizeB, data);
         }

@@ -28,7 +28,6 @@ namespace diff {
 class Merger /* final */
 {
 private:
-    using DiffIo = walb::diff::IoData;
     using RecIo = walb::diff::RecIo;
 
     class Wdiff {
@@ -37,7 +36,7 @@ private:
         cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
         std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
-        mutable walb_diff_record rec_;
+        mutable DiffRecord rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
@@ -47,10 +46,10 @@ private:
             , fop_(wdiffPath, O_RDONLY)
             , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
+            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
-			initRec(rec_);
         }
         /**
          * You must open the file before calling this constructor.
@@ -60,15 +59,15 @@ private:
             , fop_(std::move(fop))
             , reader_(fop_.fd())
             , headerP_(reader_.readHeader())
+            , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
-            initRec(rec_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
         walb::diff::FileHeaderWrap &header() { return *headerP_; }
-        const walb_diff_record &front() {
+        const DiffRecord &front() {
             fill();
             assert(isFilled_);
             return rec_;
@@ -77,7 +76,7 @@ private:
             if (isEnd()) return;
 
             /* for check */
-            const uint64_t endIoAddr0 = endIoAddressRec(rec_);
+            const uint64_t endIoAddr0 = rec_.endIoAddress();
 
             assert(isFilled_);
             io = std::move(io_);
@@ -110,7 +109,7 @@ private:
             if (reader_.readAndUncompressDiff(rec_, io_)) {
                 isFilled_ = true;
             } else {
-                clearExistsRec(rec_);
+                rec_.clearExists();
                 io_ = DiffIo();
                 isFilled_ = false;
                 isEnd_ = true;
@@ -195,7 +194,7 @@ public:
         RecIo d;
         while (pop(d)) {
             assert(d.isValid());
-            writer.compressAndWriteDiff(d.record(), d.io().data.data());
+            writer.compressAndWriteDiff(d.record(), d.io().get());
         }
 
         writer.flush();
@@ -246,8 +245,8 @@ public:
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
 				// copy rec because reference is invalid after calling wdiffs_[i]->pop
-                const walb_diff_record rec = wdiffs_[i]->front();
-                assert(isValidRec(rec));
+                const DiffRecord rec = wdiffs_[i]->front();
+                assert(rec.isValid());
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
                     wdiffs_[i]->pop(io);
@@ -274,7 +273,7 @@ private:
         auto i = map.begin();
         while (i != map.end()) {
             RecIo& recIo = i->second;
-            if (endIoAddressRec(recIo.record()) > maxAddr) break;
+            if (recIo.record().endIoAddress() > maxAddr) break;
             mergedQ_.push(std::move(recIo));
             wdiffMem_.eraseMap(i);
         }
@@ -299,14 +298,14 @@ private:
             }
         }
     }
-    void mergeIo(const walb_diff_record &rec, DiffIo &&io) {
-        assert(!isCompressedRec(rec));
+    void mergeIo(const DiffRecord &rec, DiffIo &&io) {
+        assert(!rec.isCompressed());
         wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
-    bool canMergeIo(size_t i, const walb_diff_record &rec) {
+    bool canMergeIo(size_t i, const DiffRecord &rec) {
         if (i == 0) return true;
         for (size_t j = 0; j < i; j++) {
-            if (!(endIoAddressRec(rec) <= wdiffs_[j]->currentAddress())) {
+            if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {
                 return false;
             }
         }

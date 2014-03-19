@@ -82,13 +82,13 @@ public:
     const struct walb_diff_pack &header() const {
         return *reinterpret_cast<const struct walb_diff_pack *>(&buf_[0]);
     }
-    struct walb_diff_record &record(size_t i) {
+    DiffRecord &record(size_t i) {
         checkRange(i);
-        return header().record[i];
+        return static_cast<DiffRecord&>(header().record[i]);
     }
-    const struct walb_diff_record &record(size_t i) const {
+    const DiffRecord &record(size_t i) const {
         checkRange(i);
-        return header().record[i];
+        return static_cast<const DiffRecord&>(header().record[i]);
     }
 
     uint16_t nRecords() const { return header().n_records; }
@@ -128,12 +128,12 @@ public:
      *   true when added successfully.
      *   false when pack is full.
      */
-    bool add(const struct walb_diff_record &inRec) {
+    bool add(const walb::DiffRecord &inRec) {
 #ifdef DEBUG
-        assert(isValidRec(inRec));
+        assert(inRec.isValid());
 #endif
         if (!canAdd(inRec.data_size)) { return false; }
-        walb_diff_record &outRec = record(header().n_records);
+        DiffRecord &outRec = record(header().n_records);
         outRec = inRec;
         outRec.data_offset = header().total_size;
         header().n_records++;
@@ -162,8 +162,8 @@ public:
                   , h.total_size);
         for (size_t i = 0; i < h.n_records; i++) {
             ::fprintf(fp, "record %zu: ", i);
-            const walb_diff_record& rec = record(i);
-            printOnelineRec(rec, fp);
+            const DiffRecord& rec = record(i);
+            rec.printOneline(fp);
         }
     }
 
@@ -212,8 +212,8 @@ public:
             err = "pack header invalid.";
         } else {
             for (size_t i = 0; i < packh.nRecords(); i++) {
-                const walb_diff_record& rec = packh.record(i);
-                if (!isValidRec(rec)) {
+                const DiffRecord& rec = packh.record(i);
+                if (!rec.isValid()) {
                     err = cybozu::util::formatString("record invalid: %zu.", i);
                     goto err_exit;
                 }
@@ -291,13 +291,13 @@ class ScatterGatherPack : public PackBase
 {
 private:
     PackHeader pack_; /* pack header */
-    std::vector<IoData> ios_;
+    std::vector<DiffIo> ios_;
 
 public:
     /**
      * ios_[i] must be nullptr if pack_.record(i).data_size == 0.
      */
-    ScatterGatherPack(PackHeader &&pack, std::vector<IoData> &&ios)
+    ScatterGatherPack(PackHeader &&pack, std::vector<DiffIo> &&ios)
         : pack_(std::move(pack)), ios_(std::move(ios)) {
         assert(header().n_records == ios_.size());
     }
@@ -315,7 +315,7 @@ public:
      *   nullptr for non-normal IOs such as ALL_ZERO and DISCARD.
      */
     const char *data(size_t i) const override {
-        return ios_[i].data.data();
+        return ios_[i].get();
     }
     /**
      * Generate memory pack.
@@ -339,10 +339,10 @@ public:
         uint32_t dataOffset = 0;
         for (size_t i = 0; i < pack_.nRecords(); i++) {
             /* Copy each IO data. */
-            const walb_diff_record& rec = pack_.record(i);
+            const DiffRecord& rec = pack_.record(i);
             uint32_t dataSize = rec.data_size;
             assert(rec.data_offset == dataOffset);
-            if (isNormalRec(rec)) {
+            if (rec.isNormal()) {
                 assert(0 < dataSize);
                 ::memcpy(p, data(i), dataSize);
                 p += dataSize;
@@ -389,27 +389,27 @@ public:
         if (!packh_.canAdd(dSize)) return false;
 
         bool isZero = isAllZero(data, dSize);
-        walb_diff_record rec;
+        DiffRecord rec;
         rec.io_address = ioAddr;
         rec.io_blocks = ioBlocks;
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         if (isZero) {
-            setAllZeroRec(rec);
+            rec.setAllZero();
             rec.data_size = 0;
             rec.checksum = 0;
         } else {
-            setNormalRec(rec);
+            rec.setNormal();
             rec.data_size = dSize;
             rec.checksum = cybozu::util::calcChecksum(data, dSize, 0);
         }
         return add(rec, data);
     }
-    bool add(const struct walb_diff_record &rec, const char *data) {
-        assert(isValidRec(rec));
+    bool add(const DiffRecord &rec, const char *data) {
+        assert(rec.isValid());
         size_t dSize = rec.data_size;
         if (!packh_.canAdd(dSize)) return false;
 
-        bool isNormal = isNormalRec(rec);
+        bool isNormal = rec.isNormal();
 #ifdef WALB_DEBUG
         if (isNormal) {
             assert(rec.checksum == cybozu::util::calcChecksum(data, dSize, 0));

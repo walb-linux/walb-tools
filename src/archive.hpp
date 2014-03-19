@@ -476,14 +476,14 @@ inline bool recvAndWriteDiffs(
             logger.throwError(e);
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
-            diff::IoData io;
-            const walb_diff_record& rec = packH.record(i);
+            DiffIo io;
+            const DiffRecord& rec = packH.record(i);
             io.set(rec);
             if (rec.data_size == 0) {
                 writer.writeDiff(rec, {});
                 continue;
             }
-            sock.read(io.data.data(), rec.data_size);
+            sock.read(io.get(), rec.data_size);
             if (!io.isValid()) {
                 cybozu::Exception e(FUNC);
                 e << "bad io";

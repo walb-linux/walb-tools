@@ -673,15 +673,15 @@ inline bool sendWdiffs(
         if (stopState == ForceStopping || gp.forceQuit) {
             return false;
         }
-        const walb_diff_record& rec = recIo.record();
-        const diff::IoData& io = recIo.io();
-        if (packer.add(rec, io.data.data())) {
+        const DiffRecord& rec = recIo.record();
+        const DiffIo& io = recIo.io();
+        if (packer.add(rec, io.get())) {
             continue;
         }
         conv.push(packer.getPackAsUniquePtr());
         pushedNum++;
         packer.reset();
-        packer.add(rec, io.data.data());
+        packer.add(rec, io.get());
         if (pushedNum < maxPushedNum) {
             continue;
         }

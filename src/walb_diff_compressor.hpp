@@ -16,7 +16,7 @@
 #include <condition_variable>
 #include <cybozu/thread.hpp>
 #include <cybozu/event.hpp>
-#include "walb_diff.h"
+#include "walb_diff_base.hpp"
 #include "compressor.hpp"
 #include "checksum.hpp"
 #include "walb_logger.hpp"

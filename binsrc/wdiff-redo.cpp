@@ -56,7 +56,7 @@ private:
     }
 };
 
-using DiffIo = walb::diff::IoData;
+using namespace walb;
 using DiffHeader = walb::diff::FileHeaderWrap;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
@@ -110,13 +110,13 @@ public:
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(ioP->data.size() == size);
+        assert(ioP->getSize() == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }
 
         //::printf("issue %zu %zu %p\n", oft, size, ioP->rawData()); /* debug */
-        bd_.write(oft, size, ioP->data.data());
+        bd_.write(oft, size, ioP->get());
         return true;
     }
 
@@ -205,15 +205,15 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const walb_diff_record& rec, const DiffIoPtr ioP) {
+    void executeDiffIo(const walb::DiffRecord& rec, const DiffIoPtr ioP) {
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
-        if (walb::diff::isAllZeroRec(rec)) {
+        if (rec.isAllZero()) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
             if (isSuccess) { outStat_.nIoAllZero++; }
             inStat_.nIoAllZero++;
-        } else if (walb::diff::isDiscardRec(rec)) {
+        } else if (rec.isDiscard()) {
             if (config_.isDiscard()) {
                 isSuccess = executeDiscardIo(ioAddr, ioBlocks);
             } else if (config_.isZeroDiscard()) {
@@ -225,7 +225,7 @@ public:
             inStat_.nIoDiscard++;
         } else {
             /* Normal IO. */
-            assert(walb::diff::isNormalRec(rec));
+            assert(rec.isNormal());
             assert(ioP);
             isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
             if (isSuccess) { outStat_.nIoNormal++; }
@@ -235,7 +235,7 @@ public:
             outStat_.nBlocks += ioBlocks;
         } else {
             ::printf("Failed to redo: ");
-            walb::diff::printOnelineRec(rec);
+            rec.printOneline();
         }
         inStat_.nBlocks += ioBlocks;
     }
@@ -255,13 +255,12 @@ public:
         DiffHeaderPtr wdiffH = wdiffR.readHeader();
         wdiffH->print();
 
-        walb_diff_record rec;
-		walb::diff::initRec(rec);
+        walb::DiffRecord rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
-            if (!walb::diff::isValidRec(rec)) {
+            if (!rec.isValid()) {
                 ::printf("Invalid record: ");
-                walb::diff::printOnelineRec(rec);
+                rec.printOneline();
             }
             if (!io.isValid()) {
                 ::printf("Invalid io: ");
