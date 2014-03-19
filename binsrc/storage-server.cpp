@@ -76,6 +76,7 @@ struct Option : cybozu::Option
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
         appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
         appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "maxWlogSendMb", "max wlog size to send at once.");
+        appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
 
         appendHelp("h");
     }
@@ -91,18 +92,24 @@ void initializeStorage(Option &opt)
     StorageSingleton &g = getStorageGlobal();
     g.archive = parseSocketAddr(opt.archiveDStr);
     g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
+    g.proxyManager.add(g.proxyV);
 
     // QQQ
 
     g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
     g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
+    g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
 }
 
 void finalizeStorage()
 {
     StorageSingleton &g = getStorageGlobal();
 
-    g.quitMonitor = true;
+    g.quitProxyMonitor = true;
+    g.proxyMonitor->join();
+    g.proxyMonitor.reset();
+
+    g.quitWdevMonitor = true;
     g.wdevMonitor->join();
     g.wdevMonitor.reset();
 

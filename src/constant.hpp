@@ -18,4 +18,6 @@ const size_t DEFAULT_MAX_WLOG_SEND_MB = 128;
 const size_t DEFAULT_DELAY_SEC_FOR_RETRY = 60; // seconds.
 const size_t DEFAULT_RETRY_TIMEOUT = 1800; // seconds.
 
+const size_t PROXY_HEARTBEAT_INTERVAL_SEC = 60;
+
 } // walb

@@ -7,6 +7,7 @@
 #include <snappy.h>
 #include "log_dev_monitor.hpp"
 #include "wdev_util.hpp"
+#include "walb_log_net.hpp"
 
 namespace walb {
 
@@ -60,8 +61,78 @@ public:
     explicit StorageWorker(const std::string &volId) : volId(volId) {
     }
     void operator()();
-    // QQQ
 };
+
+namespace proxy_local {
+
+class ProxyManager
+{
+private:
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = typename Clock::time_point;
+    using MilliSeconds = std::chrono::milliseconds;
+    using Seconds = std::chrono::seconds;
+    using AutoLock = std::lock_guard<std::mutex>;
+
+    struct Info
+    {
+        cybozu::SocketAddr proxy;
+        bool isAvailable;
+        TimePoint checkedTime;
+        explicit Info(const cybozu::SocketAddr &proxy)
+            : proxy(proxy), isAvailable(true)
+            , checkedTime(Clock::now() - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC)) {
+        }
+        Info() : proxy(), isAvailable(false), checkedTime() {
+        }
+    };
+    std::vector<Info> v_;
+    mutable std::mutex mu_;
+public:
+    std::vector<cybozu::SocketAddr> getAvailableList() const {
+        std::vector<cybozu::SocketAddr> ret;
+        AutoLock lk(mu_);
+        for (const Info &info : v_) {
+            if (info.isAvailable) ret.push_back(info.proxy);
+        }
+        return ret;
+    }
+    void add(const std::vector<cybozu::SocketAddr> &proxyV) {
+        AutoLock lk(mu_);
+        for (const cybozu::SocketAddr &proxy : proxyV) {
+            v_.emplace_back(proxy);
+        }
+    }
+    void tryCheckAvailability() {
+        bool found = false;
+        cybozu::SocketAddr proxy;
+        {
+            TimePoint now = Clock::now();
+            AutoLock lk(mu_);
+            for (const Info &info : v_) {
+                if (info.checkedTime + Seconds(PROXY_HEARTBEAT_INTERVAL_SEC) < now) {
+                    proxy = info.proxy;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) return;
+        Info info = checkAvailability(proxy);
+        AutoLock lk(mu_);
+        removeFromList(proxy);
+        v_.push_back(info);
+    }
+private:
+    void removeFromList(const cybozu::SocketAddr &proxy) {
+        v_.erase(std::remove_if(v_.begin(), v_.end(), [&](const Info &info) {
+                    return info.proxy == proxy;
+                }));
+    }
+    Info checkAvailability(const cybozu::SocketAddr &);
+};
+
+} // namespace proxy_local
 
 struct StorageSingleton
 {
@@ -78,17 +149,21 @@ struct StorageSingleton
     std::string nodeId;
     std::string baseDirStr;
     uint64_t maxWlogSendMb;
+    size_t delaySecForRetry;
 
     /**
      * Writable and must be thread-safe.
      */
     std::atomic<bool> forceQuit;
-    walb::AtomicMap<StorageVolState> stMap;
+    AtomicMap<StorageVolState> stMap;
     TaskQueue<std::string> taskQueue;
     std::unique_ptr<DispatchTask<std::string, StorageWorker>> dispatcher;
     std::unique_ptr<std::thread> wdevMonitor;
-    std::atomic<bool> quitMonitor;
+    std::atomic<bool> quitWdevMonitor;
     LogDevMonitor logDevMonitor;
+    std::unique_ptr<std::thread> proxyMonitor;
+    std::atomic<bool> quitProxyMonitor;
+    proxy_local::ProxyManager proxyManager;
 
     using Str2Str = std::map<std::string, std::string>;
     using AutoLock = std::lock_guard<std::mutex>;
@@ -382,8 +457,8 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     {
         cybozu::Socket aSock;
         aSock.connect(archive);
-        archiveId = walb::protocol::run1stNegotiateAsClient(aSock, gs.nodeId, "dirty-full-sync");
-        walb::packet::Packet aPack(aSock);
+        archiveId = protocol::run1stNegotiateAsClient(aSock, gs.nodeId, dirtyFullSyncPN);
+        packet::Packet aPack(aSock);
         aPack.write(storageHT);
         aPack.write(volId);
         aPack.write(uuid);
@@ -416,7 +491,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
             aPack.write(gidB);
             aPack.write(gidE);
         }
-        walb::packet::Ack(aSock).recv();
+        packet::Ack(aSock).recv();
     }
     tran0.commit(sStopped);
 
@@ -460,10 +535,107 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
 
 namespace storage_local {
 
-inline uint64_t extractAndSendWlog(const std::string &/*volId*/)
+inline void readLogPackHeader(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, uint64_t lsid, const char *msg)
 {
-    // QQQ
-    return -1;
+    reader.read((char *)packH.rawData(), 1);
+    if (packH.header().logpack_lsid != lsid) {
+        throw cybozu::Exception(msg)
+            << "logpack lsid invalid" << packH.header().logpack_lsid << lsid;
+    }
+    reader.readAhead();
+}
+
+inline void readLogIo(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, size_t recIdx, log::BlockDataShared &blockD)
+{
+    log::RecordWrapConst lrec(&packH, recIdx);
+    if (!lrec.hasData()) return;
+
+    blockD.resize(lrec.ioSizePb());
+    for (size_t i = 0; i < lrec.ioSizePb(); i++) {
+        reader.read((char *)blockD.get(i), 1);
+    }
+    reader.readAhead();
+}
+
+/**
+ * RETURN:
+ *   lsid that lsids of all the transferred wlogs are less than.
+ */
+inline uint64_t extractAndSendWlog(const std::string &volId)
+{
+    const char *const FUNC = __func__;
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    MetaLsidGid rec0, rec1;
+    std::tie(rec0, rec1) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
+
+    const std::string wdevPath = volInfo.getWdevPath();
+    const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
+    const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
+    device::AsyncWldevReader reader(wldevPath);
+    const uint32_t pbs = reader.super().getPhysicalBlockSize();
+    const uint32_t salt = reader.super().getLogChecksumSalt();
+    const uint64_t maxWlogSendPb = gs.maxWlogSendMb * MEBI / pbs;
+    const uint64_t lsidB = rec0.lsid;
+    const uint64_t lsidLimit = std::min(lsidB + maxWlogSendPb, rec1.lsid);
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    const uint64_t sizeLb = device::getSizeLb(wdevPath);
+
+    cybozu::Socket sock;
+    packet::Packet pkt(sock);
+    std::string serverId;
+    bool isAvailable = false;
+    for (const cybozu::SocketAddr &proxy : gs.proxyManager.getAvailableList()) {
+        try {
+            sock.connect(proxy);
+            serverId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, wlogTransferPN);
+            pkt.write(volId);
+            pkt.write(uuid);
+            pkt.write(pbs);
+            pkt.write(salt);
+            pkt.write(sizeLb);
+            std::string res;
+            pkt.read(res);
+            if (res != "ok") throw cybozu::Exception(FUNC) << res;
+            isAvailable = true;
+            break;
+        } catch (std::exception &e) {
+            LOGs.warn() << e.what();
+        }
+    }
+    if (!isAvailable) {
+        throw cybozu::Exception(FUNC) << "There is no available proxy";
+    }
+
+    ProtocolLogger logger(gs.nodeId, serverId);
+    log::Sender sender(sock, logger);
+    sender.setParams(pbs, salt);
+    sender.start();
+
+    std::shared_ptr<uint8_t> packHeaderBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+    log::PackHeaderRaw packH(packHeaderBlock, pbs, salt);
+    reader.reset(lsidB);
+
+    log::BlockDataShared blockD(pbs);
+    uint64_t lsid = lsidB;
+    for (;;) {
+        if (lsid == lsidLimit) break;
+        readLogPackHeader(reader, packH, lsid, FUNC);
+        const uint64_t nextLsid = lsid + packH.header().total_io_size;
+        if (lsidLimit < nextLsid) break;
+        sender.pushHeader(packH);
+        for (size_t i = 0; i < packH.header().n_records; i++) {
+            readLogIo(reader, packH, i, blockD);
+            sender.pushIo(packH, i, blockD);
+        }
+        lsid = nextLsid;
+    }
+    sender.sync();
+    const uint64_t lsidE = lsid;
+    const MetaDiff diff = volInfo.getTransferDiff(rec0, rec1, lsidE);
+    pkt.write(diff);
+    packet::Ack(sock).recv();
+    volInfo.finishWlogTransfer(rec0, rec1, lsidE);
+    return lsidE;
 }
 
 /**
@@ -498,7 +670,13 @@ inline void StorageWorker::operator()()
     if (st == sMaster) {
         StateMachineTransaction tran(volSt.sm, sMaster, stWlogSend);
         ul.unlock();
-        uint64_t lsid = storage_local::extractAndSendWlog(volId);
+        uint64_t lsid;
+        try {
+            lsid = storage_local::extractAndSendWlog(volId);
+        } catch (...) {
+            getStorageGlobal().taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
+            throw;
+        }
         const bool isEmpty = storage_local::deleteWlogs(volId, lsid);
         if (!isEmpty) getStorageGlobal().taskQueue.push(volId);
         tran.commit(sMaster);
@@ -510,11 +688,37 @@ inline void StorageWorker::operator()()
     }
 }
 
+namespace proxy_local {
+
+inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAddr &proxy)
+{
+    const char *const FUNC = __func__;
+    cybozu::Socket sock;
+    Info info(proxy);
+    info.isAvailable = false;
+    try {
+        sock.connect(proxy);
+        std::string serverId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, nodeTypePN);
+        packet::Packet pkt(sock);
+        std::string type;
+        pkt.read(type);
+        if (type == proxyHT) info.isAvailable = true;
+    } catch (std::exception &e) {
+        LOGs.warn() << FUNC << e.what();
+    } catch (...) {
+        LOGs.warn() << FUNC << "unknown error";
+    }
+    info.checkedTime = Clock::now();
+    return info;
+}
+
+} // namespace proxy_local
+
 inline void wdevMonitorWorker() noexcept
 {
     StorageSingleton& g = getStorageGlobal();
     const int timeoutMs = 1000;
-    while (!g.quitMonitor) {
+    while (!g.quitWdevMonitor) {
         try {
             const StrVec v = g.logDevMonitor.poll(timeoutMs);
             if (v.empty()) continue;
@@ -526,6 +730,22 @@ inline void wdevMonitorWorker() noexcept
             LOGs.error() << "wdevMonitorWorker" << e.what();
         } catch (...) {
             LOGs.error() << "wdevMonitorWorker:unknown error";
+        }
+    }
+}
+
+inline void proxyMonitorWorker() noexcept
+{
+    StorageSingleton& g = getStorageGlobal();
+    const int intervalMs = 1000;
+    while (!g.quitProxyMonitor) {
+        try {
+            g.proxyManager.tryCheckAvailability();
+            util::sleepMs(intervalMs);
+        } catch (std::exception& e) {
+            LOGs.error() << "proxyMonitorWorker" << e.what();
+        } catch (...) {
+            LOGs.error() << "proxyMonitorWorker:unknown error";
         }
     }
 }

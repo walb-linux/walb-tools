@@ -43,6 +43,7 @@ const char *const dirtyFullSyncPN = "dirty-full-sync";
 const char *const restorePN = "restore";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const resizePN = "resize";
+const char *const nodeTypePN = "node-type";
 const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
 
 

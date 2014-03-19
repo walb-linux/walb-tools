@@ -201,20 +201,14 @@ public:
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         return takeSnapshotDetail(maxWlogSendPb, false, qf);
     }
-    struct WlogTransferInfo {
-        MetaDiff diff;
-        MetaLsidGid rec;
-        uint32_t pbs;
-        uint32_t salt;
-        uint64_t sizeLb;
-        uint64_t beginLsid;
-        uint64_t endLsid;
-    };
-    uint64_t searchLogpackHeader(uint64_t /*startLsid*/) const {
-        // QQQ
-        return -1;
-    }
-    WlogTransferInfo prepareWlogTransfer(uint64_t maxWlogSendMb) {
+    /**
+     * RETURN:
+     *   target lsid range and gid range by two MetaLsidGids: rec0 and rec1.
+     *   If rec0.gid + 1 == rec1.gid, all wlogs of the range (rec0.lsid, rec1.lsid)
+     *   must be transferred at once.
+     *   If rec0.lsid == rec1.lsid, empty wlog must be transferred.
+     */
+    std::pair<MetaLsidGid, MetaLsidGid> prepareWlogTransfer(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid rec0 = getDoneRecord();
@@ -237,32 +231,56 @@ public:
             qf.back(rec1);
             rec1.verify();
         }
+        if (!(rec0.lsid <= rec1.lsid)) {
+            throw cybozu::Exception(FUNC)
+                << "invalid MetaLsidGidRecord" << rec0 << rec1;
+        }
         assert(rec0.gid < rec1.gid);
-
-        WlogTransferInfo info;
-        info.beginLsid = rec0.lsid;
-        if (rec1.lsid <= info.beginLsid + maxWlogSendPb) {
-            info.endLsid = rec1.lsid;
+        return std::make_pair(rec0, rec1);
+    }
+    MetaDiff getTransferDiff(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) const {
+        MetaDiff diff;
+        diff.snapB.set(recB.gid);
+        if (lsidE == recE.lsid) {
+            diff.snapE.set(recE.gid);
         } else {
-            info.endLsid = std::min(rec1.lsid, searchLogpackHeader(info.beginLsid + maxWlogSendPb));
+            assert(recB.gid + 1 < recE.gid);
+            diff.snapE.set(recB.gid + 1);
         }
-        assert(info.beginLsid <= info.endLsid);
-        assert(info.endLsid <= rec1.lsid);
+        diff.timestamp = recE.timestamp;
+        diff.isMergeable = recB.isMergeable;
+        return diff;
+    }
+    /**
+     * rec0 and rec1 must not be changed between calling
+     * prepareWlogTransfer() and finishWlogTransfer().
+     */
+    void finishWlogTransfer(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) {
+        const char *const FUNC = __func__;
+        const MetaLsidGid recBx = getDoneRecord();
+        verifyMetaLsidGidEquality(recB, recBx, FUNC);
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        if (qf.empty()) {
+            throw cybozu::Exception(FUNC)
+                << "Maybe BUG: queue must have at lease one record.";
+        }
+        MetaLsidGid recEx;
+        qf.back(recEx);
+        verifyMetaLsidGidEquality(recE, recEx, FUNC);
+        assert(recB.lsid <= lsidE && lsidE <= recE.lsid);
 
-        info.rec.lsid = info.endLsid;
-        info.diff.snapB.set(rec0.gid);
-        if (info.endLsid < rec1.lsid) {
-            info.diff.snapE.set(rec0.gid + 1);
-            info.rec.gid = rec0.gid + 1;
-            info.rec.isMergeable = true;
-        } else { // info.endLsid == rec1.lsid
-            info.diff.snapE.set(rec1.gid);
-            info.rec.gid = rec1.gid;
-            info.rec.isMergeable = rec1.isMergeable;
+        MetaLsidGid recS;
+        recS.lsid = lsidE;
+        if (lsidE == recE.lsid) {
+            recS.gid = recE.gid;
+            recS.isMergeable = recE.isMergeable;
+        } else {
+            assert(recB.gid + 1 < recB.gid);
+            recS.gid = recB.gid + 1;
+            recS.isMergeable = true;
         }
-        info.diff.timestamp = rec1.timestamp;
-        info.diff.isMergeable = rec0.isMergeable;
-        return info;
+        setDoneRecord(recS);
+        if (lsidE == recE.lsid) qf.popBack();
     }
 private:
     void loadWdevPath() {
@@ -330,29 +348,11 @@ private:
         qf.sync();
         return gid;
     }
-#if 0 // XXX
-    /**
-     * Remove old records which corresponding wlogs has been transferred.
-     */
-    void removeBefore(uint64_t gid) {
-        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
-        cybozu::util::QueueFile::Iterator it = qf.begin();
-        while (!it.isEndMark()) {
-            if (it.isDeleted()) {
-                ++it;
-                continue;
-            }
-            MetaSnap rec;
-            getRecordFromIterator(rec, it);
-            if (gid <= rec.gid0()) break;
-            it.setDeleted();
-            doneRec_ = rec;
-            ++it;
+    static void verifyMetaLsidGidEquality(const MetaLsidGid &rec0, const MetaLsidGid &rec1, const char *msg) {
+        if (rec0.lsid != rec1.lsid || rec0.gid != rec1.gid) {
+            cybozu::Exception(msg) << "not equal lsid or gid" << rec0 << rec1;
         }
-        qf.gc();
-        saveDoneRecord();
     }
-#endif // XXX
 };
 
 } //namespace walb
