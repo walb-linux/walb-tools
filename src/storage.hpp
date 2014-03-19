@@ -735,13 +735,15 @@ inline void wdevMonitorWorker() noexcept
 {
     StorageSingleton& g = getStorageGlobal();
     const int timeoutMs = 1000;
+    const int delayMs = 1000;
     while (!g.quitWdevMonitor) {
         try {
             const StrVec v = g.logDevMonitor.poll(timeoutMs);
             if (v.empty()) continue;
             for (const std::string& wdevName : v) {
                 const std::string volId = g.getVolIdFromWdevName(wdevName);
-                g.taskQueue.push(volId);
+                // There is an delay to transfer wlogs in bulk.
+                g.taskQueue.push(volId, delayMs);
             }
         } catch (std::exception& e) {
             LOGs.error() << "wdevMonitorWorker" << e.what();

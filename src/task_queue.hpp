@@ -32,15 +32,15 @@ public:
         : mu_(), map_(), rmap_(), isStopped_(false) {
     }
     /**
-     * Push a task with current time.
+     * Push a task with current time (or with a delay).
      * If the same task already exists in the queue,
      * it will do nothing.
      * After quit, it always do nothing.
      */
-    void push(const Task &task) {
+    void push(const Task &task, size_t delayMs = 0) {
         AutoLock lk(mu_);
         if (isStopped_) return;
-        TimePoint ts = Clock::now();
+        TimePoint ts = Clock::now() + MilliSeconds(delayMs);
         typename Map::iterator itr;
         bool maked;
         std::tie(itr, maked) = map_.insert(std::make_pair(task, ts));
