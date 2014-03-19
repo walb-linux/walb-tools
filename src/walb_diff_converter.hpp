@@ -33,7 +33,7 @@ namespace walb {
  *   true if the pack IO is normal IO or discard or allzero.
  */
 inline bool convertLogToDiff(
-    const log::Record& rec, const log::BlockData& blockD, DiffRecord& mrec, diff::IoData &diffIo)
+    const log::Record& rec, const log::BlockData& blockD, DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -197,7 +197,7 @@ private:
             reader.readLog(packIo);
 
             DiffRecord diffRec;
-            IoData diffIo;
+            DiffIo diffIo;
             if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;

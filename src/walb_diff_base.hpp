@@ -149,23 +149,22 @@ struct DiffRecord : public walb_diff_record {
     }
 };
 
-namespace diff {
 
 /**
  * Block diff for an IO.
  */
-class IoData
+class DiffIo
 {
 public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
 
-    explicit IoData(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
+    explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
     }
-    IoData(const IoData &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
+    DiffIo(const DiffIo &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
     }
-    IoData(IoData &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
+    DiffIo(DiffIo &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
     }
     void clear() {
         ioBlocks = 0;
@@ -234,18 +233,18 @@ public:
                   , calcChecksum());
     }
 
-    void swap(IoData& rhs) noexcept {
+    void swap(DiffIo& rhs) noexcept {
         std::swap(ioBlocks, rhs.ioBlocks);
         std::swap(compressionType, rhs.compressionType);
         data.swap(rhs.data);
     }
-    IoData &operator=(const IoData &rhs) {
+    DiffIo &operator=(const DiffIo &rhs) {
         ioBlocks = rhs.ioBlocks;
         compressionType = rhs.compressionType;
         data = rhs.data;
         return *this;
     }
-    IoData &operator=(IoData &&rhs) {
+    DiffIo &operator=(DiffIo &&rhs) {
         swap(rhs);
         return *this;
     }
@@ -262,20 +261,22 @@ public:
     }
 };
 
+namespace diff {
+
 /**
  * Compress an IO data.
  * Supported algorithms: snappy.
  */
 
-inline IoData compressIoData(const DiffRecord& rec, const char *data, int type)
+inline DiffIo compressIoData(const DiffRecord& rec, const char *data, int type)
 {
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
         throw cybozu::Exception("compressIoData:Currently only snappy is supported.");
     }
     if (rec.io_blocks == 0) {
-        return IoData();
+        return DiffIo();
     }
-    IoData io1(rec.io_blocks, type);
+    DiffIo io1(rec.io_blocks, type);
     io1.data.resize(snappy::MaxCompressedLength(rec.data_size));
     size_t compressedSize;
     snappy::RawCompress(data, rec.data_size, io1.data.data(), &compressedSize);
@@ -287,14 +288,14 @@ inline IoData compressIoData(const DiffRecord& rec, const char *data, int type)
  * Uncompress an IO data.
  * Supported algorithms: snappy.
  */
-inline IoData uncompressIoData(const IoData &io0)
+inline DiffIo uncompressIoData(const DiffIo &io0)
 {
     if (!io0.isCompressed()) {
         throw RT_ERR("Need not uncompress already uncompressed diff IO.");
     }
     walb::Uncompressor dec(io0.compressionType);
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
-    IoData io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
+    DiffIo io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
     io1.data.resize(decSize);
     size_t size = dec.run(io1.data.data(), decSize, io0.data.data(), io0.data.size());
     if (size != decSize) {
@@ -310,7 +311,7 @@ inline IoData uncompressIoData(const IoData &io0)
  * CAUSION:
  *   Compressed IO can not be splitted.
  */
-inline std::vector<IoData> splitIoDataAll(const IoData &io0, uint16_t ioBlocks0)
+inline std::vector<DiffIo> splitIoDataAll(const DiffIo &io0, uint16_t ioBlocks0)
 {
     if (ioBlocks0 == 0) {
         throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
@@ -320,7 +321,7 @@ inline std::vector<IoData> splitIoDataAll(const IoData &io0, uint16_t ioBlocks0)
     }
     assert(io0.isValid());
 
-    std::vector<IoData> v;
+    std::vector<DiffIo> v;
     uint16_t remaining = io0.ioBlocks;
     size_t off = 0;
     while (0 < remaining) {

@@ -113,7 +113,7 @@ private:
 
     /* Buffers. */
     PackHeader pack_;
-    std::queue<IoData> ioQ_;
+    std::queue<DiffIo> ioQ_;
 
 public:
     explicit Writer(int fd)
@@ -175,7 +175,7 @@ public:
     }
     void writeDiff(const DiffRecord &rec0, std::vector<char> &&data0) {
         checkWrittenHeader();
-        IoData io;
+        DiffIo io;
         io.set(rec0);
         io.data.swap(data0);
 
@@ -209,7 +209,7 @@ public:
         }
 
         // QQQ refactor later
-        IoData io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
+        DiffIo io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
         DiffRecord rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
         rec1.data_size = io1.data.size();
@@ -238,7 +238,7 @@ private:
 
         assert(pack_.nRecords() == ioQ_.size());
         while (!ioQ_.empty()) {
-            IoData io0 = std::move(ioQ_.front());
+            DiffIo io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
             fdw_.write(io0.data.data(), io0.data.size());
@@ -349,7 +349,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(DiffRecord &rec, IoData &io) {
+    bool readDiff(DiffRecord &rec, DiffIo &io) {
         if (!canRead()) return false;
         rec = pack_.record(recIdx_);
 
@@ -370,8 +370,8 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(DiffRecord &rec, IoData &io) {
-        IoData io0;
+    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io) {
+        DiffIo io0;
         if (!readDiff(rec, io0)) {
             rec.clearExists();
             io = std::move(io0);
@@ -419,7 +419,7 @@ public:
      *
      * If rec.dataSize() == 0, io will not be changed.
      */
-    void readDiffIo(const DiffRecord &rec, IoData &io) {
+    void readDiffIo(const DiffRecord &rec, DiffIo &io) {
         if (rec.data_offset != totalSize_) {
             throw RT_ERR("data offset invalid %u %u.", rec.data_offset, totalSize_);
         }

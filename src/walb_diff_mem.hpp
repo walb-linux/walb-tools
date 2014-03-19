@@ -23,13 +23,13 @@ class RecIo /* final */
 {
 private:
 	DiffRecord rec_;
-    IoData io_;
+    DiffIo io_;
 public:
     const DiffRecord &record() const { return rec_; }
 
-    const IoData &io() const { return io_; }
+    const DiffIo &io() const { return io_; }
 
-    void copyFrom(const DiffRecord &rec, const IoData &io) {
+    void copyFrom(const DiffRecord &rec, const DiffIo &io) {
         rec_ = rec;
         if (rec.isNormal()) {
             io_ = io;
@@ -37,7 +37,7 @@ public:
             io_.clear();
         }
     }
-    void moveFrom(const DiffRecord &rec, IoData &&io) {
+    void moveFrom(const DiffRecord &rec, DiffIo &&io) {
         rec_ = rec;
         if (rec.isNormal()) {
             io_ = std::move(io);
@@ -111,7 +111,7 @@ public:
         std::vector<RecIo> v;
 
         std::vector<DiffRecord> recV = rec_.splitAll(ioBlocks);
-        std::vector<IoData> ioV;
+        std::vector<DiffIo> ioV;
         if (rec_.isNormal()) {
             ioV = splitIoDataAll(io_, ioBlocks);
         } else {
@@ -300,7 +300,7 @@ public:
     ~MemoryData() noexcept = default;
     bool empty() const { return map_.empty(); }
 
-    void add(const DiffRecord& rec, IoData &&io, uint16_t maxIoBlocks = 0) {
+    void add(const DiffRecord& rec, DiffIo &&io, uint16_t maxIoBlocks = 0) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -406,7 +406,7 @@ public:
         Reader reader(inFd);
         reader.readHeader(fileH_);
         DiffRecord rec;
-        IoData io;
+        DiffIo io;
         while (reader.readAndUncompressDiff(rec, io)) {
             add(rec, std::move(io));
         }

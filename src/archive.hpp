@@ -476,7 +476,7 @@ inline bool recvAndWriteDiffs(
             logger.throwError(e);
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
-            diff::IoData io;
+            DiffIo io;
             const DiffRecord& rec = packH.record(i);
             io.set(rec);
             if (rec.data_size == 0) {

@@ -291,13 +291,13 @@ class ScatterGatherPack : public PackBase
 {
 private:
     PackHeader pack_; /* pack header */
-    std::vector<IoData> ios_;
+    std::vector<DiffIo> ios_;
 
 public:
     /**
      * ios_[i] must be nullptr if pack_.record(i).data_size == 0.
      */
-    ScatterGatherPack(PackHeader &&pack, std::vector<IoData> &&ios)
+    ScatterGatherPack(PackHeader &&pack, std::vector<DiffIo> &&ios)
         : pack_(std::move(pack)), ios_(std::move(ios)) {
         assert(header().n_records == ios_.size());
     }

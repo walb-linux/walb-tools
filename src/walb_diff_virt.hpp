@@ -166,7 +166,7 @@ private:
     size_t readWdiff(void *data, size_t blks) {
         assert(recIo_.isValid());
         const DiffRecord& rec = recIo_.record();
-        const walb::diff::IoData &io = recIo_.io();
+        const DiffIo &io = recIo_.io();
         assert(offInIo_ < rec.io_blocks);
         if (rec.isNormal()) {
             assert(!io.isCompressed());

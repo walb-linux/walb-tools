@@ -28,7 +28,6 @@ namespace diff {
 class Merger /* final */
 {
 private:
-    using DiffIo = walb::diff::IoData;
     using RecIo = walb::diff::RecIo;
 
     class Wdiff {

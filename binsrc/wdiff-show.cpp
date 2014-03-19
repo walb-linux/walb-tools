@@ -11,30 +11,28 @@
 #include "util.hpp"
 #include "walb_diff_file.hpp"
 
-int main(UNUSED int argc, UNUSED char *argv[])
-{
-    using namespace walb::diff;
-    try{
-        /* Read a wdiff file and show the contents. */
-        walb::diff::Reader wdiffR(0);
-        std::shared_ptr<FileHeaderWrap> wdiffH = wdiffR.readHeader();
-        wdiffH->print();
+int main()
+try {
+    /* Read a wdiff file and show the contents. */
+    walb::diff::Reader wdiffR(0);
+    std::shared_ptr<walb::diff::FileHeaderWrap> wdiffH = wdiffR.readHeader();
+    wdiffH->print();
 
-        /* now editing */
-        walb::DiffRecord rec;
-        walb::diff::IoData io;
-        while (wdiffR.readDiff(rec, io)) {
-            if (!rec.isValid()) {
-                ::printf("Invalid record: ");
-            }
-            rec.printOneline();
+    /* now editing */
+    walb::DiffRecord rec;
+    walb::DiffIo io;
+    while (wdiffR.readDiff(rec, io)) {
+        if (!rec.isValid()) {
+            ::printf("Invalid record: ");
         }
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caught other error.\n");
+        rec.printOneline();
     }
+    return 0;
+} catch (std::exception &e) {
+    ::fprintf(::stderr, "exception: %s\n", e.what());
+    return 1;
+} catch (...) {
+    ::fprintf(::stderr, "caught other error.\n");
     return 1;
 }
 

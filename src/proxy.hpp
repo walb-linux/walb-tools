@@ -674,7 +674,7 @@ inline bool sendWdiffs(
             return false;
         }
         const DiffRecord& rec = recIo.record();
-        const diff::IoData& io = recIo.io();
+        const DiffIo& io = recIo.io();
         if (packer.add(rec, io.data.data())) {
             continue;
         }
