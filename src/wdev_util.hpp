@@ -169,7 +169,14 @@ inline bool isOverflow(const std::string& wdevPath)
     return ctl.val_int != 0;
 }
 
-inline void eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LSID)
+/**
+ * @lsid this must satisfy oldestLsid < lsid <= permanentLsid,
+ *   or INVALID_LSID to erase all existing wlogs.
+ *
+ * RETURN:
+ *   remaining amount of wlogs after deletion [physical block]
+ */
+inline uint64_t eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LSID)
 {
     const char *const FUNC = __func__;
     if (isOverflow(wdevPath)) {
@@ -178,11 +185,16 @@ inline void eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LSID)
     const uint64_t permanentLsid = getPermanentLsid(wdevPath);
     const uint64_t oldestLsid = getOldestLsid(wdevPath);
     if (lsid == INVALID_LSID) lsid = permanentLsid;
+    if (oldestLsid == lsid) {
+        /* There is no wlogs. */
+        return 0;
+    }
     if (!(oldestLsid < lsid && lsid <= permanentLsid)) {
         throw cybozu::Exception(FUNC)
             << "invalid lsid" << oldestLsid << lsid << permanentLsid;
     }
     local::setOldestLsid(wdevPath, lsid);
+    return permanentLsid - lsid;
 }
 
 /**

@@ -473,10 +473,12 @@ inline uint64_t extractAndSendWlog(const std::string &/*volId*/)
  * RETURN:
  *   true if all the wlogs have been deleted.
  */
-inline bool deleteWlogs(const std::string &/*volId*/, uint64_t /*lsid*/ = INVALID_LSID)
+inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
 {
-    // QQQ
-    return false;
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    const uint64_t remainingPb = device::eraseWal(wdevPath, lsid);
+    return remainingPb == 0;
 }
 
 } // storage_local
@@ -506,7 +508,6 @@ inline void StorageWorker::operator()()
         storage_local::deleteWlogs(volId);
         tran.commit(sSlave);
     }
-    // QQQ
 }
 
 inline void wdevMonitorWorker() noexcept
