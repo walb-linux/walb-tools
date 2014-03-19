@@ -247,4 +247,10 @@ inline void c2xResizeClient(protocol::ClientParams &p)
     }
 }
 
+inline void c2xHostTypeClient(protocol::ClientParams &p)
+{
+    const std::string hostType = protocol::runHostTypeClient(p.sock);
+    std::cout << hostType << std::endl;
+}
+
 } // namespace walb

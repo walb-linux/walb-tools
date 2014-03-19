@@ -43,7 +43,7 @@ const char *const dirtyFullSyncPN = "dirty-full-sync";
 const char *const restorePN = "restore";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const resizePN = "resize";
-const char *const nodeTypePN = "node-type";
+const char *const hostTypePN = "host-type";
 const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
 
 
@@ -302,6 +302,20 @@ inline std::vector<std::string> recvStrVec(
         packet::Ack(sock).send();
     }
     return v;
+}
+
+inline std::string runHostTypeClient(cybozu::Socket &sock)
+{
+    packet::Packet pkt(sock);
+    std::string type;
+    pkt.read(type);
+    return type;
+}
+
+inline void runHostTypeServer(ServerParams &p, const std::string &hostType)
+{
+    packet::Packet pkt(p.sock);
+    pkt.write(hostType);
 }
 
 }} // namespace walb::protocol

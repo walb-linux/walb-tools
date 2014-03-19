@@ -822,4 +822,9 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2pHostTypeServer(protocol::ServerParams &p)
+{
+    protocol::runHostTypeServer(p, proxyHT);
+}
+
 } // walb

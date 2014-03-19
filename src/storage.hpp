@@ -533,6 +533,11 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2sHostTypeServer(protocol::ServerParams &p)
+{
+    protocol::runHostTypeServer(p, storageHT);
+}
+
 namespace storage_local {
 
 inline void readLogPackHeader(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, uint64_t lsid, const char *msg)
@@ -707,10 +712,8 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
     info.isAvailable = false;
     try {
         sock.connect(proxy);
-        std::string serverId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, nodeTypePN);
-        packet::Packet pkt(sock);
-        std::string type;
-        pkt.read(type);
+        protocol::run1stNegotiateAsClient(sock, gs.nodeId, hostTypePN);
+        const std::string type = protocol::runHostTypeClient(sock);
         if (type == proxyHT) info.isAvailable = true;
     } catch (std::exception &e) {
         LOGs.warn() << FUNC << e.what();

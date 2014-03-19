@@ -616,4 +616,9 @@ inline void c2aResizeServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
+inline void c2aHostTypeServer(protocol::ServerParams &p)
+{
+    protocol::runHostTypeServer(p, archiveHT);
+}
+
 } // walb

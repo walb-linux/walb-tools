@@ -47,6 +47,7 @@ public:
             { stopPN, c2sStopServer },
             { fullBkpPN, c2sFullSyncServer },
             { snapshotPN, c2sSnapshotServer },
+            { hostTypePN, c2sHostTypeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }
