@@ -133,7 +133,8 @@ int main(int argc, char *argv[]) try
     };
 
     StorageSingleton &g = getStorageGlobal();
-    server::MultiThreadedServer server(g.forceQuit, g.maxConnections + 1);
+    const size_t concurrency = g.maxConnections > 0 ? g.maxConnections + 1 : 0;
+    server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run(opt.port, createRequestWorker);
     finalizeStorage();
 
