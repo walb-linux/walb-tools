@@ -15,6 +15,7 @@ const size_t DEFAULT_MAX_CONNECTIONS = 2;
 const size_t DEFAULT_MAX_BACKGROUND_TASKS = 1;
 const size_t DEFAULT_MAX_WDIFF_SEND_MB = 128;
 const size_t DEFAULT_MAX_WLOG_SEND_MB = 128;
+const size_t DEFAULT_MAX_CONVERSION_MB = 1024;
 const size_t DEFAULT_DELAY_SEC_FOR_RETRY = 60; // seconds.
 const size_t DEFAULT_RETRY_TIMEOUT = 1800; // seconds.
 

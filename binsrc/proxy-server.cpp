@@ -71,6 +71,7 @@ struct Option : cybozu::Option
         appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
+        appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "maxConversionMb", "max memory size of wlog-wdiff conversion [MB].");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&p.nodeId, hostName, "id", "node identifier");
 

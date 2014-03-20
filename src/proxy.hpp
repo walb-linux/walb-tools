@@ -140,6 +140,7 @@ struct ProxySingleton
     size_t delaySecForRetry;
     size_t retryTimeout;
     size_t maxConnections;
+    size_t maxConversionMb;
 
     /**
      * Writable and must be thread-safe.
@@ -148,6 +149,7 @@ struct ProxySingleton
     AtomicMap<ProxyVolState> stMap;
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
+    std::atomic<uint64_t> conversionUsageMb;
 };
 
 inline ProxySingleton& getProxyGlobal()
@@ -199,6 +201,28 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
 }
 
 namespace proxy_local {
+
+class ConversionTransaction
+{
+private:
+    size_t sizeMb_;
+public:
+    explicit ConversionTransaction(size_t sizeMb)
+        : sizeMb_(sizeMb) {
+        getProxyGlobal().conversionUsageMb += sizeMb_;
+    }
+    ~ConversionTransaction() noexcept {
+        getProxyGlobal().conversionUsageMb -= sizeMb_;
+    }
+};
+
+inline void verifyMaxConversionMemory(const char *msg)
+{
+    if (gp.conversionUsageMb > gp.maxConversionMb) {
+        throw cybozu::Exception(msg)
+            << "exceeds max conversion memory size in MB" << gp.maxConversionMb;
+    }
+}
 
 inline StrVec getAllStateStrVec()
 {
