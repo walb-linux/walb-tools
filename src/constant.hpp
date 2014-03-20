@@ -21,4 +21,6 @@ const size_t DEFAULT_RETRY_TIMEOUT = 1800; // seconds.
 
 const size_t PROXY_HEARTBEAT_INTERVAL_SEC = 60;
 
+const size_t DEFAULT_MAX_IO_LB = MEBI / LBS; // used as max diff IO size.
+
 } // walb

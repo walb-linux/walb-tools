@@ -595,7 +595,8 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
     const uint64_t maxWlogSendPb = gs.maxWlogSendMb * MEBI / pbs;
     const uint64_t lsidB = rec0.lsid;
     const cybozu::Uuid uuid = volInfo.getUuid();
-    const uint64_t sizeLb = device::getSizeLb(wdevPath);
+    const uint64_t volSizeLb = device::getSizeLb(wdevPath);
+    const uint64_t maxLogSizePb = lsidLimit - lsidB;
 
     cybozu::Socket sock;
     packet::Packet pkt(sock);
@@ -609,7 +610,8 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
             pkt.write(uuid);
             pkt.write(pbs);
             pkt.write(salt);
-            pkt.write(sizeLb);
+            pkt.write(volSizeLb);
+            pkt.write(maxLogSizePb);
             std::string res;
             pkt.read(res);
             if (res == "ok") {

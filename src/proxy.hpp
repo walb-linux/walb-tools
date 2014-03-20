@@ -8,9 +8,13 @@
 #include "wdiff_data.hpp"
 #include "host_info.hpp"
 #include "task_queue.hpp"
+#include "tmp_file.hpp"
 #include "walb_util.hpp"
 #include "walb_diff_merge.hpp"
 #include "walb_diff_compressor.hpp"
+#include "walb_diff_converter.hpp"
+#include "walb_diff_mem.hpp"
+#include "walb_log_net.hpp"
 
 namespace walb {
 
@@ -182,9 +186,7 @@ inline void ProxyVolState::initInner(const std::string &volId)
     LOGs.debug() << "found diffs" << volId << diffV.size(); // debug
     for (const MetaDiff &d : diffV) {
         LOGs.debug() << "try to make hard link" << d; // debug
-        for (const std::string &name : archiveSet) {
-            volInfo.tryToMakeHardlinkInSlave(d, name);
-        }
+        volInfo.tryToMakeHardlinkInSlave(d);
     }
     volInfo.deleteDiffs(diffV);
     // Here the master directory must contain no wdiff file.
@@ -615,22 +617,113 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
     logger.info() << "clearVol succeeded" << volId;
 }
 
+namespace proxy_local {
+
+inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt, Logger &logger)
+{
+    diff::MemoryData memData(DEFAULT_MAX_IO_LB);
+    memData.header().setUuid(uuid.rawData());
+
+    std::shared_ptr<uint8_t> headerBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+    log::PackHeaderRaw packH(headerBlock, pbs, salt);
+
+    log::Receiver receiver(sock, logger);
+    receiver.setParams(pbs, salt);
+    receiver.start();
+
+    while (receiver.popHeader(packH.header())) {
+        log::BlockDataShared blockD(pbs);
+        for (size_t i = 0; i < packH.header().n_records; i++) {
+            log::RecordWrapConst lrec(&packH, i);
+            receiver.popIo(packH.header(), i, blockD);
+            DiffRecord drec;
+            DiffIo diffIo;
+            if (convertLogToDiff(lrec, blockD, drec, diffIo)) {
+                memData.add(drec, std::move(diffIo));
+            }
+        }
+    }
+    memData.writeTo(fd);
+}
+
+} // namespace proxy_local
+
 /**
- * params:
- *   [0]: volId
- *   [1]: uuid (cybozu::Uuid)
- *   [2]: diff (walb::MetaDiff)
- *   [3]: pbs (uint32_t)
- *   [4]: salt (uint32_t)
- *   [5]: sizeLb (uint64_t)
- *   [6]: lsidB (uint64_t)
- *   [7]: lsidE (uint64_t)
+ * protocol
+ *   recv parameters.
+ *     volId
+ *     uuid (cybozu::Uuid)
+ *     pbs (uint32_t)
+ *     salt (uint32_t)
+ *     sizeLb (uint64_t)
+ *   send "ok" or error message.
+ *   recv wlog data
+ *   recv diff (walb::MetaDiff)
+ *   send ack.
  *
  * State transition: Started --> WlogRecv --> Started
  */
-inline void s2pWlogTransferServer(protocol::ServerParams &/*p*/)
+inline void s2pWlogTransferServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    std::string volId;
+    cybozu::Uuid uuid;
+    uint32_t pbs, salt;
+    uint64_t volSizeLb, maxLogSizePb;
+
+    packet::Packet pkt(p.sock);
+    pkt.read(volId);
+    pkt.read(uuid);
+    pkt.read(pbs);
+    pkt.read(salt);
+    pkt.read(volSizeLb);
+    pkt.read(maxLogSizePb);
+
+    ConnectionCounterTransation connTran;
+    verifyMaxConnections(gp.maxConnections, FUNC);
+
+    proxy_local::ConversionTransaction convTran(maxLogSizePb * pbs / MEBI);
+    proxy_local::verifyMaxConversionMemory(FUNC);
+
+    /* Decide to receive ok or not. */
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    if (!volInfo.existsVolDir()) {
+        const char *msg = "volume-not-exists";
+        logger.warn() << FUNC << msg << volId;
+        pkt.write(msg);
+        return;
+    }
+    {
+        StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
+        ul.unlock();
+        pkt.write("ok");
+        cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
+        proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt, logger);
+        MetaDiff diff;
+        pkt.read(diff);
+        if (!diff.isClean()) {
+            throw cybozu::Exception(FUNC) << "diff is not clean" << diff;
+        }
+        tmpFile.save(volInfo.getDiffPath(diff).str());
+        packet::Ack(p.sock).send();
+
+        ul.lock();
+        volInfo.addDiffToMaster(diff);
+        volInfo.tryToMakeHardlinkInSlave(diff);
+        volInfo.deleteDiffs({diff});
+        for (const std::string &archiveName : volSt.archiveSet) {
+            ProxyTask task(volId, archiveName);
+            HostInfo hi = volInfo.getArchiveInfo(archiveName);
+            getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
+        }
+        tran.commit(pStarted);
+    }
 }
 
 inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)

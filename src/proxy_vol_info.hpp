@@ -183,22 +183,19 @@ public:
         return diffMgr_.getAll();
     }
     /**
-     * Try make a hard link of a diff file in an archive directory.
-     * If already exists, do nothing.
+     * Call this after settle the corresponding wdiff file.
      */
-    void tryToMakeHardlinkInSlave(const MetaDiff &diff, const std::string &name) {
-        std::string fname = createDiffFileName(diff);
-        cybozu::FilePath oldPath = getMasterDir() + fname;
-        cybozu::FilePath newPath = getSlaveDir(name) + fname;
-        if (!oldPath.stat().exists()) {
-            // Do nothing.
-            return;
+    void addDiffToMaster(const MetaDiff &diff) {
+        diffMgr_.add(diff);
+    }
+    /**
+     * Try make a hard link of a diff file in all the archive directories.
+     * If the diff file already exists in an archive directory, it will do nothing.
+     */
+    void tryToMakeHardlinkInSlave(const MetaDiff &diff) {
+        for (const std::string &archiveName : archiveSet_) {
+            tryToMakeHardlinkForArchive(diff, archiveName);
         }
-        if (!oldPath.link(newPath)) {
-            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInSlave")
-                << "make hardlink failed" << oldPath.str() << newPath.str();
-        }
-        diffMgrMap_.get(name).add(diff);
     }
     /**
      * Delete a diff file from the master directory.
@@ -282,6 +279,20 @@ private:
     void reloadSlave(const std::string &archiveName) {
         WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getSlaveDir(archiveName).str());
         wdiffs.reload();
+    }
+    void tryToMakeHardlinkForArchive(const MetaDiff &diff, const std::string &archiveName) {
+        std::string fname = createDiffFileName(diff);
+        cybozu::FilePath oldPath = getMasterDir() + fname;
+        cybozu::FilePath newPath = getSlaveDir(archiveName) + fname;
+        if (!oldPath.stat().exists()) {
+            // Do nothing.
+            return;
+        }
+        if (!oldPath.link(newPath)) {
+            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInSlave")
+                << "make hardlink failed" << oldPath.str() << newPath.str();
+        }
+        diffMgrMap_.get(archiveName).add(diff);
     }
 };
 
