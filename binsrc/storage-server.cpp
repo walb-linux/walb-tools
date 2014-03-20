@@ -93,8 +93,6 @@ void initializeStorage(Option &opt)
     g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
     g.proxyManager.add(g.proxyV);
 
-    // QQQ
-
     g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
     g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
     g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));

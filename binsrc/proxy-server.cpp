@@ -113,8 +113,6 @@ void finalizeProxy()
     ProxySingleton &g = getProxyGlobal();
     g.taskQueue.quit();
     g.dispatcher.reset();
-
-    // QQQ
 }
 
 int main(int argc, char *argv[]) try

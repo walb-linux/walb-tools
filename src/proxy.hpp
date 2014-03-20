@@ -204,16 +204,16 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
 
 namespace proxy_local {
 
-class ConversionTransaction
+class ConversionMemoryTransaction
 {
 private:
     size_t sizeMb_;
 public:
-    explicit ConversionTransaction(size_t sizeMb)
+    explicit ConversionMemoryTransaction(size_t sizeMb)
         : sizeMb_(sizeMb) {
         getProxyGlobal().conversionUsageMb += sizeMb_;
     }
-    ~ConversionTransaction() noexcept {
+    ~ConversionMemoryTransaction() noexcept {
         getProxyGlobal().conversionUsageMb -= sizeMb_;
     }
 };
@@ -683,7 +683,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ConnectionCounterTransation connTran;
     verifyMaxConnections(gp.maxConnections, FUNC);
 
-    proxy_local::ConversionTransaction convTran(maxLogSizePb * pbs / MEBI);
+    proxy_local::ConversionMemoryTransaction convTran(maxLogSizePb * pbs / MEBI);
     proxy_local::verifyMaxConversionMemory(FUNC);
 
     /* Decide to receive ok or not. */
