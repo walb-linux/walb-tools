@@ -562,7 +562,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.write(msg);
         return;
     }
-    if (clientType == "proxy" && volInfo.getUuid() != uuid) {
+    if (clientType == proxyHT && volInfo.getUuid() != uuid) {
         const char *msg = "different-uuid";
         logger.info() << msg << volId;
         pkt.write(msg);
