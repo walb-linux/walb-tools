@@ -113,23 +113,31 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 
 inline void c2aStatusServer(protocol::ServerParams &p)
 {
+    ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
     StrVec params;
     pkt.read(params);
 
-    if (params.empty()) {
-        // for all volumes
-        pkt.write("not implemented yet");
-        // TODO
-    } else {
-        // for a volume
-        const std::string &volId = params[0];
-
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
-                               getArchiveVolState(volId).diffMgr);
-        pkt.write("ok");
-        pkt.write(volInfo.getStatusAsStrVec());
+    StrVec statusStrVec;
+    try {
+        if (params.empty()) {
+            // for all volumes
+            throw cybozu::Exception("not implemented yet");
+            // TODO
+        } else {
+            // for a volume
+            const std::string &volId = params[0];
+            ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
+                                   getArchiveVolState(volId).diffMgr);
+            statusStrVec = volInfo.getStatusAsStrVec();
+        }
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
+    pkt.write("ok");
+    pkt.write(statusStrVec);
 }
 
 inline void c2aListVolServer(protocol::ServerParams &p)
@@ -138,7 +146,7 @@ inline void c2aListVolServer(protocol::ServerParams &p)
     StrVec v = util::getDirNameList(ga.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC, false);
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    logger.debug() << FUNC << "succeeded";
+    logger.debug() << "listVol succeeded";
 }
 
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
@@ -149,48 +157,58 @@ inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *m
 inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
-    const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 1, FUNC, false);
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyNoArchiveActionRunning(volSt.ac, FUNC);
-    {
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
         ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.init();
         tran.commit(aSyncReady);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-
-    packet::Ack(p.sock).send();
+    pkt.write("ok");
+    logger.info() << "initVol succeeded" << volId;
 }
 
 inline void c2aClearVolServer(protocol::ServerParams &p)
 {
     const char *FUNC = __func__;
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
 
-    verifyNoArchiveActionRunning(volSt.ac, FUNC);
-    StateMachine &sm = volSt.sm;
-    const std::string &currSt = sm.get(); // Stopped or SyncReady.
-    {
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        StateMachine &sm = volSt.sm;
+        const std::string &currSt = sm.get(); // aStopped or aSyncReady
+
         StateMachineTransaction tran(sm, currSt, atClearVol, FUNC);
         ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.clear();
         tran.commit(aClear);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-
-    packet::Ack(p.sock).send();
-
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    logger.info() << FUNC << "cleared volId" << volId;
+    pkt.write("ok");
+    logger.info() << "clearVol succeeded" << volId;
 }
 
 /**
@@ -203,13 +221,14 @@ inline void c2aStartServer(protocol::ServerParams &p)
     ProtocolLogger logger(ga.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    ArchiveVolState& volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyNoArchiveActionRunning(volSt.ac, FUNC);
-    StateMachine &sm = volSt.sm;
-    {
-        StateMachineTransaction tran(sm, aStopped, atStart, FUNC);
+    try {
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+
+        StateMachineTransaction tran(volSt.sm, aStopped, atStart, FUNC);
         ul.unlock();
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
                                getArchiveVolState(volId).diffMgr);
@@ -219,9 +238,13 @@ inline void c2aStartServer(protocol::ServerParams &p)
         }
         volInfo.setState(aArchived);
         tran.commit(aArchived);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-
-    packet::Ack(p.sock).send();
+    pkt.write("ok");
+    logger.info() << "start succeeded" << volId;
 }
 
 /**
@@ -236,39 +259,42 @@ inline void c2aStopServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const bool isForce = (int)cybozu::atoi(v[1]) != 0;
+    packet::Packet pkt(p.sock);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    packet::Ack(p.sock).send();
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        Stopper stopper(volSt.stopState, isForce);
+        if (!stopper.isSuccess()) {
+            throw cybozu::Exception(FUNC) << "already under stopping" << volId;
+        }
+        UniqueLock ul(volSt.mu);
+        StateMachine &sm = volSt.sm;
 
-    Stopper stopper(volSt.stopState, isForce);
-    if (!stopper.isSuccess()) return;
+        waitUntil(ul, [&]() {
+                bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
+                if (!go) return false;
+                return isStateIn(sm.get(), {aClear, aSyncReady, aArchived, aStopped});
+            }, FUNC);
 
-    UniqueLock ul(volSt.mu);
-    StateMachine &sm = volSt.sm;
+        logger.info() << "Tasks have been stopped" << volId;
+        verifyStateIn(sm.get(), {aArchived}, FUNC);
 
-    waitUntil(ul, [&]() {
-            bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
-            if (!go) return false;
-            return isStateIn(sm.get(), {aClear, aSyncReady, aArchived, aStopped});
-        }, FUNC);
-
-    const std::string &st = sm.get();
-    logger.info() << "Tasks have been stopped"
-                  << "volId" << volId
-                  << "state" << st;
-    if (st != aArchived) {
+        StateMachineTransaction tran(sm, aArchived, atStop, FUNC);
+        ul.unlock();
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        const std::string fst = volInfo.getState();
+        if (fst != aArchived) {
+            throw cybozu::Exception(FUNC) << "not Archived state" << fst;
+        }
+        volInfo.setState(aStopped);
+        tran.commit(aStopped);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
         return;
     }
-
-    StateMachineTransaction tran(sm, aArchived, atStop, FUNC);
-    ul.unlock();
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-    const std::string fst = volInfo.getState();
-    if (fst != aArchived) {
-        throw cybozu::Exception(FUNC) << "not Archived state" << fst;
-    }
-    volInfo.setState(aStopped);
-    tran.commit(aStopped);
+    pkt.write("ok");
+    logger.info() << "stop succeeded" << volId;
 }
 
 namespace archive_local {
@@ -347,18 +373,24 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     pkt.read(sizeLb);
     pkt.read(curTime);
     pkt.read(bulkLb);
-    ConnectionCounterTransation ctran;
-    verifyMaxConnections(ga.maxConnections, FUNC);
-    if (bulkLb == 0) {
-        throw cybozu::Exception(FUNC) << "bulkLb is zero";
-    }
 
+    ConnectionCounterTransation ctran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoArchiveActionRunning(volSt.ac, FUNC);
-
     StateMachine &sm = volSt.sm;
+
+    try {
+        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
+        verifyMaxConnections(ga.maxConnections, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyStateIn(sm.get(), {aSyncReady}, FUNC);
+    } catch (std::exception &e) {
+        logger.warn() << e.what();
+        pkt.write(e.what());
+        return;
+    }
+    pkt.write("ok");
 
     StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
     ul.unlock();
@@ -369,13 +401,11 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
     }
     volInfo.createLv(sizeLb);
-    pkt.write("ok");
 
     if (!archive_local::recvDirtyFullImage(pkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
         logger.warn() << FUNC << "force stopped" << volId;
         return;
     }
-    logger.info() << "dirty-full-sync done" << volId;
 
     uint64_t gidB, gidE;
     pkt.read(gidB);
@@ -391,6 +421,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     tran.commit(aArchived);
 
     walb::packet::Ack(p.sock).send();
+    logger.info() << "dirty-full-sync succeeded" << volId;
 }
 
 /**
@@ -404,10 +435,10 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
-    ConnectionCounterTransation ctran;
-    verifyMaxConnections(ga.maxConnections, FUNC);
-
     try {
+        ConnectionCounterTransation ctran;
+        verifyMaxConnections(ga.maxConnections, FUNC);
+
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -422,12 +453,13 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         if (!volInfo.restore(gid)) {
             throw cybozu::Exception(FUNC) << "restore failed" << volId << gid;
         }
-        pkt.write("ok");
-
     } catch (std::exception &e) {
+        logger.error() << e.what();
         pkt.write(e.what());
-        throw;
+        return;
     }
+    pkt.write("ok");
+    logger.info() << "restore succeeded" << volId << gid;
 }
 
 /**
@@ -452,7 +484,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
         wdiffs.reload();
     }
-    packet::Ack(p.sock).send();
+    packet::Packet(p.sock).write("ok");
 }
 
 namespace proxy_local {
@@ -464,8 +496,7 @@ namespace proxy_local {
  *   false if force stopped.
  */
 inline bool recvAndWriteDiffs(
-    cybozu::Socket &sock, diff::Writer &writer,
-    Logger &logger, const std::atomic<int> &stopState)
+    cybozu::Socket &sock, diff::Writer &writer, const std::atomic<int> &stopState)
 {
     const char *const FUNC = __func__;
     packet::StreamControl ctrl(sock);
@@ -476,9 +507,7 @@ inline bool recvAndWriteDiffs(
         diff::PackHeader packH;
         sock.read(packH.rawData(), packH.rawSize());
         if (!packH.isValid()) {
-            cybozu::Exception e(FUNC);
-            e << "bad packH";
-            logger.throwError(e);
+            throw cybozu::Exception(FUNC) << "bad packH";
         }
         for (size_t i = 0; i < packH.nRecords(); i++) {
             DiffIo io;
@@ -490,24 +519,19 @@ inline bool recvAndWriteDiffs(
             }
             sock.read(io.get(), rec.data_size);
             if (!io.isValid()) {
-                cybozu::Exception e(FUNC);
-                e << "bad io";
-                logger.throwError(e);
+                throw cybozu::Exception(FUNC) << "bad io";
             }
             uint32_t csum = io.calcChecksum();
             if (csum != rec.checksum) {
-                cybozu::Exception e(FUNC);
-                e << "bad io checksum" << csum << rec.checksum;
-                logger.throwError(e);
+                throw cybozu::Exception(FUNC)
+                    << "bad io checksum" << csum << rec.checksum;
             }
             writer.writeDiff(rec, std::move(io.data));
         }
         ctrl.reset();
     }
     if (!ctrl.isEnd()) {
-        cybozu::Exception e(FUNC);
-        e << "bad ctrl not end";
-        throw e;
+        throw cybozu::Exception(FUNC) << "bad ctrl not end";
     }
     return true;
 }
@@ -517,52 +541,58 @@ inline bool recvAndWriteDiffs(
 inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
-
     ProtocolLogger logger(ga.nodeId, p.clientId);
-
     packet::Packet pkt(p.sock);
     std::string volId;
-    pkt.read(volId);
-    if (volId.empty()) {
-        throw cybozu::Exception(FUNC) << "empty volId";
-    }
-    std::string clientType;
-    pkt.read(clientType);
-    if (clientType != proxyHT && clientType != archiveHT) {
-        throw cybozu::Exception(FUNC) << "bad clientType" << clientType;
-    }
+    std::string hostType;
     cybozu::Uuid uuid;
-    pkt.read(uuid);
     uint16_t maxIoBlocks;
-    pkt.read(maxIoBlocks);
     uint64_t sizeLb;
-    pkt.read(sizeLb);
     MetaDiff diff;
+
+    pkt.read(volId);
+    pkt.read(hostType);
+    pkt.read(uuid);
+    pkt.read(maxIoBlocks);
+    pkt.read(sizeLb);
     pkt.read(diff);
 
     logger.debug() << FUNC << volId << uuid << maxIoBlocks << sizeLb << diff;
-    ConnectionCounterTransation ctran;
-    verifyMaxConnections(ga.maxConnections, FUNC);
 
+    ConnectionCounterTransation ctran;
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    StateMachine &sm = volSt.sm;
+    try {
+        if (volId.empty()) {
+            throw cybozu::Exception(FUNC) << "empty volId";
+        }
+        if (hostType != proxyHT && hostType != archiveHT) {
+            throw cybozu::Exception(FUNC) << "bad hostType" << hostType;
+        }
+        verifyMaxConnections(ga.maxConnections, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(sm.get(), {aArchived, aStopped}, FUNC);
+    } catch (std::exception &e) {
+        logger.warn() << e.what();
+        pkt.write(e.what());
+        return;
+    }
 
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     if (!volInfo.existsVolDir()) {
         const char *msg = "archive-not-found";
         logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
-    StateMachine &sm = volSt.sm;
     if (sm.get() == aStopped) {
         const char *msg = "stopped";
         logger.info() << msg << volId;
         pkt.write(msg);
         return;
     }
-    if (clientType == proxyHT && volInfo.getUuid() != uuid) {
+    if (hostType == proxyHT && volInfo.getUuid() != uuid) {
         const char *msg = "different-uuid";
         logger.info() << msg << volId;
         pkt.write(msg);
@@ -575,6 +605,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.write(msg);
         return;
     }
+
     if (sizeLb < curSizeLb) {
         logger.warn() << "small lv size" << volId << sizeLb << curSizeLb;
     }
@@ -604,7 +635,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     fileH.setUuid(uuid.rawData());
     writer.writeHeader(fileH);
     logger.debug() << FUNC << "write header";
-    if (!proxy_local::recvAndWriteDiffs(p.sock, writer, logger, volSt.stopState)) {
+    if (!proxy_local::recvAndWriteDiffs(p.sock, writer, volSt.stopState)) {
         logger.warn() << FUNC << "force stopped" << volId;
         return;
     }
@@ -617,6 +648,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     tran.commit(aArchived);
 
     packet::Ack(p.sock).send();
+    logger.info() << "wdiff-transfer succeeded" << volId;
 }
 
 inline void c2aResizeServer(protocol::ServerParams &/*p*/)

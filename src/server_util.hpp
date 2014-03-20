@@ -142,7 +142,8 @@ public:
 };
 
 /**
- * return when pred() is true.
+ * Wait until pred() becomes true.
+ * Mutex must be locked at entering the function and it will be locked at exiting it.
  */
 template <typename Mutex, typename Pred>
 void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_TIMEOUT)
@@ -204,6 +205,7 @@ public:
         cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
         Task task;
         while (!shouldStop) {
+            logErrors(pool.gc());
             bool doWait = false;
             if (pool.getNumActiveThreads() >= maxBackgroundTasks) {
                 doWait = true;
@@ -212,13 +214,11 @@ public:
                 doWait = !tq.pop(task);
             }
             if (doWait) {
-                logErrors(pool.gc());
                 util::sleepMs(1000);
                 continue;
             }
             LOGs.debug() << "dispatchTask dispatch task" << task;
             pool.add(std::make_shared<Worker>(task));
-            logErrors(pool.gc());
         }
         logErrors(pool.waitForAll());
         LOGs.info() << "dispatchTask end";

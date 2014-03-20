@@ -168,7 +168,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
     if (cmd == "add" || cmd == "update") {
         ctrl_local::verifyEnoughParameters(p.params, 4, FUNC);
         const std::string &addrPort = p.params[3];
-        std::string compressOpt = "snappy:0";
+        std::string compressOpt = "snappy:0:1";
         if (p.params.size() > 4) compressOpt = p.params[4];
         std::string delay = "0";
         if (p.params.size() > 5) delay = p.params[5];

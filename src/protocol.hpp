@@ -277,7 +277,12 @@ inline void sendStrVec(
     packet.write(v);
 
 	if (doAck) {
-	    packet::Ack(sock).recv();
+        packet::Packet pkt(sock);
+        std::string res;
+        pkt.read(res);
+        if (res != "ok") {
+            throw cybozu::Exception(msg) << res;
+        }
 	}
 }
 
@@ -299,7 +304,7 @@ inline std::vector<std::string> recvStrVec(
         }
     }
     if (doAck) {
-        packet::Ack(sock).send();
+        packet::Packet(sock).write("ok");
     }
     return v;
 }

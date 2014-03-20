@@ -230,32 +230,38 @@ inline StorageVolState &getStorageVolState(const std::string &volId)
 
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
-    packet::Packet packet(p.sock);
+    packet::Packet pkt(p.sock);
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     std::vector<std::string> params;
-    packet.read(params);
+    pkt.read(params);
 
-    if (params.empty()) {
-        // for all volumes
-        packet.write("not implemented yet");
-        // TODO
-    } else {
-        // for a volume
-        const std::string &volId = params[0];
-        StorageVolInfo volInfo(gs.baseDirStr, volId);
-        if (!volInfo.existsVolDir()) {
-            cybozu::Exception e("c2sStatusServer:no such volume");
-            packet.write(e.what());
-            throw e;
+    StrVec statusStrV;
+    try {
+        if (params.empty()) {
+            // for all volumes
+            throw cybozu::Exception("not implemented yet");
+            // TODO
+        } else {
+            // for a volume
+            const std::string &volId = params[0];
+            StorageVolInfo volInfo(gs.baseDirStr, volId);
+            if (!volInfo.existsVolDir()) {
+                cybozu::Exception e("c2sStatusServer:no such volume");
+                pkt.write(e.what());
+                throw e;
+            }
+            // TODO: show the memory state of the volume.
+            for (std::string &s : volInfo.getStatusAsStrVec()) {
+                statusStrV.push_back(std::move(s));
+            }
         }
-        packet.write("ok");
-
-        StrVec statusStrV;
-        // TODO: show the memory state of the volume.
-        for (std::string &s : volInfo.getStatusAsStrVec()) {
-            statusStrV.push_back(std::move(s));
-        }
-        packet.write(statusStrV);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
+    pkt.write("ok");
+    pkt.write(statusStrV);
 }
 
 inline void c2sListVolServer(protocol::ServerParams &p)
@@ -264,49 +270,56 @@ inline void c2sListVolServer(protocol::ServerParams &p)
     StrVec v = util::getDirNameList(gs.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC, false);
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.debug() << FUNC << "succeeded";
+    logger.debug() << "listVol succeeded";
 }
 
 inline void c2sInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const std::string &wdevPath = v[1];
+    packet::Packet pkt(p.sock);
 
-    StateMachine &sm = getStorageVolState(volId).sm;
-    {
-        StateMachineTransaction tran(sm, sClear, stInitVol, FUNC);
+    try {
+        StorageVolState &volSt = getStorageVolState(volId);
+        StateMachineTransaction tran(volSt.sm, sClear, stInitVol, FUNC);
+
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-    packet::Ack(p.sock).send();
-
-    ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.info() << FUNC << "initialize"
-                  << "volId" << volId
-                  << "wdev" << wdevPath;
+    pkt.write("ok");
+    logger.info() << "initVol succeeded" << volId << wdevPath;
 }
 
 inline void c2sClearVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    StateMachine &sm = getStorageVolState(volId).sm;
-    {
-        StateMachineTransaction tran(sm, sSyncReady, stClearVol, FUNC);
+    try {
+        StorageVolState &volSt = getStorageVolState(volId);
+        StateMachineTransaction tran(volSt.sm, sSyncReady, stClearVol, FUNC);
+
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.clear();
         tran.commit(sClear);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-
-    packet::Ack(p.sock).send();
-
-    ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.info() << FUNC << "cleared volId" << volId;
+    pkt.write("ok");
+    logger.info() << "clearVol succeeded" << volId;
 }
 
 /**
@@ -315,80 +328,98 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
  */
 inline void c2sStartServer(protocol::ServerParams &p)
 {
-    const StrVec v = protocol::recvStrVec(p.sock, 2, "c2sStartServer", false);
+    const char *const FUNC = __func__;
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     const std::string &volId = v[0];
     const bool isMaster = (v[1] == "master");
+    packet::Packet pkt(p.sock);
 
-    StateMachine &sm = getStorageVolState(volId).sm;
-    if (isMaster) {
-        StateMachineTransaction tran(sm, sStopped, stStartMaster, "c2sStartServer");
+    try {
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        volInfo.setState(sMaster);
-        storage_local::startMonitoring(volInfo.getWdevPath(), volId);
-        tran.commit(sMaster);
-    } else {
-        StateMachineTransaction tran(sm, sSyncReady, stStartSlave, "c2sStartServer");
-        StorageVolInfo volInfo(gs.baseDirStr, volId);
-        volInfo.setState(sSlave);
-        storage_local::startMonitoring(volInfo.getWdevPath(), volId);
-        tran.commit(sSlave);
+        const std::string st = volInfo.getState();
+        if (isMaster) {
+            StateMachineTransaction tran(volSt.sm, sStopped, stStartMaster, FUNC);
+            if (st != sStopped) throw cybozu::Exception(FUNC) << "bad state" << st;
+            volInfo.setState(sMaster);
+            storage_local::startMonitoring(volInfo.getWdevPath(), volId);
+            tran.commit(sMaster);
+        } else {
+            StateMachineTransaction tran(volSt.sm, sSyncReady, stStartSlave, FUNC);
+            if (st != sSyncReady) throw cybozu::Exception(FUNC) << "bad state" << st;
+            volInfo.setState(sSlave);
+            storage_local::startMonitoring(volInfo.getWdevPath(), volId);
+            tran.commit(sSlave);
+        }
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-    packet::Ack(p.sock).send();
+    pkt.write("ok");
+    logger.info() << "start succeeded" << volId;
 }
 
 /**
  * params[0]: volId
  * params[1]: isForce: "0" or "1".
+ *
+ * Master --> Stopped, or Slave --> SyncReady.
  */
 inline void c2sStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
     const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const int isForceInt = cybozu::atoi(v[1]);
     const bool isForce = (isForceInt != 0);
+    packet::Packet pkt(p.sock);
 
-    StorageVolState &volSt = getStorageVolState(volId);
-    packet::Ack(p.sock).send();
+    try {
+        StorageVolState &volSt = getStorageVolState(volId);
+        Stopper stopper(volSt.stopState, isForce);
+        if (!stopper.isSuccess()) {
+            throw cybozu::Exception(FUNC) << "already under stopping" << volId;
+        }
+        UniqueLock ul(volSt.mu);
+        StateMachine &sm = volSt.sm;
 
-    Stopper stopper(volSt.stopState, isForce);
-    if (!stopper.isSuccess()) {
+        waitUntil(ul, [&]() {
+                return isStateIn(sm.get(), {sClear, sSyncReady, sStopped, sMaster, sSlave});
+            }, FUNC);
+
+        const std::string st = sm.get();
+        verifyStateIn(st, {sMaster, sSlave}, FUNC);
+
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string fst = volInfo.getState();
+        if (st == sMaster) {
+            StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
+            ul.unlock();
+            storage_local::stopMonitoring(volInfo.getWdevPath());
+            if (fst != sMaster) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            volInfo.setState(sStopped);
+            tran.commit(sStopped);
+        } else {
+            assert(st == sSlave);
+            StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
+            ul.unlock();
+            if (fst != sSlave) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            storage_local::stopMonitoring(volInfo.getWdevPath());
+            volInfo.setState(sSyncReady);
+            tran.commit(sSyncReady);
+        }
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
         return;
     }
-
-    UniqueLock ul(volSt.mu);
-    StateMachine &sm = volSt.sm;
-
-    waitUntil(ul, [&]() {
-            return isStateIn(sm.get(), {stFullSync, stHashSync, stWlogSend, stWlogRemove});
-        }, FUNC);
-
-    const std::string st = sm.get();
-    if (!isStateIn(st, {sMaster, sSlave})) {
-        /* For SyncReady state (after FullSync and HashSync canceled),
-           there is nothing to do. */
-        return;
-    }
-
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    if (st == sMaster) {
-        StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
-        ul.unlock();
-
-        storage_local::stopMonitoring(volInfo.getWdevPath());
-
-        volInfo.setState(sStopped);
-        tran.commit(sStopped);
-    } else {
-        assert(st == sSlave);
-        StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
-        ul.unlock();
-
-        storage_local::stopMonitoring(volInfo.getWdevPath());
-
-        volInfo.setState(sSyncReady);
-        tran.commit(sSyncReady);
-    }
+    pkt.write("ok");
+    logger.info() << "stop succeeded" << volId;
 }
 
 namespace storage_local {
@@ -505,7 +536,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     // TODO: If thrown an error, someone must stop monitoring task.
 
-    logger.info() << FUNC << "done" << "archive" << archiveId;
+    logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
 
 /**
@@ -519,22 +550,24 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
-    StorageVolState &volSt = getStorageVolState(volId);
-    UniqueLock ul(volSt.mu);
-    const std::string st = volSt.sm.get();
-    verifyStateIn(st, {sMaster, sStopped}, FUNC);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
+    uint64_t gid = -1;
     try {
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+        const std::string st = volSt.sm.get();
+        verifyStateIn(st, {sMaster, sStopped}, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        const uint64_t gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
-        pkt.write("ok");
-        pkt.write(gid);
-        logger.info() << FUNC << "taking snapshot succeeded" << volId << gid;
+        gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
     } catch (std::exception &e) {
-        logger.error() << FUNC << "taking snapshot failed" << volId << e.what();
+        logger.error() << e.what();
         pkt.write(e.what());
-        throw;
+        return;
     }
+    pkt.write("ok");
+    pkt.write(gid);
+    logger.info() << "snapshot succeeded" << volId << gid;
 }
 
 inline void c2sHostTypeServer(protocol::ServerParams &p)
@@ -685,7 +718,7 @@ inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
  */
 inline void StorageWorker::operator()()
 {
-    const char *const FUNC = "StorageWorker::operator()";
+    const char *const FUNC = __func__;
     StorageVolState& volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);

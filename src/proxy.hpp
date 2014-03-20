@@ -115,8 +115,7 @@ class ProxyWorker : public cybozu::thread::Runnable
 private:
     const ProxyTask task_;
 
-    bool setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
-
+    void setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
@@ -335,22 +334,25 @@ inline StrVec getVolStateStrVec(const std::string &volId)
 inline void c2pStatusServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
     packet::Packet pkt(p.sock);
+    StrVec stStrV;
     try {
-        StrVec stStrV;
         if (v.empty()) {
             stStrV = proxy_local::getAllStateStrVec();
         } else {
             const std::string &volId = v[0];
             stStrV = proxy_local::getVolStateStrVec(volId);
         }
-        pkt.write("ok");
-        pkt.write(stStrV);
     } catch (std::exception &e) {
-        pkt.write(std::string(FUNC) + e.what());
-        throw;
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
+    pkt.write("ok");
+    pkt.write(stStrV);
+    logger.debug() << "status succeeded";
 }
 
 inline void c2pListVolServer(protocol::ServerParams &p)
@@ -359,7 +361,7 @@ inline void c2pListVolServer(protocol::ServerParams &p)
     StrVec v = util::getDirNameList(gp.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC, false);
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    logger.debug() << FUNC << "succeeded";
+    logger.debug() << "listVol succeeded";
 }
 
 inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false)
@@ -369,7 +371,10 @@ inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
-    if (!ignoreStateFile && volSt.sm.get() != pStopped) return;
+    const std::string &st = volSt.sm.get();
+    if (!ignoreStateFile && st != pStopped) {
+        throw cybozu::Exception("bad state") << st;
+    }
 
     StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
     ul.unlock();
@@ -383,7 +388,7 @@ inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false
     if (!ignoreStateFile) {
         const std::string fst = volInfo.getState();
         if (fst != pStopped) {
-            throw cybozu::Exception(FUNC) << "not Stopped state" << fst;
+            throw cybozu::Exception(FUNC) << "bad state" << fst;
         }
     }
     volInfo.setState(pStarted);
@@ -396,20 +401,24 @@ inline void stopProxyVol(const std::string &volId, bool isForce, bool ignoreStat
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     Stopper stopper(volSt.stopState, isForce);
-    if (!stopper.isSuccess()) return;
+    if (!stopper.isSuccess()) {
+        throw cybozu::Exception(FUNC) << "already under stopping" << volId;
+    }
+
+    waitUntil(ul, [&]() {
+            if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
+            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
+        }, FUNC);
+
+    const std::string &st = volSt.sm.get();
+    if (!ignoreStateFile && st != pStarted) {
+        throw cybozu::Exception(FUNC) << "bad state" << st;
+    }
 
     // Clear all related tasks from the task queue.
     getProxyGlobal().taskQueue.remove([&](const ProxyTask &task) {
             return task.volId == volId;
         });
-
-    waitUntil(ul, [&]() {
-            if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
-            const std::string &st = volSt.sm.get();
-            return st == pStopped || st == pStarted || st == pClear;
-        }, FUNC);
-
-    if (!ignoreStateFile && volSt.sm.get() != pStarted) return;
 
     StateMachineTransaction tran(volSt.sm, pStarted, ptStop, FUNC);
     ul.unlock();
@@ -417,7 +426,7 @@ inline void stopProxyVol(const std::string &volId, bool isForce, bool ignoreStat
     if (!ignoreStateFile) {
         const std::string fst = volInfo.getState();
         if (fst != pStarted) {
-            throw cybozu::Exception(FUNC) << "not Started state" << fst;
+            throw cybozu::Exception(FUNC) << "bad state" << fst;
         }
     }
     volInfo.setState(pStopped);
@@ -433,13 +442,19 @@ inline void stopProxyVol(const std::string &volId, bool isForce, bool ignoreStat
 inline void c2pStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
-    packet::Packet pkt(p.sock);
+    ProtocolLogger logger(gp.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    packet::Ack(p.sock).send();
-    startProxyVol(volId);
-    ProtocolLogger logger(gp.nodeId, p.clientId);
+    try {
+        startProxyVol(volId);
+    } catch (std::exception &e) {
+        logger.error(e.what());
+        pkt.write(e.what());
+        return;
+    }
+    pkt.write("ok");
     logger.info() << "start succeeded" << volId;
 }
 
@@ -454,13 +469,20 @@ inline void c2pStartServer(protocol::ServerParams &p)
 inline void c2pStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const bool isForce = static_cast<int>(cybozu::atoi(v[1])) != 0;
+    packet::Packet pkt(p.sock);
 
-    packet::Ack(p.sock).send();
-    stopProxyVol(volId, isForce);
-    ProtocolLogger logger(gp.nodeId, p.clientId);
+    try {
+        stopProxyVol(volId, isForce);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
+    }
+    pkt.write("ok");
     logger.info() << "stop succeeded" << volId << isForce;
 }
 
@@ -581,11 +603,11 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             pkt.write(v);
             return;
         }
+        throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
     } catch (std::exception &e) {
-        pkt.write(std::string(FUNC) + e.what());
-        throw;
+        logger.error() << e.what();
+        pkt.write(e.what());
     }
-    throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
 }
 
 /**
@@ -597,23 +619,30 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 inline void c2pClearVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
-    packet::Ack(p.sock).send();
+    packet::Packet pkt(p.sock);
 
-    ProxyVolState &volSt = getProxyVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
-    {
+    try {
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
         volSt.archiveSet.clear();
         ul.unlock();
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         volInfo.clear();
         tran.commit(pClear);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
     }
-    ProtocolLogger logger(gp.nodeId, p.clientId);
+    pkt.write("ok");
     logger.info() << "clearVol succeeded" << volId;
 }
 
@@ -680,54 +709,55 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     pkt.read(volSizeLb);
     pkt.read(maxLogSizePb);
 
-    ConnectionCounterTransation connTran;
-    verifyMaxConnections(gp.maxConnections, FUNC);
-
-    proxy_local::ConversionMemoryTransaction convTran(maxLogSizePb * pbs / MEBI);
-    proxy_local::verifyMaxConversionMemory(FUNC);
-
     /* Decide to receive ok or not. */
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
 
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-    if (!volInfo.existsVolDir()) {
-        const char *msg = "volume-not-exists";
-        logger.warn() << FUNC << msg << volId;
-        pkt.write(msg);
+    ConnectionCounterTransation connTran;
+    proxy_local::ConversionMemoryTransaction convTran(maxLogSizePb * pbs / MEBI);
+    try {
+        verifyMaxConnections(gp.maxConnections, FUNC);
+        proxy_local::verifyMaxConversionMemory(FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+    } catch (std::exception &e) {
+        logger.warn() << e.what();
+        pkt.write(e.what());
         return;
     }
-    {
-        StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
-        ul.unlock();
-        pkt.write("ok");
-        cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
-        proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt, logger);
-        MetaDiff diff;
-        pkt.read(diff);
-        if (!diff.isClean()) {
-            throw cybozu::Exception(FUNC) << "diff is not clean" << diff;
-        }
-        tmpFile.save(volInfo.getDiffPath(diff).str());
-        packet::Ack(p.sock).send();
+    pkt.write("ok");
 
-        ul.lock();
-        volInfo.addDiffToMaster(diff);
-        volInfo.tryToMakeHardlinkInSlave(diff);
-        volInfo.deleteDiffs({diff});
-        for (const std::string &archiveName : volSt.archiveSet) {
-            ProxyTask task(volId, archiveName);
-            HostInfo hi = volInfo.getArchiveInfo(archiveName);
-            getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
-        }
-        tran.commit(pStarted);
+    StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
+    ul.unlock();
+
+    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
+    proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt, logger);
+    MetaDiff diff;
+    pkt.read(diff);
+    if (!diff.isClean()) {
+        throw cybozu::Exception(FUNC) << "diff is not clean" << diff;
     }
+    tmpFile.save(volInfo.getDiffPath(diff).str());
+    packet::Ack(p.sock).send();
+
+    ul.lock();
+    volInfo.addDiffToMaster(diff);
+    volInfo.tryToMakeHardlinkInSlave(diff);
+    volInfo.deleteDiffs({diff});
+    for (const std::string &archiveName : volSt.archiveSet) {
+        ProxyTask task(volId, archiveName);
+        HostInfo hi = volInfo.getArchiveInfo(archiveName);
+        getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
+    }
+    tran.commit(pStarted);
+
+    logger.info() << "wlog-transfer succeeded" << volId;
 }
 
-inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+inline void ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
 {
+    const char *const FUNC = __func__;
     const int maxRetryNum = 10;
     int retryNum = 0;
     cybozu::Uuid uuid;
@@ -735,15 +765,15 @@ inline bool ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>
 retry:
     {
         diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
-        if (diffV.empty()) {
-            return false;
-        }
+        if (diffV.empty()) return;
         // apply wdiff files indicated by diffV to lvSnap.
         for (const MetaDiff& diff : diffV) {
             cybozu::util::FileOpener op;
             if (!op.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
                 retryNum++;
-                if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
+                if (retryNum == maxRetryNum) {
+                    throw cybozu::Exception(FUNC) << "exceed max retry";
+                }
                 ops.clear();
                 goto retry;
             }
@@ -760,12 +790,13 @@ retry:
                 }
                 mergedDiff.merge(diff);
             }
-            if (lseek(op.fd(), 0, SEEK_SET) < 0) throw cybozu::Exception("ProxyWorker:setupMerger") << cybozu::ErrorNo();
+            if (lseek(op.fd(), 0, SEEK_SET) < 0) {
+                throw cybozu::Exception(FUNC) << "lseek failed" << cybozu::ErrorNo();
+            }
             ops.push_back(std::move(op));
         }
     }
     merger.addWdiffs(std::move(ops));
-    return true;
 }
 
 namespace proxy_local {
@@ -825,7 +856,7 @@ inline bool sendWdiffs(
 
 inline void ProxyWorker::operator()()
 {
-    const char *const FUNC = "ProxyWorker::operator()";
+    const char *const FUNC = __func__;
     const std::string& volId = task_.volId;
     const std::string& archiveName = task_.archiveName;
     ProxyVolState& volSt = getProxyVolState(volId);
@@ -838,8 +869,9 @@ inline void ProxyWorker::operator()()
     std::vector<MetaDiff> diffV;
     diff::Merger merger;
     MetaDiff mergedDiff;
-    if (!setupMerger(merger, diffV, mergedDiff, volInfo, archiveName)) {
-        LOGi("no need to send wdiffs %s:%s", volId.c_str(), archiveName.c_str());
+    setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
+    if (diffV.empty()) {
+        LOGs.info() << FUNC << "no need to send wdiffs" << volId << archiveName;
         return;
     }
 
@@ -906,7 +938,7 @@ inline void ProxyWorker::operator()()
      * or you must stop and start by yourself.
      */
     e << res;
-    logger.throwError(e);
+    logger.error() << e.what();
 }
 
 /**
@@ -917,27 +949,29 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
     StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const std::string &volId = v[0];
+    const uint64_t sizeLb = cybozu::util::fromUnitIntString(v[1]) / LOGICAL_BLOCK_SIZE;
+    uint64_t oldSizeLb;
     packet::Packet pkt(p.sock);
-    try {
-        const std::string &volId = v[0];
-        const uint64_t sizeLb = cybozu::util::fromUnitIntString(v[1]) / LOGICAL_BLOCK_SIZE;
 
+    try {
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
+
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStopped}, FUNC);
 
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-        const uint64_t oldSizeLb = volInfo.getSizeLb();
+        oldSizeLb = volInfo.getSizeLb();
         volInfo.setSizeLb(sizeLb);
 
-        pkt.write("ok");
-        logger.info() << FUNC << "resize succeeded" << oldSizeLb << sizeLb;
-
     } catch (std::exception &e) {
+        logger.error() << e.what();
         pkt.write(e.what());
-        throw;
+        return;
     }
+    pkt.write("ok");
+    logger.info() << "resize succeeded" << volId << oldSizeLb << sizeLb;
 }
 
 inline void c2pHostTypeServer(protocol::ServerParams &p)
