@@ -39,16 +39,17 @@ CYBOZU_TEST_AUTO(hostInfo)
         CYBOZU_TEST_EQUAL(host, hostx);
     }
 
-    walb::HostInfo hi0, hi1, hi2;
-    hi0.parse("192.168.1.1:5000 snappy:5:1");
-    hi1.parse("  192.168.1.1:5000   snappy:5:1   ");
-    hi2.parse("192.168.1.1:5000", "snappy:5:1");
+    walb::HostInfo hi0, hi1, hi2, hi3;
+    hi0.parse("192.168.1.1:5000 snappy:5:1 3");
+    hi1.parse("  192.168.1.1:5000   snappy:5:1   3  ");
+    hi2.parse("192.168.1.1:5000", "snappy:5:1", "3");
     CYBOZU_TEST_EQUAL(hi0, hi1);
     CYBOZU_TEST_EQUAL(hi0, hi2);
 
-    hi0.parse("192.168.1.1:5000 lzma:9:1");
-    hi0.parse("192.168.1.1:5000 gzip:9:1");
-    hi0.parse("192.168.1.1:5000 none:9:1");
+    hi0.parse("192.168.1.1:5000 lzma:9:1 0");
+    hi1.parse("192.168.1.1:5000 gzip:9:1 0");
+    hi2.parse("192.168.1.1:5000 none:9:1 0");
+    hi3.parse("192.168.1.1:5000 none:9:1 100");
     CYBOZU_TEST_EXCEPTION(hi0.parse("192.168.1.1:5000 xxx:9:1"), cybozu::Exception);
     CYBOZU_TEST_EXCEPTION(hi0.parse("192.168.1.1:5000 snappy:10:1"), cybozu::Exception);
     CYBOZU_TEST_EXCEPTION(hi0.parse("192.168.1.1:5000 snappy:9:0"), cybozu::Exception);

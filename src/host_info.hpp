@@ -19,25 +19,30 @@ struct HostInfo
     uint8_t compressionType; /* wdiff compression type. */
     uint8_t compressionLevel; /* wdiff compression level. */
     uint8_t compressionNumCPU; /* number of compression threads. */
+    uint32_t wdiffSendDelaySec;
 
     HostInfo() : HostInfo("", 0) {}
     HostInfo(const std::string &addr, uint16_t port,
              uint8_t type = ::WALB_DIFF_CMPR_SNAPPY, uint8_t level = 0,
-             uint8_t compressionNumCPU = 1)
+             uint8_t compressionNumCPU = 1,
+             uint32_t wdiffSendDelaySec = 0)
         : addr(addr), port(port)
         , compressionType(type), compressionLevel(level)
-        , compressionNumCPU(compressionNumCPU) {}
+        , compressionNumCPU(compressionNumCPU)
+        , wdiffSendDelaySec(wdiffSendDelaySec) {}
     bool operator==(const HostInfo &rhs) const {
         return addr == rhs.addr && port == rhs.port
             && compressionType == rhs.compressionType
             && compressionLevel == rhs.compressionLevel
-            && compressionNumCPU == rhs.compressionNumCPU;
+            && compressionNumCPU == rhs.compressionNumCPU
+            && wdiffSendDelaySec == rhs.wdiffSendDelaySec;
     }
     bool operator!=(const HostInfo &rhs) const {
         return addr != rhs.addr || port != rhs.port
             || compressionType != rhs.compressionType
             || compressionLevel != rhs.compressionLevel
-            || compressionNumCPU != rhs.compressionNumCPU;
+            || compressionNumCPU != rhs.compressionNumCPU
+            || wdiffSendDelaySec != rhs.wdiffSendDelaySec;
     }
     void verify() const {
         const char *const msg = "HostInfo::verify";
@@ -67,6 +72,7 @@ struct HostInfo
         cybozu::save(os, compressionType);
         cybozu::save(os, compressionLevel);
         cybozu::save(os, compressionNumCPU);
+        cybozu::save(os, wdiffSendDelaySec);
     }
     template <typename InputStream>
     void load(InputStream &is) {
@@ -75,10 +81,11 @@ struct HostInfo
         cybozu::load(compressionType, is);
         cybozu::load(compressionLevel, is);
         cybozu::load(compressionNumCPU, is);
+        cybozu::load(wdiffSendDelaySec, is);
         verify();
     }
     std::string str() const;
-    void parse(const std::string &, const std::string &);
+    void parse(const std::string &, const std::string &, const std::string &);
     void parse(const std::string &);
     friend inline std::ostream &operator<<(std::ostream &os, const HostInfo &s) {
         os << s.str();
@@ -129,7 +136,7 @@ inline const std::string &compressionTypeToStr(int type)
  * Parse three strings into a HostInfo.
  */
 inline HostInfo parseHostInfo(
-    const std::string &addrPort, const std::string &compressOpt)
+    const std::string &addrPort, const std::string &compressOpt, const std::string &delay)
 {
     HostInfo hi;
     {
@@ -150,13 +157,16 @@ inline HostInfo parseHostInfo(
         hi.compressionLevel = static_cast<uint8_t>(cybozu::atoi(v[1]));
         hi.compressionNumCPU = static_cast<uint8_t>(cybozu::atoi(v[2]));
     }
+    {
+        hi.wdiffSendDelaySec = static_cast<uint32_t>(cybozu::atoi(delay));
+    }
     hi.verify();
     return hi;
 }
 
 /**
  * Parse a string into a HostInfo.
- * Input string is like "addr:port compressionType:compresionLevel".
+ * Input string is like "addr:port compressionType:compresionLevel delay".
  */
 inline HostInfo parseHostInfo(const std::string &s)
 {
@@ -166,17 +176,17 @@ inline HostInfo parseHostInfo(const std::string &s)
             return s.empty();
         });
     v.erase(itr, v.end());
-    if (v.size() != 2) {
-        throw cybozu::Exception("parseHostInfo:not 2 tokens.")
+    if (v.size() != 3) {
+        throw cybozu::Exception("parseHostInfo:not 3 tokens.")
             << s;
     }
-    return parseHostInfo(v[0], v[1]);
+    return parseHostInfo(v[0], v[1], v[2]);
 }
 
 inline void HostInfo::parse(
-    const std::string &addrPort, const std::string &compressOpt)
+    const std::string &addrPort, const std::string &compressOpt, const std::string &delay)
 {
-    *this = parseHostInfo(addrPort, compressOpt);
+    *this = parseHostInfo(addrPort, compressOpt, delay);
 }
 
 inline void HostInfo::parse(const std::string &s)
@@ -187,11 +197,12 @@ inline void HostInfo::parse(const std::string &s)
 inline std::string HostInfo::str() const
 {
     return cybozu::util::formatString(
-        "%s:%u %s:%u:%u"
+        "%s:%u %s:%u:%u %u"
         , addr.c_str(), port
         , compressionTypeToStr(compressionType).c_str()
         , compressionLevel
-        , compressionNumCPU);
+        , compressionNumCPU
+        , wdiffSendDelaySec);
 }
 
 } //namespace walb

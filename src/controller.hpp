@@ -146,10 +146,11 @@ inline void verifyEnoughParameters(const StrVec& params, size_t num, const char 
  * pattern (2)
  *   get/delete <volId> <archiveId>
  * pattern (3)
- *   add/update <volId> <archiveId> <addr>:<port> <cmprType>:<cmprLevel>:<cmprNumCPU>
+ *   add/update <volId> <archiveId> <addr>:<port> <cmprType>:<cmprLevel>:<cmprNumCPU> <wdiffSendDelaySec>
  *
  * <cmprType>: compression type. none, snappy, gzip, or lzma.
  * <cmprLevel>: compression level. integer from 0 to 9.
+ * <cmprType>:<cmprLevel>:<cmprNumCPU> and <wdiffSendDelay> can be omitted.
  */
 inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 {
@@ -165,10 +166,13 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         pkt.write(archiveId);
     }
     if (cmd == "add" || cmd == "update") {
-        ctrl_local::verifyEnoughParameters(p.params, 5, FUNC);
+        ctrl_local::verifyEnoughParameters(p.params, 4, FUNC);
         const std::string &addrPort = p.params[3];
-        const std::string &compressOpt = p.params[4];
-        HostInfo hi = parseHostInfo(addrPort, compressOpt);
+        std::string compressOpt = "snappy:0";
+        if (p.params.size() > 4) compressOpt = p.params[4];
+        std::string delay = "0";
+        if (p.params.size() > 5) delay = p.params[5];
+        HostInfo hi = parseHostInfo(addrPort, compressOpt, delay);
         LOGs.debug() << hi;
         pkt.write(hi);
     }
