@@ -78,6 +78,7 @@ struct ArchiveSingleton
     std::string nodeId;
     std::string baseDirStr;
     std::string volumeGroup;
+    size_t maxConnections;
 
     /**
      * Writable and must be thread-safe.

@@ -59,18 +59,16 @@ struct Option : cybozu::Option
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
-    size_t maxConnections;
 
     Option() {
-        ArchiveSingleton &a = getArchiveGlobal();
-        //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
 
+        ArchiveSingleton &a = getArchiveGlobal();
+        appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
+        appendOpt(&a.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
 
@@ -114,8 +112,8 @@ int main(int argc, char *argv[]) try
             std::move(sock), ga.nodeId, procStat);
     };
 
-    server::MultiThreadedServer server(
-        getArchiveGlobal().forceQuit, opt.maxConnections);
+    ArchiveSingleton &g = getArchiveGlobal();
+    server::MultiThreadedServer server(g.forceQuit, g.maxConnections + 1);
     server.run(opt.port, createRequestWorker);
     finalizeArchive();
 

@@ -150,6 +150,7 @@ struct StorageSingleton
     std::string baseDirStr;
     uint64_t maxWlogSendMb;
     size_t delaySecForRetry;
+    size_t maxConnections;
 
     /**
      * Writable and must be thread-safe.

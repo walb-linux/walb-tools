@@ -55,22 +55,21 @@ struct Option : cybozu::Option
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
-    size_t maxConnections;
     size_t maxBackgroundTasks;
     bool isStopped;
     Option() {
-        ProxySingleton &p = getProxyGlobal();
         //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
         appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
+        appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
+
+        ProxySingleton &p = getProxyGlobal();
+        appendOpt(&p.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
         appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
         appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
-        appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
-
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&p.nodeId, hostName, "id", "node identifier");
@@ -132,8 +131,9 @@ int main(int argc, char *argv[]) try
         return std::make_shared<ProxyRequestWorker>(
             std::move(sock), gp.nodeId, procStat);
     };
-    server::MultiThreadedServer server(
-        getProxyGlobal().forceQuit, opt.maxConnections);
+
+    ProxySingleton &g = getProxyGlobal();
+    server::MultiThreadedServer server(g.forceQuit, g.maxConnections + 1);
     server.run(opt.port, createRequestWorker);
     finalizeProxy();
 

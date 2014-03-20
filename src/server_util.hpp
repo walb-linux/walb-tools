@@ -43,6 +43,7 @@ public:
         : maxNumThreads_(maxNumThreads), forceQuit_(forceQuit) {
     }
     void run(uint16_t port, const RequestWorkerGenerator &gen) noexcept {
+        const char *const FUNC = __func__;
         forceQuit_ = false;
         cybozu::Socket ssock;
         ssock.bind(port);
@@ -53,23 +54,29 @@ public:
             if (st != ProcessStatus::RUNNING) break;
             cybozu::Socket sock;
             ssock.accept(sock);
-            pool.add(gen(std::move(sock), st));
             logErrors(pool.gc());
-            //LOGi("pool size %zu", pool.size());
+            if (maxNumThreads_ > 0 && pool.getNumActiveThreads() > maxNumThreads_) {
+                LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
+                sock.close();
+                continue;
+            }
+            pool.add(gen(std::move(sock), st));
         }
         if (st == ProcessStatus::FORCE_SHUTDOWN) {
             size_t nCanceled = pool.cancelAll();
             forceQuit_ = true;
-            LOGi("Canceled %zu tasks.", nCanceled);
+            LOGs.info() << FUNC << "Canceled tasks" << nCanceled;
         }
         logErrors(pool.gc());
-        LOGi("Waiting for %zu remaining tasks...", pool.size());
+        LOGs.info() << FUNC << "Waiting for remaining tasks" << pool.size();
         logErrors(pool.waitForAll());
     }
 private:
     void logErrors(std::vector<std::exception_ptr> &&v) {
         for (std::exception_ptr ep : v) {
-            LOGe("REQUEST_WORKER_ERROR:%s", cybozu::thread::exceptionPtrToStr(ep).c_str());
+            LOGs.error()
+                << "REQUEST_WORKER_ERROR"
+                << cybozu::thread::exceptionPtrToStr(ep);
         }
     }
 };

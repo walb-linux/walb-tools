@@ -60,22 +60,20 @@ struct Option : cybozu::Option
     std::string archiveDStr;
     std::string multiProxyDStr;
     bool isDebug;
-    size_t maxConnections;
     size_t maxBackgroundTasks;
     Option() {
-        //setUsage();
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
         appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
 
         StorageSingleton &s = getStorageGlobal();
+        appendOpt(&s.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
         appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
         appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "maxWlogSendMb", "max wlog size to send at once.");
         appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
 
@@ -133,7 +131,9 @@ int main(int argc, char *argv[]) try
         return std::make_shared<StorageRequestWorker>(
             std::move(sock), gs.nodeId, procStat);
     };
-    server::MultiThreadedServer server(getStorageGlobal().forceQuit, opt.maxConnections);
+
+    StorageSingleton &g = getStorageGlobal();
+    server::MultiThreadedServer server(g.forceQuit, g.maxConnections + 1);
     server.run(opt.port, createRequestWorker);
     finalizeStorage();
 

@@ -139,6 +139,7 @@ struct ProxySingleton
     size_t maxWdiffSendMb;
     size_t delaySecForRetry;
     size_t retryTimeout;
+    size_t maxConnections;
 
     /**
      * Writable and must be thread-safe.
