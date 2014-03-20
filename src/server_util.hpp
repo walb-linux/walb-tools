@@ -16,6 +16,7 @@
 #include "walb_logger.hpp"
 #include "constant.hpp"
 #include "walb_util.hpp"
+#include "connection_counter.hpp"
 
 namespace walb {
 namespace server {
@@ -277,6 +278,13 @@ void verifyNoActionRunning(const ActionCounters& ac, const C& actions, const cha
                  << "there are running action"
                  << *itr << v[i];
         }
+    }
+}
+
+inline void verifyMaxConnections(size_t maxConnections, const char *msg)
+{
+    if (getConnectionCounter() > maxConnections) {
+        throw cybozu::Exception(msg) << "exceeds max connections" << maxConnections;
     }
 }
 
