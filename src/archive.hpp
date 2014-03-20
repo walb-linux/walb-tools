@@ -347,6 +347,8 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     pkt.read(sizeLb);
     pkt.read(curTime);
     pkt.read(bulkLb);
+    ConnectionCounterTransation ctran;
+    verifyMaxConnections(ga.maxConnections, FUNC);
     if (bulkLb == 0) {
         throw cybozu::Exception(FUNC) << "bulkLb is zero";
     }
@@ -402,6 +404,8 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
+    ConnectionCounterTransation ctran;
+    verifyMaxConnections(ga.maxConnections, FUNC);
 
     try {
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -537,11 +541,14 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     pkt.read(diff);
 
     logger.debug() << FUNC << volId << uuid << maxIoBlocks << sizeLb << diff;
+    ConnectionCounterTransation ctran;
+    verifyMaxConnections(ga.maxConnections, FUNC);
 
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
     if (!volInfo.existsVolDir()) {
         const char *msg = "archive-not-found";
         logger.info() << msg << volId;

@@ -435,6 +435,9 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     logger.debug() << volId << bulkLb << curTime;
     std::string archiveId;
 
+    ConnectionCounterTransation ctran;
+    verifyMaxConnections(gs.maxConnections, FUNC);
+
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     packet::Packet cPack(p.sock);
 
