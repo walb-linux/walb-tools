@@ -654,7 +654,7 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
             }
             LOGs.warn() << FUNC << res;
         } catch (std::exception &e) {
-            LOGs.warn() << e.what();
+            LOGs.warn() << FUNC << e.what();
         }
     }
     if (!isAvailable) {

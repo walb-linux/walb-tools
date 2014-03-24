@@ -357,8 +357,7 @@ private:
         if (pre.lsid > lsid) {
             throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
         }
-        const uint64_t gid = pre.gid + (lsid - pre.lsid + maxWlogSendPb) / maxWlogSendPb;
-        assert(pre.gid < gid);
+        const uint64_t gid = pre.gid + 1 + (lsid - pre.lsid) / maxWlogSendPb;
         qf.pushFront(MetaLsidGid(lsid, gid, isMergeable, ::time(0)));
         qf.sync();
         return gid;
