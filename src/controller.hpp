@@ -124,7 +124,7 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
 
     std::string s;
     pkt.read(s);
-    if (s != "ok") {
+    if (s != msgAccept) {
         throw cybozu::Exception(FUNC) << "failed" << s;
     }
 }

@@ -19,6 +19,12 @@
 namespace walb {
 
 /**
+ * Message string.
+ */
+const char *const msgOk = "ok"; // used for synchronous protocol.
+const char *const msgAccept = "accept"; // used for asynchronous protocol.
+
+/**
  * Host type.
  */
 const char *const controllerHT = "controller";

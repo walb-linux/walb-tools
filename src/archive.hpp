@@ -528,30 +528,29 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
+
+    ConnectionCounterTransation ctran;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
     try {
-        ConnectionCounterTransation ctran;
         verifyMaxConnections(ga.maxConnections, FUNC);
-
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        const StateMachine &sm = volSt.sm;
-        verifyStateIn(sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
-
-        ActionCounterTransaction tran(volSt.ac, volId);
-        ul.unlock();
-        if (!archive_local::restore(volId, gid)) {
-            const char *msg = "force stopped";
-            logger.warn() << FUNC << msg << volId << gid;
-            pkt.write(msg);
-            return;
-        }
-        pkt.write("ok");
-        logger.info() << "restore succeeded" << volId << gid;
+        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+        pkt.write(msgAccept);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
+        return;
     }
+
+    ActionCounterTransaction tran(volSt.ac, volId);
+    ul.unlock();
+    if (!archive_local::restore(volId, gid)) {
+        logger.warn() << FUNC << "force stopped" << volId << gid;
+        return;
+    }
+    logger.info() << "restore succeeded" << volId << gid;
 }
 
 /**
