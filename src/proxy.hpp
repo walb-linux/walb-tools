@@ -571,6 +571,7 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
     logger.debug() << cmd << volId;
 
     packet::Packet pkt(p.sock);
+    bool sendErr = true;
     try {
         std::string archiveName;
         HostInfo hi;
@@ -587,6 +588,7 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             proxy_local::getArchiveInfo(volId, archiveName, hi);
             logger.info() << "archive-info get succeeded" << volId << archiveName << hi;
             pkt.write("ok");
+            sendErr = false;
             pkt.write(hi);
             return;
         } else if (cmd == "delete") {
@@ -600,13 +602,14 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             proxy_local::listArchiveInfo(volId, v);
             logger.info() << "archive-info list succeeded" << volId << v.size();
             pkt.write("ok");
+            sendErr = false;
             pkt.write(v);
             return;
         }
         throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
