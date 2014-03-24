@@ -338,6 +338,7 @@ inline void c2pStatusServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
     packet::Packet pkt(p.sock);
     StrVec stStrV;
+    bool sendErr = true;
     try {
         if (v.empty()) {
             stStrV = proxy_local::getAllStateStrVec();
@@ -345,14 +346,14 @@ inline void c2pStatusServer(protocol::ServerParams &p)
             const std::string &volId = v[0];
             stStrV = proxy_local::getVolStateStrVec(volId);
         }
+        pkt.write("ok");
+        sendErr = false;
+        pkt.write(stStrV);
+        logger.debug() << "status succeeded";
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write("ok");
-    pkt.write(stStrV);
-    logger.debug() << "status succeeded";
 }
 
 inline void c2pListVolServer(protocol::ServerParams &p)
@@ -449,13 +450,12 @@ inline void c2pStartServer(protocol::ServerParams &p)
 
     try {
         startProxyVol(volId);
+        pkt.write("ok");
+        logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error(e.what());
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "start succeeded" << volId;
 }
 
 /**
@@ -477,13 +477,12 @@ inline void c2pStopServer(protocol::ServerParams &p)
 
     try {
         stopProxyVol(volId, isForce);
+        pkt.write("ok");
+        logger.info() << "stop succeeded" << volId << isForce;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "stop succeeded" << volId << isForce;
 }
 
 namespace proxy_local {
@@ -640,13 +639,13 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         volInfo.clear();
         tran.commit(pClear);
+        pkt.write("ok");
+        logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
         return;
     }
-    pkt.write("ok");
-    logger.info() << "clearVol succeeded" << volId;
 }
 
 namespace proxy_local {
@@ -954,7 +953,6 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
     const std::string &volId = v[0];
     const uint64_t sizeLb = cybozu::util::fromUnitIntString(v[1]) / LOGICAL_BLOCK_SIZE;
-    uint64_t oldSizeLb;
     packet::Packet pkt(p.sock);
 
     try {
@@ -965,16 +963,16 @@ inline void c2pResizeServer(protocol::ServerParams &p)
         verifyStateIn(volSt.sm.get(), {pStopped}, FUNC);
 
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-        oldSizeLb = volInfo.getSizeLb();
+        const uint64_t oldSizeLb = volInfo.getSizeLb();
         volInfo.setSizeLb(sizeLb);
 
+        pkt.write("ok");
+        logger.info() << "resize succeeded" << volId << oldSizeLb << sizeLb;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
         return;
     }
-    pkt.write("ok");
-    logger.info() << "resize succeeded" << volId << oldSizeLb << sizeLb;
 }
 
 inline void c2pHostTypeServer(protocol::ServerParams &p)

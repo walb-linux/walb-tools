@@ -306,13 +306,12 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);
+        pkt.write("ok");
+        logger.info() << "initVol succeeded" << volId << wdevPath;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "initVol succeeded" << volId << wdevPath;
 }
 
 inline void c2sClearVolServer(protocol::ServerParams &p)
@@ -330,13 +329,12 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.clear();
         tran.commit(sClear);
+        pkt.write("ok");
+        logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "clearVol succeeded" << volId;
 }
 
 /**
@@ -371,13 +369,12 @@ inline void c2sStartServer(protocol::ServerParams &p)
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
             tran.commit(sSlave);
         }
+        pkt.write("ok");
+        logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "start succeeded" << volId;
 }
 
 /**
@@ -430,13 +427,12 @@ inline void c2sStopServer(protocol::ServerParams &p)
             volInfo.setState(sSyncReady);
             tran.commit(sSyncReady);
         }
+        pkt.write("ok");
+        logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "stop succeeded" << volId;
 }
 
 namespace storage_local {

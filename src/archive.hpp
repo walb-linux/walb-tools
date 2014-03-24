@@ -119,6 +119,7 @@ inline void c2aStatusServer(protocol::ServerParams &p)
     pkt.read(params);
 
     StrVec statusStrVec;
+    bool sendErr = true;
     try {
         if (params.empty()) {
             // for all volumes
@@ -131,13 +132,13 @@ inline void c2aStatusServer(protocol::ServerParams &p)
                                    getArchiveVolState(volId).diffMgr);
             statusStrVec = volInfo.getStatusAsStrVec();
         }
+        pkt.write("ok");
+        sendErr = false;
+        pkt.write(statusStrVec);
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write("ok");
-    pkt.write(statusStrVec);
 }
 
 inline void c2aListVolServer(protocol::ServerParams &p)
@@ -172,13 +173,12 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.init();
         tran.commit(aSyncReady);
+        pkt.write("ok");
+        logger.info() << "initVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "initVol succeeded" << volId;
 }
 
 inline void c2aClearVolServer(protocol::ServerParams &p)
@@ -202,13 +202,12 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.clear();
         tran.commit(aClear);
+        pkt.write("ok");
+        logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "clearVol succeeded" << volId;
 }
 
 /**
@@ -238,13 +237,13 @@ inline void c2aStartServer(protocol::ServerParams &p)
         }
         volInfo.setState(aArchived);
         tran.commit(aArchived);
+
+        pkt.write("ok");
+        logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "start succeeded" << volId;
 }
 
 /**
@@ -288,13 +287,13 @@ inline void c2aStopServer(protocol::ServerParams &p)
         }
         volInfo.setState(aStopped);
         tran.commit(aStopped);
+
+        pkt.write("ok");
+        logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "stop succeeded" << volId;
 }
 
 namespace archive_local {
@@ -453,13 +452,13 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         if (!volInfo.restore(gid)) {
             throw cybozu::Exception(FUNC) << "restore failed" << volId << gid;
         }
+
+        pkt.write("ok");
+        logger.info() << "restore succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
-        return;
     }
-    pkt.write("ok");
-    logger.info() << "restore succeeded" << volId << gid;
 }
 
 /**
@@ -471,20 +470,26 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
     const std::vector<std::string> v =
         protocol::recvStrVec(p.sock, 1, FUNC, false);
     const std::string &volId = v[0];
+    packet::Packet pkt(p.sock);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoArchiveActionRunning(volSt.ac, FUNC);
-    {
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
         wdiffs.reload();
+        pkt.write("ok");
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
     }
-    packet::Packet(p.sock).write("ok");
 }
 
 namespace proxy_local {
