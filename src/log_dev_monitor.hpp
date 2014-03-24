@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "cybozu/exception.hpp"
+#include "walb_logger.hpp"
 #include "wdev_util.hpp"
 
 namespace walb {
@@ -96,14 +97,12 @@ public:
      * DO NOT call this from multiple threads.
      * This will throw an exception if caught SIGINT.
      *
-     * TODO: signal handling.
-     *   Should we use epoll_pwait()?
      */
     std::vector<std::string> poll(int timeoutMs = -1) {
         std::vector<std::string> v;
         int nfds = ::epoll_wait(efd_(), &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
-            /* TODO: logging. */
+            LOGs.error() << "LogDevMonitor:poll" << cybozu::ErrorNo();
             return v;
         }
         std::lock_guard<std::mutex> lk(mutex_);
