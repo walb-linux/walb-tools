@@ -491,7 +491,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
         const DiffRecord& rec = recIo.record();
         assert(!rec.isCompressed());
         const uint64_t ioAddress = rec.io_address;
-        const uint64_t ioBlocks = rec.io_blocks;;
+        const uint64_t ioBlocks = rec.io_blocks;
 		LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
 		if (ioAddress + ioBlocks > lvSnapSizeLb) {
 			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
