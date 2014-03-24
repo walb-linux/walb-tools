@@ -168,78 +168,6 @@ public:
         return lv;
     }
     /**
-     * Restore a snapshot.
-     * (1) create lvm snapshot of base lv. (with temporal lv name)
-     * (2) apply appropriate wdiff files.
-     * (3) rename the lvm snapshot.
-     */
-    bool restore(uint64_t gid) {
-        using namespace walb::diff;
-        cybozu::lvm::Lv lv = getLv();
-        const std::string targetName = restoredSnapshotName(gid);
-        const std::string tmpLvName = targetName + "_tmp";
-        if (lv.hasSnapshot(tmpLvName)) {
-            lv.getSnapshot(tmpLvName).remove();
-        }
-        if (lv.hasSnapshot(targetName)) {
-            // Already restored.
-            return false;
-        }
-        cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
-        const MetaDiffManager& mgr = wdiffs_.getMgr();
-        const int maxRetryNum = 10;
-        int retryNum = 0;
-        std::vector<cybozu::util::FileOpener> ops;
-    retry:
-        {
-            const std::vector<MetaDiff> metaDiffList = mgr.getDiffListToRestore(getMetaState(), gid);
-            if (metaDiffList.empty()) {
-                return false;
-            }
-            // apply wdiff files indicated by metaDiffList to lvSnap.
-            for (const MetaDiff& diff : metaDiffList) {
-                cybozu::util::FileOpener op;
-                if (!op.open(getDiffPath(diff).str(), O_RDONLY)) {
-                    retryNum++;
-                    if (retryNum == maxRetryNum) throw cybozu::Exception("ArchiveVolInfo::restore:exceed max retry");
-                    ops.clear();
-                    goto retry;
-                }
-                ops.push_back(std::move(op));
-            }
-        }
-        diff::Merger merger;
-        merger.addWdiffs(std::move(ops));
-        diff::RecIo recIo;
-        cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
-        std::vector<char> zero;
-        while (merger.pop(recIo)) {
-            const DiffRecord& rec = recIo.record();
-            assert(!rec.isCompressed());
-            const uint64_t ioAddress = rec.io_address;
-            const uint64_t ioBlocks = rec.io_blocks;;
-            LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
-            const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
-            const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
-
-            // TODO: check the IO is out of range or not.
-
-            const char *data;
-            // Curently a discard IO is converted to an all-zero IO.
-            if (rec.isAllZero() || rec.isDiscard()) {
-                if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
-                data = &zero[0];
-            } else {
-                data = recIo.io().get();
-            }
-            bd.write(ioAddrB, ioSizeB, data);
-        }
-        bd.fdatasync();
-        bd.close();
-        cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
-        return true;
-    }
-    /**
      * QQQ
      */
     bool apply(uint64_t timestamp) {
@@ -308,13 +236,6 @@ public:
         }
         return v;
     }
-private:
-    cybozu::lvm::Vg getVg() const {
-        return cybozu::lvm::getVg(vgName_);
-    }
-    std::string lvName() const {
-        return VOLUME_PREFIX + volId_;
-    }
     std::string restoredSnapshotName(uint64_t gid) const {
         return RESTORE_PREFIX + volId_ + "_" + cybozu::itoa(gid);
     }
@@ -323,6 +244,13 @@ private:
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
         return volDir + cybozu::FilePath(createDiffFileName(diff));
+    }
+private:
+    cybozu::lvm::Vg getVg() const {
+        return cybozu::lvm::getVg(vgName_);
+    }
+    std::string lvName() const {
+        return VOLUME_PREFIX + volId_;
     }
 #if 0 // XXX
     /**

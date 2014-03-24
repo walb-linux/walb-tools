@@ -423,6 +423,98 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     logger.info() << "dirty-full-sync succeeded" << volId;
 }
 
+
+namespace archive_local {
+
+/**
+ * Restore a snapshot.
+ * (1) create lvm snapshot of base lv. (with temporal lv name)
+ * (2) apply appropriate wdiff files.
+ * (3) rename the lvm snapshot.
+ *
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool restore(const std::string &volId, uint64_t gid)
+{
+    using namespace walb::diff;
+
+    const char *const FUNC = __func__;
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    const std::string targetName = volInfo.restoredSnapshotName(gid);
+    const std::string tmpLvName = targetName + "_tmp";
+    if (lv.hasSnapshot(tmpLvName)) {
+        lv.getSnapshot(tmpLvName).remove();
+    }
+    if (lv.hasSnapshot(targetName)) {
+        throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
+    }
+    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
+    const int maxRetryNum = 10;
+    int retryNum = 0;
+    std::vector<cybozu::util::FileOpener> ops;
+  retry:
+    {
+        const std::vector<MetaDiff> metaDiffList = volSt.diffMgr.getDiffListToRestore(volInfo.getMetaState(), gid);
+        if (metaDiffList.empty()) {
+            throw cybozu::Exception(FUNC)
+                << "can not restore" << volId << gid;
+        }
+        // apply wdiff files indicated by metaDiffList to lvSnap.
+        for (const MetaDiff& diff : metaDiffList) {
+            cybozu::util::FileOpener op;
+            if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
+                retryNum++;
+                if (retryNum == maxRetryNum) {
+                    throw cybozu::Exception(FUNC) << "exceed max retry";
+                }
+                ops.clear();
+                goto retry;
+            }
+            ops.push_back(std::move(op));
+        }
+    }
+    diff::Merger merger;
+    merger.addWdiffs(std::move(ops));
+    diff::RecIo recIo;
+    cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
+    std::vector<char> zero;
+    while (merger.pop(recIo)) {
+        if (volSt.stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
+        const DiffRecord& rec = recIo.record();
+        assert(!rec.isCompressed());
+        const uint64_t ioAddress = rec.io_address;
+        const uint64_t ioBlocks = rec.io_blocks;;
+        LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
+        const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
+        const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
+
+        // TODO: check the IO is out of range or not.
+
+        const char *data;
+        // Curently a discard IO is converted to an all-zero IO.
+        if (rec.isAllZero() || rec.isDiscard()) {
+            if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
+            data = &zero[0];
+        } else {
+            data = recIo.io().get();
+        }
+        bd.write(ioAddrB, ioSizeB, data);
+    }
+    bd.fdatasync();
+    bd.close();
+    cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+    return true;
+}
+
+} // namespace archive_local
+
 /**
  * Restore command.
  */
@@ -446,13 +538,12 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 
         ActionCounterTransaction tran(volSt.ac, volId);
         ul.unlock();
-
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-        // TODO: volinfo.restore(gid, volSt.forceStop, ga.forceQuit);
-        if (!volInfo.restore(gid)) {
-            throw cybozu::Exception(FUNC) << "restore failed" << volId << gid;
+        if (!archive_local::restore(volId, gid)) {
+            const char *msg = "force stopped";
+            logger.warn() << FUNC << msg << volId << gid;
+            pkt.write(msg);
+            return;
         }
-
         pkt.write("ok");
         logger.info() << "restore succeeded" << volId << gid;
     } catch (std::exception &e) {
