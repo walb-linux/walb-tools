@@ -236,6 +236,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     pkt.read(params);
 
     StrVec statusStrV;
+    bool sendErr = true;
     try {
         if (params.empty()) {
             // for all volumes
@@ -255,13 +256,13 @@ inline void c2sStatusServer(protocol::ServerParams &p)
                 statusStrV.push_back(std::move(s));
             }
         }
+        pkt.write("ok");
+        sendErr = false;
+        pkt.write(statusStrV);
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write("ok");
-    pkt.write(statusStrV);
 }
 
 inline void c2sListVolServer(protocol::ServerParams &p)
@@ -550,7 +551,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
-    uint64_t gid = -1;
+    bool sendErr = true;
     try {
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -559,15 +560,15 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
+        const uint64_t gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
+        pkt.write("ok");
+        sendErr = false;
+        pkt.write(gid);
+        logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write("ok");
-    pkt.write(gid);
-    logger.info() << "snapshot succeeded" << volId << gid;
 }
 
 inline void c2sHostTypeServer(protocol::ServerParams &p)
