@@ -146,6 +146,7 @@ inline void c2aListVolServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(ga.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    packet::Ack(p.sock).send();
     ProtocolLogger logger(ga.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }

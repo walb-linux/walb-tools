@@ -35,6 +35,7 @@ inline void c2xListVolClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
     const StrVec volIdV = protocol::recvStrVec(p.sock, 0, FUNC, false);
+    packet::Ack(p.sock).recv();
     for (const std::string &volId : volIdV) {
         std::cout << volId << std::endl;
     }

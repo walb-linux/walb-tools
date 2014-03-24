@@ -286,6 +286,7 @@ inline void c2sListVolServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(gs.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    packet::Ack(p.sock).send();
     ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }
