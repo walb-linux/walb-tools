@@ -23,7 +23,6 @@ namespace cybozu {
 
 /**
  * A wrapper of stat()/lstat().
- * TODO: implement other functionalities.
  */
 class FileStat
 {
