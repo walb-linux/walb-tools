@@ -40,8 +40,6 @@ const char *const stWlogRemove = "WlogRemove";
  *
  * queue file:
  *   must have at least one record.
- *
- * TODO: mutex.
  */
 class StorageVolInfo
 {
@@ -85,8 +83,8 @@ public:
         }
         util::saveFile(volDir_, "path", wdevPath_.str());
         setState(sSyncReady);
-        const uint64_t lsid = 0; // TODO
-        const uint64_t gid = 0; // TODO
+        const uint64_t lsid = -1;
+        const uint64_t gid = -1;
         MetaLsidGid doneRec(lsid, gid, false, 0);
         setDoneRecord(doneRec);
         setUuid(cybozu::Uuid());

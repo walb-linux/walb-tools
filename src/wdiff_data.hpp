@@ -119,7 +119,7 @@ public:
             cybozu::FilePath p = dir_ + createDiffFileName(d);
             if (!p.stat().isFile()) continue;
             if (!p.unlink()) {
-                /* TODO: put log. */
+                LOGs.error() << "removeDiffFiles:unlink failed" << p.str();
             }
         }
     }
