@@ -24,7 +24,7 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
     std::vector<std::string> v;
     packet.read(v);
     for (const std::string &s : v) {
-        ::printf("%s\n", s.c_str());
+        std::cout << s << std::endl;
     }
 }
 
@@ -220,7 +220,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
 
     uint64_t gid;
     pkt.read(gid);
-    ::printf("%" PRIu64 "\n", gid);
+    std::cout << gid << std::endl;
 }
 
 /**
