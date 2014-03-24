@@ -272,7 +272,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
                 statusStrV.push_back(std::move(s));
             }
         }
-        pkt.write("ok");
+        pkt.write(msgOk);
         sendErr = false;
         pkt.write(statusStrV);
     } catch (std::exception &e) {
@@ -306,7 +306,7 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "initVol succeeded" << volId << wdevPath;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -329,7 +329,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.clear();
         tran.commit(sClear);
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -369,7 +369,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
             tran.commit(sSlave);
         }
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -427,7 +427,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
             volInfo.setState(sSyncReady);
             tran.commit(sSyncReady);
         }
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -517,8 +517,8 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         {
             std::string res;
             aPack.read(res);
-            if (res == "ok") {
-                cPack.write("ok");
+            if (res == msgAccept) {
+                cPack.write(msgAccept);
                 p.sock.close();
             } else {
                 cybozu::Exception e(FUNC);
@@ -571,7 +571,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const uint64_t gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
-        pkt.write("ok");
+        pkt.write(msgOk);
         sendErr = false;
         pkt.write(gid);
         logger.info() << "snapshot succeeded" << volId << gid;
@@ -658,7 +658,7 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
             pkt.write(maxLogSizePb);
             std::string res;
             pkt.read(res);
-            if (res == "ok") {
+            if (res == msgAccept) {
                 isAvailable = true;
                 break;
             }

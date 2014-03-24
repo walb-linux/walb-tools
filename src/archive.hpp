@@ -132,7 +132,7 @@ inline void c2aStatusServer(protocol::ServerParams &p)
                                    getArchiveVolState(volId).diffMgr);
             statusStrVec = volInfo.getStatusAsStrVec();
         }
-        pkt.write("ok");
+        pkt.write(msgOk);
         sendErr = false;
         pkt.write(statusStrVec);
     } catch (std::exception &e) {
@@ -173,7 +173,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.init();
         tran.commit(aSyncReady);
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "initVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -202,7 +202,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         volInfo.clear();
         tran.commit(aClear);
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -238,7 +238,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
         volInfo.setState(aArchived);
         tran.commit(aArchived);
 
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -288,7 +288,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
         volInfo.setState(aStopped);
         tran.commit(aStopped);
 
-        pkt.write("ok");
+        pkt.write(msgOk);
         logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -389,7 +389,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         pkt.write(e.what());
         return;
     }
-    pkt.write("ok");
+    pkt.write(msgAccept);
 
     StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
     ul.unlock();
@@ -537,12 +537,12 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
-        pkt.write(msgAccept);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
         return;
     }
+    pkt.write(msgAccept);
 
     ActionCounterTransaction tran(volSt.ac, volId);
     ul.unlock();
@@ -577,7 +577,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
         wdiffs.reload();
-        pkt.write("ok");
+        pkt.write(msgOk);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -716,7 +716,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.write(msg);
         return;
     }
-    pkt.write("ok");
+    pkt.write(msgAccept);
 
     StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
     ul.unlock();

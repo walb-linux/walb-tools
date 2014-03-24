@@ -17,7 +17,7 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
 
     std::string st;
     packet.read(st);
-    if (st != "ok") {
+    if (st != msgOk) {
         throw cybozu::Exception(FUNC) << "not ok" << st;
     }
 
@@ -107,8 +107,8 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
     std::string st;
     packet::Packet packet(p.sock);
     packet.read(st);
-    if (st != "ok") {
-        throw cybozu::Exception(FUNC) << "not ok" << st;
+    if (st != msgAccept) {
+        throw cybozu::Exception(FUNC) << "not accept" << st;
     }
 }
 
@@ -179,7 +179,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 
     std::string res;
     pkt.read(res);
-    if (res != "ok") {
+    if (res != msgOk) {
         throw cybozu::Exception(FUNC) << "command failed" << res;
     }
 
@@ -214,7 +214,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
 
     std::string res;
     pkt.read(res);
-    if (res != "ok") {
+    if (res != msgOk) {
         throw cybozu::Exception(FUNC) << "failed" << res;
     }
 
@@ -246,7 +246,7 @@ inline void c2xResizeClient(protocol::ClientParams &p)
     packet::Packet pkt(p.sock);
     std::string res;
     pkt.read(res);
-    if (res != "ok") {
+    if (res != msgOk) {
         throw cybozu::Exception(FUNC) << "failed" << res;
     }
 }
