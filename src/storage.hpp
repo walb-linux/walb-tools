@@ -209,6 +209,22 @@ inline void stopMonitoring(const std::string& wdevPath)
 {
     getStorageGlobal().delWdevName(device::getWdevNameFromWdevPath(wdevPath));
 }
+
+class MonitorManager {
+    const std::string wdevPath;
+    const std::string volId;
+    bool dontStop_;
+public:
+    MonitorManager(const std::string& wdevPath, const std::string& volId)
+        : wdevPath(wdevPath), volId(volId), dontStop_(false) {
+        startMonitoring(wdevPath, volId);
+    }
+    void dontStop() { dontStop_ = true; }
+    ~MonitorManager() {
+        if (!dontStop_) stopMonitoring(wdevPath);
+    }
+};
+
 } // storage_local
 
 const StorageSingleton& gs = getStorageGlobal();
@@ -481,13 +497,14 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     StateMachineTransaction tran0(sm, sSyncReady, stFullSync, FUNC);
     ul.unlock();
 
-    volInfo.resetWlog(0);
+    const uint64_t gidB = 0;
+    volInfo.resetWlog(gidB);
 
     const uint64_t sizeLb = device::getSizeLb(volInfo.getWdevPath());
     const cybozu::Uuid uuid = volInfo.getUuid();
     logger.debug() << sizeLb << uuid;
 
-    // ToDo : start master((3) at full-sync as client in storage-daemon.txt)
+    storage_local::MonitorManager monitorMgr(volInfo.getWdevPath(), volId);
 
     const cybozu::SocketAddr& archive = gs.archive;
     {
@@ -517,13 +534,11 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         // (7) in storage-daemon.txt
         if (!storage_local::sendDirtyFullImage(aPack, volInfo, sizeLb, bulkLb, volSt.stopState)) {
             logger.warn() << FUNC << "force stopped" << volId;
-            // TODO: stop monitoring.
             return;
         }
         // (8), (9) in storage-daemon.txt
         {
-            // TODO take a snapshot
-            uint64_t gidB = 0, gidE = 1;
+            const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
             aPack.write(gidB);
             aPack.write(gidE);
         }
@@ -534,8 +549,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
     volInfo.setState(sMaster);
     tran1.commit(sMaster);
-
-    // TODO: If thrown an error, someone must stop monitoring task.
+    monitorMgr.dontStop();
 
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
