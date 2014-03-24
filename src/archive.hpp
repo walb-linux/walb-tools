@@ -483,6 +483,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
     diff::RecIo recIo;
     cybozu::util::BlockDevice bd(lvSnap.path().str(), O_RDWR);
     std::vector<char> zero;
+	const uint64_t lvSnapSizeLb = lvSnap.sizeLb();
     while (merger.pop(recIo)) {
         if (volSt.stopState == ForceStopping || ga.forceQuit) {
             return false;
@@ -491,16 +492,17 @@ inline bool restore(const std::string &volId, uint64_t gid)
         assert(!rec.isCompressed());
         const uint64_t ioAddress = rec.io_address;
         const uint64_t ioBlocks = rec.io_blocks;;
-        LOGd_("ioAddr %" PRIu64 " ioBlks %" PRIu64 "", ioAddress, ioBlocks);
+		LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
+		if (ioAddress + ioBlocks > lvSnapSizeLb) {
+			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
+		}
         const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
         const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
-
-        // TODO: check the IO is out of range or not.
 
         const char *data;
         // Curently a discard IO is converted to an all-zero IO.
         if (rec.isAllZero() || rec.isDiscard()) {
-            if (zero.size() < ioSizeB) zero.resize(ioSizeB, 0);
+            if (zero.size() < ioSizeB) zero.resize(ioSizeB);
             data = &zero[0];
         } else {
             data = recIo.io().get();
