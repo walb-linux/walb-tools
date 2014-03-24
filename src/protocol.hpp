@@ -320,13 +320,14 @@ inline std::string runHostTypeClient(cybozu::Socket &sock)
     packet::Packet pkt(sock);
     std::string type;
     pkt.read(type);
+    packet::Ack(sock).recv();
     return type;
 }
 
 inline void runHostTypeServer(ServerParams &p, const std::string &hostType)
 {
-    packet::Packet pkt(p.sock);
-    pkt.write(hostType);
+    packet::Packet(p.sock).write(hostType);
+    packet::Ack(p.sock).send();
 }
 
 }} // namespace walb::protocol
