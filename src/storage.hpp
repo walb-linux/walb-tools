@@ -226,11 +226,20 @@ inline StorageSingleton& getStorageGlobal()
 namespace storage_local {
 inline void startMonitoring(const std::string& wdevPath, const std::string& volId)
 {
-    getStorageGlobal().addWdevName(device::getWdevNameFromWdevPath(wdevPath), volId);
+    const char *const FUNC = __func__;
+    StorageSingleton &g = getStorageGlobal();
+    const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
+    g.addWdevName(wdevName, volId);
+    if (!g.logDevMonitor.add(wdevName)) {
+        throw cybozu::Exception(FUNC) << "failed to add" << volId << wdevName;
+    }
 }
 inline void stopMonitoring(const std::string& wdevPath)
 {
-    getStorageGlobal().delWdevName(device::getWdevNameFromWdevPath(wdevPath));
+    StorageSingleton &g = getStorageGlobal();
+    const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
+    g.logDevMonitor.del(wdevName);
+    g.delWdevName(wdevName);
 }
 
 class MonitorManager {
@@ -586,6 +595,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     volInfo.setState(sMaster);
     tran1.commit(sMaster);
     monitorMgr.dontStop();
+    getStorageGlobal().taskQueue.push(volId);
 
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
@@ -614,6 +624,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(gid);
+        getStorageGlobal().taskQueue.push(volId);
         logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -659,14 +670,35 @@ inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t lo
 }
 
 /**
+ * Delete all wlogs which lsid is less than a specifeid lsid.
+ * Given INVALID_LSID, all existing wlogs will be deleted.
+ *
  * RETURN:
- *   lsid that lsids of all the transferred wlogs are less than.
+ *   true if all the wlogs have been deleted.
  */
-inline uint64_t extractAndSendWlog(const std::string &volId)
+inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
+{
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    const uint64_t remainingPb = device::eraseWal(wdevPath, lsid);
+    return remainingPb == 0;
+}
+
+/**
+ * RETURN:
+ *   true if there is remaining to send.
+ */
+inline bool extractAndSendAndDeleteWlog(const std::string &volId)
 {
     const char *const FUNC = __func__;
     StorageVolState &volSt = getStorageVolState(volId);
     StorageVolInfo volInfo(gs.baseDirStr, volId);
+
+    if (!volInfo.isRequiredWlogTransfer()) {
+        LOGs.debug() << FUNC << "not required to wlog-transfer";
+        return false;
+    }
+
     MetaLsidGid rec0, rec1;
     uint64_t lsidLimit;
     std::tie(rec0, rec1, lsidLimit) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
@@ -744,23 +776,12 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
     const MetaDiff diff = volInfo.getTransferDiff(rec0, rec1, lsidE);
     pkt.write(diff);
     packet::Ack(sock).recv();
-    volInfo.finishWlogTransfer(rec0, rec1, lsidE);
-    return lsidE;
-}
+    const bool isRemaining = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
 
-/**
- * Delete all wlogs which lsid is less than a specifeid lsid.
- * Given INVALID_LSID, all existing wlogs will be deleted.
- *
- * RETURN:
- *   true if all the wlogs have been deleted.
- */
-inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
-{
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    const std::string wdevPath = volInfo.getWdevPath();
-    const uint64_t remainingPb = device::eraseWal(wdevPath, lsid);
-    return remainingPb == 0;
+    bool isEmpty = true;
+    if (lsidB < lsidE) isEmpty = storage_local::deleteWlogs(volId, lsidE);
+
+    return !isEmpty || isRemaining;
 }
 
 } // storage_local
@@ -780,15 +801,13 @@ inline void StorageWorker::run()
     if (st == sMaster) {
         StateMachineTransaction tran(volSt.sm, sMaster, stWlogSend);
         ul.unlock();
-        uint64_t lsid;
         try {
-            lsid = storage_local::extractAndSendWlog(volId);
+            const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
+            if (isRemaining) getStorageGlobal().taskQueue.push(volId);
         } catch (...) {
             getStorageGlobal().taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
             throw;
         }
-        const bool isEmpty = storage_local::deleteWlogs(volId, lsid);
-        if (!isEmpty) getStorageGlobal().taskQueue.push(volId);
         tran.commit(sMaster);
     } else { // sSlave
         StateMachineTransaction tran(volSt.sm, sSlave, stWlogRemove);
@@ -860,6 +879,20 @@ inline void proxyMonitorWorker() noexcept
             LOGs.error() << "proxyMonitorWorker:unknown error";
         }
     }
+}
+
+inline void startIfNecessary(const std::string &volId)
+{
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+
+    const std::string st = volSt.sm.get();
+    if (st == sMaster || st == sSlave) {
+        getStorageGlobal().taskQueue.push(volId);
+        storage_local::startMonitoring(volInfo.getWdevPath(), volId);
+    }
+    LOGs.info() << "start monitoring" << volId;
 }
 
 /**

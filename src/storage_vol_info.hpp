@@ -189,6 +189,7 @@ public:
             uuid.set(super.getUuid());
             setUuid(uuid);
         }
+        setState(sSyncReady);
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;
@@ -219,9 +220,27 @@ public:
     }
     /**
      * Calling order:
+     *   (0) isRequiredWlogTransfer()
      *   (1) prepareWlogTransfer()
      *   (2) getTransferDiff()
      *   (3) finishWlogTransfer()
+     *
+     * RETURN:
+     *   false if wlogTransfer is not required.
+     */
+    bool isRequiredWlogTransfer() {
+        const char *const FUNC = __func__;
+        const std::string wdevPath = getWdevPath();
+        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
+        const uint64_t lsid1 = device::getPermanentLsid(wdevPath);
+        if (lsid0 < lsid1) return true;
+        if (lsid0 != lsid1) {
+            throw cybozu::Exception(FUNC) << "must be equal" << lsid0 << lsid1;
+        }
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        return !qf.empty();
+    }
+    /**
      *
      * RETURN:
      *   target lsid/gid range by two MetaLsidGids: recB and recE,
@@ -232,8 +251,9 @@ public:
         const char *const FUNC = __func__;
         cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid recB = getDoneRecord();
-        const uint64_t lsid0 = device::getOldestLsid(getWdevPath());
-        if (lsid0 < recB.lsid) device::eraseWal(getWdevPath(), recB.lsid);
+        const std::string wdevPath = getWdevPath();
+        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
+        if (lsid0 < recB.lsid) device::eraseWal(wdevPath, recB.lsid);
         MetaLsidGid recE;
         for (;;) {
             if (qf.empty()) break;
@@ -285,8 +305,11 @@ public:
     /**
      * recB and recE must not be changed between calling
      * prepareWlogTransfer() and finishWlogTransfer().
+     *
+     * RETURN:
+     *   true if there is remaining wlogs (that may be empty).
      */
-    void finishWlogTransfer(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) {
+    bool finishWlogTransfer(const MetaLsidGid &recB, const MetaLsidGid &recE, uint64_t lsidE) {
         const char *const FUNC = __func__;
         const MetaLsidGid recBx = getDoneRecord();
         verifyMetaLsidGidEquality(recB, recBx, FUNC);
@@ -311,7 +334,8 @@ public:
             recS.isMergeable = true;
         }
         setDoneRecord(recS);
-        if (lsidE == recE.lsid) qf.popBack();
+        if (recS.gid == recE.gid) qf.popBack();
+        return !qf.empty();
     }
 private:
     void loadWdevPath() {
@@ -374,8 +398,10 @@ private:
             throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
         }
         const uint64_t gid = pre.gid + 1 + (lsid - pre.lsid) / maxWlogSendPb;
-        qf.pushFront(MetaLsidGid(lsid, gid, isMergeable, ::time(0)));
+        MetaLsidGid cur(lsid, gid, isMergeable, ::time(0));
+        qf.pushFront(cur);
         qf.sync();
+        LOGs.debug() << FUNC << cur;
         return gid;
     }
     static void verifyMetaLsidGidEquality(const MetaLsidGid &rec0, const MetaLsidGid &rec1, const char *msg) {

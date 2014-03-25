@@ -94,6 +94,14 @@ void initializeStorage(Option &opt)
     g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
     g.proxyManager.add(g.proxyV);
 
+    for (const std::string &volId : util::getDirNameList(gs.baseDirStr)) {
+        try {
+            startIfNecessary(volId);
+        } catch (std::exception &e) {
+            LOGs.error() << "initializeStorage:start failed" << volId << e.what();
+        }
+    }
+
     g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
     g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
     g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
