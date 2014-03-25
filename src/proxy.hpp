@@ -757,6 +757,11 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
         getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
         logger.debug() << "task pushed" << task;
     }
+    const uint64_t realSizeLb = volInfo.getSizeLb();
+    if (realSizeLb < volSizeLb) {
+        logger.info() << "detect volume grow" << realSizeLb << volSizeLb;
+        volInfo.setSizeLb(volSizeLb);
+    }
     tran.commit(pStarted);
 
     logger.info() << "wlog-transfer succeeded" << volId;
