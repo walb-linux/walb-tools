@@ -33,15 +33,15 @@ struct DiffFileHeader : walb_diff_file_header
 		static_cast<walb_diff_file_header>(*this) = *reinterpret_cast<const walb_diff_file_header *>(h);
     }
 
-//    size_t rawSize() const { return sizeof(h_); }
+	size_t getSize() const { return sizeof(walb_diff_file_header); }
 
     bool isValid() const {
-        return cybozu::util::calcChecksum(this, sizeof(walb_diff_file_header), 0) == 0;
+        return cybozu::util::calcChecksum(this, getSize(), 0) == 0;
     }
 
     void updateChecksum() {
         checksum = 0;
-        checksum = cybozu::util::calcChecksum(this, sizeof(walb_diff_file_header), 0);
+        checksum = cybozu::util::calcChecksum(this, getSize(), 0);
     }
 
     void setUuid(const void *uuid) {
@@ -215,6 +215,15 @@ public:
         header.updateChecksum();
         assert(header.isValid());
         fdw_.write(header.rawData(), header.rawSize());
+        isWrittenHeader_ = true;
+    }
+    void writeHeader(DiffFileHeader &header) {
+        if (isWrittenHeader_) {
+            throw RT_ERR("Do not call writeHeader() more than once.");
+        }
+        header.updateChecksum();
+        assert(header.isValid());
+        fdw_.write(&header, header.getSize());
         isWrittenHeader_ = true;
     }
 

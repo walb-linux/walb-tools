@@ -728,7 +728,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     cybozu::FilePath fPath(baseDir);
     fPath += fName;
     diff::Writer writer(tmpFile.fd());
-    diff::FileHeaderRaw fileH;
+    DiffFileHeader fileH;
     fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
     fileH.setUuid(uuid.rawData());
     writer.writeHeader(fileH);
