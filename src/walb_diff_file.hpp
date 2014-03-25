@@ -141,20 +141,6 @@ public:
 };
 
 /**
- * With raw data.
- */
-class FileHeaderRaw
-    : public FileHeaderWrap
-{
-private:
-    struct walb_diff_file_header header_;
-
-public:
-    FileHeaderRaw()
-        : FileHeaderWrap(header_), header_() {}
-};
-
-/**
  * Walb diff writer.
  */
 class Writer /* final */
