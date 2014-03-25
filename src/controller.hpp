@@ -254,7 +254,7 @@ inline void c2xHostTypeClient(protocol::ClientParams &p)
  * params[0]: volId
  * params[1]: gid as string (optional)
  */
-inline void c2sResetVolClient(protocol::ClientParams &p)
+inline void c2xResetVolClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, true);

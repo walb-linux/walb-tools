@@ -41,6 +41,7 @@ public:
             { listVolPN, c2aListVolServer },
             { initVolPN, c2aInitVolServer },
             { clearVolPN, c2aClearVolServer },
+            { resetVolPN, c2aResetVolServer },
             { startPN, c2aStartServer },
             { stopPN, c2aStopServer },
             { dirtyFullSyncPN, x2aDirtyFullSyncServer },

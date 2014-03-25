@@ -34,6 +34,7 @@ const char *const aStopped = "Stopped";
 // temporary state
 const char *const atInitVol = "InitVol";
 const char *const atClearVol = "ClearVol";
+const char *const atResetVol = "ResetVol";
 const char *const atFullSync = "FullSync";
 const char *const atHashSync = "HashSync";
 const char *const atWdiffRecv = "WdiffRecv";

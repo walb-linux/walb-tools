@@ -57,6 +57,8 @@ struct ArchiveVolState
             { atClearVol, aClear },
             { aStopped, atStart },
             { atStart, aArchived },
+            { aStopped, atResetVol },
+            { atResetVol, aSyncReady },
         };
         sm.init(tbl);
         initInner(volId);
@@ -757,6 +759,44 @@ inline void c2aResizeServer(protocol::ServerParams &/*p*/)
 inline void c2aHostTypeServer(protocol::ServerParams &p)
 {
     protocol::runHostTypeServer(p, archiveHT);
+}
+
+/**
+ * params[0]: volId
+ */
+inline void c2aResetVolServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+        if (v.empty()) {
+            throw cybozu::Exception(FUNC) << "specify volId";
+        }
+        const std::string &volId = v[0];
+
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        const std::string &currSt = volSt.sm.get(); // aStopped or aSyncReady
+
+        StateMachineTransaction tran(volSt.sm, currSt, atResetVol, FUNC);
+        ul.unlock();
+
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
+                               getArchiveVolState(volId).diffMgr);
+        volInfo.clear();
+        volInfo.init();
+        tran.commit(aSyncReady);
+
+        pkt.write(msgOk);
+        logger.info() << "reset succeeded" << volId;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
 }
 
 } // walb
