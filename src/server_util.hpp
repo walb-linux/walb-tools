@@ -203,11 +203,14 @@ public:
     void operator()() noexcept try {
         LOGs.info() << "dispatchTask begin";
         cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
+        LOGs.debug() << "numActiveThreads" << pool.getNumActiveThreads();
         Task task;
         while (!shouldStop) {
             logErrors(pool.gc());
             bool doWait = false;
             if (pool.getNumActiveThreads() >= maxBackgroundTasks) {
+                LOGs.debug() << "numActiveThreads" << pool.getNumActiveThreads()
+                             << maxBackgroundTasks;
                 doWait = true;
             }
             if (!doWait) {

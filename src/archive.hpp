@@ -373,6 +373,7 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     pkt.read(sizeLb);
     pkt.read(curTime);
     pkt.read(bulkLb);
+    logger.debug() << hostType << volId << uuid << sizeLb << curTime << bulkLb;
 
     ConnectionCounterTransation ctran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -493,7 +494,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
         assert(!rec.isCompressed());
         const uint64_t ioAddress = rec.io_address;
         const uint64_t ioBlocks = rec.io_blocks;
-		LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
+		//LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
 		if (ioAddress + ioBlocks > lvSnapSizeLb) {
 			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
 		}
@@ -654,8 +655,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     pkt.read(maxIoBlocks);
     pkt.read(sizeLb);
     pkt.read(diff);
-
-    logger.debug() << FUNC << volId << uuid << maxIoBlocks << sizeLb << diff;
+    logger.debug() << "recv" << volId << hostType << uuid << maxIoBlocks << sizeLb << diff;
 
     ConnectionCounterTransation ctran;
     ArchiveVolState& volSt = getArchiveVolState(volId);

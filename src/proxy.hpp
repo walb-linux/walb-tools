@@ -710,6 +710,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     pkt.read(salt);
     pkt.read(volSizeLb);
     pkt.read(maxLogSizePb);
+    LOGs.debug() << "recv" << volId << uuid << pbs << salt << volSizeLb << maxLogSizePb;
 
     /* Decide to receive ok or not. */
     ProxyVolState &volSt = getProxyVolState(volId);
@@ -751,6 +752,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
         ProxyTask task(volId, archiveName);
         HostInfo hi = volInfo.getArchiveInfo(archiveName);
         getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
+        logger.debug() << "task pushed" << task;
     }
     tran.commit(pStarted);
 
@@ -897,6 +899,8 @@ inline void ProxyWorker::operator()()
     pkt.write(fileH.getMaxIoBlocks());
     pkt.write(volInfo.getSizeLb());
     pkt.write(mergedDiff);
+    logger.debug() << "send" << volId << proxyHT << fileH.getUuid2()
+                   << fileH.getMaxIoBlocks() << volInfo.getSizeLb() << mergedDiff;
 
     std::string res;
     pkt.read(res);

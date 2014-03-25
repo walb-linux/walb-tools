@@ -501,7 +501,6 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
 
     const uint64_t sizeLb = device::getSizeLb(volInfo.getWdevPath());
     const cybozu::Uuid uuid = volInfo.getUuid();
-    logger.debug() << sizeLb << uuid;
 
     storage_local::MonitorManager monitorMgr(volInfo.getWdevPath(), volId);
 
@@ -517,6 +516,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         aPack.write(sizeLb);
         aPack.write(curTime);
         aPack.write(bulkLb);
+        logger.debug() << "send" << storageHT << volId << uuid << sizeLb << curTime << bulkLb;
         {
             std::string res;
             aPack.read(res);
@@ -659,6 +659,7 @@ inline uint64_t extractAndSendWlog(const std::string &volId)
             pkt.write(salt);
             pkt.write(volSizeLb);
             pkt.write(maxLogSizePb);
+            LOGs.debug() << "send" << volId << uuid << pbs << salt << volSizeLb << maxLogSizePb;
             std::string res;
             pkt.read(res);
             if (res == msgAccept) {
@@ -786,6 +787,7 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
 
 inline void wdevMonitorWorker() noexcept
 {
+    const char *const FUNC = __func__;
     StorageSingleton& g = getStorageGlobal();
     const int timeoutMs = 1000;
     const int delayMs = 1000;
@@ -794,14 +796,15 @@ inline void wdevMonitorWorker() noexcept
             const StrVec v = g.logDevMonitor.poll(timeoutMs);
             if (v.empty()) continue;
             for (const std::string& wdevName : v) {
+                LOGs.debug() << FUNC << wdevName;
                 const std::string volId = g.getVolIdFromWdevName(wdevName);
                 // There is an delay to transfer wlogs in bulk.
                 g.taskQueue.push(volId, delayMs);
             }
         } catch (std::exception& e) {
-            LOGs.error() << "wdevMonitorWorker" << e.what();
+            LOGs.error() << FUNC << e.what();
         } catch (...) {
-            LOGs.error() << "wdevMonitorWorker:unknown error";
+            LOGs.error() << FUNC << "unknown error";
         }
     }
 }

@@ -164,14 +164,14 @@ inline bool run1stNegotiateAsServer(
 {
     packet::Packet packet(sock);
 
-    LOGd("run1stNegotiateAsServer start");
+    //LOGs.debug() << "run1stNegotiateAsServer start";
     packet.read(clientId);
-    LOGd("clientId: %s", clientId.c_str());
+    //LOGs.debug() << "clientId" << clientId;
     packet.read(protocolName);
-    LOGd("protocolName: %s", protocolName.c_str());
+    //LOGs.debug() << "protocolName" << protocolName;
     packet::Version ver(sock);
     bool isVersionSame = ver.recv();
-    LOGd_("isVersionSame: %d", isVersionSame);
+    //LOGs.debug() << "isVersionSame" << isVersionSame;
     packet.write(serverId);
 
     ProtocolLogger logger(serverId, clientId);
@@ -287,7 +287,7 @@ inline void sendStrVec(
         packet::Packet pkt(sock);
         std::string res;
         pkt.read(res);
-        if (res != "ok") {
+        if (res != msgOk) {
             throw cybozu::Exception(msg) << res;
         }
 	}
