@@ -236,6 +236,18 @@ inline StrVec getAllStateStrVec()
     StrVec ret;
     const auto &fmt = cybozu::util::formatString;
 
+    const std::vector<std::pair<ProxyTask, int64_t> > tqv = gp.taskQueue.getAll();
+    ret.push_back(fmt("TaskQueue %zu", tqv.size()));
+    for (const auto &pair : tqv) {
+        const ProxyTask &task = pair.first;
+        const int64_t &timeDiffMs = pair.second;
+        std::stringstream ss;
+        ss << "volume " << task.volId
+           << " archiveName " << task.archiveName
+           << " timeDiffMs " << timeDiffMs;
+        ret.push_back(ss.str());
+    }
+
     for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);

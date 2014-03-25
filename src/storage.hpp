@@ -91,6 +91,15 @@ private:
         }
         Info() : proxy(), isAvailable(false), checkedTime() {
         }
+        std::string str() const {
+            const int64_t timeDiffSec
+                = std::chrono::duration_cast<Seconds>(checkedTime - Clock::now()).count();
+            std::stringstream ss;
+            ss << "sockaddr " << proxy.toStr()
+               << " isAvailable " << (isAvailable ? "1" : "0")
+               << " timeDiffSec " << timeDiffSec;
+            return ss.str();
+        }
     };
     std::vector<Info> v_;
     mutable std::mutex mu_;
@@ -100,6 +109,14 @@ public:
         AutoLock lk(mu_);
         for (const Info &info : v_) {
             if (info.isAvailable) ret.push_back(info.proxy);
+        }
+        return ret;
+    }
+    StrVec getAsStrVec() const {
+        AutoLock lk(mu_);
+        StrVec ret;
+        for (const Info &info : v_) {
+            ret.push_back(info.str());
         }
         return ret;
     }
@@ -262,8 +279,22 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     try {
         if (params.empty()) {
             // for all volumes
-            throw cybozu::Exception("not implemented yet");
-            // TODO
+
+            statusStrV.push_back("ProxyStatus");
+            for (std::string &s : gs.proxyManager.getAsStrVec()) {
+                statusStrV.push_back(std::move(s));
+            }
+
+            statusStrV.push_back("TaskQueue");
+            for (const auto &pair : gs.taskQueue.getAll()) {
+                const std::string &volId = pair.first;
+                const int64_t &timeDiffMs = pair.second;
+                std::stringstream ss;
+                ss << "volume " << volId << " timeDiffMs " << timeDiffMs;
+                statusStrV.push_back(ss.str());
+            }
+
+            // TODO: each volume info by oneline.
         } else {
             // for a volume
             const std::string &volId = params[0];
