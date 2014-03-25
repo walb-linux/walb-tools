@@ -35,7 +35,7 @@ private:
         std::string wdiffPath_;
         cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
-        std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
+        std::shared_ptr<DiffFileHeader> headerP_;
         mutable DiffRecord rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
@@ -66,7 +66,7 @@ private:
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
-        walb::diff::FileHeaderWrap &header() { return *headerP_; }
+        walb::DiffFileHeader &header() { return *headerP_; }
         const DiffRecord &front() {
             fill();
             assert(isFilled_);

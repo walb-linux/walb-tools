@@ -780,7 +780,7 @@ retry:
                 goto retry;
             }
             diff::Reader reader(op.fd());
-            diff::FileHeaderRaw header;
+            DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
             if (ops.empty()) {
                 uuid = header.getUuid2();

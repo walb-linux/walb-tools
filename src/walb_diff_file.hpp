@@ -383,8 +383,8 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    std::shared_ptr<FileHeaderWrap> readHeader() {
-        auto p = std::make_shared<FileHeaderRaw>();
+    std::shared_ptr<DiffFileHeader> readHeader() {
+        auto p = std::make_shared<DiffFileHeader>();
         readHeader(*p);
         return p;
     }
@@ -395,11 +395,25 @@ public:
     void readHeaderWithoutReadingPackHeader(FileHeaderWrap &head) {
         readHeader(head, false);
     }
+    void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
+        readHeader(head, false);
+    }
     void readHeader(FileHeaderWrap &head, bool doReadHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
         fdr_.read(head.rawData(), head.rawSize());
+        if (!head.isValid()) {
+            throw RT_ERR("diff header invalid.\n");
+        }
+        isReadHeader_ = true;
+        if (doReadHeader) readPackHeader();
+    }
+    void readHeader(DiffFileHeader &head, bool doReadHeader = true) {
+        if (isReadHeader_) {
+            throw RT_ERR("Do not call readHeader() more than once.");
+        }
+        fdr_.read(&head, head.getSize());
         if (!head.isValid()) {
             throw RT_ERR("diff header invalid.\n");
         }
