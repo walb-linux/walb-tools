@@ -105,7 +105,7 @@ public:
     /**
      * get status as a string vector.
      */
-    std::vector<std::string> getStatusAsStrVec() const {
+    std::vector<std::string> getStatusAsStrVec(bool isVerbose) const {
         std::vector<std::string> v;
         if (!existsVolDir()) return v;
 
@@ -131,6 +131,24 @@ public:
 
         // base <lsid> <gidB> <gidE> <canMerge> <timestamp>
         // snapshot <lsid> <gid> <gid> <canMerge> <timestamp>
+
+        if (!isVerbose) return v;
+        v.push_back("verbose");
+
+        v.push_back("DoneFile");
+        MetaLsidGid doneRec = getDoneRecord();
+        v.push_back(doneRec.str());
+
+        v.push_back("QueueFile");
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        cybozu::util::QueueFile::ConstIterator itr = qf.cbegin();
+        while (itr != qf.cend()) {
+            MetaLsidGid rec;
+            itr.get(rec);
+            rec.verify();
+            v.push_back(rec.str());
+            ++itr;
+        }
 
         return v;
     }

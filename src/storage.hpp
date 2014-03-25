@@ -261,6 +261,10 @@ inline void c2sStatusServer(protocol::ServerParams &p)
         } else {
             // for a volume
             const std::string &volId = params[0];
+            bool isVerbose = false;
+            if (params.size() >= 2) {
+                isVerbose = static_cast<int>(cybozu::atoi(params[1])) != 0;
+            }
             StorageVolInfo volInfo(gs.baseDirStr, volId);
             if (!volInfo.existsVolDir()) {
                 cybozu::Exception e("c2sStatusServer:no such volume");
@@ -268,9 +272,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
                 throw e;
             }
             // TODO: show the memory state of the volume.
-            for (std::string &s : volInfo.getStatusAsStrVec()) {
-                statusStrV.push_back(std::move(s));
-            }
+            statusStrV = volInfo.getStatusAsStrVec(isVerbose);
         }
         pkt.write(msgOk);
         sendErr = false;
