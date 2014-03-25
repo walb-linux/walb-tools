@@ -35,7 +35,7 @@ private:
         std::string wdiffPath_;
         cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
-        std::shared_ptr<DiffFileHeader> headerP_;
+        DiffFileHeader header_;
         mutable DiffRecord rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
@@ -45,11 +45,11 @@ private:
             : wdiffPath_(wdiffPath)
             , fop_(wdiffPath, O_RDONLY)
             , reader_(fop_.fd())
-            , headerP_(reader_.readHeader())
             , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+            reader_.readHeader(header_);
         }
         /**
          * You must open the file before calling this constructor.
@@ -58,15 +58,15 @@ private:
             : wdiffPath_()
             , fop_(std::move(fop))
             , reader_(fop_.fd())
-            , headerP_(reader_.readHeader())
             , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+            reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
-        walb::DiffFileHeader &header() { return *headerP_; }
+        walb::DiffFileHeader &header() { return header_; }
         const DiffRecord &front() {
             fill();
             assert(isFilled_);

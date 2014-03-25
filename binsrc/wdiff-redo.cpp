@@ -250,8 +250,9 @@ public:
             fd = fo.fd();
         }
         walb::diff::Reader wdiffR(fd);
-        std::shared_ptr<DiffFileHeader> wdiffH = wdiffR.readHeader();
-        wdiffH->print();
+        DiffFileHeader wdiffH;
+        wdiffR.readHeader(wdiffH);
+        wdiffH.print();
 
         walb::DiffRecord rec;
         DiffIo io;

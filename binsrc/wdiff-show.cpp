@@ -15,8 +15,9 @@ int main()
 try {
     /* Read a wdiff file and show the contents. */
     walb::diff::Reader wdiffR(0);
-    std::shared_ptr<walb::DiffFileHeader> wdiffH = wdiffR.readHeader();
-    wdiffH->print();
+    walb::DiffFileHeader wdiffH;
+    wdiffR.readHeader(wdiffH);
+    wdiffH.print();
 
     /* now editing */
     walb::DiffRecord rec;

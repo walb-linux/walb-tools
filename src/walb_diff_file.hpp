@@ -285,18 +285,6 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    std::shared_ptr<DiffFileHeader> readHeader() {
-        auto p = std::make_shared<DiffFileHeader>();
-        readHeader(*p);
-        return p;
-    }
-
-    /**
-     * Read header data with another interface.
-     */
-    void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
-        readHeader(head, false);
-    }
     void readHeader(DiffFileHeader &head, bool doReadHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
@@ -307,6 +295,12 @@ public:
         }
         isReadHeader_ = true;
         if (doReadHeader) readPackHeader();
+    }
+    /**
+     * Read header data with another interface.
+     */
+    void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
+        readHeader(head, false);
     }
 
     /**
