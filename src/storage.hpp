@@ -60,7 +60,13 @@ public:
     const std::string volId;
     explicit StorageWorker(const std::string &volId) : volId(volId) {
     }
-    void operator()();
+    void operator()() override try {
+        run();
+        done();
+    } catch (...) {
+        throwErrorLater();
+    }
+    void run();
 };
 
 namespace proxy_local {
@@ -731,7 +737,7 @@ inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
 /**
  * Run wlog-trnasfer or wlog-remove for a specified volume.
  */
-inline void StorageWorker::operator()()
+inline void StorageWorker::run()
 {
     const char *const FUNC = __func__;
     StorageVolState& volSt = getStorageVolState(volId);

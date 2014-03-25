@@ -120,11 +120,17 @@ private:
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
     }
+    void operator()() override try {
+        run();
+        done();
+    } catch (...) {
+        throwErrorLater();
+    }
     /**
      * This will do wdiff send to an archive server.
      * You can throw an exception.
      */
-    void operator()();
+    void run();
 };
 
 struct ProxySingleton
@@ -843,7 +849,7 @@ inline bool sendWdiffs(
 
 } // namespace proxy_local
 
-inline void ProxyWorker::operator()()
+inline void ProxyWorker::run()
 {
     const char *const FUNC = __func__;
     const std::string& volId = task_.volId;
