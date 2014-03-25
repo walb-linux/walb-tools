@@ -318,7 +318,7 @@ private:
             logger_.info("hashSender end");
         };
 
-        diff::FileHeaderRaw wdiffH;
+        DiffFileHeader wdiffH;
         wdiffH.init();
         wdiffH.setMaxIoBlocksIfNecessary(bulkLb_);
 
