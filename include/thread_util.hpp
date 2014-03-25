@@ -104,6 +104,15 @@ public:
      */
     virtual void operator()() {
         throw std::runtime_error("Implement operator()().");
+#if 0
+        // typical implementation
+        try {
+            // something to do.
+            done();
+        } catch (...) {
+            throwErrorLator();
+        }
+#endif
     }
 
     /**
