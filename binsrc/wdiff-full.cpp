@@ -31,8 +31,7 @@ public:
     void convert(int inFd, int outFd) {
         cybozu::util::FdReader reader(inFd);
         walb::diff::Writer writer(outFd);
-        struct walb_diff_file_header rawHead;
-        walb::diff::FileHeaderWrap head(rawHead);
+        walb::DiffFileHeader head;
 
         head.init();
         head.setMaxIoBlocksIfNecessary(ioBlocks_);

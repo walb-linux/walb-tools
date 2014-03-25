@@ -104,9 +104,6 @@ private:
     using LogpackHeader = log::PackHeaderRaw;
 
 public:
-    Converter() = default;
-    ~Converter() noexcept = default;
-
     void convert(int inputLogFd, int outputWdiffFd,
                  uint16_t maxIoBlocks = uint16_t(-1)) {
         /* Prepare walb diff. */

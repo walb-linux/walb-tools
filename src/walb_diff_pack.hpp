@@ -191,14 +191,24 @@ private:
 };
 
 /**
- * Pack interface.
+ * Manage a pack as a contiguous memory.
  */
-class PackBase
+class MemoryPack
 {
+private:
+    const char *p_;
 public:
-    virtual ~PackBase() noexcept {}
-    virtual const struct walb_diff_pack &header() const = 0;
-    virtual const char *data(size_t i) const = 0;
+    explicit MemoryPack(const char *p) : p_() {
+        reset(p);
+    }
+    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
+    MemoryPack(MemoryPack &&) = delete;
+    MemoryPack &operator=(const MemoryPack &rhs) {
+        reset(rhs.p_);
+        return *this;
+    }
+    MemoryPack &operator=(MemoryPack &&) = delete;
+
     size_t size() const {
         return ::WALB_DIFF_PACK_SIZE + header().total_size;
     }
@@ -233,35 +243,14 @@ public:
         if (errMsg) *errMsg = e.what();
         return false;
     }
-};
 
-/**
- * Manage a pack as a contiguous memory.
- */
-class MemoryPack : public PackBase
-{
-private:
-    const char *p_;
-
-public:
-    explicit MemoryPack(const char *p) : p_() {
-        reset(p);
+    const struct walb_diff_pack &header() const {
+        return *reinterpret_cast<const walb_diff_pack*>(p_);
     }
-    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
-    MemoryPack(MemoryPack &&) = delete;
-    MemoryPack &operator=(const MemoryPack &rhs) {
-        reset(rhs.p_);
-        return *this;
-    }
-    MemoryPack &operator=(MemoryPack &&) = delete;
-
-    const struct walb_diff_pack &header() const override {
-        return *ptr<struct walb_diff_pack>(0);
-    }
-    const char *data(size_t i) const override {
+    const char *data(size_t i) const {
         assert(i < header().n_records);
         if (header().record[i].data_size == 0) return nullptr;
-        return ptr<const char>(offset(i));
+        return &p_[offset(i)];
     }
     const char *rawPtr() const {
         return p_;
@@ -271,85 +260,8 @@ public:
         p_ = p;
     }
 private:
-    template <typename T>
-    const T *ptr(size_t off) const {
-        return reinterpret_cast<const T *>(&p_[off]);
-    }
-    template <typename T>
-    T *ptr(size_t off) {
-        return reinterpret_cast<T *>(&p_[off]);
-    }
     size_t offset(size_t i) const {
         return ::WALB_DIFF_PACK_SIZE + header().record[i].data_offset;
-    }
-};
-
-/**
- * Manage a pack as a header data and multiple block diff IO data.
- */
-class ScatterGatherPack : public PackBase
-{
-private:
-    PackHeader pack_; /* pack header */
-    std::vector<DiffIo> ios_;
-
-public:
-    /**
-     * ios_[i] must be nullptr if pack_.record(i).data_size == 0.
-     */
-    ScatterGatherPack(PackHeader &&pack, std::vector<DiffIo> &&ios)
-        : pack_(std::move(pack)), ios_(std::move(ios)) {
-        assert(header().n_records == ios_.size());
-    }
-    ScatterGatherPack(const ScatterGatherPack &) = delete;
-    ScatterGatherPack(ScatterGatherPack &&) = default;
-    ScatterGatherPack &operator=(const ScatterGatherPack &) = delete;
-    ScatterGatherPack &operator=(ScatterGatherPack &&) = default;
-
-    const struct walb_diff_pack &header() const override {
-        return pack_.header();
-    }
-    /**
-     * RETURN:
-     *   data pointer for normal IOs.
-     *   nullptr for non-normal IOs such as ALL_ZERO and DISCARD.
-     */
-    const char *data(size_t i) const override {
-        return ios_[i].get();
-    }
-    /**
-     * Generate memory pack.
-     */
-    std::unique_ptr<char[]> generateMemoryPack() const {
-        assert(isValid());
-        std::unique_ptr<char[]> up(new char[size()]);
-        copyTo(up.get());
-        MemoryPack mpack(up.get());
-        assert(mpack.isValid());
-        return up;
-    }
-    /**
-     * @p a pointer that has at least size() bytes space.
-     */
-    void copyTo(char *p) const {
-        /* Copy pack header. */
-        ::memcpy(p, pack_.rawData(), pack_.rawSize());
-        p += pack_.rawSize();
-        assert(pack_.nRecords() == ios_.size());
-        uint32_t dataOffset = 0;
-        for (size_t i = 0; i < pack_.nRecords(); i++) {
-            /* Copy each IO data. */
-            const DiffRecord& rec = pack_.record(i);
-            uint32_t dataSize = rec.data_size;
-            assert(rec.data_offset == dataOffset);
-            if (rec.isNormal()) {
-                assert(0 < dataSize);
-                ::memcpy(p, data(i), dataSize);
-                p += dataSize;
-                dataOffset += dataSize;
-            }
-        }
-        assert(pack_.rawSize() + dataOffset == size());
     }
 };
 

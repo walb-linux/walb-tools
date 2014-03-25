@@ -10,59 +10,38 @@
 #include "uuid.hpp"
 
 namespace walb {
-namespace diff {
 
 /**
  * Walb diff header data.
  */
-class FileHeaderWrap
+struct DiffFileHeader : walb_diff_file_header
 {
-private:
-    struct walb_diff_file_header &h_;
-
-public:
-    FileHeaderWrap(struct walb_diff_file_header &h) : h_(h) {}
-    virtual ~FileHeaderWrap() noexcept = default;
-
-    uint32_t getChecksum() const { return h_.checksum; }
-    uint16_t getMaxIoBlocks() const { return h_.max_io_blocks; }
-    const uint8_t *getUuid() const { return &h_.uuid[0]; }
-    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&h_.uuid[0]); }
+    uint32_t getChecksum() const { return checksum; }
+    uint16_t getMaxIoBlocks() const { return max_io_blocks; }
+    const uint8_t *getUuid() const { return &uuid[0]; }
+    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&uuid[0]); }
 
     void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
-        if (getMaxIoBlocks() < ioBlocks) {
-            h_.max_io_blocks = ioBlocks;
+        if (max_io_blocks < ioBlocks) {
+            max_io_blocks = ioBlocks;
         }
     }
 
-    void resetMaxIoBlocks() { h_.max_io_blocks = 0; }
+    void resetMaxIoBlocks() { max_io_blocks = 0; }
 
-    void assign(const void *h) {
-        h_ = *reinterpret_cast<const struct walb_diff_file_header *>(h);
-    }
-
-    const char *rawData() const { return ptr<char>(); }
-    char *rawData() { return ptr<char>(); }
-    size_t rawSize() const { return sizeof(h_); }
-
-    template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(&h_); }
-
-    template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(&h_); }
+	size_t getSize() const { return sizeof(walb_diff_file_header); }
 
     bool isValid() const {
-        return cybozu::util::calcChecksum(ptr<char>(), sizeof(h_), 0) == 0;
+        return cybozu::util::calcChecksum(this, getSize(), 0) == 0;
     }
 
     void updateChecksum() {
-        h_.checksum = 0;
-        h_.checksum = cybozu::util::calcChecksum(ptr<char>(), sizeof(h_), 0);
-        assert(isValid());
+        checksum = 0;
+        checksum = cybozu::util::calcChecksum(this, getSize(), 0);
     }
 
     void setUuid(const void *uuid) {
-        ::memcpy(&h_.uuid[0], uuid, UUID_SIZE);
+        ::memcpy(&this->uuid[0], uuid, UUID_SIZE);
     }
 
     void print(::FILE *fp) const {
@@ -70,7 +49,7 @@ public:
                   "checksum: %08x\n"
                   "maxIoBlocks: %u\n"
                   "uuid: ",
-                  getChecksum(), getMaxIoBlocks());
+                  checksum, max_io_blocks);
         for (size_t i = 0; i < UUID_SIZE; i++) {
             ::fprintf(fp, "%02x", getUuid()[i]);
         }
@@ -80,24 +59,11 @@ public:
     void print() const { print(::stdout); }
 
     void init() {
-        ::memset(&h_, 0, sizeof(h_));
+        ::memset(this, 0, getSize());
     }
 };
 
-/**
- * With raw data.
- */
-class FileHeaderRaw
-    : public FileHeaderWrap
-{
-private:
-    struct walb_diff_file_header header_;
-
-public:
-    FileHeaderRaw()
-        : FileHeaderWrap(header_), header_() {}
-    ~FileHeaderRaw() noexcept = default;
-};
+namespace diff {
 
 /**
  * Walb diff writer.
@@ -153,13 +119,13 @@ public:
      * Write header data.
      * You must call this at first.
      */
-    void writeHeader(FileHeaderWrap &header) {
+    void writeHeader(DiffFileHeader &header) {
         if (isWrittenHeader_) {
             throw RT_ERR("Do not call writeHeader() more than once.");
         }
         header.updateChecksum();
         assert(header.isValid());
-        fdw_.write(header.rawData(), header.rawSize());
+        fdw_.write(&header, header.getSize());
         isWrittenHeader_ = true;
     }
 
@@ -276,7 +242,7 @@ private:
 class Reader
 {
 private:
-    std::shared_ptr<cybozu::util::FileOpener> opener_;
+    std::unique_ptr<cybozu::util::FileOpener> opener_;
     int fd_;
     cybozu::util::FdReader fdr_;
     bool isReadHeader_;
@@ -319,28 +285,22 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    std::shared_ptr<FileHeaderWrap> readHeader() {
-        auto p = std::make_shared<FileHeaderRaw>();
-        readHeader(*p);
-        return p;
-    }
-
-    /**
-     * Read header data with another interface.
-     */
-    void readHeaderWithoutReadingPackHeader(FileHeaderWrap &head) {
-        readHeader(head, false);
-    }
-    void readHeader(FileHeaderWrap &head, bool doReadHeader = true) {
+    void readHeader(DiffFileHeader &head, bool doReadHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
-        fdr_.read(head.rawData(), head.rawSize());
+        fdr_.read(&head, head.getSize());
         if (!head.isValid()) {
             throw RT_ERR("diff header invalid.\n");
         }
         isReadHeader_ = true;
         if (doReadHeader) readPackHeader();
+    }
+    /**
+     * Read header data with another interface.
+     */
+    void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
+        readHeader(head, false);
     }
 
     /**

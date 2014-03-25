@@ -790,7 +790,7 @@ retry:
                 goto retry;
             }
             diff::Reader reader(op.fd());
-            diff::FileHeaderRaw header;
+            DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
             if (ops.empty()) {
                 uuid = header.getUuid2();
@@ -898,7 +898,7 @@ inline void ProxyWorker::run()
 
     ProtocolLogger logger(gp.nodeId, serverId);
 
-    const diff::FileHeaderWrap& fileH = merger.header();
+    const DiffFileHeader& fileH = merger.header();
 
     /* wdiff-send negotiation */
     packet::Packet pkt(sock);

@@ -57,9 +57,7 @@ private:
 };
 
 using namespace walb;
-using DiffHeader = walb::diff::FileHeaderWrap;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
-using DiffHeaderPtr = std::shared_ptr<DiffHeader>;
 
 /**
  * Diff IO executor interface.
@@ -252,8 +250,9 @@ public:
             fd = fo.fd();
         }
         walb::diff::Reader wdiffR(fd);
-        DiffHeaderPtr wdiffH = wdiffR.readHeader();
-        wdiffH->print();
+        DiffFileHeader wdiffH;
+        wdiffR.readHeader(wdiffH);
+        wdiffH.print();
 
         walb::DiffRecord rec;
         DiffIo io;

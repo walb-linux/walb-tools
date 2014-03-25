@@ -35,7 +35,7 @@ private:
         std::string wdiffPath_;
         cybozu::util::FileOpener fop_;
         mutable walb::diff::Reader reader_;
-        std::shared_ptr<walb::diff::FileHeaderWrap> headerP_;
+        DiffFileHeader header_;
         mutable DiffRecord rec_;
         mutable DiffIo io_;
         mutable bool isFilled_;
@@ -45,11 +45,11 @@ private:
             : wdiffPath_(wdiffPath)
             , fop_(wdiffPath, O_RDONLY)
             , reader_(fop_.fd())
-            , headerP_(reader_.readHeader())
             , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+            reader_.readHeader(header_);
         }
         /**
          * You must open the file before calling this constructor.
@@ -58,15 +58,15 @@ private:
             : wdiffPath_()
             , fop_(std::move(fop))
             , reader_(fop_.fd())
-            , headerP_(reader_.readHeader())
             , rec_()
             , io_()
             , isFilled_(false)
             , isEnd_(false) {
+            reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
         walb::diff::Reader &reader() { return reader_; }
-        walb::diff::FileHeaderWrap &header() { return *headerP_; }
+        walb::DiffFileHeader &header() { return header_; }
         const DiffRecord &front() {
             fill();
             assert(isFilled_);
@@ -117,13 +117,12 @@ private:
         }
     };
 
-    std::deque<std::shared_ptr<Wdiff> > wdiffs_;
-    std::deque<std::shared_ptr<Wdiff> > doneWdiffs_;
+    std::deque<std::shared_ptr<Wdiff>> wdiffs_;
+    std::deque<std::shared_ptr<Wdiff>> doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
     walb::diff::MemoryData wdiffMem_;
-    struct walb_diff_file_header wdiffRawH_;
-    FileHeaderWrap wdiffH_;
+    DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
     bool shouldValidateUuid_;
@@ -135,8 +134,7 @@ public:
         : wdiffs_()
         , doneWdiffs_()
         , wdiffMem_()
-        , wdiffRawH_()
-        , wdiffH_(wdiffRawH_)
+        , wdiffH_()
         , isHeaderPrepared_(false)
         , mergedQ_()
         , shouldValidateUuid_(false)
@@ -212,7 +210,7 @@ public:
             const uint8_t *uuid = wdiffs_.back()->header().getUuid();
             if (shouldValidateUuid_) { checkUuid(uuid); }
 
-            ::memset(&wdiffRawH_, 0, sizeof(wdiffRawH_));
+            wdiffH_.init();
             wdiffH_.setUuid(uuid);
             wdiffH_.setMaxIoBlocksIfNecessary(
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
@@ -226,7 +224,7 @@ public:
     /**
      * Get header.
      */
-    const FileHeaderWrap &header() const {
+    const DiffFileHeader &header() const {
         return wdiffH_;
     }
     /**

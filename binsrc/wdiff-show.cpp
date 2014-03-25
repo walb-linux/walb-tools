@@ -15,8 +15,9 @@ int main()
 try {
     /* Read a wdiff file and show the contents. */
     walb::diff::Reader wdiffR(0);
-    std::shared_ptr<walb::diff::FileHeaderWrap> wdiffH = wdiffR.readHeader();
-    wdiffH->print();
+    walb::DiffFileHeader wdiffH;
+    wdiffR.readHeader(wdiffH);
+    wdiffH.print();
 
     /* now editing */
     walb::DiffRecord rec;
@@ -27,7 +28,6 @@ try {
         }
         rec.printOneline();
     }
-    return 0;
 } catch (std::exception &e) {
     ::fprintf(::stderr, "exception: %s\n", e.what());
     return 1;
@@ -36,4 +36,3 @@ try {
     return 1;
 }
 
-/* end of file. */
