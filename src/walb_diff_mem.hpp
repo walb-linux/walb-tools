@@ -29,14 +29,6 @@ public:
 
     const DiffIo &io() const { return io_; }
 
-    void copyFrom(const DiffRecord &rec, const DiffIo &io) {
-        rec_ = rec;
-        if (rec.isNormal()) {
-            io_ = io;
-        } else {
-            io_.clear();
-        }
-    }
     void moveFrom(const DiffRecord &rec, DiffIo &&io) {
         rec_ = rec;
         if (rec.isNormal()) {
@@ -45,15 +37,18 @@ public:
             io_.clear();
         }
     }
-    void moveFrom(const DiffRecord &rec, std::vector<char> &&data) {
-        rec_ = rec;
+    RecIo() {}
+    RecIo(const DiffRecord &rec, std::vector<char> &&data)
+        : rec_(rec) {
         if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
-            io_.data.swap(data);
+            io_.data = std::move(data);
         } else {
             io_.clear();
         }
+        updateChecksum();
+        assert(isValid());// QQQ:necessary?
     }
 
     void updateChecksum() {
@@ -191,18 +186,10 @@ public:
             }
 
             if (0 < blks0) {
-                RecIo r;
-                r.moveFrom(rec0, std::move(data0));
-                r.updateChecksum();
-                assert(r.isValid());
-                v.push_back(std::move(r));
+                v.emplace_back(rec0, std::move(data0));
             }
             if (0 < blks1) {
-                RecIo r;
-                r.moveFrom(rec1, std::move(data1));
-                r.updateChecksum();
-                assert(r.isValid());
-                v.push_back(std::move(r));
+                v.emplace_back(rec1, std::move(data1));
             }
             return v;
         }
@@ -233,11 +220,7 @@ public:
                 data.assign(p, p + size);
             }
 
-            RecIo r;
-            r.moveFrom(rec, std::move(data));
-            r.updateChecksum();
-            assert(r.isValid());
-            v.push_back(std::move(r));
+            v.emplace_back(rec, std::move(data));
             return v;
         }
         /*
@@ -267,11 +250,7 @@ public:
             data.assign(p, p + size);
         }
         assert(rhsEndIoAddr == rec.io_address);
-        RecIo r;
-        r.moveFrom(rec, std::move(data));
-        r.updateChecksum();
-        assert(r.isValid());
-        v.push_back(std::move(r));
+        v.emplace_back(rec, std::move(data));
         return v;
     }
 };
@@ -332,8 +311,7 @@ public:
 				const DiffRecord& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
-                uint64_t addr = dr.io_address;
-                map_.emplace(addr, std::move(r));
+                map_.emplace(dr.io_address, std::move(r));
             }
             q.pop();
         }
