@@ -899,7 +899,7 @@ inline void startIfNecessary(const std::string &volId)
  * This is for test and debug.
  *
  * params[0]: volId.
- * params[1]: uint64_t gid.
+ * params[1]: gid as string (optional)
  */
 inline void c2sResetVolServer(protocol::ServerParams &p)
 {
