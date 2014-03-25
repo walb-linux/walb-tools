@@ -29,10 +29,6 @@ struct DiffFileHeader : walb_diff_file_header
 
     void resetMaxIoBlocks() { max_io_blocks = 0; }
 
-    void assign(const void *h) {
-		static_cast<walb_diff_file_header>(*this) = *reinterpret_cast<const walb_diff_file_header *>(h);
-    }
-
 	size_t getSize() const { return sizeof(walb_diff_file_header); }
 
     bool isValid() const {
