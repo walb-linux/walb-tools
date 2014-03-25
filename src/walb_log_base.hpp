@@ -29,13 +29,7 @@ namespace log {
 class InvalidIo : public std::exception
 {
 public:
-private:
-    std::string msg_;
-public:
-    InvalidIo()
-        : std::exception()
-        , msg_("invalid logpack IO.") {}
-    const char *what() const noexcept override { return msg_.c_str(); }
+    const char *what() const noexcept override { return "invalid logpack IO."; }
 };
 
 inline void printRecord(
