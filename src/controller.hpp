@@ -258,4 +258,14 @@ inline void c2xHostTypeClient(protocol::ClientParams &p)
     std::cout << hostType << std::endl;
 }
 
+/**
+ * params[0]: volId
+ * params[1]: gid as string (optional)
+ */
+inline void c2sResetVolClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 0, FUNC, true);
+}
+
 } // namespace walb

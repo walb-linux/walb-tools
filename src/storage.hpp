@@ -822,4 +822,39 @@ inline void proxyMonitorWorker() noexcept
     }
 }
 
+/**
+ * This is for test and debug.
+ *
+ * params[0]: volId.
+ * params[1]: uint64_t gid.
+ */
+inline void c2sResetVolServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+        if (v.empty()) throw cybozu::Exception(FUNC) << "empty param";
+        const std::string &volId = v[0];
+        uint64_t gid = 0;
+        if (v.size() >= 2) gid = cybozu::atoi(v[1]);
+
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        StateMachineTransaction tran(volSt.sm, sStopped, stReset);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        volInfo.resetWlog(gid);
+        tran.commit(sSyncReady);
+        pkt.write(msgOk);
+        logger.info() << "reset succeeded" << volId << gid;
+    } catch (std::exception &e) {
+        logger.error() << FUNC << e.what();
+        pkt.write(e.what());
+    }
+}
+
 } // walb

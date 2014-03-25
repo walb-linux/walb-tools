@@ -43,6 +43,7 @@ public:
             { listVolPN, c2sListVolServer },
             { initVolPN, c2sInitVolServer },
             { clearVolPN, c2sClearVolServer },
+            { resetVolPN, c2sResetVolServer },
             { startPN, c2sStartServer },
             { stopPN, c2sStopServer },
             { fullBkpPN, c2sFullSyncServer },

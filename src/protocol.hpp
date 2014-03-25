@@ -39,6 +39,7 @@ const char *const statusPN = "status";
 const char *const initVolPN = "init-vol";
 const char *const clearVolPN = "clear-vol";
 const char *const listVolPN = "list-vol";
+const char *const resetVolPN = "reset-vol";
 const char *const startPN = "start";
 const char *const stopPN = "stop";
 const char *const fullBkpPN = "full-bkp";
