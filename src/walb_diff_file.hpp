@@ -242,7 +242,7 @@ private:
 class Reader
 {
 private:
-    std::shared_ptr<cybozu::util::FileOpener> opener_;
+    std::unique_ptr<cybozu::util::FileOpener> opener_;
     int fd_;
     cybozu::util::FdReader fdr_;
     bool isReadHeader_;
