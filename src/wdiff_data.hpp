@@ -64,6 +64,7 @@ public:
         if (!dir_.rmdirRecursive()) {
             throw cybozu::Exception("WalbDiffFiles::eraseCompletely:rmdirRecursive failed");
         }
+        mgr_.clear();
     }
     /**
      * Add a diff file.
