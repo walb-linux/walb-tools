@@ -232,7 +232,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
  */
 inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 1, "c2aReloadMetadataClient");
+    protocol::sendStrVec(p.sock, p.params, 1, __func__);
 }
 
 /**
@@ -241,15 +241,7 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
  */
 inline void c2xResizeClient(protocol::ClientParams &p)
 {
-    const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 2, FUNC, false);
-
-    packet::Packet pkt(p.sock);
-    std::string res;
-    pkt.read(res);
-    if (res != msgOk) {
-        throw cybozu::Exception(FUNC) << "failed" << res;
-    }
+    protocol::sendStrVec(p.sock, p.params, 2, __func__);
 }
 
 inline void c2xHostTypeClient(protocol::ClientParams &p)
