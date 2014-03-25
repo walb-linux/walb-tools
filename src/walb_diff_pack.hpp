@@ -191,14 +191,24 @@ private:
 };
 
 /**
- * Pack interface.
+ * Manage a pack as a contiguous memory.
  */
-class PackBase
+class MemoryPack
 {
+private:
+    const char *p_;
 public:
-    virtual ~PackBase() noexcept {}
-    virtual const struct walb_diff_pack &header() const = 0;
-    virtual const char *data(size_t i) const = 0;
+    explicit MemoryPack(const char *p) : p_() {
+        reset(p);
+    }
+    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
+    MemoryPack(MemoryPack &&) = delete;
+    MemoryPack &operator=(const MemoryPack &rhs) {
+        reset(rhs.p_);
+        return *this;
+    }
+    MemoryPack &operator=(MemoryPack &&) = delete;
+
     size_t size() const {
         return ::WALB_DIFF_PACK_SIZE + header().total_size;
     }
@@ -233,32 +243,11 @@ public:
         if (errMsg) *errMsg = e.what();
         return false;
     }
-};
 
-/**
- * Manage a pack as a contiguous memory.
- */
-class MemoryPack : public PackBase
-{
-private:
-    const char *p_;
-
-public:
-    explicit MemoryPack(const char *p) : p_() {
-        reset(p);
-    }
-    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
-    MemoryPack(MemoryPack &&) = delete;
-    MemoryPack &operator=(const MemoryPack &rhs) {
-        reset(rhs.p_);
-        return *this;
-    }
-    MemoryPack &operator=(MemoryPack &&) = delete;
-
-    const struct walb_diff_pack &header() const override {
+    const struct walb_diff_pack &header() const {
         return *ptr<struct walb_diff_pack>(0);
     }
-    const char *data(size_t i) const override {
+    const char *data(size_t i) const {
         assert(i < header().n_records);
         if (header().record[i].data_size == 0) return nullptr;
         return ptr<const char>(offset(i));
