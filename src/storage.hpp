@@ -69,7 +69,7 @@ public:
     void run();
 };
 
-namespace proxy_local {
+namespace storage_local {
 
 class ProxyManager
 {
@@ -155,7 +155,7 @@ private:
     Info checkAvailability(const cybozu::SocketAddr &);
 };
 
-} // namespace proxy_local
+} // namespace storage_local
 
 struct StorageSingleton
 {
@@ -187,7 +187,7 @@ struct StorageSingleton
     LogDevMonitor logDevMonitor;
     std::unique_ptr<std::thread> proxyMonitor;
     std::atomic<bool> quitProxyMonitor;
-    proxy_local::ProxyManager proxyManager;
+    storage_local::ProxyManager proxyManager;
 
     using Str2Str = std::map<std::string, std::string>;
     using AutoLock = std::lock_guard<std::mutex>;
@@ -817,7 +817,7 @@ inline void StorageWorker::run()
     }
 }
 
-namespace proxy_local {
+namespace storage_local {
 
 inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAddr &proxy)
 {
@@ -839,7 +839,7 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
     return info;
 }
 
-} // namespace proxy_local
+} // namespace storage_local
 
 inline void wdevMonitorWorker() noexcept
 {
