@@ -122,8 +122,7 @@ private:
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
     walb::diff::MemoryData wdiffMem_;
-    walb_diff_file_header wdiffRawH_;
-    DiffFileHeader& wdiffH_;
+    DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
     bool shouldValidateUuid_;
@@ -135,8 +134,7 @@ public:
         : wdiffs_()
         , doneWdiffs_()
         , wdiffMem_()
-        , wdiffRawH_()
-        , wdiffH_(static_cast<DiffFileHeader&>(wdiffRawH_))
+        , wdiffH_()
         , isHeaderPrepared_(false)
         , mergedQ_()
         , shouldValidateUuid_(false)
@@ -212,7 +210,7 @@ public:
             const uint8_t *uuid = wdiffs_.back()->header().getUuid();
             if (shouldValidateUuid_) { checkUuid(uuid); }
 
-            ::memset(&wdiffRawH_, 0, sizeof(wdiffRawH_));
+            wdiffH_.init();
             wdiffH_.setUuid(uuid);
             wdiffH_.setMaxIoBlocksIfNecessary(
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);

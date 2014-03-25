@@ -59,7 +59,7 @@ struct DiffFileHeader : walb_diff_file_header
     void print() const { print(::stdout); }
 
     void init() {
-        ::memset(this, 0, sizeof(walb_diff_file_header));
+        ::memset(this, 0, getSize());
     }
 };
 
