@@ -57,7 +57,6 @@ private:
 };
 
 using namespace walb;
-using DiffHeader = walb::diff::FileHeaderWrap;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 
 /**

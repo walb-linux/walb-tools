@@ -117,13 +117,13 @@ private:
         }
     };
 
-    std::deque<std::shared_ptr<Wdiff> > wdiffs_;
-    std::deque<std::shared_ptr<Wdiff> > doneWdiffs_;
+    std::deque<std::shared_ptr<Wdiff>> wdiffs_;
+    std::deque<std::shared_ptr<Wdiff>> doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
     walb::diff::MemoryData wdiffMem_;
-    struct walb_diff_file_header wdiffRawH_;
-    FileHeaderWrap wdiffH_;
+    walb_diff_file_header wdiffRawH_;
+    DiffFileHeader& wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
     bool shouldValidateUuid_;
@@ -136,7 +136,7 @@ public:
         , doneWdiffs_()
         , wdiffMem_()
         , wdiffRawH_()
-        , wdiffH_(wdiffRawH_)
+        , wdiffH_(static_cast<DiffFileHeader&>(wdiffRawH_))
         , isHeaderPrepared_(false)
         , mergedQ_()
         , shouldValidateUuid_(false)
@@ -226,7 +226,7 @@ public:
     /**
      * Get header.
      */
-    const FileHeaderWrap &header() const {
+    const DiffFileHeader &header() const {
         return wdiffH_;
     }
     /**
