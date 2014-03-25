@@ -809,6 +809,7 @@ retry:
         }
     }
     merger.addWdiffs(std::move(ops));
+    merger.prepare();
 }
 
 namespace proxy_local {
