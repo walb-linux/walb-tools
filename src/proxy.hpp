@@ -177,7 +177,7 @@ inline void ProxyVolState::initInner(const std::string &volId)
         return;
     }
 
-    sm.set(volInfo.getState());
+    sm.set(pStopped);
     volInfo.loadAllArchiveInfo();
 
     // Retry to make hard links of wdiff files in the master directory.
@@ -366,7 +366,7 @@ inline void c2pListVolServer(protocol::ServerParams &p)
     logger.debug() << "listVol succeeded";
 }
 
-inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false)
+inline void startProxyVol(const std::string &volId)
 {
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
@@ -374,7 +374,7 @@ inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false
     verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &st = volSt.sm.get();
-    if (!ignoreStateFile && st != pStopped) {
+    if (st != pStopped) {
         throw cybozu::Exception("bad state") << st;
     }
 
@@ -386,18 +386,10 @@ inline void startProxyVol(const std::string &volId, bool ignoreStateFile = false
         getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
     }
 
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-    if (!ignoreStateFile) {
-        const std::string fst = volInfo.getState();
-        if (fst != pStopped) {
-            throw cybozu::Exception(FUNC) << "bad state" << fst;
-        }
-    }
-    volInfo.setState(pStarted);
     tran.commit(pStarted);
 }
 
-inline void stopProxyVol(const std::string &volId, bool isForce, bool ignoreStateFile = false)
+inline void stopProxyVol(const std::string &volId, bool isForce)
 {
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
@@ -413,25 +405,18 @@ inline void stopProxyVol(const std::string &volId, bool isForce, bool ignoreStat
         }, FUNC);
 
     const std::string &st = volSt.sm.get();
-    if (!ignoreStateFile && st != pStarted) {
+    if (st != pStarted) {
         throw cybozu::Exception(FUNC) << "bad state" << st;
     }
+
+    StateMachineTransaction tran(volSt.sm, pStarted, ptStop, FUNC);
+    ul.unlock();
 
     // Clear all related tasks from the task queue.
     getProxyGlobal().taskQueue.remove([&](const ProxyTask &task) {
             return task.volId == volId;
         });
 
-    StateMachineTransaction tran(volSt.sm, pStarted, ptStop, FUNC);
-    ul.unlock();
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-    if (!ignoreStateFile) {
-        const std::string fst = volInfo.getState();
-        if (fst != pStarted) {
-            throw cybozu::Exception(FUNC) << "bad state" << fst;
-        }
-    }
-    volInfo.setState(pStopped);
     tran.commit(pStopped);
 }
 

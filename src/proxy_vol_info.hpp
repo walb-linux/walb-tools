@@ -65,7 +65,6 @@ public:
      */
     void init() {
         util::makeDir(volDir.str(), "ProxyVolInfo::init:makdir failed", true);
-        setState(pStopped);
         setSizeLb(0);
         util::makeDir(getMasterDir().str(), "ProxyVolInfo::init:makedir failed", true);
         util::makeDir(getSlaveDir().str(), "ProxyVolInfo::init:makedir failed", true);
@@ -126,24 +125,6 @@ public:
         if (!volDir.rmdirRecursive()) {
             throw cybozu::Exception("ProxyVolInfo::clear:rmdir recursively failed.");
         }
-    }
-    void setState(const std::string& newState)
-    {
-        const char *tbl[] = {
-            pStarted, pStopped,
-        };
-        for (const char *p : tbl) {
-            if (newState == p) {
-                util::saveFile(volDir, "state", newState);
-                return;
-            }
-        }
-        throw cybozu::Exception("ProxyVolInfo::setState:bad state") << newState;
-    }
-    std::string getState() const {
-        std::string st;
-        util::loadFile(volDir, "state", st);
-        return st;
     }
     void setSizeLb(uint64_t sizeLb) {
         util::saveFile(volDir, "size", sizeLb);

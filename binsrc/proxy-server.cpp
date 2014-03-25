@@ -87,18 +87,14 @@ void initializeProxy(Option &opt)
 {
     util::makeDir(gp.baseDirStr, "proxyServer", false);
 
-    // Start/stop each volume.
-    for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
-        try {
-            if (opt.isStopped) {
-                stopProxyVol(volId, true);
-            } else {
-                startProxyVol(volId, true);
+    // Start each volume if necessary
+    if (!opt.isStopped) {
+        for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
+            try {
+                startProxyVol(volId);
+            } catch (std::exception &e) {
+                LOGs.error() << "initializeProxy:start failed" << volId << e.what();
             }
-        } catch (std::exception &e) {
-            SimpleLogger().error()
-                << "initializeProxy:start/stop failed"
-                << volId << e.what();
         }
     }
 
