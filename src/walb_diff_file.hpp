@@ -10,6 +10,63 @@
 #include "uuid.hpp"
 
 namespace walb {
+
+/**
+ * Walb diff header data.
+ */
+struct DiffFileHeader : walb_diff_file_header
+{
+    uint32_t getChecksum() const { return checksum; }
+    uint16_t getMaxIoBlocks() const { return max_io_blocks; }
+    const uint8_t *getUuid() const { return &uuid[0]; }
+    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&uuid[0]); }
+
+    void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
+        if (max_io_blocks < ioBlocks) {
+            max_io_blocks = ioBlocks;
+        }
+    }
+
+    void resetMaxIoBlocks() { max_io_blocks = 0; }
+
+    void assign(const void *h) {
+		static_cast<walb_diff_file_header>(*this) = *reinterpret_cast<const walb_diff_file_header *>(h);
+    }
+
+//    size_t rawSize() const { return sizeof(h_); }
+
+    bool isValid() const {
+        return cybozu::util::calcChecksum(this, sizeof(walb_diff_file_header), 0) == 0;
+    }
+
+    void updateChecksum() {
+        checksum = 0;
+        checksum = cybozu::util::calcChecksum(this, sizeof(walb_diff_file_header), 0);
+    }
+
+    void setUuid(const void *uuid) {
+        ::memcpy(&this->uuid[0], uuid, UUID_SIZE);
+    }
+
+    void print(::FILE *fp) const {
+        ::fprintf(fp, "-----walb_file_header-----\n"
+                  "checksum: %08x\n"
+                  "maxIoBlocks: %u\n"
+                  "uuid: ",
+                  checksum, max_io_blocks);
+        for (size_t i = 0; i < UUID_SIZE; i++) {
+            ::fprintf(fp, "%02x", getUuid()[i]);
+        }
+        ::fprintf(fp, "\n");
+    }
+
+    void print() const { print(::stdout); }
+
+    void init() {
+        ::memset(this, 0, sizeof(walb_diff_file_header));
+    }
+};
+
 namespace diff {
 
 /**
@@ -22,7 +79,6 @@ private:
 
 public:
     FileHeaderWrap(struct walb_diff_file_header &h) : h_(h) {}
-    virtual ~FileHeaderWrap() noexcept = default;
 
     uint32_t getChecksum() const { return h_.checksum; }
     uint16_t getMaxIoBlocks() const { return h_.max_io_blocks; }
@@ -96,7 +152,6 @@ private:
 public:
     FileHeaderRaw()
         : FileHeaderWrap(header_), header_() {}
-    ~FileHeaderRaw() noexcept = default;
 };
 
 /**
