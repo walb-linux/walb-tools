@@ -245,12 +245,12 @@ public:
     }
 
     const struct walb_diff_pack &header() const {
-        return *ptr<struct walb_diff_pack>(0);
+        return *reinterpret_cast<const walb_diff_pack*>(p_);
     }
     const char *data(size_t i) const {
         assert(i < header().n_records);
         if (header().record[i].data_size == 0) return nullptr;
-        return ptr<const char>(offset(i));
+        return &p_[offset(i)];
     }
     const char *rawPtr() const {
         return p_;
@@ -260,14 +260,6 @@ public:
         p_ = p;
     }
 private:
-    template <typename T>
-    const T *ptr(size_t off) const {
-        return reinterpret_cast<const T *>(&p_[off]);
-    }
-    template <typename T>
-    T *ptr(size_t off) {
-        return reinterpret_cast<T *>(&p_[off]);
-    }
     size_t offset(size_t i) const {
         return ::WALB_DIFF_PACK_SIZE + header().record[i].data_offset;
     }
