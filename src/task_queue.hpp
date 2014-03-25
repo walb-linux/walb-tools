@@ -22,7 +22,7 @@ private:
     using Map = std::map<Task, TimePoint>;
     using Rmap = std::multimap<TimePoint, Task>;
 
-    std::mutex mu_;
+    mutable std::mutex mu_;
     Map map_;
     Rmap rmap_;
     bool isStopped_;
@@ -45,6 +45,7 @@ public:
         bool maked;
         std::tie(itr, maked) = map_.insert(std::make_pair(task, ts));
         if (maked) rmap_.insert(std::make_pair(ts, task));
+        assert(map_.size() == rmap_.size());
     }
     /**
      * Push a task with a delay.
@@ -64,6 +65,7 @@ public:
             map_[task] = ts;
         }
         rmap_.insert(std::make_pair(ts, task));
+        assert(map_.size() == rmap_.size());
     }
     /**
      * Pop a task with the oldest timestamp and the timestamp
@@ -79,6 +81,7 @@ public:
         task = itr->second;
         rmap_.erase(itr);
         map_.erase(task);
+        assert(map_.size() == rmap_.size());
         return true;
     }
     /**
@@ -105,6 +108,22 @@ public:
                 ++itr;
             }
         }
+        assert(map_.size() == rmap_.size());
+    }
+    /**
+     * RETURN:
+     *   first: task
+     *   second: delay [msec]. Negative value means it should be run.
+     */
+    std::vector<std::pair<Task, int64_t> > getAll() const {
+        TimePoint now = Clock::now();
+        AutoLock lk(mu_);
+        std::vector<std::pair<Task, int64_t> > ret;
+        for (const typename Map::value_type &pair : map_) {
+            const int64_t diff = std::chrono::duration_cast<MilliSeconds>(pair.second - now).count();
+            ret.push_back(std::make_pair(pair.first, diff));
+        }
+        return ret;
     }
 private:
     void eraseFromRmap(const Task &task, TimePoint ts) {
