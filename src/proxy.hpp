@@ -887,7 +887,7 @@ inline void ProxyWorker::operator()()
 
     ProtocolLogger logger(gp.nodeId, serverId);
 
-    const diff::FileHeaderWrap& fileH = merger.header();
+    const DiffFileHeader& fileH = merger.header();
 
     /* wdiff-send negotiation */
     packet::Packet pkt(sock);

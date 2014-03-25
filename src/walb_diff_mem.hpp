@@ -287,14 +287,14 @@ public:
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
     Map map_;
-    struct walb_diff_file_header h_;
-    FileHeaderWrap fileH_;
+    walb_diff_file_header h_;
+    DiffFileHeader& fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
     explicit MemoryData(uint16_t maxIoBlocks = uint16_t(-1))
-        : maxIoBlocks_(maxIoBlocks), map_(), h_(), fileH_(h_), nIos_(0), nBlocks_(0) {
+        : maxIoBlocks_(maxIoBlocks), map_(), h_(), fileH_(static_cast<DiffFileHeader&>(h_)), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
     ~MemoryData() noexcept = default;
@@ -385,7 +385,7 @@ public:
                          nIos_, nIos);
         }
     }
-    FileHeaderWrap& header() { return fileH_; }
+    DiffFileHeader& header() { return fileH_; }
     void writeTo(int outFd, bool isCompressed = true) {
         Writer writer(outFd);
         writer.writeHeader(fileH_);
