@@ -1,5 +1,6 @@
 #pragma once
 
+#include <type_traits>
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include <sys/types.h>
@@ -31,6 +32,53 @@ inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl, i
 }
 
 /**
+ * IntType: int, uint32_t, uint64_t.
+ */
+template <typename IntType>
+IntType getValueByIoctl(const std::string& wdevPath, int command)
+{
+    struct walb_ctl ctl;
+    ::memset(&ctl, 0, sizeof(ctl));
+    ctl.command = command;
+
+    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+
+    if (std::is_same<IntType, int>::value) {
+        return ctl.val_int;
+    }
+    if (std::is_same<IntType, uint32_t>::value) {
+        return ctl.val_u32;
+    }
+    if (std::is_same<IntType, uint64_t>::value) {
+        return ctl.val_u64;
+    }
+    throw cybozu::Exception(__func__) << "not supported type.";
+}
+
+/**
+ * IntType: int, uint32_t, uint64_t.
+ */
+template <typename IntType>
+void setValueByIoctl(const std::string& wdevPath, int command, IntType value)
+{
+    struct walb_ctl ctl;
+    ::memset(&ctl, 0, sizeof(ctl));
+    ctl.command = command;
+
+    if (std::is_same<IntType, int>::value) {
+        ctl.val_int = value;
+    } else if (std::is_same<IntType, uint32_t>::value) {
+        ctl.val_u32 = value;
+    } else if (std::is_same<IntType, uint64_t>::value) {
+        ctl.val_u64 = value;
+    } else {
+        throw cybozu::Exception(__func__) << "not supported type.";
+    }
+
+    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+}
+
+/**
  * Get a lsid of the volume using ioctl.
  *
  * @command
@@ -39,25 +87,16 @@ inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl, i
  */
 inline uint64_t getLsid(const std::string& wdevPath, int command)
 {
-    struct walb_ctl ctl;
-    ::memset(&ctl, 0, sizeof(ctl));
-    ctl.command = command;
-
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
-    if (ctl.val_u64 == uint64_t(-1)) {
+    uint64_t lsid = getValueByIoctl<uint64_t>(wdevPath, command);
+    if (lsid == uint64_t(-1)) {
         throw cybozu::Exception("getLsid:invalid lsid");
     }
-    return ctl.val_u64;
+    return lsid;
 }
 
 inline void setOldestLsid(const std::string& wdevPath, uint64_t lsid)
 {
-    struct walb_ctl ctl;
-    ::memset(&ctl, 0, sizeof(ctl));
-    ctl.command = WALB_IOCTL_SET_OLDEST_LSID;
-    ctl.val_u64 = lsid;
-
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+    local::setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_SET_OLDEST_LSID, lsid);
 }
 
 /**
@@ -142,11 +181,7 @@ inline std::string getUnderlyingDevPath(const std::string& wdevName, bool isLog)
 
 inline void resetWal(const std::string& wdevPath)
 {
-    struct walb_ctl ctl;
-    ::memset(&ctl, 0, sizeof(ctl));
-    ctl.command = WALB_IOCTL_CLEAR_LOG;
-
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+    local::setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, 0);
 }
 
 inline uint64_t getPermanentLsid(const std::string& wdevPath)
@@ -161,12 +196,17 @@ inline uint64_t getOldestLsid(const std::string& wdevPath)
 
 inline bool isOverflow(const std::string& wdevPath)
 {
-    struct walb_ctl ctl;
-    ::memset(&ctl, 0, sizeof(ctl));
-    ctl.command = WALB_IOCTL_IS_LOG_OVERFLOW;
+    return local::getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_LOG_OVERFLOW) != 0;
+}
 
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
-    return ctl.val_int != 0;
+inline uint64_t getLogCapacityPb(const std::string& wdevPath)
+{
+    return local::getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_CAPACITY);
+}
+
+inline uint64_t getLogUsagePb(const std::string& wdevPath)
+{
+    return local::getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_USAGE);
 }
 
 /**
@@ -203,12 +243,7 @@ inline uint64_t eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LS
  */
 inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
 {
-    struct walb_ctl ctl;
-    ::memset(&ctl, 0, sizeof(ctl));
-    ctl.command = WALB_IOCTL_RESIZE;
-    ctl.val_u64 = sizeLb;
-
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+    local::setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
 }
 
 inline uint64_t getSizeLb(const std::string& wdevPath)
