@@ -1,5 +1,4 @@
 bdiff
-itest_server_data
 verify_wldev
 verify_wlog
 verify_written_data
