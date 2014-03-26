@@ -10,14 +10,9 @@
 #include "util.hpp"
 #include <sstream>
 
-#ifdef DEBUG
 #define LOGd(...) LOGd2(__VA_ARGS__, "")
 #define LOGd2(fmt, ...) \
     cybozu::PutLog(cybozu::LogDebug, "DEBUG (%s:%d) " fmt "%s", __func__, __LINE__, __VA_ARGS__)
-#else
-#define LOGd(...)
-#endif
-
 #define LOGi(...) cybozu::PutLog(cybozu::LogInfo, "INFO " __VA_ARGS__)
 #define LOGw(...) cybozu::PutLog(cybozu::LogWarning, "WARNING " __VA_ARGS__)
 #define LOGe(...) cybozu::PutLog(cybozu::LogError, "ERROR " __VA_ARGS__)
@@ -69,16 +64,12 @@ public:
     #define WALB_LOGGER_FORMAT_ATTR
 #endif
 
-    void debug(UNUSED const std::string &msg) const noexcept {
-#ifdef DEBUG
-        write(cybozu::LogDebug, msg);
-#endif
-    }
+    void debug(const std::string &msg) const noexcept { write(cybozu::LogDebug, msg); }
     void info(const std::string &msg) const noexcept { write(cybozu::LogInfo, msg); }
     void warn(const std::string &msg) const noexcept { write(cybozu::LogWarning, msg); }
     void error(const std::string &msg) const noexcept { write(cybozu::LogError, msg); }
 
-    void debug(UNUSED const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
+    void debug(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void info(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void warn(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void error(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
@@ -145,13 +136,11 @@ inline void Logger::writeF(cybozu::LogPriority pri, const char *format, ...) con
         write(pri, "Logger::write() error.");
     }
 }
-inline void Logger::debug(UNUSED const char *format, ...) const noexcept {
-#ifdef DEBUG
+inline void Logger::debug(const char *format, ...) const noexcept {
     va_list args;
     va_start(args, format);
     writeV(cybozu::LogDebug, format, args);
     va_end(args);
-#endif
 }
 inline void Logger::info(const char *format, ...) const noexcept {
     va_list args;
