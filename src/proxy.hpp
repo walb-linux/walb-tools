@@ -38,8 +38,9 @@ struct ProxyVolState
     /**
      * Timestamp of the latest wdiff received from a storage server.
      * Lock of mu is required to access this.
+     * 0 means invalid.
      */
-    uint64_t lastWlogRecievedTime;
+    uint64_t lastWlogReceivedTime;
     /**
      * Timestamp of the latest wdiff sent to each archive server.
      * Lock of mu is required to access this.
@@ -255,7 +256,7 @@ inline StrVec getAllStateStrVec()
         const std::string state = volSt.sm.get();
         const uint64_t totalSize = volInfo.getTotalDiffFileSize();
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-        const std::string tsStr = util::timeToPrintable(volSt.lastWlogRecievedTime);
+        const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
         ret.push_back(
             fmt("%s %s %zu %s %s"
                 , volId.c_str(), state.c_str(), volSt.diffMgr.size()
@@ -295,7 +296,7 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     const size_t num = volSt.diffMgr.size();
     const uint64_t totalSize = volInfo.getTotalDiffFileSize();
     const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-    const std::string tsStr = util::timeToPrintable(volSt.lastWlogRecievedTime);
+    const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
 
     ret.push_back(fmt("volId %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
@@ -929,7 +930,7 @@ inline void ProxyWorker::run()
     if (res == "stopped" || res == "too-new-diff") {
         const uint64_t curTs = ::time(0);
         ul.lock();
-        if (curTs - volSt.lastWlogRecievedTime > gp.retryTimeout) {
+        if (curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
             logger.throwError(e);
         }
