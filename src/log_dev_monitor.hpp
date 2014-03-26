@@ -99,10 +99,11 @@ public:
      *
      */
     std::vector<std::string> poll(int timeoutMs = -1) {
+        const char *const FUNC = __func__;
         std::vector<std::string> v;
         int nfds = ::epoll_wait(efd_(), &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
-            LOGs.error() << "LogDevMonitor:poll" << cybozu::ErrorNo();
+            LOGs.error() << FUNC << cybozu::ErrorNo();
             return v;
         }
         std::lock_guard<std::mutex> lk(mutex_);
@@ -113,10 +114,8 @@ public:
                 v.push_back(name);
                 char buf[4096];
                 ::lseek(fd, 0, SEEK_SET);
-                UNUSED int s = ::read(fd, buf, 4096);
-#ifdef DEBUG
-                ::printf("read %d bytes\n", s);
-#endif
+                int s = ::read(fd, buf, 4096);
+                LOGs.debug() << FUNC << "read bytes" << s;
             }
         }
         return v;
