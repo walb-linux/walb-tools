@@ -175,7 +175,7 @@ public:
         }
 
         // QQQ refactor later
-        DiffIo io1 = compressIoData(rec, data, ::WALB_DIFF_CMPR_SNAPPY);
+        DiffIo io1 = compressDiffIo(data, rec.io_blocks, ::WALB_DIFF_CMPR_SNAPPY);
         DiffRecord rec1 = rec;
         rec1.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
         rec1.data_size = io1.getSize();
@@ -341,7 +341,7 @@ public:
             io = std::move(io0);
             return true;
         }
-        io = uncompressIoData(io0);
+        io = uncompressDiffIo(io0);
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         rec.data_size = io.getSize();
         rec.checksum = io.calcChecksum();

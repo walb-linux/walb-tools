@@ -293,37 +293,31 @@ public:
     }
 };
 
-namespace diff {
-
 /**
- * Compress an IO data.
+ * Compress an diff IO.
  * Supported algorithms: snappy.
  */
-
-inline DiffIo compressIoData(const DiffRecord& rec, const char *data, int type)
+inline DiffIo compressDiffIo(const char *data, uint16_t ioBlocks, int type)
 {
     if (type != ::WALB_DIFF_CMPR_SNAPPY) {
         throw cybozu::Exception("compressIoData:Currently only snappy is supported.");
     }
-    if (rec.io_blocks == 0) {
-        return DiffIo();
-    }
-    DiffIo io1(rec.io_blocks, type);
-    io1.data.resize(snappy::MaxCompressedLength(rec.data_size));
+    DiffIo io1(ioBlocks, type);
+    const size_t dataSize = ioBlocks * LOGICAL_BLOCK_SIZE;
+    io1.data.resize(snappy::MaxCompressedLength(dataSize));
     size_t compressedSize;
-    snappy::RawCompress(data, rec.data_size, io1.get(), &compressedSize);
+    snappy::RawCompress(data, dataSize, io1.get(), &compressedSize);
     io1.data.resize(compressedSize);
     return io1;
 }
 
 /**
- * Uncompress an IO data.
- * Supported algorithms: snappy.
+ * Uncompress an diff IO.
  */
-inline DiffIo uncompressIoData(const DiffIo &io0)
+inline DiffIo uncompressDiffIo(const DiffIo &io0)
 {
     if (!io0.isCompressed()) {
-        throw RT_ERR("Need not uncompress already uncompressed diff IO.");
+        throw cybozu::Exception("Need not uncompress already uncompressed diff IO.");
     }
     walb::Uncompressor dec(io0.compressionType);
     const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
@@ -336,4 +330,4 @@ inline DiffIo uncompressIoData(const DiffIo &io0)
     return io1;
 }
 
-}} //namesapce walb::diff
+} //namesapce walb
