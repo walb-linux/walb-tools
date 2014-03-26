@@ -149,7 +149,7 @@ struct ProxySingleton
     size_t maxWdiffSendMb;
     size_t delaySecForRetry;
     size_t retryTimeout;
-    size_t maxConnections;
+    size_t maxForegroundTasks;
     size_t maxConversionMb;
 
     /**
@@ -720,10 +720,10 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    ConnectionCounterTransation connTran;
+    ForegroundCounterTransaction foregroundTasksTran;
     proxy_local::ConversionMemoryTransaction convTran(maxLogSizePb * pbs / MEBI);
     try {
-        verifyMaxConnections(gp.maxConnections, FUNC);
+        verifyMaxForegroundTasks(gp.maxForegroundTasks, FUNC);
         proxy_local::verifyMaxConversionMemory(FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);

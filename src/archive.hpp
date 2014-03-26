@@ -80,7 +80,7 @@ struct ArchiveSingleton
     std::string nodeId;
     std::string baseDirStr;
     std::string volumeGroup;
-    size_t maxConnections;
+    size_t maxForegroundTasks;
 
     /**
      * Writable and must be thread-safe.
@@ -377,14 +377,14 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     pkt.read(bulkLb);
     logger.debug() << hostType << volId << uuid << sizeLb << curTime << bulkLb;
 
-    ConnectionCounterTransation ctran;
+    ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
 
     try {
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
-        verifyMaxConnections(ga.maxConnections, FUNC);
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
         verifyStateIn(sm.get(), {aSyncReady}, FUNC);
@@ -552,11 +552,11 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
-    ConnectionCounterTransation ctran;
+    ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     try {
-        verifyMaxConnections(ga.maxConnections, FUNC);
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
@@ -707,7 +707,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     pkt.read(diff);
     logger.debug() << "recv" << volId << hostType << uuid << maxIoBlocks << sizeLb << diff;
 
-    ConnectionCounterTransation ctran;
+    ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
@@ -718,7 +718,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         if (hostType != proxyHT && hostType != archiveHT) {
             throw cybozu::Exception(FUNC) << "bad hostType" << hostType;
         }
-        verifyMaxConnections(ga.maxConnections, FUNC);
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(sm.get(), {aArchived, aStopped}, FUNC);
     } catch (std::exception &e) {

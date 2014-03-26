@@ -68,10 +68,10 @@ struct Option : cybozu::Option
         appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
         appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max background tasks.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max concurrent background tasks.");
 
         StorageSingleton &s = getStorageGlobal();
-        appendOpt(&s.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
+        appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foregroud tasks.");
         appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) try
     };
 
     StorageSingleton &g = getStorageGlobal();
-    const size_t concurrency = g.maxConnections > 0 ? g.maxConnections + 1 : 0;
+    const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run(opt.port, createRequestWorker);
     finalizeStorage();

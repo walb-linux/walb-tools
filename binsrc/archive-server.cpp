@@ -70,7 +70,7 @@ struct Option : cybozu::Option
         ArchiveSingleton &a = getArchiveGlobal();
         appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
-        appendOpt(&a.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxConn", "num of max connections.");
+        appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
 
@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) try
     };
 
     ArchiveSingleton &g = getArchiveGlobal();
-    const size_t concurrency = g.maxConnections > 0 ? g.maxConnections + 1 : 0;
+    const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run(opt.port, createRequestWorker);
     finalizeArchive();

@@ -21,4 +21,4 @@ state_machine_test
 host_info_test
 task_queue_test
 queue_file_test
-connection_counter_test
+counter_test

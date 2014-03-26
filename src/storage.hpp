@@ -173,7 +173,7 @@ struct StorageSingleton
     std::string baseDirStr;
     uint64_t maxWlogSendMb;
     size_t delaySecForRetry;
-    size_t maxConnections;
+    size_t maxForegroundTasks;
 
     /**
      * Writable and must be thread-safe.
@@ -528,8 +528,8 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     logger.debug() << volId << bulkLb << curTime;
     std::string archiveId;
 
-    ConnectionCounterTransation ctran;
-    verifyMaxConnections(gs.maxConnections, FUNC);
+    ForegroundCounterTransaction foregroundTasksTran;
+    verifyMaxForegroundTasks(gs.maxForegroundTasks, FUNC);
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     packet::Packet cPack(p.sock);

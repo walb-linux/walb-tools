@@ -16,7 +16,7 @@
 #include "walb_logger.hpp"
 #include "constant.hpp"
 #include "walb_util.hpp"
-#include "connection_counter.hpp"
+#include "counter.hpp"
 
 namespace walb {
 namespace server {
@@ -284,10 +284,14 @@ void verifyNoActionRunning(const ActionCounters& ac, const C& actions, const cha
     }
 }
 
-inline void verifyMaxConnections(size_t maxConnections, const char *msg)
+const int ForegroundCounterType = 0;
+using ForegroundCounterTransaction = counter::CounterTransaction<ForegroundCounterType>;
+
+inline void verifyMaxForegroundTasks(size_t maxForegroundTasks, const char *msg)
 {
-    if (getConnectionCounter() > maxConnections) {
-        throw cybozu::Exception(msg) << "exceeds max connections" << maxConnections;
+    if (counter::getCounter<ForegroundCounterType>() > maxForegroundTasks) {
+        throw cybozu::Exception(msg)
+            << "exceeds max foreground tasks" << maxForegroundTasks;
     }
 }
 

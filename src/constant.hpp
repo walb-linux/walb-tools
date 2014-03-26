@@ -11,7 +11,7 @@ const uint64_t LBS = 512;
 const uint64_t DEFAULT_BULK_LB = MEBI / LBS;
 const size_t DEFAULT_TIMEOUT = 60; // seconds.
 
-const size_t DEFAULT_MAX_CONNECTIONS = 2;
+const size_t DEFAULT_MAX_FOREGROUND_TASKS = 2;
 const size_t DEFAULT_MAX_BACKGROUND_TASKS = 1;
 const size_t DEFAULT_MAX_WDIFF_SEND_MB = 128;
 const size_t DEFAULT_MAX_WLOG_SEND_MB = 128;
