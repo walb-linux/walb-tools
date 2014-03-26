@@ -48,6 +48,7 @@ const char *const archiveInfoPN = "archive-info";
 const char *const wlogTransferPN = "wlog-transfer";
 const char *const dirtyFullSyncPN = "dirty-full-sync";
 const char *const restorePN = "restore";
+const char *const dropPN = "drop";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const resizePN = "resize";
 const char *const hostTypePN = "host-type";

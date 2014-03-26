@@ -53,6 +53,7 @@ void runClient(Option &opt)
         { resetVolPN, c2xResetVolClient },
         { fullBkpPN, c2sFullSyncClient },
         { restorePN, c2aRestoreClient },
+        { dropPN, c2aDropClient },
         { startPN, c2xStartClient },
         { stopPN, c2xStopClient },
         { archiveInfoPN, c2pArchiveInfoClient },

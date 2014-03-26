@@ -130,6 +130,16 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
     }
 }
 
+/**
+ * Drop command.
+ * parameters: volId, gid
+ */
+inline void c2aDropClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 2, FUNC);
+}
+
 namespace ctrl_local {
 
 inline void verifyEnoughParameters(const StrVec& params, size_t num, const char *msg)

@@ -519,6 +519,25 @@ inline bool restore(const std::string &volId, uint64_t gid)
     return true;
 }
 
+/**
+ * Drop a restored volume.
+ */
+inline void drop(const std::string &volId, uint64_t gid)
+{
+    const char *const FUNC = __func__;
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    const std::string targetName = volInfo.restoredSnapshotName(gid);
+    if (!lv.hasSnapshot(targetName)) {
+        throw cybozu::Exception(FUNC)
+            << "restored volume not found" << volId << gid;
+    }
+    lv.getSnapshot(targetName).remove();
+}
+
 } // namespace archive_local
 
 /**
@@ -555,6 +574,35 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         return;
     }
     logger.info() << "restore succeeded" << volId << gid;
+}
+
+/**
+ * Drop command.
+ */
+inline void c2aDropServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const std::string &volId = v[0];
+    const uint64_t gid = cybozu::atoi(v[1]);
+    packet::Packet pkt(p.sock);
+
+    try {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+        ul.unlock();
+
+        archive_local::drop(volId, gid);
+        logger.info() << "drop succeeded" << volId << gid;
+        pkt.write(msgOk);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
 }
 
 /**

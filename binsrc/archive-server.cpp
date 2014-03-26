@@ -46,6 +46,7 @@ public:
             { stopPN, c2aStopServer },
             { dirtyFullSyncPN, x2aDirtyFullSyncServer },
             { restorePN, c2aRestoreServer },
+            { dropPN, c2aDropServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataPN, c2aReloadMetadataServer },
             { resizePN, c2aResizeServer },
