@@ -22,3 +22,4 @@ host_info_test
 task_queue_test
 queue_file_test
 counter_test
+memory_data_test
