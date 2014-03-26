@@ -763,6 +763,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
         logger.info() << "detect volume grow" << realSizeLb << volSizeLb;
         volInfo.setSizeLb(volSizeLb);
     }
+    volSt.lastWlogReceivedTime = ::time(0);
     tran.commit(pStarted);
 
     logger.info() << "wlog-transfer succeeded" << volId;
@@ -930,7 +931,8 @@ inline void ProxyWorker::run()
     if (res == "stopped" || res == "too-new-diff") {
         const uint64_t curTs = ::time(0);
         ul.lock();
-        if (curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
+        if (volSt.lastWlogReceivedTime != 0 &&
+            curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
             logger.throwError(e);
         }
