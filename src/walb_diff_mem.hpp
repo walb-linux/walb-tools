@@ -29,15 +29,17 @@ public:
 
     const DiffIo &io() const { return io_; }
 
-    void moveFrom(const DiffRecord &rec, DiffIo &&io) {
-        rec_ = rec;
+    RecIo() {}
+    RecIo(const DiffRecord &rec, DiffIo &&io)
+        : rec_(rec) {
         if (rec.isNormal()) {
             io_ = std::move(io);
         } else {
             io_.clear();
         }
+        updateChecksum();
+        assert(isValid());// QQQ: to be removed
     }
-    RecIo() {}
     RecIo(const DiffRecord &rec, std::vector<char> &&data)
         : rec_(rec) {
         if (rec.isNormal()) {
@@ -48,7 +50,7 @@ public:
             io_.clear();
         }
         updateChecksum();
-        assert(isValid());// QQQ:necessary?
+        assert(isValid());// QQQ: to be removed
     }
 
     void updateChecksum() {
@@ -90,12 +92,10 @@ public:
         return true;
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         rec_.printOneline(fp);
         io_.printOneline(fp);
     }
-
-    void print() const { print(::stdout); }
 
     /**
      * Split the RecIo into pieces
@@ -116,11 +116,7 @@ public:
         auto it0 = recV.begin();
         auto it1 = ioV.begin();
         while (it0 != recV.end() && it1 != ioV.end()) {
-            RecIo r;
-            r.moveFrom(*it0, std::move(*it1));
-            r.updateChecksum();
-            assert(r.isValid());
-            v.push_back(std::move(r));
+            v.emplace_back(*it0, std::move(*it1));
             ++it0;
             ++it1;
         }
@@ -302,9 +298,7 @@ public:
             }
         }
         /* Eliminate overlaps. */
-        RecIo r0;
-        r0.moveFrom(rec, std::move(io));
-        assert(r0.isValid());
+        RecIo r0(rec, std::move(io));
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
@@ -354,12 +348,10 @@ public:
             ++it;
         }
         if (nBlocks_ != nBlocks) {
-            throw RT_ERR("nBlocks_ %" PRIu64 " nBlocks %" PRIu64 "\n",
-                         nBlocks_, nBlocks);
+            throw cybozu::Exception("MemoryData:getNIos:bad blocks") << nBlocks_ << nBlocks;
         }
         if (nIos_ != nIos) {
-            throw RT_ERR("nIos_ %" PRIu64 " nIos %" PRIu64 "\n",
-                         nIos_, nIos);
+            throw cybozu::Exception("MemoryData:getNIos:bad ios") << nIos_ << nIos;
         }
     }
     DiffFileHeader& header() { return fileH_; }
