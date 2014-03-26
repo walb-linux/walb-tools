@@ -337,6 +337,17 @@ public:
         if (recS.gid == recE.gid) qf.popBack();
         return !qf.empty();
     }
+    /**
+     * Get the oldest and the latest gid.
+     */
+    std::pair<uint64_t, uint64_t> getGidRange() const {
+        const MetaLsidGid rec0 = getDoneRecord();
+        cybozu::util::QueueFile qf(queuePath().str(), O_RDWR);
+        if (qf.empty()) return {rec0.gid, rec0.gid};
+        MetaLsidGid rec1;
+        qf.front(rec1);
+        return {rec0.gid, rec1.gid};
+    }
 private:
     void loadWdevPath() {
         std::string s;

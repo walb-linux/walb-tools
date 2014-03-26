@@ -276,6 +276,75 @@ inline StorageVolState &getStorageVolState(const std::string &volId)
     return getStorageGlobal().stMap.get(volId);
 }
 
+namespace storage_local {
+
+inline StrVec getAllStateStrVec()
+{
+    StrVec v;
+    auto fmt = cybozu::util::formatString;
+
+    v.push_back("-----Archive-----");
+    v.push_back(gs.archive.toStr());
+
+    v.push_back("-----Proxy-----");
+    for (std::string &s : gs.proxyManager.getAsStrVec()) {
+        v.push_back(std::move(s));
+    }
+
+    v.push_back("-----TaskQueue-----");
+    for (const auto &pair : gs.taskQueue.getAll()) {
+        const std::string &volId = pair.first;
+        const int64_t &timeDiffMs = pair.second;
+        std::stringstream ss;
+        ss << "volume " << volId << " timeDiffMs " << timeDiffMs;
+        v.push_back(ss.str());
+    }
+
+    v.push_back("-----Volume-----");
+    for (const std::string &volId : gs.stMap.getKeyList()) {
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+
+        const std::string state = volSt.sm.get();
+        if (state == sClear) continue;
+
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string wdevPath = volInfo.getWdevPath();
+        const uint64_t logUsagePb = device::getLogUsagePb(wdevPath);
+        const uint64_t logCapacityPb = device::getLogCapacityPb(wdevPath);
+        uint64_t oldestGid, latestGid;
+        std::tie(oldestGid, latestGid) = volInfo.getGidRange();
+
+        std::string volStStr = fmt(
+            "%s %s %" PRIu64 "/%" PRIu64 " %" PRIu64 " %" PRIu64 ""
+            , volId.c_str(), state.c_str()
+            , logUsagePb, logCapacityPb
+            , oldestGid, latestGid);
+
+        v.push_back(volStStr);
+    }
+    return v;
+}
+
+inline StrVec getVolStateStrVec(const std::string &volId, bool isVerbose)
+{
+    StrVec v;
+
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    if (volSt.sm.get() == sClear) {
+        throw cybozu::Exception(__func__) << "not found" << volId;
+    }
+
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    // TODO: show the memory state of the volume.
+    v = volInfo.getStatusAsStrVec(isVerbose);
+    return v;
+}
+
+} // namespace storage_local
+
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet pkt(p.sock);
@@ -283,46 +352,22 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     std::vector<std::string> params;
     pkt.read(params);
 
-    StrVec statusStrV;
+    StrVec v;
     bool sendErr = true;
     try {
         if (params.empty()) {
-            // for all volumes
-
-            statusStrV.push_back("ProxyStatus");
-            for (std::string &s : gs.proxyManager.getAsStrVec()) {
-                statusStrV.push_back(std::move(s));
-            }
-
-            statusStrV.push_back("TaskQueue");
-            for (const auto &pair : gs.taskQueue.getAll()) {
-                const std::string &volId = pair.first;
-                const int64_t &timeDiffMs = pair.second;
-                std::stringstream ss;
-                ss << "volume " << volId << " timeDiffMs " << timeDiffMs;
-                statusStrV.push_back(ss.str());
-            }
-
-            // TODO: each volume info by oneline.
+            v = storage_local::getAllStateStrVec();
         } else {
-            // for a volume
             const std::string &volId = params[0];
             bool isVerbose = false;
             if (params.size() >= 2) {
                 isVerbose = static_cast<int>(cybozu::atoi(params[1])) != 0;
             }
-            StorageVolInfo volInfo(gs.baseDirStr, volId);
-            if (!volInfo.existsVolDir()) {
-                cybozu::Exception e("c2sStatusServer:no such volume");
-                pkt.write(e.what());
-                throw e;
-            }
-            // TODO: show the memory state of the volume.
-            statusStrV = volInfo.getStatusAsStrVec(isVerbose);
+            v = storage_local::getVolStateStrVec(volId, isVerbose);
         }
         pkt.write(msgOk);
         sendErr = false;
-        pkt.write(statusStrV);
+        pkt.write(v);
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
