@@ -29,13 +29,7 @@ namespace log {
 class InvalidIo : public std::exception
 {
 public:
-private:
-    std::string msg_;
-public:
-    InvalidIo()
-        : std::exception()
-        , msg_("invalid logpack IO.") {}
-    const char *what() const noexcept override { return msg_.c_str(); }
+    const char *what() const noexcept override { return "invalid logpack IO."; }
 };
 
 inline void printRecord(
@@ -875,40 +869,38 @@ private:
  * Logpack record and IO data.
  * This is just a wrapper of a record and a block data.
  *
- * RecordT: Record or const Record.
- * BlockDataT: BlockData or const BlockData.
+ * Record: Record
+ * BlockData: BlockData
  */
-template <class RecordT, class BlockDataT>
-class PackIoWrapT
+class PackIoWrap
 {
 private:
-    RecordT *recP_;
-    BlockDataT *blockD_;
+    Record *recP_;
+    BlockData *blockD_;
 
 public:
-    PackIoWrapT(RecordT *rec, BlockDataT *blockD)
+    PackIoWrap(Record *rec, BlockData *blockD)
         : recP_(rec), blockD_(blockD) {
         assert(recP_);
         assert(blockD_);
     }
-    virtual ~PackIoWrapT() noexcept {}
-    PackIoWrapT(const PackIoWrapT &rhs)
+    PackIoWrap(const PackIoWrap &rhs)
         : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
-    PackIoWrapT &operator=(const PackIoWrapT &rhs) {
+    PackIoWrap &operator=(const PackIoWrap &rhs) {
         recP_ = rhs.recP_;
         blockD_ = rhs.blockD_;
         return *this;
     }
-    DISABLE_MOVE(PackIoWrapT);
+    DISABLE_MOVE(PackIoWrap);
 
     const Record &record() const { return *recP_; }
     Record &record() {
-        assert_bt(!std::is_const<RecordT>::value);
+        assert_bt(!std::is_const<Record>::value);
         return *const_cast<Record *>(recP_);
     }
     const BlockData &blockData() const { return *blockD_; }
     BlockData &blockData() {
-        assert_bt(!std::is_const<BlockDataT>::value);
+        assert_bt(!std::is_const<BlockData>::value);
         return *const_cast<BlockData *>(blockD_);
     }
 
@@ -962,7 +954,6 @@ public:
     }
 };
 
-using PackIoWrap = PackIoWrapT<Record, BlockData>;
 
 inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
 {
@@ -1006,7 +997,6 @@ public:
         , rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const PackHeader &logh, size_t pos)
         : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
-    ~PackIoRaw() noexcept override = default;
     PackIoRaw(const PackIoRaw &rhs)
         : PackIoWrap(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
     PackIoRaw(PackIoRaw &&rhs)

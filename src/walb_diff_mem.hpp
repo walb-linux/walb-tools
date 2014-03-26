@@ -29,31 +29,28 @@ public:
 
     const DiffIo &io() const { return io_; }
 
-    void copyFrom(const DiffRecord &rec, const DiffIo &io) {
-        rec_ = rec;
-        if (rec.isNormal()) {
-            io_ = io;
-        } else {
-            io_.clear();
-        }
-    }
-    void moveFrom(const DiffRecord &rec, DiffIo &&io) {
-        rec_ = rec;
+    RecIo() {}
+    RecIo(const DiffRecord &rec, DiffIo &&io)
+        : rec_(rec) {
         if (rec.isNormal()) {
             io_ = std::move(io);
         } else {
             io_.clear();
         }
+        updateChecksum();
+        assert(isValid());// QQQ: to be removed
     }
-    void moveFrom(const DiffRecord &rec, std::vector<char> &&data) {
-        rec_ = rec;
+    RecIo(const DiffRecord &rec, std::vector<char> &&data)
+        : rec_(rec) {
         if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
             io_.compressionType = rec.compression_type;
-            io_.data.swap(data);
+            io_.data = std::move(data);
         } else {
             io_.clear();
         }
+        updateChecksum();
+        assert(isValid());// QQQ: to be removed
     }
 
     void updateChecksum() {
@@ -95,12 +92,10 @@ public:
         return true;
     }
 
-    void print(::FILE *fp) const {
+    void print(::FILE *fp = ::stdout) const {
         rec_.printOneline(fp);
         io_.printOneline(fp);
     }
-
-    void print() const { print(::stdout); }
 
     /**
      * Split the RecIo into pieces
@@ -121,11 +116,7 @@ public:
         auto it0 = recV.begin();
         auto it1 = ioV.begin();
         while (it0 != recV.end() && it1 != ioV.end()) {
-            RecIo r;
-            r.moveFrom(*it0, std::move(*it1));
-            r.updateChecksum();
-            assert(r.isValid());
-            v.push_back(std::move(r));
+            v.emplace_back(*it0, std::move(*it1));
             ++it0;
             ++it1;
         }
@@ -191,18 +182,10 @@ public:
             }
 
             if (0 < blks0) {
-                RecIo r;
-                r.moveFrom(rec0, std::move(data0));
-                r.updateChecksum();
-                assert(r.isValid());
-                v.push_back(std::move(r));
+                v.emplace_back(rec0, std::move(data0));
             }
             if (0 < blks1) {
-                RecIo r;
-                r.moveFrom(rec1, std::move(data1));
-                r.updateChecksum();
-                assert(r.isValid());
-                v.push_back(std::move(r));
+                v.emplace_back(rec1, std::move(data1));
             }
             return v;
         }
@@ -233,11 +216,7 @@ public:
                 data.assign(p, p + size);
             }
 
-            RecIo r;
-            r.moveFrom(rec, std::move(data));
-            r.updateChecksum();
-            assert(r.isValid());
-            v.push_back(std::move(r));
+            v.emplace_back(rec, std::move(data));
             return v;
         }
         /*
@@ -267,11 +246,7 @@ public:
             data.assign(p, p + size);
         }
         assert(rhsEndIoAddr == rec.io_address);
-        RecIo r;
-        r.moveFrom(rec, std::move(data));
-        r.updateChecksum();
-        assert(r.isValid());
-        v.push_back(std::move(r));
+        v.emplace_back(rec, std::move(data));
         return v;
     }
 };
@@ -323,17 +298,14 @@ public:
             }
         }
         /* Eliminate overlaps. */
-        RecIo r0;
-        r0.moveFrom(rec, std::move(io));
-        assert(r0.isValid());
+        RecIo r0(rec, std::move(io));
         while (!q.empty()) {
             std::vector<RecIo> v = q.front().minus(r0);
             for (RecIo &r : v) {
 				const DiffRecord& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
-                uint64_t addr = dr.io_address;
-                map_.emplace(addr, std::move(r));
+                map_.emplace(dr.io_address, std::move(r));
             }
             q.pop();
         }
@@ -376,12 +348,10 @@ public:
             ++it;
         }
         if (nBlocks_ != nBlocks) {
-            throw RT_ERR("nBlocks_ %" PRIu64 " nBlocks %" PRIu64 "\n",
-                         nBlocks_, nBlocks);
+            throw cybozu::Exception("MemoryData:getNIos:bad blocks") << nBlocks_ << nBlocks;
         }
         if (nIos_ != nIos) {
-            throw RT_ERR("nIos_ %" PRIu64 " nIos %" PRIu64 "\n",
-                         nIos_, nIos);
+            throw cybozu::Exception("MemoryData:getNIos:bad ios") << nIos_ << nIos;
         }
     }
     DiffFileHeader& header() { return fileH_; }
