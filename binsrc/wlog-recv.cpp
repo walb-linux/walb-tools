@@ -29,7 +29,7 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         std::string clientId, protocolName;
-        if (protocol::run1stNegotiateAsServer(sock_, nodeId_, protocolName, clientId, procStat_)) {
+        if (protocol::run1stNegotiateAsServer(sock_, nodeId_, protocolName, clientId)) {
             return;
         }
         /* Original behavior for wlog-recv command. */

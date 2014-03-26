@@ -52,6 +52,7 @@ const char *const dropPN = "drop";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const resizePN = "resize";
 const char *const hostTypePN = "host-type";
+const char *const shutdownPN = "shutdown";
 const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
 
 
@@ -128,30 +129,11 @@ struct ClientParams
  */
 using ClientHandler = void (*)(ClientParams &);
 
-inline void clientDispatch(
-    const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
-    const std::vector<std::string> &params,
-    const std::map<std::string, ClientHandler> &handlers)
-{
-    if (protocolName == "force-shutdown" || protocolName == "graceful-shutdown") {
-        return;
-    }
-    auto it = handlers.find(protocolName);
-    if (it != handlers.cend()) {
-        ClientHandler h = it->second;
-        ClientParams p(sock, logger, params);
-        h(p);
-    } else {
-        throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;
-    }
-}
-
 /**
  * @clientId will be set.
  * @protocol will be set.
  *
- * This function will process shutdown protocols.
- * For other protocols, this function will do only the common negotiation.
+ * This function will do only the common negotiation.
  *
  * RETURN:
  *   true if the protocol has finished or failed that is there is nothing to do.
@@ -160,8 +142,7 @@ inline void clientDispatch(
 inline bool run1stNegotiateAsServer(
     cybozu::Socket &sock, const std::string &serverId,
     std::string &protocolName,
-    std::string &clientId,
-    std::atomic<walb::server::ProcessStatus> &procStat)
+    std::string &clientId)
 {
     packet::Packet packet(sock);
 
@@ -177,19 +158,6 @@ inline bool run1stNegotiateAsServer(
 
     ProtocolLogger logger(serverId, clientId);
     packet::Answer ans(sock);
-
-    /* Server shutdown commands. */
-    if (protocolName == "graceful-shutdown") {
-        procStat = walb::server::ProcessStatus::GRACEFUL_SHUTDOWN;
-        logger.info("graceful shutdown.");
-        ans.ok();
-        return true;
-    } else if (protocolName == "force-shutdown") {
-        procStat = walb::server::ProcessStatus::FORCE_SHUTDOWN;
-        logger.info("force shutdown.");
-        ans.ok();
-        return true;
-    }
 
     if (!isVersionSame) {
         std::string msg = cybozu::util::formatString(
@@ -230,6 +198,52 @@ struct ServerParams
  */
 using ServerHandler = void (*)(ServerParams &);
 
+inline void shutdownClient(ClientParams &p)
+{
+    bool isForce = false;
+    if (!p.params.empty()) {
+        isForce = static_cast<int>(cybozu::atoi(p.params[0])) != 0;
+    }
+    packet::Packet pkt(p.sock);
+    pkt.write(isForce);
+    std::string res;
+    pkt.read(res);
+    if (res != msgAccept) {
+        throw cybozu::Exception(__func__) << res;
+    }
+}
+
+inline void shutdownServer(ServerParams &p)
+{
+    bool isForce;
+    packet::Packet pkt(p.sock);
+    pkt.read(isForce);
+    p.procStat = (isForce
+                  ? walb::server::ProcessStatus::FORCE_SHUTDOWN
+                  : walb::server::ProcessStatus::GRACEFUL_SHUTDOWN);
+    LOGs.info() << "shutdown" << (isForce ? "force" : "graceful") << p.clientId;
+    pkt.write(msgAccept);
+}
+
+inline void clientDispatch(
+    const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
+    const std::vector<std::string> &params,
+    const std::map<std::string, ClientHandler> &handlers)
+{
+    ClientParams clientParams(sock, logger, params);
+    if (protocolName == shutdownPN) {
+        shutdownClient(clientParams);
+        return;
+    }
+    auto it = handlers.find(protocolName);
+    if (it != handlers.cend()) {
+        ClientHandler h = it->second;
+        h(clientParams);
+    } else {
+        throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;
+    }
+}
+
 /**
  * Server dispatcher.
  */
@@ -240,7 +254,7 @@ inline void serverDispatch(
 {
     std::string clientId, protocolName;
     try {
-        if (run1stNegotiateAsServer(sock, nodeId, protocolName, clientId, procStat)) {
+        if (run1stNegotiateAsServer(sock, nodeId, protocolName, clientId)) {
             /* The protocol has finished or failed. */
             return;
         }
@@ -251,11 +265,15 @@ inline void serverDispatch(
     }
     ProtocolLogger logger(nodeId, clientId);
     try {
+        ServerParams serverParams(sock, clientId, procStat);
+        if (protocolName == shutdownPN) {
+            shutdownServer(serverParams);
+            return;
+        }
         auto it = handlers.find(protocolName);
         if (it != handlers.cend()) {
             ServerHandler h = it->second;
-            ServerParams p(sock, clientId, procStat);
-            h(p);
+            h(serverParams);
         } else {
             throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;
         }
