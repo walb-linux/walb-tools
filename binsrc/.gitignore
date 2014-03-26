@@ -21,8 +21,6 @@ write_random_data
 virt-full-cat
 wdev-poll
 lvm-mgr
-wlog-send
-wlog-recv
 storage-server
 proxy-server
 archive-server
