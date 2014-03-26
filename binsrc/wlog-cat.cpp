@@ -23,6 +23,7 @@
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
 #include "fileorfd.hpp"
+#include "walb_util.hpp"
 
 /**
  * Wlcat configuration.
@@ -254,7 +255,7 @@ private:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     config.check();
 

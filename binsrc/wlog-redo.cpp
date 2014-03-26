@@ -27,6 +27,7 @@
 #include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -895,7 +896,7 @@ private:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
 
     const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
     Config config(argc, argv);

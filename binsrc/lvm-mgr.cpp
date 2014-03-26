@@ -8,6 +8,7 @@
 #include "cybozu/option.hpp"
 #include "lvm.hpp"
 #include "util.hpp"
+#include "walb_util.hpp"
 
 struct Option : public cybozu::Option
 {
@@ -157,6 +158,7 @@ void dispatch(const Option &opt)
 int main(int argc, char *argv[])
 {
     try {
+        walb::util::setLogSetting("-", false);
         Option opt;
         opt.parse(argc, argv);
         dispatch(opt);

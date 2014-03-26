@@ -27,6 +27,7 @@
 #include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
 #include "wdev_log.hpp"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -360,7 +361,7 @@ private:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
 
     Config config(argc, argv);
     config.check();

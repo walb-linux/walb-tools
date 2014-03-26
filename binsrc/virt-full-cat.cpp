@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
     try {
         Option opt;
         if (!opt.parse(argc, argv)) return 1;
+        walb::util::setLogSetting("-", false);
 
         /* File descriptors for input/output. */
         int inFd = 0, outFd = 1;

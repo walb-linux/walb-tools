@@ -13,6 +13,7 @@
 
 #include "util.hpp"
 #include "fileio.hpp"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -124,6 +125,7 @@ uint64_t checkBlockDiff(Config& config)
 int main(int argc, char* argv[])
     try
 {
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
 
     return checkBlockDiff(config) != 0;

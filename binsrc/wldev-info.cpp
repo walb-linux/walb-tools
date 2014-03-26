@@ -22,6 +22,7 @@
 #include "wdev_log.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -80,7 +81,7 @@ public:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     WalbLogInfo wlInfo(config);
     wlInfo.show();

@@ -85,6 +85,8 @@ int main(int argc, UNUSED char *argv[])
             ::printf("Usage: wdiff-full < [full image] > [wdiff]\n");
             return 1;
         }
+        walb::util::setLogSetting("-", false);
+
         FullImageToWalbDiffConverter c(64 * 1024 / LOGICAL_BLOCK_SIZE);
         c.convert(0, 1);
         return 0;

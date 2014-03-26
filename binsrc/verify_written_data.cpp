@@ -30,6 +30,7 @@
 #include "io_recipe.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -152,7 +153,7 @@ private:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     IoDataVerifier v(config);
     v.run();

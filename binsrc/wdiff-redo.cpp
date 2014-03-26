@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
     try
 {
     Config config(argc, argv);
-
+    walb::util::setLogSetting("-", false);
     WdiffRedoManger m(config);
     m.run();
 } catch (std::exception &e) {

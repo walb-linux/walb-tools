@@ -36,7 +36,7 @@ struct Option : public cybozu::Option
 
 int main(int argc, UNUSED char *argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Option opt;
     if (!opt.parse(argc, argv)) {
         opt.usage();

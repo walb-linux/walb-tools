@@ -21,6 +21,7 @@
 #include "memory_buffer.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -268,7 +269,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     config.check();
     if (!writeConcurrentlyAndVerify(config)) {

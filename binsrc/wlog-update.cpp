@@ -23,6 +23,7 @@
 #include "aio_util.hpp"
 #include "walb/walb.h"
 #include "cybozu/atoi.hpp"
+#include "walb_util.hpp"
 
 /**
  * Command line configuration.
@@ -156,7 +157,7 @@ public:
 
 int main(int argc, char* argv[]) try
 {
-    cybozu::SetLogFILE(::stderr);
+    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     WalbLogUpdater wlUpdater(config);
     wlUpdater.update();

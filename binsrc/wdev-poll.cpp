@@ -11,6 +11,7 @@
 #include "cybozu/option.hpp"
 #include "util.hpp"
 #include "log_dev_monitor.hpp"
+#include "walb_util.hpp"
 
 struct Option : public cybozu::Option
 {
@@ -111,14 +112,14 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::LogDevMonitor &mo
 int main(int argc, char *argv[])
 {
     try {
-        walb::LogDevMonitor monitor;
-
         Option opt;
         if (!opt.parse(argc, argv)) {
             return 1;
         }
-        std::atomic<bool> flag(false);
+        walb::util::setLogSetting("-", false);
 
+        walb::LogDevMonitor monitor;
+        std::atomic<bool> flag(false);
         std::thread th(pollWorker, std::ref(flag), std::ref(monitor));
         while (true) {
             std::vector<std::string> cmds = commandReader(::stdin);

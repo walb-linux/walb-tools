@@ -13,6 +13,8 @@
 
 int main()
 try {
+    walb::util::setLogSetting("-", false);
+
     /* Read a wdiff file and show the contents. */
     walb::diff::Reader wdiffR(0);
     walb::DiffFileHeader wdiffH;
