@@ -904,6 +904,7 @@ public:
         return *const_cast<BlockData *>(blockD_);
     }
 
+    // not use blockD_
     bool isValid(bool isChecksum = true) const {
         if (!recP_->isValid()) {
             LOGd("invalid record.");
@@ -916,7 +917,16 @@ public:
         }
         return true;
     }
+    // not use blockD_
+    void printOneline(::FILE *fp = ::stdout) const {
+        recP_->printOneline(fp);
+    }
+    // not use blockD_
+    uint32_t calcIoChecksum() const {
+        return calcIoChecksum(recP_->salt());
+    }
 
+    // use blockD_
     void print(::FILE *fp = ::stdout) const {
         recP_->print(fp);
         if (recP_->hasDataForChecksum() && recP_->ioSizePb() == blockD_->nBlocks()) {
@@ -929,21 +939,15 @@ public:
             }
         }
     }
-    void printOneline(::FILE *fp = ::stdout) const {
-        recP_->printOneline(fp);
-    }
 
+    // use blockD_
     bool setChecksum() {
         if (!recP_->hasDataForChecksum()) { return false; }
         if (recP_->ioSizePb() != blockD_->nBlocks()) { return false; }
         recP_->record().checksum = calcIoChecksum();
         return true;
     }
-
-    uint32_t calcIoChecksum() const {
-        return calcIoChecksum(recP_->salt());
-    }
-
+    // use blockD_
     uint32_t calcIoChecksum(uint32_t salt) const {
         assert(recP_->hasDataForChecksum());
         assert(0 < recP_->ioSizeLb());
