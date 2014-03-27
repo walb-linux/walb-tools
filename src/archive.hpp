@@ -567,7 +567,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     }
     pkt.write(msgAccept);
 
-    ActionCounterTransaction tran(volSt.ac, volId);
+    ActionCounterTransaction tran(volSt.ac, aRestore);
     ul.unlock();
     if (!archive_local::restore(volId, gid)) {
         logger.warn() << FUNC << "force stopped" << volId << gid;
