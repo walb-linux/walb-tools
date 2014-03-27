@@ -24,6 +24,63 @@
 #include "backtrace.hpp"
 
 namespace walb {
+
+#if 0
+struct LogRecord : walb_log_record
+{
+public:
+//    uint64_t lsid() const { return lsid; }
+    uint16_t lsidLocal() const { return lsid_local; }
+//    uint32_t checksum() const { return checksum; }
+//    uint64_t offset() const { return offset; }
+    uint64_t packLsid() const { return lsid - lsidLocal(); }
+    bool isExist() const {
+        return ::test_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    bool isPadding() const {
+        return ::test_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    bool isDiscard() const {
+        return ::test_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+    bool hasData() const {
+        return isExist() && !isDiscard();
+    }
+    bool hasDataForChecksum() const {
+        return isExist() && !isDiscard() && !isPadding();
+    }
+    unsigned int ioSizeLb() const { return io_size; }
+    unsigned int ioSizePb() const { return ::capacity_pb(pbs(), ioSizeLb()); }
+    bool isValid() const { return ::is_valid_log_record_const(this); }
+
+    virtual void print(::FILE *fp = ::stdout) const {
+        printLogRecord(fp, pos(), this);
+    }
+    virtual void printOneline(::FILE *fp = ::stdout) const {
+        printLogRecordOneline(fp, pos(), this);
+    }
+
+    void setExist() {
+        ::set_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    void setPadding() {
+        ::set_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    void setDiscard() {
+        ::set_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+    void clearExist() {
+        ::clear_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    void clearPadding() {
+        ::clear_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    void clearDiscard() {
+        ::clear_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+};
+#endif
+
 namespace log {
 
 class InvalidIo : public std::exception
@@ -628,20 +685,18 @@ public:
  *
  * PackHeaderT: PackHeader or const PackHeader.
  */
-template <class PackHeaderT>
-class RecordWrapT : public Record
+class RecordWrap : public Record
 {
-protected:
-    PackHeaderT *logh_;
+    PackHeader *logh_;
     size_t pos_;
 public:
-    RecordWrapT(const PackHeaderT *logh, size_t pos)
-        : Record(), logh_(const_cast<PackHeaderT *>(logh)) , pos_(pos) {
+    RecordWrap(const PackHeader *logh, size_t pos)
+        : Record(), logh_(const_cast<PackHeader *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
-    ~RecordWrapT() noexcept override {}
-    DISABLE_COPY_AND_ASSIGN(RecordWrapT);
-    DISABLE_MOVE(RecordWrapT);
+    ~RecordWrap() noexcept override {}
+    DISABLE_COPY_AND_ASSIGN(RecordWrap);
+    DISABLE_MOVE(RecordWrap);
 
     size_t pos() const override { return pos_; }
     unsigned int pbs() const override { return logh_->pbs(); }
@@ -656,8 +711,6 @@ public:
         return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
     }
 };
-
-using RecordWrap = RecordWrapT<PackHeader>;
 
 /**
  * Interface.
