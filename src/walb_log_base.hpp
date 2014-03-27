@@ -25,7 +25,7 @@
 
 namespace walb {
 
-#if 0
+template<class T>
 struct LogRecord : walb_log_record
 {
 public:
@@ -50,14 +50,14 @@ public:
         return isExist() && !isDiscard() && !isPadding();
     }
     unsigned int ioSizeLb() const { return io_size; }
-    unsigned int ioSizePb() const { return ::capacity_pb(pbs(), ioSizeLb()); }
+    unsigned int ioSizePb() const { return ::capacity_pb(static_cast<const T&>(*this).pbs(), ioSizeLb()); }
     bool isValid() const { return ::is_valid_log_record_const(this); }
 
     virtual void print(::FILE *fp = ::stdout) const {
-        printLogRecord(fp, pos(), this);
+        printLogRecord(fp, static_cast<const T&>(*this).pos(), this);
     }
     virtual void printOneline(::FILE *fp = ::stdout) const {
-        printLogRecordOneline(fp, pos(), this);
+        printLogRecordOneline(fp, static_cast<const T&>(*this).pos(), this);
     }
 
     void setExist() {
@@ -79,7 +79,6 @@ public:
         ::clear_bit_u32(LOG_RECORD_DISCARD, &flags);
     }
 };
-#endif
 
 namespace log {
 
@@ -484,35 +483,34 @@ protected:
 /**
  * Logpack wrapper implementation.
  */
-template <typename CharT>
-class PackHeaderWrapT : public PackHeader
+class PackHeaderWrap : public PackHeader
 {
 protected:
-    CharT *data_;
+    uint8_t *data_;
     unsigned int pbs_;
     uint32_t salt_;
 public:
-    PackHeaderWrapT(CharT *data, unsigned int pbs, uint32_t salt)
-        : data_(data), pbs_(pbs), salt_(salt) {
+    PackHeaderWrap(const uint8_t *data, unsigned int pbs, uint32_t salt)
+        : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
-    ~PackHeaderWrapT() noexcept = default;
+    ~PackHeaderWrap() noexcept = default;
     const struct walb_logpack_header &header() const override {
         checkBlock();
         return *reinterpret_cast<const struct walb_logpack_header *>(data_);
     }
     struct walb_logpack_header &header() override {
-        assert_bt(!std::is_const<CharT>::value);
+        assert_bt(!std::is_const<uint8_t>::value);
         checkBlock();
-        using CharTT = typename std::remove_const<CharT>::type;
+        using uint8_tT = typename std::remove_const<uint8_t>::type;
         return *reinterpret_cast<struct walb_logpack_header *>(
-            const_cast<CharTT *>(data_));
+            const_cast<uint8_tT *>(data_));
     }
     unsigned int pbs() const override { return pbs_; }
     uint32_t salt() const override { return salt_; }
     void setPbs(unsigned int pbs0) override { pbs_ = pbs0; };
     void setSalt(uint32_t salt0) override { salt_ = salt0; };
-    void resetData(CharT *data) {
+    void resetData(uint8_t *data) {
         data_ = data;
     }
 protected:
@@ -522,9 +520,6 @@ protected:
         }
     }
 };
-
-using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
-using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>; //must use with const.
 
 class PackHeaderRaw : public PackHeaderWrap
 {
@@ -682,8 +677,6 @@ public:
 /**
  * Log data of an IO.
  * Log record is a reference.
- *
- * PackHeaderT: PackHeader or const PackHeader.
  */
 class RecordWrap : public Record
 {
@@ -691,23 +684,22 @@ class RecordWrap : public Record
     size_t pos_;
 public:
     RecordWrap(const PackHeader *logh, size_t pos)
-        : Record(), logh_(const_cast<PackHeader *>(logh)) , pos_(pos) {
+        : logh_(const_cast<PackHeader *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
-    ~RecordWrap() noexcept override {}
     DISABLE_COPY_AND_ASSIGN(RecordWrap);
     DISABLE_MOVE(RecordWrap);
 
-    size_t pos() const override { return pos_; }
-    unsigned int pbs() const override { return logh_->pbs(); }
-    uint32_t salt() const override { return logh_->salt(); }
+    size_t pos() const { return pos_; }
+    unsigned int pbs() const { return logh_->pbs(); }
+    uint32_t salt() const { return logh_->salt(); }
 
-    void setPos(size_t pos0) override { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) override { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
-    void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
+    void setPos(size_t pos0) { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
+    void setSalt(uint32_t salt0) { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
-    const struct walb_log_record &record() const override { return logh_->record(pos_); }
-    struct walb_log_record &record() override {
+    const struct walb_log_record &record() const { return logh_->record(pos_); }
+    struct walb_log_record &record() {
         return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
     }
 };
@@ -915,7 +907,6 @@ private:
     }
 };
 
-
 /**
  * Logpack record and IO data.
  * This is just a wrapper of a record and a block data.
@@ -1009,7 +1000,8 @@ public:
     }
 };
 
-inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
+template<class R>
+uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
 {
     const uint32_t salt = rec.salt();
     if (blockD.nBlocks() < rec.ioSizePb()) {
@@ -1018,7 +1010,8 @@ inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
     return blockD.calcChecksum(rec.ioSizeLb(), salt);
 }
 
-inline bool isValidRecordAndBlockData(const Record& rec, const BlockData& blockD)
+template<class R>
+bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");

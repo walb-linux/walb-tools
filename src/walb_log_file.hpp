@@ -186,8 +186,10 @@ public:
 
         /* Copy to the record. */
         Record &rec = packIo.record();
-        const RecordWrap srcRec(pack_.get(), recIdx_);
-        rec = srcRec;
+        const PackHeader& packHeader = *pack_.get();
+        rec.record() = packHeader.record(recIdx_);
+        rec.setPbs(packHeader.pbs());
+        rec.setSalt(packHeader.salt());
 
         /* Read to the blockD. */
         BlockData &blockD = packIo.blockData();

@@ -322,7 +322,7 @@ public:
     template <typename BlockDataT>
     void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
         assert(recIdx_ == recIdx);
-        const PackHeaderWrapConst h(reinterpret_cast<const uint8_t *>(&header), pbs_, salt_);
+        const PackHeaderWrap h((uint8_t*)&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
         const RecordWrap rec(&h, recIdx);
         if (rec.hasDataForChecksum()) {
