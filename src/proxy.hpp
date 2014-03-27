@@ -670,7 +670,7 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
     while (receiver.popHeader(packH.header())) {
         log::BlockDataShared blockD(pbs);
         for (size_t i = 0; i < packH.header().n_records; i++) {
-            log::RecordWrapConst lrec(&packH, i);
+            const log::RecordWrap lrec(&packH, i);
             receiver.popIo(packH.header(), i, blockD);
             DiffRecord drec;
             DiffIo diffIo;
@@ -852,7 +852,7 @@ inline bool sendWdiffs(
         }
         std::unique_ptr<char[]> p = conv.pop();
         ctrl.next();
-        sock.write(p.get(), diff::PackHeader(p.get()).wholePackSize());
+        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
         pushedNum--;
     }
     if (!packer.empty()) {
@@ -861,7 +861,7 @@ inline bool sendWdiffs(
     conv.quit();
     while (std::unique_ptr<char[]> p = conv.pop()) {
         ctrl.next();
-        sock.write(p.get(), diff::PackHeader(p.get()).wholePackSize());
+        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
     }
     ctrl.end();
     packet::Ack(sock).recv();

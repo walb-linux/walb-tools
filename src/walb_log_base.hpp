@@ -24,6 +24,62 @@
 #include "backtrace.hpp"
 
 namespace walb {
+
+template<class T>
+struct LogRecord : walb_log_record
+{
+public:
+//    uint64_t lsid() const { return lsid; }
+    uint16_t lsidLocal() const { return lsid_local; }
+//    uint32_t checksum() const { return checksum; }
+//    uint64_t offset() const { return offset; }
+    uint64_t packLsid() const { return lsid - lsidLocal(); }
+    bool isExist() const {
+        return ::test_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    bool isPadding() const {
+        return ::test_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    bool isDiscard() const {
+        return ::test_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+    bool hasData() const {
+        return isExist() && !isDiscard();
+    }
+    bool hasDataForChecksum() const {
+        return isExist() && !isDiscard() && !isPadding();
+    }
+    unsigned int ioSizeLb() const { return io_size; }
+    unsigned int ioSizePb() const { return ::capacity_pb(static_cast<const T&>(*this).pbs(), ioSizeLb()); }
+    bool isValid() const { return ::is_valid_log_record_const(this); }
+
+    virtual void print(::FILE *fp = ::stdout) const {
+        printLogRecord(fp, static_cast<const T&>(*this).pos(), this);
+    }
+    virtual void printOneline(::FILE *fp = ::stdout) const {
+        printLogRecordOneline(fp, static_cast<const T&>(*this).pos(), this);
+    }
+
+    void setExist() {
+        ::set_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    void setPadding() {
+        ::set_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    void setDiscard() {
+        ::set_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+    void clearExist() {
+        ::clear_bit_u32(LOG_RECORD_EXIST, &flags);
+    }
+    void clearPadding() {
+        ::clear_bit_u32(LOG_RECORD_PADDING, &flags);
+    }
+    void clearDiscard() {
+        ::clear_bit_u32(LOG_RECORD_DISCARD, &flags);
+    }
+};
+
 namespace log {
 
 class InvalidIo : public std::exception
@@ -427,35 +483,34 @@ protected:
 /**
  * Logpack wrapper implementation.
  */
-template <typename CharT>
-class PackHeaderWrapT : public PackHeader
+class PackHeaderWrap : public PackHeader
 {
 protected:
-    CharT *data_;
+    uint8_t *data_;
     unsigned int pbs_;
     uint32_t salt_;
 public:
-    PackHeaderWrapT(CharT *data, unsigned int pbs, uint32_t salt)
-        : data_(data), pbs_(pbs), salt_(salt) {
+    PackHeaderWrap(const uint8_t *data, unsigned int pbs, uint32_t salt)
+        : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
-    ~PackHeaderWrapT() noexcept = default;
+    ~PackHeaderWrap() noexcept = default;
     const struct walb_logpack_header &header() const override {
         checkBlock();
         return *reinterpret_cast<const struct walb_logpack_header *>(data_);
     }
     struct walb_logpack_header &header() override {
-        assert_bt(!std::is_const<CharT>::value);
+        assert_bt(!std::is_const<uint8_t>::value);
         checkBlock();
-        using CharTT = typename std::remove_const<CharT>::type;
+        using uint8_tT = typename std::remove_const<uint8_t>::type;
         return *reinterpret_cast<struct walb_logpack_header *>(
-            const_cast<CharTT *>(data_));
+            const_cast<uint8_tT *>(data_));
     }
     unsigned int pbs() const override { return pbs_; }
     uint32_t salt() const override { return salt_; }
     void setPbs(unsigned int pbs0) override { pbs_ = pbs0; };
     void setSalt(uint32_t salt0) override { salt_ = salt0; };
-    void resetData(CharT *data) {
+    void resetData(uint8_t *data) {
         data_ = data;
     }
 protected:
@@ -465,9 +520,6 @@ protected:
         }
     }
 };
-
-using PackHeaderWrap = PackHeaderWrapT<uint8_t>;
-using PackHeaderWrapConst = PackHeaderWrapT<const uint8_t>; //must use with const.
 
 class PackHeaderRaw : public PackHeaderWrap
 {
@@ -625,41 +677,32 @@ public:
 /**
  * Log data of an IO.
  * Log record is a reference.
- *
- * PackHeaderT: PackHeader or const PackHeader.
  */
-template <class PackHeaderT>
-class RecordWrapT : public Record
+class RecordWrap : public Record
 {
-protected:
-    PackHeaderT *logh_;
+    PackHeader *logh_;
     size_t pos_;
 public:
-    RecordWrapT(PackHeaderT *logh, size_t pos)
-        : Record(), logh_(logh) , pos_(pos) {
+    RecordWrap(const PackHeader *logh, size_t pos)
+        : logh_(const_cast<PackHeader *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
-    ~RecordWrapT() noexcept override {}
-    DISABLE_COPY_AND_ASSIGN(RecordWrapT);
-    DISABLE_MOVE(RecordWrapT);
+    DISABLE_COPY_AND_ASSIGN(RecordWrap);
+    DISABLE_MOVE(RecordWrap);
 
-    size_t pos() const override { return pos_; }
-    unsigned int pbs() const override { return logh_->pbs(); }
-    uint32_t salt() const override { return logh_->salt(); }
+    size_t pos() const { return pos_; }
+    unsigned int pbs() const { return logh_->pbs(); }
+    uint32_t salt() const { return logh_->salt(); }
 
-    void setPos(size_t pos0) override { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) override { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
-    void setSalt(uint32_t salt0) override { if (salt() != salt0) throw RT_ERR("salt differs."); }
+    void setPos(size_t pos0) { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
+    void setSalt(uint32_t salt0) { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
-    const struct walb_log_record &record() const override { return logh_->record(pos_); }
-    struct walb_log_record &record() override {
-        assert_bt(!std::is_const<PackHeaderT>::value);
+    const struct walb_log_record &record() const { return logh_->record(pos_); }
+    struct walb_log_record &record() {
         return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
     }
 };
-
-using RecordWrap = RecordWrapT<PackHeader>;
-using RecordWrapConst = RecordWrapT<const PackHeader>; //must use with const.
 
 /**
  * Interface.
@@ -864,7 +907,6 @@ private:
     }
 };
 
-
 /**
  * Logpack record and IO data.
  * This is just a wrapper of a record and a block data.
@@ -904,6 +946,7 @@ public:
         return *const_cast<BlockData *>(blockD_);
     }
 
+    // not use blockD_
     bool isValid(bool isChecksum = true) const {
         if (!recP_->isValid()) {
             LOGd("invalid record.");
@@ -916,7 +959,16 @@ public:
         }
         return true;
     }
+    // not use blockD_
+    void printOneline(::FILE *fp = ::stdout) const {
+        recP_->printOneline(fp);
+    }
+    // not use blockD_
+    uint32_t calcIoChecksum() const {
+        return calcIoChecksum(recP_->salt());
+    }
 
+    // use blockD_
     void print(::FILE *fp = ::stdout) const {
         recP_->print(fp);
         if (recP_->hasDataForChecksum() && recP_->ioSizePb() == blockD_->nBlocks()) {
@@ -929,21 +981,15 @@ public:
             }
         }
     }
-    void printOneline(::FILE *fp = ::stdout) const {
-        recP_->printOneline(fp);
-    }
 
+    // use blockD_
     bool setChecksum() {
         if (!recP_->hasDataForChecksum()) { return false; }
         if (recP_->ioSizePb() != blockD_->nBlocks()) { return false; }
         recP_->record().checksum = calcIoChecksum();
         return true;
     }
-
-    uint32_t calcIoChecksum() const {
-        return calcIoChecksum(recP_->salt());
-    }
-
+    // use blockD_
     uint32_t calcIoChecksum(uint32_t salt) const {
         assert(recP_->hasDataForChecksum());
         assert(0 < recP_->ioSizeLb());
@@ -954,8 +1000,8 @@ public:
     }
 };
 
-
-inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
+template<class R>
+uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
 {
     const uint32_t salt = rec.salt();
     if (blockD.nBlocks() < rec.ioSizePb()) {
@@ -964,7 +1010,8 @@ inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
     return blockD.calcChecksum(rec.ioSizeLb(), salt);
 }
 
-inline bool isValidRecordAndBlockData(const Record& rec, const BlockData& blockD)
+template<class R>
+bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");

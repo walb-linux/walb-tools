@@ -654,7 +654,7 @@ inline bool recvAndWriteDiffs(
         if (stopState == ForceStopping || ga.forceQuit) {
             return false;
         }
-        diff::PackHeader packH;
+        DiffPackHeader packH;
         sock.read(packH.rawData(), packH.rawSize());
         if (!packH.isValid()) {
             throw cybozu::Exception(FUNC) << "bad packH";

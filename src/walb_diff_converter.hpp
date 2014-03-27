@@ -31,9 +31,11 @@ namespace walb {
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
+ *   R : Record
  */
+template<class R>
 inline bool convertLogToDiff(
-    const log::Record& rec, const log::BlockData& blockD, DiffRecord& mrec, DiffIo &diffIo)
+    const R& rec, const log::BlockData& blockD, DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;

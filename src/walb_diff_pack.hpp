@@ -10,13 +10,12 @@
 #include <exception>
 
 namespace walb {
-namespace diff {
 
 /**
  * Walb diff pack wrapper.
  * This can be a wrapper or a manager of 4KiB memory image.
  */
-class PackHeader /* final */
+class DiffPackHeader
 {
 private:
     char *buf_;
@@ -24,7 +23,7 @@ private:
     size_t maxNumRecords_;
     size_t maxPackSize_; /* [byte] */
 public:
-    PackHeader()
+    DiffPackHeader()
         : buf_(allocStatic()), mustDelete_(true)
         , maxNumRecords_(::MAX_N_RECORDS_IN_WALB_DIFF_PACK)
         , maxPackSize_(::WALB_DIFF_PACK_MAX_SIZE) {
@@ -34,22 +33,22 @@ public:
      * Buffer size must be ::WALB_DIFF_PACK_SIZE.
      * You must call reset() to initialize.
      */
-    explicit PackHeader(char *buf)
+    explicit DiffPackHeader(char *buf)
         : buf_(buf), mustDelete_(false)
         , maxNumRecords_(::MAX_N_RECORDS_IN_WALB_DIFF_PACK)
         , maxPackSize_(::WALB_DIFF_PACK_MAX_SIZE) {
         assert(buf);
     }
-    PackHeader(const PackHeader &) = delete;
-    PackHeader(PackHeader &&rhs)
+    DiffPackHeader(const DiffPackHeader &) = delete;
+    DiffPackHeader(DiffPackHeader &&rhs)
         : buf_(nullptr), mustDelete_(false) {
         *this = std::move(rhs);
     }
-    ~PackHeader() noexcept {
+    ~DiffPackHeader() noexcept {
         if (mustDelete_) ::free(buf_);
     }
-    PackHeader &operator=(const PackHeader &) = delete;
-    PackHeader &operator=(PackHeader &&rhs) {
+    DiffPackHeader &operator=(const DiffPackHeader &) = delete;
+    DiffPackHeader &operator=(DiffPackHeader &&rhs) {
         if (mustDelete_) {
             ::free(buf_);
             buf_ = nullptr;
@@ -190,6 +189,7 @@ private:
     }
 };
 
+namespace diff {
 /**
  * Manage a pack as a contiguous memory.
  */
@@ -217,7 +217,7 @@ public:
     }
     bool isValid(bool checkHeaderCsum, std::string *errMsg = nullptr) const try {
         std::string err;
-        PackHeader packh((char *)&header());
+        DiffPackHeader packh((char *)&header());
         if (checkHeaderCsum && !packh.isValid()) {
             err = "pack header invalid.";
         } else {
@@ -272,7 +272,7 @@ class Packer
 {
 private:
     std::vector<char> data_;
-    diff::PackHeader packh_;
+    DiffPackHeader packh_;
 
 public:
     Packer() : data_(::WALB_DIFF_PACK_SIZE) , packh_(&data_[0]) {

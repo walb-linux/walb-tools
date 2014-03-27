@@ -79,8 +79,8 @@ private:
 class WlogVerifier
 {
 private:
-    using PackHeader = walb::log::PackHeaderRaw;
-    using PackHeaderPtr = std::shared_ptr<PackHeader>;
+    using PackHeaderRaw = walb::log::PackHeaderRaw;
+    using PackHeaderPtr = std::shared_ptr<PackHeaderRaw>;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
 
     const Config &config_;
@@ -127,7 +127,7 @@ public:
         /* Read walb logs and verify them with IO recipes. */
         while (lsid < endLsid) {
             PackHeaderPtr loghp = readPackHeader(wlFdr, ba, salt);
-            PackHeader &logh = *loghp;
+            PackHeaderRaw &logh = *loghp;
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
             std::queue<PackIo> q;
             readPackIo(logh, wlFdr, ba, q);
@@ -179,11 +179,11 @@ private:
     PackHeaderPtr readPackHeader(
         cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba, uint32_t salt) {
         Block b = readBlock(fdr, ba);
-        return PackHeaderPtr(new PackHeader(b, ba.blockSize(), salt));
+        return PackHeaderPtr(new PackHeaderRaw(b, ba.blockSize(), salt));
     }
 
     void readPackIo(
-        PackHeader &logh, cybozu::util::FdReader &fdr,
+        PackHeaderRaw &logh, cybozu::util::FdReader &fdr,
         cybozu::util::BlockAllocator<u8> &ba, std::queue<PackIo> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIo packIo(logh, i);

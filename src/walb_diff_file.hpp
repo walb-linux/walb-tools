@@ -78,7 +78,7 @@ private:
     bool isClosed_;
 
     /* Buffers. */
-    PackHeader pack_;
+    DiffPackHeader pack_;
     std::queue<DiffIo> ioQ_;
 
 public:
@@ -248,7 +248,7 @@ private:
     bool isReadHeader_;
 
     /* Buffers. */
-    PackHeader pack_;
+    DiffPackHeader pack_;
     uint16_t recIdx_;
     uint32_t totalSize_;
 
@@ -358,7 +358,7 @@ public:
         return true;
     }
 
-    bool readPackHeader(PackHeader& pack) {
+    bool readPackHeader(DiffPackHeader& pack) {
         try {
             fdr_.read(pack.rawData(), pack.rawSize());
         } catch (cybozu::util::EofError &e) {

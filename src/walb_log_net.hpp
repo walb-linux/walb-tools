@@ -168,7 +168,7 @@ public:
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);
         assert(recIdx < header.nRecords());
-        const RecordWrapConst rec(&header, recIdx);
+        const RecordWrap rec(&header, recIdx);
 #ifdef DEBUG
         assert(isValidRecordAndBlockData(rec, blockD));
 #endif
@@ -322,9 +322,9 @@ public:
     template <typename BlockDataT>
     void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
         assert(recIdx_ == recIdx);
-        const PackHeaderWrapConst h(reinterpret_cast<const uint8_t *>(&header), pbs_, salt_);
+        const PackHeaderWrap h((uint8_t*)&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
-        const RecordWrapConst rec(&h, recIdx);
+        const RecordWrap rec(&h, recIdx);
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
