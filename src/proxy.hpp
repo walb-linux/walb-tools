@@ -851,7 +851,7 @@ inline bool sendWdiffs(
         }
         std::unique_ptr<char[]> p = conv.pop();
         ctrl.next();
-        sock.write(p.get(), diff::PackHeader(p.get()).wholePackSize());
+        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
         pushedNum--;
     }
     if (!packer.empty()) {
@@ -860,7 +860,7 @@ inline bool sendWdiffs(
     conv.quit();
     while (std::unique_ptr<char[]> p = conv.pop()) {
         ctrl.next();
-        sock.write(p.get(), diff::PackHeader(p.get()).wholePackSize());
+        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
     }
     ctrl.end();
     packet::Ack(sock).recv();
