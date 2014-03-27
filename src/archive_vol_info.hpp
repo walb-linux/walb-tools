@@ -194,8 +194,16 @@ public:
         return true;
     }
     std::vector<std::string> getStatusAsStrVec() const {
+        const char *const FUNC = __func__;
         std::vector<std::string> v;
         auto &fmt = cybozu::util::formatString;
+
+        if (!existsVolDir()) {
+            throw cybozu::Exception(FUNC) << "not found volDir" << volDir.str();
+        }
+        if (!lvExists()) {
+            throw cybozu::Exception(FUNC) << "not found base lv" << volId_;
+        }
 
         v.push_back(fmt("volId %s", volId_.c_str()));
         uint64_t sizeLb = getLv().sizeLb();
