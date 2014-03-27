@@ -696,7 +696,7 @@ inline void readLogPackHeader(device::AsyncWldevReader &reader, log::PackHeaderR
 
 inline void readLogIo(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, size_t recIdx, log::BlockDataShared &blockD)
 {
-    log::RecordWrapConst lrec(&packH, recIdx);
+    const log::RecordWrap lrec(&packH, recIdx);
     if (!lrec.hasData()) return;
 
     blockD.resize(lrec.ioSizePb());

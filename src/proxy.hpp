@@ -669,7 +669,7 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
     while (receiver.popHeader(packH.header())) {
         log::BlockDataShared blockD(pbs);
         for (size_t i = 0; i < packH.header().n_records; i++) {
-            log::RecordWrapConst lrec(&packH, i);
+            const log::RecordWrap lrec(&packH, i);
             receiver.popIo(packH.header(), i, blockD);
             DiffRecord drec;
             DiffIo diffIo;

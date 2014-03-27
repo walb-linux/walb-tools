@@ -186,7 +186,7 @@ public:
 
         /* Copy to the record. */
         Record &rec = packIo.record();
-        const RecordWrapConst srcRec(pack_.get(), recIdx_);
+        const RecordWrap srcRec(pack_.get(), recIdx_);
         rec = srcRec;
 
         /* Read to the blockD. */
@@ -377,7 +377,7 @@ public:
         }
         std::vector<BlockDataShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
-            const RecordWrapConst rec(&header, i);
+            const RecordWrap rec(&header, i);
             BlockDataShared blockD(pbs_);
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {

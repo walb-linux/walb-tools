@@ -635,8 +635,8 @@ protected:
     PackHeaderT *logh_;
     size_t pos_;
 public:
-    RecordWrapT(PackHeaderT *logh, size_t pos)
-        : Record(), logh_(logh) , pos_(pos) {
+    RecordWrapT(const PackHeaderT *logh, size_t pos)
+        : Record(), logh_(const_cast<PackHeaderT *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
     ~RecordWrapT() noexcept override {}
@@ -653,13 +653,11 @@ public:
 
     const struct walb_log_record &record() const override { return logh_->record(pos_); }
     struct walb_log_record &record() override {
-        assert_bt(!std::is_const<PackHeaderT>::value);
         return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
     }
 };
 
 using RecordWrap = RecordWrapT<PackHeader>;
-using RecordWrapConst = RecordWrapT<const PackHeader>; //must use with const.
 
 /**
  * Interface.
@@ -957,7 +955,6 @@ public:
         return blockD_->calcChecksum(recP_->ioSizeLb(), salt);
     }
 };
-
 
 inline uint32_t calcIoChecksum(const Record& rec, const BlockData& blockD)
 {

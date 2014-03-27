@@ -246,7 +246,7 @@ private:
         log::BlockDataVec blockD;
         for (size_t i = 0; i < packH.nRecords(); i++) {
             receiver_.popIo(packH.header(), i, blockD);
-            const log::RecordWrapConst lrec(&packH, i);
+            const log::RecordWrap lrec(&packH, i);
             DiffRecord drec;
             DiffIo dio;
             if (convertLogToDiff(lrec, blockD, drec, dio)) {
