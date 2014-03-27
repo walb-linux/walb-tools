@@ -8,15 +8,21 @@
 #include "log_dev_monitor.hpp"
 #include "wdev_util.hpp"
 #include "walb_log_net.hpp"
+#include "action_counter.hpp"
 
 namespace walb {
+
+// action
+const char *const sWlogSend = "WlogSend";
 
 struct StorageVolState {
     std::recursive_mutex mu;
     std::atomic<int> stopState;
     StateMachine sm;
+    ActionCounters ac; // key is action identifier.
 
-    explicit StorageVolState(const std::string& volId) : stopState(NotStopping), sm(mu) {
+    explicit StorageVolState(const std::string& volId)
+        : stopState(NotStopping), sm(mu), ac(mu) {
         const struct StateMachine::Pair tbl[] = {
             { sClear, stInitVol },
             { stInitVol, sSyncReady },
@@ -42,9 +48,6 @@ struct StorageVolState {
             { stStartMaster, sMaster },
             { sMaster, stStopMaster },
             { stStopMaster, sStopped },
-
-            { sMaster, stWlogSend },
-            { stWlogSend, sMaster },
         };
         sm.init(tbl);
 
@@ -224,6 +227,7 @@ inline StorageSingleton& getStorageGlobal()
 }
 
 namespace storage_local {
+
 inline void startMonitoring(const std::string& wdevPath, const std::string& volId)
 {
     const char *const FUNC = __func__;
@@ -233,16 +237,22 @@ inline void startMonitoring(const std::string& wdevPath, const std::string& volI
     if (!g.logDevMonitor.add(wdevName)) {
         throw cybozu::Exception(FUNC) << "failed to add" << volId << wdevName;
     }
+    g.taskQueue.push(volId);
 }
-inline void stopMonitoring(const std::string& wdevPath)
+
+inline void stopMonitoring(const std::string& wdevPath, const std::string& volId)
 {
     StorageSingleton &g = getStorageGlobal();
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
     g.logDevMonitor.del(wdevName);
     g.delWdevName(wdevName);
+    g.taskQueue.remove([&](const std::string &volId2) {
+            return volId == volId2;
+        });
 }
 
-class MonitorManager {
+class MonitorManager
+{
     const std::string wdevPath;
     const std::string volId;
     bool dontStop_;
@@ -253,7 +263,7 @@ public:
     }
     void dontStop() { dontStop_ = true; }
     ~MonitorManager() {
-        if (!dontStop_) stopMonitoring(wdevPath);
+        if (!dontStop_) stopMonitoring(wdevPath, volId);
     }
 };
 
@@ -497,18 +507,20 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
+                if (!volSt.ac.isAllZero(StrVec{sWlogSend})) return false;
                 return isStateIn(sm.get(), {sClear, sSyncReady, sStopped, sMaster, sSlave});
             }, FUNC);
 
         const std::string st = sm.get();
         verifyStateIn(st, {sMaster, sSlave}, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{sWlogSend}, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
         if (st == sMaster) {
             StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
             ul.unlock();
-            storage_local::stopMonitoring(volInfo.getWdevPath());
+            storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
             if (fst != sMaster) throw cybozu::Exception(FUNC) << "bad state" << fst;
             volInfo.setState(sStopped);
             tran.commit(sStopped);
@@ -517,7 +529,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
             StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
             ul.unlock();
             if (fst != sSlave) throw cybozu::Exception(FUNC) << "bad state" << fst;
-            storage_local::stopMonitoring(volInfo.getWdevPath());
+            storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
             volInfo.setState(sSyncReady);
             tran.commit(sSyncReady);
         }
@@ -629,18 +641,18 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
         // (8), (9) in storage-daemon.txt
         {
             const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
+            getStorageGlobal().taskQueue.push(volId);
             aPack.write(gidB);
             aPack.write(gidE);
         }
         packet::Ack(aSock).recv();
     }
+    ul.lock();
     tran0.commit(sStopped);
-
     StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
     volInfo.setState(sMaster);
     tran1.commit(sMaster);
     monitorMgr.dontStop();
-    getStorageGlobal().taskQueue.push(volId);
 
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
@@ -841,24 +853,25 @@ inline void StorageWorker::run()
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
-    verifyStateIn(st, {sMaster, sSlave}, FUNC);
+    verifyStateIn(st, {sMaster, stFullSync, stHashSync, sSlave}, FUNC);
 
-    if (st == sMaster) {
-        StateMachineTransaction tran(volSt.sm, sMaster, stWlogSend);
-        ul.unlock();
-        try {
-            const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
-            if (isRemaining) getStorageGlobal().taskQueue.push(volId);
-        } catch (...) {
-            getStorageGlobal().taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
-            throw;
-        }
-        tran.commit(sMaster);
-    } else { // sSlave
+    if (st == sSlave) {
         StateMachineTransaction tran(volSt.sm, sSlave, stWlogRemove);
         ul.unlock();
         storage_local::deleteWlogs(volId);
         tran.commit(sSlave);
+        return;
+    }
+
+    verifyNoActionRunning(volSt.ac, StrVec{sWlogSend}, FUNC);
+    ActionCounterTransaction tran(volSt.ac, sWlogSend);
+    ul.unlock();
+    try {
+        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
+        if (isRemaining) getStorageGlobal().taskQueue.push(volId);
+    } catch (...) {
+        getStorageGlobal().taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
+        throw;
     }
 }
 
@@ -934,7 +947,6 @@ inline void startIfNecessary(const std::string &volId)
 
     const std::string st = volSt.sm.get();
     if (st == sMaster || st == sSlave) {
-        getStorageGlobal().taskQueue.push(volId);
         storage_local::startMonitoring(volInfo.getWdevPath(), volId);
     }
     LOGs.info() << "start monitoring" << volId;
