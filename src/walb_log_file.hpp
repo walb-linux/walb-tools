@@ -186,7 +186,7 @@ public:
 
         /* Copy to the record. */
         Record &rec = packIo.record();
-        const PackHeader& packHeader = *pack_.get();
+        const PackHeaderRaw& packHeader = *pack_.get();
         rec.record() = packHeader.record(recIdx_);
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());

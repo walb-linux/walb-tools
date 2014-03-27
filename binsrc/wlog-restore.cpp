@@ -103,7 +103,7 @@ private:
     using BlockA = cybozu::util::BlockAllocator<uint8_t>;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
-    using PackHeader = walb::log::PackHeaderRaw;
+    using PackHeaderRaw = walb::log::PackHeaderRaw;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::device::SuperBlock;
@@ -250,7 +250,7 @@ private:
         unsigned int pbs = wlHead.pbs();
 
         /* Read logpack header. */
-        PackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
+        PackHeaderRaw logh(readBlock(fdr, ba, pbs), pbs, salt);
         if (logh.isEnd()) return false;
         if (!logh.isValid()) return false;
         if (config_.isVerbose()) logh.printShort();
@@ -273,7 +273,7 @@ private:
             unsigned int paddingPb = endOffPb - offPb;
             assert(0 < paddingPb);
             assert(paddingPb < (1U << 16));
-            PackHeader paddingLogh(ba.alloc(), pbs, wlHead.salt());
+            PackHeaderRaw paddingLogh(ba.alloc(), pbs, wlHead.salt());
             paddingLogh.init(logh.logpackLsid());
             paddingLogh.addPadding(paddingPb - 1);
             paddingLogh.updateChecksum();
@@ -340,7 +340,7 @@ private:
             blkdev.read(
                 offPb * pbs, pbs,
                 reinterpret_cast<char *>(b2.get()));
-            PackHeader logh2(b2, pbs, salt);
+            PackHeaderRaw logh2(b2, pbs, salt);
             int ret = ::memcmp(logh.ptr<char>(), logh2.ptr<char>(), pbs);
             if (ret) {
                 throw RT_ERR("Logpack header verification failed: "
