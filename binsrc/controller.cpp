@@ -13,6 +13,8 @@
 #include "controller.hpp"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 struct Option : public cybozu::Option
 {
     std::string addr;
@@ -21,12 +23,14 @@ struct Option : public cybozu::Option
     std::vector<std::string> params;
     std::string ctrlId;
     bool isDebug;
+    size_t socketTimeout;
     Option() {
         appendMust(&addr, "a", "host name or address");
         appendMust(&port, "p", "port number");
         appendParam(&cmd, "command", "command name");
         appendParamVec(&params, "parameters", "command parameters");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
+        appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
 
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&ctrlId, hostName, "id", "controller identfier");
@@ -35,12 +39,10 @@ struct Option : public cybozu::Option
     }
 };
 
-namespace walb {
-
 void runClient(Option &opt)
 {
     cybozu::Socket sock;
-    sock.connect(opt.addr, opt.port);
+    util::connectWithTimeout(sock, cybozu::SocketAddr(opt.addr, opt.port), opt.socketTimeout);
     std::string serverId = protocol::run1stNegotiateAsClient(
         sock, opt.ctrlId, opt.cmd);
     ProtocolLogger logger(opt.ctrlId, serverId);
@@ -65,8 +67,6 @@ void runClient(Option &opt)
     protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);
 }
 
-} // namespace walb
-
 int main(int argc, char *argv[])
 try {
     Option opt;
@@ -74,8 +74,8 @@ try {
         opt.usage();
         return 1;
     }
-    walb::util::setLogSetting("-", opt.isDebug);
-    walb::runClient(opt);
+    util::setLogSetting("-", opt.isDebug);
+    runClient(opt);
 
 } catch (std::exception &e) {
     LOGe("Controller: error: %s", e.what());

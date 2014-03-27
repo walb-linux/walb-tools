@@ -177,6 +177,7 @@ struct StorageSingleton
     uint64_t maxWlogSendMb;
     size_t delaySecForRetry;
     size_t maxForegroundTasks;
+    size_t socketTimeout;
 
     /**
      * Writable and must be thread-safe.
@@ -610,7 +611,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     const cybozu::SocketAddr& archive = gs.archive;
     {
         cybozu::Socket aSock;
-        aSock.connect(archive);
+        util::connectWithTimeout(aSock, archive, gs.socketTimeout);
         archiveId = protocol::run1stNegotiateAsClient(aSock, gs.nodeId, dirtyFullSyncPN);
         packet::Packet aPack(aSock);
         aPack.write(storageHT);
@@ -777,7 +778,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     bool isAvailable = false;
     for (const cybozu::SocketAddr &proxy : gs.proxyManager.getAvailableList()) {
         try {
-            sock.connect(proxy);
+            util::connectWithTimeout(sock, proxy, gs.socketTimeout);
             serverId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, wlogTransferPN);
             pkt.write(volId);
             pkt.write(uuid);
@@ -880,11 +881,11 @@ namespace storage_local {
 inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAddr &proxy)
 {
     const char *const FUNC = __func__;
-    cybozu::Socket sock;
     Info info(proxy);
     info.isAvailable = false;
     try {
-        sock.connect(proxy);
+        cybozu::Socket sock;
+        util::connectWithTimeout(sock, proxy, PROXY_HEARTBEAT_SOCKET_TIMEOUT_SEC);
         protocol::run1stNegotiateAsClient(sock, gs.nodeId, hostTypePN);
         const std::string type = protocol::runHostTypeClient(sock);
         if (type == proxyHT) info.isAvailable = true;

@@ -152,4 +152,17 @@ inline std::string timeToPrintable(uint64_t ts)
     }
 }
 
+/**
+ * @sock socket to connect.
+ * @sockAddr socket address.
+ * @timeout connection/read/write timeout [sec].
+ */
+inline void connectWithTimeout(cybozu::Socket &sock, const cybozu::SocketAddr &sockAddr, size_t timeout)
+{
+    const size_t timeoutMs = timeout * 1000;
+    sock.connect(sockAddr, timeoutMs);
+    sock.setSendTimeout(timeoutMs);
+    sock.setReceiveTimeout(timeoutMs);
+}
+
 }} // walb::util

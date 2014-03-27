@@ -32,16 +32,17 @@ enum class ProcessStatus
 class MultiThreadedServer
 {
 private:
-    const size_t maxNumThreads_;
     std::atomic<bool> &forceQuit_;
+    const size_t maxNumThreads_;
+    const size_t socketTimeout_;
 
 public:
     using RequestWorkerGenerator =
         std::function<std::shared_ptr<cybozu::thread::Runnable>(
             cybozu::Socket &&, std::atomic<ProcessStatus> &)>;
 
-    MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0)
-        : maxNumThreads_(maxNumThreads), forceQuit_(forceQuit) {
+    MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0, size_t socketTimeout = 10)
+        : forceQuit_(forceQuit), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
     }
     void run(uint16_t port, const RequestWorkerGenerator &gen) noexcept {
         const char *const FUNC = __func__;
@@ -55,6 +56,8 @@ public:
             if (st != ProcessStatus::RUNNING) break;
             cybozu::Socket sock;
             ssock.accept(sock);
+            sock.setSendTimeout(socketTimeout_ * 1000);
+            sock.setReceiveTimeout(socketTimeout_ * 1000);
             logErrors(pool.gc());
             if (maxNumThreads_ > 0 && pool.getNumActiveThreads() > maxNumThreads_) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
@@ -144,11 +147,16 @@ public:
 /**
  * Wait until pred() becomes true.
  * Mutex must be locked at entering the function and it will be locked at exiting it.
+ *
+ * @mu lock such as std::unique_lock<std::mutex> and std::lock_guard<std::mutex>.
+ * @pred predicate. waitUntil will wait until pred() becomes true.
+ * @msg error message prefix.
+ * @timeout timeout [sec]. 0 means no timeout.
  */
 template <typename Mutex, typename Pred>
-void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_TIMEOUT)
+void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_TIMEOUT_SEC)
 {
-    for (size_t c = 0; c < timeout; c++) {
+    for (size_t c = 0; timeout == 0 || c < timeout; c++) {
         if (pred()) return;
         mu.unlock();
         util::sleepMs(1000);

@@ -151,6 +151,7 @@ struct ProxySingleton
     size_t retryTimeout;
     size_t maxForegroundTasks;
     size_t maxConversionMb;
+    size_t socketTimeout;
 
     /**
      * Writable and must be thread-safe.
@@ -894,7 +895,7 @@ inline void ProxyWorker::run()
     cybozu::Socket sock;
     ActionCounterTransaction trans(volSt.ac, archiveName);
     ul.unlock();
-    sock.connect(hi.addr, hi.port);
+    util::connectWithTimeout(sock, cybozu::SocketAddr(hi.addr, hi.port), gp.socketTimeout);
     const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
     packet::Packet aPack(sock);
 

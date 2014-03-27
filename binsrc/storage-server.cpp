@@ -77,6 +77,7 @@ struct Option : cybozu::Option
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
         appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "maxWlogSendMb", "max wlog size to send at once.");
         appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
+        appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
 
         appendHelp("h");
     }

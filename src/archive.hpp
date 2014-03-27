@@ -81,6 +81,7 @@ struct ArchiveSingleton
     std::string baseDirStr;
     std::string volumeGroup;
     size_t maxForegroundTasks;
+    size_t socketTimeout;
 
     /**
      * Writable and must be thread-safe.

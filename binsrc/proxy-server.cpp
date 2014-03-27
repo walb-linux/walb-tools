@@ -69,11 +69,12 @@ struct Option : cybozu::Option
         appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foreground tasks.");
         appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
         appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT, "retryTimeout", "Retry timeout (total period) [sec].");
+        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "retryTimeout", "Retry timeout (total period) [sec].");
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
         appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "maxConversionMb", "max memory size of wlog-wdiff conversion [MB].");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&p.nodeId, hostName, "id", "node identifier");
+        appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
 
         appendHelp("h");
     }

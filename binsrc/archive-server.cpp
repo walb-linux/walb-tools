@@ -73,6 +73,7 @@ struct Option : cybozu::Option
         appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
+        appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
 
         appendHelp("h");
     }
