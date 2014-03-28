@@ -130,24 +130,21 @@ public:
         }
     }
     void tryCheckAvailability() {
-        bool found = false;
-        cybozu::SocketAddr proxy;
+        Info *target = nullptr;
         {
             TimePoint now = Clock::now();
             AutoLock lk(mu_);
-            for (const Info &info : v_) {
-                if (info.checkedTime + Seconds(PROXY_HEARTBEAT_INTERVAL_SEC) < now) {
-                    proxy = info.proxy;
-                    found = true;
-                    break;
-                }
+            TimePoint minCheckedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
+            for (Info &info : v_) {
+                info.checkedTime < minCheckedTime;
+                minCheckedTime = info.checkedTime;
+                target = &info;
             }
         }
-        if (!found) return;
-        Info info = checkAvailability(proxy);
+        if (!target) return;
+        Info info = checkAvailability(target->proxy);
         AutoLock lk(mu_);
-        removeFromList(proxy);
-        v_.push_back(info);
+        *target = info;
     }
 private:
     void removeFromList(const cybozu::SocketAddr &proxy) {
