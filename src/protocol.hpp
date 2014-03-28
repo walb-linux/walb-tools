@@ -168,7 +168,7 @@ inline bool run1stNegotiateAsServer(
         return true;
     }
     ans.ok();
-    logger.info() << "initial negotiation succeeded" << protocolName;
+    logger.debug() << "initial negotiation succeeded" << protocolName;
     return false;
 
     /* Here command existance has not been checked yet. */
