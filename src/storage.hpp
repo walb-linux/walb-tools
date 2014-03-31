@@ -571,7 +571,7 @@ inline bool sendDirtyFullImage(
 
 } // storage_local
 
-inline void c2sFullSyncServer(protocol::ServerParams &p)
+inline void c2sFullBkpServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
@@ -655,7 +655,7 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
 
-inline void c2sHashSyncServer(protocol::ServerParams &/*p*/)
+inline void c2sHashBkpServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
 }

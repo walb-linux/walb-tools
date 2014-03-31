@@ -83,7 +83,7 @@ inline void c2xStopClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient");
 }
 
-inline void c2sFullSyncClient(protocol::ClientParams &p)
+inline void c2sFullBkpClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
     if (p.params.size() != 1 && p.params.size() != 2) {
@@ -113,7 +113,7 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
     }
 }
 
-inline void c2sHashSyncClient(protocol::ClientParams &/*p*/)
+inline void c2sHashBkpClient(protocol::ClientParams &/*p*/)
 {
     // QQQ
 }

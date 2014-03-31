@@ -46,8 +46,8 @@ public:
             { resetVolPN, c2sResetVolServer },
             { startPN, c2sStartServer },
             { stopPN, c2sStopServer },
-            { fullBkpPN, c2sFullSyncServer },
-            { hashBkpPN, c2sHashSyncServer },
+            { fullBkpPN, c2sFullBkpServer },
+            { hashBkpPN, c2sHashBkpServer },
             { snapshotPN, c2sSnapshotServer },
             { hostTypePN, c2sHostTypeServer },
         };
