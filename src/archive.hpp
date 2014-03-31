@@ -805,6 +805,11 @@ inline void c2aApplyServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
+inline void c2aMergeServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 inline void c2aResizeServer(protocol::ServerParams &/*p*/)
 {
     // QQQ

@@ -50,6 +50,7 @@ public:
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataPN, c2aReloadMetadataServer },
             { applyPN, c2aApplyServer },
+            { mergePN, c2aMergeServer },
             { resizePN, c2aResizeServer },
             { hostTypePN, c2aHostTypeServer },
         };

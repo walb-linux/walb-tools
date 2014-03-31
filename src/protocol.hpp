@@ -51,6 +51,7 @@ const char *const restorePN = "restore";
 const char *const dropPN = "drop";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const applyPN = "apply";
+const char *const mergePN = "merge";
 const char *const resizePN = "resize";
 const char *const hostTypePN = "host-type";
 const char *const shutdownPN = "shutdown";
