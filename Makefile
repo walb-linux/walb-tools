@@ -5,7 +5,7 @@ CC = gcc-4.8.2
 
 OPT_FLAGS =
 ifeq ($(DEBUG),1)
-OPT_FLAGS += -g -rdynamic -DDEBUG -DWALB_DEBUG
+OPT_FLAGS += -g -DDEBUG -DWALB_DEBUG
 else
 OPT_FLAGS += -O2 -DNDEBUG
 endif
@@ -26,6 +26,9 @@ LDLIBS = -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 else
 LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
 LDLIBS = -lpthread
+endif
+ifeq ($(DEBUG),1)
+LDFLAGS += -rdynamic
 endif
 
 LDLIBS_LOCAL = -lwalb-tools
