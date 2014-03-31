@@ -428,6 +428,14 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     logger.info() << "dirty-full-sync succeeded" << volId;
 }
 
+/**
+ * Execute dirty hash sync protocol as server.
+ * Client is storage server or another archive server.
+ */
+inline void x2aDirtyHashSyncServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
 
 namespace archive_local {
 

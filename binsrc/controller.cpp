@@ -54,6 +54,7 @@ void runClient(Option &opt)
         { clearVolPN, c2xClearVolClient },
         { resetVolPN, c2xResetVolClient },
         { fullBkpPN, c2sFullSyncClient },
+        { hashBkpPN, c2sHashSyncClient },
         { restorePN, c2aRestoreClient },
         { dropPN, c2aDropClient },
         { startPN, c2xStartClient },

@@ -45,6 +45,7 @@ public:
             { startPN, c2aStartServer },
             { stopPN, c2aStopServer },
             { dirtyFullSyncPN, x2aDirtyFullSyncServer },
+            { dirtyHashSyncPN, x2aDirtyHashSyncServer },
             { restorePN, c2aRestoreServer },
             { dropPN, c2aDropServer },
             { wdiffTransferPN, x2aWdiffTransferServer },

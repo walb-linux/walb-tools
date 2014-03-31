@@ -655,6 +655,11 @@ inline void c2sFullSyncServer(protocol::ServerParams &p)
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
 
+inline void c2sHashSyncServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 /**
  * Take a snapshot to restore in archive hosts.
  */

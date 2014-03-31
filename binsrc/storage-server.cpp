@@ -47,6 +47,7 @@ public:
             { startPN, c2sStartServer },
             { stopPN, c2sStopServer },
             { fullBkpPN, c2sFullSyncServer },
+            { hashBkpPN, c2sHashSyncServer },
             { snapshotPN, c2sSnapshotServer },
             { hostTypePN, c2sHostTypeServer },
         };

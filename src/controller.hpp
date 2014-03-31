@@ -113,6 +113,11 @@ inline void c2sFullSyncClient(protocol::ClientParams &p)
     }
 }
 
+inline void c2sHashSyncClient(protocol::ClientParams &/*p*/)
+{
+    // QQQ
+}
+
 /**
  * Restore command.
  * parameters: volId, gid
