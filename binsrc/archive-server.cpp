@@ -50,6 +50,8 @@ public:
             { dropPN, c2aDropServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataPN, c2aReloadMetadataServer },
+            { replicatePN, c2aReplicateServer },
+            { replSyncPN, a2aReplSyncServer },
             { applyPN, c2aApplyServer },
             { mergePN, c2aMergeServer },
             { resizePN, c2aResizeServer },

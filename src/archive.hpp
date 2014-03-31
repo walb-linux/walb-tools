@@ -808,6 +808,16 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     logger.info() << "wdiff-transfer succeeded" << volId;
 }
 
+inline void c2aReplicateServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
+inline void a2aReplSyncServer(protocol::ServerParams &/*p*/)
+{
+    // QQQ
+}
+
 inline void c2aApplyServer(protocol::ServerParams &/*p*/)
 {
     // QQQ

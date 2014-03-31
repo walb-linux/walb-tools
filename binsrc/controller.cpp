@@ -61,6 +61,7 @@ void runClient(Option &opt)
         { stopPN, c2xStopClient },
         { archiveInfoPN, c2pArchiveInfoClient },
         { snapshotPN, c2sSnapshotClient },
+        { replicatePN, c2aReplicateClient },
         { applyPN, c2aApplyClient },
         { mergePN, c2aMergeClient },
         { resizePN, c2xResizeClient },

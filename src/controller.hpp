@@ -251,6 +251,16 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 }
 
 /**
+ * params[0] volId
+ * params[1] archiveAddrPortStr like "192.168.1.1:10000".
+ * params[2] archiveCompressionOptStr like "snappy:0:1".
+ */
+inline void c2aReplicateClient(protocol::ClientParams &/*p*/)
+{
+    // QQQ
+}
+
+/**
  * params[0]: volId
  * params[1]: gid: All snapshots where snap.gidB < gid will be deleted.
  */
