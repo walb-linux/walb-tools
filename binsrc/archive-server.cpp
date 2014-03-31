@@ -49,6 +49,7 @@ public:
             { dropPN, c2aDropServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataPN, c2aReloadMetadataServer },
+            { applyPN, c2aApplyServer },
             { resizePN, c2aResizeServer },
             { hostTypePN, c2aHostTypeServer },
         };

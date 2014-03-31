@@ -247,6 +247,15 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 
 /**
  * params[0]: volId
+ * params[1]: gid: All snapshots where snap.gidB < gid will be deleted.
+ */
+inline void c2aApplyClient(protocol::ClientParams &/*p*/)
+{
+    // QQQ
+}
+
+/**
+ * params[0]: volId
  * params[1]: size [byte] suffix k/m/g can be used.
  */
 inline void c2xResizeClient(protocol::ClientParams &p)

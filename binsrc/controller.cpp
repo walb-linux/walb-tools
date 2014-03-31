@@ -60,6 +60,7 @@ void runClient(Option &opt)
         { stopPN, c2xStopClient },
         { archiveInfoPN, c2pArchiveInfoClient },
         { snapshotPN, c2sSnapshotClient },
+        { applyPN, c2aApplyClient },
         { resizePN, c2xResizeClient },
         { hostTypePN, c2xHostTypeClient },
         { dbgReloadMetadataPN, c2aReloadMetadataClient },
