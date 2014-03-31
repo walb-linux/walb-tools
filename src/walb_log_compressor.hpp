@@ -140,11 +140,7 @@ private:
     }
 };
 
-/**
- * Compressor.
- * You can run this using cybozu::thread::ThreadRunner.
- */
-class CompressWorker : public cybozu::thread::Runnable
+class CompressWorker
 {
 private:
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
@@ -153,31 +149,24 @@ private:
 public:
     CompressWorker(BoundedQ &inQ, BoundedQ &outQ)
         : inQ_(inQ), outQ_(outQ) {}
-    void operator()() override {
-        try {
-            CompressedData d;
-            while (inQ_.pop(d)) {
-                if (d.isCompressed()) {
-                    outQ_.push(std::move(d));
-                } else {
-                    outQ_.push(d.compress());
-                }
+    void operator()() try {
+        CompressedData d;
+        while (inQ_.pop(d)) {
+            if (d.isCompressed()) {
+                outQ_.push(std::move(d));
+            } else {
+                outQ_.push(d.compress());
             }
-            outQ_.sync();
-            done();
-        } catch (...) {
-            throwErrorLater();
-            inQ_.fail();
-            outQ_.fail();
         }
+        outQ_.sync();
+    } catch (...) {
+        inQ_.fail();
+        outQ_.fail();
+        throw;
     }
 };
 
-/**
- * Uncompressor.
- * You can run this using cybozu::thread::ThreadRunner.
- */
-class UncompressWorker : public cybozu::thread::Runnable
+class UncompressWorker
 {
 private:
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
@@ -186,23 +175,20 @@ private:
 public:
     UncompressWorker(BoundedQ &inQ, BoundedQ &outQ)
         : inQ_(inQ), outQ_(outQ) {}
-    void operator()() override {
-        try {
-            CompressedData d;
-            while (inQ_.pop(d)) {
-                if (d.isCompressed()) {
-                    outQ_.push(d.uncompress());
-                } else {
-                    outQ_.push(std::move(d));
-                }
+    void operator()() try {
+        CompressedData d;
+        while (inQ_.pop(d)) {
+            if (d.isCompressed()) {
+                outQ_.push(d.uncompress());
+            } else {
+                outQ_.push(std::move(d));
             }
-            outQ_.sync();
-            done();
-        } catch (...) {
-            throwErrorLater();
-            inQ_.fail();
-            outQ_.fail();
         }
+        outQ_.sync();
+    } catch (...) {
+        inQ_.fail();
+        outQ_.fail();
+        throw;
     }
 };
 

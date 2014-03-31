@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) try
     ArchiveSingleton &g = getArchiveGlobal();
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
-    server.run(opt.port, createRequestWorker);
+    server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
     finalizeArchive();
 
 } catch (std::exception &e) {

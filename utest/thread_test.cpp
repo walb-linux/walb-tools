@@ -4,29 +4,24 @@
 #include "thread_util.hpp"
 #include "random.hpp"
 
-struct Worker : public cybozu::thread::Runnable
+struct Worker
 {
     int i_;
     size_t sleepMs_;
     Worker(int i, size_t sleepMs) : i_(i), sleepMs_(sleepMs) {}
-    void operator()() override {
-        try {
-            ::printf("start %d\n", i_);
-            std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs_));
-            ::printf("done %d\n", i_);
-            done();
-        } catch (...) {
-            throwErrorLater();
-        }
+    void operator()() {
+        //::printf("start %d\n", i_);
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs_));
+        //::printf("done %d\n", i_);
     }
 };
 
 CYBOZU_TEST_AUTO(unlimitedPool)
 {
-    cybozu::thread::ThreadRunnerPool<Worker> pool;
+    cybozu::thread::ThreadRunnerPool pool;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
-        pool.add(std::make_shared<Worker>(i, rand()));
+        pool.add(Worker(i, rand()));
     }
     pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
@@ -34,11 +29,11 @@ CYBOZU_TEST_AUTO(unlimitedPool)
 
 CYBOZU_TEST_AUTO(fixedPool)
 {
-    cybozu::thread::ThreadRunnerPool<Worker> pool(5);
+    cybozu::thread::ThreadRunnerPool pool(5);
     std::vector<uint32_t> v;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
-        uint32_t id = pool.add(std::make_shared<Worker>(i, rand()));
+        uint32_t id = pool.add(Worker(i, rand()));
         v.push_back(id);
     }
     for (uint32_t id : v) pool.waitFor(id);
@@ -51,10 +46,10 @@ CYBOZU_TEST_AUTO(fixedPoolCancel)
 {
     const int POOL_SIZE = 5;
     const int N_TASKS = 15;
-    cybozu::thread::ThreadRunnerPool<Worker> pool(POOL_SIZE);
+    cybozu::thread::ThreadRunnerPool pool(POOL_SIZE);
     std::vector<uint32_t> v;
     for (int i = 0; i < N_TASKS; i++) {
-        uint32_t id = pool.add(std::make_shared<Worker>(i, 200));
+        uint32_t id = pool.add(Worker(i, 200));
         v.push_back(id);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -67,31 +62,26 @@ CYBOZU_TEST_AUTO(fixedPoolCancel)
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }
 
-struct FailWorker : public cybozu::thread::Runnable
+struct FailWorker
 {
     int i_;
     size_t sleepMs_;
     FailWorker(int i, size_t sleepMs) : i_(i), sleepMs_(sleepMs) {}
-    void operator()() override {
-        try {
-            ::printf("start %d\n", i_);
-            std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs_));
-            ::printf("done %d\n", i_);
-            throw std::runtime_error("error exception for test.");
-            done();
-        } catch (...) {
-            throwErrorLater();
-        }
+    void operator()() {
+        ::printf("start %d\n", i_);
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs_));
+        ::printf("done %d\n", i_);
+        throw std::runtime_error("error exception for test.");
     }
 };
 
 CYBOZU_TEST_AUTO(poolWithFailWorker)
 {
-    cybozu::thread::ThreadRunnerPool<FailWorker> pool;
+    cybozu::thread::ThreadRunnerPool pool;
     std::vector<uint32_t> v;
     cybozu::util::Random<uint32_t> rand(100, 300);
     for (int i = 0; i < 10; i++) {
-        uint32_t id = pool.add(std::make_shared<FailWorker>(i, rand()));
+        uint32_t id = pool.add(FailWorker(i, rand()));
         pool.gc();
         v.push_back(id);
     }
@@ -100,6 +90,29 @@ CYBOZU_TEST_AUTO(poolWithFailWorker)
         CYBOZU_TEST_ASSERT(ep);
     }
     CYBOZU_TEST_ASSERT(pool.size() == 0);
+    pool.waitForAll();
+    CYBOZU_TEST_ASSERT(pool.size() == 0);
+}
+
+CYBOZU_TEST_AUTO(poolLambda)
+{
+    cybozu::thread::ThreadRunnerPool pool;
+    std::atomic<int> x(0);
+    for (size_t i = 0; i < 100; i++) {
+        pool.add([&]() { x++; });
+    }
+    pool.waitForAll();
+    CYBOZU_TEST_ASSERT(pool.size() == 0);
+    CYBOZU_TEST_EQUAL(x.load(), 100);
+}
+
+CYBOZU_TEST_AUTO(poolSharedPtr)
+{
+    cybozu::thread::ThreadRunnerPool pool;
+    cybozu::util::Random<uint32_t> rand(100, 300);
+    for (int i = 0; i < 10; i++) {
+        pool.add(std::make_shared<Worker>(i, rand()));
+    }
     pool.waitForAll();
     CYBOZU_TEST_ASSERT(pool.size() == 0);
 }

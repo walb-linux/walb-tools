@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) try
     StorageSingleton &g = getStorageGlobal();
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
-    server.run(opt.port, createRequestWorker);
+    server.run<StorageRequestWorker>(opt.port, createRequestWorker);
     finalizeStorage();
 
 } catch (std::exception &e) {

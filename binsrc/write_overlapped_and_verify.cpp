@@ -154,7 +154,6 @@ public:
 };
 
 class Worker
-    : public cybozu::thread::Runnable
 {
 private:
     const Config &config_;
@@ -171,28 +170,20 @@ public:
         , dataPtr_(dataPtr)
         , bmp_(config.sizeB(), false) {}
 
-    virtual ~Worker() noexcept override {}
-
-    virtual void operator()() override {
+    void operator()() {
         const unsigned int bs = config_.blockSize();
         uint64_t ioAddr;
         unsigned int ioBlocks;
-        try {
-            for (size_t i = 0; i < config_.counts(); i++) {
-                ioSpecGen_.get(ioAddr, ioBlocks);
-                bd_.write(ioAddr * bs, ioBlocks * bs,
-                          &dataPtr_.get()[(ioAddr - config_.offsetB()) * bs]);
-                for (uint64_t i = ioAddr - config_.offsetB();
-                     i < ioAddr - config_.offsetB() + ioBlocks; i++) {
-                    bmp_[i] = true;
-                }
+        for (size_t i = 0; i < config_.counts(); i++) {
+            ioSpecGen_.get(ioAddr, ioBlocks);
+            bd_.write(ioAddr * bs, ioBlocks * bs,
+                      &dataPtr_.get()[(ioAddr - config_.offsetB()) * bs]);
+            for (uint64_t i = ioAddr - config_.offsetB();
+                 i < ioAddr - config_.offsetB() + ioBlocks; i++) {
+                bmp_[i] = true;
             }
-            done();
-        } catch (...) {
-            throwErrorLater(std::current_exception());
         }
     }
-
     const std::vector<bool> &getBmp() const {
         return bmp_;
     }
@@ -233,7 +224,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     for (size_t i = 0; i < config.numThreads(); i++) {
         v.push_back(std::make_shared<Worker>(config, blocks0));
     }
-    cybozu::thread::ThreadRunnerSet<Worker> thSet;
+    cybozu::thread::ThreadRunnerSet thSet;
     for (std::shared_ptr<Worker> &w : v) {
         thSet.add(w);
     }

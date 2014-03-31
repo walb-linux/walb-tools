@@ -37,19 +37,20 @@ private:
     const size_t socketTimeout_;
 
 public:
+    template <typename Func>
     using RequestWorkerGenerator =
-        std::function<std::shared_ptr<cybozu::thread::Runnable>(
-            cybozu::Socket &&, std::atomic<ProcessStatus> &)>;
+        std::function<std::shared_ptr<Func>(cybozu::Socket &&, std::atomic<ProcessStatus> &)>;
 
     MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0, size_t socketTimeout = 10)
         : forceQuit_(forceQuit), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
     }
-    void run(uint16_t port, const RequestWorkerGenerator &gen) noexcept {
+    template <typename Func>
+    void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) noexcept {
         const char *const FUNC = __func__;
         forceQuit_ = false;
         cybozu::Socket ssock;
         ssock.bind(port);
-        cybozu::thread::ThreadRunnerPool<> pool(maxNumThreads_);
+        cybozu::thread::ThreadRunnerPool pool(maxNumThreads_);
         std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
         while (st == ProcessStatus::RUNNING) {
             while (!ssock.queryAccept() && st == ProcessStatus::RUNNING) {}
@@ -87,10 +88,8 @@ private:
 
 /**
  * Request worker for daemons.
- *
- * Override run().
  */
-class RequestWorker : public cybozu::thread::Runnable
+class RequestWorker
 {
 protected:
     cybozu::Socket sock_;
@@ -102,13 +101,12 @@ public:
         : sock_(std::move(sock))
         , nodeId_(nodeId)
         , procStat_(procStat) {}
-    void operator()() noexcept override try {
+    void operator()() try {
         run();
         sock_.close();
-        done();
     } catch (...) {
-        throwErrorLater();
         sock_.close();
+        throw;
     }
     virtual void run() = 0;
 };
@@ -179,8 +177,8 @@ void waitUntil(Mutex &mu, Pred pred, const char *msg, size_t timeout = DEFAULT_T
  * Task must satisfy TaskQueue constraint.
  * See TaskQueue definition.
  *
- * Worker must have constructor of type (*)(const Task &),
- * and operator()() of type void (*)().
+ * Worker must have Worker(const Task &),
+ * and void operator()().
  */
 template <typename Task, typename Worker>
 class DispatchTask
@@ -210,7 +208,7 @@ public:
     }
     void operator()() noexcept try {
         LOGs.info() << "dispatchTask begin";
-        cybozu::thread::ThreadRunnerPool<Worker> pool(maxBackgroundTasks);
+        cybozu::thread::ThreadRunnerPool pool(maxBackgroundTasks);
         LOGs.debug() << "numActiveThreads" << pool.getNumActiveThreads();
         Task task;
         while (!shouldStop) {
@@ -229,7 +227,7 @@ public:
                 continue;
             }
             LOGs.debug() << "dispatchTask dispatch task" << task;
-            pool.add(std::make_shared<Worker>(task));
+            pool.add(Worker(task));
         }
         logErrors(pool.waitForAll());
         LOGs.info() << "dispatchTask end";

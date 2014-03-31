@@ -66,7 +66,7 @@ CYBOZU_TEST_AUTO(compressor)
     size_t qs = 10;
     BoundedQ q0(qs), q1(qs), q2(qs);
 
-    class Producer : public cybozu::thread::Runnable
+    class Producer
     {
     private:
         BoundedQ &outQ_;
@@ -75,7 +75,7 @@ CYBOZU_TEST_AUTO(compressor)
     public:
         Producer(BoundedQ &outQ, size_t n, std::vector<uint32_t> &csumV)
             : outQ_(outQ), n_(n), csumV_(csumV) {}
-        void operator()() noexcept override try {
+        void operator()() try {
             cybozu::util::Random<uint32_t> rand;
             for (size_t i = 0; i < n_; i++) {
                 size_t s = rand.get16() + 32;
@@ -87,13 +87,12 @@ CYBOZU_TEST_AUTO(compressor)
                 outQ_.push(std::move(cd));
             }
             outQ_.sync();
-            done();
         } catch (...) {
-            throwErrorLater();
             outQ_.fail();
+            throw;
         }
     };
-    class Consumer : public cybozu::thread::Runnable
+    class Consumer
     {
     private:
         BoundedQ &inQ_;
@@ -101,16 +100,15 @@ CYBOZU_TEST_AUTO(compressor)
     public:
         Consumer(BoundedQ &inQ, std::vector<uint32_t> &csumV)
             : inQ_(inQ), csumV_(csumV) {}
-        void operator()() noexcept override try {
+        void operator()() try {
             walb::log::CompressedData cd;
             while (inQ_.pop(cd)) {
                 uint32_t csum = calcCsum(cd);
                 csumV_.push_back(csum);
             }
-            done();
         } catch (...) {
-            throwErrorLater();
             inQ_.fail();
+            throw;
         }
     };
 
@@ -119,7 +117,7 @@ CYBOZU_TEST_AUTO(compressor)
     auto w1 = std::make_shared<walb::log::CompressWorker>(q0, q1);
     auto w2 = std::make_shared<walb::log::UncompressWorker>(q1, q2);
     auto w3 = std::make_shared<Consumer>(q2, csumV1);
-    cybozu::thread::ThreadRunnerSet<> thSet;
+    cybozu::thread::ThreadRunnerSet thSet;
     thSet.add(w0);
     thSet.add(w1);
     thSet.add(w2);

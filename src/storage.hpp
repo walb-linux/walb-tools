@@ -57,19 +57,13 @@ private:
     void initInner(const std::string& volId);
 };
 
-class StorageWorker : public cybozu::thread::Runnable
+class StorageWorker
 {
 public:
     const std::string volId;
     explicit StorageWorker(const std::string &volId) : volId(volId) {
     }
-    void operator()() override try {
-        run();
-        done();
-    } catch (...) {
-        throwErrorLater();
-    }
-    void run();
+    void operator()();
 };
 
 namespace storage_local {
@@ -849,7 +843,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
 /**
  * Run wlog-trnasfer or wlog-remove for a specified volume.
  */
-inline void StorageWorker::run()
+inline void StorageWorker::operator()()
 {
     const char *const FUNC = __func__;
     StorageVolState& volSt = getStorageVolState(volId);

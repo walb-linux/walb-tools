@@ -24,13 +24,15 @@
 /**
  * Thread utilities.
  *
- * Prepare a 'Runnable' object at first,
- * then, pass it to 'ThreadRunner'.
+ * Prepare a functor or a shared_ptr of a functor at first.
+ * A functor can be a lambda expression, a object that has operator(), etc.
+ *
+ * Then, pass it to 'ThreadRunner'.
  * You can call start() and join() to
  * create new thread and start/join it easily.
  *
- * You can throw error in your runnable operator()().
- * It will be thrown from join().
+ * You can throw an error in your functor.
+ * It will be thrown when calling join().
  *
  * You can use ThreadRunnableSet class to
  * start/join multiple threads in bulk.
@@ -47,126 +49,126 @@ namespace cybozu {
 namespace thread {
 
 /**
- * This is used by thread runners.
- * Any exceptions will be thrown when
- * join() of thread runners' call.
- *
- * You must call throwErrorLater() or done() finally
- * inside your operator()().
+ * A functor wrapper to deal with exceptions and callbacks.
  */
-class Runnable
+class Runner /* final */
 {
-protected:
-    std::string name_;
+private:
+    struct BaseHolder
+    {
+        virtual void run() = 0;
+        virtual ~BaseHolder() noexcept {}
+    };
+    template <typename Func>
+    struct Holder : public BaseHolder
+    {
+        Func func;
+        explicit Holder(Func&& func) : func(std::forward<Func>(func)) {
+        }
+        void run() override {
+            func();
+        }
+    };
+    template <typename Func>
+    struct PtrHolder : public BaseHolder
+    {
+        std::shared_ptr<Func> funcP;
+        explicit PtrHolder(std::shared_ptr<Func> funcP) : funcP(funcP) {
+        }
+        void run() override {
+            (*funcP)();
+        }
+    };
+    std::shared_ptr<BaseHolder> holderP_;
+
     std::promise<void> promise_;
     std::shared_future<void> future_;
     std::atomic<bool> isEnd_;
     std::function<void()> callback_;
 
     void throwErrorLater(std::exception_ptr p) noexcept {
-        if (isEnd_) { return; }
+        if (isEnd_) return;
         assert(p);
         promise_.set_exception(p);
-        isEnd_.store(true);
+        isEnd_ = true;
         if (callback_) callback_();
     }
-
     /**
      * Call this in a catch clause.
      */
     void throwErrorLater() noexcept {
         throwErrorLater(std::current_exception());
     }
-
     void done() {
-        if (isEnd_.load()) { return; }
+        if (isEnd_) return;
         promise_.set_value();
-        isEnd_.store(true);
+        isEnd_ = true;
         if (callback_) callback_();
     }
-
 public:
-    explicit Runnable(const std::string &name = "runnable")
-        : name_(name)
+    template <typename Func>
+    explicit Runner(std::shared_ptr<Func> funcP)
+        : holderP_(new PtrHolder<Func>(funcP))
         , promise_()
         , future_(promise_.get_future())
         , isEnd_(false)
-        , callback_() {}
-
-    virtual ~Runnable() noexcept {
-        try {
-            if (!isEnd_.load()) { done(); }
-        } catch (...) {}
+        , callback_() {
     }
-
-    /**
-     * You must override this.
-     */
-    virtual void operator()() {
-        throw std::runtime_error("Implement operator()().");
-#if 0
-        // typical implementation
-        try {
-            // something to do.
-            done();
-        } catch (...) {
-            throwErrorLator();
-        }
-#endif
+    template <typename Func>
+    explicit Runner(Func&& func)
+        : holderP_(new Holder<Func>(std::forward<Func>(func)))
+        , promise_()
+        , future_(promise_.get_future())
+        , isEnd_(false)
+        , callback_() {
     }
-
-    /**
-     * Get the result or exceptions thrown.
-     */
-    void get() {
-        future_.get();
+    ~Runner() noexcept try {
+        if (!isEnd_) done();
+    } catch (...) {
     }
-
-    /**
-     * Returns true when the execution has done.
-     */
-    bool isEnd() const {
-        return isEnd_.load();
+    void operator()() noexcept try {
+        holderP_->run();
+        done();
+    } catch (...) {
+        throwErrorLater();
     }
-
-    /**
-     * Set a callback function which will be called at end.
-     */
-    void setCallback(const std::function<void()>& f) {
-        callback_ = f;
-    }
+    void get() { future_.get(); }
+    bool isEnd() const { return isEnd_; }
+    void setCallback(const std::function<void()>& f) { callback_ = f; }
 };
 
 /**
  * Thread runner.
  * This is not thread-safe.
  */
-template <typename Worker = Runnable>
 class ThreadRunner /* final */
 {
 private:
-    static_assert(std::is_base_of<Runnable, Worker>::value,
-                  "Worker is not derived from Runnable.");
-    std::shared_ptr<Worker> workerP_;
+    std::shared_ptr<Runner> runnerP_;
     std::shared_ptr<std::thread> threadP_;
 
 public:
-    ThreadRunner() : ThreadRunner(nullptr) {}
-    explicit ThreadRunner(const std::shared_ptr<Worker> &workerP)
-        : workerP_(workerP)
-        , threadP_() {}
-    ThreadRunner(const ThreadRunner &rhs) = delete;
+    ThreadRunner() {}
+    template <typename Func>
+    explicit ThreadRunner(Func&& func)
+        : runnerP_(new Runner(std::forward<Func>(func))) {
+    }
+    explicit ThreadRunner(std::shared_ptr<Runner> runnerP)
+        : runnerP_(runnerP) {
+    }
+    ThreadRunner(const ThreadRunner &) = delete;
     ThreadRunner(ThreadRunner &&rhs)
-        : workerP_(rhs.workerP_)
-        , threadP_(std::move(rhs.threadP_)) {}
+        : runnerP_(std::move(rhs.runnerP_))
+        , threadP_(std::move(rhs.threadP_)) {
+    }
     ~ThreadRunner() noexcept {
         try {
             join();
         } catch (...) {}
     }
-    ThreadRunner &operator=(const ThreadRunner &rhs) = delete;
+    ThreadRunner &operator=(const ThreadRunner &) = delete;
     ThreadRunner &operator=(ThreadRunner &&rhs) {
-        workerP_ = std::move(rhs.workerP_);
+        runnerP_ = std::move(rhs.runnerP_);
         threadP_ = std::move(rhs.threadP_);
         return *this;
     }
@@ -174,26 +176,31 @@ public:
      * You must join() before calling this
      * when you try to reuse the instance.
      */
-    void set(const std::shared_ptr<Worker>& workerP) {
-        if (threadP_) throw std::runtime_error("threadP must be null.");
-        workerP_ = workerP;
+    template <typename Func>
+    void set(Func&& func) {
+        set(std::make_shared<Runner>(std::forward<Func>(func)));
+    }
+    void set(std::shared_ptr<Runner> runnerP) {
+        if (threadP_) throw std::runtime_error("threadP must be null");
+        runnerP_ = runnerP;
     }
     /**
      * Start a thread.
      */
     void start() {
         /* You need std::ref(). */
-        threadP_.reset(new std::thread(std::ref(*workerP_)));
+        threadP_.reset(new std::thread(std::ref(*runnerP_)));
     }
     /**
      * Wait for the thread done.
      * You will get an exception thrown in the thread running.
      */
     void join() {
-        if (!threadP_) { return; }
+        if (!threadP_) return;
         threadP_->join();
         threadP_.reset();
-        workerP_->get();
+        runnerP_->get();
+        runnerP_.reset();
     }
     /**
      * Wait for the thread done.
@@ -213,31 +220,29 @@ public:
      * Check whether you can join the thread just now.
      */
     bool canJoin() const {
-        return workerP_->isEnd();
+        return runnerP_->isEnd();
     }
 };
 
 /**
  * Manage ThreadRunners in bulk.
  */
-template <typename Worker = Runnable>
 class ThreadRunnerSet /* final */
 {
 private:
-    static_assert(std::is_base_of<Runnable, Worker>::value,
-                  "Worker is not derived from Runnable.");
-    using Runner = ThreadRunner<Worker>;
-    std::vector<Runner > v_;
+    std::vector<ThreadRunner> v_;
 
 public:
-    void add(Runner &&runner) {
-        v_.push_back(std::move(runner));
+    template <typename Func>
+    void add(Func&& func) {
+        v_.emplace_back(std::forward<Func>(func));
     }
-    void add(const std::shared_ptr<Worker>& workerP) {
-        v_.push_back(Runner(workerP));
+    template <typename Func>
+    void add(std::shared_ptr<Func> funcP) {
+        v_.emplace_back(funcP);
     }
     void start() {
-        for (Runner &r : v_) {
+        for (ThreadRunner &r : v_) {
             r.start();
         }
     }
@@ -246,7 +251,7 @@ public:
      */
     std::vector<std::exception_ptr> join() {
         std::vector<std::exception_ptr> v;
-        for (Runner &r : v_) {
+        for (ThreadRunner &r : v_) {
             try {
                 r.join();
             } catch (...) {
@@ -269,12 +274,9 @@ public:
  * (4) You can call waitForAll() to wait for all tasks to be done.
  * (5) You can call gc() to get results of finished tasks.
  */
-template <typename Worker = Runnable>
 class ThreadRunnerPool /* final */
 {
 private:
-    static_assert(std::is_base_of<Runnable, Worker>::value,
-                  "Worker is not derived from Runnable.");
     /**
      * A task contains its unique id and a runnable object.
      * Not copyable, but movable.
@@ -283,28 +285,28 @@ private:
     {
     private:
         uint32_t id_;
-        std::shared_ptr<Worker> worker_;
+        std::shared_ptr<Runner> runnerP_;
     public:
-        Task() : id_(uint32_t(-1)), worker_() {}
-        Task(uint32_t id, const std::shared_ptr<Worker>& worker)
-            : id_(id), worker_(worker) {}
-        Task(const Task &rhs) = delete;
-        Task(Task &&rhs) : id_(rhs.id_), worker_(std::move(rhs.worker_)) {}
-        Task &operator=(const Task &rhs) = delete;
+        Task() : id_(uint32_t(-1)), runnerP_() {}
+        Task(uint32_t id, std::shared_ptr<Runner> runner)
+            : id_(id), runnerP_(runner) {}
+        Task(const Task &) = delete;
+        Task(Task &&rhs) : id_(rhs.id_), runnerP_(std::move(rhs.runnerP_)) {}
+        Task &operator=(const Task &) = delete;
         Task &operator=(Task &&rhs) {
             id_ = rhs.id_;
             rhs.id_ = uint32_t(-1);
-            worker_ = std::move(rhs.worker_);
+            runnerP_ = std::move(rhs.runnerP_);
             return *this;
         }
         uint32_t id() const { return id_; }
-        bool isValid() const { return id_ != uint32_t(-1) && worker_; }
+        bool isValid() const { return id_ != uint32_t(-1) && runnerP_; }
         std::exception_ptr run() noexcept {
             assert(isValid());
             std::exception_ptr ep;
             try {
-                (*worker_)();
-                worker_->get();
+                (*runnerP_)();
+                runnerP_->get();
             } catch (...) {
                 ep = std::current_exception();
             }
@@ -316,7 +318,7 @@ private:
      * A thread has a TaskWorker and run its operator()().
      * A thread will run tasks until the readyQ becomes empty.
      */
-    class TaskWorker : public Runnable
+    class TaskWorker
     {
     private:
         /* All members are shared with ThreadRunnerPool instance. */
@@ -333,13 +335,8 @@ private:
             : readyQ_(readyQ), ready_(ready)
             , running_(running), done_(done)
             , mutex_(mutex), cv_(cv) {}
-        void operator()() override {
-            try {
-                while (tryRunTask());
-                done();
-            } catch (...) {
-                throwErrorLater();
-            }
+        void operator()() {
+            while (tryRunTask());
         }
     private:
         bool tryRunTask() {
@@ -369,7 +366,7 @@ private:
     };
 
     /* Threads container. You must call gcThread() to collect finished threads. */
-    std::list<ThreadRunner<TaskWorker> > runners_;
+    std::list<ThreadRunner> runners_;
     std::atomic<size_t> numActiveThreads_;
 
     /* Task container.
@@ -408,9 +405,15 @@ public:
     /**
      * Add a runnable task to be executed in the pool.
      */
-    uint32_t add(const std::shared_ptr<Worker> &worker) {
+    template <typename Func>
+    uint32_t add(Func&& func) {
         std::lock_guard<std::mutex> lk(mutex_);
-        return addNolock(worker);
+        return addNolock(std::make_shared<Runner>(std::forward<Func>(func)));
+    }
+    template <typename Func>
+    uint32_t add(std::shared_ptr<Func> funcP) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return addNolock(std::make_shared<Runner>(funcP));
     }
     /**
      * Try to cancel a task if it has not started yet.
@@ -513,18 +516,18 @@ private:
         return (maxNumThreads_ == 0 ? running_.size() : maxNumThreads_) * 2 <= runners_.size();
     }
     void makeThread() {
-        auto wp = std::make_shared<TaskWorker>(readyQ_, ready_, running_, done_, mutex_, cv_);
-        wp->setCallback([this]() { numActiveThreads_--; });
-        ThreadRunner<TaskWorker> runner(wp);
+        std::shared_ptr<Runner> runnerP(
+            new Runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_)));
+        runnerP->setCallback([this]() { numActiveThreads_--; });
+        ThreadRunner runner(runnerP);
         runner.start();
         runners_.push_back(std::move(runner));
         numActiveThreads_++;
     }
-    uint32_t addNolock(const std::shared_ptr<Worker>& worker) {
-        assert(worker);
+    uint32_t addNolock(std::shared_ptr<Runner> runnerP) {
         uint32_t id = id_++;
         if (id_ == uint32_t(-1)) id_ = 0;
-        readyQ_.push_back(Task(id, worker));
+        readyQ_.emplace_back(id, runnerP);
         __attribute__((unused)) auto pair = ready_.insert(id);
         assert(pair.second);
         if (shouldMakeThread()) {
@@ -551,7 +554,7 @@ private:
         return v;
     }
     void gcThread() {
-        typename std::list<ThreadRunner<TaskWorker> >::iterator it = runners_.begin();
+        typename std::list<ThreadRunner>::iterator it = runners_.begin();
         while (it != runners_.end()) {
             if (it->canJoin()) {
                 it->join(); /* never throw an exception that is related to tasks. */
@@ -635,7 +638,7 @@ public:
      * Disable copy/move constructors.
      */
     BoundedQueue(const BoundedQueue &rhs) = delete;
-	BoundedQueue(BoundedQueue &&rhs) = delete;
+    BoundedQueue(BoundedQueue &&rhs) = delete;
 
     /**
      * Disable copy/move.
@@ -705,14 +708,16 @@ public:
     /**
      * Check if there is no more items and push() will be never called.
      */
+#if 0
 #ifdef __GNUC__
-	__attribute__((deprecated))
+    __attribute__((deprecated))
 #endif
-		bool isEnd() const {
+    bool isEnd() const {
         AutoLock lk(mutex_);
         verifyFailed();
         return isClosed_ && isEmpty();
     }
+#endif
     /**
      * max size of the queue.
      */
@@ -888,8 +893,8 @@ public:
     }
 };
 
-inline std::string exceptionPtrToStr(std::exception_ptr ep)
-try {
+inline std::string exceptionPtrToStr(std::exception_ptr ep) try
+{
     std::rethrow_exception(ep);
     return "exceptionPtrToStr:no error";
 } catch (std::exception &e) {

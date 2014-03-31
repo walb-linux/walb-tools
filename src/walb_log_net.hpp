@@ -91,7 +91,7 @@ private:
 
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
 
-    class SendWorker : public cybozu::thread::Runnable
+    class SendWorker
     {
     private:
         BoundedQ &inQ_;
@@ -100,7 +100,7 @@ private:
     public:
         SendWorker(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger)
             : inQ_(inQ), packet_(sock), logger_(logger) {}
-        void operator()() noexcept override try {
+        void operator()() try {
             packet::StreamControl ctrl(packet_.sock());
             log::CompressedData cd;
             while (inQ_.pop(cd)) {
@@ -108,11 +108,12 @@ private:
                 cd.send(packet_);
             }
             ctrl.end();
-            done();
         } catch (std::exception &e) {
             handleError(e.what());
+            throw;
         } catch (...) {
             handleError("unknown error");
+            throw;
         }
     private:
         void handleError(const char *msg) noexcept {
@@ -121,12 +122,11 @@ private:
             } catch (...) {}
             logger_.error() << "SendWorker" << msg;
             inQ_.fail();
-            throwErrorLater();
         }
     };
 
-    cybozu::thread::ThreadRunner<CompressWorker> compressor_;
-    cybozu::thread::ThreadRunner<SendWorker> sender_;
+    cybozu::thread::ThreadRunner compressor_;
+    cybozu::thread::ThreadRunner sender_;
     size_t recIdx_;
 
     BoundedQ q0_; /* input to compressor_ */
@@ -146,8 +146,8 @@ public:
         salt_ = salt;
     }
     void start() {
-        compressor_.set(std::make_shared<CompressWorker>(q0_, q1_));
-        sender_.set(std::make_shared<SendWorker>(q1_, sock_, logger_));
+        compressor_.set(CompressWorker(q0_, q1_));
+        sender_.set(SendWorker(q1_, sock_, logger_));
         compressor_.start();
         sender_.start();
     }
@@ -245,7 +245,7 @@ private:
 
     using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
 
-    class RecvWorker : public cybozu::thread::Runnable
+    class RecvWorker
     {
     private:
         BoundedQ &outQ_;
@@ -254,7 +254,7 @@ private:
     public:
         RecvWorker(BoundedQ &outQ, cybozu::Socket &sock, Logger &logger)
             : outQ_(outQ), packet_(sock), logger_(logger) {}
-        void operator()() noexcept override try {
+        void operator()() try {
             packet::StreamControl ctrl(packet_.sock());
             log::CompressedData cd;
             while (ctrl.isNext()) {
@@ -267,22 +267,22 @@ private:
             }
             assert(ctrl.isEnd());
             outQ_.sync();
-            done();
         } catch (std::exception &e) {
             handleError(e.what());
+            throw;
         } catch (...) {
             handleError("unknown error");
+            throw;
         }
     private:
         void handleError(const char *msg) noexcept {
             logger_.error() << "RecvWorker" << msg;
             outQ_.fail();
-            throwErrorLater();
         }
     };
 
-    cybozu::thread::ThreadRunner<RecvWorker> receiver_;
-    cybozu::thread::ThreadRunner<UncompressWorker> uncompressor_;
+    cybozu::thread::ThreadRunner receiver_;
+    cybozu::thread::ThreadRunner uncompressor_;
     size_t recIdx_;
 
     BoundedQ q0_; /* receiver_ to uncompressor_ */
@@ -302,8 +302,8 @@ public:
         salt_ = salt;
     }
     void start() {
-        receiver_.set(std::make_shared<RecvWorker>(q0_, sock_, logger_));
-        uncompressor_.set(std::make_shared<UncompressWorker>(q0_, q1_));
+        receiver_.set(RecvWorker(q0_, sock_, logger_));
+        uncompressor_.set(UncompressWorker(q0_, q1_));
         receiver_.start();
         uncompressor_.start();
     }

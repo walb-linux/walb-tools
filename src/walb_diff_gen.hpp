@@ -50,69 +50,72 @@ public:
         /**
          * Generate wlog.
          */
-        struct Worker0 : public cybozu::thread::Runnable
+        struct Worker0
         {
             int outFd_;
             const log::Generator::Config &config_;
             Worker0(int outFd, const log::Generator::Config &config)
                 : outFd_(outFd), config_(config) {}
-            void operator()() override {
+            void operator()() {
+                std::exception_ptr ep;
                 try {
                     ::printf("start worker0.\n"); /* debug */
                     log::Generator g(config_);
                     g.generate(outFd_);
-                    done();
                 } catch (...) {
-                    throwErrorLater();
+                    ep = std::current_exception();
                 }
                 /* finally */
                 ::close(outFd_);
+                if (ep) std::rethrow_exception(ep);
             }
         };
         /**
          * Convert wlog to wdiff.
          */
-        struct Worker1 : public cybozu::thread::Runnable
+        struct Worker1
         {
             int inFd_;
             int outFd_;
             Worker1(int inFd, int outFd)
                 : inFd_(inFd), outFd_(outFd) {}
-            void operator()() override {
+            void operator()() {
+                std::exception_ptr ep;
                 try {
                     ::printf("start worker1.\n"); /* debug */
                     Converter c;
                     c.convert(inFd_, outFd_);
-                    done();
                 } catch (...) {
-                    throwErrorLater();
+                    ep = std::current_exception();
                 }
                 /* finally */
                 ::close(inFd_);
                 ::close(outFd_);
+                if (ep) std::rethrow_exception(ep);
             }
         };
         /**
          * Read wdiff stream and make a memory data.
          */
-        struct Worker2 : public cybozu::thread::Runnable
+        struct Worker2
         {
             int inFd_;
             MemoryData &mem_;
             Worker2(int inFd, MemoryData &mem)
                 : inFd_(inFd), mem_(mem) {}
-            void operator()() override {
+            void operator()() {
+                std::exception_ptr ep;
                 try {
                     mem_.clear();
                     mem_.readFrom(inFd_);
-                    done();
                 } catch (...) {
-                    throwErrorLater();
+                    ep = std::current_exception();
                 }
                 ::close(inFd_);
+                if (ep) std::rethrow_exception(ep);
             }
         };
-        cybozu::thread::ThreadRunnerSet<> thSet;
+        cybozu::thread::ThreadRunnerSet thSet;
         thSet.add(std::make_shared<Worker0>(pipe0.fdW(), config_));
         thSet.add(std::make_shared<Worker1>(pipe0.fdR(), pipe1.fdW()));
         thSet.add(std::make_shared<Worker2>(pipe1.fdR(), mem_));
