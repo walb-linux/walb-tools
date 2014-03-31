@@ -65,13 +65,11 @@ public:
     };
 private:
     const Config& config_;
-    uint64_t lsid_;
 
 public:
     Generator(const Config& config)
-        : config_(config)
-        , lsid_(config.lsid) {}
-
+        : config_(config) {
+    }
     void generate(int outFd) {
         generateAndWrite(outFd);
     }

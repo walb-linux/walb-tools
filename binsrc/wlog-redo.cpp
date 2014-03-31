@@ -467,9 +467,6 @@ private:
        is submitted, but not completed. */
     size_t nPendingBlocks_;
 
-    /* Number of prepared but not submitted IOs. */
-    size_t nPreparedIos_;
-
     OverlappedData olData_;
 
     /* For statistics. */
@@ -494,7 +491,6 @@ public:
         , ioQ_()
         , readyIoQ_()
         , nPendingBlocks_(0)
-        , nPreparedIos_(0)
         , olData_()
         , nWritten_(0)
         , nOverwritten_(0)

@@ -459,7 +459,7 @@ inline void c2pStartServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
-        logger.error(e.what());
+        logger.error() << e.what();
         pkt.write(e.what());
     }
 }

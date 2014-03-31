@@ -55,36 +55,15 @@ private:
     }
 };
 
-/**
- * To get log device suprblock.
- */
-class WalbLogInfo
-{
-private:
-    const Config& config_;
-    cybozu::util::BlockDevice bd_;
-    walb::device::SuperBlock super_;
-    const size_t blockSize_;
-
-public:
-    WalbLogInfo(const Config& config)
-        : config_(config)
-        , bd_(config.ldevPath().c_str(), O_RDONLY | O_DIRECT)
-        , super_(bd_)
-        , blockSize_(bd_.getPhysicalBlockSize()) {
-    }
-
-    void show() {
-        super_.print();
-    }
-};
-
 int main(int argc, char* argv[]) try
 {
     walb::util::setLogSetting("-", false);
     Config config(argc, argv);
-    WalbLogInfo wlInfo(config);
-    wlInfo.show();
+
+    cybozu::util::BlockDevice bd(config.ldevPath().c_str(), O_RDONLY | O_DIRECT);
+    walb::device::SuperBlock super(bd);
+    super.print();
+
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
     return 1;

@@ -135,7 +135,6 @@ private:
 class Reader /* final */
 {
 private:
-    int fd_;
     cybozu::util::FdReader fdr_;
     bool isReadHeader_;
     unsigned int pbs_;
@@ -144,19 +143,17 @@ private:
 
     std::shared_ptr<PackHeaderRaw> pack_;
     uint16_t recIdx_;
-    uint16_t totalSize_;
     uint64_t endLsid_;
 
 public:
     explicit Reader(int fd)
-        : fd_(fd), fdr_(fd)
+        : fdr_(fd)
         , isReadHeader_(false)
         , pbs_(0)
         , salt_(0)
         , isEnd_(false)
         , pack_()
         , recIdx_(0)
-        , totalSize_(0)
         , endLsid_(0) {}
 
     ~Reader() noexcept {}
@@ -302,7 +299,6 @@ class Writer
 private:
     using Block = std::shared_ptr<uint8_t>;
 
-    int fd_;
     cybozu::util::FdWriter fdw_;
     bool isWrittenHeader_;
     bool isClosed_;
@@ -314,7 +310,7 @@ private:
     uint64_t lsid_;
 public:
     explicit Writer(int fd)
-        : fd_(fd), fdw_(fd), isWrittenHeader_(false), isClosed_(false)
+        : fdw_(fd), isWrittenHeader_(false), isClosed_(false)
         , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1) {}
     ~Writer() noexcept {
         try {

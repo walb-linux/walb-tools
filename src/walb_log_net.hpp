@@ -34,7 +34,7 @@ CompressedData convertToCompressedData(const BlockData &blockD, bool doCompress)
 }
 
 template <typename BlockDataT>
-BlockDataT convertToBlockData(const CompressedData &cd, unsigned int pbs)
+BlockDataT convertToBlockData(const CompressedData &/*cd*/, unsigned int /*pbs*/)
 {
     throw std::runtime_error("convertToBlockData: not supported type.");
 }
@@ -109,12 +109,19 @@ private:
             }
             ctrl.end();
             done();
+        } catch (std::exception &e) {
+            handleError(e.what());
         } catch (...) {
+            handleError("unknown error");
+        }
+    private:
+        void handleError(const char *msg) noexcept {
             try {
                 packet::StreamControl(packet_.sock()).error();
             } catch (...) {}
-            throwErrorLater();
+            logger_.error() << "SendWorker" << msg;
             inQ_.fail();
+            throwErrorLater();
         }
     };
 
@@ -208,9 +215,9 @@ private:
             try {
                 f();
             } catch (std::exception &e) {
-                logger_.error("walb::log::Sender: %s.", e.what());
+                logger_.error() << "walb::log::Sender" << e.what();
             } catch (...) {
-                logger_.error("walb::log::Sender: unknown error.");
+                logger_.error() << "walb::log::Sender:unknown error";
             }
         }
     }
@@ -261,9 +268,16 @@ private:
             assert(ctrl.isEnd());
             outQ_.sync();
             done();
+        } catch (std::exception &e) {
+            handleError(e.what());
         } catch (...) {
-            throwErrorLater();
+            handleError("unknown error");
+        }
+    private:
+        void handleError(const char *msg) noexcept {
+            logger_.error() << "RecvWorker" << msg;
             outQ_.fail();
+            throwErrorLater();
         }
     };
 
