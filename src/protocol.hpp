@@ -33,7 +33,7 @@ const char *const proxyHT = "proxy";
 const char *const archiveHT = "archive";
 
 /**
- * Protocol name list.
+ * Command protocols.
  */
 const char *const statusPN = "status";
 const char *const initVolPN = "init-vol";
@@ -46,20 +46,24 @@ const char *const fullBkpPN = "full-bkp";
 const char *const hashBkpPN = "hash-bkp";
 const char *const snapshotPN = "snapshot";
 const char *const archiveInfoPN = "archive-info";
-const char *const wlogTransferPN = "wlog-transfer";
-const char *const dirtyFullSyncPN = "dirty-full-sync";
-const char *const dirtyHashSyncPN = "dirty-hash-sync";
 const char *const restorePN = "restore";
 const char *const dropPN = "drop";
-const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const replicatePN = "replicate";
-const char *const replSyncPN = "repl-sync";
 const char *const applyPN = "apply";
 const char *const mergePN = "merge";
 const char *const resizePN = "resize";
 const char *const hostTypePN = "host-type";
 const char *const shutdownPN = "shutdown";
 const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
+
+/**
+ * Internal protocols.
+ */
+const char *const dirtyFullSyncPN = "dirty-full-sync";
+const char *const dirtyHashSyncPN = "dirty-hash-sync";
+const char *const wlogTransferPN = "wlog-transfer";
+const char *const wdiffTransferPN = "wdiff-transfer";
+const char *const replSyncPN = "repl-sync";
 
 
 inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)
