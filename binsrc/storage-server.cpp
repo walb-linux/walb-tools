@@ -39,17 +39,17 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
-            { statusPN, c2sStatusServer },
-            { listVolPN, c2sListVolServer },
-            { initVolPN, c2sInitVolServer },
-            { clearVolPN, c2sClearVolServer },
-            { resetVolPN, c2sResetVolServer },
-            { startPN, c2sStartServer },
-            { stopPN, c2sStopServer },
-            { fullBkpPN, c2sFullBkpServer },
-            { hashBkpPN, c2sHashBkpServer },
-            { snapshotPN, c2sSnapshotServer },
-            { hostTypePN, c2sHostTypeServer },
+            { statusCN, c2sStatusServer },
+            { listVolCN, c2sListVolServer },
+            { initVolCN, c2sInitVolServer },
+            { clearVolCN, c2sClearVolServer },
+            { resetVolCN, c2sResetVolServer },
+            { startCN, c2sStartServer },
+            { stopCN, c2sStopServer },
+            { fullBkpCN, c2sFullBkpServer },
+            { hashBkpCN, c2sHashBkpServer },
+            { snapshotCN, c2sSnapshotServer },
+            { hostTypeCN, c2sHostTypeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
     }

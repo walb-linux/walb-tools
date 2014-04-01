@@ -33,31 +33,31 @@ const char *const proxyHT = "proxy";
 const char *const archiveHT = "archive";
 
 /**
- * Command protocols.
+ * Command name.
  */
-const char *const statusPN = "status";
-const char *const initVolPN = "init-vol";
-const char *const clearVolPN = "clear-vol";
-const char *const listVolPN = "list-vol";
-const char *const resetVolPN = "reset-vol";
-const char *const startPN = "start";
-const char *const stopPN = "stop";
-const char *const fullBkpPN = "full-bkp";
-const char *const hashBkpPN = "hash-bkp";
-const char *const snapshotPN = "snapshot";
-const char *const archiveInfoPN = "archive-info";
-const char *const restorePN = "restore";
-const char *const dropPN = "drop";
-const char *const replicatePN = "replicate";
-const char *const applyPN = "apply";
-const char *const mergePN = "merge";
-const char *const resizePN = "resize";
-const char *const hostTypePN = "host-type";
-const char *const shutdownPN = "shutdown";
-const char *const dbgReloadMetadataPN = "dbg-reload-metadata";
+const char *const statusCN = "status";
+const char *const initVolCN = "init-vol";
+const char *const clearVolCN = "clear-vol";
+const char *const listVolCN = "list-vol";
+const char *const resetVolCN = "reset-vol";
+const char *const startCN = "start";
+const char *const stopCN = "stop";
+const char *const fullBkpCN = "full-bkp";
+const char *const hashBkpCN = "hash-bkp";
+const char *const snapshotCN = "snapshot";
+const char *const archiveInfoCN = "archive-info";
+const char *const restoreCN = "restore";
+const char *const dropCN = "drop";
+const char *const replicateCN = "replicate";
+const char *const applyCN = "apply";
+const char *const mergeCN = "merge";
+const char *const resizeCN = "resize";
+const char *const hostTypeCN = "host-type";
+const char *const shutdownCN = "shutdown";
+const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 
 /**
- * Internal protocols.
+ * Internal protocol name.
  */
 const char *const dirtyFullSyncPN = "dirty-full-sync";
 const char *const dirtyHashSyncPN = "dirty-hash-sync";
@@ -242,7 +242,7 @@ inline void clientDispatch(
     const std::map<std::string, ClientHandler> &handlers)
 {
     ClientParams clientParams(sock, logger, params);
-    if (protocolName == shutdownPN) {
+    if (protocolName == shutdownCN) {
         shutdownClient(clientParams);
         return;
     }
@@ -277,7 +277,7 @@ inline void serverDispatch(
     ProtocolLogger logger(nodeId, clientId);
     try {
         ServerParams serverParams(sock, clientId, procStat);
-        if (protocolName == shutdownPN) {
+        if (protocolName == shutdownCN) {
             shutdownServer(serverParams);
             return;
         }

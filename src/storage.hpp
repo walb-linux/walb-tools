@@ -915,7 +915,7 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
     try {
         cybozu::Socket sock;
         util::connectWithTimeout(sock, proxy, PROXY_HEARTBEAT_SOCKET_TIMEOUT_SEC);
-        protocol::run1stNegotiateAsClient(sock, gs.nodeId, hostTypePN);
+        protocol::run1stNegotiateAsClient(sock, gs.nodeId, hostTypeCN);
         const std::string type = protocol::runHostTypeClient(sock);
         if (type == proxyHT) info.isAvailable = true;
     } catch (std::exception &e) {
