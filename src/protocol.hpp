@@ -212,7 +212,7 @@ inline void shutdownClient(ClientParams &p)
 {
     bool isForce = false;
     if (!p.params.empty()) {
-        isForce = static_cast<int>(cybozu::atoi(p.params[0])) != 0;
+        isForce = !s.empty() && s[0] == 'f';
     }
     packet::Packet pkt(p.sock);
     pkt.write(isForce);
