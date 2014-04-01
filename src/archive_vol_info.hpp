@@ -49,9 +49,9 @@ class ArchiveVolInfo
 {
 public:
     const cybozu::FilePath volDir;
+    const std::string volId;
 private:
     const std::string vgName_;
-    const std::string volId_;
     WalbDiffFiles wdiffs_;
 
 public:
@@ -63,8 +63,8 @@ public:
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
                    const std::string &vgName, MetaDiffManager &diffMgr)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
+        , volId(volId)
         , vgName_(vgName)
-        , volId_(volId)
         , wdiffs_(diffMgr, volDir.str()) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
@@ -99,6 +99,10 @@ public:
             throw cybozu::Exception("ArchiveVolInfo::clear:rmdir recursively failed.");
         }
 #endif
+    }
+    void removeDiffFiles(const std::vector<MetaDiff>& diffV)
+    {
+        wdiffs_.removeDiffFiles(diffV);
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;
@@ -168,31 +172,6 @@ public:
         }
         return lv;
     }
-    /**
-     * QQQ
-     */
-    bool apply(uint64_t timestamp) {
-        MetaState st0 = getMetaState();
-        const MetaDiffManager &mgr = wdiffs_.getMgr();
-        std::vector<MetaDiff> metaDiffList = mgr.getDiffListToApply(st0, timestamp);
-        if (metaDiffList.empty()) {
-            // There is nothing to apply.
-            return false;
-        }
-        MetaState st1 = applying(st0, metaDiffList);
-        setMetaState(st1);
-
-        // QQQ
-        // apply wdiff files indicated by metaDiffList to lv.
-
-        MetaState st2 = walb::apply(st0, metaDiffList);
-        setMetaState(st2);
-
-        // QQQ
-        // Remove applied wdiff files.
-
-        return true;
-    }
     std::vector<std::string> getStatusAsStrVec() const {
         const char *const FUNC = __func__;
         std::vector<std::string> v;
@@ -202,10 +181,10 @@ public:
             throw cybozu::Exception(FUNC) << "not found volDir" << volDir.str();
         }
         if (!lvExists()) {
-            throw cybozu::Exception(FUNC) << "not found base lv" << volId_;
+            throw cybozu::Exception(FUNC) << "not found base lv" << volId;
         }
 
-        v.push_back(fmt("volId %s", volId_.c_str()));
+        v.push_back(fmt("volId %s", volId.c_str()));
         uint64_t sizeLb = getLv().sizeLb();
         const std::string sizeStr = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         v.push_back(fmt("size %" PRIu64 " %s", sizeLb, sizeStr.c_str()));
@@ -246,7 +225,7 @@ public:
         return v;
     }
     std::string restoredSnapshotName(uint64_t gid) const {
-        return RESTORE_PREFIX + volId_ + "_" + cybozu::itoa(gid);
+        return RESTORE_PREFIX + volId + "_" + cybozu::itoa(gid);
     }
     /**
      * Full path of the wdiff file of a corresponding meta diff.
@@ -259,7 +238,7 @@ private:
         return cybozu::lvm::getVg(vgName_);
     }
     std::string lvName() const {
-        return VOLUME_PREFIX + volId_;
+        return VOLUME_PREFIX + volId;
     }
 #if 0 // XXX
     /**
