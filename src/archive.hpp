@@ -480,16 +480,9 @@ inline void x2aDirtyHashSyncServer(protocol::ServerParams &p)
 
 namespace archive_local {
 
-inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolState& volSt, ArchiveVolInfo& volInfo, uint64_t gid, bool doApply)
+inline std::pair<MetaState, std::vector<MetaDiff>> getDiffList(ArchiveVolInfo& volInfo, uint64_t gid, bool doApply, const char *msg)
 {
-    const char *const FUNC = __func__;
-//    ArchiveVolState& volSt = getArchiveVolState(volId);
-//    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
-    MetaDiffManager &mgr = volSt.diffMgr;
-
-    const int maxRetryNum = 10;
-    int retryNum = 0;
-  retry:
+    const MetaDiffManager &mgr = volInfo.getDiffMgr();
     const MetaState st = volInfo.getMetaState();
     std::vector<MetaDiff> diffV;
     if (doApply) {
@@ -498,9 +491,22 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybo
         diffV = mgr.getDiffListToRestore(st, gid);
     }
     if (diffV.empty()) {
-        throw cybozu::Exception(FUNC) << volInfo.volId << gid;
+        throw cybozu::Exception(msg) << volInfo.volId << gid;
     }
-    // apply wdiff files indicated by diffV to lvSnap.
+    return {st, diffV};
+}
+
+inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo, uint64_t gid, bool doApply)
+{
+    const char *const FUNC = __func__;
+
+    const int maxRetryNum = 10;
+    int retryNum = 0;
+  retry:
+    MetaState st;
+    std::vector<MetaDiff> diffV;
+    std::tie(st, diffV) = getDiffList(volInfo, gid, doApply, FUNC);
+    // Try to open all wdiff files.
     for (const MetaDiff& diff : diffV) {
         cybozu::util::FileOpener op;
         if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
@@ -586,7 +592,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     const bool doApply = false;
     std::vector<cybozu::util::FileOpener> ops;
-    tryOpenDiffs(ops, volSt, volInfo, gid, doApply);
+    tryOpenDiffs(ops, volInfo, gid, doApply);
     if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
         return false;
     }
@@ -887,7 +893,18 @@ inline void a2aReplSyncServer(protocol::ServerParams &/*p*/)
 
 namespace archive_local {
 
-inline bool apply(const std::string& volId, uint64_t gid) {
+inline void verifyApplicable(const std::string& volId, uint64_t gid)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    UniqueLock ul(volSt.mu);
+
+    const bool doApply = true;
+    getDiffList(volInfo, gid, doApply, __func__);
+}
+
+inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
+{
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
@@ -896,7 +913,7 @@ inline bool apply(const std::string& volId, uint64_t gid) {
     std::vector<cybozu::util::FileOpener> ops;
     MetaState st0;
     std::vector<MetaDiff> diffV;
-    std::tie(st0, diffV) = tryOpenDiffs(ops, volSt, volInfo, gid, doApply);
+    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, gid, doApply);
 
     const MetaState st1 = applying(st0, diffV);
     volInfo.setMetaState(st1);
@@ -906,7 +923,7 @@ inline bool apply(const std::string& volId, uint64_t gid) {
         return false;
     }
 
-    const MetaState st2 = walb::apply(st0, diffV);
+    const MetaState st2 = apply(st0, diffV);
     volInfo.setMetaState(st2);
 
     volInfo.removeDiffFiles(diffV);
@@ -915,23 +932,30 @@ inline bool apply(const std::string& volId, uint64_t gid) {
 
 } // archive_local
 
-#if 1
-inline void c2aApplyServer(protocol::ServerParams &){}
-#else
 inline void c2aApplyServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
         const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
         const uint64_t gid = cybozu::atoi(v[1]);
+        archive_local::verifyApplicable(volId, gid);
+        pkt.write(msgAccept);
+        sendErr = false;
+        if (!archive_local::applyDiffsToVolume(volId, gid)) {
+            logger.warn() << FUNC << "stopped force" << volId << gid;
+            return;
+        }
+        logger.info() << "apply succeeded" << volId << gid;
     } catch (std::exception& e) {
+        logger.error() << FUNC << e.what();
+        if (sendErr) pkt.write(e.what());
     }
 }
-#endif
 
 inline void c2aMergeServer(protocol::ServerParams &/*p*/)
 {

@@ -52,6 +52,7 @@ public:
     const std::string volId;
 private:
     const std::string vgName_;
+    MetaDiffManager &diffMgr_;
     WalbDiffFiles wdiffs_;
 
 public:
@@ -65,6 +66,7 @@ public:
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
         , vgName_(vgName)
+        , diffMgr_(diffMgr)
         , wdiffs_(diffMgr, volDir.str()) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
@@ -232,6 +234,9 @@ public:
      */
     cybozu::FilePath getDiffPath(const MetaDiff &diff) const {
         return volDir + cybozu::FilePath(createDiffFileName(diff));
+    }
+    const MetaDiffManager &getDiffMgr() const {
+        return diffMgr_;
     }
 private:
     cybozu::lvm::Vg getVg() const {
