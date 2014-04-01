@@ -163,7 +163,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -189,7 +189,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
 {
     const char *FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -222,7 +222,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -259,7 +259,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const bool isForce = (int)cybozu::atoi(v[1]) != 0;
     packet::Packet pkt(p.sock);
@@ -556,7 +556,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
@@ -592,7 +592,7 @@ inline void c2aDropServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
@@ -625,7 +625,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
     const char * const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
     const std::vector<std::string> v =
-        protocol::recvStrVec(p.sock, 1, FUNC, false);
+        protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -825,7 +825,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
         const uint64_t gid = cybozu::atoi(v[1]);
     } catch (std::exception& e) {
@@ -857,7 +857,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) {
             throw cybozu::Exception(FUNC) << "specify volId";
         }

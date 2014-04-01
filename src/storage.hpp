@@ -390,7 +390,7 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const std::string &wdevPath = v[1];
     packet::Packet pkt(p.sock);
@@ -414,7 +414,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -440,7 +440,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
 inline void c2sStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     ProtocolLogger logger(gs.nodeId, p.clientId);
     const std::string &volId = v[0];
     const bool isMaster = (v[1] == "master");
@@ -483,7 +483,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const int isForceInt = cybozu::atoi(v[1]);
     const bool isForce = (isForceInt != 0);
@@ -570,7 +570,7 @@ inline void c2sFullBkpServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
 
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string& volId = v[0];
     const uint64_t bulkLb = cybozu::atoi(v[1]);
     const uint64_t curTime = ::time(0);
@@ -661,7 +661,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -962,7 +962,7 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) throw cybozu::Exception(FUNC) << "empty param";
         const std::string &volId = v[0];
         uint64_t gid = 0;
