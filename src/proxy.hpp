@@ -370,7 +370,7 @@ inline void c2pListVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(gp.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    protocol::sendStrVec(p.sock, v, 0, FUNC);
     packet::Ack(p.sock).send();
     ProtocolLogger logger(gp.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";

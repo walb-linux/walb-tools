@@ -148,7 +148,7 @@ inline void c2aListVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(ga.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    protocol::sendStrVec(p.sock, v, 0, FUNC);
     packet::Ack(p.sock).send();
     ProtocolLogger logger(ga.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
@@ -818,9 +818,18 @@ inline void a2aReplSyncServer(protocol::ServerParams &/*p*/)
     // QQQ
 }
 
-inline void c2aApplyServer(protocol::ServerParams &/*p*/)
+inline void c2aApplyServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+        const std::string &volId = v[0];
+        const uint64_t gid = cybozu::atoi(v[1]);
+    } catch (std::exception& e) {
+    }
 }
 
 inline void c2aMergeServer(protocol::ServerParams &/*p*/)

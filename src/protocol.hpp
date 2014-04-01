@@ -299,7 +299,7 @@ inline void serverDispatch(
  */
 inline void sendStrVec(
     cybozu::Socket &sock,
-    const std::vector<std::string> &v, size_t numToSend, const char *msg, bool doAck = true)
+    const std::vector<std::string> &v, size_t numToSend, const char *msg, const char *confirmMsg = nullptr)
 {
     if (numToSend != 0 && v.size() != numToSend) {
         throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
@@ -312,11 +312,11 @@ inline void sendStrVec(
     }
     packet.write(v);
 
-	if (doAck) {
+	if (confirmMsg) {
         packet::Packet pkt(sock);
         std::string res;
         pkt.read(res);
-        if (res != msgOk) {
+        if (res != confirmMsg) {
             throw cybozu::Exception(msg) << res;
         }
 	}

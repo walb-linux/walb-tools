@@ -50,7 +50,7 @@ inline void c2xListVolClient(protocol::ClientParams &p)
  */
 inline void c2xInitVolClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 0, "c2xInitVolClient");
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xInitVolClient", msgOk);
 }
 
 /**
@@ -59,7 +59,7 @@ inline void c2xInitVolClient(protocol::ClientParams &p)
  */
 inline void c2xClearVolClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 1, "c2xClearVolClient");
+    protocol::sendStrVec(p.sock, p.params, 1, "c2xClearVolClient", msgOk);
 }
 
 /**
@@ -71,7 +71,7 @@ inline void c2xClearVolClient(protocol::ClientParams &p)
  */
 inline void c2xStartClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 0, "c2xStartClient");
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xStartClient", msgOk);
 }
 
 /**
@@ -80,7 +80,7 @@ inline void c2xStartClient(protocol::ClientParams &p)
  */
 inline void c2xStopClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient");
+    protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient", msgOk);
 }
 
 inline void c2sFullBkpClient(protocol::ClientParams &p)
@@ -103,7 +103,7 @@ inline void c2sFullBkpClient(protocol::ClientParams &p)
     }
     v.push_back(cybozu::itoa(bulkLb));
     LOGd("sendStrVec");
-    protocol::sendStrVec(p.sock, v, 2, FUNC, false);
+    protocol::sendStrVec(p.sock, v, 2, FUNC);
 
     std::string st;
     packet::Packet packet(p.sock);
@@ -125,7 +125,7 @@ inline void c2sHashBkpClient(protocol::ClientParams &/*p*/)
 inline void c2aRestoreClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 2, FUNC, false);
+    protocol::sendStrVec(p.sock, p.params, 2, FUNC);
     packet::Packet pkt(p.sock);
 
     std::string s;
@@ -142,7 +142,7 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
 inline void c2aDropClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 2, FUNC);
+    protocol::sendStrVec(p.sock, p.params, 2, FUNC, msgOk);
 }
 
 namespace ctrl_local {
@@ -174,7 +174,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
     ctrl_local::verifyEnoughParameters(p.params, 2, FUNC);
     const std::string &cmd = p.params[0];
     const std::string &volId = p.params[1];
-    protocol::sendStrVec(p.sock, {cmd, volId}, 2, FUNC, false);
+    protocol::sendStrVec(p.sock, {cmd, volId}, 2, FUNC);
     packet::Packet pkt(p.sock);
     if (cmd != "list") {
         ctrl_local::verifyEnoughParameters(p.params, 3, FUNC);
@@ -225,7 +225,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 inline void c2sSnapshotClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 1, FUNC, false);
+    protocol::sendStrVec(p.sock, p.params, 1, FUNC);
     packet::Packet pkt(p.sock);
 
     std::string res;
@@ -247,7 +247,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
  */
 inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 1, __func__);
+    protocol::sendStrVec(p.sock, p.params, 1, __func__, msgOk);
 }
 
 /**
@@ -264,9 +264,9 @@ inline void c2aReplicateClient(protocol::ClientParams &/*p*/)
  * params[0]: volId
  * params[1]: gid: All snapshots where snap.gidB < gid will be deleted.
  */
-inline void c2aApplyClient(protocol::ClientParams &/*p*/)
+inline void c2aApplyClient(protocol::ClientParams &p)
 {
-    // QQQ
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgAccept);
 }
 
 /**
@@ -286,7 +286,7 @@ inline void c2aMergeClient(protocol::ClientParams &/*p*/)
  */
 inline void c2xResizeClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, __func__);
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
 inline void c2xHostTypeClient(protocol::ClientParams &p)
@@ -302,7 +302,7 @@ inline void c2xHostTypeClient(protocol::ClientParams &p)
 inline void c2xResetVolClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 0, FUNC, true);
+    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
 }
 
 } // namespace walb
