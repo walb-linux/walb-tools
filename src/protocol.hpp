@@ -212,6 +212,7 @@ inline void shutdownClient(ClientParams &p)
 {
     bool isForce = false;
     if (!p.params.empty()) {
+        const std::string &s = p.params[0];
         isForce = !s.empty() && s[0] == 'f';
     }
     packet::Packet pkt(p.sock);
