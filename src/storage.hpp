@@ -247,15 +247,25 @@ class MonitorManager
 {
     const std::string wdevPath;
     const std::string volId;
+    bool started_;
     bool dontStop_;
 public:
     MonitorManager(const std::string& wdevPath, const std::string& volId)
-        : wdevPath(wdevPath), volId(volId), dontStop_(false) {
+        : wdevPath(wdevPath), volId(volId), started_(false), dontStop_(false) {
     }
-    void start() { startMonitoring(wdevPath, volId); }
+    void start() {
+        startMonitoring(wdevPath, volId);
+        started_ = true;
+    }
     void dontStop() { dontStop_ = true; }
     ~MonitorManager() {
-        if (!dontStop_) stopMonitoring(wdevPath, volId);
+        try {
+            if (started_ && !dontStop_) {
+                stopMonitoring(wdevPath, volId);
+            }
+        } catch (...) {
+            LOGs.error() << __func__ << "stop monitoring failed" << volId;
+        }
     }
 };
 
@@ -634,26 +644,27 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
                 throw e;
             }
         }
-        // (7) in storage-daemon.txt
         MetaSnap snap;
-        if (isFull) {
-            if (!storage_local::dirtyFullSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
-                logger.warn() << FUNC << "force stopped" << volId;
-                return;
-            }
-        } else {
-            aPkt.read(snap);
-            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
-                logger.warn() << FUNC << "force stopped" << volId;
-                return;
-            }
-        }
+        if (!isFull) aPkt.read(snap);
         const uint64_t gidB = isFull ? 0 : snap.gidE + 1;
         volInfo.resetWlog(gidB);
         const cybozu::Uuid uuid = volInfo.getUuid();
         aPkt.write(uuid);
         packet::Ack(aSock).recv();
         monitorMgr.start();
+
+        // (7) in storage-daemon.txt
+        if (isFull) {
+            if (!storage_local::dirtyFullSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+                logger.warn() << FUNC << "force stopped" << volId;
+                return;
+            }
+        } else {
+            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+                logger.warn() << FUNC << "force stopped" << volId;
+                return;
+            }
+        }
 
         // (8), (9) in storage-daemon.txt
         {
