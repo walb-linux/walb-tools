@@ -76,11 +76,12 @@ inline void c2xStartClient(protocol::ClientParams &p)
 
 /**
  * params[0]: volId
- * params[1]: isForce: "0" or "1".
+ * params[1]: type (optional)
+ *   "graceful" (default) or "force" or "empty".
  */
 inline void c2xStopClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient", msgOk);
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xStopClient", msgOk);
 }
 
 namespace ctrl_local {

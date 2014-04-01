@@ -485,7 +485,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
 
 /**
  * params[0]: volId
- * params[1]: isForce: "0" or "1".
+ * params[1]: StopOpt as string (optional)
  *
  * Master --> Stopped, or Slave --> SyncReady.
  */
@@ -493,15 +493,15 @@ inline void c2sStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const int isForceInt = cybozu::atoi(v[1]);
-    const bool isForce = (isForceInt != 0);
+    const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+    std::string volId;
+    StopOpt stopOpt;
+    std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
     packet::Packet pkt(p.sock);
 
     try {
         StorageVolState &volSt = getStorageVolState(volId);
-        Stopper stopper(volSt.stopState, isForce);
+        Stopper stopper(volSt.stopState, stopOpt.isForce());
         if (!stopper.isSuccess()) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }

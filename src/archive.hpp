@@ -253,20 +253,21 @@ inline void c2aStartServer(protocol::ServerParams &p)
 /**
  * command "stop"
  * params[0]: volId
- * params[1]: isForce
+ * params[1]: StopOpt as string (optional)
  */
 inline void c2aStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const bool isForce = (int)cybozu::atoi(v[1]) != 0;
+    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+    std::string volId;
+    StopOpt stopOpt;
+    std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
     packet::Packet pkt(p.sock);
 
     try {
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        Stopper stopper(volSt.stopState, isForce);
+        Stopper stopper(volSt.stopState, stopOpt.isForce());
         if (!stopper.isSuccess()) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }

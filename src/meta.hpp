@@ -1055,6 +1055,10 @@ public:
         }
         return v;
     }
+    bool empty() const {
+        AutoLock lk(mu_);
+        return mmap_.empty();
+    }
     size_t size() const {
         AutoLock lk(mu_);
         return mmap_.size();

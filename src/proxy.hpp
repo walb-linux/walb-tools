@@ -75,6 +75,14 @@ struct ProxyVolState
 
             { pStarted, ptWlogRecv },
             { ptWlogRecv, pStarted },
+
+            { pStarted, ptPreWaitForEmpty },
+            { ptPreWaitForEmpty, pWaitForEmpty },
+            { pWaitForEmpty, ptPostWaitForEmpty },
+            { ptPostWaitForEmpty, pStopped },
+
+            { pWaitForEmpty, ptStop },
+            //{ ptStop, pStopped },
         };
         sm.init(tbl);
         initInner(volId);
@@ -399,11 +407,74 @@ inline void startProxyVol(const std::string &volId)
     tran.commit(pStarted);
 }
 
+namespace proxy_local {
+
+inline bool hasDiffs(ProxyVolState &volSt)
+{
+    UniqueLock ul(volSt.mu);
+    if (!volSt.diffMgr.empty()) return true;
+    for (const std::string &archiveName : volSt.archiveSet) {
+        if (!volSt.diffMgrMap.get(archiveName).empty()) return true;
+    }
+    return false;
+}
+
+/**
+ * pStarted --> pWaitForEmpty --> pStopped.
+ */
+inline void stopAndEmptyProxyVol(const std::string &volId)
+{
+    const char *const FUNC = __func__;
+    ProxySingleton &g = getProxyGlobal();
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+
+    waitUntil(ul, [&]() {
+            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted, pWaitForEmpty});
+        }, FUNC);
+
+    verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+
+    StateMachineTransaction tran0(volSt.sm, pStarted, ptPreWaitForEmpty);
+    tran0.commit(pWaitForEmpty);
+
+    waitUntil(ul, [&]() {
+            if (volSt.sm.get() != pWaitForEmpty) return true;
+            const bool hasDiffs = proxy_local::hasDiffs(volSt);
+            if (hasDiffs) {
+                for (const std::string &archiveName : volSt.archiveSet) {
+                    g.taskQueue.push(ProxyTask(volId, archiveName));
+                }
+            }
+            return !hasDiffs;
+        }, FUNC);
+
+    verifyStateIn(volSt.sm.get(), {pWaitForEmpty}, FUNC);
+    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    StateMachineTransaction tran1(volSt.sm, pWaitForEmpty, ptPostWaitForEmpty, FUNC);
+    ul.unlock();
+
+    // Clear all related tasks from the task queue.
+    g.taskQueue.remove([&](const ProxyTask &task) {
+            return task.volId == volId;
+        });
+
+    tran1.commit(pStopped);
+}
+
+/**
+ *   pStarted --> pStopped or
+ *   pWaitForEmpty --> pStopped
+ */
 inline void stopProxyVol(const std::string &volId, bool isForce)
 {
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
+
     Stopper stopper(volSt.stopState, isForce);
     if (!stopper.isSuccess()) {
         throw cybozu::Exception(FUNC) << "already under stopping" << volId;
@@ -411,15 +482,15 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
 
     waitUntil(ul, [&]() {
             if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
-            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
+            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted, pWaitForEmpty});
         }, FUNC);
 
-    const std::string &st = volSt.sm.get();
-    if (st != pStarted) {
-        throw cybozu::Exception(FUNC) << "bad state" << st;
+    const std::string &stFrom = volSt.sm.get();
+    if (stFrom != pStarted && stFrom != pWaitForEmpty) {
+        throw cybozu::Exception(FUNC) << "bad state" << stFrom;
     }
 
-    StateMachineTransaction tran(volSt.sm, pStarted, ptStop, FUNC);
+    StateMachineTransaction tran(volSt.sm, stFrom, ptStop, FUNC);
     ul.unlock();
 
     // Clear all related tasks from the task queue.
@@ -429,6 +500,8 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
 
     tran.commit(pStopped);
 }
+
+} // proxy_local
 
 /**
  * params:
@@ -457,7 +530,7 @@ inline void c2pStartServer(protocol::ServerParams &p)
 /**
  * params:
  *   [0]: volId
- *   [1]: isForce
+ *   [1]: StopOpt as string (optional)
  *
  * State transition: Started --> Stop --> Stopped.
  * In addition, this will stop all background tasks before changing state.
@@ -466,15 +539,20 @@ inline void c2pStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const bool isForce = static_cast<int>(cybozu::atoi(v[1])) != 0;
+    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+    std::string volId;
+    StopOpt stopOpt;
+    std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
     packet::Packet pkt(p.sock);
 
     try {
-        stopProxyVol(volId, isForce);
+        if (stopOpt.isEmpty()) {
+            proxy_local::stopAndEmptyProxyVol(volId);
+        } else {
+            proxy_local::stopProxyVol(volId, stopOpt.isForce());
+        }
         pkt.write(msgOk);
-        logger.info() << "stop succeeded" << volId << isForce;
+        logger.info() << "stop succeeded" << volId << stopOpt;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -868,7 +946,7 @@ inline void ProxyWorker::operator()()
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+    verifyStateIn(volSt.sm.get(), {pStarted, pWaitForEmpty}, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
