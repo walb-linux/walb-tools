@@ -322,7 +322,7 @@ public:
             return false;
         }
         assert(!cd.isCompressed());
-        PackHeaderWrap h(reinterpret_cast<uint8_t *>(&header), pbs_, salt_);
+        PackHeader h(reinterpret_cast<uint8_t *>(&header), pbs_, salt_);
         cd.copyTo(h.rawData(), pbs_);
         if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
         assert(!h.isEnd());
@@ -336,7 +336,7 @@ public:
     template <typename BlockDataT>
     void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
         assert(recIdx_ == recIdx);
-        const PackHeaderWrap h((uint8_t*)&header, pbs_, salt_); // QQQ
+        const PackHeader h((uint8_t*)&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
         const RecordWrap rec(&h, recIdx);
         if (rec.hasDataForChecksum()) {

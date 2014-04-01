@@ -131,14 +131,32 @@ inline void printRecordOneline(
  */
 class PackHeader
 {
+    uint8_t *data_;
+    unsigned int pbs_;
+    uint32_t salt_;
 public:
-    virtual struct walb_logpack_header &header() = 0;
-    virtual const struct walb_logpack_header& header() const = 0;
-
-    virtual unsigned int pbs() const = 0;
-    virtual uint32_t salt() const = 0;
-    virtual void setPbs(unsigned int) = 0;
-    virtual void setSalt(uint32_t) = 0;
+    PackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
+        : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
+        ASSERT_PBS(pbs);
+    }
+    const struct walb_logpack_header &header() const {
+        checkBlock();
+        return *reinterpret_cast<const struct walb_logpack_header *>(data_);
+    }
+    struct walb_logpack_header &header() {
+        assert_bt(!std::is_const<uint8_t>::value);
+        checkBlock();
+        using uint8_tT = typename std::remove_const<uint8_t>::type;
+        return *reinterpret_cast<struct walb_logpack_header *>(
+            const_cast<uint8_tT *>(data_));
+    }
+    unsigned int pbs() const { return pbs_; }
+    uint32_t salt() const { return salt_; }
+    void setPbs(unsigned int pbs0) { pbs_ = pbs0; };
+    void setSalt(uint32_t salt0) { salt_ = salt0; };
+    void resetData(uint8_t *data) {
+        data_ = data;
+    }
 
     /*
      * Fields.
@@ -478,42 +496,6 @@ protected:
             throw RT_ERR("index out of range.");
         }
     }
-};
-
-/**
- * Logpack wrapper implementation.
- */
-class PackHeaderWrap : public PackHeader
-{
-protected:
-    uint8_t *data_;
-    unsigned int pbs_;
-    uint32_t salt_;
-public:
-    PackHeaderWrap(const uint8_t *data, unsigned int pbs, uint32_t salt)
-        : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
-        ASSERT_PBS(pbs);
-    }
-    ~PackHeaderWrap() noexcept = default;
-    const struct walb_logpack_header &header() const override {
-        checkBlock();
-        return *reinterpret_cast<const struct walb_logpack_header *>(data_);
-    }
-    struct walb_logpack_header &header() override {
-        assert_bt(!std::is_const<uint8_t>::value);
-        checkBlock();
-        using uint8_tT = typename std::remove_const<uint8_t>::type;
-        return *reinterpret_cast<struct walb_logpack_header *>(
-            const_cast<uint8_tT *>(data_));
-    }
-    unsigned int pbs() const override { return pbs_; }
-    uint32_t salt() const override { return salt_; }
-    void setPbs(unsigned int pbs0) override { pbs_ = pbs0; };
-    void setSalt(uint32_t salt0) override { salt_ = salt0; };
-    void resetData(uint8_t *data) {
-        data_ = data;
-    }
-protected:
     void checkBlock() const {
         if (data_ == nullptr) {
             throw RT_ERR("Header is null.");
@@ -521,7 +503,7 @@ protected:
     }
 };
 
-class PackHeaderRaw : public PackHeaderWrap
+class PackHeaderRaw : public PackHeader
 {
 protected:
     using Block = std::shared_ptr<uint8_t>;
@@ -529,7 +511,7 @@ protected:
 
 public:
     PackHeaderRaw(const Block &block, unsigned int pbs, uint32_t salt)
-        : PackHeaderWrap(nullptr, pbs, salt)
+        : PackHeader(nullptr, pbs, salt)
         , block_(block) {
         resetData(block_.get());
     }
