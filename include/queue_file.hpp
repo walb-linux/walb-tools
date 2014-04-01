@@ -122,7 +122,7 @@ public:
         , lock_(filePath) {
         init(true);
     }
-    ~QueueFile() noexcept {
+    virtual ~QueueFile() noexcept {
         try {
             sync();
         } catch (...) {
@@ -296,6 +296,7 @@ public:
         Qf *qf_;
         uint64_t offset_;
     public:
+        IteratorT() : qf_(nullptr), offset_(-1) {}
         IteratorT(Qf *qf, uint64_t offset)
             : qf_(qf), offset_(offset) {
             assert(qf);
@@ -327,10 +328,10 @@ public:
             return ret;
         }
         bool operator==(const It &rhs) const {
-            return offset_ == rhs.offset_;
+            return qf_ == rhs.qf_ && offset_ == rhs.offset_;
         }
         bool operator!=(const It &rhs) const {
-            return offset_ != rhs.offset_;
+            return qf_ != rhs.qf_ || offset_ != rhs.offset_;
         }
         bool isValid() const {
             const RecHeader &rec = qf_->record(offset_);
@@ -459,6 +460,9 @@ private:
             throw std::runtime_error(ss.str());
         }
     }
+protected:
+    uint64_t beginOffset() const { return header_.beginOffset; }
+    uint64_t endOffset() const { return header_.endOffset; }
 };
 
 }} //namespace cybozu::util
