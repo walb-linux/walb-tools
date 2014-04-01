@@ -1005,42 +1005,42 @@ public:
         }
         return ret;
     }
+    void getTargetDiffLists(std::vector<MetaDiff>& applicableV, std::vector<MetaDiff>& minV, const MetaState &st, uint64_t gid) const {
+        AutoLock lk(mu_);
+        applicableV = getApplicableDiffListByGid(st.snapB, gid);
+        // use this if timestamp
+        // ret = getApplicableDiffListByTime(st.snapB, timestamp);
+        if (applicableV.empty()) return;
+
+        minV = getMinimumApplicableDiffList(st);
+    }
     /**
      * Get diff list to restore a clean snapshot specified by a gid.
      * RETURN:
      *   Empty vector means the clean snapshot can not be restored.
      */
     std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
-        std::vector<MetaDiff> ret, miniDiffList;
-        {
-            AutoLock lk(mu_);
-            ret = getApplicableDiffListByGid(st.snapB, gid);
-            if (ret.empty()) return ret;
+        std::vector<MetaDiff> applicableV, minV;
+        getTargetDiffLists(applicableV, minV, st, gid);
+        if (minV.size() > applicableV.size()) return {};
 
-            miniDiffList = getMinimumApplicableDiffList(st);
-            if (miniDiffList.size() > ret.size()) return {};
-        }
-        const MetaState appliedSt = apply(st, ret);
+        const MetaState appliedSt = apply(st, applicableV);
         if (appliedSt.snapB.isClean() && appliedSt.snapB.gidB == gid) {
-            return ret;
+            return applicableV;
         } else {
             return {};
         }
     }
     /**
-     * Get diff list to apply all diffs before a specified timestamp.
+     * Get diff list to apply all diffs before a specified gid.
      * RETURN:
      *   Empty vector means there is no diff to apply.
      */
-    std::vector<MetaDiff> getDiffListToApply(const MetaState &st, uint64_t timestamp) const {
-        std::vector<MetaDiff> ret, miniDiffList;
-        {
-            AutoLock lk(mu_);
-            ret = getApplicableDiffListByTime(st.snapB, timestamp);
-            miniDiffList = getMinimumApplicableDiffList(st);
-        }
-        if (miniDiffList.size() > ret.size()) return miniDiffList;
-        return ret;
+    std::vector<MetaDiff> getDiffListToApply(const MetaState &st, uint64_t gid) const {
+        std::vector<MetaDiff> applicableV, minV;
+        getTargetDiffLists(applicableV, minV, st, gid);
+        if (minV.size() > applicableV.size()) return minV;
+        return applicableV;
     }
     /**
      * Get all diffs between gid0 and gid1.

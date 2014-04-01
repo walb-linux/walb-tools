@@ -299,7 +299,7 @@ inline void serverDispatch(
  */
 inline void sendStrVec(
     cybozu::Socket &sock,
-    const std::vector<std::string> &v, size_t numToSend, const char *msg, bool doAck = true)
+    const std::vector<std::string> &v, size_t numToSend, const char *msg, const char *confirmMsg = nullptr)
 {
     if (numToSend != 0 && v.size() != numToSend) {
         throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
@@ -312,11 +312,11 @@ inline void sendStrVec(
     }
     packet.write(v);
 
-	if (doAck) {
+	if (confirmMsg) {
         packet::Packet pkt(sock);
         std::string res;
         pkt.read(res);
-        if (res != msgOk) {
+        if (res != confirmMsg) {
             throw cybozu::Exception(msg) << res;
         }
 	}
@@ -326,7 +326,7 @@ inline void sendStrVec(
  * If numToRecv == 0, it will not check the vector size.
  */
 inline std::vector<std::string> recvStrVec(
-    cybozu::Socket &sock, size_t numToRecv, const char *msg, bool doAck = true)
+    cybozu::Socket &sock, size_t numToRecv, const char *msg)
 {
     packet::Packet packet(sock);
     std::vector<std::string> v;
@@ -338,9 +338,6 @@ inline std::vector<std::string> recvStrVec(
         if (v[i].empty()) {
             throw cybozu::Exception(msg) << "empty string" << i;
         }
-    }
-    if (doAck) {
-        packet::Packet(sock).write("ok");
     }
     return v;
 }

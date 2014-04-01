@@ -345,7 +345,7 @@ inline void c2pStatusServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
     packet::Packet pkt(p.sock);
     StrVec stStrV;
     bool sendErr = true;
@@ -370,7 +370,7 @@ inline void c2pListVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(gp.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC, false);
+    protocol::sendStrVec(p.sock, v, 0, FUNC);
     packet::Ack(p.sock).send();
     ProtocolLogger logger(gp.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
@@ -440,7 +440,7 @@ inline void c2pStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -466,7 +466,7 @@ inline void c2pStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const bool isForce = static_cast<int>(cybozu::atoi(v[1])) != 0;
     packet::Packet pkt(p.sock);
@@ -558,7 +558,7 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
 inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 {
     const char * const FUNC = "c2pArchiveInfoServer";
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &cmd = v[0];
     const std::string &volId = v[1];
 
@@ -618,7 +618,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
@@ -957,7 +957,7 @@ inline void c2pResizeServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC, false);
+    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string &volId = v[0];
     const uint64_t sizeLb = cybozu::util::fromUnitIntString(v[1]) / LOGICAL_BLOCK_SIZE;
     packet::Packet pkt(p.sock);
