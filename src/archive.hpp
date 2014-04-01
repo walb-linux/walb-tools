@@ -434,10 +434,10 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         return;
     }
 
-    walb::MetaSnap snapTo;
+    MetaSnap snapTo;
     pkt.read(snapTo);
     if (isFull) {
-        walb::MetaState state(snapTo, curTime);
+        MetaState state(snapTo, curTime);
         volInfo.setMetaState(state);
     } else {
         const MetaDiff diff(snapFrom, snapTo, true, curTime);
@@ -450,7 +450,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
 
     tran.commit(aArchived);
 
-    walb::packet::Ack(p.sock).send();
+    packet::Ack(p.sock).send();
     logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
                   << "succeeded" << volId;
 }
