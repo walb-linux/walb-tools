@@ -539,7 +539,7 @@ namespace storage_local {
  * RETURN:
  *   false if force stopped.
  */
-inline bool sendDirtyFullImage(
+inline bool dirtyFullSyncClient(
     packet::Packet &pkt, StorageVolInfo &volInfo,
     uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
 {
@@ -563,7 +563,7 @@ inline bool sendDirtyFullImage(
     return true;
 }
 
-inline bool executeDirtyHashSync(
+inline bool dirtyHashSyncClient(
     packet::Packet &pkt, StorageVolInfo &volInfo,
     uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
 {
@@ -576,7 +576,7 @@ inline bool executeDirtyHashSync(
     return false;
 }
 
-inline void backup(protocol::ServerParams &p, bool isFull)
+inline void backupClient(protocol::ServerParams &p, bool isFull)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
@@ -637,13 +637,13 @@ inline void backup(protocol::ServerParams &p, bool isFull)
         // (7) in storage-daemon.txt
         MetaSnap snap;
         if (isFull) {
-            if (!storage_local::sendDirtyFullImage(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+            if (!storage_local::dirtyFullSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
         } else {
             aPkt.read(snap);
-            if (!storage_local::executeDirtyHashSync(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
@@ -659,8 +659,7 @@ inline void backup(protocol::ServerParams &p, bool isFull)
         {
             const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
             getStorageGlobal().taskQueue.push(volId);
-            aPkt.write(gidB);
-            aPkt.write(gidE);
+            aPkt.write(MetaSnap(gidB, gidE));
         }
         packet::Ack(aSock).recv();
     }
@@ -679,13 +678,13 @@ inline void backup(protocol::ServerParams &p, bool isFull)
 inline void c2sFullBkpServer(protocol::ServerParams &p)
 {
     const bool isFull = true;
-    storage_local::backup(p, isFull);
+    storage_local::backupClient(p, isFull);
 }
 
 inline void c2sHashBkpServer(protocol::ServerParams &p)
 {
     const bool isFull = false;
-    storage_local::backup(p, isFull);
+    storage_local::backupClient(p, isFull);
 }
 
 /**

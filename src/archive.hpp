@@ -306,7 +306,7 @@ namespace archive_local {
  * RETURN:
  *   false if force stopped.
  */
-inline bool recvDirtyFullImage(
+inline bool dirtyFullSyncServer(
     packet::Packet &pkt, ArchiveVolInfo &volInfo,
     uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
 {
@@ -352,24 +352,29 @@ inline bool recvDirtyFullImage(
     return true;
 }
 
-} // archive_local
+inline bool dirtyHashSyncServer(
+    packet::Packet &pkt, ArchiveVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState, int fd)
+{
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(sizeLb);
+    cybozu::disable_warning_unused_variable(bulkLb);
+    cybozu::disable_warning_unused_variable(stopState);
+    cybozu::disable_warning_unused_variable(fd);
+    // QQQ
+    return false;
+}
 
-/**
- * Execute dirty full sync protocol as server.
- * Client is storage server or another archive server.
- */
-inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
+inline void backupServer(protocol::ServerParams &p, bool isFull)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-
     walb::packet::Packet pkt(p.sock);
+
     std::string hostType, volId;
     uint64_t sizeLb, curTime, bulkLb;
     pkt.read(hostType);
-    if (hostType != storageHT && hostType != archiveHT) {
-        throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
-    }
     pkt.read(volId);
     pkt.read(sizeLb);
     pkt.read(curTime);
@@ -380,63 +385,96 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
+    const std::string &stFrom = isFull ? aSyncReady : aArchived;
+    MetaSnap snapFrom;
     try {
+        if (hostType != storageHT && hostType != archiveHT) {
+            throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
+        }
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
-        verifyStateIn(sm.get(), {aSyncReady}, FUNC);
+        verifyStateIn(sm.get(), {stFrom}, FUNC);
+        if (!isFull) {
+            snapFrom = volSt.diffMgr.getLatestSnapshot(volInfo.getMetaState());
+        }
     } catch (std::exception &e) {
         logger.warn() << e.what();
         pkt.write(e.what());
         return;
     }
     pkt.write(msgAccept);
-
+    if (!isFull) pkt.write(snapFrom);
     cybozu::Uuid uuid;
     pkt.read(uuid);
     packet::Ack(p.sock).send();
 
-    StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
+    const std::string &stPass = isFull ? atFullSync : atHashSync;
+    StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
     ul.unlock();
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     const std::string st = volInfo.getState();
     if (st != aSyncReady) {
         throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
     }
     volInfo.createLv(sizeLb);
-
-    if (!archive_local::recvDirtyFullImage(pkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+    bool isOk;
+    std::unique_ptr<cybozu::TmpFile> tmpFileP;
+    if (isFull) {
+        isOk = archive_local::dirtyFullSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState);
+    } else {
+        tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
+        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState, tmpFileP->fd());
+    }
+    if (!isOk) {
         logger.warn() << FUNC << "force stopped" << volId;
         return;
     }
 
-    uint64_t gidB, gidE;
-    pkt.read(gidB);
-    pkt.read(gidE);
-
-    walb::MetaSnap snap(gidB, gidE);
-    walb::MetaState state(snap, curTime);
-    volInfo.setMetaState(state);
-
+    walb::MetaSnap snapTo;
+    pkt.read(snapTo);
+    if (isFull) {
+        walb::MetaState state(snapTo, curTime);
+        volInfo.setMetaState(state);
+    } else {
+        const MetaDiff diff(snapFrom, snapTo, true, curTime);
+        tmpFileP->save(volInfo.getDiffPath(diff).str());
+        tmpFileP.reset();
+        volSt.diffMgr.add(diff);
+    }
     volInfo.setUuid(uuid);
     volInfo.setState(aArchived);
 
     tran.commit(aArchived);
 
     walb::packet::Ack(p.sock).send();
-    logger.info() << "dirty-full-sync succeeded" << volId;
+    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
+                  << "succeeded" << volId;
+}
+
+} // archive_local
+
+/**
+ * Execute dirty full sync protocol as server.
+ * Client is storage server or another archive server.
+ */
+inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
+{
+    const bool isFull = true;
+    archive_local::backupServer(p, isFull);
 }
 
 /**
  * Execute dirty hash sync protocol as server.
  * Client is storage server or another archive server.
  */
-inline void x2aDirtyHashSyncServer(protocol::ServerParams &/*p*/)
+inline void x2aDirtyHashSyncServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const bool isFull = false;
+    archive_local::backupServer(p, isFull);
 }
 
 namespace archive_local {

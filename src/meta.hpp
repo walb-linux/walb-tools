@@ -83,7 +83,6 @@ const uint16_t META_LSIDGID_PREAMBLE = 0x0314;
  */
 struct MetaSnap
 {
-    uint16_t preamble;
     uint64_t gidB, gidE;
 
     MetaSnap()
@@ -103,8 +102,7 @@ struct MetaSnap
         }
     }
     MetaSnap(uint64_t gidB, uint64_t gidE)
-        : preamble(META_SNAP_PREAMBLE)
-        , gidB(gidB), gidE(gidE) {}
+        : gidB(gidB), gidE(gidE) {}
     bool isClean() const {
         return gidB == gidE;
     }
@@ -138,9 +136,6 @@ struct MetaSnap
         this->gidE = gidE;
     }
     void verify() const {
-        if (preamble != META_SNAP_PREAMBLE) {
-            throw cybozu::Exception("MetaSnap::check:wrong preamble") << preamble;
-        }
         if (gidB > gidE) {
             throw cybozu::Exception("MetaSnap::check:must be gidB <= gidE") << gidB << gidE;
         }
@@ -161,7 +156,11 @@ struct MetaSnap
      */
     template <typename InputStream>
     void load(InputStream &is) {
+        uint16_t preamble;
         cybozu::load(preamble, is);
+        if (preamble != META_SNAP_PREAMBLE) {
+            throw cybozu::Exception("MetaSnap::check:wrong preamble") << preamble;
+        }
         cybozu::load(gidB, is);
         cybozu::load(gidE, is);
         verify();
@@ -171,7 +170,7 @@ struct MetaSnap
      */
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::save(os, preamble);
+        cybozu::save(os, META_SNAP_PREAMBLE);
         cybozu::save(os, gidB);
         cybozu::save(os, gidE);
     }
@@ -375,22 +374,19 @@ struct MetaState
  */
 struct MetaLsidGid
 {
-    uint16_t preamble;
     bool isMergeable;
     uint64_t timestamp; /* unix time */
     uint64_t lsid; /* log sequence id. */
     uint64_t gid; /* generation id. */
 
     MetaLsidGid(uint64_t lsid, uint64_t gid, bool isMergeable, uint64_t timestamp)
-        : preamble(META_LSIDGID_PREAMBLE)
-        , isMergeable(isMergeable), timestamp(timestamp), lsid(lsid), gid(gid) {
+        : isMergeable(isMergeable), timestamp(timestamp), lsid(lsid), gid(gid) {
     }
     MetaLsidGid() : MetaLsidGid(-1, -1, false, 0) {
     }
+    DEPRECATED
     void verify() const {
-        if (preamble != META_LSIDGID_PREAMBLE) {
-            throw cybozu::Exception("MetaLsidGid::check:wrong preamble") << preamble;
-        }
+        // QQQ
     }
     std::string str() const {
         std::string ts = cybozu::unixTimeToStr(timestamp);
@@ -407,19 +403,22 @@ struct MetaLsidGid
      */
     template <typename InputStream>
     void load(InputStream &is) {
+        uint16_t preamble;
         cybozu::load(preamble, is);
+        if (preamble != META_LSIDGID_PREAMBLE) {
+            throw cybozu::Exception("MetaLsidGid::check:wrong preamble") << preamble;
+        }
         cybozu::load(isMergeable, is);
         cybozu::load(timestamp, is);
         cybozu::load(lsid, is);
         cybozu::load(gid, is);
-        verify();
     }
     /**
      * For cybozu serializer.
      */
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::save(os, preamble);
+        cybozu::save(os, META_LSIDGID_PREAMBLE);
         cybozu::save(os, isMergeable);
         cybozu::save(os, timestamp);
         cybozu::save(os, lsid);
