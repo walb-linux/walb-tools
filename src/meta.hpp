@@ -380,10 +380,6 @@ struct MetaLsidGid
     }
     MetaLsidGid() : MetaLsidGid(-1, -1, false, 0) {
     }
-    DEPRECATED
-    void verify() const {
-        // QQQ
-    }
     std::string str() const {
         std::string ts = cybozu::unixTimeToStr(timestamp);
         return cybozu::util::formatString(
