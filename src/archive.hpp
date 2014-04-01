@@ -590,13 +590,17 @@ inline bool restore(const std::string &volId, uint64_t gid)
     }
     cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
 
-    const bool doApply = false;
-    std::vector<cybozu::util::FileOpener> ops;
-    tryOpenDiffs(ops, volInfo, gid, doApply);
-    if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
-        return false;
-    }
+    const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+    const bool noNeedToApply = latestSnap.isClean() && latestSnap.gidB == gid;
 
+    if (!noNeedToApply) {
+        const bool doApply = false;
+        std::vector<cybozu::util::FileOpener> ops;
+        tryOpenDiffs(ops, volInfo, gid, doApply);
+        if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
+            return false;
+        }
+    }
     cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
     return true;
 }
