@@ -365,18 +365,16 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 
     walb::packet::Packet pkt(p.sock);
     std::string hostType, volId;
-    cybozu::Uuid uuid;
     uint64_t sizeLb, curTime, bulkLb;
     pkt.read(hostType);
     if (hostType != storageHT && hostType != archiveHT) {
         throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
     }
     pkt.read(volId);
-    pkt.read(uuid);
     pkt.read(sizeLb);
     pkt.read(curTime);
     pkt.read(bulkLb);
-    logger.debug() << hostType << volId << uuid << sizeLb << curTime << bulkLb;
+    logger.debug() << hostType << volId << sizeLb << curTime << bulkLb;
 
     ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -395,6 +393,10 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
         return;
     }
     pkt.write(msgAccept);
+
+    cybozu::Uuid uuid;
+    pkt.read(uuid);
+    packet::Ack(p.sock).send();
 
     StateMachineTransaction tran(sm, aSyncReady, atFullSync, FUNC);
     ul.unlock();

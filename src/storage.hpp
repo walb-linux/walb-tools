@@ -251,8 +251,8 @@ class MonitorManager
 public:
     MonitorManager(const std::string& wdevPath, const std::string& volId)
         : wdevPath(wdevPath), volId(volId), dontStop_(false) {
-        startMonitoring(wdevPath, volId);
     }
+    void start() { startMonitoring(wdevPath, volId); }
     void dontStop() { dontStop_ = true; }
     ~MonitorManager() {
         if (!dontStop_) stopMonitoring(wdevPath, volId);
@@ -563,9 +563,20 @@ inline bool sendDirtyFullImage(
     return true;
 }
 
-} // storage_local
+inline bool executeDirtyHashSync(
+    packet::Packet &pkt, StorageVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
+{
+    // QQQ
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(sizeLb);
+    cybozu::disable_warning_unused_variable(bulkLb);
+    cybozu::disable_warning_unused_variable(stopState);
+    return false;
+}
 
-inline void c2sFullBkpServer(protocol::ServerParams &p)
+inline void backup(protocol::ServerParams &p, bool isFull)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
@@ -581,40 +592,38 @@ inline void c2sFullBkpServer(protocol::ServerParams &p)
     verifyMaxForegroundTasks(gs.maxForegroundTasks, FUNC);
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
+
     packet::Packet cPack(p.sock);
 
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
+
     StateMachine &sm = volSt.sm;
 
-    StateMachineTransaction tran0(sm, sSyncReady, stFullSync, FUNC);
+    const std::string &st = isFull ? stFullSync : stHashSync;
+    StateMachineTransaction tran0(sm, sSyncReady, st, FUNC);
     ul.unlock();
 
-    const uint64_t gidB = 0;
-    volInfo.resetWlog(gidB);
-
     const uint64_t sizeLb = device::getSizeLb(volInfo.getWdevPath());
-    const cybozu::Uuid uuid = volInfo.getUuid();
-
     storage_local::MonitorManager monitorMgr(volInfo.getWdevPath(), volId);
 
     const cybozu::SocketAddr& archive = gs.archive;
     {
         cybozu::Socket aSock;
         util::connectWithTimeout(aSock, archive, gs.socketTimeout);
-        archiveId = protocol::run1stNegotiateAsClient(aSock, gs.nodeId, dirtyFullSyncPN);
-        packet::Packet aPack(aSock);
-        aPack.write(storageHT);
-        aPack.write(volId);
-        aPack.write(uuid);
-        aPack.write(sizeLb);
-        aPack.write(curTime);
-        aPack.write(bulkLb);
-        logger.debug() << "send" << storageHT << volId << uuid << sizeLb << curTime << bulkLb;
+        const std::string &protocolName = isFull ? dirtyFullSyncPN : dirtyHashSyncPN;
+        archiveId = protocol::run1stNegotiateAsClient(aSock, gs.nodeId, protocolName);
+        packet::Packet aPkt(aSock);
+        aPkt.write(storageHT);
+        aPkt.write(volId);
+        aPkt.write(sizeLb);
+        aPkt.write(curTime);
+        aPkt.write(bulkLb);
+        logger.debug() << "send" << storageHT << volId << sizeLb << curTime << bulkLb;
         {
             std::string res;
-            aPack.read(res);
+            aPkt.read(res);
             if (res == msgAccept) {
                 cPack.write(msgAccept);
                 p.sock.close();
@@ -626,16 +635,32 @@ inline void c2sFullBkpServer(protocol::ServerParams &p)
             }
         }
         // (7) in storage-daemon.txt
-        if (!storage_local::sendDirtyFullImage(aPack, volInfo, sizeLb, bulkLb, volSt.stopState)) {
-            logger.warn() << FUNC << "force stopped" << volId;
-            return;
+        MetaSnap snap;
+        if (isFull) {
+            if (!storage_local::sendDirtyFullImage(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+                logger.warn() << FUNC << "force stopped" << volId;
+                return;
+            }
+        } else {
+            aPkt.read(snap);
+            if (!storage_local::executeDirtyHashSync(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+                logger.warn() << FUNC << "force stopped" << volId;
+                return;
+            }
         }
+        const uint64_t gidB = isFull ? 0 : snap.gidE + 1;
+        volInfo.resetWlog(gidB);
+        const cybozu::Uuid uuid = volInfo.getUuid();
+        aPkt.write(uuid);
+        packet::Ack(aSock).recv();
+        monitorMgr.start();
+
         // (8), (9) in storage-daemon.txt
         {
             const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
             getStorageGlobal().taskQueue.push(volId);
-            aPack.write(gidB);
-            aPack.write(gidE);
+            aPkt.write(gidB);
+            aPkt.write(gidE);
         }
         packet::Ack(aSock).recv();
     }
@@ -649,9 +674,18 @@ inline void c2sFullBkpServer(protocol::ServerParams &p)
     logger.info() << "full-bkp succeeded" << volId << archiveId;
 }
 
-inline void c2sHashBkpServer(protocol::ServerParams &/*p*/)
+} // storage_local
+
+inline void c2sFullBkpServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const bool isFull = true;
+    storage_local::backup(p, isFull);
+}
+
+inline void c2sHashBkpServer(protocol::ServerParams &p)
+{
+    const bool isFull = false;
+    storage_local::backup(p, isFull);
 }
 
 /**

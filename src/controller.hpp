@@ -83,39 +83,29 @@ inline void c2xStopClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, "c2xStopClient", msgOk);
 }
 
-inline void c2sFullBkpClient(protocol::ClientParams &p)
-{
-    const char *const FUNC = __func__;
-    if (p.params.size() != 1 && p.params.size() != 2) {
-        throw cybozu::Exception(FUNC) << "bad size param" << p.params.size();
-    }
-    std::vector<std::string> v;
-    if (p.params[0].empty()) {
-        throw cybozu::Exception(FUNC) << "empty volId";
-    }
-    v.push_back(p.params[0]);
-    uint64_t bulkLb = walb::DEFAULT_BULK_LB;
-    if (p.params.size() == 2) {
-        bulkLb = cybozu::atoi(p.params[1]);
-        if (bulkLb == 0) {
-            throw cybozu::Exception(FUNC) << "zero bulkLb";
-        }
-    }
-    v.push_back(cybozu::itoa(bulkLb));
-    LOGd("sendStrVec");
-    protocol::sendStrVec(p.sock, v, 2, FUNC);
+namespace ctrl_local {
 
-    std::string st;
-    packet::Packet packet(p.sock);
-    packet.read(st);
-    if (st != msgAccept) {
-        throw cybozu::Exception(FUNC) << "not accept" << st;
+inline StrVec makeBkpParams(const StrVec &v)
+{
+    StrVec ret = v;
+    if (v.size() == 1) {
+        ret.push_back(cybozu::itoa(walb::DEFAULT_BULK_LB));
     }
+    return ret;
 }
 
-inline void c2sHashBkpClient(protocol::ClientParams &/*p*/)
+} // ctrl_local
+
+inline void c2sFullBkpClient(protocol::ClientParams &p)
 {
-    // QQQ
+    const StrVec v = ctrl_local::makeBkpParams(p.params);
+    protocol::sendStrVec(p.sock, v, 2, __func__, msgAccept);
+}
+
+inline void c2sHashBkpClient(protocol::ClientParams &p)
+{
+    const StrVec v = ctrl_local::makeBkpParams(p.params);
+    protocol::sendStrVec(p.sock, v, 2, __func__, msgAccept);
 }
 
 /**
@@ -124,15 +114,7 @@ inline void c2sHashBkpClient(protocol::ClientParams &/*p*/)
  */
 inline void c2aRestoreClient(protocol::ClientParams &p)
 {
-    const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 2, FUNC);
-    packet::Packet pkt(p.sock);
-
-    std::string s;
-    pkt.read(s);
-    if (s != msgAccept) {
-        throw cybozu::Exception(FUNC) << "failed" << s;
-    }
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgAccept);
 }
 
 /**
@@ -141,8 +123,7 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
  */
 inline void c2aDropClient(protocol::ClientParams &p)
 {
-    const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 2, FUNC, msgOk);
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
 namespace ctrl_local {
