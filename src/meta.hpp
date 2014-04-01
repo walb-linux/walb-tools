@@ -181,7 +181,6 @@ struct MetaSnap
  */
 struct MetaDiff
 {
-    uint16_t preamble;
     bool isMergeable;
 
     /* This is timestamp of snapshot after applying the diff. */
@@ -196,8 +195,7 @@ struct MetaDiff
     MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool isMergeable = false, uint64_t ts = 0)
         : MetaDiff(MetaSnap(b), MetaSnap(e), isMergeable, ts) {}
     MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool isMergeable = false, uint64_t ts = 0)
-        : preamble(META_DIFF_PREAMBLE)
-        , isMergeable(isMergeable), timestamp(ts)
+        : isMergeable(isMergeable), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     bool operator==(const MetaDiff &rhs) const {
         return snapB == rhs.snapB && snapE == rhs.snapE;
@@ -224,9 +222,6 @@ struct MetaDiff
         return snapB.isDirty() || snapE.isDirty();
     }
     void verify() const {
-        if (preamble != META_DIFF_PREAMBLE) {
-            throw cybozu::Exception("MetaDiff::check:wrong preamble") << preamble;
-        }
         snapB.verify();
         snapE.verify();
         if (snapB.gidB >= snapE.gidB) {
@@ -253,7 +248,11 @@ struct MetaDiff
      */
     template <typename InputStream>
     void load(InputStream &is) {
+        uint16_t preamble;
         cybozu::load(preamble, is);
+        if (preamble != META_DIFF_PREAMBLE) {
+            throw cybozu::Exception("MetaDiff::check:wrong preamble") << preamble;
+        }
         cybozu::load(isMergeable, is);
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
@@ -265,7 +264,7 @@ struct MetaDiff
      */
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::save(os, preamble);
+        cybozu::save(os, META_DIFF_PREAMBLE);
         cybozu::save(os, isMergeable);
         cybozu::save(os, timestamp);
         cybozu::save(os, snapB);
@@ -279,22 +278,18 @@ struct MetaDiff
  */
 struct MetaState
 {
-    uint16_t preamble;
     bool isApplying;
     uint64_t timestamp;
     MetaSnap snapB, snapE; /* snapE is meaningful when isApplying is true */
 
     MetaState()
-        : preamble(META_STATE_PREAMBLE)
-        , isApplying(false), timestamp(0)
+        : isApplying(false), timestamp(0)
         , snapB(), snapE() {}
     explicit MetaState(const MetaSnap &snap, uint64_t ts = 0)
-        : preamble(META_STATE_PREAMBLE)
-        , isApplying(false), timestamp(ts)
+        : isApplying(false), timestamp(ts)
         , snapB(snap), snapE(snap) {}
     MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts = 0)
-        : preamble(META_STATE_PREAMBLE)
-        , isApplying(true), timestamp(ts)
+        : isApplying(true), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     void set(const MetaSnap &snapB) {
         isApplying = false;
@@ -321,9 +316,6 @@ struct MetaState
         return !operator==(rhs);
     }
     void verify() const {
-        if (preamble != META_STATE_PREAMBLE) {
-            throw cybozu::Exception("MetaState::check:wrong preamble") << preamble;
-        }
         snapB.verify();
         snapE.verify();
         if (isApplying && snapB.gidB >= snapE.gidB) {
@@ -349,7 +341,11 @@ struct MetaState
      */
     template <typename InputStream>
     void load(InputStream &is) {
+        uint16_t preamble;
         cybozu::load(preamble, is);
+        if (preamble != META_STATE_PREAMBLE) {
+            throw cybozu::Exception("MetaState::check:wrong preamble") << preamble;
+        }
         cybozu::load(isApplying, is);
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
@@ -361,7 +357,7 @@ struct MetaState
      */
     template <typename OutputStream>
     void save(OutputStream &os) const {
-        cybozu::save(os, preamble);
+        cybozu::save(os, META_STATE_PREAMBLE);
         cybozu::save(os, isApplying);
         cybozu::save(os, timestamp);
         cybozu::save(os, snapB);
