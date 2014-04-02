@@ -134,6 +134,8 @@ inline void printRecordOneline(
 class LogPackHeader
 {
 protected:
+    using Block = std::shared_ptr<uint8_t>;
+    Block block_;
     walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
@@ -141,9 +143,13 @@ protected:
         header_ = (walb_logpack_header*)data;
     }
 public:
-    LogPackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
+    LogPackHeader(const void *data, unsigned int pbs, uint32_t salt)
         : header_((walb_logpack_header*)data), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
+    }
+    LogPackHeader(const Block &block, unsigned int pbs, uint32_t salt)
+        : header_(nullptr), pbs_(pbs), salt_(salt) {
+        reset(block);
     }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
     struct walb_logpack_header &header() { checkBlock(); return *header_; }
@@ -151,6 +157,10 @@ public:
     uint32_t salt() const { return salt_; }
     void setPbs(unsigned int pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
+    void reset(const Block &block) {
+        block_ = block;
+        resetData(block_.get());
+    }
 
     /*
      * Fields.
@@ -488,24 +498,6 @@ protected:
 };
 
 namespace log {
-
-class PackHeaderRaw : public LogPackHeader
-{
-protected:
-    using Block = std::shared_ptr<uint8_t>;
-    Block block_;
-
-public:
-    PackHeaderRaw(const Block &block, unsigned int pbs, uint32_t salt)
-        : LogPackHeader(nullptr, pbs, salt)
-        , block_(block) {
-        resetData(block_.get());
-    }
-    void reset(const Block &block) {
-        block_ = block;
-        resetData(block_.get());
-    }
-};
 
 /**
  * Interface.

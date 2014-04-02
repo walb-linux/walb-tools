@@ -239,7 +239,7 @@ private:
     bool readLogpackAndAdd(diff::MemoryData &wdiffM) {
         /* Pack header block */
         auto blk = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
-        log::PackHeaderRaw packH(blk, pbs_, salt_);
+        LogPackHeader packH(blk, pbs_, salt_);
         if (!receiver_.popHeader(packH.header())) return false;
 
         /* Pack IO data. */

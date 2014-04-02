@@ -729,7 +729,7 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
     memData.header().setUuid(uuid.rawData());
 
     std::shared_ptr<uint8_t> headerBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
-    log::PackHeaderRaw packH(headerBlock, pbs, salt);
+    LogPackHeader packH(headerBlock, pbs, salt);
 
     log::Receiver receiver(sock, logger);
     receiver.setParams(pbs, salt);

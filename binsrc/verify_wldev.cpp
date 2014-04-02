@@ -78,8 +78,8 @@ private:
 class WldevVerifier
 {
 private:
-    using PackHeaderRaw = walb::log::PackHeaderRaw;
-    using PackHeaderPtr = std::shared_ptr<PackHeaderRaw>;
+    using LogPackHeader = walb::LogPackHeader;
+    using PackHeaderPtr = std::shared_ptr<walb::LogPackHeader>;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
 
     const Config &config_;
@@ -123,7 +123,7 @@ public:
         uint64_t lsid = beginLsid;
         while (lsid < endLsid) {
             PackHeaderPtr loghp = readPackHeader(lsid);
-            PackHeaderRaw &logh = *loghp;
+            LogPackHeader &logh = *loghp;
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
             std::queue<PackIo> q;
             readPackIo(logh, q);
@@ -172,10 +172,10 @@ private:
 
     PackHeaderPtr readPackHeader(uint64_t lsid) {
         Block b = readBlock(lsid);
-        return PackHeaderPtr(new PackHeaderRaw(b, pbs_, salt_));
+        return PackHeaderPtr(new LogPackHeader(b, pbs_, salt_));
     }
 
-    void readPackIo(PackHeaderRaw &logh, std::queue<PackIo> &queue) {
+    void readPackIo(LogPackHeader &logh, std::queue<PackIo> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIo packIo(logh, i);
             const walb::log::Record &rec = packIo.record();
