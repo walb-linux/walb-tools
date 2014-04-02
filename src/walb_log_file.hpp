@@ -221,7 +221,7 @@ public:
      *   false when the stream has reached the end.
      */
     bool readLog(Record &rec, BlockData &blockD) {
-        PackIoWrap packIo(&rec, &blockD);
+        PackIoWrap packIo{&rec, &blockD};
         return readLog(packIo);
     }
     /**

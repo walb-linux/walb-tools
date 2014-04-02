@@ -860,34 +860,15 @@ private:
  * Record: Record
  * BlockData: BlockData
  */
-class PackIoWrap
+struct PackIoWrap
 {
-private:
     Record *recP_;
     BlockData *blockD_;
-
-public:
-    PackIoWrap(Record *rec, BlockData *blockD)
-        : recP_(rec), blockD_(blockD) {
-        assert(recP_);
-        assert(blockD_);
-    }
-    PackIoWrap(const PackIoWrap &rhs)
-        : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
-    PackIoWrap &operator=(const PackIoWrap &rhs) {
-        recP_ = rhs.recP_;
-        blockD_ = rhs.blockD_;
-        return *this;
-    }
-    DISABLE_MOVE(PackIoWrap);
 
     const Record &record() const { return *recP_; }
     Record &record() { return *recP_; }
     const BlockData &blockData() const { return *blockD_; }
-    BlockData &blockData() {
-        assert_bt(!std::is_const<BlockData>::value);
-        return *const_cast<BlockData *>(blockD_);
-    }
+    BlockData &blockData() { return *blockD_; }
 
     // not use blockD_
     bool isValid(bool isChecksum = true) const {
@@ -981,16 +962,16 @@ private:
     RecordRaw rec_;
     BlockDataT blockD_;
 public:
-    PackIoRaw() : PackIoWrap(&rec_, &blockD_) {}
+    PackIoRaw() : PackIoWrap{&rec_, &blockD_} {}
     PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
-        : PackIoWrap(&rec_, &blockD_)
+        : PackIoWrap{&rec_, &blockD_}
         , rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
+        : PackIoWrap{&rec_, &blockD_}, rec_(logh, pos), blockD_(logh.pbs()) {}
     PackIoRaw(const PackIoRaw &rhs)
-        : PackIoWrap(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+        : PackIoWrap{&rec_, &blockD_}, rec_(rhs.rec_), blockD_(rhs.blockD_) {}
     PackIoRaw(PackIoRaw &&rhs)
-        : PackIoRaw(rhs.rec_, std::move(rhs.blockD_)) {}
+        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
     PackIoRaw &operator=(const PackIoRaw &rhs) {
         rec_ = rhs.rec_;
         blockD_ = rhs.blockD_;
