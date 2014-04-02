@@ -133,61 +133,58 @@ inline void printRecordOneline(
  */
 class LogPackHeader
 {
-    uint8_t *data_;
+    walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
 public:
     LogPackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
-        : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
+        : header_((walb_logpack_header*)data), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
-    const struct walb_logpack_header &header() const {
+    const walb_logpack_header &header() const {
         checkBlock();
-        return *reinterpret_cast<const struct walb_logpack_header *>(data_);
+        return *header_;
     }
     struct walb_logpack_header &header() {
-        assert_bt(!std::is_const<uint8_t>::value);
         checkBlock();
-        using uint8_tT = typename std::remove_const<uint8_t>::type;
-        return *reinterpret_cast<struct walb_logpack_header *>(
-            const_cast<uint8_tT *>(data_));
+        return *header_;
     }
     unsigned int pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
-    void setPbs(unsigned int pbs0) { pbs_ = pbs0; };
-    void setSalt(uint32_t salt0) { salt_ = salt0; };
+    void setPbs(unsigned int pbs) { pbs_ = pbs; };
+    void setSalt(uint32_t salt) { salt_ = salt; };
     void resetData(uint8_t *data) {
-        data_ = data;
+        header_ = (walb_logpack_header*)data;
     }
 
     /*
      * Fields.
      */
-    uint32_t checksum() const { return header().checksum; }
-    uint16_t sectorType() const { return header().sector_type; }
-    uint16_t totalIoSize() const { return header().total_io_size; }
-    uint64_t logpackLsid() const { return header().logpack_lsid; }
-    uint16_t nRecords() const { return header().n_records; }
-    uint16_t nPadding() const { return header().n_padding; }
+    uint32_t checksum() const { return header_->checksum; }
+    uint16_t sectorType() const { return header_->sector_type; }
+    uint16_t totalIoSize() const { return header_->total_io_size; }
+    uint64_t logpackLsid() const { return header_->logpack_lsid; }
+    uint16_t nRecords() const { return header_->n_records; }
+    uint16_t nPadding() const { return header_->n_padding; }
 
     /*
      * Utilities.
      */
     template <typename T>
     const T *ptr() const {
-        return reinterpret_cast<const T *>(&header());
+        return reinterpret_cast<const T *>(header_);
     }
     template <typename T>
     T *ptr() {
-        return reinterpret_cast<T *>(&header());
+        return reinterpret_cast<T *>(header_);
     }
     const uint8_t *rawData() const { return ptr<const uint8_t>(); }
     uint8_t *rawData() { return ptr<uint8_t>(); }
     const struct walb_log_record &recordUnsafe(size_t pos) const {
-        return header().record[pos];
+        return header_->record[pos];
     }
     struct walb_log_record& recordUnsafe(size_t pos) {
-        return header().record[pos];
+        return header_->record[pos];
     }
     const struct walb_log_record &record(size_t pos) const {
         checkIndexRange(pos);
@@ -222,10 +219,9 @@ public:
     }
     bool isValid(bool isChecksum = true) const {
         if (isChecksum) {
-            return ::is_valid_logpack_header_and_records_with_checksum(
-                &header(), pbs(), salt()) != 0;
+            return ::is_valid_logpack_header_and_records_with_checksum(header_, pbs(), salt()) != 0;
         } else {
-            return ::is_valid_logpack_header_and_records(&header()) != 0;
+            return ::is_valid_logpack_header_and_records(header_) != 0;
         }
     }
 
@@ -241,7 +237,6 @@ public:
         log::printRecordOneline(fp, pos, rec);
     }
     void printHeader(::FILE *fp = ::stdout) const {
-        const struct walb_logpack_header &logh = header();
         ::fprintf(fp,
                   "*****logpack header*****\n"
                   "checksum: %08x(%u)\n"
@@ -249,11 +244,11 @@ public:
                   "n_padding: %u\n"
                   "total_io_size: %u\n"
                   "logpack_lsid: %" PRIu64 "\n",
-                  logh.checksum, logh.checksum,
-                  logh.n_records,
-                  logh.n_padding,
-                  logh.total_io_size,
-                  logh.logpack_lsid);
+                  header_->checksum, header_->checksum,
+                  header_->n_records,
+                  header_->n_padding,
+                  header_->total_io_size,
+                  header_->logpack_lsid);
     }
     void print(::FILE *fp = ::stdout) const {
         printHeader(fp);
@@ -278,7 +273,7 @@ public:
             if (::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)) { mode = 'P'; }
             ::fprintf(fp,
                       "%" PRIu64 "\t%c\t%" PRIu64 "\t%u\n",
-                      header().logpack_lsid,
+                      header_->logpack_lsid,
                       mode, rec.offset, rec.io_size);
         }
     }
@@ -286,8 +281,8 @@ public:
      * Update checksum field.
      */
     void updateChecksum() {
-        header().checksum = 0;
-        header().checksum = ::checksum(ptr<uint8_t>(), pbs(), salt());
+        header_->checksum = 0;
+        header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
     }
     /**
      * Write the logpack header block.
@@ -310,14 +305,14 @@ public:
      * Initialize logpack header block.
      */
     void init(uint64_t lsid) {
-        ::memset(&header(), 0, pbs());
-        header().logpack_lsid = lsid;
-        header().sector_type = SECTOR_TYPE_LOGPACK;
+        ::memset(header_, 0, pbs());
+        header_->logpack_lsid = lsid;
+        header_->sector_type = SECTOR_TYPE_LOGPACK;
         /*
-          header().total_io_size = 0;
-          header().n_records = 0;
-          header().n_padding = 0;
-          header().checksum = 0;
+          header_->total_io_size = 0;
+          header_->n_records = 0;
+          header_->n_padding = 0;
+          header_->checksum = 0;
         */
     }
     /**
@@ -353,13 +348,13 @@ public:
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         rec.offset = offset;
         rec.io_size = size;
-        rec.lsid_local = header().total_io_size + 1;
-        rec.lsid = header().logpack_lsid + rec.lsid_local;
+        rec.lsid_local = header_->total_io_size + 1;
+        rec.lsid = header_->logpack_lsid + rec.lsid_local;
         rec.checksum = 0; /* You must set this lator. */
 
-        header().n_records++;
-        header().total_io_size += capacity_pb(pbs(), size);
-        assert(::is_valid_logpack_header_and_records(&header()));
+        header_->n_records++;
+        header_->total_io_size += capacity_pb(pbs(), size);
+        assert(::is_valid_logpack_header_and_records(header_));
         return true;
     }
     /**
@@ -385,13 +380,13 @@ public:
         ::set_bit_u32(LOG_RECORD_DISCARD, &rec.flags);
         rec.offset = offset;
         rec.io_size = size;
-        rec.lsid_local = header().total_io_size + 1;
-        rec.lsid = header().logpack_lsid + rec.lsid_local;
+        rec.lsid_local = header_->total_io_size + 1;
+        rec.lsid = header_->logpack_lsid + rec.lsid_local;
         rec.checksum = 0; /* Not be used. */
 
-        header().n_records++;
+        header_->n_records++;
         /* You must not update total_io_size. */
-        assert(::is_valid_logpack_header_and_records(&header()));
+        assert(::is_valid_logpack_header_and_records(header_));
         return true;
     }
     /**
@@ -424,14 +419,14 @@ public:
         ::set_bit_u32(LOG_RECORD_PADDING, &rec.flags);
         rec.offset = 0; /* will not be used. */
         rec.io_size = size;
-        rec.lsid_local = header().total_io_size + 1;
-        rec.lsid = header().logpack_lsid + rec.lsid_local;
+        rec.lsid_local = header_->total_io_size + 1;
+        rec.lsid = header_->logpack_lsid + rec.lsid_local;
         rec.checksum = 0;  /* will not be used. */
 
-        header().n_records++;
-        header().total_io_size += ::capacity_pb(pbs(), size);
-        header().n_padding++;
-        assert(::is_valid_logpack_header_and_records(&header()));
+        header_->n_records++;
+        header_->total_io_size += ::capacity_pb(pbs(), size);
+        header_->n_padding++;
+        assert(::is_valid_logpack_header_and_records(header_));
         return true;
     }
     /**
@@ -449,12 +444,12 @@ public:
         if (newLsid == uint64_t(-1)) {
             return true;
         }
-        if (header().logpack_lsid == newLsid) {
+        if (header_->logpack_lsid == newLsid) {
             return true;
         }
 
-        header().logpack_lsid = newLsid;
-        for (size_t i = 0; i < header().n_records; i++) {
+        header_->logpack_lsid = newLsid;
+        for (size_t i = 0; i < header_->n_records; i++) {
             struct walb_log_record &rec = record(i);
             rec.lsid = newLsid + rec.lsid_local;
         }
@@ -473,38 +468,37 @@ public:
         }
 
         /* Set n_records and total_io_size. */
-        header().n_records = invalidIdx;
-        header().total_io_size = 0;
-        header().n_padding = 0;
+        header_->n_records = invalidIdx;
+        header_->total_io_size = 0;
+        header_->n_padding = 0;
         for (size_t i = 0; i < nRecords(); i++) {
             struct walb_log_record &rec = record(i);
             if (!::test_bit_u32(LOG_RECORD_DISCARD, &rec.flags)) {
-                header().total_io_size += ::capacity_pb(pbs(), rec.io_size);
+                header_->total_io_size += ::capacity_pb(pbs(), rec.io_size);
             }
             if (::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)) {
-                header().n_padding++;
+                header_->n_padding++;
             }
         }
 
         /* Calculate checksum. */
-        header().checksum = 0;
-        header().checksum = ::checksum(ptr<uint8_t>(), pbs(), salt());
+        header_->checksum = 0;
+        header_->checksum = ::checksum(ptr<uint8_t>(), pbs(), salt());
 
         assert(isValid());
     }
 protected:
     void checkIndexRange(size_t pos) const {
         if (pos >= nRecords()) {
-            throw RT_ERR("index out of range.");
+            throw cybozu::Exception("LogPackHeader:index out of range.") << pos;
         }
     }
     void checkBlock() const {
-        if (data_ == nullptr) {
-            throw RT_ERR("Header is null.");
+        if (header_ == nullptr) {
+            throw cybozu::Exception("LogPackHeader:header is null.");
         }
     }
 };
-
 
 namespace log {
 
