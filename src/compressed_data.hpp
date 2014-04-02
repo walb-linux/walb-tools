@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief Walb log compressor.
+ * @brief Compressed data and workers for them
  * @author HOSHINO Takashi
  *
  * (C) 2013 Cybozu Labs, Inc.
@@ -15,14 +15,10 @@
 #include "compressor.hpp"
 
 namespace walb {
-namespace log {
 
 /**
  * Compressed and uncompressed data.
  * This uses snappy only.
- *
- * Checksum is not required here
- * because wlog itself can validate itself.
  */
 class CompressedData
 {
@@ -192,4 +188,4 @@ public:
     }
 };
 
-}} //namespace walb::log
+} //namespace walb

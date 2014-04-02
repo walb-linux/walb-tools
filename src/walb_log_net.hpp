@@ -11,7 +11,7 @@
 
 #include "walb_log_base.hpp"
 #include "walb_log_file.hpp"
-#include "walb_log_compressor.hpp"
+#include "compressed_data.hpp"
 #include "walb_logger.hpp"
 
 namespace walb {
@@ -102,7 +102,7 @@ private:
             : inQ_(inQ), packet_(sock), logger_(logger) {}
         void operator()() try {
             packet::StreamControl ctrl(packet_.sock());
-            log::CompressedData cd;
+            CompressedData cd;
             while (inQ_.pop(cd)) {
                 ctrl.next();
                 cd.send(packet_);
@@ -256,7 +256,7 @@ private:
             : outQ_(outQ), packet_(sock), logger_(logger) {}
         void operator()() try {
             packet::StreamControl ctrl(packet_.sock());
-            log::CompressedData cd;
+            CompressedData cd;
             while (ctrl.isNext()) {
                 cd.recv(packet_);
                 outQ_.push(std::move(cd));
