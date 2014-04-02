@@ -23,4 +23,4 @@ task_queue_test
 queue_file_test
 counter_test
 memory_data_test
-queue_file_plus_test
+walb_queue_file_test

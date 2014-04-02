@@ -3,7 +3,7 @@
 #include <cstring>
 #include <time.h>
 #include "cybozu/serializer.hpp"
-#include "queue_file_plus.hpp"
+#include "walb_queue_file.hpp"
 #include "file_path.hpp"
 #include "tmp_file.hpp"
 #include "tmp_file_serializer.hpp"
@@ -46,6 +46,8 @@ private:
     std::string volId_; /* volume identifier. */
     cybozu::FilePath wdevPath_; /* wdev path. */
 
+    using QFile = QueueFile<MetaLsidGid>;
+
 public:
     /**
      * For initialization.
@@ -76,7 +78,7 @@ public:
         LOGd("volDir %s volId %s", volDir_.cStr(), volId_.c_str());
         util::makeDir(volDir_.str(), "StorageVolInfo", true);
         {
-            QueueFilePlus qf(queuePath().str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+            QFile qf(queuePath().str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
             qf.sync();
         }
         util::saveFile(volDir_, "path", wdevPath_.str());
@@ -138,11 +140,10 @@ public:
         v.push_back(doneRec.str());
 
         v.push_back("QueueFile");
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
-        QueueFilePlus::ConstIterator itr = qf.cbegin();
+        QFile qf(queuePath().str(), O_RDWR);
+        QFile::ConstIterator itr = qf.cbegin();
         while (itr != qf.cend()) {
-            MetaLsidGid rec;
-            itr.load(rec);
+            const MetaLsidGid rec = *itr;
             v.push_back(rec.str());
             ++itr;
         }
@@ -175,7 +176,7 @@ public:
         device::resetWal(wdevPath_.str());
         setDoneRecord(MetaLsidGid(0, gid, false, ::time(0)));
         {
-            QueueFilePlus qf(queuePath().str(), O_RDWR);
+            QFile qf(queuePath().str(), O_RDWR);
             qf.clear();
             qf.sync();
         }
@@ -212,7 +213,7 @@ public:
     uint64_t takeSnapshot(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
         const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
+        QFile qf(queuePath().str(), O_RDWR);
         return takeSnapshotDetail(maxWlogSendPb, false, qf);
     }
     /**
@@ -234,7 +235,7 @@ public:
         if (lsid0 != lsid1) {
             throw cybozu::Exception(FUNC) << "must be equal" << lsid0 << lsid1;
         }
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
+        QFile qf(queuePath().str(), O_RDWR);
         return !qf.empty();
     }
     /**
@@ -246,7 +247,7 @@ public:
      */
     std::tuple<MetaLsidGid, MetaLsidGid, uint64_t> prepareWlogTransfer(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
+        QFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid recB = getDoneRecord();
         const std::string wdevPath = getWdevPath();
         const uint64_t lsid0 = device::getOldestLsid(wdevPath);
@@ -254,7 +255,7 @@ public:
         MetaLsidGid recE;
         for (;;) {
             if (qf.empty()) break;
-            qf.loadBack(recE);
+            qf.back(recE);
             if ((recE.lsid < recB.lsid) || (recB.lsid == recE.lsid && recE.gid <= recB.gid)) {
                 qf.popBack();
                 continue;
@@ -264,7 +265,7 @@ public:
         const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
         if (qf.empty()) {
             takeSnapshotDetail(maxWlogSendPb, true, qf);
-            qf.loadBack(recE);
+            qf.back(recE);
         }
         if (!(recB.lsid <= recE.lsid)) {
             throw cybozu::Exception(FUNC)
@@ -308,13 +309,13 @@ public:
         const char *const FUNC = __func__;
         const MetaLsidGid recBx = getDoneRecord();
         verifyMetaLsidGidEquality(recB, recBx, FUNC);
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
+        QFile qf(queuePath().str(), O_RDWR);
         if (qf.empty()) {
             throw cybozu::Exception(FUNC)
                 << "Maybe BUG: queue must have at lease one record.";
         }
         MetaLsidGid recEx;
-        qf.loadBack(recEx);
+        qf.back(recEx);
         verifyMetaLsidGidEquality(recE, recEx, FUNC);
         assert(recB.lsid <= lsidE && lsidE <= recE.lsid);
 
@@ -337,10 +338,10 @@ public:
      */
     std::pair<uint64_t, uint64_t> getGidRange() const {
         const MetaLsidGid rec0 = getDoneRecord();
-        QueueFilePlus qf(queuePath().str(), O_RDWR);
+        QFile qf(queuePath().str(), O_RDWR);
         if (qf.empty()) return {rec0.gid, rec0.gid};
         MetaLsidGid rec1;
-        qf.loadFront(rec1);
+        qf.front(rec1);
         return {rec0.gid, rec1.gid};
     }
 private:
@@ -386,13 +387,13 @@ private:
         }
         return maxWlogSendPb;
     }
-    uint64_t takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, QueueFilePlus& qf) {
+    uint64_t takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, QFile& qf) {
         const char *const FUNC = __func__;
         MetaLsidGid pre;
         if (qf.empty()) {
             pre = getDoneRecord();
         } else {
-            qf.loadFront(pre);
+            qf.front(pre);
         }
         const std::string wdevPath = wdevPath_.str();
         const uint64_t lsid = device::getPermanentLsid(wdevPath);
@@ -404,7 +405,7 @@ private:
         }
         const uint64_t gid = pre.gid + 1 + (lsid - pre.lsid) / maxWlogSendPb;
         MetaLsidGid cur(lsid, gid, isMergeable, ::time(0));
-        qf.saveFront(cur);
+        qf.pushFront(cur);
         qf.sync();
         LOGs.debug() << FUNC << cur;
         return gid;
