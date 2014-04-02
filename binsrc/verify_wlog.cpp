@@ -175,11 +175,10 @@ private:
         return b;
     }
 
-    void readPackHeader(
-        LogPackHeader& logh,
+    void readPackHeader(LogPackHeader& logh,
         cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba, uint32_t salt) {
         logh.setBlock(readBlock(fdr, ba));
-        logh.setBlock(ba.blockSize());
+        logh.setPbs(ba.blockSize());
         logh.setSalt(salt);
     }
 

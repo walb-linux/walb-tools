@@ -171,19 +171,13 @@ public:
      * Utilities.
      */
     const uint8_t *rawData() const { return (const uint8_t*)header_; }
-    const struct walb_log_record &recordUnsafe(size_t pos) const {
-        return header_->record[pos];
-    }
-    struct walb_log_record& recordUnsafe(size_t pos) {
-        return header_->record[pos];
-    }
     const struct walb_log_record &record(size_t pos) const {
         checkIndexRange(pos);
-        return recordUnsafe(pos);
+        return header_->record[pos];
     }
     struct walb_log_record& record(size_t pos) {
         checkIndexRange(pos);
-        return recordUnsafe(pos);
+        return header_->record[pos];
     }
     uint64_t nextLogpackLsid() const {
         if (nRecords() > 0) {
@@ -335,7 +329,7 @@ public:
             throw RT_ERR("Normal IO can not be zero-sized.");
         }
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         rec.offset = offset;
@@ -366,7 +360,7 @@ public:
             throw RT_ERR("Discard IO can not be zero-sized.");
         }
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         ::set_bit_u32(LOG_RECORD_DISCARD, &rec.flags);
@@ -405,7 +399,7 @@ public:
         }
 
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         ::set_bit_u32(LOG_RECORD_PADDING, &rec.flags);
