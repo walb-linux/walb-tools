@@ -1,11 +1,4 @@
 #pragma once
-/**
- * @file
- * @brief Simple permanent queue.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
- */
 #include <string>
 #include <exception>
 #include <algorithm>
@@ -20,9 +13,10 @@
 #include "checksum.hpp"
 #include "random.hpp"
 #include "flock.hpp"
+#include "serializer.hpp"
 
-namespace cybozu {
-namespace util {
+namespace walb {
+namespace queue_local {
 
 static const uint32_t QUEUE_PREAMBLE = 0x119d83a7;
 
@@ -94,20 +88,23 @@ private:
     }
 } __attribute__((packed));
 
+} // namespace queue_local
+
 /**
- * A queue file with fixed-size records.
- *
  * Queue file format:
  *   1st QueueFileHeader
  *   2nd QueueFileHeader
  *   [QueueRecordHeader, byte array (record data)] * n
  *   QueueRecordHeader (end stub. for toPrev only)
+ *
+ * T must be serializable with cybozu::save() and cybozu::load().
  */
-class QueueFile
+template <typename T>
+class QueueFile /*final*/
 {
 private:
-    mutable QueueFileHeader header_;
-    MmappedFile mmappedFile_;
+    mutable queue_local::QueueFileHeader header_;
+    cybozu::util::MmappedFile mmappedFile_;
     cybozu::file::Lock lock_;
 
 public:
@@ -117,7 +114,7 @@ public:
         init(false);
     }
     QueueFile(const std::string& filePath, int flags, int mode)
-        : mmappedFile_(getFileHeaderSize() + sizeof(QueueRecordHeader),
+        : mmappedFile_(getFileHeaderSize() + sizeof(queue_local::QueueRecordHeader),
                        filePath, flags, mode)
         , lock_(filePath) {
         init(true);
@@ -128,85 +125,37 @@ public:
         } catch (...) {
         }
     }
-    static uint64_t getFileHeaderSize() {
-        return sizeof(QueueFileHeader) * 2;
+    void pushFront(const T& t) {
+        std::string s;
+        cybozu::saveToStr(s, t);
+        pushFrontRaw(&s[0], s.size());
     }
-
-    void pushBack(const void *data, uint32_t size) {
-        mmappedFile_.resize(getRequiredFileSize(size));
-        QueueRecordHeader &rec = record(header_.endOffset);
-        const uint32_t toPrev = rec.toPrev;
-        rec.init();
-        rec.dataSize = size;
-        rec.checksum = calcChecksum(data, size, header_.salt);
-        rec.toPrev = toPrev;
-        rec.next().init();
-        rec.next().toPrev = rec.totalSize();
-        ::memcpy(rec.data(), data, size);
-        header_.endOffset += rec.totalSize();
+    void pushBack(const T& t) {
+        std::string s;
+        cybozu::saveToStr(s, t);
+        pushBackRaw(&s[0], s.size());
     }
-    /**
-     * T must be copyable.
-     */
-    template <typename T>
-    void pushBack(const T& t) { pushBack(&t, sizeof(t)); }
-    void pushBack(const std::string& s) { pushBack(&s[0], s.size()); }
-    void pushBack(const char *s) { pushBack(std::string(s)); }
-    void pushFront(const void *data, uint32_t size) {
-        const uint32_t totalSize = sizeof(QueueRecordHeader) + size;
-        reserveFrontSpace(totalSize);
-        QueueRecordHeader &rec = record(header_.beginOffset);
-        QueueRecordHeader &prev = record(header_.beginOffset - totalSize);
-        prev.init();
-        prev.dataSize = size;
-        prev.checksum = calcChecksum(data, size, header_.salt);
-        ::memcpy(prev.data(), data, size);
-        rec.toPrev = totalSize;
-        header_.beginOffset -= totalSize;
+    void front(T& t) {
+        std::string s;
+        frontRaw(s);
+        cybozu::loadFromStr(t, s);
     }
-    template <typename T>
-    void pushFront(const T& t) { pushFront(&t, sizeof(t)); }
-    void pushFront(const std::string& s) { pushFront(&s[0], s.size()); }
-    void pushFront(const char *s) { pushFront(std::string(s)); }
-    bool empty() const {
-        return header_.beginOffset == header_.endOffset;
-    }
-    void front(void *data, uint32_t size) const {
-        verifyNotEmpty(__func__);
-        const QueueRecordHeader &rec = record(header_.beginOffset);
-        verifySizeEquality(rec.dataSize, size, __func__);
-        ::memcpy(data, rec.data(), size);
-    }
-    template <typename T>
-    void front(T& data) const {
-        front(&data, sizeof(data));
-    }
-    void front(std::string& s) const {
-        verifyNotEmpty(__func__);
-        assignString(s, record(header_.beginOffset));
-    }
-    void back(void *data, uint32_t size) const {
-        verifyNotEmpty(__func__);
-        const QueueRecordHeader &rec = record(header_.endOffset).prev();
-        verifySizeEquality(rec.dataSize, size, __func__);
-        ::memcpy(data, rec.data(), size);
-    }
-    template <typename T>
-    void back(T& data) const {
-        back(&data, sizeof(data));
-    }
-    void back(std::string& s) const {
-        verifyNotEmpty(__func__);
-        assignString(s, record(header_.endOffset).prev());
+    void back(T& t) {
+        std::string s;
+        backRaw(s);
+        cybozu::loadFromStr(t, s);
     }
     void popFront() {
         verifyNotEmpty(__func__);
-        QueueRecordHeader &rec = record(header_.beginOffset);
+        queue_local::QueueRecordHeader &rec = record(header_.beginOffset);
         header_.beginOffset += rec.totalSize();
     }
     void popBack() {
         verifyNotEmpty(__func__);
         header_.endOffset -= record(header_.endOffset).toPrev;
+    }
+    bool empty() const {
+        return header_.beginOffset == header_.endOffset;
     }
     void printOffsets() const {
         ::printf("begin %" PRIu64 " end %" PRIu64 "\n"
@@ -220,7 +169,7 @@ public:
         updateFileHeaderChecksum();
         /* Double write for atomicity. */
         for (int i = 0; i < 2; i++) {
-            ::memcpy(ptr<uint8_t>() + sizeof(header_) * i, &header_, sizeof(header_));
+            ::memcpy(ptrInFile(sizeof(header_) * i), &header_, sizeof(header_));
             mmappedFile_.sync();
         }
     }
@@ -232,7 +181,7 @@ public:
      */
     void gc() {
         const uint64_t bgn = header_.beginOffset;
-        const uint64_t end = header_.endOffset + sizeof(QueueRecordHeader);
+        const uint64_t end = header_.endOffset + sizeof(queue_local::QueueRecordHeader);
         assert(bgn <= end);
         const uint64_t len = end - bgn;
 
@@ -250,7 +199,7 @@ public:
         {
             // These must be atomic.
             header_.beginOffset = 0;
-            header_.endOffset = len - sizeof(QueueRecordHeader);
+            header_.endOffset = len - sizeof(queue_local::QueueRecordHeader);
         }
         sync();
         /* Truncate the file. */
@@ -264,7 +213,7 @@ public:
         }
 
         const uint64_t bgn = header_.beginOffset;
-        const uint64_t end = header_.endOffset + sizeof(QueueRecordHeader);
+        const uint64_t end = header_.endOffset + sizeof(queue_local::QueueRecordHeader);
         assert(bgn <= end);
         const uint64_t len = end - bgn;
         const uint64_t newBgn = std::max(end, size);
@@ -280,24 +229,24 @@ public:
         {
             // These must be atomic.
             header_.beginOffset = newBgn;
-            header_.endOffset = newBgn + len - sizeof(QueueRecordHeader);
+            header_.endOffset = newBgn + len - sizeof(queue_local::QueueRecordHeader);
         }
         sync();
     }
 
     template <class It, class Qf, class RecHeader>
-    class IteratorT
+    class IteratorBase
     {
     protected:
         Qf *qf_;
         uint64_t offset_;
     public:
-        IteratorT() : qf_(nullptr), offset_(-1) {}
-        IteratorT(Qf *qf, uint64_t offset)
+        IteratorBase() : qf_(nullptr), offset_(-1) {}
+        IteratorBase(Qf *qf, uint64_t offset)
             : qf_(qf), offset_(offset) {
             assert(qf);
         }
-        IteratorT(const It &rhs)
+        IteratorBase(const It &rhs)
             : qf_(rhs.qf_), offset_(rhs.offset_) {}
         It &operator=(const It &rhs) const {
             qf_ = rhs.qf_;
@@ -308,20 +257,10 @@ public:
             offset_ += rec.totalSize();
             return static_cast<It&>(*this);
         }
-        It operator++(int) {
-            It ret(qf_, offset_);
-            ++(*this);
-            return ret;
-        }
         It &operator--() {
             RecHeader &rec = qf_->record(offset_);
             offset_ -= rec.toPrev;
             return static_cast<It&>(*this);
-        }
-        It operator--(int) {
-            It ret(qf_, offset_);
-            --(*this);
-            return ret;
         }
         bool operator==(const It &rhs) const {
             return qf_ == rhs.qf_ && offset_ == rhs.offset_;
@@ -329,36 +268,35 @@ public:
         bool operator!=(const It &rhs) const {
             return qf_ != rhs.qf_ || offset_ != rhs.offset_;
         }
+        T operator*() const {
+            T t;
+            get(t);
+            return t;
+        }
+        void get(T& t) const {
+            std::string s;
+            getRaw(s);
+            cybozu::loadFromStr(t, s);
+        }
         bool isValid() const {
             const RecHeader &rec = qf_->record(offset_);
             if (!rec.isValid()) return false;
-            const uint32_t csum = calcChecksum(rec.data(), rec.dataSize, qf_->header_.salt);
+            const uint32_t csum = cybozu::util::calcChecksum(rec.data(), rec.dataSize, qf_->header_.salt);
             if (csum != rec.checksum) return false;
             return true;
         }
-        void get(std::string& s) const {
-            const RecHeader &rec = qf_->record(offset_);
-            s.resize(rec.dataSize);
-            ::memcpy(&s[0], rec.data(), s.size());
+    private:
+        void getRaw(std::string& s) const {
+            qf_->assignString(s, qf_->record(offset_));
         }
-        void get(void *data, uint32_t size) const {
-            const RecHeader &rec = qf_->record(offset_);
-            qf_->verifySizeEquality(rec.dataSize, size, __func__);
-            ::memcpy(data, rec.data(), size);
-        }
-        /* T must be copyable. */
-        template <typename T>
-        void get(T& t) const { get(&t, sizeof(t)); }
     };
 
-    struct ConstIterator : public IteratorT<ConstIterator, const QueueFile, const QueueRecordHeader>
+    class ConstIterator : public IteratorBase<ConstIterator, const QueueFile, const queue_local::QueueRecordHeader>
     {
-        using IteratorT :: IteratorT;
+        using IteratorBase<ConstIterator, const QueueFile, const queue_local::QueueRecordHeader>::IteratorBase;
     };
     ConstIterator cbegin() const { return ConstIterator(this, header_.beginOffset); }
     ConstIterator cend() const { return ConstIterator(this, header_.endOffset); }
-    ConstIterator begin() const { return cbegin(); }
-    ConstIterator end() const { return cend(); }
 
     /**
      * for test.
@@ -367,39 +305,44 @@ public:
         // Forward
         uint64_t off = header_.beginOffset;
         while (off < header_.endOffset) {
-            const QueueRecordHeader &rec = record(off);
+            const queue_local::QueueRecordHeader &rec = record(off);
             verifyRec(rec);
             off += rec.totalSize();
         }
         // Backward
         off = header_.endOffset;
         for (;;) {
-            const QueueRecordHeader &rec = record(off);
+            const queue_local::QueueRecordHeader &rec = record(off);
             if (off != header_.endOffset) verifyRec(rec);
             if (off == header_.beginOffset) break;
             off -= rec.toPrev;
         }
     }
 private:
-    template <typename T>
-    T* ptr() { return mmappedFile_.ptr<T>(); }
-    template <typename T>
-    const T* ptr() const { return mmappedFile_.ptr<T>(); }
+    uint64_t getFileHeaderSize() const {
+        return sizeof(queue_local::QueueFileHeader) * 2;
+    }
+    uint8_t *ptrInFile(size_t offset) {
+        return mmappedFile_.ptr<uint8_t>() + offset;
+    }
+    const uint8_t *ptrInFile(size_t offset) const {
+        return mmappedFile_.ptr<const uint8_t>() + offset;
+    }
     void init(bool isCreated) {
         if (isCreated) {
-            header_.preamble = QUEUE_PREAMBLE;
-            Random<uint32_t> rand;
+            header_.preamble = queue_local::QUEUE_PREAMBLE;
+            cybozu::util::Random<uint32_t> rand;
             header_.salt = rand();
             header_.beginOffset = 0;
             header_.endOffset = 0;
-            QueueRecordHeader &rec = record(0);
+            queue_local::QueueRecordHeader &rec = record(0);
             rec.init();
             sync();
             return;
         }
         for (int i = 0; i < 2; i++) {
             /* Read i'th header data. */
-            ::memcpy(&header_, ptr<uint8_t>() + sizeof(header_) * i, sizeof(header_));
+            ::memcpy(&header_, ptrInFile(sizeof(header_) * i), sizeof(header_));
             if (isValidFileHeader()) {
                 break;
             }
@@ -410,55 +353,82 @@ private:
         sync();
     }
     bool isValidFileHeader() const {
-        if (header_.preamble != QUEUE_PREAMBLE) {
+        if (header_.preamble != queue_local::QUEUE_PREAMBLE) {
             return false;
         }
-        if (calcChecksum(&header_, sizeof(header_), 0) != 0) {
+        if (cybozu::util::calcChecksum(&header_, sizeof(header_), 0) != 0) {
             return false;
         }
         return true;
     }
     void updateFileHeaderChecksum() {
         header_.checksum = 0;
-        header_.checksum = calcChecksum(&header_, sizeof(header_), 0);
+        header_.checksum = cybozu::util::calcChecksum(&header_, sizeof(header_), 0);
     }
-    const QueueRecordHeader& record(uint64_t offset) const {
-        return *reinterpret_cast<const QueueRecordHeader*>(
-            ptr<uint8_t>() + sizeof(QueueFileHeader) * 2 + offset);
+    const queue_local::QueueRecordHeader& record(uint64_t offset) const {
+        return *reinterpret_cast<const queue_local::QueueRecordHeader*>(
+            ptrInFile(sizeof(queue_local::QueueFileHeader) * 2 + offset));
     }
-    QueueRecordHeader& record(uint64_t offset) {
-        return *reinterpret_cast<QueueRecordHeader*>(
-            ptr<uint8_t>() + sizeof(QueueFileHeader) * 2 + offset);
+    queue_local::QueueRecordHeader& record(uint64_t offset) {
+        return *reinterpret_cast<queue_local::QueueRecordHeader*>(
+            ptrInFile(sizeof(queue_local::QueueFileHeader) * 2 + offset));
     }
     uint64_t getRequiredFileSize(uint64_t size) const {
-        return sizeof(QueueFileHeader) * 2 + header_.endOffset /* current size except end mark. */
-            + sizeof(QueueRecordHeader) + size /* for a record. */
-            + sizeof(QueueRecordHeader); /* for end stub. */
-    }
-    void verifySizeEquality(uint32_t x, uint32_t y, const char *msg) const {
-        if (x != y) {
-            std::stringstream ss;
-            ss << msg << ":data size differs:" << x << ":" << y;
-            throw std::runtime_error(ss.str());
-        }
+        return sizeof(queue_local::QueueFileHeader) * 2
+            + header_.endOffset /* current size except end mark. */
+            + sizeof(queue_local::QueueRecordHeader) + size /* for a record. */
+            + sizeof(queue_local::QueueRecordHeader); /* for end stub. */
     }
     void verifyNotEmpty(const std::string& msg) const {
         if (empty()) {
             throw std::runtime_error(msg + ":empty");
         }
     }
-    void verifyRec(const QueueRecordHeader& rec) const {
+    void verifyRec(const queue_local::QueueRecordHeader& rec) const {
         rec.verify();
-        const uint32_t csum = calcChecksum(rec.data(), rec.dataSize, header_.salt);
+        const uint32_t csum = cybozu::util::calcChecksum(rec.data(), rec.dataSize, header_.salt);
         if (rec.checksum != csum) {
             std::stringstream ss;
             ss << "invalid checksum checksum:" << rec.checksum << ":" << csum;
             throw std::runtime_error(ss.str());
         }
     }
-    void assignString(std::string& s, const QueueRecordHeader& rec) const {
+    void assignString(std::string& s, const queue_local::QueueRecordHeader& rec) const {
         s.assign((const char *)rec.data(), rec.dataSize);
+    }
+    void pushBackRaw(const void *data, uint32_t size) {
+        mmappedFile_.resize(getRequiredFileSize(size));
+        queue_local::QueueRecordHeader &rec = record(header_.endOffset);
+        const uint32_t toPrev = rec.toPrev;
+        rec.init();
+        rec.dataSize = size;
+        rec.checksum = cybozu::util::calcChecksum(data, size, header_.salt);
+        rec.toPrev = toPrev;
+        rec.next().init();
+        rec.next().toPrev = rec.totalSize();
+        ::memcpy(rec.data(), data, size);
+        header_.endOffset += rec.totalSize();
+    }
+    void pushFrontRaw(const void *data, uint32_t size) {
+        const uint32_t totalSize = sizeof(queue_local::QueueRecordHeader) + size;
+        reserveFrontSpace(totalSize);
+        queue_local::QueueRecordHeader &rec = record(header_.beginOffset);
+        queue_local::QueueRecordHeader &prev = record(header_.beginOffset - totalSize);
+        prev.init();
+        prev.dataSize = size;
+        prev.checksum = cybozu::util::calcChecksum(data, size, header_.salt);
+        ::memcpy(prev.data(), data, size);
+        rec.toPrev = totalSize;
+        header_.beginOffset -= totalSize;
+    }
+    void frontRaw(std::string& s) const {
+        verifyNotEmpty(__func__);
+        assignString(s, record(header_.beginOffset));
+    }
+    void backRaw(std::string& s) const {
+        verifyNotEmpty(__func__);
+        assignString(s, record(header_.endOffset).prev());
     }
 };
 
-}} //namespace cybozu::util
+} // namespace walb
