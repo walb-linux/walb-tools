@@ -133,33 +133,28 @@ inline void printRecordOneline(
  */
 class LogPackHeader
 {
-protected:
     using Block = std::shared_ptr<uint8_t>;
     Block block_;
     walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
-    void resetData(uint8_t *data) {
-        header_ = (walb_logpack_header*)data;
-    }
 public:
-    LogPackHeader(const void *data, unsigned int pbs, uint32_t salt)
-        : header_((walb_logpack_header*)data), pbs_(pbs), salt_(salt) {
-        ASSERT_PBS(pbs);
+    LogPackHeader(const void *header = 0, unsigned int pbs = 0, uint32_t salt = 0)
+        : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
     }
     LogPackHeader(const Block &block, unsigned int pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
-        reset(block);
+        setBlock(block);
     }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
-    struct walb_logpack_header &header() { checkBlock(); return *header_; }
+    walb_logpack_header &header() { checkBlock(); return *header_; }
     unsigned int pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
     void setPbs(unsigned int pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
-    void reset(const Block &block) {
+    void setBlock(const Block &block) {
         block_ = block;
-        resetData(block_.get());
+        header_ = (walb_logpack_header*)block_.get();
     }
 
     /*
@@ -176,19 +171,13 @@ public:
      * Utilities.
      */
     const uint8_t *rawData() const { return (const uint8_t*)header_; }
-    const struct walb_log_record &recordUnsafe(size_t pos) const {
-        return header_->record[pos];
-    }
-    struct walb_log_record& recordUnsafe(size_t pos) {
-        return header_->record[pos];
-    }
     const struct walb_log_record &record(size_t pos) const {
         checkIndexRange(pos);
-        return recordUnsafe(pos);
+        return header_->record[pos];
     }
     struct walb_log_record& record(size_t pos) {
         checkIndexRange(pos);
-        return recordUnsafe(pos);
+        return header_->record[pos];
     }
     uint64_t nextLogpackLsid() const {
         if (nRecords() > 0) {
@@ -340,7 +329,7 @@ public:
             throw RT_ERR("Normal IO can not be zero-sized.");
         }
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         rec.offset = offset;
@@ -371,7 +360,7 @@ public:
             throw RT_ERR("Discard IO can not be zero-sized.");
         }
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         ::set_bit_u32(LOG_RECORD_DISCARD, &rec.flags);
@@ -410,7 +399,7 @@ public:
         }
 
         size_t pos = nRecords();
-        struct walb_log_record &rec = recordUnsafe(pos);
+        struct walb_log_record &rec = header_->record[pos];
         rec.flags = 0;
         ::set_bit_u32(LOG_RECORD_EXIST, &rec.flags);
         ::set_bit_u32(LOG_RECORD_PADDING, &rec.flags);
@@ -478,10 +467,7 @@ public:
             }
         }
 
-        /* Calculate checksum. */
-        header_->checksum = 0;
-        header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
-
+        updateChecksum();
         assert(isValid());
     }
 protected:
@@ -874,37 +860,15 @@ private:
  * Record: Record
  * BlockData: BlockData
  */
-class PackIoWrap
+struct PackIoWrap
 {
-private:
     Record *recP_;
     BlockData *blockD_;
 
-public:
-    PackIoWrap(Record *rec, BlockData *blockD)
-        : recP_(rec), blockD_(blockD) {
-        assert(recP_);
-        assert(blockD_);
-    }
-    PackIoWrap(const PackIoWrap &rhs)
-        : recP_(rhs.recP_), blockD_(rhs.blockD_) {}
-    PackIoWrap &operator=(const PackIoWrap &rhs) {
-        recP_ = rhs.recP_;
-        blockD_ = rhs.blockD_;
-        return *this;
-    }
-    DISABLE_MOVE(PackIoWrap);
-
     const Record &record() const { return *recP_; }
-    Record &record() {
-        assert_bt(!std::is_const<Record>::value);
-        return *const_cast<Record *>(recP_);
-    }
+    Record &record() { return *recP_; }
     const BlockData &blockData() const { return *blockD_; }
-    BlockData &blockData() {
-        assert_bt(!std::is_const<BlockData>::value);
-        return *const_cast<BlockData *>(blockD_);
-    }
+    BlockData &blockData() { return *blockD_; }
 
     // not use blockD_
     bool isValid(bool isChecksum = true) const {
@@ -998,16 +962,16 @@ private:
     RecordRaw rec_;
     BlockDataT blockD_;
 public:
-    PackIoRaw() : PackIoWrap(&rec_, &blockD_) {}
+    PackIoRaw() : PackIoWrap{&rec_, &blockD_} {}
     PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
-        : PackIoWrap(&rec_, &blockD_)
+        : PackIoWrap{&rec_, &blockD_}
         , rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
+        : PackIoWrap{&rec_, &blockD_}, rec_(logh, pos), blockD_(logh.pbs()) {}
     PackIoRaw(const PackIoRaw &rhs)
-        : PackIoWrap(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+        : PackIoWrap{&rec_, &blockD_}, rec_(rhs.rec_), blockD_(rhs.blockD_) {}
     PackIoRaw(PackIoRaw &&rhs)
-        : PackIoRaw(rhs.rec_, std::move(rhs.blockD_)) {}
+        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
     PackIoRaw &operator=(const PackIoRaw &rhs) {
         rec_ = rhs.rec_;
         blockD_ = rhs.blockD_;
