@@ -122,7 +122,7 @@ public:
         , lock_(filePath) {
         init(true);
     }
-    virtual ~QueueFile() noexcept {
+    ~QueueFile() noexcept {
         try {
             sync();
         } catch (...) {
@@ -183,9 +183,7 @@ public:
     }
     void front(std::string& s) const {
         verifyNotEmpty(__func__);
-        const QueueRecordHeader &rec = record(header_.beginOffset);
-        s.resize(rec.dataSize);
-        ::memcpy(&s[0], rec.data(), s.size());
+        assignString(s, record(header_.beginOffset));
     }
     void back(void *data, uint32_t size) const {
         verifyNotEmpty(__func__);
@@ -199,9 +197,7 @@ public:
     }
     void back(std::string& s) const {
         verifyNotEmpty(__func__);
-        const QueueRecordHeader &rec = record(header_.endOffset).prev();
-        s.resize(rec.dataSize);
-        ::memcpy(&s[0], rec.data(), s.size());
+        assignString(s, record(header_.endOffset).prev());
     }
     void popFront() {
         verifyNotEmpty(__func__);
@@ -460,9 +456,9 @@ private:
             throw std::runtime_error(ss.str());
         }
     }
-protected:
-    uint64_t beginOffset() const { return header_.beginOffset; }
-    uint64_t endOffset() const { return header_.endOffset; }
+    void assignString(std::string& s, const QueueRecordHeader& rec) const {
+        s.assign((const char *)rec.data(), rec.dataSize);
+    }
 };
 
 }} //namespace cybozu::util
