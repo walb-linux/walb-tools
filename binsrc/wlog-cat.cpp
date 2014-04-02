@@ -88,7 +88,7 @@ private:
     cybozu::util::BlockAllocator<uint8_t> ba_;
     bool isVerbose_;
 
-    using PackHeaderRaw = walb::log::PackHeaderRaw;
+    using LogPackHeader = walb::LogPackHeader;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using Block = std::shared_ptr<uint8_t>;
 
@@ -133,7 +133,7 @@ public:
         uint64_t lsid = beginLsid;
         uint64_t totalPaddingPb = 0;
         uint64_t nPacks = 0;
-        PackHeaderRaw packH(nullptr, super_.getPhysicalBlockSize(),
+        LogPackHeader packH(nullptr, super_.getPhysicalBlockSize(),
                          super_.getLogChecksumSalt());
         while (lsid < endLsid_) {
             bool isEnd = false;
@@ -193,7 +193,7 @@ private:
      * RETURN:
      *   false if got invalid logpack header.
      */
-    bool readLogpackHeader(PackHeaderRaw &packH, uint64_t lsid) {
+    bool readLogpackHeader(LogPackHeader &packH, uint64_t lsid) {
         packH.reset(readBlock());
 #if 0
         packH.print(::stderr);
@@ -212,7 +212,7 @@ private:
      * RETURN:
      *   true if logpack has shrinked and should end.
      */
-    bool readAllLogpackData(PackHeaderRaw &logh, std::queue<PackIo> &q) {
+    bool readAllLogpackData(LogPackHeader &logh, std::queue<PackIo> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIo packIo(logh, i);

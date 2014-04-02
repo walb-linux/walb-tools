@@ -141,7 +141,7 @@ private:
     uint32_t salt_;
     bool isEnd_;
 
-    std::shared_ptr<PackHeaderRaw> pack_;
+    std::shared_ptr<LogPackHeader> pack_;
     uint16_t recIdx_;
     uint64_t endLsid_;
 
@@ -183,7 +183,7 @@ public:
 
         /* Copy to the record. */
         Record &rec = packIo.record();
-        const PackHeaderRaw& packHeader = *pack_.get();
+        const LogPackHeader& packHeader = *pack_.get();
         rec.record() = packHeader.record(recIdx_);
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());
@@ -243,7 +243,7 @@ public:
     /**
      * Get pack header reference.
      */
-    PackHeaderRaw &packHeader() {
+    LogPackHeader &packHeader() {
         checkReadHeader();
         fillPackIfNeed();
         return *pack_;
@@ -263,7 +263,7 @@ private:
         std::shared_ptr<uint8_t> b = allocPb();
         try {
             fdr_.read(reinterpret_cast<char *>(b.get()), pbs_);
-            pack_.reset(new PackHeaderRaw(b, pbs_, salt_));
+            pack_.reset(new LogPackHeader(b, pbs_, salt_));
             if (!pack_->isValid()) {
                 throw RT_ERR("Invalid logpack header.");
             }
@@ -366,7 +366,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const PackHeader &header, std::queue<Block> &&blocks) {
+    void writePack(const LogPackHeader &header, std::queue<Block> &&blocks) {
         /* Validate. */
         checkHeader(header);
         if (header.totalIoSize() != blocks.size()) {
@@ -412,7 +412,7 @@ private:
     /**
      * Check a pack header block.
      */
-    void checkHeader(const PackHeader &header) const {
+    void checkHeader(const LogPackHeader &header) const {
         if (!header.isValid()) {
             throw RT_ERR("Logpack header invalid.");
         }
@@ -433,7 +433,7 @@ private:
      */
     void writeEof() {
         Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
-        PackHeaderRaw h(b, pbs_, salt_);
+        LogPackHeader h(b, pbs_, salt_);
         h.setEnd();
         h.write(fdw_);
     }

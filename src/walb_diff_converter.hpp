@@ -103,7 +103,7 @@ class Converter /* final */
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
-    using LogpackHeader = log::PackHeaderRaw;
+    using LogpackHeader = LogPackHeader;
 
 public:
     void convert(int inputLogFd, int outputWdiffFd,

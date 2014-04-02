@@ -737,7 +737,7 @@ inline void c2sHostTypeServer(protocol::ServerParams &p)
 
 namespace storage_local {
 
-inline void readLogPackHeader(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, uint64_t lsid, const char *msg)
+inline void readLogPackHeader(device::AsyncWldevReader &reader, LogPackHeader &packH, uint64_t lsid, const char *msg)
 {
     reader.read((char *)packH.rawData(), 1);
     if (packH.header().logpack_lsid != lsid) {
@@ -747,7 +747,7 @@ inline void readLogPackHeader(device::AsyncWldevReader &reader, log::PackHeaderR
     reader.readAhead();
 }
 
-inline void readLogIo(device::AsyncWldevReader &reader, log::PackHeaderRaw &packH, size_t recIdx, log::BlockDataShared &blockD)
+inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, log::BlockDataShared &blockD)
 {
     const log::RecordWrap lrec(&packH, recIdx);
     if (!lrec.hasData()) return;
@@ -848,7 +848,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     sender.start();
 
     std::shared_ptr<uint8_t> packHeaderBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
-    log::PackHeaderRaw packH(packHeaderBlock, pbs, salt);
+    LogPackHeader packH(packHeaderBlock, pbs, salt);
     reader.reset(lsidB);
 
     log::BlockDataShared blockD(pbs);

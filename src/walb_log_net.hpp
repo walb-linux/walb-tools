@@ -155,7 +155,7 @@ public:
      * You must call pushHeader(h) and n times of pushIo(),
      * where n is h.nRecords().
      */
-    void pushHeader(const PackHeader &header) {
+    void pushHeader(const LogPackHeader &header) {
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
 #ifdef DEBUG
@@ -170,7 +170,7 @@ public:
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const PackHeader &header, size_t recIdx, const BlockData &blockD) {
+    void pushIo(const LogPackHeader &header, size_t recIdx, const BlockData &blockD) {
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);
@@ -322,8 +322,8 @@ public:
             return false;
         }
         assert(!cd.isCompressed());
-        PackHeaderWrap h(reinterpret_cast<uint8_t *>(&header), pbs_, salt_);
-        cd.copyTo(h.rawData(), pbs_);
+        LogPackHeader h(&header, pbs_, salt_);
+        h.copyFrom(cd.getData(), pbs_);
         if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
         assert(!h.isEnd());
         recIdx_ = 0;
@@ -336,7 +336,7 @@ public:
     template <typename BlockDataT>
     void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
         assert(recIdx_ == recIdx);
-        const PackHeaderWrap h((uint8_t*)&header, pbs_, salt_); // QQQ
+        const LogPackHeader h(&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
         const RecordWrap rec(&h, recIdx);
         if (rec.hasDataForChecksum()) {

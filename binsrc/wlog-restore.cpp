@@ -103,7 +103,7 @@ private:
     using BlockA = cybozu::util::BlockAllocator<uint8_t>;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
-    using PackHeaderRaw = walb::log::PackHeaderRaw;
+    using LogPackHeader = walb::LogPackHeader;
     using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::device::SuperBlock;
@@ -250,7 +250,7 @@ private:
         unsigned int pbs = wlHead.pbs();
 
         /* Read logpack header. */
-        PackHeaderRaw logh(readBlock(fdr, ba, pbs), pbs, salt);
+        LogPackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
         if (logh.isEnd()) return false;
         if (!logh.isValid()) return false;
         if (config_.isVerbose()) logh.printShort();
@@ -273,13 +273,12 @@ private:
             unsigned int paddingPb = endOffPb - offPb;
             assert(0 < paddingPb);
             assert(paddingPb < (1U << 16));
-            PackHeaderRaw paddingLogh(ba.alloc(), pbs, wlHead.salt());
+            LogPackHeader paddingLogh(ba.alloc(), pbs, wlHead.salt());
             paddingLogh.init(logh.logpackLsid());
             paddingLogh.addPadding(paddingPb - 1);
             paddingLogh.updateChecksum();
             assert(paddingLogh.isValid());
-            blkdev.write(
-                offPb * pbs, pbs, paddingLogh.ptr<char>());
+            blkdev.write(offPb * pbs, pbs, paddingLogh.rawData());
 
             /* Update logh's lsid information. */
             lsidDiff_ += paddingPb;
@@ -328,7 +327,7 @@ private:
             ::printf("header %u records\n", logh.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
-        blkdev.write(offPb * pbs, pbs, logh.ptr<char>());
+        blkdev.write(offPb * pbs, pbs, logh.rawData());
         for (size_t i = 0; i < blocks.size(); i++) {
             blkdev.write((offPb + 1 + i) * pbs, pbs,
                          reinterpret_cast<const char *>(blocks[i].get()));
@@ -337,11 +336,9 @@ private:
         if (config_.isVerify()) {
             /* Currently only header block will be verified. */
             Block b2 = ba.alloc();
-            blkdev.read(
-                offPb * pbs, pbs,
-                reinterpret_cast<char *>(b2.get()));
-            PackHeaderRaw logh2(b2, pbs, salt);
-            int ret = ::memcmp(logh.ptr<char>(), logh2.ptr<char>(), pbs);
+            blkdev.read(offPb * pbs, pbs, reinterpret_cast<char *>(b2.get()));
+            LogPackHeader logh2(b2, pbs, salt);
+            int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
             if (ret) {
                 throw RT_ERR("Logpack header verification failed: "
                              "lsid %" PRIu64 " offPb %" PRIu64 ".",
