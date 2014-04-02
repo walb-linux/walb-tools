@@ -126,16 +126,18 @@ inline void printRecordOneline(
               , rec.checksum, rec.checksum);
 }
 
+} // log
+
 /**
- * Interface.
+ * log pack header
  */
-class PackHeader
+class LogPackHeader
 {
     uint8_t *data_;
     unsigned int pbs_;
     uint32_t salt_;
 public:
-    PackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
+    LogPackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
         : data_(const_cast<uint8_t*>(data)), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
@@ -503,7 +505,10 @@ protected:
     }
 };
 
-class PackHeaderRaw : public PackHeader
+
+namespace log {
+
+class PackHeaderRaw : public LogPackHeader
 {
 protected:
     using Block = std::shared_ptr<uint8_t>;
@@ -511,7 +516,7 @@ protected:
 
 public:
     PackHeaderRaw(const Block &block, unsigned int pbs, uint32_t salt)
-        : PackHeader(nullptr, pbs, salt)
+        : LogPackHeader(nullptr, pbs, salt)
         , block_(block) {
         resetData(block_.get());
     }
@@ -618,7 +623,7 @@ public:
         const struct walb_log_record &rec, size_t pos,
         unsigned int pbs, uint32_t salt)
         : Record(), pos_(pos), pbs_(pbs), salt_(salt), rec_(rec) {}
-    RecordRaw(const PackHeader &logh, size_t pos)
+    RecordRaw(const LogPackHeader &logh, size_t pos)
         : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
     ~RecordRaw() noexcept override = default;
     RecordRaw(const RecordRaw &rhs)
@@ -637,7 +642,7 @@ public:
     }
     DISABLE_MOVE(RecordRaw);
 
-    void copyFrom(const PackHeader &logh, size_t pos) {
+    void copyFrom(const LogPackHeader &logh, size_t pos) {
         setPos(pos);
         setPbs(logh.pbs());
         setSalt(logh.salt());
@@ -662,11 +667,11 @@ public:
  */
 class RecordWrap : public Record
 {
-    PackHeader *logh_;
+    LogPackHeader *logh_;
     size_t pos_;
 public:
-    RecordWrap(const PackHeader *logh, size_t pos)
-        : logh_(const_cast<PackHeader *>(logh)) , pos_(pos) {
+    RecordWrap(const LogPackHeader *logh, size_t pos)
+        : logh_(const_cast<LogPackHeader *>(logh)) , pos_(pos) {
         assert(pos < logh->nRecords());
     }
     DISABLE_COPY_AND_ASSIGN(RecordWrap);
@@ -1024,7 +1029,7 @@ public:
     PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
         : PackIoWrap(&rec_, &blockD_)
         , rec_(rec), blockD_(std::move(blockD)) {}
-    PackIoRaw(const PackHeader &logh, size_t pos)
+    PackIoRaw(const LogPackHeader &logh, size_t pos)
         : PackIoWrap(&rec_, &blockD_), rec_(logh, pos), blockD_(logh.pbs()) {}
     PackIoRaw(const PackIoRaw &rhs)
         : PackIoWrap(&rec_, &blockD_), rec_(rhs.rec_), blockD_(rhs.blockD_) {}

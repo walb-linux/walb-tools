@@ -366,7 +366,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const PackHeader &header, std::queue<Block> &&blocks) {
+    void writePack(const LogPackHeader &header, std::queue<Block> &&blocks) {
         /* Validate. */
         checkHeader(header);
         if (header.totalIoSize() != blocks.size()) {
@@ -412,7 +412,7 @@ private:
     /**
      * Check a pack header block.
      */
-    void checkHeader(const PackHeader &header) const {
+    void checkHeader(const LogPackHeader &header) const {
         if (!header.isValid()) {
             throw RT_ERR("Logpack header invalid.");
         }

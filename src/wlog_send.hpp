@@ -115,10 +115,10 @@ public:
      * Push a log pack.
      * Do not send end logpack header by yourself. Use sync() instead.
      */
-    void pushHeader(const log::PackHeader &header) {
+    void pushHeader(const LogPackHeader &header) {
         sender_.pushHeader(header);
     }
-    void pushIo(const log::PackHeader &header, size_t recIdx, const log::BlockData &blockD) {
+    void pushIo(const LogPackHeader &header, size_t recIdx, const log::BlockData &blockD) {
         sender_.pushIo(header, recIdx, blockD);
     }
     /**
