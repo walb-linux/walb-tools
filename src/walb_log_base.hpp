@@ -219,11 +219,11 @@ public:
     /*
      * Print.
      */
-    void printRecord(::FILE *fp, size_t pos) const {
+    void printRecord(size_t pos, ::FILE *fp = ::stdout) const {
         const struct walb_log_record &rec = record(pos);
         log::printRecord(fp, pos, rec);
     }
-    void printRecordOneline(::FILE *fp, size_t pos) const {
+    void printRecordOneline(size_t pos, ::FILE *fp = ::stdout) const {
         const struct walb_log_record &rec = record(pos);
         log::printRecordOneline(fp, pos, rec);
     }
@@ -244,12 +244,8 @@ public:
     void print(::FILE *fp = ::stdout) const {
         printHeader(fp);
         for (size_t i = 0; i < nRecords(); i++) {
-            printRecord(fp, i);
+            printRecord(i, fp);
         }
-    }
-    void printRecord(size_t pos) const { printRecord(::stdout, pos); }
-    void printRecordOneline(size_t pos) const {
-        printRecordOneline(::stdout, pos);
     }
     /**
      * Print each IO oneline.
