@@ -9,8 +9,7 @@
 void testCompressedData(std::vector<char> &&v)
 {
     walb::CompressedData cd0, cd1, cd2;
-    size_t s = v.size();
-    cd0.moveFrom(0, s, std::move(v));
+    cd0.setUncompressed(std::move(v));
     cd1 = cd0.compress();
     if (cd1.isCompressed()) {
         cd2 = cd1.uncompress();
@@ -82,7 +81,7 @@ CYBOZU_TEST_AUTO(compressor)
                 std::vector<char> v(s);
                 rand.fill(&v[0], 32);
                 walb::CompressedData cd;
-                cd.moveFrom(0, s, std::move(v));
+                cd.setUncompressed(std::move(v));
                 csumV_.push_back(calcCsum(cd));
                 outQ_.push(std::move(cd));
             }

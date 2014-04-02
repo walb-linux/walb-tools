@@ -29,7 +29,7 @@ CompressedData convertToCompressedData(const BlockData &blockD, bool doCompress)
         ::memcpy(&d[i * pbs], blockD.get(i), pbs);
     }
     CompressedData cd;
-    cd.moveFrom(0, n * pbs, std::move(d));
+    cd.setUncompressed(std::move(d));
     return doCompress ? cd.compress() : cd;
 }
 
@@ -44,12 +44,8 @@ BlockDataVec convertToBlockData(const CompressedData &cd, unsigned int pbs)
 {
     const size_t origSize = cd.originalSize();
     assert(origSize % pbs == 0);
-    std::vector<uint8_t> v(origSize);
-    if (cd.isCompressed()) {
-        cd.uncompressTo(&v[0]);
-    } else {
-        ::memcpy(&v[0], cd.rawData(), origSize);
-    }
+    std::vector<uint8_t> v;
+    cd.getUncompressed(v);
     BlockDataVec blockD(pbs);
     blockD.moveFrom(std::move(v));
     return blockD;
@@ -162,8 +158,7 @@ public:
         assert(header.isValid());
 #endif
         CompressedData cd;
-        cd.copyFrom(0, pbs_, header.rawData());
-        assert(0 < cd.originalSize());
+        cd.setUncompressed(header.rawData(), pbs_);
         q0_.push(std::move(cd));
         recIdx_ = 0;
     }
@@ -323,7 +318,10 @@ public:
         }
         assert(!cd.isCompressed());
         LogPackHeader h(&header, pbs_, salt_);
-        h.copyFrom(cd.getData(), pbs_);
+        if (cd.rawSize() != pbs_) {
+            throw cybozu::Exception(__func__) << "invalid pack header size" << cd.rawSize() << pbs_;
+        }
+        h.copyFrom(cd.rawData(), pbs_);
         if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
         assert(!h.isEnd());
         recIdx_ = 0;

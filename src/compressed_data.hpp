@@ -16,6 +16,50 @@
 
 namespace walb {
 
+namespace cmpr_local {
+
+inline Compressor &getSnappyCompressor() {
+    static Compressor cmpr(WALB_DIFF_CMPR_SNAPPY, 0);
+    return cmpr;
+}
+
+inline Uncompressor &getSnappyUncompressor() {
+    static Uncompressor uncmpr(WALB_DIFF_CMPR_SNAPPY);
+    return uncmpr;
+}
+
+/**
+ * RETURN:
+ *   true when successfully compressed, false when copied.
+ */
+template <typename CharT>
+bool compressToVec(const void *data, size_t size, std::vector<CharT> &outV)
+{
+    outV.resize(size);
+    size_t outSize;
+    try {
+        outSize = getSnappyCompressor().run(&outV[0], size, data, size);
+    } catch (cybozu::Exception &) {
+        ::memcpy(&outV[0], data, size);
+        return false;
+    }
+    outV.resize(outSize);
+    return true;
+}
+
+/**
+ * Assume uncompressed size must be outSize.
+ */
+template <typename CharT>
+void uncompressToVec(const void *data, size_t size, std::vector<CharT> &outV, size_t outSize)
+{
+    outV.resize(outSize);
+    const size_t s = getSnappyUncompressor().run(&outV[0], outV.size(), data, size);
+    if (s != outSize) throw cybozu::Exception(__func__) << "invalid outSize" << outSize << s;
+}
+
+} // namespace cmpr_local
+
 /**
  * Compressed and uncompressed data.
  * This uses snappy only.
@@ -31,26 +75,6 @@ public:
     size_t rawSize() const { return data_.size(); }
     bool isCompressed() const { return cmprSize_ != 0; }
     size_t originalSize() const { return origSize_; }
-    void moveFrom(uint32_t cmprSize, uint32_t origSize, std::vector<char> &&data) {
-        assert(!data.empty());
-        setSizes(cmprSize, origSize);
-        data_ = std::move(data);
-        verify();
-    }
-    void copyFrom(uint32_t cmprSize, uint32_t origSize, const void *data) {
-        setSizes(cmprSize, origSize);
-        data_.resize(dataSize());
-        ::memcpy(&data_[0], data, data_.size());
-        verify();
-    }
-    std::vector<char> moveTo() { return std::move(data_); }
-    std::vector<char> copyTo() const { return data_; }
-    void copyTo(void *data, size_t size) const {
-        if (data_.size() != size) {
-            throw RT_ERR("size differs %zu %zu.", data_.size(), size);
-        }
-        ::memcpy(data, &data_[0], size);
-    }
     /**
      * Send data to the remote host.
      */
@@ -70,49 +94,50 @@ public:
         packet.read(&data_[0], data_.size());
         verify();
     }
-    void compressFrom(const void *data, uint32_t size) {
-        data_.resize(size);
-        std::vector<char> &dst = data_;
-        uint32_t cSize = 0;
-        try {
-            cSize = compressor().run(&dst[0], size, data, size);
-            dst.resize(cSize);
-        } catch (cybozu::Exception &) {
-            ::memcpy(&dst[0], data, size);
-        }
-        setSizes(cSize, size);
+    void setUncompressed(std::vector<char> &&data) {
+        if (data.empty()) throw cybozu::Exception(__func__) << "empty";
+        setSizes(0, data.size());
+        data_ = std::move(data);
         verify();
     }
-    /**
-     * @data Output buffer which size must be more than originalSize().
-     */
-    void uncompressTo(void *data) const {
-        assert(isCompressed());
-        uint32_t s0 = origSize_;
-        size_t s1 = uncompressor().run(data, s0, &data_[0], data_.size());
-        if (s0 != s1) {
-            throw RT_ERR("uncompressed data size differ: "
-                         "expected %zu real %zu.", s0, s1);
+    void setUncompressed(const void *data, uint32_t size) {
+        if (size == 0) throw cybozu::Exception(__func__) << "empty";
+        setSizes(0, size);
+        data_.resize(size);
+        ::memcpy(&data_[0], data, size);
+        verify();
+    }
+    void compressFrom(const void *data, uint32_t size) {
+        if (cmpr_local::compressToVec(data, size, data_)) {
+            setSizes(data_.size(), size);
+        } else {
+            setSizes(0, size);
+        }
+        verify();
+    }
+    template <typename CharT>
+    void getUncompressed(std::vector<CharT> &outV) const {
+        if (isCompressed()) {
+            cmpr_local::uncompressToVec(&data_[0], data_.size(), outV, origSize_);
+        } else {
+            outV.resize(data_.size());
+            ::memcpy(&outV[0], &data_[0], outV.size());
         }
     }
     CompressedData compress() const {
-        assert(!isCompressed());
+        verifyUncompressed(__func__);
         CompressedData ret;
         ret.compressFrom(&data_[0], data_.size());
         return ret;
     }
     CompressedData uncompress() const {
-        assert(isCompressed());
-        std::vector<char> dst(origSize_);
-        uncompressTo(&dst[0]);
+        verifyCompressed(__func__);
+        std::vector<char> dst;
+        getUncompressed(dst);
         CompressedData ret;
-        ret.moveFrom(0, origSize_, std::move(dst));
-        ret.verify();
+        ret.setUncompressed(std::move(dst));
         return ret;
     }
-    // QQQ : different from dataSize()
-    const char *getData() const { return data_.data(); }
-    size_t getDataSize() const { return data_.size(); }
 private:
     void verify() const {
         if (origSize_ == 0) throw RT_ERR("origSize must not be 0.");
@@ -121,6 +146,12 @@ private:
                          , dataSize(), data_.size());
         }
     }
+    void verifyCompressed(const char *msg) const {
+        if (!isCompressed()) throw cybozu::Exception(msg) << "must be compressed";
+    }
+    void verifyUncompressed(const char *msg) const {
+        if (isCompressed()) throw cybozu::Exception(msg) << "must be uncompressed";
+    }
     void setSizes(uint32_t cmprSize, uint32_t origSize) {
         cmprSize_ = cmprSize;
         origSize_ = origSize;
@@ -128,14 +159,6 @@ private:
     }
     size_t dataSize() const {
         return cmprSize_ == 0 ? origSize_ : cmprSize_;
-    }
-    static walb::Compressor &compressor() {
-        static walb::Compressor cmpr(WALB_DIFF_CMPR_SNAPPY, 0);
-        return cmpr;
-    }
-    static walb::Uncompressor &uncompressor() {
-        static walb::Uncompressor uncmpr(WALB_DIFF_CMPR_SNAPPY);
-        return uncmpr;
     }
 };
 
