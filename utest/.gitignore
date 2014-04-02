@@ -14,7 +14,7 @@ util_test
 wdiff_data_test
 worker_data_test
 hash_test
-wlog_compressor_test
+compressed_data_test
 atomic_map_test
 action_counter_test
 state_machine_test
