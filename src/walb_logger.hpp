@@ -207,4 +207,16 @@ public:
     }
 };
 
+inline void putErrorLogIfNecessary(std::exception_ptr ep, Logger &logger, const char *msg) noexcept
+{
+    if (!ep) return;
+    try {
+        std::rethrow_exception(ep);
+    } catch (std::exception &e) {
+        logger.error() << msg << e.what();
+    } catch (...) {
+        logger.error() << msg << "unknown error";
+    }
+}
+
 } //namespace walb
