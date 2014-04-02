@@ -194,7 +194,7 @@ private:
      *   false if got invalid logpack header.
      */
     bool readLogpackHeader(LogPackHeader &packH, uint64_t lsid) {
-        packH.reset(readBlock());
+        packH.setBlock(readBlock());
 #if 0
         packH.print(::stderr);
 #endif
