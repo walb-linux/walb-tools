@@ -39,13 +39,13 @@ public:
         assert(!data.empty());
         setSizes(cmprSize, origSize);
         data_ = std::move(data);
-        check();
+        verify();
     }
     void copyFrom(uint32_t cmprSize, uint32_t origSize, const void *data) {
         setSizes(cmprSize, origSize);
         data_.resize(dataSize());
         ::memcpy(&data_[0], data, data_.size());
-        check();
+        verify();
     }
     std::vector<char> moveTo() { return std::move(data_); }
     std::vector<char> copyTo() const { return data_; }
@@ -59,7 +59,7 @@ public:
      * Send data to the remote host.
      */
     void send(packet::Packet &packet) const {
-        check();
+        verify();
         packet.write(cmprSize_);
         packet.write(origSize_);
         packet.write(&data_[0], data_.size());
@@ -72,7 +72,7 @@ public:
         packet.read(origSize_);
         data_.resize(dataSize());
         packet.read(&data_[0], data_.size());
-        check();
+        verify();
     }
     void compressFrom(const void *data, uint32_t size) {
         data_.resize(size);
@@ -85,7 +85,7 @@ public:
             ::memcpy(&dst[0], data, size);
         }
         setSizes(cSize, size);
-        check();
+        verify();
     }
     /**
      * @data Output buffer which size must be more than originalSize().
@@ -111,11 +111,11 @@ public:
         uncompressTo(&dst[0]);
         CompressedData ret;
         ret.moveFrom(0, origSize_, std::move(dst));
-        ret.check();
+        ret.verify();
         return ret;
     }
 private:
-    void check() const {
+    void verify() const {
         if (origSize_ == 0) throw RT_ERR("origSize must not be 0.");
         if (dataSize() != data_.size()) {
             throw RT_ERR("data size must be %zu but really %zu."
