@@ -16,7 +16,6 @@
 #include "memory_buffer.hpp"
 #include "fileio.hpp"
 #include "checksum.hpp"
-#include "block_diff.hpp"
 #include "walb_diff.h"
 #include "walb_logger.hpp"
 #include "walb/block_size.h"
