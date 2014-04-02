@@ -882,10 +882,7 @@ public:
     DISABLE_MOVE(PackIoWrap);
 
     const Record &record() const { return *recP_; }
-    Record &record() {
-        assert_bt(!std::is_const<Record>::value);
-        return *const_cast<Record *>(recP_);
-    }
+    Record &record() { return *recP_; }
     const BlockData &blockData() const { return *blockD_; }
     BlockData &blockData() {
         assert_bt(!std::is_const<BlockData>::value);
