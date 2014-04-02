@@ -114,6 +114,9 @@ public:
         ret.check();
         return ret;
     }
+    // QQQ : different from dataSize()
+    const char *getData() const { return data_.data(); }
+    size_t getDataSize() const { return data_.size(); }
 private:
     void check() const {
         if (origSize_ == 0) throw RT_ERR("origSize must not be 0.");

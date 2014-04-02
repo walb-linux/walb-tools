@@ -323,7 +323,7 @@ public:
         }
         assert(!cd.isCompressed());
         LogPackHeader h(reinterpret_cast<uint8_t *>(&header), pbs_, salt_);
-        cd.copyTo(h.rawData(), pbs_);
+        h.copyFrom(cd.getData(), pbs_);
         if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
         assert(!h.isEnd());
         recIdx_ = 0;

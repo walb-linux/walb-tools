@@ -278,8 +278,7 @@ private:
             paddingLogh.addPadding(paddingPb - 1);
             paddingLogh.updateChecksum();
             assert(paddingLogh.isValid());
-            blkdev.write(
-                offPb * pbs, pbs, paddingLogh.ptr<char>());
+            blkdev.write(offPb * pbs, pbs, paddingLogh.rawData());
 
             /* Update logh's lsid information. */
             lsidDiff_ += paddingPb;
@@ -328,7 +327,7 @@ private:
             ::printf("header %u records\n", logh.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
-        blkdev.write(offPb * pbs, pbs, logh.ptr<char>());
+        blkdev.write(offPb * pbs, pbs, logh.rawData());
         for (size_t i = 0; i < blocks.size(); i++) {
             blkdev.write((offPb + 1 + i) * pbs, pbs,
                          reinterpret_cast<const char *>(blocks[i].get()));
@@ -341,7 +340,7 @@ private:
                 offPb * pbs, pbs,
                 reinterpret_cast<char *>(b2.get()));
             PackHeaderRaw logh2(b2, pbs, salt);
-            int ret = ::memcmp(logh.ptr<char>(), logh2.ptr<char>(), pbs);
+            int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
             if (ret) {
                 throw RT_ERR("Logpack header verification failed: "
                              "lsid %" PRIu64 " offPb %" PRIu64 ".",

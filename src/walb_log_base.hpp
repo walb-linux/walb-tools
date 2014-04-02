@@ -170,16 +170,7 @@ public:
     /*
      * Utilities.
      */
-    template <typename T>
-    const T *ptr() const {
-        return reinterpret_cast<const T *>(header_);
-    }
-    template <typename T>
-    T *ptr() {
-        return reinterpret_cast<T *>(header_);
-    }
-    const uint8_t *rawData() const { return ptr<const uint8_t>(); }
-    uint8_t *rawData() { return ptr<uint8_t>(); }
+    const uint8_t *rawData() const { return (const uint8_t*)header_; }
     const struct walb_log_record &recordUnsafe(size_t pos) const {
         return header_->record[pos];
     }
@@ -223,6 +214,11 @@ public:
         } else {
             return ::is_valid_logpack_header_and_records(header_) != 0;
         }
+    }
+    void copyFrom(const void *data, size_t size)
+    {
+        // QQQ veryf size
+        memcpy(header_, data, size);
     }
 
     /*
@@ -299,7 +295,7 @@ public:
         if (!isValid(true)) {
             throw RT_ERR("logpack header invalid.");
         }
-        fdw.write(ptr<char>(), pbs());
+        fdw.write(header_, pbs());
     }
     /**
      * Initialize logpack header block.
@@ -483,7 +479,7 @@ public:
 
         /* Calculate checksum. */
         header_->checksum = 0;
-        header_->checksum = ::checksum(ptr<uint8_t>(), pbs(), salt());
+        header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
 
         assert(isValid());
     }
