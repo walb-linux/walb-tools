@@ -133,33 +133,28 @@ inline void printRecordOneline(
  */
 class LogPackHeader
 {
-protected:
     using Block = std::shared_ptr<uint8_t>;
     Block block_;
     walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
-    void resetData(uint8_t *data) {
-        header_ = (walb_logpack_header*)data;
-    }
 public:
-    LogPackHeader(const void *data, unsigned int pbs, uint32_t salt)
-        : header_((walb_logpack_header*)data), pbs_(pbs), salt_(salt) {
-        ASSERT_PBS(pbs);
+    LogPackHeader(const void *header = 0, unsigned int pbs = 0, uint32_t salt = 0)
+        : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
     }
     LogPackHeader(const Block &block, unsigned int pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
-        reset(block);
+        setBlock(block);
     }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
-    struct walb_logpack_header &header() { checkBlock(); return *header_; }
+    walb_logpack_header &header() { checkBlock(); return *header_; }
     unsigned int pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
     void setPbs(unsigned int pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
-    void reset(const Block &block) {
+    void setBlock(const Block &block) {
         block_ = block;
-        resetData(block_.get());
+        header_ = (walb_logpack_header*)block_.get();
     }
 
     /*
@@ -478,10 +473,7 @@ public:
             }
         }
 
-        /* Calculate checksum. */
-        header_->checksum = 0;
-        header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
-
+        updateChecksum();
         assert(isValid());
     }
 protected:
