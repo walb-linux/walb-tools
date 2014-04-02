@@ -133,29 +133,24 @@ inline void printRecordOneline(
  */
 class LogPackHeader
 {
+protected:
     walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
+    void resetData(uint8_t *data) {
+        header_ = (walb_logpack_header*)data;
+    }
 public:
     LogPackHeader(const uint8_t *data, unsigned int pbs, uint32_t salt)
         : header_((walb_logpack_header*)data), pbs_(pbs), salt_(salt) {
         ASSERT_PBS(pbs);
     }
-    const walb_logpack_header &header() const {
-        checkBlock();
-        return *header_;
-    }
-    struct walb_logpack_header &header() {
-        checkBlock();
-        return *header_;
-    }
+    const walb_logpack_header &header() const { checkBlock(); return *header_; }
+    struct walb_logpack_header &header() { checkBlock(); return *header_; }
     unsigned int pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
-    void setPbs(unsigned int pbs) { pbs_ = pbs; };
-    void setSalt(uint32_t salt) { salt_ = salt; };
-    void resetData(uint8_t *data) {
-        header_ = (walb_logpack_header*)data;
-    }
+    void setPbs(unsigned int pbs) { pbs_ = pbs; }
+    void setSalt(uint32_t salt) { salt_ = salt; }
 
     /*
      * Fields.
