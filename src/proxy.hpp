@@ -130,6 +130,13 @@ public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
     }
     void operator()();
+private:
+    struct PushOpt
+    {
+        bool isForce;
+        size_t delaySec;
+    };
+    bool transferWdiffIfNecessary(PushOpt &);
 };
 
 struct ProxySingleton
@@ -437,8 +444,10 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
     verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
     verifyNotStopping(volSt.stopState, volId, FUNC);
 
-    StateMachineTransaction tran0(volSt.sm, pStarted, ptPreWaitForEmpty);
-    tran0.commit(pWaitForEmpty);
+    {
+        StateMachineTransaction tran0(volSt.sm, pStarted, ptPreWaitForEmpty);
+        tran0.commit(pWaitForEmpty);
+    }
 
     waitUntil(ul, [&]() {
             if (volSt.sm.get() != pWaitForEmpty) return true;
@@ -551,7 +560,7 @@ inline void c2pStopServer(protocol::ServerParams &p)
         } else {
             proxy_local::stopProxyVol(volId, stopOpt.isForce());
         }
-        pkt.write(msgOk);
+        pkt.write(msgOk); // TODO change to msgAccept.
         logger.info() << "stop succeeded" << volId << stopOpt;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -938,7 +947,11 @@ inline bool sendWdiffs(
 
 } // namespace proxy_local
 
-inline void ProxyWorker::operator()()
+/**
+ * RETURN:
+ *   If true, caller must push taskQueue using pushOpt.
+ */
+inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 {
     const char *const FUNC = __func__;
     const std::string& volId = task_.volId;
@@ -956,7 +969,7 @@ inline void ProxyWorker::operator()()
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
     if (diffV.empty()) {
         LOGs.info() << FUNC << "no need to send wdiffs" << volId << archiveName;
-        return;
+        return false;
     }
 
     const HostInfo hi = volInfo.getArchiveInfo(archiveName);
@@ -987,14 +1000,15 @@ inline void ProxyWorker::operator()()
     if (res == msgAccept) {
         if (!proxy_local::sendWdiffs(sock, merger, hi, volSt.stopState)) {
             logger.warn() << FUNC << "force stopped" << volId;
-            return;
+            return false;
         }
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();
         volInfo.deleteDiffs(diffV, archiveName);
-        getProxyGlobal().taskQueue.push(task_);
-        return;
+        pushOpt.isForce = false;
+        pushOpt.delaySec = 0;
+        return true;
     }
     cybozu::Exception e("ProxyWorker");
     if (res == "stopped" || res == "too-new-diff") {
@@ -1003,19 +1017,22 @@ inline void ProxyWorker::operator()()
         if (volSt.lastWlogReceivedTime != 0 &&
             curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
-            logger.throwError(e);
+            logger.error() << e.what();
+            return false;
         }
         e << res << "delay time" << gp.delaySecForRetry;
         logger.info() << e.what();
-        getProxyGlobal().taskQueue.pushForce(task_, gp.delaySecForRetry * 1000);
-        return;
+        pushOpt.isForce = true;
+        pushOpt.delaySec = gp.delaySecForRetry;
+        return true;
     }
     if (res == "different-uuid" || res == "too-old-diff") {
         e << res;
         logger.info() << e.what();
         volInfo.deleteDiffs(diffV, archiveName);
-        getProxyGlobal().taskQueue.pushForce(task_, 0);
-        return;
+        pushOpt.isForce = true;
+        pushOpt.delaySec = 0;
+        return true;
     }
     /**
      * archive-not-found, not-applicable-diff, large-lv-size
@@ -1026,6 +1043,30 @@ inline void ProxyWorker::operator()()
      */
     e << res;
     logger.error() << e.what();
+    return false;
+}
+
+inline void ProxyWorker::operator()()
+{
+    const char *const FUNC = __func__;
+    TaskQueue<ProxyTask> &q = getProxyGlobal().taskQueue;
+    try {
+        PushOpt opt;
+        if (transferWdiffIfNecessary(opt)) {
+            const size_t delayMs = opt.delaySec * 1000;
+            if (opt.isForce) {
+                q.pushForce(task_, delayMs);
+            } else {
+                q.push(task_, delayMs);
+            }
+        }
+    } catch (std::exception &e) {
+        LOGs.error() << FUNC << e.what();
+        q.pushForce(task_, 0);
+    } catch (...) {
+        LOGs.error() << FUNC << "unknown error";
+        q.pushForce(task_, 0);
+    }
 }
 
 /**
