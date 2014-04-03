@@ -79,7 +79,7 @@ class WldevVerifier
 {
 private:
     using LogPackHeader = walb::LogPackHeader;
-    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
+    using PackIoRaw = walb::log::PackIoRaw<walb::log::BlockDataShared>;
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
@@ -124,11 +124,11 @@ public:
             LogPackHeader logh;
             readPackHeader(logh, lsid);
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
-            std::queue<PackIo> q;
+            std::queue<PackIoRaw> q;
             readPackIo(logh, q);
 
             while (!q.empty()) {
-                PackIo packIo = std::move(q.front());
+                PackIoRaw packIo = std::move(q.front());
                 q.pop();
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
@@ -175,9 +175,9 @@ private:
         logh.setSalt(salt_);
     }
 
-    void readPackIo(LogPackHeader &logh, std::queue<PackIo> &queue) {
+    void readPackIo(LogPackHeader &logh, std::queue<PackIoRaw> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIo packIo(logh, i);
+            PackIoRaw packIo(logh, i);
             const walb::log::Record &rec = packIo.record();
             if (!rec.hasData()) { continue; }
             const uint64_t endLsid = rec.lsid() + rec.ioSizePb();

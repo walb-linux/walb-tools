@@ -80,7 +80,7 @@ class WlogVerifier
 {
 private:
     using LogPackHeader = walb::LogPackHeader;
-    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataShared>;
+    using PackIoRaw = walb::log::PackIoRaw<walb::log::BlockDataShared>;
 
     const Config &config_;
 
@@ -128,11 +128,11 @@ public:
             LogPackHeader logh;
             readPackHeader(logh, wlFdr, ba, salt);
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
-            std::queue<PackIo> q;
+            std::queue<PackIoRaw> q;
             readPackIo(logh, wlFdr, ba, q);
 
             while (!q.empty()) {
-                PackIo packIo = std::move(q.front());
+                PackIoRaw packIo = std::move(q.front());
                 q.pop();
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
@@ -184,9 +184,9 @@ private:
 
     void readPackIo(
         LogPackHeader &logh, cybozu::util::FdReader &fdr,
-        cybozu::util::BlockAllocator<u8> &ba, std::queue<PackIo> &queue) {
+        cybozu::util::BlockAllocator<u8> &ba, std::queue<PackIoRaw> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIo packIo(logh, i);
+            PackIoRaw packIo(logh, i);
             const walb::log::Record &rec = packIo.record();
             if (!rec.hasData()) { continue; }
             for (size_t j = 0; j < rec.ioSizePb(); j++) {

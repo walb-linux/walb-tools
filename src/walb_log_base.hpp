@@ -955,6 +955,7 @@ bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
  * This is copyable and movable.
  * BlockDataT: BlockDataVec or BlockDataShared.
  */
+#if 1
 template <class BlockDataT>
 class PackIoRaw : public PackIoWrap
 {
@@ -983,5 +984,95 @@ public:
         return *this;
     }
 };
+#else
+template <class BlockDataT>
+class PackIoRaw
+{
+private:
+    RecordRaw rec_;
+    BlockDataT blockD_;
+public:
+    PackIoRaw() {}
+    PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
+        : rec_(rec), blockD_(std::move(blockD)) {}
+    PackIoRaw(const LogPackHeader &logh, size_t pos)
+        : rec_(logh, pos), blockD_(logh.pbs()) {}
+    PackIoRaw(const PackIoRaw &rhs)
+        : rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+    PackIoRaw(PackIoRaw &&rhs)
+        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
+    PackIoRaw &operator=(const PackIoRaw &rhs) {
+        rec_ = rhs.rec_;
+        blockD_ = rhs.blockD_;
+        return *this;
+    }
+    PackIoRaw &operator=(PackIoRaw &&rhs) {
+        rec_ = rhs.rec_;
+        blockD_ = std::move(rhs.blockD_);
+        return *this;
+    }
+    /*
+        QQQ copy these following method from  PackIoWrap to avoid inheritance
+        remove unnecessary methods later
+    */
+    const Record &record() const { return rec_; }
+    Record &record() { return rec_; }
+    const BlockData &blockData() const { return blockD_; }
+    BlockData &blockData() { return blockD_; }
+
+    // not use blockD_
+    bool isValid(bool isChecksum = true) const {
+        if (!rec_.isValid()) {
+            LOGd("invalid record.");
+            return false; }
+        if (isChecksum && rec_.hasDataForChecksum() &&
+            calcIoChecksum() != rec_.record().checksum) {
+            LOGd("invalid checksum expected %08x calculated %08x."
+                 , rec_.record().checksum, calcIoChecksum());
+            return false;
+        }
+        return true;
+    }
+    // not use blockD_
+    void printOneline(::FILE *fp = ::stdout) const {
+        rec_.printOneline(fp);
+    }
+    // not use blockD_
+    uint32_t calcIoChecksum() const {
+        return calcIoChecksum(rec_.salt());
+    }
+
+    // use blockD_
+    void print(::FILE *fp = ::stdout) const {
+        rec_.print(fp);
+        if (rec_.hasDataForChecksum() && rec_.ioSizePb() == blockD_.nBlocks()) {
+            ::fprintf(fp, "record_checksum: %08x\n"
+                      "calculated_checksum: %08x\n",
+                      rec_.record().checksum, calcIoChecksum());
+            for (size_t i = 0; i < rec_.ioSizePb(); i++) {
+                ::fprintf(fp, "----------block %zu----------\n", i);
+                cybozu::util::printByteArray(fp, blockD_.get(i), rec_.pbs());
+            }
+        }
+    }
+
+    // use blockD_
+    bool setChecksum() {
+        if (!rec_.hasDataForChecksum()) { return false; }
+        if (rec_.ioSizePb() != blockD_.nBlocks()) { return false; }
+        rec_.record().checksum = calcIoChecksum();
+        return true;
+    }
+    // use blockD_
+    uint32_t calcIoChecksum(uint32_t salt) const {
+        assert(rec_.hasDataForChecksum());
+        assert(0 < rec_.ioSizeLb());
+        if (blockD_.nBlocks() < rec_.ioSizePb()) {
+            throw RT_ERR("There is not sufficient data block.");
+        }
+        return blockD_.calcChecksum(rec_.ioSizeLb(), salt);
+    }
+};
+#endif
 
 }} //namespace walb::log
