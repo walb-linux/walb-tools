@@ -903,31 +903,6 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
         }
     }
 }
-/**
- * Logpack record and IO data.
- * This is just a wrapper of a record and a block data.
- *
- * Record: Record
- * BlockData: BlockData
- */
-struct PackIoWrap
-{
-    Record *recP_;
-    BlockData *blockD_;
-
-    const Record &record() const { return *recP_; }
-    Record &record() { return *recP_; }
-    const BlockData &blockData() const { return *blockD_; }
-    BlockData &blockData() { return *blockD_; }
-
-    void print(::FILE *fp = ::stdout) const { printRB(*recP_, *blockD_, fp); }
-    bool setChecksum() { return setChecksumRB(*recP_, *blockD_); }
-    uint32_t calcIoChecksum(uint32_t salt) const { return calcIoChecksumRB(*recP_, *blockD_, salt); }
-    uint32_t calcIoChecksum() const {
-        return calcIoChecksum(recP_->salt());
-    }
-    bool isValid(bool isChecksum = true) const { return isValidRB(*recP_, *blockD_, isChecksum); }
-};
 
 template<class R>
 uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)

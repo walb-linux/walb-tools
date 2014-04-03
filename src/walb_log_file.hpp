@@ -156,7 +156,6 @@ public:
         , recIdx_(0)
         , endLsid_(0) {}
 
-    ~Reader() noexcept {}
     /**
      * Read log file header.
      * This will throw EofError.
@@ -178,19 +177,24 @@ public:
      */
     template<class PackIo>
     bool readLog(PackIo &packIo) {
+        Record &rec = packIo.record();
+        BlockData &blockD = packIo.blockData();
+        return readLog(rec, blockD);
+    }
+
+    template<class R, class B>
+    bool readLog(R& rec, B& blockD) {
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
 
         /* Copy to the record. */
-        Record &rec = packIo.record();
         const LogPackHeader& packHeader = *pack_.get();
         rec.record() = packHeader.record(recIdx_);
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());
 
         /* Read to the blockD. */
-        BlockData &blockD = packIo.blockData();
         blockD.setPbs(pbs_);
         if (rec.hasData()) {
             blockD.resize(rec.ioSizePb());
@@ -206,24 +210,13 @@ public:
         }
 
         /* Validate. */
-        if (!packIo.isValid()) {
-            packIo.print();
+        if (!isValidRB(rec, blockD)) {
+            printRB(rec, blockD);
             LOGd("invalid...");
             throw InvalidIo();
         }
-
         recIdx_++;
         return true;
-    }
-    /**
-     * Read a log.
-     * RETURN:
-     *   true when successfully read.
-     *   false when the stream has reached the end.
-     */
-    bool readLog(Record &rec, BlockData &blockD) {
-        PackIoWrap packIo{&rec, &blockD};
-        return readLog(packIo);
     }
     /**
      * RETURN:

@@ -123,7 +123,7 @@ private:
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
                 BlockDataShared blockD(pbs);
-                PackIoWrap packIo{&rec, &blockD};
+//                PackIoWrap packIo{&rec, &blockD};
 
                 if (rec.hasData()) {
                     bool isAllZero = false;
@@ -142,9 +142,9 @@ private:
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    UNUSED bool ret = packIo.setChecksum();
+                    UNUSED bool ret = setChecksumRB(rec, blockD);
                     assert(ret);
-                    assert(packIo.isValid(true));
+                    assert(isValidRB(rec, blockD, true));
                 }
             }
             assert(blocks.size() == logh.totalIoSize());
