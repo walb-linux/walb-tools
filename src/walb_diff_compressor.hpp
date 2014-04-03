@@ -25,6 +25,8 @@ namespace walb {
 
 namespace compressor {
 
+using Buffer = std::vector<char>;
+
 /*
  * convert pack data
  * @param conv [in] PackCompressor or PackUncompressor
@@ -33,15 +35,14 @@ namespace compressor {
  * @return buffer of converted pack data
  */
 template<class Convertor>
-std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
+Buffer convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
 {
     const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
-    std::unique_ptr<char[]> ret(new char [WALB_DIFF_PACK_SIZE + maxOutSize]);
-    walb_diff_pack& outPack = *(walb_diff_pack*)ret.get();
+    Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize);
+    walb_diff_pack& outPack = *(walb_diff_pack*)ret.data();
     const char *in = inPackTop + WALB_DIFF_PACK_SIZE;
-    char *out = ret.get() + WALB_DIFF_PACK_SIZE;
+    char *out = &ret[WALB_DIFF_PACK_SIZE];
 
-    memset(ret.get(), 0, WALB_DIFF_PACK_SIZE);
     uint32_t outOffset = 0;
     for (int i = 0, n = inPack.n_records; i < n; i++) {
         const walb_diff_record& inRecord = inPack.record[i];
@@ -63,6 +64,7 @@ std::unique_ptr<char[]> convert(Convertor& conv, const char *inPackTop, size_t m
     outPack.total_size = outOffset;
     outPack.checksum = 0; // necessary to the following calcChecksum
     outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
+    ret.resize(WALB_DIFF_PACK_SIZE + outPack.total_size);
     return ret;
 }
 
@@ -78,7 +80,7 @@ inline uint32_t calcTotalBlockNum(const walb_diff_pack& pack)
 struct PackCompressorBase {
     virtual ~PackCompressorBase() {}
     virtual void convertRecord(char *out, size_t maxOutSize, walb_diff_record& outRecord, const char *in, const walb_diff_record& inRecord) = 0;
-    virtual std::unique_ptr<char[]> convert(const char *inPackTop) = 0;
+    virtual Buffer convert(const char *inPackTop) = 0;
 };
 
 } // compressor
@@ -119,7 +121,7 @@ public:
      * @param inPackTop [in] top address of pack data
      * @return buffer of compressed pack data
      */
-    std::unique_ptr<char[]> convert(const char *inPackTop)
+    compressor::Buffer convert(const char *inPackTop)
     {
         const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
         return compressor::convert(*this, inPackTop, inPack.total_size);
@@ -156,7 +158,7 @@ public:
      * @param inPackTop [in] top address of pack data
      * @return buffer of compressed pack data
      */
-    std::unique_ptr<char[]> convert(const char *inPackTop)
+    compressor::Buffer convert(const char *inPackTop)
     {
         const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
         const size_t uncompressedSize = compressor::calcTotalBlockNum(inPack) * 512;
@@ -166,8 +168,7 @@ public:
 
 namespace compressor_local {
 
-typedef std::unique_ptr<char[]> Buffer;
-typedef std::pair<Buffer, std::exception_ptr> MaybeBuffer;
+typedef std::pair<compressor::Buffer, std::exception_ptr> MaybeBuffer;
 
 class Queue {
     const std::atomic<bool> *pq_;
@@ -196,16 +197,16 @@ public:
     {
         avail_.notify_one();
     }
-    Buffer pop()
+    compressor::Buffer pop()
     {
         MaybeBuffer ret;
         {
             std::unique_lock<std::mutex> lk(m_);
             avail_.wait(lk, [this] {
-                return (!this->q_.empty() && (this->q_.front().first || this->q_.front().second))
+                return (!this->q_.empty() && (!this->q_.front().first.empty() || this->q_.front().second))
                     || (*this->pq_ && this->q_.empty());
             });
-            if (*pq_ && q_.empty()) return nullptr;
+            if (*pq_ && q_.empty()) return compressor::Buffer();
             ret = std::move(q_.front());
             q_.pop();
         }
@@ -227,7 +228,7 @@ private:
     std::atomic<bool> using_;
     Queue *que_;
     cybozu::Event startEv_;
-    Buffer inBuf_;
+    compressor::Buffer inBuf_;
     MaybeBuffer *outBuf_;
     EngineT(const EngineT&) = delete;
     void operator=(const EngineT&) = delete;
@@ -264,17 +265,17 @@ public:
              * case 1 (process task): set inBuf_ and outBuf_ and wakeup().
              * case 2 (quit): just call wakeup() wihtout setting inBuf_ and outBuf_.
              */
-            if (!inBuf_) {
+            if (inBuf_.empty()) {
                 que_->notify();
                 break;
             }
             assert(outBuf_);
             try {
-                outBuf_->first = e_->convert(inBuf_.get());
+                outBuf_->first = e_->convert(inBuf_.data());
             } catch (...) {
                 outBuf_->second = std::current_exception();
             }
-            inBuf_ = nullptr;
+            inBuf_.clear();
             outBuf_ = nullptr;
             using_ = false;
             que_->notify();
@@ -286,7 +287,7 @@ public:
     {
         startEv_.wakeup();
     }
-    bool tryToRun(MaybeBuffer *outBuf, Buffer& inBuf)
+    bool tryToRun(MaybeBuffer *outBuf, compressor::Buffer& inBuf)
     {
         if (using_.exchange(true)) return false;
         inBuf_ = std::move(inBuf);
@@ -304,7 +305,7 @@ class ConverterQueueT {
     std::atomic<bool> joined_;
     Queue que_;
     std::vector<Engine> enginePool_;
-    void runEngine(MaybeBuffer *outBuf, Buffer& inBuf)
+    void runEngine(MaybeBuffer *outBuf, compressor::Buffer& inBuf)
     {
         for (;;) {
             for (Engine& e : enginePool_) {
@@ -373,15 +374,15 @@ public:
      * return false if quit_
      * @param inBuf [in] not nullptr
      */
-    bool push(Buffer& inBuf)
+    bool push(compressor::Buffer& inBuf)
     {
-        if (!inBuf) throw cybozu::Exception("walb:ConverterQueueT:push:inBuf is empty");
+        if (inBuf.empty()) throw cybozu::Exception("walb:ConverterQueueT:push:inBuf is empty");
         if (quit_) return false;
         MaybeBuffer *outBuf = que_.push();
         runEngine(outBuf, inBuf); // no throw
         return true;
     }
-    bool push(Buffer&& inBuf)
+    bool push(compressor::Buffer&& inBuf)
     {
         return push(inBuf);
     }
@@ -389,9 +390,9 @@ public:
      * return nullptr if quit_ and queue is empty
      * otherwise return buffer after blocking until data comes
      */
-    Buffer pop()
+    compressor::Buffer pop()
     {
-        if (quit_ && que_.empty()) return nullptr;
+        if (quit_ && que_.empty()) return compressor::Buffer();
         return que_.pop();
     }
 };

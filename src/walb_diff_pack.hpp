@@ -357,14 +357,6 @@ public:
         reset();
         return ret;
     }
-    std::unique_ptr<char[]> getPackAsUniquePtr() {
-        packh_.updateChecksum();
-        assert(isValid());
-        std::unique_ptr<char[]> up(new char[data_.size()]);
-        ::memcpy(up.get(), &data_[0], data_.size());
-        reset();
-        return up;
-    }
     void reset() {
         data_.resize(::WALB_DIFF_PACK_SIZE);
         packh_.resetBuffer(&data_[0]);

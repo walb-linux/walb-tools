@@ -3,6 +3,8 @@
 #include <cybozu/xorshift.hpp>
 #include "walb_diff_compressor.hpp"
 
+using Buffer = walb::compressor::Buffer;
+
 void test(int mode)
 {
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
@@ -111,19 +113,20 @@ std::vector<std::vector<char>> generateRawPacks()
     return packV0;
 }
 
-void testPackCompression(int type, const char *rawPack)
+void testPackCompression(int type, const char *rawPack, size_t size)
 {
     walb::PackCompressor compr(type);
     walb::PackUncompressor ucompr(type);
 
     walb::diff::MemoryPack mpack0(rawPack);
     CYBOZU_TEST_ASSERT(mpack0.isValid());
+    CYBOZU_TEST_EQUAL(mpack0.size(), size);
 
-    std::unique_ptr<char[]> p1 = compr.convert(mpack0.rawPtr());
-    walb::diff::MemoryPack mpack1(p1.get());
+    Buffer p1 = compr.convert(mpack0.rawPtr());
+    walb::diff::MemoryPack mpack1(p1.data());
     CYBOZU_TEST_ASSERT(mpack1.isValid());
-    std::unique_ptr<char[]> p2 = ucompr.convert(mpack1.rawPtr());
-    walb::diff::MemoryPack mpack2(p2.get());
+    Buffer p2 = ucompr.convert(mpack1.rawPtr());
+    walb::diff::MemoryPack mpack2(p2.data());
     CYBOZU_TEST_ASSERT(mpack2.isValid());
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
@@ -139,7 +142,7 @@ void testPackCompression(int type, const char *rawPack)
 void testDiffCompression(int type)
 {
     for (std::vector<char> &pk : generateRawPacks()) {
-        testPackCompression(type, &pk[0]);
+        testPackCompression(type, &pk[0], pk.size());
     }
 }
 
@@ -150,7 +153,6 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
 }
 
-typedef std::unique_ptr<char[]> Buffer;
 static const uint32_t headerSize = 4;
 std::mutex g_mu;
 static cybozu::XorShift g_rg;
@@ -158,8 +160,8 @@ static cybozu::XorShift g_rg;
 size_t size(const Buffer& b)
 {
     uint32_t len;
-    if (!b) throw cybozu::Exception("size Buffer null");
-    memcpy(&len, b.get(), headerSize);
+    if (b.empty()) throw cybozu::Exception("size Buffer null");
+    memcpy(&len, b.data(), headerSize);
     return len;
 }
 
@@ -169,15 +171,15 @@ bool compare(const Buffer& lhs, const Buffer& rhs)
     const size_t rhsSize = size(rhs);
     printf("lhsSize=%d, rhsSize=%d\n", (int)lhsSize, (int)rhsSize); fflush(stdout);
     if (lhsSize != rhsSize) return false;
-    return memcmp(lhs.get(), rhs.get(), lhsSize) == 0;
+    return memcmp(lhs.data(), rhs.data(), lhsSize) == 0;
 }
 
 static Buffer copy(const char *buf)
 {
     uint32_t len;
     memcpy(&len, buf, headerSize);
-    Buffer ret(new char[headerSize + len]);
-    memcpy(ret.get(), buf, headerSize + len);
+    Buffer ret(headerSize + len);
+    memcpy(ret.data(), buf, headerSize + len);
     return ret;
 }
 static std::string create(uint32_t len, int idx)
@@ -197,7 +199,7 @@ static std::string create(uint32_t len, int idx)
 struct NoConverter : walb::compressor::PackCompressorBase {
     NoConverter(int, size_t) {}
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
-    std::unique_ptr<char[]> convert(const char *buf)
+    Buffer convert(const char *buf)
     {
         g_mu.lock();
         int wait = g_rg() % 100;
@@ -237,7 +239,7 @@ CYBOZU_TEST_AUTO(ConverterQueue)
         for (size_t i = 0; i < bufN; i++) {
             Buffer c = cv.pop();
             CYBOZU_TEST_EQUAL(size(c), len);
-            CYBOZU_TEST_ASSERT(memcmp(c.get(), &inData[i][0], len) == 0);
+            CYBOZU_TEST_ASSERT(memcmp(c.data(), &inData[i][0], len) == 0);
         }
     });
     pusht.join();
@@ -252,15 +254,15 @@ std::vector<Buffer> parallelConverter(
     const int level = 0;
     walb::ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
     std::exception_ptr ep;
-    std::vector<std::unique_ptr<char []> > packV1;
+    std::vector<Buffer> packV1;
 
     std::thread popper([&cq, &ep, &packV1, isFirstDelay]() {
             try {
                 if (!isFirstDelay) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
-                std::unique_ptr<char[]> p = cq.pop();
-                while (p) {
+                Buffer p = cq.pop();
+                while (!p.empty()) {
                     //::printf("poped %p\n", p.get());
                     packV1.push_back(std::move(p));
                     p = cq.pop();
@@ -300,8 +302,8 @@ CYBOZU_TEST_AUTO(convertNothing)
 
     std::thread popper([&cq, &ep]() {
             try {
-                std::unique_ptr<char[]> p = cq.pop();
-                while (p) {
+                Buffer p = cq.pop();
+                while (!p.empty()) {
                     /* do nothing */
                     p = cq.pop();
                 }
@@ -338,14 +340,12 @@ void testParallelCompressNothing(size_t maxQueueSize, size_t numThreads, int typ
 
 void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    std::vector<std::vector<char> > packV = generateRawPacks();
+    std::vector<Buffer> packV = generateRawPacks();
 
     /* Convert pack representation. */
     std::vector<Buffer> packV0;
-    for (std::vector<char> &v : packV) {
-        Buffer p(new char [v.size()]);
-        ::memcpy(p.get(), &v[0], v.size());
-        packV0.push_back(std::move(p));
+    for (const Buffer &v : packV) {
+        packV0.push_back(v);
     }
 
     std::vector<Buffer> packV1 =
@@ -357,7 +357,7 @@ void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type, bool
     /* Verify */
     CYBOZU_TEST_EQUAL(packV.size(), packV2.size());
     for (size_t i = 0; i < packV.size(); i++) {
-        CYBOZU_TEST_ASSERT(::memcmp(&packV[i][0], packV2[i].get(), packV[i].size()) == 0);
+        CYBOZU_TEST_ASSERT(::memcmp(&packV[i][0], packV2[i].data(), packV[i].size()) == 0);
     }
 }
 

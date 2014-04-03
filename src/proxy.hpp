@@ -921,25 +921,27 @@ inline bool sendWdiffs(
         if (packer.add(rec, io.get())) {
             continue;
         }
-        conv.push(packer.getPackAsUniquePtr());
+        conv.push(packer.getPackAsVector());
         pushedNum++;
         packer.reset();
         packer.add(rec, io.get());
         if (pushedNum < maxPushedNum) {
             continue;
         }
-        std::unique_ptr<char[]> p = conv.pop();
+        std::vector<char> v = conv.pop();
         ctrl.next();
-        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
+        sock.write(v.data(), v.size());
         pushedNum--;
     }
     if (!packer.empty()) {
-        conv.push(packer.getPackAsUniquePtr());
+        conv.push(packer.getPackAsVector());
     }
     conv.quit();
-    while (std::unique_ptr<char[]> p = conv.pop()) {
+    std::vector<char> v = conv.pop();
+    while (!v.empty()) {
         ctrl.next();
-        sock.write(p.get(), DiffPackHeader(p.get()).wholePackSize());
+        sock.write(v.data(), v.size());
+        v = conv.pop();
     }
     ctrl.end();
     packet::Ack(sock).recv();
