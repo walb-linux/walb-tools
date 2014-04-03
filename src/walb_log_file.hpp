@@ -175,15 +175,12 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    template<class PackIo>
-    bool readLog(PackIo &packIo) {
-        Record &rec = packIo.record();
-        BlockData &blockD = packIo.blockData();
-        return readLog(rec, blockD);
-    }
+    template<class BlockDataT>
+    bool readLog(PackIoRaw<BlockDataT>& packIo)
+    {
+        RecordRaw &rec = packIo.record();
+        BlockDataT &blockD = packIo.blockData();
 
-    template<class R, class B>
-    bool readLog(R& rec, B& blockD) {
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;

@@ -952,8 +952,8 @@ public:
         blockD_ = std::move(rhs.blockD_);
         return *this;
     }
-    Record &record() { return rec_; }
-    BlockData &blockData() { return blockD_; }
+    RecordRaw &record() { return rec_; }
+    BlockDataT &blockData() { return blockD_; }
 
     bool isValid(bool isChecksum = true) const { return isValidRB(rec_, blockD_, isChecksum); }
     void printOneline(::FILE *fp = ::stdout) const {
