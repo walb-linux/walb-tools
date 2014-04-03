@@ -180,12 +180,11 @@ public:
         if (!existsVolDir()) {
             throw cybozu::Exception(FUNC) << "not found volDir" << volDir.str();
         }
-        if (!lvExists()) {
-            throw cybozu::Exception(FUNC) << "not found base lv" << volId;
-        }
+        const bool existsLv = lvExists();
 
         v.push_back(fmt("volId %s", volId.c_str()));
-        uint64_t sizeLb = getLv().sizeLb();
+        uint64_t sizeLb = 0;
+        if (existsLv) sizeLb = getLv().sizeLb();
         const std::string sizeStr = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         v.push_back(fmt("size %" PRIu64 " %s", sizeLb, sizeStr.c_str()));
         const cybozu::Uuid uuid = getUuid();
