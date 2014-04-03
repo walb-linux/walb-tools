@@ -955,36 +955,6 @@ bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
  * This is copyable and movable.
  * BlockDataT: BlockDataVec or BlockDataShared.
  */
-#if 1
-template <class BlockDataT>
-class PackIoRaw : public PackIoWrap
-{
-private:
-    RecordRaw rec_;
-    BlockDataT blockD_;
-public:
-    PackIoRaw() : PackIoWrap{&rec_, &blockD_} {}
-    PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
-        : PackIoWrap{&rec_, &blockD_}
-        , rec_(rec), blockD_(std::move(blockD)) {}
-    PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : PackIoWrap{&rec_, &blockD_}, rec_(logh, pos), blockD_(logh.pbs()) {}
-    PackIoRaw(const PackIoRaw &rhs)
-        : PackIoWrap{&rec_, &blockD_}, rec_(rhs.rec_), blockD_(rhs.blockD_) {}
-    PackIoRaw(PackIoRaw &&rhs)
-        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
-    PackIoRaw &operator=(const PackIoRaw &rhs) {
-        rec_ = rhs.rec_;
-        blockD_ = rhs.blockD_;
-        return *this;
-    }
-    PackIoRaw &operator=(PackIoRaw &&rhs) {
-        rec_ = rhs.rec_;
-        blockD_ = std::move(rhs.blockD_);
-        return *this;
-    }
-};
-#else
 template <class BlockDataT>
 class PackIoRaw
 {
@@ -993,19 +963,10 @@ private:
     BlockDataT blockD_;
 public:
     PackIoRaw() {}
-    PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
-        : rec_(rec), blockD_(std::move(blockD)) {}
     PackIoRaw(const LogPackHeader &logh, size_t pos)
         : rec_(logh, pos), blockD_(logh.pbs()) {}
-    PackIoRaw(const PackIoRaw &rhs)
-        : rec_(rhs.rec_), blockD_(rhs.blockD_) {}
     PackIoRaw(PackIoRaw &&rhs)
-        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
-    PackIoRaw &operator=(const PackIoRaw &rhs) {
-        rec_ = rhs.rec_;
-        blockD_ = rhs.blockD_;
-        return *this;
-    }
+        : rec_(rhs.rec_), blockD_(std::move(rhs.blockD_)) {}
     PackIoRaw &operator=(PackIoRaw &&rhs) {
         rec_ = rhs.rec_;
         blockD_ = std::move(rhs.blockD_);
@@ -1013,11 +974,9 @@ public:
     }
     /*
         QQQ copy these following method from  PackIoWrap to avoid inheritance
-        remove unnecessary methods later
+        the following methods are all called
     */
-    const Record &record() const { return rec_; }
     Record &record() { return rec_; }
-    const BlockData &blockData() const { return blockD_; }
     BlockData &blockData() { return blockD_; }
 
     // not use blockD_
@@ -1057,13 +1016,6 @@ public:
     }
 
     // use blockD_
-    bool setChecksum() {
-        if (!rec_.hasDataForChecksum()) { return false; }
-        if (rec_.ioSizePb() != blockD_.nBlocks()) { return false; }
-        rec_.record().checksum = calcIoChecksum();
-        return true;
-    }
-    // use blockD_
     uint32_t calcIoChecksum(uint32_t salt) const {
         assert(rec_.hasDataForChecksum());
         assert(0 < rec_.ioSizeLb());
@@ -1073,6 +1025,5 @@ public:
         return blockD_.calcChecksum(rec_.ioSizeLb(), salt);
     }
 };
-#endif
 
 }} //namespace walb::log

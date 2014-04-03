@@ -141,7 +141,7 @@ private:
     uint32_t salt_;
     bool isEnd_;
 
-    std::shared_ptr<LogPackHeader> pack_;
+    std::unique_ptr<LogPackHeader> pack_;
     uint16_t recIdx_;
     uint64_t endLsid_;
 
@@ -176,7 +176,8 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(PackIoWrap &packIo) {
+    template<class PackIo>
+    bool readLog(PackIo &packIo) {
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
