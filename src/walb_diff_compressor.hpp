@@ -372,7 +372,7 @@ public:
     /*
      * push buffer and return true
      * return false if quit_
-     * @param inBuf [in] not nullptr
+     * @param inBuf [in] not empty
      */
     bool push(compressor::Buffer& inBuf)
     {
@@ -387,7 +387,7 @@ public:
         return push(inBuf);
     }
     /*
-     * return nullptr if quit_ and queue is empty
+     * return empty buffer if quit_ and queue is empty
      * otherwise return buffer after blocking until data comes
      */
     compressor::Buffer pop()
