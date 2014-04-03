@@ -50,7 +50,8 @@ struct ProxyVolState
 
     explicit ProxyVolState(const std::string &volId)
         : stopState(NotStopping), sm(mu), ac(mu)
-        , diffMgr(), diffMgrMap(), archiveSet() {
+        , diffMgr(), diffMgrMap(), archiveSet()
+        , lastWlogReceivedTime(0), lastWdiffSentTimeMap() {
         const struct StateMachine::Pair tbl[] = {
             { pClear, ptAddArchiveInfo },
             { ptAddArchiveInfo, pStopped },
