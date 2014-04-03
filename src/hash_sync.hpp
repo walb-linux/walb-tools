@@ -3,6 +3,7 @@
 #include "protocol.hpp"
 #include "murmurhash3.hpp"
 #include "walb_diff_pack.hpp"
+#include "walb_diff_compressor.hpp"
 #include "walb_logger.hpp"
 
 namespace walb {
@@ -20,194 +21,172 @@ struct Io
 
 } // namespace hash_sync_local
 
-/**
- * Walb hash-sync client helper.
- * This will receive hash arrays, send diff packs.
- *
- * Usage:
- *   (1) call start() to start worker threads.
- *   (2) call popHash(). If the returned value is true, goto (3) else (4).
- *   (3) call pushIo() if the corresponding hash is different. goto (2).
- *   (4) call sync() for successful end.
- *
- *   You can call fail() when an error ocurrs and stop all threads.
- */
-class HashSyncClient
+class SendHashWorker
 {
 private:
+    static constexpr char CLS[] = "SendHashWorker";
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
-    using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
-    using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
 
-    class SendPackWorker
-    {
-    private:
-        PackQ &inQ_;
-        packet::Packet packet_;
-        Logger &logger_;
-        static constexpr char CLS[] = "SendPackWorker";
-    public:
-        SendPackWorker(PackQ &inQ, cybozu::Socket &sock, Logger &logger)
-            : inQ_(inQ), packet_(sock), logger_(logger) {
-        }
-        void operator()() try {
-            packet::StreamControl ctrl(packet_.sock());
-            std::vector<char> packAsVec;
-            while (inQ_.pop(packAsVec)) {
-                ctrl.next();
-                packet_.write(packAsVec);
-            }
-            ctrl.end();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            try {
-                packet::StreamControl(packet_.sock()).error();
-            } catch (...) {}
-            logger_.error() << CLS << msg;
-            inQ_.fail();
-        }
-    };
-    class CreatePackWorker
-    {
-    private:
-        IoQ &inQ_;
-        PackQ &outQ_;
-        Logger &logger_;
-        static constexpr char CLS[] = "CreatePackWorker";
-    public:
-        CreatePackWorker(IoQ &inQ, PackQ &outQ, Logger &logger)
-            : inQ_(inQ), outQ_(outQ), logger_(logger) {
-        }
-        void operator()() try {
-            hash_sync_local::Io io;
-            while (inQ_.pop(io)) {
-                // Compress and add to packer.
-                // Packer is full, generate and push the pack.
-                // QQQ
-            }
-            // Packer is not empty, generate and push the pack.
-            // QQQ
-            outQ_.sync();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            logger_.error() << CLS << msg;
-            inQ_.fail();
-            outQ_.fail();
-        }
-    };
-    class ReceiveHashWorker
-    {
-    private:
-        HashQ &outQ_;
-        packet::Packet packet_;
-        Logger &logger_;
-        static constexpr char CLS[] = "ReceiveHashWorker";
-    public:
-        ReceiveHashWorker(HashQ &outQ, cybozu::Socket &sock, Logger &logger)
-            : outQ_(outQ), packet_(sock), logger_(logger) {
-        }
-        void operator()() try {
-            packet::StreamControl ctrl(packet_.sock());
-            cybozu::murmurhash3::Hash hash;
-            while (ctrl.isNext()) {
-                packet_.read(hash);
-                outQ_.push(hash);
-                ctrl.reset();
-            }
-            if (ctrl.isError()) {
-                throw cybozu::Exception(CLS) << "server sent an error";
-            }
-            assert(ctrl.isEnd());
-            outQ_.sync();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            logger_.error() << CLS << msg;
-            outQ_.fail();
-        }
-    };
-
-    cybozu::Socket &sock_;
+    HashQ &inQ_;
+    packet::Packet packet_;
     Logger &logger_;
-    std::atomic<bool> isEnd_;
-    std::atomic<bool> isFailed_;
-
-    HashQ hashQ_;
-    IoQ ioQ_;
-    PackQ packQ_;
-
-    cybozu::thread::ThreadRunner receiveHashThread_;
-    cybozu::thread::ThreadRunner createPackThread_;
-    cybozu::thread::ThreadRunner sendPackThread_;
-
-    static constexpr char CLS[] = "HashSyncClient";
 
 public:
-    HashSyncClient(cybozu::Socket &sock, Logger &logger)
-        : sock_(sock), logger_(logger)
-        , isEnd_(false), isFailed_(false)
-        , hashQ_(Q_SIZE), ioQ_(Q_SIZE), packQ_(Q_SIZE) {
+    SendHashWorker(HashQ &inQ, cybozu::Socket &sock, Logger &logger)
+        : inQ_(inQ), packet_(sock), logger_(logger) {
     }
-    ~HashSyncClient() noexcept {
-        if (!isEnd_ && !isFailed_) fail();
-    }
-    void start() {
-        receiveHashThread_.set(ReceiveHashWorker(hashQ_, sock_, logger_));
-        createPackThread_.set(CreatePackWorker(ioQ_, packQ_, logger_));
-        sendPackThread_.set(SendPackWorker(packQ_, sock_, logger_));
-        receiveHashThread_.start();
-        createPackThread_.start();
-        sendPackThread_.start();
-    }
-    bool popHash(cybozu::murmurhash3::Hash &hash) {
-        if (!hashQ_.pop(hash)) {
-            return false;
+    void operator()() try {
+        packet::StreamControl ctrl(packet_.sock());
+        cybozu::murmurhash3::Hash hash;
+        while (inQ_.pop(hash)) {
+            ctrl.next();
+            packet_.write(hash);
         }
-        return true;
-    }
-    void pushIo(uint64_t ioAddress, uint16_t ioBlocks, std::vector<char> &&data) {
-        ioQ_.push(hash_sync_local::Io{ioAddress, ioBlocks, std::move(data)});
-    }
-    void sync() {
-        ioQ_.sync();
-        isEnd_ = true;
-        joinWorkers();
-    }
-    void fail() {
-        isFailed_ = true;
-        hashQ_.fail();
-        ioQ_.fail();
-        packQ_.fail();
-        joinWorkers();
+        ctrl.end();
+    } catch (std::exception &e) {
+        handleError(e.what());
+        throw;
+    } catch (...) {
+        handleError("unknown error");
+        throw;
     }
 private:
-    void joinWorkers() noexcept {
-        putErrorLogIfNecessary(receiveHashThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(createPackThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(sendPackThread_.joinNoThrow(), logger_, CLS);
+    void handleError(const char *msg) noexcept {
+        try {
+            packet::StreamControl(packet_.sock()).error();
+        } catch (...) {}
+        logger_.error() << CLS << msg;
+        inQ_.fail();
     }
 };
 
+class ReceiveHashWorker
+{
+private:
+    static constexpr char CLS[] = "ReceiveHashWorker";
+    using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
+
+    HashQ &outQ_;
+    packet::Packet packet_;
+    Logger &logger_;
+
+public:
+    ReceiveHashWorker(HashQ &outQ, cybozu::Socket &sock, Logger &logger)
+        : outQ_(outQ), packet_(sock), logger_(logger) {
+    }
+    void operator()() try {
+        packet::StreamControl ctrl(packet_.sock());
+        cybozu::murmurhash3::Hash hash;
+        while (ctrl.isNext()) {
+            packet_.read(hash);
+            outQ_.push(hash);
+            ctrl.reset();
+        }
+        if (ctrl.isError()) {
+            throw cybozu::Exception(CLS) << "server sent an error";
+        }
+        assert(ctrl.isEnd());
+        outQ_.sync();
+    } catch (std::exception &e) {
+        handleError(e.what());
+        throw;
+    } catch (...) {
+        handleError("unknown error");
+        throw;
+    }
+private:
+    void handleError(const char *msg) noexcept {
+        logger_.error() << CLS << msg;
+        outQ_.fail();
+    }
+};
+
+class SendPackWorker
+{
+private:
+    static constexpr char CLS[] = "SendPackWorker";
+    using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
+
+    PackQ &inQ_;
+    packet::Packet packet_;
+    Logger &logger_;
+
+public:
+    SendPackWorker(PackQ &inQ, cybozu::Socket &sock, Logger &logger)
+        : inQ_(inQ), packet_(sock), logger_(logger) {
+    }
+    void operator()() try {
+        packet::StreamControl ctrl(packet_.sock());
+        std::vector<char> packAsVec;
+        while (inQ_.pop(packAsVec)) {
+            ctrl.next();
+            packet_.write(packAsVec);
+        }
+        ctrl.end();
+    } catch (std::exception &e) {
+        handleError(e.what());
+        throw;
+    } catch (...) {
+        handleError("unknown error");
+        throw;
+    }
+private:
+    void handleError(const char *msg) noexcept {
+        try {
+            packet::StreamControl(packet_.sock()).error();
+        } catch (...) {}
+        logger_.error() << CLS << msg;
+        inQ_.fail();
+    }
+};
+
+class ReceivePackWorker
+{
+private:
+    static constexpr char CLS[] = "ReceivePackWorker";
+    using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
+
+    PackQ &outQ_;
+    packet::Packet packet_;
+    Logger &logger_;
+
+public:
+    ReceivePackWorker(PackQ &outQ, cybozu::Socket &sock, Logger &logger)
+        : outQ_(outQ), packet_(sock), logger_(logger) {
+    }
+    void operator()() try {
+        packet::StreamControl ctrl(packet_.sock());
+        std::vector<char> packAsVec;
+        while (ctrl.isNext()) {
+            packet_.read(packAsVec);
+            outQ_.push(std::move(packAsVec));
+            ctrl.reset();
+        }
+        if (ctrl.isError()) {
+            throw cybozu::Exception(CLS) << "client sent an error";
+        }
+        assert(ctrl.isEnd());
+        outQ_.sync();
+    } catch (std::exception &e) {
+        handleError(e.what());
+        throw;
+    } catch (...) {
+        handleError("unknown error");
+        throw;
+    }
+private:
+    void handleError(const char *msg) noexcept {
+        logger_.error() << CLS << msg;
+        outQ_.fail();
+    }
+};
+
+/**
+ * Full scan a block device.
+ * Read blocks will be pushed to a thread-safe queue: outQ.
+ * Users can pop IO data from the queue.
+ * To notify an error to the worker, call outQ.fail().
+ */
 class ReadBdevWorker
 {
 private:
@@ -255,6 +234,176 @@ private:
 };
 
 /**
+ * Walb hash-sync client helper.
+ * This will receive hash arrays, send diff packs.
+ *
+ * Usage:
+ *   (1) call start() to start worker threads.
+ *   (2) call popHash(). If the returned value is true, goto (3) else (4).
+ *   (3) call pushIo() if the corresponding hash is different. goto (2).
+ *   (4) call sync() for successful end.
+ *
+ *   You can call fail() when an error ocurrs and stop all threads.
+ */
+class HashSyncClient
+{
+private:
+    using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
+    using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
+    using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
+
+    class CreatePackWorker
+    {
+    private:
+        static constexpr char CLS[] = "CreatePackWorker";
+
+        IoQ &inQ_;
+        ConverterQueue &outQ_;
+        Logger &logger_;
+
+    public:
+        CreatePackWorker(IoQ &inQ, ConverterQueue &outQ, Logger &logger)
+            : inQ_(inQ), outQ_(outQ), logger_(logger) {
+        }
+        void operator()() try {
+            hash_sync_local::Io io;
+            diff::Packer packer;
+            packer.setMaxNumRecords(Q_SIZE);
+            while (inQ_.pop(io)) {
+                if (packer.add(io.ioAddress, io.ioBlocks, &io.data[0])) {
+                    continue;
+                }
+                pushPack(packer);
+                packer.add(io.ioAddress, io.ioBlocks, &io.data[0]);
+            }
+            if (!packer.empty()) pushPack(packer);
+            outQ_.quit();
+        } catch (std::exception &e) {
+            handleError(e.what());
+            throw;
+        } catch (...) {
+            handleError("unknown error");
+            throw;
+        }
+    private:
+        void pushPack(diff::Packer &packer) {
+            if (!packer.isValid()) {
+                throw cybozu::Exception(CLS) << "invalid pack";
+            }
+            outQ_.push(packer.getPackAsVector());
+        }
+        void handleError(const char *msg) noexcept {
+            logger_.error() << CLS << msg;
+            inQ_.fail();
+            outQ_.quit();
+        }
+    };
+    class PassWorker
+    {
+    private:
+        static constexpr char CLS[] = "PassWorker";
+
+        ConverterQueue &inQ_;
+        PackQ &outQ_;
+        Logger &logger_;
+
+    public:
+        PassWorker(ConverterQueue &inQ, PackQ &outQ, Logger &logger)
+            : inQ_(inQ), outQ_(outQ), logger_(logger) {
+        }
+        void operator()() try {
+            std::vector<char> pack = inQ_.pop();
+            if (!pack.empty()) {
+                outQ_.push(std::move(pack));
+                pack = inQ_.pop();
+            }
+            outQ_.sync();
+        } catch (std::exception &e) {
+            handleError(e.what());
+            throw;
+        } catch (...) {
+            handleError("unknown error");
+            throw;
+        }
+    private:
+        void handleError(const char *msg) noexcept {
+            logger_.error() << CLS << msg;
+            inQ_.quit();
+            outQ_.fail();
+        }
+    };
+
+    cybozu::Socket &sock_;
+    Logger &logger_;
+    std::atomic<bool> isEnd_;
+    std::atomic<bool> isFailed_;
+
+    HashQ hashQ_;
+    IoQ ioQ_;
+    std::unique_ptr<ConverterQueue> convQueueP_; // diff pack converter.
+    PackQ packQ_;
+
+    cybozu::thread::ThreadRunner receiveHashThread_;
+    cybozu::thread::ThreadRunner createPackThread_;
+    cybozu::thread::ThreadRunner passThread_;
+    cybozu::thread::ThreadRunner sendPackThread_;
+
+    static constexpr char CLS[] = "HashSyncClient";
+
+public:
+    HashSyncClient(cybozu::Socket &sock, Logger &logger)
+        : sock_(sock), logger_(logger)
+        , isEnd_(false), isFailed_(false)
+        , hashQ_(Q_SIZE), ioQ_(Q_SIZE), packQ_(Q_SIZE) {
+    }
+    ~HashSyncClient() noexcept {
+        if (!isEnd_ && !isFailed_) fail();
+    }
+    void start() {
+        convQueueP_.reset(new ConverterQueue(Q_SIZE, 1, true, ::WALB_DIFF_CMPR_SNAPPY));
+        receiveHashThread_.set(ReceiveHashWorker(hashQ_, sock_, logger_));
+        createPackThread_.set(CreatePackWorker(ioQ_, *convQueueP_, logger_));
+        passThread_.set(PassWorker(*convQueueP_, packQ_, logger_));
+        sendPackThread_.set(SendPackWorker(packQ_, sock_, logger_));
+        receiveHashThread_.start();
+        createPackThread_.start();
+        passThread_.start();
+        sendPackThread_.start();
+    }
+    bool popHash(cybozu::murmurhash3::Hash &hash) {
+        if (!hashQ_.pop(hash)) return false;
+        return true;
+    }
+    void pushIo(uint64_t ioAddress, uint16_t ioBlocks, std::vector<char> &&data) {
+        ioQ_.push(hash_sync_local::Io{ioAddress, ioBlocks, std::move(data)});
+    }
+    void sync() {
+        ioQ_.sync();
+        isEnd_ = true;
+        joinWorkers();
+    }
+    void fail() {
+        isFailed_ = true;
+        hashQ_.fail();
+        ioQ_.fail();
+        if (convQueueP_) convQueueP_->quit();
+        packQ_.fail();
+        joinWorkers();
+    }
+private:
+    void joinWorkers() noexcept {
+        putErrorLogIfNecessary(receiveHashThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(createPackThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(passThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(sendPackThread_.joinNoThrow(), logger_, CLS);
+        if (convQueueP_) {
+            convQueueP_->join();
+            convQueueP_.reset();
+        }
+    }
+};
+
+/**
  * Walb hash-sync server helper.
  * This will send hash arrays, receive diff packs.
  * You need more two threads A and B:
@@ -272,94 +421,20 @@ private:
 class HashSyncServer
 {
 private:
+    static constexpr char CLS[] = "HashSyncServer";
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
     using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
-
-    class SendHashWorker
-    {
-    private:
-        HashQ &inQ_;
-        packet::Packet packet_;
-        Logger &logger_;
-        static constexpr char CLS[] = "SendHashWorker";
-    public:
-        SendHashWorker(HashQ &inQ, cybozu::Socket &sock, Logger &logger)
-            : inQ_(inQ), packet_(sock), logger_(logger) {
-        }
-        void operator()() try {
-            packet::StreamControl ctrl(packet_.sock());
-            cybozu::murmurhash3::Hash hash;
-            while (inQ_.pop(hash)) {
-                ctrl.next();
-                packet_.write(hash);
-            }
-            ctrl.end();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            try {
-                packet::StreamControl(packet_.sock()).error();
-            } catch (...) {}
-            logger_.error() << CLS << msg;
-            inQ_.fail();
-        }
-    };
-    class ReceivePackWorker
-    {
-    private:
-        PackQ &outQ_;
-        packet::Packet packet_;
-        Logger &logger_;
-        static constexpr char CLS[] = "ReceivePackWorker";
-    public:
-        ReceivePackWorker(PackQ &outQ, cybozu::Socket &sock, Logger &logger)
-            : outQ_(outQ), packet_(sock), logger_(logger) {
-        }
-        void operator()() try {
-            packet::StreamControl ctrl(packet_.sock());
-            std::vector<char> packAsVec;
-            while (ctrl.isNext()) {
-                packet_.read(packAsVec);
-                outQ_.push(std::move(packAsVec));
-                ctrl.reset();
-            }
-            if (ctrl.isError()) {
-                throw cybozu::Exception(CLS) << "client sent an error";
-            }
-            assert(ctrl.isEnd());
-            outQ_.sync();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            logger_.error() << CLS << msg;
-            outQ_.fail();
-        }
-    };
 
     cybozu::Socket &sock_;
     Logger &logger_;
     std::atomic<bool> isEnd_;
     std::atomic<bool> isFailed_;
 
-    HashQ hashQ_;
-    PackQ packQ_;
+    HashQ hashQ_; /* Users push hashes to the queue. */
+    PackQ packQ_; /* Users pop packs from the queue. */
 
     cybozu::thread::ThreadRunner sendHashThread_;
     cybozu::thread::ThreadRunner receivePackThread_;
-
-    static constexpr char CLS[] = "HashSyncServer";
 
 public:
     HashSyncServer(cybozu::Socket &sock, Logger &logger)
@@ -377,18 +452,18 @@ public:
         receivePackThread_.start();
     }
     void pushHash(const cybozu::murmurhash3::Hash &hash) {
-        cybozu::disable_warning_unused_variable(hash);
-        // QQQ
-    }
-    bool popPack(std::vector<char> &v) {
-        cybozu::disable_warning_unused_variable(v);
-        return false;
-        // QQQ
+        hashQ_.push(hash);
     }
     void sync() {
         hashQ_.sync();
-        isEnd_ = true;
-        joinWorkers();
+    }
+    bool popPack(std::vector<char> &v) {
+        if (!packQ_.pop(v)) {
+            isEnd_ = true;
+            joinWorkers();
+            return false;
+        }
+        return true;
     }
     void fail() {
         isFailed_ = true;
@@ -424,6 +499,7 @@ private:
     cybozu::util::BlockDevice bd_;
     uint64_t sizeLb_;
     uint16_t bulkLb_;
+    uint32_t hashSeed_;
 
     cybozu::thread::ThreadRunner readBdevThread_;
 
@@ -438,7 +514,7 @@ public:
     ~BdevHashArrayGenerator() noexcept {
         if (!isEnd_ && !isFailed_) fail();
     }
-    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb) {
+    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb, uint32_t hashSeed) {
         cybozu::util::BlockDevice bd(bdevPath, O_RDONLY);
         const uint64_t sizeLb2 = bd.getDeviceSize() / LOGICAL_BLOCK_SIZE;
         if (sizeLb2 != sizeLb) {
@@ -450,6 +526,7 @@ public:
         bd_ = std::move(bd);
         sizeLb_ = sizeLb;
         bulkLb_ = bulkLb;
+        hashSeed_ = hashSeed;
     }
     void start() {
         readBdevThread_.set(ReadBdevWorker(bd_, sizeLb_, bulkLb_, ioQ_, logger_));
@@ -465,8 +542,7 @@ public:
         ioAddress = io.ioAddress;
         ioBlocks = io.ioBlocks;
         data = std::move(io.data);
-        uint32_t seed = 0; // QQQ
-        cybozu::murmurhash3::Hasher hasher(seed);
+        cybozu::murmurhash3::Hasher hasher(hashSeed_);
         hash = hasher(&data[0], data.size());
         return true;
     }
