@@ -492,10 +492,9 @@ class Record
 {
 public:
     Record() = default;
-    Record(const Record &) = delete;
-    DISABLE_MOVE(Record);
     virtual ~Record() noexcept {}
-    virtual Record& operator=(const Record &) = 0;
+    DISABLE_COPY_AND_ASSIGN(Record);
+    DISABLE_MOVE(Record);
 
     /* Interface to access a record */
     virtual struct walb_log_record &record() = 0;
@@ -504,9 +503,6 @@ public:
     virtual size_t pos() const = 0;
     virtual unsigned int pbs() const = 0;
     virtual uint32_t salt() const = 0;
-    virtual void setPos(size_t) = 0;
-    virtual void setPbs(unsigned int) = 0;
-    virtual void setSalt(uint32_t) = 0;
 
     /* default implementation. */
     uint64_t lsid() const { return record().lsid; }
@@ -580,16 +576,7 @@ public:
         : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
     ~RecordRaw() noexcept override = default;
     RecordRaw(const RecordRaw &rhs)
-        : RecordRaw(static_cast<const Record &>(rhs)) {}
-    RecordRaw(const Record &rhs)
-        : Record(), pos_(rhs.pos()), pbs_(rhs.pbs()), salt_(rhs.salt()), rec_(rhs.record()) {}
-    Record& operator=(const Record &rhs) override {
-        setPos(rhs.pos());
-        setPbs(rhs.pbs());
-        setSalt(rhs.salt());
-        record() = rhs.record();
-        return *this;
-    }
+        : pos_(rhs.pos()), pbs_(rhs.pbs()), salt_(rhs.salt()), rec_(rhs.record()) {}
     DISABLE_MOVE(RecordRaw);
 
     void copyFrom(const LogPackHeader &logh, size_t pos) {
@@ -603,9 +590,9 @@ public:
     unsigned int pbs() const override { return pbs_; }
     uint32_t salt() const override { return salt_; }
 
-    void setPos(size_t pos0) override { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) override { pbs_ = pbs0; }
-    void setSalt(uint32_t salt0) override { salt_ = salt0; }
+    void setPos(size_t pos0) { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) { pbs_ = pbs0; }
+    void setSalt(uint32_t salt0) { salt_ = salt0; }
 
     const struct walb_log_record &record() const override { return rec_; }
     struct walb_log_record &record() override { return rec_; }
@@ -627,18 +614,9 @@ public:
     DISABLE_COPY_AND_ASSIGN(RecordWrap);
     DISABLE_MOVE(RecordWrap);
 
-    Record& operator=(const Record &rhs) override {
-        record() = rhs.record();
-        return *this;
-    }
-
     size_t pos() const { return pos_; }
     unsigned int pbs() const { return logh_->pbs(); }
     uint32_t salt() const { return logh_->salt(); }
-
-    void setPos(size_t pos0) { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) { if (pbs() != pbs0) throw RT_ERR("pbs differs."); }
-    void setSalt(uint32_t salt0) { if (salt() != salt0) throw RT_ERR("salt differs."); }
 
     const struct walb_log_record &record() const { return logh_->record(pos_); }
     struct walb_log_record &record() {
