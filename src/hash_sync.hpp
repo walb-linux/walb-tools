@@ -485,10 +485,10 @@ private:
  *
  *   You can call fail() to stop threads.
  */
-class BdevHashArrayGenerator
+class BdevReader
 {
 private:
-    static constexpr const char *NAME() { return "BdevHashArrayGenerator"; }
+    static constexpr const char *NAME() { return "BdevReader"; }
     using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
 
     Logger &logger_;
@@ -499,20 +499,19 @@ private:
     cybozu::util::BlockDevice bd_;
     uint64_t sizeLb_;
     uint16_t bulkLb_;
-    uint32_t hashSeed_;
 
     cybozu::thread::ThreadRunner readBdevThread_;
 
 public:
-    explicit BdevHashArrayGenerator(Logger &logger)
+    explicit BdevReader(Logger &logger)
         : logger_(logger)
         , isEnd_(false), isFailed_(false)
         , ioQ_(Q_SIZE) {
     }
-    ~BdevHashArrayGenerator() noexcept {
+    ~BdevReader() noexcept {
         if (!isEnd_ && !isFailed_) fail();
     }
-    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb, uint32_t hashSeed) {
+    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb) {
         cybozu::util::BlockDevice bd(bdevPath, O_RDONLY);
         const uint64_t sizeLb2 = bd.getDeviceSize() / LOGICAL_BLOCK_SIZE;
         if (sizeLb2 != sizeLb) {
@@ -524,13 +523,12 @@ public:
         bd_ = std::move(bd);
         sizeLb_ = sizeLb;
         bulkLb_ = bulkLb;
-        hashSeed_ = hashSeed;
     }
     void start() {
         readBdevThread_.set(ReadBdevWorker(bd_, sizeLb_, bulkLb_, ioQ_, logger_));
         readBdevThread_.start();
     }
-    bool pop(cybozu::murmurhash3::Hash &hash, uint64_t &ioAddress, uint16_t &ioBlocks, std::vector<char> &data) {
+    bool pop(uint64_t &ioAddress, uint16_t &ioBlocks, std::vector<char> &data) {
         hash_sync_local::Io io;
         if (!ioQ_.pop(io)) {
             isEnd_ = true;
@@ -540,14 +538,15 @@ public:
         ioAddress = io.ioAddress;
         ioBlocks = io.ioBlocks;
         data = std::move(io.data);
-        cybozu::murmurhash3::Hasher hasher(hashSeed_);
-        hash = hasher(&data[0], data.size());
         return true;
     }
     void fail() noexcept {
         isFailed_ = true;
         ioQ_.fail();
         joinWorkers();
+    }
+    bool isEnd() const {
+        return isEnd_;
     }
 private:
     void joinWorkers() noexcept {

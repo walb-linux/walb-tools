@@ -355,12 +355,40 @@ inline bool dirtyFullSyncServer(
 
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState, int fd)
+    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState, int fd)
 {
+#if 0
+    const char *const FUNC = __func__;
+
+    HashSyncServer server(pkt.sock(), logger);
+    server.start();
+
+    cybozu::util::FdWriter fdw(fd);
+    // write diff file header.
+
+    cybozu::util::ThreadRunner readThread;
+    readThread.set([&]() {
+            // QQQ
+        });
+
+    cybozu::util::ThreadRunner writeThread;
+    writeThread.set([&]() {
+            std::vector<char> pack;
+            while (server.popPack(pack)) {
+                fdw.write(pack.data(), pack.size());
+            }
+        });
+    writeThread.start();// QQQ
+
+    readThread.joinNoThrow();
+    writeThread.joinNoThrow();
+#endif
+
     cybozu::disable_warning_unused_variable(pkt);
     cybozu::disable_warning_unused_variable(volInfo);
     cybozu::disable_warning_unused_variable(sizeLb);
     cybozu::disable_warning_unused_variable(bulkLb);
+    cybozu::disable_warning_unused_variable(hashSeed);
     cybozu::disable_warning_unused_variable(stopState);
     cybozu::disable_warning_unused_variable(fd);
     // QQQ
@@ -427,8 +455,9 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     if (isFull) {
         isOk = archive_local::dirtyFullSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState);
     } else {
+        const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState, tmpFileP->fd());
+        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState, tmpFileP->fd());
     }
     if (!isOk) {
         logger.warn() << FUNC << "force stopped" << volId;

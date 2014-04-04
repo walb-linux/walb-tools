@@ -9,6 +9,7 @@
 #include "wdev_util.hpp"
 #include "walb_log_net.hpp"
 #include "action_counter.hpp"
+#include "hash_sync.hpp"
 
 namespace walb {
 
@@ -575,15 +576,36 @@ inline bool dirtyFullSyncClient(
 
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, StorageVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
+    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState, Logger &logger)
 {
-    // QQQ
-    cybozu::disable_warning_unused_variable(pkt);
-    cybozu::disable_warning_unused_variable(volInfo);
-    cybozu::disable_warning_unused_variable(sizeLb);
-    cybozu::disable_warning_unused_variable(bulkLb);
-    cybozu::disable_warning_unused_variable(stopState);
-    return false;
+    const char *const FUNC = __func__;
+    BdevReader reader(logger);
+    reader.setParams(volInfo.getWdevPath(), sizeLb, bulkLb);
+    reader.start();
+    HashSyncClient client(pkt.sock(), logger);
+    client.start();
+
+    cybozu::murmurhash3::Hasher hasher(hashSeed);
+    cybozu::murmurhash3::Hash hash0, hash1;
+    while (client.popHash(hash0)) {
+        if (stopState == ForceStopping || gs.forceQuit) {
+            reader.fail();
+            client.fail();
+            return false;
+        }
+        uint64_t ioAddress;
+        uint16_t ioBlocks;
+        std::vector<char> data;
+        const bool ret = reader.pop(ioAddress, ioBlocks, data);
+        if (!ret) throw cybozu::Exception(FUNC) << "reader pop failed";
+        hash1 = hasher(&data[0], data.size());
+        if (hash0 != hash1) {
+            client.pushIo(ioAddress, ioBlocks, std::move(data));
+        }
+    }
+    if (!reader.isEnd()) cybozu::Exception(FUNC) << "reader must end";
+    client.sync();
+    return true;
 }
 
 inline void backupClient(protocol::ServerParams &p, bool isFull)
@@ -660,7 +682,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
                 return;
             }
         } else {
-            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+            const uint32_t hashSeed = curTime;
+            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState, logger)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
