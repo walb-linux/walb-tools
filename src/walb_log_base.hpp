@@ -849,76 +849,56 @@ private:
     }
 };
 
-/**
- * Logpack record and IO data.
- * This is just a wrapper of a record and a block data.
- *
- * Record: Record
- * BlockData: BlockData
- */
-struct PackIoWrap
-{
-    Record *recP_;
-    BlockData *blockD_;
-
-    const Record &record() const { return *recP_; }
-    Record &record() { return *recP_; }
-    const BlockData &blockData() const { return *blockD_; }
-    BlockData &blockData() { return *blockD_; }
-
-    // not use blockD_
-    bool isValid(bool isChecksum = true) const {
-        if (!recP_->isValid()) {
-            LOGd("invalid record.");
-            return false; }
-        if (isChecksum && recP_->hasDataForChecksum() &&
-            calcIoChecksum() != recP_->record().checksum) {
+template<class R, class B>
+uint32_t calcIoChecksumRB(const R& rec, const B& block, uint32_t salt) {
+    assert(rec.hasDataForChecksum());
+    assert(0 < rec.ioSizeLb());
+    if (block.nBlocks() < rec.ioSizePb()) {
+        throw RT_ERR("There is not sufficient data block.");
+    }
+    return block.calcChecksum(rec.ioSizeLb(), salt);
+}
+template<class R, class B>
+uint32_t calcIoChecksumRB(const R& rec, const B& block) {
+    return calcIoChecksumRB(rec, block, rec.salt());
+}
+template<class R, class B>
+bool setChecksumRB(R& rec, const B& block) {
+    if (!rec.hasDataForChecksum()) { return false; }
+    if (rec.ioSizePb() != block.nBlocks()) { return false; }
+    rec.record().checksum = calcIoChecksumRB(rec, block);
+    return true;
+}
+template<class R, class B>
+bool isValidRB(const R& rec, const B& block, bool isChecksum = true) {
+    if (!rec.isValid()) {
+        LOGd("invalid record.");
+        return false;
+    }
+    if (isChecksum && rec.hasDataForChecksum()) {
+        const uint32_t sum = calcIoChecksumRB(rec, block);
+        if (rec.record().checksum != sum) {
             LOGd("invalid checksum expected %08x calculated %08x."
-                 , recP_->record().checksum, calcIoChecksum());
+                , rec.record().checksum, sum);
             return false;
         }
-        return true;
     }
-    // not use blockD_
-    void printOneline(::FILE *fp = ::stdout) const {
-        recP_->printOneline(fp);
-    }
-    // not use blockD_
-    uint32_t calcIoChecksum() const {
-        return calcIoChecksum(recP_->salt());
-    }
-
-    // use blockD_
-    void print(::FILE *fp = ::stdout) const {
-        recP_->print(fp);
-        if (recP_->hasDataForChecksum() && recP_->ioSizePb() == blockD_->nBlocks()) {
-            ::fprintf(fp, "record_checksum: %08x\n"
-                      "calculated_checksum: %08x\n",
-                      recP_->record().checksum, calcIoChecksum());
-            for (size_t i = 0; i < recP_->ioSizePb(); i++) {
-                ::fprintf(fp, "----------block %zu----------\n", i);
-                cybozu::util::printByteArray(fp, blockD_->get(i), recP_->pbs());
-            }
+    return true;
+}
+template<class R, class B>
+inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
+{
+    rec.print(fp);
+    if (rec.hasDataForChecksum() && rec.ioSizePb() == block.nBlocks()) {
+        ::fprintf(fp, "record_checksum: %08x\n"
+                  "calculated_checksum: %08x\n",
+                  rec.record().checksum, calcIoChecksumRB(rec, block));
+        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+            ::fprintf(fp, "----------block %zu----------\n", i);
+            cybozu::util::printByteArray(fp, block.get(i), rec.pbs());
         }
     }
-
-    // use blockD_
-    bool setChecksum() {
-        if (!recP_->hasDataForChecksum()) { return false; }
-        if (recP_->ioSizePb() != blockD_->nBlocks()) { return false; }
-        recP_->record().checksum = calcIoChecksum();
-        return true;
-    }
-    // use blockD_
-    uint32_t calcIoChecksum(uint32_t salt) const {
-        assert(recP_->hasDataForChecksum());
-        assert(0 < recP_->ioSizeLb());
-        if (blockD_->nBlocks() < recP_->ioSizePb()) {
-            throw RT_ERR("There is not sufficient data block.");
-        }
-        return blockD_->calcChecksum(recP_->ioSizeLb(), salt);
-    }
-};
+}
 
 template<class R>
 uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
@@ -952,32 +932,33 @@ bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
  * BlockDataT: BlockDataVec or BlockDataShared.
  */
 template <class BlockDataT>
-class PackIoRaw : public PackIoWrap
+class PackIoRaw
 {
 private:
     RecordRaw rec_;
     BlockDataT blockD_;
 public:
-    PackIoRaw() : PackIoWrap{&rec_, &blockD_} {}
-    PackIoRaw(const RecordRaw &rec, BlockDataT &&blockD)
-        : PackIoWrap{&rec_, &blockD_}
-        , rec_(rec), blockD_(std::move(blockD)) {}
+    PackIoRaw() {}
     PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : PackIoWrap{&rec_, &blockD_}, rec_(logh, pos), blockD_(logh.pbs()) {}
-    PackIoRaw(const PackIoRaw &rhs)
-        : PackIoWrap{&rec_, &blockD_}, rec_(rhs.rec_), blockD_(rhs.blockD_) {}
+        : rec_(logh, pos), blockD_(logh.pbs()) {}
     PackIoRaw(PackIoRaw &&rhs)
-        : PackIoRaw{rhs.rec_, std::move(rhs.blockD_)} {}
-    PackIoRaw &operator=(const PackIoRaw &rhs) {
-        rec_ = rhs.rec_;
-        blockD_ = rhs.blockD_;
-        return *this;
-    }
+        : rec_(rhs.rec_), blockD_(std::move(rhs.blockD_)) {}
     PackIoRaw &operator=(PackIoRaw &&rhs) {
         rec_ = rhs.rec_;
         blockD_ = std::move(rhs.blockD_);
         return *this;
     }
+    RecordRaw &record() { return rec_; }
+    BlockDataT &blockData() { return blockD_; }
+
+    bool isValid(bool isChecksum = true) const { return isValidRB(rec_, blockD_, isChecksum); }
+    void printOneline(::FILE *fp = ::stdout) const {
+        rec_.printOneline(fp);
+    }
+    uint32_t calcIoChecksum(uint32_t salt) const { return calcIoChecksumRB(rec_, blockD_, salt); }
+    uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec_, blockD_);
+    }
+    void print(::FILE *fp = ::stdout) const { printRB(rec_, blockD_, fp); }
 };
 
 }} //namespace walb::log

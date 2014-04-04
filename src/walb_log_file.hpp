@@ -141,7 +141,7 @@ private:
     uint32_t salt_;
     bool isEnd_;
 
-    std::shared_ptr<LogPackHeader> pack_;
+    std::unique_ptr<LogPackHeader> pack_;
     uint16_t recIdx_;
     uint64_t endLsid_;
 
@@ -156,7 +156,6 @@ public:
         , recIdx_(0)
         , endLsid_(0) {}
 
-    ~Reader() noexcept {}
     /**
      * Read log file header.
      * This will throw EofError.
@@ -176,20 +175,23 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(PackIoWrap &packIo) {
+    template<class BlockDataT>
+    bool readLog(PackIoRaw<BlockDataT>& packIo)
+    {
+        RecordRaw &rec = packIo.record();
+        BlockDataT &blockD = packIo.blockData();
+
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
 
         /* Copy to the record. */
-        Record &rec = packIo.record();
         const LogPackHeader& packHeader = *pack_.get();
         rec.record() = packHeader.record(recIdx_);
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());
 
         /* Read to the blockD. */
-        BlockData &blockD = packIo.blockData();
         blockD.setPbs(pbs_);
         if (rec.hasData()) {
             blockD.resize(rec.ioSizePb());
@@ -205,24 +207,13 @@ public:
         }
 
         /* Validate. */
-        if (!packIo.isValid()) {
-            packIo.print();
+        if (!isValidRB(rec, blockD)) {
+            printRB(rec, blockD);
             LOGd("invalid...");
             throw InvalidIo();
         }
-
         recIdx_++;
         return true;
-    }
-    /**
-     * Read a log.
-     * RETURN:
-     *   true when successfully read.
-     *   false when the stream has reached the end.
-     */
-    bool readLog(Record &rec, BlockData &blockD) {
-        PackIoWrap packIo{&rec, &blockD};
-        return readLog(packIo);
     }
     /**
      * RETURN:

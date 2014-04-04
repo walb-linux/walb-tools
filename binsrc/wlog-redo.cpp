@@ -476,7 +476,7 @@ private:
     size_t nDiscard_;
     size_t nPadding_;
 
-    using PackIo = walb::log::PackIoRaw<walb::log::BlockDataVec>;
+    using PackIoRaw = walb::log::PackIoRaw<walb::log::BlockDataVec>;
 
 public:
     WalbLogApplyer(
@@ -529,7 +529,7 @@ public:
         uint64_t redoLsid = beginLsid;
 
         while (!reader.isEnd()) {
-            PackIo packIo;
+            PackIoRaw packIo;
             if (config_.isVerbose() && reader.isFirstInPack()) {
                 reader.packHeader().printShort();
             }
@@ -581,7 +581,7 @@ private:
     /**
      * Redo a discard log by issuing discard command.
      */
-    void redoDiscard(PackIo &packIo) {
+    void redoDiscard(PackIoRaw &packIo) {
         const walb::log::Record &rec = packIo.record();
         assert(config_.isDiscard());
         assert(rec.isDiscard());
@@ -790,7 +790,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(PackIo &packIo) {
+    void redoNormalIo(PackIoRaw &packIo) {
         const walb::log::Record &rec = packIo.record();
         assert(rec.isExist());
         assert(!rec.isPadding());
@@ -852,7 +852,7 @@ private:
     /**
      * Redo a logpack data.
      */
-    void redoPack(PackIo &packIo) {
+    void redoPack(PackIoRaw &packIo) {
         const walb::log::Record &rec = packIo.record();
         assert(rec.isExist());
 
