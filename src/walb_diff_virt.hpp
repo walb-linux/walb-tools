@@ -42,12 +42,12 @@ private:
 
 public:
     /**
-     * @inputFd a base image file descriptor.
+     * @baseFd a base image file descriptor.
      *   stdin (non-seekable) or a raw image file or a block device.
      * @wdiffPaths walb diff files. Each wdiff is sorted by time.
      */
-    VirtualFullScanner(int inputFd, const std::vector<std::string> &wdiffPaths)
-        : reader_(inputFd)
+    VirtualFullScanner(int baseFd, const std::vector<std::string> &wdiffPaths)
+        : reader_(baseFd)
         , isInputFdSeekable_(reader_.seekable())
         , bufForSkip_(allocateBufForSkipStatic(isInputFdSeekable_))
         , merger_()
@@ -58,6 +58,24 @@ public:
         , emptyWdiff_(wdiffPaths.empty()) {
         if (!emptyWdiff_) {
             merger_.addWdiffs(wdiffPaths);
+            merger_.prepare();
+        }
+    }
+    /**
+     * @ops must opened wdiff file descriptor list.
+     */
+    VirtualFullScanner(int baseFd, std::vector<cybozu::util::FileOpener> &ops)
+        : reader_(baseFd)
+        , isInputFdSeekable_(reader_.seekable())
+        , bufForSkip_(allocateBufForSkipStatic(isInputFdSeekable_))
+        , merger_()
+        , addr_(0)
+        , recIo_()
+        , offInIo_(0)
+        , isEndDiff_(false)
+        , emptyWdiff_(ops.empty()) {
+        if (!emptyWdiff_) {
+            merger_.addWdiffs(std::move(ops));
             merger_.prepare();
         }
     }
