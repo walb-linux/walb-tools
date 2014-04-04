@@ -24,7 +24,7 @@ struct Io
 class SendHashWorker
 {
 private:
-    static constexpr char CLS[] = "SendHashWorker";
+    static constexpr const char *NAME() { return "SendHashWorker"; }
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
 
     HashQ &inQ_;
@@ -55,7 +55,7 @@ private:
         try {
             packet::StreamControl(packet_.sock()).error();
         } catch (...) {}
-        logger_.error() << CLS << msg;
+        logger_.error() << NAME() << msg;
         inQ_.fail();
     }
 };
@@ -63,7 +63,7 @@ private:
 class ReceiveHashWorker
 {
 private:
-    static constexpr char CLS[] = "ReceiveHashWorker";
+    static constexpr const char *NAME() { return "ReceiveHashWorker"; }
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
 
     HashQ &outQ_;
@@ -83,7 +83,7 @@ public:
             ctrl.reset();
         }
         if (ctrl.isError()) {
-            throw cybozu::Exception(CLS) << "server sent an error";
+            throw cybozu::Exception(NAME()) << "server sent an error";
         }
         assert(ctrl.isEnd());
         outQ_.sync();
@@ -96,7 +96,7 @@ public:
     }
 private:
     void handleError(const char *msg) noexcept {
-        logger_.error() << CLS << msg;
+        logger_.error() << NAME() << msg;
         outQ_.fail();
     }
 };
@@ -104,7 +104,7 @@ private:
 class SendPackWorker
 {
 private:
-    static constexpr char CLS[] = "SendPackWorker";
+    static constexpr const char *NAME() { return "SendPackWorker"; }
     using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
 
     PackQ &inQ_;
@@ -135,7 +135,7 @@ private:
         try {
             packet::StreamControl(packet_.sock()).error();
         } catch (...) {}
-        logger_.error() << CLS << msg;
+        logger_.error() << NAME() << msg;
         inQ_.fail();
     }
 };
@@ -143,7 +143,7 @@ private:
 class ReceivePackWorker
 {
 private:
-    static constexpr char CLS[] = "ReceivePackWorker";
+    static constexpr const char *NAME() { return "ReceivePackWorker"; }
     using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
 
     PackQ &outQ_;
@@ -163,7 +163,7 @@ public:
             ctrl.reset();
         }
         if (ctrl.isError()) {
-            throw cybozu::Exception(CLS) << "client sent an error";
+            throw cybozu::Exception(NAME()) << "client sent an error";
         }
         assert(ctrl.isEnd());
         outQ_.sync();
@@ -176,7 +176,7 @@ public:
     }
 private:
     void handleError(const char *msg) noexcept {
-        logger_.error() << CLS << msg;
+        logger_.error() << NAME() << msg;
         outQ_.fail();
     }
 };
@@ -190,6 +190,7 @@ private:
 class ReadBdevWorker
 {
 private:
+    static constexpr const char *NAME() { return "ReadBdevWorker"; }
     using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
 
     cybozu::util::BlockDevice &bd_;
@@ -197,7 +198,6 @@ private:
     const uint16_t bulkLb_;
     IoQ &outQ_;
     Logger &logger_;
-    static constexpr char CLS[] = "BdevReader";
 
 public:
     ReadBdevWorker(cybozu::util::BlockDevice &bd, uint64_t sizeLb, uint16_t bulkLb, IoQ &outQ, Logger &logger)
@@ -228,7 +228,7 @@ public:
     }
 private:
     void handleError(const char *msg) noexcept {
-        logger_.error() << CLS << msg;
+        logger_.error() << NAME() << msg;
         outQ_.fail();
     }
 };
@@ -248,6 +248,7 @@ private:
 class HashSyncClient
 {
 private:
+    static constexpr const char *NAME() { return "HashSyncClient"; }
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
     using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
     using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
@@ -255,7 +256,7 @@ private:
     class CreatePackWorker
     {
     private:
-        static constexpr char CLS[] = "CreatePackWorker";
+        static constexpr const char *NAME() { return "CreatePackWorker"; }
 
         IoQ &inQ_;
         ConverterQueue &outQ_;
@@ -288,12 +289,12 @@ private:
     private:
         void pushPack(diff::Packer &packer) {
             if (!packer.isValid()) {
-                throw cybozu::Exception(CLS) << "invalid pack";
+                throw cybozu::Exception(NAME()) << "invalid pack";
             }
             outQ_.push(packer.getPackAsVector());
         }
         void handleError(const char *msg) noexcept {
-            logger_.error() << CLS << msg;
+            logger_.error() << NAME() << msg;
             inQ_.fail();
             outQ_.quit();
         }
@@ -301,7 +302,7 @@ private:
     class PassWorker
     {
     private:
-        static constexpr char CLS[] = "PassWorker";
+        static constexpr const char *NAME() { return "PassWorker"; }
 
         ConverterQueue &inQ_;
         PackQ &outQ_;
@@ -327,7 +328,7 @@ private:
         }
     private:
         void handleError(const char *msg) noexcept {
-            logger_.error() << CLS << msg;
+            logger_.error() << NAME() << msg;
             inQ_.quit();
             outQ_.fail();
         }
@@ -347,8 +348,6 @@ private:
     cybozu::thread::ThreadRunner createPackThread_;
     cybozu::thread::ThreadRunner passThread_;
     cybozu::thread::ThreadRunner sendPackThread_;
-
-    static constexpr char CLS[] = "HashSyncClient";
 
 public:
     HashSyncClient(cybozu::Socket &sock, Logger &logger)
@@ -392,10 +391,10 @@ public:
     }
 private:
     void joinWorkers() noexcept {
-        putErrorLogIfNecessary(receiveHashThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(createPackThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(passThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(sendPackThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(receiveHashThread_.joinNoThrow(), logger_, NAME());
+        putErrorLogIfNecessary(createPackThread_.joinNoThrow(), logger_, NAME());
+        putErrorLogIfNecessary(passThread_.joinNoThrow(), logger_, NAME());
+        putErrorLogIfNecessary(sendPackThread_.joinNoThrow(), logger_, NAME());
         if (convQueueP_) {
             convQueueP_->join();
             convQueueP_.reset();
@@ -416,12 +415,12 @@ private:
  *   (3) A call pushHash() repeatedly. finally call sync().
  *   (4) B call popPack() repeatedly until false is returned.
  *
- *   You can call fail() to stop all threads when an error ocurrs.
+ *   You can call fail() to stop all threads when an error occurs.
  */
 class HashSyncServer
 {
 private:
-    static constexpr char CLS[] = "HashSyncServer";
+    static constexpr const char *NAME() { return "HashSyncServer"; }
     using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
     using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
 
@@ -473,8 +472,8 @@ public:
     }
 private:
     void joinWorkers() noexcept {
-        putErrorLogIfNecessary(sendHashThread_.joinNoThrow(), logger_, CLS);
-        putErrorLogIfNecessary(receivePackThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(sendHashThread_.joinNoThrow(), logger_, NAME());
+        putErrorLogIfNecessary(receivePackThread_.joinNoThrow(), logger_, NAME());
     }
 };
 
@@ -489,6 +488,7 @@ private:
 class BdevHashArrayGenerator
 {
 private:
+    static constexpr const char *NAME() { return "BdevHashArrayGenerator"; }
     using IoQ = cybozu::thread::BoundedQueue<hash_sync_local::Io>;
 
     Logger &logger_;
@@ -503,8 +503,6 @@ private:
 
     cybozu::thread::ThreadRunner readBdevThread_;
 
-    static constexpr char CLS[] = "BdevHashArrayGenerator";
-
 public:
     explicit BdevHashArrayGenerator(Logger &logger)
         : logger_(logger)
@@ -518,10 +516,10 @@ public:
         cybozu::util::BlockDevice bd(bdevPath, O_RDONLY);
         const uint64_t sizeLb2 = bd.getDeviceSize() / LOGICAL_BLOCK_SIZE;
         if (sizeLb2 != sizeLb) {
-            throw cybozu::Exception(CLS) << "wrong sizeLb" << sizeLb2 << sizeLb;
+            throw cybozu::Exception(NAME()) << "wrong sizeLb" << sizeLb2 << sizeLb;
         }
         if (bulkLb == 0) {
-            throw cybozu::Exception(CLS) << "bulkLb is 0";
+            throw cybozu::Exception(NAME()) << "bulkLb is 0";
         }
         bd_ = std::move(bd);
         sizeLb_ = sizeLb;
@@ -553,7 +551,7 @@ public:
     }
 private:
     void joinWorkers() noexcept {
-        putErrorLogIfNecessary(readBdevThread_.joinNoThrow(), logger_, CLS);
+        putErrorLogIfNecessary(readBdevThread_.joinNoThrow(), logger_, NAME());
     }
 };
 
