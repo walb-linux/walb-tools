@@ -366,15 +366,16 @@ public:
         }
         std::vector<BlockDataShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
-            const RecordWrap rec(&header, i);
+            const LogRecord &rec = header.record(i);
             BlockDataShared blockD(pbs_);
             if (rec.hasData()) {
-                for (size_t j = 0; j < rec.ioSizePb(); j++) {
+                const size_t ioSizePb = rec.ioSizePb(pbs_);
+                for (size_t j = 0; j < ioSizePb; j++) {
                     blockD.addBlock(std::move(blocks.front()));
                     blocks.pop();
                 }
             }
-            if (!isValidRecordAndBlockData(rec, blockD)) {
+            if (!isValidRecordAndBlockData(rec, blockD, header.salt())) {
                 throw cybozu::Exception("writePack:invalid rec/blockD");
             }
             v.push_back(std::move(blockD));

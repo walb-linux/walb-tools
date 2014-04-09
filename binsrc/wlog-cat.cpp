@@ -239,7 +239,7 @@ private:
      * Read a logpack data.
      */
     void readLogpackData(PackIoRaw& packIo) {
-        const walb::log::Record &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.record();
         if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         readAheadLoose();

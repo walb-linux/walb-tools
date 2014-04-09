@@ -178,7 +178,7 @@ private:
     void readPackIo(LogPackHeader &logh, std::queue<PackIoRaw> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIoRaw packIo(logh, i);
-            const walb::log::Record &rec = packIo.record();
+            const walb::log::RecordRaw &rec = packIo.record();
             if (!rec.hasData()) { continue; }
             const uint64_t endLsid = rec.lsid() + rec.ioSizePb();
             for (uint64_t lsid = rec.lsid(); lsid < endLsid; lsid++) {

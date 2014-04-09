@@ -772,11 +772,12 @@ inline void readLogPackHeader(device::AsyncWldevReader &reader, LogPackHeader &p
 
 inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, log::BlockDataShared &blockD)
 {
-    const log::RecordWrap lrec(&packH, recIdx);
+    const LogRecord &lrec = packH.record(recIdx);
     if (!lrec.hasData()) return;
 
-    blockD.resize(lrec.ioSizePb());
-    for (size_t i = 0; i < lrec.ioSizePb(); i++) {
+    const size_t ioSizePb = lrec.ioSizePb(packH.pbs());
+    blockD.resize(ioSizePb);
+    for (size_t i = 0; i < ioSizePb; i++) {
         reader.read((char *)blockD.get(i), 1);
     }
     reader.readAhead();

@@ -25,15 +25,9 @@
 
 namespace walb {
 
-template<class T>
-struct LogRecord : walb_log_record
+struct LogRecord : public walb_log_record
 {
-public:
-//    uint64_t lsid() const { return lsid; }
-    uint16_t lsidLocal() const { return lsid_local; }
-//    uint32_t checksum() const { return checksum; }
-//    uint64_t offset() const { return offset; }
-    uint64_t packLsid() const { return lsid - lsidLocal(); }
+    uint64_t packLsid() const { return lsid - lsid_local; }
     bool isExist() const {
         return ::test_bit_u32(LOG_RECORD_EXIST, &flags);
     }
@@ -49,17 +43,6 @@ public:
     bool hasDataForChecksum() const {
         return isExist() && !isDiscard() && !isPadding();
     }
-    unsigned int ioSizeLb() const { return io_size; }
-    unsigned int ioSizePb() const { return ::capacity_pb(static_cast<const T&>(*this).pbs(), ioSizeLb()); }
-    bool isValid() const { return ::is_valid_log_record_const(this); }
-
-    virtual void print(::FILE *fp = ::stdout) const {
-        printLogRecord(fp, static_cast<const T&>(*this).pos(), this);
-    }
-    virtual void printOneline(::FILE *fp = ::stdout) const {
-        printLogRecordOneline(fp, static_cast<const T&>(*this).pos(), this);
-    }
-
     void setExist() {
         ::set_bit_u32(LOG_RECORD_EXIST, &flags);
     }
@@ -78,6 +61,11 @@ public:
     void clearDiscard() {
         ::clear_bit_u32(LOG_RECORD_DISCARD, &flags);
     }
+    bool isValid() const { return ::is_valid_log_record_const(this); }
+    uint32_t ioSizePb(uint32_t pbs) const {
+        return ::capacity_pb(pbs, io_size);
+    }
+    uint32_t ioSizeLb() const { return io_size; }
 };
 
 namespace log {
@@ -88,8 +76,7 @@ public:
     const char *what() const noexcept override { return "invalid logpack IO."; }
 };
 
-inline void printRecord(
-    ::FILE *fp, size_t idx, const struct walb_log_record &rec)
+inline void printRecord(::FILE *fp, size_t idx, const LogRecord &rec)
 {
     ::fprintf(fp,
               "record %zu\n"
@@ -104,14 +91,13 @@ inline void printRecord(
               , idx
               , rec.checksum, rec.checksum
               , rec.lsid, rec.lsid_local
-              , ::test_bit_u32(LOG_RECORD_EXIST, &rec.flags)
-              , ::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)
-              , ::test_bit_u32(LOG_RECORD_DISCARD, &rec.flags)
+              , rec.isExist()
+              , rec.isPadding()
+              , rec.isDiscard()
               , rec.offset, rec.io_size);
 }
 
-inline void printRecordOneline(
-    ::FILE *fp, size_t idx, const struct walb_log_record &rec)
+inline void printRecordOneline(::FILE *fp, size_t idx, const LogRecord &rec)
 {
     ::fprintf(fp,
               "wlog_rec %2zu:\t"
@@ -120,9 +106,9 @@ inline void printRecordOneline(
               , idx
               , rec.lsid, rec.lsid_local
               , rec.offset, rec.io_size
-              , ::test_bit_u32(LOG_RECORD_EXIST, &rec.flags)
-              , ::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)
-              , ::test_bit_u32(LOG_RECORD_DISCARD, &rec.flags)
+              , rec.isExist()
+              , rec.isPadding()
+              , rec.isDiscard()
               , rec.checksum, rec.checksum);
 }
 
@@ -171,13 +157,13 @@ public:
      * Utilities.
      */
     const uint8_t *rawData() const { return (const uint8_t*)header_; }
-    const struct walb_log_record &record(size_t pos) const {
+    const LogRecord &record(size_t pos) const {
         checkIndexRange(pos);
-        return header_->record[pos];
+        return static_cast<const LogRecord &>(header_->record[pos]);
     }
-    struct walb_log_record& record(size_t pos) {
+    struct LogRecord &record(size_t pos) {
         checkIndexRange(pos);
-        return header_->record[pos];
+        return static_cast<LogRecord &>(header_->record[pos]);
     }
     uint64_t nextLogpackLsid() const {
         if (nRecords() > 0) {
@@ -192,8 +178,8 @@ public:
         }
         uint64_t t = 0;
         for (size_t i = 0; i < nRecords(); i++) {
-            const struct walb_log_record &rec = record(i);
-            if (::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)) {
+            const LogRecord &rec = record(i);
+            if (rec.isPadding()) {
                 t += ::capacity_pb(pbs(), rec.io_size);
             }
         }
@@ -219,12 +205,10 @@ public:
      * Print.
      */
     void printRecord(size_t pos, ::FILE *fp = ::stdout) const {
-        const struct walb_log_record &rec = record(pos);
-        log::printRecord(fp, pos, rec);
+        log::printRecord(fp, pos, record(pos));
     }
     void printRecordOneline(size_t pos, ::FILE *fp = ::stdout) const {
-        const struct walb_log_record &rec = record(pos);
-        log::printRecordOneline(fp, pos, rec);
+        log::printRecordOneline(fp, pos, record(pos));
     }
     void printHeader(::FILE *fp = ::stdout) const {
         ::fprintf(fp,
@@ -485,37 +469,71 @@ protected:
 
 namespace log {
 
-/**
- * Interface.
- */
-class Record
+class MemRecord
 {
+private:
+    size_t pos_;
+    unsigned int pbs_;
+    uint32_t salt_;
+    LogRecord rec_;
 public:
-    Record() = default;
-    virtual ~Record() noexcept {}
-    DISABLE_COPY_AND_ASSIGN(Record);
-    DISABLE_MOVE(Record);
+    void copyFrom(const LogPackHeader &logh, size_t pos) {
+        setPos(pos);
+        setPbs(logh.pbs());
+        setSalt(logh.salt());
+        rec_ = logh.record(pos);
+    }
 
-    /* Interface to access a record */
-    virtual struct walb_log_record &record() = 0;
-    virtual const struct walb_log_record &record() const = 0;
+    const LogRecord &record() const { return rec_; }
+    LogRecord &record() { return rec_; }
 
-    virtual size_t pos() const = 0;
-    virtual unsigned int pbs() const = 0;
-    virtual uint32_t salt() const = 0;
+    size_t pos() const { return pos_; }
+    unsigned int pbs() const { return pbs_; }
+    uint32_t salt() const { return salt_; }
 
-    /* default implementation. */
-    uint64_t lsid() const { return record().lsid; }
-    uint16_t lsidLocal() const { return record().lsid_local; }
+    void setPos(size_t pos0) { pos_ = pos0; }
+    void setPbs(unsigned int pbs0) { pbs_ = pbs0; }
+    void setSalt(uint32_t salt0) { salt_ = salt0; }
+};
+
+class PtrRecord
+{
+private:
+    LogPackHeader *logh_;
+    size_t pos_;
+public:
+    PtrRecord(LogPackHeader *logh, size_t pos)
+        : logh_(logh), pos_(pos) {
+        assert(pos < logh->nRecords());
+    }
+
+    const LogRecord &record() const { return logh_->record(pos_); }
+    LogRecord &record() { return logh_->record(pos_); }
+
+    size_t pos() const { return pos_; }
+    unsigned int pbs() const { return logh_->pbs(); }
+    uint32_t salt() const { return logh_->salt(); }
+};
+
+/**
+ * T is MemRecord, PtrRecord, or ConstPtrRecord.
+ */
+template <typename T>
+struct ReadableRecord : T
+{
+    using T::T;
+
+    uint64_t lsid() const { return this->record().lsid; }
+    uint16_t lsidLocal() const { return this->record().lsid_local; }
     uint64_t packLsid() const { return lsid() - lsidLocal(); }
     bool isExist() const {
-        return ::test_bit_u32(LOG_RECORD_EXIST, &record().flags);
+        return ::test_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
     }
     bool isPadding() const {
-        return ::test_bit_u32(LOG_RECORD_PADDING, &record().flags);
+        return ::test_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
     }
     bool isDiscard() const {
-        return ::test_bit_u32(LOG_RECORD_DISCARD, &record().flags);
+        return ::test_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
     }
     bool hasData() const {
         return isExist() && !isDiscard();
@@ -523,106 +541,47 @@ public:
     bool hasDataForChecksum() const {
         return isExist() && !isDiscard() && !isPadding();
     }
-    unsigned int ioSizeLb() const { return record().io_size; }
-    unsigned int ioSizePb() const { return ::capacity_pb(pbs(), ioSizeLb()); }
-    uint64_t offset() const { return record().offset; }
-    bool isValid() const { return ::is_valid_log_record_const(&record()); }
-    uint32_t checksum() const { return record().checksum; }
+    unsigned int ioSizeLb() const { return this->record().io_size; }
+    unsigned int ioSizePb() const { return ::capacity_pb(this->pbs(), ioSizeLb()); }
+    uint64_t offset() const { return this->record().offset; }
+    bool isValid() const { return ::is_valid_log_record_const(&this->record()); }
+    uint32_t checksum() const { return this->record().checksum; }
 
-    virtual void print(::FILE *fp = ::stdout) const {
-        printRecord(fp, pos(), record());
+    void print(::FILE *fp = ::stdout) const {
+        printRecord(fp, this->pos(), this->record());
     }
-    virtual void printOneline(::FILE *fp = ::stdout) const {
-        printRecordOneline(fp, pos(), record());
+    void printOneline(::FILE *fp = ::stdout) const {
+        printRecordOneline(fp, this->pos(), this->record());
     }
+};
+
+template <typename T>
+struct WritableRecord : T
+{
+    using T::T;
 
     void setExist() {
-        ::set_bit_u32(LOG_RECORD_EXIST, &record().flags);
+        ::set_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
     }
     void setPadding() {
-        ::set_bit_u32(LOG_RECORD_PADDING, &record().flags);
+        ::set_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
     }
     void setDiscard() {
-        ::set_bit_u32(LOG_RECORD_DISCARD, &record().flags);
+        ::set_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
     }
     void clearExist() {
-        ::clear_bit_u32(LOG_RECORD_EXIST, &record().flags);
+        ::clear_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
     }
     void clearPadding() {
-        ::clear_bit_u32(LOG_RECORD_PADDING, &record().flags);
+        ::clear_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
     }
     void clearDiscard() {
-        ::clear_bit_u32(LOG_RECORD_DISCARD, &record().flags);
+        ::clear_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
     }
 };
 
-/**
- * Wrapper of a raw walb log record.
- */
-class RecordRaw : public Record
-{
-private:
-    size_t pos_;
-    unsigned int pbs_;
-    uint32_t salt_;
-    struct walb_log_record rec_;
-public:
-    RecordRaw() : Record(), pos_(0), pbs_(0), salt_(0), rec_() {}
-    RecordRaw(
-        const struct walb_log_record &rec, size_t pos,
-        unsigned int pbs, uint32_t salt)
-        : Record(), pos_(pos), pbs_(pbs), salt_(salt), rec_(rec) {}
-    RecordRaw(const LogPackHeader &logh, size_t pos)
-        : RecordRaw(logh.record(pos), pos, logh.pbs(), logh.salt()) {}
-    ~RecordRaw() noexcept override = default;
-    RecordRaw(const RecordRaw &rhs)
-        : pos_(rhs.pos()), pbs_(rhs.pbs()), salt_(rhs.salt()), rec_(rhs.record()) {}
-    DISABLE_MOVE(RecordRaw);
-
-    void copyFrom(const LogPackHeader &logh, size_t pos) {
-        setPos(pos);
-        setPbs(logh.pbs());
-        setSalt(logh.salt());
-        record() = logh.record(pos);
-    }
-
-    size_t pos() const override { return pos_; }
-    unsigned int pbs() const override { return pbs_; }
-    uint32_t salt() const override { return salt_; }
-
-    void setPos(size_t pos0) { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) { pbs_ = pbs0; }
-    void setSalt(uint32_t salt0) { salt_ = salt0; }
-
-    const struct walb_log_record &record() const override { return rec_; }
-    struct walb_log_record &record() override { return rec_; }
-};
-
-/**
- * Log data of an IO.
- * Log record is a reference.
- */
-class RecordWrap : public Record
-{
-    LogPackHeader *logh_;
-    size_t pos_;
-public:
-    RecordWrap(const LogPackHeader *logh, size_t pos)
-        : logh_(const_cast<LogPackHeader *>(logh)) , pos_(pos) {
-        assert(pos < logh->nRecords());
-    }
-    DISABLE_COPY_AND_ASSIGN(RecordWrap);
-    DISABLE_MOVE(RecordWrap);
-
-    size_t pos() const { return pos_; }
-    unsigned int pbs() const { return logh_->pbs(); }
-    uint32_t salt() const { return logh_->salt(); }
-
-    const struct walb_log_record &record() const { return logh_->record(pos_); }
-    struct walb_log_record &record() {
-        return *const_cast<struct walb_log_record *>(&logh_->record(pos_));
-    }
-};
+using RecordRaw = WritableRecord<ReadableRecord<MemRecord> >;
+using RecordWrap = WritableRecord<ReadableRecord<PtrRecord> >;
 
 /**
  * Interface.
@@ -878,6 +837,16 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
     }
 }
 
+uint32_t calcIoChecksum(const LogRecord& rec, const BlockData& blockD, uint32_t salt)
+{
+    const uint32_t ioSizePb = rec.ioSizePb(blockD.pbs());
+    if (blockD.nBlocks() < ioSizePb) {
+        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
+            << blockD.nBlocks() << ioSizePb;
+    }
+    return blockD.calcChecksum(rec.io_size, salt);
+}
+
 template<class R>
 uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
 {
@@ -888,17 +857,16 @@ uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
     return blockD.calcChecksum(rec.ioSizeLb(), salt);
 }
 
-template<class R>
-bool isValidRecordAndBlockData(const R& rec, const BlockData& blockD)
+bool isValidRecordAndBlockData(const LogRecord& rec, const BlockData& blockD, uint32_t salt)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");
         return false; }
     if (!rec.hasDataForChecksum()) return true;
-    const uint32_t checksum = calcIoChecksum(rec, blockD);
-    if (checksum != rec.record().checksum) {
+    const uint32_t checksum = calcIoChecksum(rec, blockD, salt);
+    if (checksum != rec.checksum) {
         LOGd("invalid checksum expected %08x calculated %08x."
-             , rec.record().checksum, checksum);
+             , rec.checksum, checksum);
         return false;
     }
     return true;
@@ -918,7 +886,9 @@ private:
 public:
     PackIoRaw() {}
     PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : rec_(logh, pos), blockD_(logh.pbs()) {}
+        : rec_(), blockD_(logh.pbs()) {
+        rec_.copyFrom(logh, pos);
+    }
     PackIoRaw(PackIoRaw &&rhs)
         : rec_(rhs.rec_), blockD_(std::move(rhs.blockD_)) {}
     PackIoRaw &operator=(PackIoRaw &&rhs) {

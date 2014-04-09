@@ -187,7 +187,7 @@ private:
         cybozu::util::BlockAllocator<u8> &ba, std::queue<PackIoRaw> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             PackIoRaw packIo(logh, i);
-            const walb::log::Record &rec = packIo.record();
+            const walb::log::RecordRaw &rec = packIo.record();
             if (!rec.hasData()) { continue; }
             for (size_t j = 0; j < rec.ioSizePb(); j++) {
                 packIo.blockData().addBlock(readBlock(fdr, ba));

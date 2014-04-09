@@ -168,7 +168,8 @@ private:
     /**
      * Update bitmap with a log record.
      */
-    void updateBitmap(const walb::log::Record &rec) {
+    template <typename Record>
+    void updateBitmap(const Record &rec) {
         if (rec.isPadding()) return;
         const unsigned int pbs = config_.blockSize();
         uint64_t offLb = rec.offset();

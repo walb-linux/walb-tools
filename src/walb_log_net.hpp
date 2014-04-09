@@ -170,9 +170,9 @@ public:
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);
         assert(recIdx < header.nRecords());
-        const RecordWrap rec(&header, recIdx);
+        const LogRecord &rec = header.record(recIdx);
 #ifdef DEBUG
-        assert(isValidRecordAndBlockData(rec, blockD));
+        assert(isValidRecordAndBlockData(rec, blockD, header.salt()));
 #endif
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockD, false);
@@ -336,7 +336,7 @@ public:
         assert(recIdx_ == recIdx);
         const LogPackHeader h(&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
-        const RecordWrap rec(&h, recIdx);
+        const LogRecord &rec = h.record(recIdx);
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
@@ -345,7 +345,7 @@ public:
             blockD.setPbs(pbs_);
             blockD.resize(0);
         }
-        if (!isValidRecordAndBlockData(rec, blockD)) {
+        if (!isValidRecordAndBlockData(rec, blockD, h.salt())) {
             throw cybozu::Exception("popIo:Popped IO is invalid.");
         }
         recIdx_++;
