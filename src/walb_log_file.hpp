@@ -346,7 +346,7 @@ public:
     /**
      * Write a pack IO.
      */
-    void writePackIo(const BlockData &blockD) {
+    void writePackIo(const BlockDataShared &blockD) {
         blockD.write(fdw_);
         lsid_ += blockD.nBlocks();
     }
@@ -381,7 +381,7 @@ public:
 
         /* Write */
         writePackHeader(header.header());
-        for (BlockData &blockD : v) {
+        for (const BlockDataShared &blockD : v) {
             writePackIo(blockD);
         }
         assert(lsid_ == header.nextLogpackLsid());

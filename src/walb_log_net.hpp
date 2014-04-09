@@ -19,7 +19,7 @@ namespace log {
 
 constexpr size_t Q_SIZE = 16;
 
-CompressedData convertToCompressedData(const BlockData &blockD, bool doCompress)
+CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCompress)
 {
     const unsigned int pbs = blockD.pbs();
     const size_t n = blockD.nBlocks();
@@ -165,7 +165,7 @@ public:
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, size_t recIdx, const BlockData &blockD) {
+    void pushIo(const LogPackHeader &header, size_t recIdx, const BlockDataShared &blockD) {
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);

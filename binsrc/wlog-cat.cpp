@@ -179,7 +179,7 @@ private:
         while (!src.empty()) {
             LogPackIo packIo = std::move(src.front());
             src.pop();
-            walb::log::BlockData &blockD = packIo.blockD;
+            walb::log::BlockDataShared &blockD = packIo.blockD;
             for (size_t i = 0; i < blockD.nBlocks(); i++) {
                 dst.push(blockD.getBlock(i));
             }

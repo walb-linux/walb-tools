@@ -31,11 +31,11 @@ namespace walb {
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
- *   R : Record
+ *   (R, B) = (RecordWrap, BlockDataShared) or (RecordRaw, BlockDataVec)
  */
-template<class R>
+template<class R, class B>
 inline bool convertLogToDiff(
-    const R& rec, const log::BlockData& blockD, DiffRecord& mrec, DiffIo &diffIo)
+    const R& rec, const B& blockD, DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -159,9 +159,6 @@ private:
         } catch (cybozu::util::EofError &e) {
             return false;
         }
-#if 0
-        wlHeader.print(::stderr); /* debug */
-#endif
 
         /* Block buffer. */
         const unsigned int BUF_SIZE = 4U << 20;

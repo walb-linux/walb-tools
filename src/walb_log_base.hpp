@@ -823,17 +823,7 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
     }
 }
 
-template<class R>
-uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
-{
-    const uint32_t salt = rec.salt();
-    if (blockD.nBlocks() < rec.ioSizePb()) {
-        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.") << blockD.nBlocks() << rec.ioSizePb();
-    }
-    return blockD.calcChecksum(rec.ioSizeLb(), salt);
-}
-
-bool isValidRecordAndBlockData(const LogRecord& rec, const BlockData& blockD, uint32_t salt)
+bool isValidRecordAndBlockData(const LogRecord& rec, const BlockDataShared& blockD, uint32_t salt)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");
