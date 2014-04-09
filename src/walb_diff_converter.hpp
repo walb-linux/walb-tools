@@ -189,15 +189,16 @@ private:
 
         /* Convert each log. */
         while (!reader.isEnd()) {
-            log::PackIoRaw<log::BlockDataVec> packIo;
+            log::RecordRaw rec;
+            log::BlockDataVec blockD;
             if (reader.isFirstInPack()) {
                 lsid = reader.packHeader().nextLogpackLsid();
             }
-            reader.readLog(packIo);
+            reader.readLog(rec, blockD);
 
             DiffRecord diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(packIo.rec, packIo.blockD, diffRec, diffIo)) {
+            if (convertLogToDiff(rec, blockD, diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;
             }

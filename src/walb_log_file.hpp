@@ -175,11 +175,8 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(PackIoRaw<walb::log::BlockDataVec>& packIo)
+    bool readLog(RecordRaw& rec, walb::log::BlockDataVec& blockD)
     {
-        RecordRaw &rec = packIo.rec;
-        walb::log::BlockDataVec &blockD = packIo.blockD;
-
         checkReadHeader();
         fillPackIfNeed();
         if (!pack_) return false;
@@ -444,9 +441,10 @@ public:
         reader.readHeader(wh);
         wh.print(fp);
 
-        PackIoRaw<BlockDataVec> packIo;
-        while (reader.readLog(packIo)) {
-            packIo.rec.printOneline(fp);
+        RecordRaw rec;
+        BlockDataVec blockD;
+        while (reader.readLog(rec, blockD)) {
+            rec.printOneline(fp);
         }
         /*
          * reader.readLog() may throw InvalidIo.
