@@ -145,7 +145,7 @@ public:
                     RT_ERR("io_size mismatch.");
                 }
                 /* Validate the log and confirm checksum equality. */
-                const uint32_t csum0 = packIo.calcIoChecksum(0);
+                const uint32_t csum0 = packIo.calcIoChecksumWithZeroSalt();
                 const uint32_t csum1 = packIo.record().checksum();
                 const uint32_t csum2 = packIo.calcIoChecksum();
                 const bool isValid = packIo.isValid(false) &&

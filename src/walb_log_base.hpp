@@ -781,17 +781,13 @@ private:
 };
 
 template<class R, class B>
-uint32_t calcIoChecksumRB(const R& rec, const B& block, uint32_t salt) {
+uint32_t calcIoChecksumRB(const R& rec, const B& block) {
     assert(rec.hasDataForChecksum());
     assert(0 < rec.ioSizeLb());
     if (block.nBlocks() < rec.ioSizePb()) {
         throw RT_ERR("There is not sufficient data block.");
     }
-    return block.calcChecksum(rec.ioSizeLb(), salt);
-}
-template<class R, class B>
-uint32_t calcIoChecksumRB(const R& rec, const B& block) {
-    return calcIoChecksumRB(rec, block, rec.salt());
+    return block.calcChecksum(rec.ioSizeLb(), rec.salt());
 }
 template<class R, class B>
 bool isValidRB(const R& rec, const B& block, bool isChecksum = true) {
@@ -890,7 +886,7 @@ public:
     void printOneline(::FILE *fp = ::stdout) const {
         rec_.printOneline(fp);
     }
-    uint32_t calcIoChecksum(uint32_t salt) const { return calcIoChecksumRB(rec_, blockD_, salt); }
+    uint32_t calcIoChecksumWithZeroSalt() const { return blockD_.calcChecksum(rec_.ioSizeLb(), 0); }
     uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec_, blockD_);
     }
     void print(::FILE *fp = ::stdout) const { printRB(rec_, blockD_, fp); }
