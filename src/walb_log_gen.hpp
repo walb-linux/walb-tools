@@ -141,9 +141,7 @@ private:
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    UNUSED bool ret = setChecksumRB(rec, blockD);
-                    assert(ret);
-                    assert(isValidRB(rec, blockD, true));
+                    setChecksumRB(rec, blockD);
                 }
             }
             assert(blocks.size() == logh.totalIoSize());
