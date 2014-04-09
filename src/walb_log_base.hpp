@@ -516,10 +516,10 @@ public:
 };
 
 /**
- * T is MemRecord, PtrRecord, or ConstPtrRecord.
+ * T is MemRecord, PtrRecord
  */
 template <typename T>
-struct ReadableRecord : T
+struct RecordT : T
 {
     using T::T;
 
@@ -553,12 +553,6 @@ struct ReadableRecord : T
     void printOneline(::FILE *fp = ::stdout) const {
         printRecordOneline(fp, this->pos(), this->record());
     }
-};
-
-template <typename T>
-struct WritableRecord : T
-{
-    using T::T;
 
     void setExist() {
         ::set_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
@@ -580,8 +574,8 @@ struct WritableRecord : T
     }
 };
 
-using RecordRaw = WritableRecord<ReadableRecord<MemRecord> >;
-using RecordWrap = WritableRecord<ReadableRecord<PtrRecord> >;
+using RecordRaw = RecordT<MemRecord>;
+using RecordWrap = RecordT<PtrRecord>;
 
 /**
  * Interface.
