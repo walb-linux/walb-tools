@@ -171,9 +171,6 @@ public:
         assert(recIdx_ == recIdx);
         assert(recIdx < header.nRecords());
         const LogRecord &rec = header.record(recIdx);
-#ifdef DEBUG
-        assert(isValidRecordAndBlockData(rec, blockD, header.salt()));
-#endif
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockD, false);
             assert(0 < cd.originalSize());

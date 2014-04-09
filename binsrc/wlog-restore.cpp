@@ -219,7 +219,6 @@ private:
     void readLogpackData(PackIoRaw &packIo, FdReader &fdr, BlockA &ba) {
         const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
-        //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
             packIo.blockD.addBlock(readBlock(fdr, ba, rec.pbs()));
         }

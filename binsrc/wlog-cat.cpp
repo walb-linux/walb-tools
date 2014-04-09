@@ -239,13 +239,11 @@ private:
     void readLogpackData(PackIoRaw& packIo) {
         const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
-        //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         readAheadLoose();
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
             packIo.blockD.addBlock(readBlock());
         }
         if (!packIo.isValid()) {
-            //if (isVerbose_) packIo.print(::stderr);
             throw walb::log::InvalidIo();
         }
     }

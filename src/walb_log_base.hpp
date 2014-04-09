@@ -875,7 +875,6 @@ struct PackIoRaw
     uint32_t calcIoChecksumWithZeroSalt() const { return blockD.calcChecksum(rec.ioSizeLb(), 0); }
     uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec, blockD);
     }
-    void print(::FILE *fp = ::stdout) const { printRB(rec, blockD, fp); }
 };
 
 }} //namespace walb::log

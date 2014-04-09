@@ -175,11 +175,10 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    template<class BlockDataT>
-    bool readLog(PackIoRaw<BlockDataT>& packIo)
+    bool readLog(PackIoRaw<walb::log::BlockDataVec>& packIo)
     {
         RecordRaw &rec = packIo.rec;
-        BlockDataT &blockD = packIo.blockD;
+        walb::log::BlockDataVec &blockD = packIo.blockD;
 
         checkReadHeader();
         fillPackIfNeed();
