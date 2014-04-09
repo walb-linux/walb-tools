@@ -467,7 +467,7 @@ protected:
     }
 };
 
-namespace log {
+namespace log_local {
 
 class MemRecord
 {
@@ -548,10 +548,10 @@ struct RecordT : T
     uint32_t checksum() const { return this->record().checksum; }
 
     void print(::FILE *fp = ::stdout) const {
-        printRecord(fp, this->pos(), this->record());
+        log::printRecord(fp, this->pos(), this->record());
     }
     void printOneline(::FILE *fp = ::stdout) const {
-        printRecordOneline(fp, this->pos(), this->record());
+        log::printRecordOneline(fp, this->pos(), this->record());
     }
 
     void setExist() {
@@ -574,9 +574,12 @@ struct RecordT : T
     }
 };
 
-using RecordRaw = RecordT<MemRecord>;
-using RecordWrap = RecordT<PtrRecord>;
+} // walb::log_local
 
+namespace log {
+
+using RecordRaw = log_local::RecordT<log_local::MemRecord>;
+using RecordWrap = log_local::RecordT<log_local::PtrRecord>;
 /**
  * Interface.
  */
