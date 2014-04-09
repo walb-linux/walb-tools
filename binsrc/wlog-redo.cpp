@@ -582,7 +582,7 @@ private:
      * Redo a discard log by issuing discard command.
      */
     void redoDiscard(PackIoRaw &packIo) {
-        const walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.rec;
         assert(config_.isDiscard());
         assert(rec.isDiscard());
 
@@ -791,7 +791,7 @@ private:
      * Zero-discard also uses this method.
      */
     void redoNormalIo(PackIoRaw &packIo) {
-        const walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.rec;
         assert(rec.isExist());
         assert(!rec.isPadding());
         assert(config_.isZeroDiscard() || !rec.isDiscard());
@@ -808,7 +808,7 @@ private:
                 block = ba_.alloc();
                 ::memset(block.get(), 0, blockSize_);
             } else {
-                block = packIo.blockData().getBlock(i);
+                block = packIo.blockD.getBlock(i);
             }
             IoPtr iop;
             if (blockSize_ <= remaining) {
@@ -853,7 +853,7 @@ private:
      * Redo a logpack data.
      */
     void redoPack(PackIoRaw &packIo) {
-        const walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.rec;
         assert(rec.isExist());
 
         if (rec.isPadding()) {

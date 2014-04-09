@@ -178,8 +178,8 @@ public:
     template<class BlockDataT>
     bool readLog(PackIoRaw<BlockDataT>& packIo)
     {
-        RecordRaw &rec = packIo.record();
-        BlockDataT &blockD = packIo.blockData();
+        RecordRaw &rec = packIo.rec;
+        BlockDataT &blockD = packIo.blockD;
 
         checkReadHeader();
         fillPackIfNeed();
@@ -447,7 +447,7 @@ public:
 
         PackIoRaw<BlockDataVec> packIo;
         while (reader.readLog(packIo)) {
-            packIo.printOneline(fp);
+            packIo.rec.printOneline(fp);
         }
         /*
          * reader.readLog() may throw InvalidIo.

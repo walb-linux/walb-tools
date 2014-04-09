@@ -161,7 +161,7 @@ private:
         while (!reader.isEnd()) {
             walb::log::PackIoRaw<walb::log::BlockDataVec> packIo;
             reader.readLog(packIo);
-            updateBitmap(packIo.record());
+            updateBitmap(packIo.rec);
         }
         return reader.endLsid();
     }

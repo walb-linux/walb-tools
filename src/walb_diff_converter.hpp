@@ -197,7 +197,7 @@ private:
 
             DiffRecord diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(packIo.record(), packIo.blockData(), diffRec, diffIo)) {
+            if (convertLogToDiff(packIo.rec, packIo.blockD, diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;
             }

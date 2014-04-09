@@ -179,7 +179,7 @@ private:
         while (!src.empty()) {
             PackIoRaw packIo = std::move(src.front());
             src.pop();
-            walb::log::BlockData &blockD = packIo.blockData();
+            walb::log::BlockData &blockD = packIo.blockD;
             for (size_t i = 0; i < blockD.nBlocks(); i++) {
                 dst.push(blockD.getBlock(i));
             }
@@ -195,9 +195,6 @@ private:
      */
     bool readLogpackHeader(LogPackHeader &packH, uint64_t lsid) {
         packH.setBlock(readBlock());
-#if 0
-        packH.print(::stderr);
-#endif
         if (!packH.isValid()) return false;
         if (packH.header().logpack_lsid != lsid) {
             ::fprintf(::stderr, "logpack %" PRIu64 " is not the expected one %" PRIu64 "."
@@ -215,7 +212,8 @@ private:
     bool readAllLogpackData(LogPackHeader &logh, std::queue<PackIoRaw> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIoRaw packIo(logh, i);
+            PackIoRaw packIo;
+            packIo.set(logh, i);
             try {
                 readLogpackData(packIo);
                 q.push(std::move(packIo));
@@ -239,12 +237,12 @@ private:
      * Read a logpack data.
      */
     void readLogpackData(PackIoRaw& packIo) {
-        const walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         readAheadLoose();
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockData().addBlock(readBlock());
+            packIo.blockD.addBlock(readBlock());
         }
         if (!packIo.isValid()) {
             //if (isVerbose_) packIo.print(::stderr);

@@ -861,35 +861,21 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const BlockData& blockD, ui
  * BlockDataT: BlockDataVec or BlockDataShared.
  */
 template <class BlockDataT>
-class PackIoRaw
+struct PackIoRaw
 {
-private:
-    RecordRaw rec_;
-    BlockDataT blockD_;
-public:
-    PackIoRaw() {}
-    PackIoRaw(const LogPackHeader &logh, size_t pos)
-        : rec_(), blockD_(logh.pbs()) {
-        rec_.copyFrom(logh, pos);
-    }
-    PackIoRaw(PackIoRaw &&rhs)
-        : rec_(rhs.rec_), blockD_(std::move(rhs.blockD_)) {}
-    PackIoRaw &operator=(PackIoRaw &&rhs) {
-        rec_ = rhs.rec_;
-        blockD_ = std::move(rhs.blockD_);
-        return *this;
-    }
-    RecordRaw &record() { return rec_; }
-    BlockDataT &blockData() { return blockD_; }
+    RecordRaw rec;
+    BlockDataT blockD;
 
-    bool isValid(bool isChecksum = true) const { return isValidRB(rec_, blockD_, isChecksum); }
-    void printOneline(::FILE *fp = ::stdout) const {
-        rec_.printOneline(fp);
+    void set(const LogPackHeader &logh, size_t pos) {
+        rec.copyFrom(logh, pos);
+        blockD.setPbs(logh.pbs());
     }
-    uint32_t calcIoChecksumWithZeroSalt() const { return blockD_.calcChecksum(rec_.ioSizeLb(), 0); }
-    uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec_, blockD_);
+
+    bool isValid(bool isChecksum = true) const { return isValidRB(rec, blockD, isChecksum); }
+    uint32_t calcIoChecksumWithZeroSalt() const { return blockD.calcChecksum(rec.ioSizeLb(), 0); }
+    uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec, blockD);
     }
-    void print(::FILE *fp = ::stdout) const { printRB(rec_, blockD_, fp); }
+    void print(::FILE *fp = ::stdout) const { printRB(rec, blockD, fp); }
 };
 
 }} //namespace walb::log

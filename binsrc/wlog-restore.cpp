@@ -217,11 +217,11 @@ private:
      * Read a logpack data.
      */
     void readLogpackData(PackIoRaw &packIo, FdReader &fdr, BlockA &ba) {
-        const walb::log::RecordRaw &rec = packIo.record();
+        const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
         //::printf("ioSizePb: %u\n", logd.ioSizePb()); //debug
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockData().addBlock(readBlock(fdr, ba, rec.pbs()));
+            packIo.blockD.addBlock(readBlock(fdr, ba, rec.pbs()));
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();
@@ -295,12 +295,13 @@ private:
         std::vector<Block> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIoRaw packIo(logh, i);
+            PackIoRaw packIo;
+            packIo.set(logh, i);
             readLogpackData(packIo, fdr, ba);
-            walb::log::RecordRaw &rec = packIo.record();
+            walb::log::RecordRaw &rec = packIo.rec;
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {
-                    blocks.push_back(packIo.blockData().getBlock(j));
+                    blocks.push_back(packIo.blockD.getBlock(j));
                 }
             }
             if (0 < config_.ddevLb() &&

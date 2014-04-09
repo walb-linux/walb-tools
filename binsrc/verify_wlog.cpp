@@ -138,15 +138,15 @@ public:
                     throw RT_ERR("Recipe not found.");
                 }
                 walb::util::IoRecipe recipe = recipeParser.get();
-                if (recipe.offsetB() != packIo.record().offset()) {
+                if (recipe.offsetB() != packIo.rec.offset()) {
                     RT_ERR("offset mismatch.");
                 }
-                if (recipe.ioSizeB() != packIo.record().ioSizeLb()) {
+                if (recipe.ioSizeB() != packIo.rec.ioSizeLb()) {
                     RT_ERR("io_size mismatch.");
                 }
                 /* Validate the log and confirm checksum equality. */
                 const uint32_t csum0 = packIo.calcIoChecksumWithZeroSalt();
-                const uint32_t csum1 = packIo.record().checksum();
+                const uint32_t csum1 = packIo.rec.checksum();
                 const uint32_t csum2 = packIo.calcIoChecksum();
                 const bool isValid = packIo.isValid(false) &&
                     recipe.csum() == csum0 && csum1 == csum2;
@@ -186,11 +186,12 @@ private:
         LogPackHeader &logh, cybozu::util::FdReader &fdr,
         cybozu::util::BlockAllocator<u8> &ba, std::queue<PackIoRaw> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIoRaw packIo(logh, i);
-            const walb::log::RecordRaw &rec = packIo.record();
+            PackIoRaw packIo;
+            packIo.set(logh, i);
+            const walb::log::RecordRaw &rec = packIo.rec;
             if (!rec.hasData()) { continue; }
             for (size_t j = 0; j < rec.ioSizePb(); j++) {
-                packIo.blockData().addBlock(readBlock(fdr, ba));
+                packIo.blockD.addBlock(readBlock(fdr, ba));
             }
             if (!rec.hasDataForChecksum()) { continue; }
             /* Only normal IOs will be inserted. */
