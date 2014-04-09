@@ -104,7 +104,7 @@ private:
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using LogPackHeader = walb::LogPackHeader;
-    using PackIoRaw = walb::log::PackIoRaw<walb::log::BlockDataShared>;
+    using LogPackIo = walb::LogPackIo;
     using FdReader = cybozu::util::FdReader;
     using SuperBlock = walb::device::SuperBlock;
 
@@ -216,7 +216,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackIoRaw &packIo, FdReader &fdr, BlockA &ba) {
+    void readLogpackData(LogPackIo &packIo, FdReader &fdr, BlockA &ba) {
         const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
@@ -294,7 +294,7 @@ private:
         std::vector<Block> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIoRaw packIo;
+            LogPackIo packIo;
             packIo.set(logh, i);
             readLogpackData(packIo, fdr, ba);
             walb::log::RecordRaw &rec = packIo.rec;

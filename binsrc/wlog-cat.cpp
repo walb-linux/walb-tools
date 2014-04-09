@@ -89,7 +89,7 @@ private:
     bool isVerbose_;
 
     using LogPackHeader = walb::LogPackHeader;
-    using PackIoRaw = walb::log::PackIoRaw<walb::log::BlockDataShared>;
+    using LogPackIo = walb::LogPackIo;
     using Block = std::shared_ptr<uint8_t>;
 
 public:
@@ -145,7 +145,7 @@ public:
                 isEnd = true;
                 break;
             }
-            std::queue<PackIoRaw> q;
+            std::queue<LogPackIo> q;
             isEnd = readAllLogpackData(packH, q);
             writer.writePack(packH, toBlocks(q));
             lsid = packH.nextLogpackLsid();
@@ -174,10 +174,10 @@ private:
     /**
      * Get block list from packIo list.
      */
-    static std::queue<Block> toBlocks(std::queue<PackIoRaw> &src) {
+    static std::queue<Block> toBlocks(std::queue<LogPackIo> &src) {
         std::queue<Block> dst;
         while (!src.empty()) {
-            PackIoRaw packIo = std::move(src.front());
+            LogPackIo packIo = std::move(src.front());
             src.pop();
             walb::log::BlockData &blockD = packIo.blockD;
             for (size_t i = 0; i < blockD.nBlocks(); i++) {
@@ -209,10 +209,10 @@ private:
      * RETURN:
      *   true if logpack has shrinked and should end.
      */
-    bool readAllLogpackData(LogPackHeader &logh, std::queue<PackIoRaw> &q) {
+    bool readAllLogpackData(LogPackHeader &logh, std::queue<LogPackIo> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
-            PackIoRaw packIo;
+            LogPackIo packIo;
             packIo.set(logh, i);
             try {
                 readLogpackData(packIo);
@@ -236,7 +236,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(PackIoRaw& packIo) {
+    void readLogpackData(LogPackIo& packIo) {
         const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
         readAheadLoose();

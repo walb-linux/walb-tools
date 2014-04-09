@@ -855,26 +855,24 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const BlockData& blockD, ui
     return true;
 }
 
+} // walb::log
 /**
  * Logpack record and IO data.
- * This is copyable and movable.
- * BlockDataT: BlockDataVec or BlockDataShared.
  */
-template <class BlockDataT>
-struct PackIoRaw
+struct LogPackIo
 {
-    RecordRaw rec;
-    BlockDataT blockD;
+    log::RecordRaw rec;
+    log::BlockDataShared blockD;
 
     void set(const LogPackHeader &logh, size_t pos) {
         rec.copyFrom(logh, pos);
         blockD.setPbs(logh.pbs());
     }
 
-    bool isValid(bool isChecksum = true) const { return isValidRB(rec, blockD, isChecksum); }
+    bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockD, isChecksum); }
     uint32_t calcIoChecksumWithZeroSalt() const { return blockD.calcChecksum(rec.ioSizeLb(), 0); }
-    uint32_t calcIoChecksum() const { return calcIoChecksumRB(rec, blockD);
+    uint32_t calcIoChecksum() const { return log::calcIoChecksumRB(rec, blockD);
     }
 };
 
-}} //namespace walb::log
+} // walb
