@@ -144,7 +144,7 @@ public:
 private:
     void removeFromList(const cybozu::SocketAddr &proxy) {
         v_.erase(std::remove_if(v_.begin(), v_.end(), [&](const Info &info) {
-                    return info.proxy == proxy;
+                    return info.proxy.hasSameAddr(proxy);
                 }));
     }
     Info checkAvailability(const cybozu::SocketAddr &);
