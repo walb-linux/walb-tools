@@ -820,16 +820,6 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
     }
 }
 
-uint32_t calcIoChecksum(const LogRecord& rec, const BlockData& blockD, uint32_t salt)
-{
-    const uint32_t ioSizePb = rec.ioSizePb(blockD.pbs());
-    if (blockD.nBlocks() < ioSizePb) {
-        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
-            << blockD.nBlocks() << ioSizePb;
-    }
-    return blockD.calcChecksum(rec.io_size, salt);
-}
-
 template<class R>
 uint32_t calcIoChecksum(const R& rec, const BlockData& blockD)
 {
@@ -846,7 +836,12 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const BlockData& blockD, ui
         LOGd("invalid record.");
         return false; }
     if (!rec.hasDataForChecksum()) return true;
-    const uint32_t checksum = calcIoChecksum(rec, blockD, salt);
+    const uint32_t ioSizePb = rec.ioSizePb(blockD.pbs());
+    if (blockD.nBlocks() < ioSizePb) {
+        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
+            << blockD.nBlocks() << ioSizePb;
+    }
+    const uint32_t checksum = blockD.calcChecksum(rec.io_size, salt);
     if (checksum != rec.checksum) {
         LOGd("invalid checksum expected %08x calculated %08x."
              , rec.checksum, checksum);
