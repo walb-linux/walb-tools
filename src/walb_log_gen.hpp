@@ -141,7 +141,7 @@ private:
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    setChecksumRB(rec, blockD);
+                    rec.record().checksum = log::calcIoChecksumRB(rec, blockD);
                 }
             }
             assert(blocks.size() == logh.totalIoSize());

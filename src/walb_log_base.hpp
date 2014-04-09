@@ -794,14 +794,6 @@ uint32_t calcIoChecksumRB(const R& rec, const B& block) {
     return calcIoChecksumRB(rec, block, rec.salt());
 }
 template<class R, class B>
-void setChecksumRB(R& rec, const B& block) {
-    if (!rec.hasDataForChecksum()) return;
-    rec.record().checksum = calcIoChecksumRB(rec, block);
-    // QQQ:should be removed
-    assert(rec.ioSizePb() == block.nBlocks());
-    assert(isValidRB(rec, block, true));
-}
-template<class R, class B>
 bool isValidRB(const R& rec, const B& block, bool isChecksum = true) {
     if (!rec.isValid()) {
         LOGd("invalid record.");
