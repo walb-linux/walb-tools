@@ -303,25 +303,19 @@ public:
         assert(!v.empty());
         return v;
     }
+    void uncompress()
+    {
+        assert(isCompressed());
+        walb::Uncompressor dec(compressionType);
+        const size_t decSize = ioBlocks * LOGICAL_BLOCK_SIZE;
+        std::vector<char> decData(decSize);
+        size_t size = dec.run(decData.data(), decSize, data.data(), data.size());
+        if (size != decSize) {
+            throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
+        }
+        compressionType = WALB_DIFF_CMPR_NONE;
+        data = std::move(decData);
+    }
 };
-
-/**
- * Uncompress an diff IO.
- */
-inline DiffIo uncompressDiffIo(const DiffIo &io0)
-{
-    if (!io0.isCompressed()) {
-        throw cybozu::Exception("Need not uncompress already uncompressed diff IO.");
-    }
-    walb::Uncompressor dec(io0.compressionType);
-    const size_t decSize = io0.ioBlocks * LOGICAL_BLOCK_SIZE;
-    DiffIo io1(io0.ioBlocks, WALB_DIFF_CMPR_NONE);
-    io1.data.resize(decSize);
-    size_t size = dec.run(io1.get(), decSize, io0.get(), io0.getSize());
-    if (size != decSize) {
-        throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
-    }
-    return io1;
-}
 
 } //namesapce walb

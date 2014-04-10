@@ -327,22 +327,17 @@ public:
      *   false if the input stream reached the end.
      */
     bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io) {
-        DiffIo io0;
-        if (!readDiff(rec, io0)) {
+        if (!readDiff(rec, io)) {
             rec.clearExists();
-            io = std::move(io0);
             return false;
         }
         if (!rec.isCompressed()) {
-            io = std::move(io0);
             return true;
         }
-        io = uncompressDiffIo(io0);
+        io.uncompress();
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         rec.data_size = io.getSize();
         rec.checksum = io.calcChecksum();
-        assert(rec.isValid());
-        assert(io.isValid());
         return true;
     }
 
