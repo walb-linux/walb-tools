@@ -272,7 +272,7 @@ public:
     void write(cybozu::util::FdWriter &fdw) {
         updateChecksum();
         if (!isValid(true)) {
-            throw RT_ERR("logpack header invalid.");
+            throw cybozu::Exception("write:logpack header invalid.");
         }
         fdw.write(header_, pbs());
     }
@@ -315,7 +315,7 @@ public:
             return false;
         }
         if (size == 0) {
-            throw RT_ERR("Normal IO can not be zero-sized.");
+            throw cybozu::Exception("Normal IO can not be zero-sized.");
         }
         size_t pos = nRecords();
         struct walb_log_record &rec = header_->record[pos];
@@ -346,7 +346,7 @@ public:
             return false;
         }
         if (size == 0) {
-            throw RT_ERR("Discard IO can not be zero-sized.");
+            throw cybozu::Exception("Discard IO can not be zero-sized.");
         }
         size_t pos = nRecords();
         struct walb_log_record &rec = header_->record[pos];
@@ -384,7 +384,7 @@ public:
             return false;
         }
         if (size % ::n_lb_in_pb(pbs()) != 0) {
-            throw RT_ERR("Padding size must be pbs-aligned.");
+            throw cybozu::Exception("Padding size must be pbs-aligned.");
         }
 
         size_t pos = nRecords();
@@ -732,7 +732,7 @@ uint32_t calcIoChecksumRB(const R& rec, const B& block) {
     assert(rec.hasDataForChecksum());
     assert(0 < rec.ioSizeLb());
     if (block.nBlocks() < rec.ioSizePb()) {
-        throw RT_ERR("There is not sufficient data block.");
+        throw cybozu::Exception("There is not sufficient data block.");
     }
     return block.calcChecksum(rec.ioSizeLb(), rec.salt());
 }
