@@ -40,7 +40,7 @@ inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd
     std::vector<uint8_t> v;
     cd.getUncompressed(v);
     blockD.setPbs(pbs);
-    blockD.moveFrom(std::move(v));
+    blockD.setData(std::move(v));
 }
 
 inline void convertToBlockDataShared(BlockDataShared& blockDS, const CompressedData &cd, unsigned int pbs)

@@ -670,10 +670,13 @@ public:
     explicit BlockDataVec(unsigned int pbs = 0) : pbs_(pbs), data_() {}
 
     unsigned int pbs() const { return pbs_; }
-// used
     void setPbs(unsigned int pbs) {
         // checkPbs(); // QQQ : why fails?
         pbs_ = pbs;
+    }
+    void setData(std::vector<uint8_t> &&data) {
+        verifyDataSize(data.size());
+        data_ = std::move(data);
     }
     size_t nBlocks() const {
         checkPbs();
@@ -711,21 +714,6 @@ public:
         }
         return true;
     }
-    void moveFrom(std::vector<uint8_t> &&data) {
-        verifyDataSize(data.size());
-        data_ = std::move(data);
-    }
-
-// not used
-    void addBlock(const Block &block) {
-        data_.insert(data_.end(), block.get(), block.get() + pbs_);
-    }
-
-    void copyFrom(const uint8_t *data, size_t size) {
-        verifyDataSize(size);
-        data_.assign(data, data + size);
-    }
-
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
         checkPbs();
         checkSizeLb(ioSizeLb);
@@ -742,17 +730,6 @@ public:
         }
         return cybozu::util::checksumFinish(csum);
     }
-    void write(int fd) const {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
-    }
-    void write(cybozu::util::FdWriter &fdw) const {
-        checkPbs();
-        for (size_t i = 0; i < nBlocks(); i++) {
-            fdw.write(get(i), pbs_);
-        }
-    }
-
 private:
     void verifyDataSize(size_t size) const {
         if (pbs_ && (size % pbs_) != 0) throw cybozu::Exception("BlockDataVec:bad size") << pbs_ << size;
@@ -762,8 +739,7 @@ private:
     }
     void checkSizeLb(size_t ioSizeLb) const {
         if (nBlocks() * pbs_ < ioSizeLb * LOGICAL_BLOCK_SIZE) {
-            throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
-                         , ioSizeLb, ::capacity_lb(pbs_, nBlocks()));
+            throw cybozu::Exception("BlockDataVec:checkSizeLb:ioSizeLb too large") << ioSizeLb << ::capacity_lb(pbs_, nBlocks());
         }
     }
     void check(size_t idx) const {
