@@ -69,6 +69,10 @@ struct LogRecord : public walb_log_record
 };
 
 using LogBlock = std::shared_ptr<uint8_t>;
+inline LogBlock createLogBlock(uint32_t pbs)
+{
+   return cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+}
 
 namespace log {
 

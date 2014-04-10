@@ -165,11 +165,11 @@ public:
     }
 
 private:
-    using Block = std::shared_ptr<uint8_t>;
+    using LogBlock = walb::LogBlock;
 
-    Block readBlock(
+    LogBlock readBlock(
         cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba) {
-        Block b = ba.alloc();
+        LogBlock b = ba.alloc();
         unsigned int bs = ba.blockSize();
         fdr.read(reinterpret_cast<char *>(b.get()), bs);
         return b;

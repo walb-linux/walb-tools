@@ -99,7 +99,7 @@ private:
     const Config& config_;
     int64_t lsidDiff_;
 
-    using Block = std::shared_ptr<uint8_t>;
+    using LogBlock = walb::LogBlock;
     using BlockA = cybozu::util::BlockAllocator<uint8_t>;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
@@ -125,7 +125,7 @@ public:
         if (!wlHead.isValid()) {
             throw RT_ERR("Walb log file header is invalid.");
         }
-        const unsigned int pbs = wlHead.pbs();
+        const uint32_t pbs = wlHead.pbs();
 
         /* Open the log device. */
         BlockDev blkdev(config_.ldevPath(), O_RDWR);
@@ -144,7 +144,7 @@ public:
         }
 
         /* Allocate buffer for logpacks. */
-        const unsigned int BUFFER_SIZE = 16 * 1024 * 1024; /* 16MB */
+        const uint32_t BUFFER_SIZE = 16 * 1024 * 1024; /* 16MB */
         BlockA ba(BUFFER_SIZE / pbs, pbs, pbs);
 
         /* Set lsid range. */
@@ -194,22 +194,18 @@ private:
      */
     void invalidateLsid(
         BlockDev &blkdev, SuperBlock &super, BlockA &ba,
-        unsigned int pbs, uint64_t lsid) {
+        uint32_t pbs, uint64_t lsid) {
         uint64_t off = super.getOffsetFromLsid(lsid);
-        Block b = ba.alloc();
-        ::memset(b.get(), 0, pbs);
-        blkdev.write(off * pbs, pbs, reinterpret_cast<const char *>(b.get()));
+        LogBlock b = ba.alloc();
+        blkdev.write(off * pbs, pbs, b.get());
     }
 
     /**
      * Read a block data from a fd reader.
      */
-    Block readBlock(FdReader& fdr, BlockA& ba, unsigned int pbs) {
-        Block b = ba.alloc();
-        if (b.get() == nullptr) {
-            throw RT_ERR("allocate failed.");
-        }
-        fdr.read(reinterpret_cast<char *>(b.get()), pbs);
+    LogBlock readBlock(FdReader& fdr, BlockA& ba, uint32_t pbs) {
+        LogBlock b = ba.alloc();
+        fdr.read(b.get(), pbs);
         return b;
     }
 
@@ -246,7 +242,7 @@ private:
         uint64_t &restoredLsid) {
 
         uint32_t salt = wlHead.salt();
-        unsigned int pbs = wlHead.pbs();
+        uint32_t pbs = wlHead.pbs();
 
         /* Read logpack header. */
         LogPackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
@@ -269,7 +265,7 @@ private:
             super.getRingBufferSize();
         if (endOffPb < offPb + 1 + logh.totalIoSize()) {
             /* Create and write padding logpack. */
-            unsigned int paddingPb = endOffPb - offPb;
+            uint32_t paddingPb = endOffPb - offPb;
             assert(0 < paddingPb);
             assert(paddingPb < (1U << 16));
             LogPackHeader paddingLogh(ba.alloc(), pbs, wlHead.salt());
@@ -291,7 +287,7 @@ private:
         }
 
         /* Read logpack data. */
-        std::vector<Block> blocks;
+        std::vector<LogBlock> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
@@ -335,7 +331,7 @@ private:
 
         if (config_.isVerify()) {
             /* Currently only header block will be verified. */
-            Block b2 = ba.alloc();
+            LogBlock b2 = ba.alloc();
             blkdev.read(offPb * pbs, pbs, reinterpret_cast<char *>(b2.get()));
             LogPackHeader logh2(b2, pbs, salt);
             int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);

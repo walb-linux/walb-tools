@@ -98,9 +98,6 @@ class WalbLogUpdater
 {
 private:
     const Config &config_;
-
-    using Block = std::shared_ptr<u8>;
-
 public:
     WalbLogUpdater(const Config &config)
         : config_(config) {}

@@ -102,7 +102,6 @@ namespace diff {
 class Converter /* final */
 {
 private:
-    using Block = std::shared_ptr<uint8_t>;
     using LogpackHeader = LogPackHeader;
 
 public:

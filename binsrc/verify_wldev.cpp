@@ -160,10 +160,10 @@ public:
     }
 
 private:
-    using Block = std::shared_ptr<uint8_t>;
+    using LogBlock = walb::LogBlock;
 
-    Block readBlock(uint64_t lsid) {
-        Block b = ba_.alloc();
+    LogBlock readBlock(uint64_t lsid) {
+        LogBlock b = ba_.alloc();
         uint64_t offset = super_.getOffsetFromLsid(lsid);
         wlDev_.read(offset * pbs_, pbs_, reinterpret_cast<char *>(b.get()));
         return b;

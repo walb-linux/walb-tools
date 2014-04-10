@@ -54,11 +54,10 @@ public:
 
     void check() const {
         if (numWlogs() == 0) {
-            throw RT_ERR("Specify input wlog path.");
+            throw cybozu::Exception("Specify input wlog path.");
         }
         if (blockSize() % LOGICAL_BLOCK_SIZE != 0) {
-            throw RT_ERR("Block size must be a multiple of %u.",
-                       LOGICAL_BLOCK_SIZE);
+            throw cybozu::Exception("invalid blockSize()") << blockSize() << LOGICAL_BLOCK_SIZE;
         }
     }
 private:

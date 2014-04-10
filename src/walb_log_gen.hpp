@@ -74,7 +74,6 @@ public:
         generateAndWrite(outFd);
     }
 private:
-    using Block = std::shared_ptr<uint8_t>;
     using Rand = cybozu::util::Random<uint64_t>;
 
     static void setUuid(Rand &rand, std::vector<uint8_t> &uuid) {
@@ -101,7 +100,7 @@ private:
         const uint32_t salt = rand.get32();
         const unsigned int pbs = config_.pbs;
         uint64_t lsid = config_.lsid;
-        Block hBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+        LogBlock hBlock = createLogBlock(pbs);
         cybozu::util::BlockAllocator<uint8_t> ba(config_.maxPackPb, pbs, pbs);
 
         /* Generate and write walb log header. */
@@ -119,7 +118,7 @@ private:
             uint64_t tmpLsid = lsid + 1;
 
             /* Prepare blocks and calc checksum if necessary. */
-            std::queue<Block> blocks;
+            std::queue<LogBlock> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
                 BlockDataShared blockD(pbs);
@@ -130,7 +129,7 @@ private:
                         isAllZero = rand.get32() % 100 < 10;
                     }
                     for (unsigned int j = 0; j < rec.ioSizePb(); j++) {
-                        Block b = ba.alloc();
+                        LogBlock b = ba.alloc();
                         ::memset(b.get(), 0, pbs);
                         if (!isAllZero) {
                             ::memcpy(b.get(), &tmpLsid, sizeof(tmpLsid));

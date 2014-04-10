@@ -52,7 +52,7 @@ public:
 
     void check() const {
         if (blockSize_ == 0) {
-            throw RT_ERR("Block size must be positive integer.");
+            throw cybozu::Exception("blockSize_ must be positive integer.");
         }
     }
 

@@ -80,7 +80,7 @@ private:
     }
 };
 
-using Block = std::shared_ptr<uint8_t>;
+using LogBlock = walb::LogBlock;
 
 /**
  * Sequence id generator.
@@ -113,7 +113,7 @@ private:
     bool isSubmitted_;
     bool isCompleted_;
     bool isOverwritten_;
-    std::deque<Block> blocks_;
+    std::deque<LogBlock> blocks_;
     unsigned int nOverlapped_; // To serialize overlapped IOs.
     u64 sequenceId_;
 
@@ -127,7 +127,7 @@ public:
         , blocks_(), nOverlapped_(0)
         , sequenceId_(DefaultSequenceIdGenerator()) {}
 
-    Io(off_t offset, size_t size, Block block)
+    Io(off_t offset, size_t size, LogBlock block)
         : Io(offset, size) {
         setBlock(block);
     }
@@ -157,7 +157,7 @@ public:
     unsigned int& nOverlapped() { return nOverlapped_; }
     unsigned int& aioKey() { return aioKey_; }
     std::shared_ptr<uint8_t> ptr() { return blocks_.front(); }
-    Block block() { return ptr(); } /* This is just alias of ptr(). */
+    LogBlock block() { return ptr(); } /* This is just alias of ptr(). */
     bool empty() const { return blocks().empty(); }
     u64 sequenceId() const { return sequenceId_; }
 
@@ -165,7 +165,7 @@ public:
     T* rawPtr() { return reinterpret_cast<T*>(ptr().get()); }
     uint8_t* rawPtr() { return ptr().get(); }
 
-    void setBlock(Block b) {
+    void setBlock(LogBlock b) {
         assert(blocks_.empty());
         blocks_.push_back(b);
     }
@@ -573,7 +573,7 @@ private:
     /**
      * Create an IO.
      */
-    IoPtr createIo(off_t offset, size_t size, Block block) {
+    IoPtr createIo(off_t offset, size_t size, LogBlock block) {
         return IoPtr(new Io(offset, size, block));
     }
 
@@ -799,7 +799,7 @@ private:
         off_t off = static_cast<off_t>(rec.offset()) * LOGICAL_BLOCK_SIZE;
         size_t nBlocks = 0;
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            Block block;
+            LogBlock block;
             if (rec.isDiscard()) {
                 assert(config_.isZeroDiscard());
                 block = ba_.alloc();

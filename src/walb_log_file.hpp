@@ -284,8 +284,6 @@ private:
 class Writer
 {
 private:
-    using Block = std::shared_ptr<uint8_t>;
-
     cybozu::util::FdWriter fdw_;
     bool isWrittenHeader_;
     bool isClosed_;
@@ -353,7 +351,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const LogPackHeader &header, std::queue<Block> &&blocks) {
+    void writePack(const LogPackHeader &header, std::queue<LogBlock> &&blocks) {
         /* Validate. */
         checkHeader(header);
         if (header.totalIoSize() != blocks.size()) {
@@ -420,7 +418,7 @@ private:
      * Write the end block.
      */
     void writeEof() {
-        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
+        LogBlock b = createLogBlock(pbs_);
         LogPackHeader h(b, pbs_, salt_);
         h.setEnd();
         h.write(fdw_);

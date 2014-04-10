@@ -90,7 +90,7 @@ private:
 
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
-    using Block = std::shared_ptr<uint8_t>;
+    using LogBlock = walb::LogBlock;
 
 public:
     WlogExtractor(const std::string &ldevPath,
@@ -166,16 +166,16 @@ private:
     void readAheadLoose() {
         ldevReader_.readAhead(0.5);
     }
-    Block readBlock() {
-        Block b = ba_.alloc();
+    LogBlock readBlock() {
+        LogBlock b = ba_.alloc();
         ldevReader_.read(reinterpret_cast<char *>(b.get()), 1);
         return b;
     }
     /**
      * Get block list from packIo list.
      */
-    static std::queue<Block> toBlocks(std::queue<LogPackIo> &src) {
-        std::queue<Block> dst;
+    static std::queue<LogBlock> toBlocks(std::queue<LogPackIo> &src) {
+        std::queue<LogBlock> dst;
         while (!src.empty()) {
             LogPackIo packIo = std::move(src.front());
             src.pop();
