@@ -175,14 +175,9 @@ struct DiffIo
 
     explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
     }
-    DiffIo(DiffIo &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
-    }
-    void operator=(DiffIo&& rhs)
-    {
-        ioBlocks = rhs.ioBlocks;
-        compressionType = rhs.compressionType;
-        data = std::move(rhs.data);
-    }
+    DiffIo(const DiffIo &) = default;
+    DiffIo(DiffIo &&) = default;
+    DiffIo& operator=(DiffIo&&) = default;
 
     void clear() {
         ioBlocks = 0;
