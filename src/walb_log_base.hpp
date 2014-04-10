@@ -767,18 +767,18 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
     }
 }
 
-bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& blockD, uint32_t salt)
+bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");
         return false; }
     if (!rec.hasDataForChecksum()) return true;
-    const uint32_t ioSizePb = rec.ioSizePb(blockD.pbs);
-    if (blockD.nBlocks() < ioSizePb) {
+    const uint32_t ioSizePb = rec.ioSizePb(blockS.pbs);
+    if (blockS.nBlocks() < ioSizePb) {
         throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
-            << blockD.nBlocks() << ioSizePb;
+            << blockS.nBlocks() << ioSizePb;
     }
-    const uint32_t checksum = blockD.calcChecksum(rec.io_size, salt);
+    const uint32_t checksum = blockS.calcChecksum(rec.io_size, salt);
     if (checksum != rec.checksum) {
         LOGd("invalid checksum expected %08x calculated %08x."
              , rec.checksum, checksum);
@@ -794,16 +794,16 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& block
 struct LogPackIo
 {
     log::RecordRaw rec;
-    LogBlockShared blockD;
+    LogBlockShared blockS;
 
     void set(const LogPackHeader &logh, size_t pos) {
         rec.copyFrom(logh, pos);
-        blockD.pbs = logh.pbs();
+        blockS.pbs = logh.pbs();
     }
 
-    bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockD, isChecksum); }
-    uint32_t calcIoChecksumWithZeroSalt() const { return blockD.calcChecksum(rec.ioSizeLb(), 0); }
-    uint32_t calcIoChecksum() const { return log::calcIoChecksumRB(rec, blockD);
+    bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockS, isChecksum); }
+    uint32_t calcIoChecksumWithZeroSalt() const { return blockS.calcChecksum(rec.ioSizeLb(), 0); }
+    uint32_t calcIoChecksum() const { return log::calcIoChecksumRB(rec, blockS);
     }
 };
 

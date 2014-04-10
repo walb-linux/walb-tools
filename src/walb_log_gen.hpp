@@ -121,7 +121,7 @@ private:
             std::queue<LogBlock> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
-                LogBlockShared blockD(pbs);
+                LogBlockShared blockS(pbs);
 
                 if (rec.hasData()) {
                     bool isAllZero = false;
@@ -135,12 +135,12 @@ private:
                             ::memcpy(b.get(), &tmpLsid, sizeof(tmpLsid));
                         }
                         tmpLsid++;
-                        blockD.addBlock(b);
+                        blockS.addBlock(b);
                         blocks.push(b);
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    rec.record().checksum = log::calcIoChecksumRB(rec, blockD);
+                    rec.record().checksum = log::calcIoChecksumRB(rec, blockS);
                 }
             }
             assert(blocks.size() == logh.totalIoSize());

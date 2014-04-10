@@ -19,28 +19,28 @@ namespace log {
 
 constexpr size_t Q_SIZE = 16;
 
-CompressedData convertToCompressedData(const LogBlockShared &blockD, bool doCompress)
+CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress)
 {
-    const uint32_t pbs = blockD.pbs;
-    const size_t n = blockD.nBlocks();
+    const uint32_t pbs = blockS.pbs;
+    const size_t n = blockS.nBlocks();
     assert(0 < n);
     std::vector<char> d(n * pbs);
     for (size_t i = 0; i < n; i++) {
-        ::memcpy(&d[i * pbs], blockD.get(i), pbs);
+        ::memcpy(&d[i * pbs], blockS.get(i), pbs);
     }
     CompressedData cd;
     cd.setUncompressed(std::move(d));
     return doCompress ? cd.compress() : cd;
 }
 
-inline void convertToLogBlockVec(LogBlockVec& blockD, const CompressedData &cd, uint32_t pbs)
+inline void convertToLogBlockVec(LogBlockVec& blockV, const CompressedData &cd, uint32_t pbs)
 {
     const size_t origSize = cd.originalSize();
     assert(origSize % pbs == 0);
     std::vector<uint8_t> v;
     cd.getUncompressed(v);
-    blockD.pbs = pbs;
-    blockD.setData(std::move(v));
+    blockV.pbs = pbs;
+    blockV.setData(std::move(v));
 }
 
 inline void convertToLogBlockShared(LogBlockShared& blockDS, const CompressedData &cd, uint32_t pbs)
@@ -156,14 +156,14 @@ public:
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, size_t recIdx, const LogBlockShared &blockD) {
+    void pushIo(const LogPackHeader &header, size_t recIdx, const LogBlockShared &blockS) {
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);
         assert(recIdx < header.nRecords());
         const LogRecord &rec = header.record(recIdx);
         if (rec.hasDataForChecksum()) {
-            CompressedData cd = convertToCompressedData(blockD, false);
+            CompressedData cd = convertToCompressedData(blockS, false);
             assert(0 < cd.originalSize());
             q0_.push(std::move(cd));
         }
@@ -319,7 +319,7 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const walb_logpack_header &header, size_t recIdx, LogBlockShared &blockD) {
+    void popIo(const walb_logpack_header &header, size_t recIdx, LogBlockShared &blockS) {
         assert(recIdx_ == recIdx);
         const LogPackHeader h(&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
@@ -327,12 +327,12 @@ public:
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
-            convertToLogBlockShared(blockD, cd, pbs_);
+            convertToLogBlockShared(blockS, cd, pbs_);
         } else {
-            blockD.pbs = pbs_;
-            blockD.resize(0);
+            blockS.pbs = pbs_;
+            blockS.resize(0);
         }
-        if (!isValidRecordAndBlockData(rec, blockD, h.salt())) {
+        if (!isValidRecordAndBlockData(rec, blockS, h.salt())) {
             throw cybozu::Exception("Receiver:popIo:invalid.");
         }
         recIdx_++;

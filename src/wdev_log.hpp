@@ -297,10 +297,11 @@ public:
      * @data buffer pointer to fill.
      * @pb size [physical block].
      */
-    void read(char *data, size_t pb) {
+    void read(void *data, size_t pb) {
+        char *p = (char*)data;
         while (0 < pb) {
-            readBlock(data);
-            data += pbs_;
+            readBlock(p);
+            p += pbs_;
             pb--;
         }
     }
@@ -390,7 +391,7 @@ private:
         pendingPb_ += ioPb;
         plusIdx(aheadIdx_, ioPb);
     }
-    void readBlock(char *data) {
+    void readBlock(void *data) {
         if (remainingPb_ == 0 && pendingPb_ == 0) {
             readAhead();
         }

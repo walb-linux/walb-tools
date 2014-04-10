@@ -191,7 +191,7 @@ private:
             const walb::log::RecordRaw &rec = packIo.rec;
             if (!rec.hasData()) { continue; }
             for (size_t j = 0; j < rec.ioSizePb(); j++) {
-                packIo.blockD.addBlock(readBlock(fdr, ba));
+                packIo.blockS.addBlock(readBlock(fdr, ba));
             }
             if (!rec.hasDataForChecksum()) { continue; }
             /* Only normal IOs will be inserted. */

@@ -175,7 +175,7 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(RecordRaw& rec, walb::LogBlockVec& blockD)
+    bool readLog(RecordRaw& rec, walb::LogBlockVec& blockV)
     {
         checkReadHeader();
         fillPackIfNeed();
@@ -187,24 +187,24 @@ public:
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());
 
-        /* Read to the blockD. */
-        blockD.pbs = pbs_;
+        /* Read to the blockV. */
+        blockV.pbs = pbs_;
         if (rec.hasData()) {
-            blockD.resize(rec.ioSizePb());
+            blockV.resize(rec.ioSizePb());
             for (size_t i = 0; i < rec.ioSizePb(); i++) {
                 try {
-                    fdr_.read(blockD.get(i), pbs_);
+                    fdr_.read(blockV.get(i), pbs_);
                 } catch (cybozu::util::EofError &e) {
                     throw InvalidIo();
                 }
             }
         } else {
-            blockD.resize(0);
+            blockV.resize(0);
         }
 
         /* Validate. */
-        if (!isValidRB(rec, blockD)) {
-            printRB(rec, blockD);
+        if (!isValidRB(rec, blockV)) {
+            printRB(rec, blockV);
             LOGd("invalid...");
             throw InvalidIo();
         }
@@ -344,9 +344,9 @@ public:
     /**
      * Write a pack IO.
      */
-    void writePackIo(const LogBlockShared &blockD) {
-        blockD.write(fdw_);
-        lsid_ += blockD.nBlocks();
+    void writePackIo(const LogBlockShared &blockS) {
+        blockS.write(fdw_);
+        lsid_ += blockS.nBlocks();
     }
     /**
      * Write a pack.
@@ -361,26 +361,26 @@ public:
         std::vector<LogBlockShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
             const LogRecord &rec = header.record(i);
-            LogBlockShared blockD(pbs_);
+            LogBlockShared blockS(pbs_);
             if (rec.hasData()) {
                 const size_t ioSizePb = rec.ioSizePb(pbs_);
                 for (size_t j = 0; j < ioSizePb; j++) {
-                    blockD.addBlock(std::move(blocks.front()));
+                    blockS.addBlock(std::move(blocks.front()));
                     blocks.pop();
                 }
             }
-            if (!isValidRecordAndBlockData(rec, blockD, header.salt())) {
-                throw cybozu::Exception("writePack:invalid rec/blockD");
+            if (!isValidRecordAndBlockData(rec, blockS, header.salt())) {
+                throw cybozu::Exception("writePack:invalid rec/blockS");
             }
-            v.push_back(std::move(blockD));
+            v.push_back(std::move(blockS));
         }
         assert(v.size() == header.nRecords());
         assert(blocks.empty());
 
         /* Write */
         writePackHeader(header.header());
-        for (const LogBlockShared &blockD : v) {
-            writePackIo(blockD);
+        for (const LogBlockShared &blockS : v) {
+            writePackIo(blockS);
         }
         assert(lsid_ == header.nextLogpackLsid());
     }
@@ -440,8 +440,8 @@ public:
         wh.print(fp);
 
         RecordRaw rec;
-        LogBlockVec blockD;
-        while (reader.readLog(rec, blockD)) {
+        LogBlockVec blockV;
+        while (reader.readLog(rec, blockV)) {
             rec.printOneline(fp);
         }
         /*

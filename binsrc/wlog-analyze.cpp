@@ -159,8 +159,8 @@ private:
         /* Read pack IO. */
         while (!reader.isEnd()) {
             walb::log::RecordRaw rec;
-            walb::LogBlockVec blockD;
-            reader.readLog(rec, blockD);
+            walb::LogBlockVec blockV;
+            reader.readLog(rec, blockV);
             updateBitmap(rec);
         }
         return reader.endLsid();

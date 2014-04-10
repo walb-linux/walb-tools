@@ -179,9 +179,9 @@ private:
         while (!src.empty()) {
             LogPackIo packIo = std::move(src.front());
             src.pop();
-            walb::LogBlockShared &blockD = packIo.blockD;
-            for (size_t i = 0; i < blockD.nBlocks(); i++) {
-                dst.push(blockD.getBlock(i));
+            walb::LogBlockShared &blockS = packIo.blockS;
+            for (size_t i = 0; i < blockS.nBlocks(); i++) {
+                dst.push(blockS.getBlock(i));
             }
         }
         assert(src.empty());
@@ -241,7 +241,7 @@ private:
         if (!rec.hasData()) { return; }
         readAheadLoose();
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockD.addBlock(readBlock());
+            packIo.blockS.addBlock(readBlock());
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();

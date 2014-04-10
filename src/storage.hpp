@@ -770,15 +770,15 @@ inline void readLogPackHeader(device::AsyncWldevReader &reader, LogPackHeader &p
     reader.readAhead();
 }
 
-inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, LogBlockShared &blockD)
+inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, LogBlockShared &blockS)
 {
     const LogRecord &lrec = packH.record(recIdx);
     if (!lrec.hasData()) return;
 
     const size_t ioSizePb = lrec.ioSizePb(packH.pbs());
-    blockD.resize(ioSizePb);
+    blockS.resize(ioSizePb);
     for (size_t i = 0; i < ioSizePb; i++) {
-        reader.read((char *)blockD.get(i), 1);
+        reader.read(blockS.get(i), 1);
     }
     reader.readAhead();
 }
@@ -875,7 +875,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     LogPackHeader packH(packHeaderBlock, pbs, salt);
     reader.reset(lsidB);
 
-    LogBlockShared blockD(pbs);
+    LogBlockShared blockS(pbs);
     uint64_t lsid = lsidB;
     for (;;) {
         if (volSt.stopState == ForceStopping || gs.forceQuit) {
@@ -888,8 +888,8 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
         if (lsidLimit < nextLsid) break;
         sender.pushHeader(packH);
         for (size_t i = 0; i < packH.header().n_records; i++) {
-            readLogIo(reader, packH, i, blockD);
-            sender.pushIo(packH, i, blockD);
+            readLogIo(reader, packH, i, blockS);
+            sender.pushIo(packH, i, blockS);
         }
         lsid = nextLsid;
     }

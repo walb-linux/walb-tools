@@ -216,7 +216,7 @@ private:
         const walb::log::RecordRaw &rec = packIo.rec;
         if (!rec.hasData()) { return; }
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockD.addBlock(readBlock(fdr, ba, rec.pbs()));
+            packIo.blockS.addBlock(readBlock(fdr, ba, rec.pbs()));
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();
@@ -296,7 +296,7 @@ private:
             walb::log::RecordRaw &rec = packIo.rec;
             if (rec.hasData()) {
                 for (size_t j = 0; j < rec.ioSizePb(); j++) {
-                    blocks.push_back(packIo.blockD.getBlock(j));
+                    blocks.push_back(packIo.blockS.getBlock(j));
                 }
             }
             if (0 < config_.ddevLb() &&

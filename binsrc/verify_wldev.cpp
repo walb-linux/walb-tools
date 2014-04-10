@@ -183,7 +183,7 @@ private:
             if (!rec.hasData()) { continue; }
             const uint64_t endLsid = rec.lsid() + rec.ioSizePb();
             for (uint64_t lsid = rec.lsid(); lsid < endLsid; lsid++) {
-                packIo.blockD.addBlock(readBlock(lsid));
+                packIo.blockS.addBlock(readBlock(lsid));
             }
             if (!rec.hasDataForChecksum()) continue;
             /* Only normal IOs will be inserted. */
