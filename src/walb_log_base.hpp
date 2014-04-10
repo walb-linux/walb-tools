@@ -668,48 +668,44 @@ class BlockDataVec
     std::vector<uint8_t> data_;
 public:
     explicit BlockDataVec(unsigned int pbs = 0) : pbs_(pbs), data_() {}
-    BlockDataVec(const BlockDataVec &) = default;
-    BlockDataVec(BlockDataVec &&) = default;
-    BlockDataVec &operator=(const BlockDataVec &) = default;
-    BlockDataVec &operator=(BlockDataVec &&) = default;
 
     unsigned int pbs() const { return pbs_; }
     void setPbs(unsigned int pbs) {
+        // checkPbs(); // QQQ : why fails?
         pbs_ = pbs;
-        checkPbs();
     }
-    size_t nBlocks() const { return data_.size() / pbs(); }
+    size_t nBlocks() const {
+        checkPbs();
+        return data_.size() / pbs_;
+    }
     const uint8_t *get(size_t idx) const {
         check(idx);
-        return &data_[idx * pbs()];
+        return &data_[idx * pbs_];
     }
     uint8_t *get(size_t idx) {
         check(idx);
-        return &data_[idx * pbs()];
+        return &data_[idx * pbs_];
     }
     void resize(size_t nBlocks0) {
-        data_.resize(nBlocks0 * pbs());
+        data_.resize(nBlocks0 * pbs_);
     }
     void addBlock(const Block &block) {
-        checkPbs();
-        size_t s0 = data_.size();
-        size_t s1 = s0 + pbs();
-        data_.resize(s1);
-        ::memcpy(&data_[s0], block.get(), pbs());
+        data_.insert(data_.end(), block.get(), block.get() + pbs_);
     }
     Block getBlock(size_t idx) const {
         check(idx);
-        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
-        ::memcpy(b.get(), get(idx), pbs());
+        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
+        ::memcpy(b.get(), get(idx), pbs_);
         return b;
     }
 
     void moveFrom(std::vector<uint8_t> &&data) {
+        verifyDataSize(data.size());
         data_ = std::move(data);
     }
     void copyFrom(const uint8_t *data, size_t size) {
-        data_.resize(size);
-        ::memcpy(&data_[0], data, size);
+        verifyDataSize(size);
+        data_.assign(data, data + size);
     }
 
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
@@ -720,8 +716,8 @@ public:
         size_t i = 0;
         while (0 < remaining) {
             assert(i < nBlocks());
-            size_t s = pbs();
-            if (remaining < pbs()) s = remaining;
+            size_t s = pbs_;
+            if (remaining < pbs_) s = remaining;
             csum = cybozu::util::checksumPartial(get(i), s, csum);
             remaining -= s;
             i++;
@@ -735,8 +731,8 @@ public:
         size_t i = 0;
         while (0 < remaining) {
             assert(i < nBlocks());
-            size_t s = pbs();
-            if (remaining < pbs()) s = remaining;
+            size_t s = pbs_;
+            if (remaining < pbs_) s = remaining;
             if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
             remaining -= s;
             i++;
@@ -750,25 +746,25 @@ public:
     void write(cybozu::util::FdWriter &fdw) const {
         checkPbs();
         for (size_t i = 0; i < nBlocks(); i++) {
-            fdw.write(get(i), pbs());
+            fdw.write(get(i), pbs_);
         }
     }
 
 private:
+    void verifyDataSize(size_t size) const {
+        if (pbs_ && (size % pbs_) != 0) throw cybozu::Exception("BlockDataVec:bad size") << pbs_ << size;
+    }
     void checkPbs() const {
-        if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
+        if (pbs_ == 0) throw cybozu::Exception("BlockDataVec:pbs_ is zero");
     }
     void checkSizeLb(size_t ioSizeLb) const {
-        if (nBlocks() * pbs() < ioSizeLb * LOGICAL_BLOCK_SIZE) {
+        if (nBlocks() * pbs_ < ioSizeLb * LOGICAL_BLOCK_SIZE) {
             throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
-                         , ioSizeLb, ::capacity_lb(pbs(), nBlocks()));
+                         , ioSizeLb, ::capacity_lb(pbs_, nBlocks()));
         }
     }
     void check(size_t idx) const {
         checkPbs();
-        if (data_.size() % pbs() != 0) {
-            throw RT_ERR("data size is not multiples of pbs.");
-        }
         if (nBlocks() <= idx) {
             throw RT_ERR("BlockDataVec: index out of range.");
         }
