@@ -21,7 +21,7 @@ constexpr size_t Q_SIZE = 16;
 
 CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCompress)
 {
-    const unsigned int pbs = blockD.pbs();
+    const uint32_t pbs = blockD.pbs;
     const size_t n = blockD.nBlocks();
     assert(0 < n);
     std::vector<char> d(n * pbs);
@@ -33,21 +33,21 @@ CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCom
     return doCompress ? cd.compress() : cd;
 }
 
-inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd, unsigned int pbs)
+inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd, uint32_t pbs)
 {
     const size_t origSize = cd.originalSize();
     assert(origSize % pbs == 0);
     std::vector<uint8_t> v;
     cd.getUncompressed(v);
-    blockD.setPbs(pbs);
+    blockD.pbs = pbs;
     blockD.setData(std::move(v));
 }
 
-inline void convertToBlockDataShared(BlockDataShared& blockDS, const CompressedData &cd, unsigned int pbs)
+inline void convertToBlockDataShared(BlockDataShared& blockDS, const CompressedData &cd, uint32_t pbs)
 {
     BlockDataVec blockDV;
     convertToBlockDataVec(blockDV, cd, pbs);
-    blockDS.setPbs(pbs);
+    blockDS.pbs = pbs;
     const size_t n = blockDV.nBlocks();
     blockDS.resize(n);
     for (size_t i = 0; i < n; i++) {
@@ -326,14 +326,14 @@ public:
         const LogRecord &rec = h.record(recIdx);
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
-            if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
+            if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
             convertToBlockDataShared(blockD, cd, pbs_);
         } else {
-            blockD.setPbs(pbs_);
+            blockD.pbs = pbs_;
             blockD.resize(0);
         }
         if (!isValidRecordAndBlockData(rec, blockD, h.salt())) {
-            throw cybozu::Exception("popIo:Popped IO is invalid.");
+            throw cybozu::Exception("Receiver:popIo:invalid.");
         }
         recIdx_++;
     }
