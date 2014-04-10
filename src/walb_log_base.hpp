@@ -68,6 +68,8 @@ struct LogRecord : public walb_log_record
     uint32_t ioSizeLb() const { return io_size; }
 };
 
+using LogBlock = std::shared_ptr<uint8_t>;
+
 namespace log {
 
 class InvalidIo : public std::exception
@@ -119,8 +121,7 @@ inline void printRecordOneline(::FILE *fp, size_t idx, const LogRecord &rec)
  */
 class LogPackHeader
 {
-    using Block = std::shared_ptr<uint8_t>;
-    Block block_;
+    LogBlock block_;
     walb_logpack_header *header_;
     unsigned int pbs_;
     uint32_t salt_;
@@ -128,7 +129,7 @@ public:
     LogPackHeader(const void *header = 0, unsigned int pbs = 0, uint32_t salt = 0)
         : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
     }
-    LogPackHeader(const Block &block, unsigned int pbs, uint32_t salt)
+    LogPackHeader(const LogBlock &block, unsigned int pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
         setBlock(block);
     }
@@ -138,7 +139,7 @@ public:
     uint32_t salt() const { return salt_; }
     void setPbs(unsigned int pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
-    void setBlock(const Block &block) {
+    void setBlock(const LogBlock &block) {
         block_ = block;
         header_ = (walb_logpack_header*)block_.get();
     }
@@ -576,7 +577,6 @@ struct RecordT : T
 
 template<class T>
 struct BlockDataT {
-    using Block = std::shared_ptr<uint8_t>;
     uint32_t pbs; /* physical block size. */
     explicit BlockDataT(uint32_t pbs = 0) : pbs(pbs) {}
 
@@ -663,9 +663,9 @@ public:
         check(idx);
         return &data_[idx * pbs];
     }
-    Block getBlock(size_t idx) const {
+    LogBlock getBlock(size_t idx) const {
         check(idx);
-        Block b = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+        LogBlock b = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
         ::memcpy(b.get(), get(idx), pbs);
         return b;
     }
@@ -682,7 +682,7 @@ private:
 class BlockDataShared : public log_local::BlockDataT<BlockDataShared>
 {
 private:
-    std::vector<Block> data_; /* Each block's size must be pbs. */
+    std::vector<LogBlock> data_; /* Each block's size must be pbs. */
 public:
     explicit BlockDataShared(uint32_t pbs = 0) : log_local::BlockDataT<BlockDataShared>(pbs) {}
     size_t nBlocks() const { return data_.size(); }
@@ -702,11 +702,11 @@ public:
             data_.push_back(allocPb());
         }
     }
-    void addBlock(const Block &block) {
+    void addBlock(const LogBlock &block) {
         assert(block);
         data_.push_back(block);
     }
-    Block getBlock(size_t idx) const { return data_[idx]; }
+    LogBlock getBlock(size_t idx) const { return data_[idx]; }
     void write(cybozu::util::FdWriter &fdw) const {
         checkPbs();
         for (size_t i = 0; i < nBlocks(); i++) {
@@ -714,7 +714,7 @@ public:
         }
     }
 private:
-    Block allocPb() const {
+    LogBlock allocPb() const {
         return cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
     }
 };
