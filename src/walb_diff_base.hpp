@@ -164,9 +164,8 @@ struct DiffRecord : public walb_diff_record {
 /**
  * Block diff for an IO.
  */
-class DiffIo
+struct DiffIo
 {
-public:
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
     std::vector<char> data;
@@ -176,10 +175,15 @@ public:
 
     explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
     }
-    DiffIo(const DiffIo &rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(rhs.data) {
-    }
     DiffIo(DiffIo &&rhs) : ioBlocks(rhs.ioBlocks), compressionType(rhs.compressionType), data(std::move(rhs.data)) {
     }
+    void operator=(DiffIo&& rhs)
+    {
+        ioBlocks = rhs.ioBlocks;
+        compressionType = rhs.compressionType;
+        data = std::move(rhs.data);
+    }
+
     void clear() {
         ioBlocks = 0;
         compressionType = ::WALB_DIFF_CMPR_NONE;
@@ -247,22 +251,6 @@ public:
                   , calcChecksum());
     }
 
-    void swap(DiffIo& rhs) noexcept {
-        std::swap(ioBlocks, rhs.ioBlocks);
-        std::swap(compressionType, rhs.compressionType);
-        data.swap(rhs.data);
-    }
-    DiffIo &operator=(const DiffIo &rhs) {
-        ioBlocks = rhs.ioBlocks;
-        compressionType = rhs.compressionType;
-        data = rhs.data;
-        return *this;
-    }
-    DiffIo &operator=(DiffIo &&rhs) {
-        swap(rhs);
-        return *this;
-    }
-
     void set(const DiffRecord &rec) {
         if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
@@ -283,24 +271,22 @@ public:
     std::vector<DiffIo> splitIoDataAll(uint16_t ioBlocks0) const
     {
         if (ioBlocks0 == 0) {
-            throw RT_ERR("splitAll: ioBlocks0 must not be 0.");
+            throw cybozu::Exception("splitIoDataAll: ioBlocks0 must not be 0.");
         }
         if (isCompressed()) {
-            throw RT_ERR("splitAll: compressed IO can not be splitted.");
+            throw cybozu::Exception("splitIoDataAll: compressed IO can not be splitted.");
         }
         assert(isValid());
         std::vector<DiffIo> v;
         uint16_t remaining = ioBlocks;
-        size_t off = 0;
-        while (0 < remaining) {
+        const char *p = data.data();
+        while (remaining > 0) {
             uint16_t blks = std::min(remaining, ioBlocks0);
             size_t size = blks * LOGICAL_BLOCK_SIZE;
-            v.emplace_back(blks, WALB_DIFF_CMPR_NONE, &data[off], size);
+            v.emplace_back(blks, WALB_DIFF_CMPR_NONE, p, size);
             remaining -= blks;
-            off += size;
+            p += size;
         }
-        assert(off == getSize());
-        assert(!v.empty());
         return v;
     }
     void uncompress()
