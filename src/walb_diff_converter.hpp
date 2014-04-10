@@ -101,9 +101,6 @@ namespace diff {
  */
 class Converter /* final */
 {
-private:
-    using LogpackHeader = LogPackHeader;
-
 public:
     void convert(int inputLogFd, int outputWdiffFd,
                  uint16_t maxIoBlocks = uint16_t(-1)) {
