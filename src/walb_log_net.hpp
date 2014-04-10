@@ -33,35 +33,26 @@ CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCom
     return doCompress ? cd.compress() : cd;
 }
 
-template <typename BlockDataT>
-BlockDataT convertToBlockData(const CompressedData &/*cd*/, unsigned int /*pbs*/)
-{
-    throw std::runtime_error("convertToBlockData: not supported type.");
-}
-
-template <>
-BlockDataVec convertToBlockData(const CompressedData &cd, unsigned int pbs)
+inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd, unsigned int pbs)
 {
     const size_t origSize = cd.originalSize();
     assert(origSize % pbs == 0);
     std::vector<uint8_t> v;
     cd.getUncompressed(v);
-    BlockDataVec blockD(pbs);
+    blockD.setPbs(pbs);
     blockD.moveFrom(std::move(v));
-    return blockD;
 }
 
-template <>
-BlockDataShared convertToBlockData(const CompressedData &cd, unsigned int pbs)
+inline void convertToBlockDataShared(BlockDataShared& blockDS, const CompressedData &cd, unsigned int pbs)
 {
-    BlockDataVec blockD0 = convertToBlockData<BlockDataVec>(cd, pbs);
-    BlockDataShared blockD1(pbs);
-    const size_t n = blockD0.nBlocks();
-    blockD1.resize(n);
+    BlockDataVec blockDV;
+    convertToBlockDataVec(blockDV, cd, pbs);
+    blockDS.setPbs(pbs);
+    const size_t n = blockDV.nBlocks();
+    blockDS.resize(n);
     for (size_t i = 0; i < n; i++) {
-        ::memcpy(blockD1.get(i), blockD0.get(i), pbs);
+        ::memcpy(blockDS.get(i), blockDV.get(i), pbs);
     }
-    return blockD1;
 }
 
 /**
@@ -328,8 +319,7 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    template <typename BlockDataT>
-    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataT &blockD) {
+    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataShared &blockD) {
         assert(recIdx_ == recIdx);
         const LogPackHeader h(&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
@@ -337,7 +327,7 @@ public:
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw std::runtime_error("Pop IO data failed.");
-            blockD = convertToBlockData<BlockDataT>(cd, pbs_);
+            convertToBlockDataShared(blockD, cd, pbs_);
         } else {
             blockD.setPbs(pbs_);
             blockD.resize(0);

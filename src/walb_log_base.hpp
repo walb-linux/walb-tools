@@ -670,6 +670,7 @@ public:
     explicit BlockDataVec(unsigned int pbs = 0) : pbs_(pbs), data_() {}
 
     unsigned int pbs() const { return pbs_; }
+// used
     void setPbs(unsigned int pbs) {
         // checkPbs(); // QQQ : why fails?
         pbs_ = pbs;
@@ -677,6 +678,9 @@ public:
     size_t nBlocks() const {
         checkPbs();
         return data_.size() / pbs_;
+    }
+    void resize(size_t nBlocks0) {
+        data_.resize(nBlocks0 * pbs_);
     }
     const uint8_t *get(size_t idx) const {
         check(idx);
@@ -686,23 +690,37 @@ public:
         check(idx);
         return &data_[idx * pbs_];
     }
-    void resize(size_t nBlocks0) {
-        data_.resize(nBlocks0 * pbs_);
-    }
-    void addBlock(const Block &block) {
-        data_.insert(data_.end(), block.get(), block.get() + pbs_);
-    }
     Block getBlock(size_t idx) const {
         check(idx);
         Block b = cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
         ::memcpy(b.get(), get(idx), pbs_);
         return b;
     }
-
+    bool calcIsAllZero(size_t ioSizeLb) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs_;
+            if (remaining < pbs_) s = remaining;
+            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
+            remaining -= s;
+            i++;
+        }
+        return true;
+    }
     void moveFrom(std::vector<uint8_t> &&data) {
         verifyDataSize(data.size());
         data_ = std::move(data);
     }
+
+// not used
+    void addBlock(const Block &block) {
+        data_.insert(data_.end(), block.get(), block.get() + pbs_);
+    }
+
     void copyFrom(const uint8_t *data, size_t size) {
         verifyDataSize(size);
         data_.assign(data, data + size);
@@ -723,21 +741,6 @@ public:
             i++;
         }
         return cybozu::util::checksumFinish(csum);
-    }
-    bool calcIsAllZero(size_t ioSizeLb) const {
-        checkPbs();
-        checkSizeLb(ioSizeLb);
-        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
-        size_t i = 0;
-        while (0 < remaining) {
-            assert(i < nBlocks());
-            size_t s = pbs_;
-            if (remaining < pbs_) s = remaining;
-            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
-            remaining -= s;
-            i++;
-        }
-        return true;
     }
     void write(int fd) const {
         cybozu::util::FdWriter fdw(fd);
