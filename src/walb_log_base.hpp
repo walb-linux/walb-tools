@@ -617,17 +617,17 @@ struct BlockDataT {
     }
 protected:
     void checkPbs() const {
-        if (pbs == 0) throw cybozu::Exception("BlockDataVec:pbs is zero");
+        if (pbs == 0) throw cybozu::Exception("LogBlockVec:pbs is zero");
     }
     void checkSizeLb(size_t ioSizeLb) const {
         if (static_cast<const T&>(*this).nBlocks() * pbs < ioSizeLb * LOGICAL_BLOCK_SIZE) {
-            throw cybozu::Exception("BlockDataVec:checkSizeLb:ioSizeLb too large") << ioSizeLb << ::capacity_lb(pbs, static_cast<const T&>(*this).nBlocks());
+            throw cybozu::Exception("LogBlockVec:checkSizeLb:ioSizeLb too large") << ioSizeLb << ::capacity_lb(pbs, static_cast<const T&>(*this).nBlocks());
         }
     }
     void check(size_t idx) const {
         checkPbs();
         if (static_cast<const T&>(*this).nBlocks() <= idx) {
-            throw cybozu::Exception("BlockDataVec: index out of range.") << idx;
+            throw cybozu::Exception("LogBlockVec: index out of range.") << idx;
         }
     }
 };
@@ -639,15 +639,17 @@ namespace log {
 using RecordRaw = log_local::RecordT<log_local::MemRecord>;
 using RecordWrap = log_local::RecordT<log_local::PtrRecord>;
 
+} // walb::log
+
 /**
  * Block data using a vector.
  */
-class BlockDataVec : public log_local::BlockDataT<BlockDataVec>
+class LogBlockVec : public log_local::BlockDataT<LogBlockVec>
 {
 private:
     std::vector<uint8_t> data_;
 public:
-    explicit BlockDataVec(uint32_t pbs = 0) : log_local::BlockDataT<BlockDataVec>(pbs) {}
+    explicit LogBlockVec(uint32_t pbs = 0) : log_local::BlockDataT<LogBlockVec>(pbs) {}
     size_t nBlocks() const {
         checkPbs();
         return data_.size() / pbs;
@@ -675,7 +677,7 @@ public:
     }
 private:
     void verifyDataSize(size_t size) const {
-        if (pbs && (size % pbs) != 0) throw cybozu::Exception("BlockDataVec:bad size") << pbs << size;
+        if (pbs && (size % pbs) != 0) throw cybozu::Exception("LogBlockVec:bad size") << pbs << size;
     }
 };
 
@@ -683,12 +685,12 @@ private:
  * Helper class to manage multiple IO blocks.
  * This is copyable and movable.
  */
-class BlockDataShared : public log_local::BlockDataT<BlockDataShared>
+class LogBlockShared : public log_local::BlockDataT<LogBlockShared>
 {
 private:
     std::vector<LogBlock> data_; /* Each block's size must be pbs. */
 public:
-    explicit BlockDataShared(uint32_t pbs = 0) : log_local::BlockDataT<BlockDataShared>(pbs) {}
+    explicit LogBlockShared(uint32_t pbs = 0) : log_local::BlockDataT<LogBlockShared>(pbs) {}
     size_t nBlocks() const { return data_.size(); }
     const uint8_t *get(size_t idx) const {
         check(idx);
@@ -722,6 +724,8 @@ private:
         return cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
     }
 };
+
+namespace log {
 
 template<class R, class B>
 uint32_t calcIoChecksumRB(const R& rec, const B& block) {
@@ -763,7 +767,7 @@ inline void printRB(const R& rec, const B& block, FILE *fp = stdout)
     }
 }
 
-bool isValidRecordAndBlockData(const LogRecord& rec, const BlockDataShared& blockD, uint32_t salt)
+bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& blockD, uint32_t salt)
 {
     if (!rec.isValid()) {
         LOGd("invalid record.");
@@ -790,7 +794,7 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const BlockDataShared& bloc
 struct LogPackIo
 {
     log::RecordRaw rec;
-    log::BlockDataShared blockD;
+    LogBlockShared blockD;
 
     void set(const LogPackHeader &logh, size_t pos) {
         rec.copyFrom(logh, pos);

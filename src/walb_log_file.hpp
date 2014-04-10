@@ -175,7 +175,7 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(RecordRaw& rec, walb::log::BlockDataVec& blockD)
+    bool readLog(RecordRaw& rec, walb::LogBlockVec& blockD)
     {
         checkReadHeader();
         fillPackIfNeed();
@@ -344,7 +344,7 @@ public:
     /**
      * Write a pack IO.
      */
-    void writePackIo(const BlockDataShared &blockD) {
+    void writePackIo(const LogBlockShared &blockD) {
         blockD.write(fdw_);
         lsid_ += blockD.nBlocks();
     }
@@ -358,10 +358,10 @@ public:
             throw RT_ERR("blocks.size() must be %u but %zu."
                          , header.totalIoSize(), blocks.size());
         }
-        std::vector<BlockDataShared> v;
+        std::vector<LogBlockShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
             const LogRecord &rec = header.record(i);
-            BlockDataShared blockD(pbs_);
+            LogBlockShared blockD(pbs_);
             if (rec.hasData()) {
                 const size_t ioSizePb = rec.ioSizePb(pbs_);
                 for (size_t j = 0; j < ioSizePb; j++) {
@@ -379,7 +379,7 @@ public:
 
         /* Write */
         writePackHeader(header.header());
-        for (const BlockDataShared &blockD : v) {
+        for (const LogBlockShared &blockD : v) {
             writePackIo(blockD);
         }
         assert(lsid_ == header.nextLogpackLsid());
@@ -440,7 +440,7 @@ public:
         wh.print(fp);
 
         RecordRaw rec;
-        BlockDataVec blockD;
+        LogBlockVec blockD;
         while (reader.readLog(rec, blockD)) {
             rec.printOneline(fp);
         }

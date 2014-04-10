@@ -528,7 +528,7 @@ public:
 
         while (!reader.isEnd()) {
             walb::log::RecordRaw rec;
-            walb::log::BlockDataVec blockD;
+            walb::LogBlockVec blockD;
             if (config_.isVerbose() && reader.isFirstInPack()) {
                 reader.packHeader().printShort();
             }
@@ -788,7 +788,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(const walb::log::RecordRaw &rec, const walb::log::BlockDataVec& blockD) {
+    void redoNormalIo(const walb::log::RecordRaw &rec, const walb::LogBlockVec& blockD) {
         assert(rec.isExist());
         assert(!rec.isPadding());
         assert(config_.isZeroDiscard() || !rec.isDiscard());
@@ -849,7 +849,7 @@ private:
     /**
      * Redo a logpack data.
      */
-    void redoPack(const walb::log::RecordRaw &rec, const walb::log::BlockDataVec& blockD) {
+    void redoPack(const walb::log::RecordRaw &rec, const walb::LogBlockVec& blockD) {
         assert(rec.isExist());
 
         if (rec.isPadding()) {

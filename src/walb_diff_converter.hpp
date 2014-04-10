@@ -31,7 +31,7 @@ namespace walb {
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
- *   (R, B) = (RecordWrap, BlockDataShared) or (RecordRaw, BlockDataVec)
+ *   (R, B) = (RecordWrap, LogBlockShared) or (RecordRaw, LogBlockVec)
  */
 template<class R, class B>
 inline bool convertLogToDiff(
@@ -183,7 +183,7 @@ private:
         /* Convert each log. */
         while (!reader.isEnd()) {
             log::RecordRaw rec;
-            log::BlockDataVec blockD;
+            LogBlockVec blockD;
             if (reader.isFirstInPack()) {
                 lsid = reader.packHeader().nextLogpackLsid();
             }

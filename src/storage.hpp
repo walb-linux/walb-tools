@@ -770,7 +770,7 @@ inline void readLogPackHeader(device::AsyncWldevReader &reader, LogPackHeader &p
     reader.readAhead();
 }
 
-inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, log::BlockDataShared &blockD)
+inline void readLogIo(device::AsyncWldevReader &reader, LogPackHeader &packH, size_t recIdx, LogBlockShared &blockD)
 {
     const LogRecord &lrec = packH.record(recIdx);
     if (!lrec.hasData()) return;
@@ -875,7 +875,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     LogPackHeader packH(packHeaderBlock, pbs, salt);
     reader.reset(lsidB);
 
-    log::BlockDataShared blockD(pbs);
+    LogBlockShared blockD(pbs);
     uint64_t lsid = lsidB;
     for (;;) {
         if (volSt.stopState == ForceStopping || gs.forceQuit) {

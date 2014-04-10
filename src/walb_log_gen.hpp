@@ -121,7 +121,7 @@ private:
             std::queue<LogBlock> blocks;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
                 RecordWrap rec(&logh, i);
-                BlockDataShared blockD(pbs);
+                LogBlockShared blockD(pbs);
 
                 if (rec.hasData()) {
                     bool isAllZero = false;

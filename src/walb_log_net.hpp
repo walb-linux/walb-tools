@@ -19,7 +19,7 @@ namespace log {
 
 constexpr size_t Q_SIZE = 16;
 
-CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCompress)
+CompressedData convertToCompressedData(const LogBlockShared &blockD, bool doCompress)
 {
     const uint32_t pbs = blockD.pbs;
     const size_t n = blockD.nBlocks();
@@ -33,7 +33,7 @@ CompressedData convertToCompressedData(const BlockDataShared &blockD, bool doCom
     return doCompress ? cd.compress() : cd;
 }
 
-inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd, uint32_t pbs)
+inline void convertToLogBlockVec(LogBlockVec& blockD, const CompressedData &cd, uint32_t pbs)
 {
     const size_t origSize = cd.originalSize();
     assert(origSize % pbs == 0);
@@ -43,10 +43,10 @@ inline void convertToBlockDataVec(BlockDataVec& blockD, const CompressedData &cd
     blockD.setData(std::move(v));
 }
 
-inline void convertToBlockDataShared(BlockDataShared& blockDS, const CompressedData &cd, uint32_t pbs)
+inline void convertToLogBlockShared(LogBlockShared& blockDS, const CompressedData &cd, uint32_t pbs)
 {
-    BlockDataVec blockDV;
-    convertToBlockDataVec(blockDV, cd, pbs);
+    LogBlockVec blockDV;
+    convertToLogBlockVec(blockDV, cd, pbs);
     blockDS.pbs = pbs;
     const size_t n = blockDV.nBlocks();
     blockDS.resize(n);
@@ -156,7 +156,7 @@ public:
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, size_t recIdx, const BlockDataShared &blockD) {
+    void pushIo(const LogPackHeader &header, size_t recIdx, const LogBlockShared &blockD) {
         assert(header.pbs() == pbs_);
         assert(header.salt() == salt_);
         assert(recIdx_ == recIdx);
@@ -319,7 +319,7 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const walb_logpack_header &header, size_t recIdx, BlockDataShared &blockD) {
+    void popIo(const walb_logpack_header &header, size_t recIdx, LogBlockShared &blockD) {
         assert(recIdx_ == recIdx);
         const LogPackHeader h(&header, pbs_, salt_); // QQQ
         assert(recIdx < h.nRecords());
@@ -327,7 +327,7 @@ public:
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
-            convertToBlockDataShared(blockD, cd, pbs_);
+            convertToLogBlockShared(blockD, cd, pbs_);
         } else {
             blockD.pbs = pbs_;
             blockD.resize(0);
