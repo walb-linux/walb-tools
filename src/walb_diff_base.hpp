@@ -146,6 +146,19 @@ struct DiffRecord : public walb_diff_record {
         assert(!v.empty());
         return v;
     }
+    std::vector<char> compress(DiffRecord& compRec, const char *data) const {
+        std::vector<char> compData;
+        const size_t dataSize = io_blocks * LOGICAL_BLOCK_SIZE;
+        compData.resize(snappy::MaxCompressedLength(dataSize));
+        size_t compressedSize;
+        snappy::RawCompress(data, dataSize, compData.data(), &compressedSize);
+        compData.resize(compressedSize);
+        compRec = *this;
+        compRec.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
+        compRec.data_size = compressedSize;
+        compRec.checksum = cybozu::util::calcChecksum(compData.data(), compData.size(), 0);
+        return compData;
+    }
 };
 
 /**
@@ -291,24 +304,6 @@ public:
         return v;
     }
 };
-
-/**
- * Compress an diff IO.
- * Supported algorithms: snappy.
- */
-inline DiffIo compressDiffIo(const char *data, uint16_t ioBlocks, int type)
-{
-    if (type != ::WALB_DIFF_CMPR_SNAPPY) {
-        throw cybozu::Exception("compressIoData:Currently only snappy is supported.");
-    }
-    DiffIo io1(ioBlocks, type);
-    const size_t dataSize = ioBlocks * LOGICAL_BLOCK_SIZE;
-    io1.data.resize(snappy::MaxCompressedLength(dataSize));
-    size_t compressedSize;
-    snappy::RawCompress(data, dataSize, io1.get(), &compressedSize);
-    io1.data.resize(compressedSize);
-    return io1;
-}
 
 /**
  * Uncompress an diff IO.

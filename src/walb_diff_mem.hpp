@@ -26,7 +26,6 @@ private:
     DiffIo io_;
 public:
     const DiffRecord &record() const { return rec_; }
-
     const DiffIo &io() const { return io_; }
 
     RecIo() {}
@@ -38,7 +37,7 @@ public:
             io_.clear();
         }
         updateChecksum();
-        assert(isValid());// QQQ: to be removed
+        assert(isValid());
     }
     RecIo(const DiffRecord &rec, std::vector<char> &&data)
         : rec_(rec) {
@@ -50,7 +49,7 @@ public:
             io_.clear();
         }
         updateChecksum();
-        assert(isValid());// QQQ: to be removed
+        assert(isValid());
     }
 
     void updateChecksum() {
@@ -58,14 +57,6 @@ public:
     }
 
     bool isValid(bool isChecksum = false) const {
-        if (!rec_.isValid()) {
-            LOGd("rec is not valid.\n");
-            return false;
-        }
-        if (!io_.isValid()) {
-            LOGd("io is not valid.\n");
-            return false;
-        }
         if (!rec_.isNormal()) {
             if (io_.ioBlocks != 0) {
                 LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
