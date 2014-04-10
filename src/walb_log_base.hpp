@@ -580,83 +580,6 @@ namespace log {
 
 using RecordRaw = log_local::RecordT<log_local::MemRecord>;
 using RecordWrap = log_local::RecordT<log_local::PtrRecord>;
-/**
- * Interface.
- */
-class BlockData
-{
-public:
-    using Block = std::shared_ptr<uint8_t>;
-
-    virtual ~BlockData() noexcept = default;
-
-    /*
-     * You must implement these member functions.
-     */
-    virtual unsigned int pbs() const = 0;
-    virtual void setPbs(unsigned int pbs) = 0;
-    virtual size_t nBlocks() const = 0;
-    virtual const uint8_t *get(size_t idx) const = 0;
-    virtual uint8_t *get(size_t idx) = 0;
-    virtual void resize(size_t nBlocks) = 0;
-    virtual void addBlock(const Block &block) = 0;
-    virtual Block getBlock(size_t idx) const = 0;
-
-    /*
-     * Utilities.
-     */
-    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
-        checkPbs();
-        checkSizeLb(ioSizeLb);
-        uint32_t csum = salt;
-        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
-        size_t i = 0;
-        while (0 < remaining) {
-            assert(i < nBlocks());
-            size_t s = pbs();
-            if (remaining < pbs()) s = remaining;
-            csum = cybozu::util::checksumPartial(get(i), s, csum);
-            remaining -= s;
-            i++;
-        }
-        return cybozu::util::checksumFinish(csum);
-    }
-    bool calcIsAllZero(size_t ioSizeLb) const {
-        checkPbs();
-        checkSizeLb(ioSizeLb);
-        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
-        size_t i = 0;
-        while (0 < remaining) {
-            assert(i < nBlocks());
-            size_t s = pbs();
-            if (remaining < pbs()) s = remaining;
-            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
-            remaining -= s;
-            i++;
-        }
-        return true;
-    }
-    void write(int fd) const {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
-    }
-    void write(cybozu::util::FdWriter &fdw) const {
-        checkPbs();
-        for (size_t i = 0; i < nBlocks(); i++) {
-            fdw.write(get(i), pbs());
-        }
-    }
-protected:
-    void checkPbs() const {
-        if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
-    }
-    void checkSizeLb(size_t ioSizeLb) const {
-        if (nBlocks() * pbs() < ioSizeLb * LOGICAL_BLOCK_SIZE) {
-            throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
-                         , ioSizeLb, ::capacity_lb(pbs(), nBlocks()));
-        }
-    }
-};
 
 /**
  * Block data using a vector.
@@ -754,14 +677,13 @@ private:
  * Helper class to manage multiple IO blocks.
  * This is copyable and movable.
  */
-class BlockDataShared : public BlockData
+class BlockDataShared
 {
 private:
     using Block = std::shared_ptr<uint8_t>;
 
     unsigned int pbs_; /* physical block size [byte]. */
     std::vector<Block> data_; /* Each block's size must be pbs_. */
-
 public:
     BlockDataShared() : pbs_(0), data_() {}
     explicit BlockDataShared(unsigned int pbs) : pbs_(pbs), data_() {}
@@ -770,18 +692,18 @@ public:
     BlockDataShared &operator=(const BlockDataShared &) = default;
     BlockDataShared &operator=(BlockDataShared &&) = default;
 
-    unsigned int pbs() const override { return pbs_; }
-    void setPbs(unsigned int pbs) override { pbs_ = pbs; }
-    size_t nBlocks() const override { return data_.size(); }
-    const uint8_t *get(size_t idx) const override {
+    unsigned int pbs() const { return pbs_; }
+    void setPbs(unsigned int pbs) { pbs_ = pbs; }
+    size_t nBlocks() const { return data_.size(); }
+    const uint8_t *get(size_t idx) const {
         check(idx);
         return data_[idx].get();
     }
-    uint8_t *get(size_t idx) override {
+    uint8_t *get(size_t idx) {
         check(idx);
         return data_[idx].get();
     }
-    void resize(size_t nBlocks0) override {
+    void resize(size_t nBlocks0) {
         if (nBlocks0 < data_.size()) {
             data_.resize(nBlocks0);
         }
@@ -789,13 +711,64 @@ public:
             data_.push_back(allocPb());
         }
     }
-    void addBlock(const Block &block) override {
+    void addBlock(const Block &block) {
         assert(block);
         data_.push_back(block);
     }
-    Block getBlock(size_t idx) const override { return data_[idx]; }
+    Block getBlock(size_t idx) const { return data_[idx]; }
 
+    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        uint32_t csum = salt;
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            csum = cybozu::util::checksumPartial(get(i), s, csum);
+            remaining -= s;
+            i++;
+        }
+        return cybozu::util::checksumFinish(csum);
+    }
+    bool calcIsAllZero(size_t ioSizeLb) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
+            remaining -= s;
+            i++;
+        }
+        return true;
+    }
+    void write(int fd) const {
+        cybozu::util::FdWriter fdw(fd);
+        write(fdw);
+    }
+    void write(cybozu::util::FdWriter &fdw) const {
+        checkPbs();
+        for (size_t i = 0; i < nBlocks(); i++) {
+            fdw.write(get(i), pbs());
+        }
+    }
 private:
+    void checkPbs() const {
+        if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
+    }
+    void checkSizeLb(size_t ioSizeLb) const {
+        if (nBlocks() * pbs() < ioSizeLb * LOGICAL_BLOCK_SIZE) {
+            throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
+                         , ioSizeLb, ::capacity_lb(pbs(), nBlocks()));
+        }
+    }
+
     void check(size_t idx) const {
         checkPbs();
         if (nBlocks() <= idx) {
