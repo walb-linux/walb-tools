@@ -661,46 +661,43 @@ protected:
 /**
  * Block data using a vector.
  */
-class BlockDataVec : public BlockData
+class BlockDataVec
 {
-private:
     using Block = std::shared_ptr<uint8_t>;
     unsigned int pbs_; /* physical block size. */
     std::vector<uint8_t> data_;
-
 public:
-    BlockDataVec() : pbs_(0), data_() {}
-    explicit BlockDataVec(unsigned int pbs) : pbs_(pbs), data_() {}
+    explicit BlockDataVec(unsigned int pbs = 0) : pbs_(pbs), data_() {}
     BlockDataVec(const BlockDataVec &) = default;
     BlockDataVec(BlockDataVec &&) = default;
     BlockDataVec &operator=(const BlockDataVec &) = default;
     BlockDataVec &operator=(BlockDataVec &&) = default;
 
-    unsigned int pbs() const override { return pbs_; }
-    void setPbs(unsigned int pbs) override {
+    unsigned int pbs() const { return pbs_; }
+    void setPbs(unsigned int pbs) {
         pbs_ = pbs;
         checkPbs();
     }
-    size_t nBlocks() const override { return data_.size() / pbs(); }
-    const uint8_t *get(size_t idx) const override {
+    size_t nBlocks() const { return data_.size() / pbs(); }
+    const uint8_t *get(size_t idx) const {
         check(idx);
         return &data_[idx * pbs()];
     }
-    uint8_t *get(size_t idx) override {
+    uint8_t *get(size_t idx) {
         check(idx);
         return &data_[idx * pbs()];
     }
-    void resize(size_t nBlocks0) override {
+    void resize(size_t nBlocks0) {
         data_.resize(nBlocks0 * pbs());
     }
-    void addBlock(const Block &block) override {
+    void addBlock(const Block &block) {
         checkPbs();
         size_t s0 = data_.size();
         size_t s1 = s0 + pbs();
         data_.resize(s1);
         ::memcpy(&data_[s0], block.get(), pbs());
     }
-    Block getBlock(size_t idx) const override {
+    Block getBlock(size_t idx) const {
         check(idx);
         Block b = cybozu::util::allocateBlocks<uint8_t>(pbs(), pbs());
         ::memcpy(b.get(), get(idx), pbs());
@@ -714,7 +711,59 @@ public:
         data_.resize(size);
         ::memcpy(&data_[0], data, size);
     }
+
+    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        uint32_t csum = salt;
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            csum = cybozu::util::checksumPartial(get(i), s, csum);
+            remaining -= s;
+            i++;
+        }
+        return cybozu::util::checksumFinish(csum);
+    }
+    bool calcIsAllZero(size_t ioSizeLb) const {
+        checkPbs();
+        checkSizeLb(ioSizeLb);
+        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
+        size_t i = 0;
+        while (0 < remaining) {
+            assert(i < nBlocks());
+            size_t s = pbs();
+            if (remaining < pbs()) s = remaining;
+            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
+            remaining -= s;
+            i++;
+        }
+        return true;
+    }
+    void write(int fd) const {
+        cybozu::util::FdWriter fdw(fd);
+        write(fdw);
+    }
+    void write(cybozu::util::FdWriter &fdw) const {
+        checkPbs();
+        for (size_t i = 0; i < nBlocks(); i++) {
+            fdw.write(get(i), pbs());
+        }
+    }
+
 private:
+    void checkPbs() const {
+        if (pbs() == 0) throw RT_ERR("pbs must not be zero.");
+    }
+    void checkSizeLb(size_t ioSizeLb) const {
+        if (nBlocks() * pbs() < ioSizeLb * LOGICAL_BLOCK_SIZE) {
+            throw RT_ERR("ioSizeLb too large. specified %zu, should be <= %zu."
+                         , ioSizeLb, ::capacity_lb(pbs(), nBlocks()));
+        }
+    }
     void check(size_t idx) const {
         checkPbs();
         if (data_.size() % pbs() != 0) {
