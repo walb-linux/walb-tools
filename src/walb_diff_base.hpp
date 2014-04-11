@@ -177,21 +177,8 @@ struct DiffIo
     }
     DiffIo(const DiffIo &) = default;
     DiffIo(DiffIo &&) = default;
-    void swap(DiffIo& rhs) noexcept {
-        std::swap(ioBlocks, rhs.ioBlocks);
-        std::swap(compressionType, rhs.compressionType);
-        data.swap(rhs.data);
-    }
-    DiffIo &operator=(const DiffIo &rhs) {
-        ioBlocks = rhs.ioBlocks;
-        compressionType = rhs.compressionType;
-        data = rhs.data;
-        return *this;
-    }
-    DiffIo &operator=(DiffIo &&rhs) {
-        swap(rhs);
-        return *this;
-    }
+    DiffIo& operator=(const DiffIo&) = default;
+	DiffIo& operator=(DiffIo&&) = default;
 
     void clear() {
         ioBlocks = 0;

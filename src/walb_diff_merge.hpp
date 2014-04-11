@@ -80,6 +80,7 @@ private:
 
             assert(isFilled_);
             io = std::move(io_);
+			io_.clear(); // QQQ : Who does use?
             isFilled_ = false;
             fill();
 
