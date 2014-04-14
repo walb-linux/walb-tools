@@ -37,20 +37,14 @@ struct DiffRecord : public walb_diff_record {
     }
     void init() {
         ::memset(this, 0, sizeof(struct walb_diff_record));
-        flags = WALB_DIFF_FLAG(EXIST);
     }
     uint64_t endIoAddress() const { return io_address + io_blocks; }
     bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
 
-    bool exists() const { return (flags & WALB_DIFF_FLAG(EXIST)) != 0; }
     bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
     bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
     bool isNormal() const { return !isAllZero() && !isDiscard(); }
     bool isValid() const {
-        if (!exists()) {
-            LOGd("Does not exist.\n");
-            return false;
-        }
         if (!isNormal()) {
             if (isAllZero() && isDiscard()) {
                 LOGd("allzero and discard flag is exclusive.\n");
@@ -77,21 +71,18 @@ struct DiffRecord : public walb_diff_record {
            "dataOffset: %u\n"
            "dataSize: %u\n"
            "checksum: %08x\n"
-           "exists: %d\n"
            "isAllZero: %d\n"
            "isDiscard: %d\n",
            io_address, io_blocks,
            compression_type, data_offset, data_size,
-           checksum, exists(), isAllZero(), isDiscard());
+           checksum, isAllZero(), isDiscard());
     }
     void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d%d\n",
+        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d\n",
             io_address, io_blocks,
             compression_type, data_offset, data_size,
-            checksum, exists(), isAllZero(), isDiscard());
+            checksum, isAllZero(), isDiscard());
     }
-    void setExists() { flags |= WALB_DIFF_FLAG(EXIST); }
-    void clearExists() { flags &= ~WALB_DIFF_FLAG(EXIST); }
     void setNormal() {
         flags &= ~WALB_DIFF_FLAG(ALLZERO);
         flags &= ~WALB_DIFF_FLAG(DISCARD);

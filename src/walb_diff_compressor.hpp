@@ -48,7 +48,6 @@ Buffer convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
         const walb_diff_record& inRecord = inPack.record[i];
         walb_diff_record& outRecord = outPack.record[i];
 
-        assert(inRecord.flags & WALB_DIFF_FLAG(EXIST));
         if (inRecord.flags & (WALB_DIFF_FLAG(ALLZERO) | WALB_DIFF_FLAG(DISCARD))) {
             outRecord = inRecord;
         } else {
