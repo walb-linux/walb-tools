@@ -277,17 +277,18 @@ private:
             cybozu::FilePath fp = sd.getDiffPath(diff);
             diffPaths.push_back(fp.str());
         }
-        diff::VirtualFullScanner virtLv(bd.getFd(), diffPaths);
+        diff::VirtualFullScanner virt(bd.getFd());
+        virt.setWdiffPaths(diffPaths);
         std::vector<char> buf0(bulkLb_ * LOGICAL_BLOCK_SIZE);
 
         logger_.info("hoge2");
 
-        auto readBulkAndSendHash = [this, &virtLv, &packet, &buf0, &hasher](
+        auto readBulkAndSendHash = [this, &virt, &packet, &buf0, &hasher](
             uint64_t &offLb, uint64_t &remainingLb) {
 
             uint16_t lb = std::min<uint64_t>(bulkLb_, remainingLb);
             size_t size = lb * LOGICAL_BLOCK_SIZE;
-            virtLv.read(&buf0[0], size);
+            virt.read(&buf0[0], size);
             cybozu::murmurhash3::Hash h0 = hasher(&buf0[0], size);
             packet.write(h0.rawData(), h0.rawSize());
             offLb += lb;

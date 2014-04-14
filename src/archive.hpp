@@ -353,9 +353,58 @@ inline bool dirtyFullSyncServer(
     return true;
 }
 
+namespace archive_local {
+
+inline void openWdiffs(std::vector<cybozu::util::FileOpener>& ops, std::vector<MetaDiff>& diffV, const ArchiveVolInfo& volInfo, const MetaSnap& snap)
+{
+    const char *const FUNC = __func__;
+    const int maxRetryNum = 10;
+    int retryNum = 0;
+    cybozu::Uuid uuid;
+    ;
+retry:
+    {
+        diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
+        if (diffV.empty()) return;
+        // apply wdiff files indicated by diffV to lvSnap.
+        for (const MetaDiff& diff : diffV) {
+            cybozu::util::FileOpener op;
+            if (!op.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
+                retryNum++;
+                if (retryNum == maxRetryNum) {
+                    throw cybozu::Exception(FUNC) << "exceed max retry";
+                }
+                ops.clear();
+                goto retry;
+            }
+            diff::Reader reader(op.fd());
+            DiffFileHeader header;
+            reader.readHeaderWithoutReadingPackHeader(header);
+            if (ops.empty()) {
+                uuid = header.getUuid2();
+                mergedDiff = diff;
+            } else {
+                if (uuid != header.getUuid2()) {
+                    diffV.resize(ops.size());
+                    break;
+                }
+                mergedDiff.merge(diff);
+            }
+            if (lseek(op.fd(), 0, SEEK_SET) < 0) {
+                throw cybozu::Exception(FUNC) << "lseek failed" << cybozu::ErrorNo();
+            }
+            ops.push_back(std::move(op));
+        }
+    }
+    merger.addWdiffs(std::move(ops));
+    merger.prepare();
+}
+
+} // archive_local
+
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState, int fd)
+    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState, const MetaSnap& snap, int fd)
 {
 #if 0
     const char *const FUNC = __func__;
@@ -457,7 +506,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState, tmpFileP->fd());
+        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState, snapFrom, tmpFileP->fd());
     }
     if (!isOk) {
         logger.warn() << FUNC << "force stopped" << volId;

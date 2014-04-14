@@ -607,6 +607,13 @@ private:
 
     using AutoLock = std::unique_lock<std::mutex>;
 
+    void waitForPush(AutoLock& lk) {
+        verifyFailed();
+        if (isClosed_) throw ClosedError();
+        while (!isFailed_ && !isClosed_ && isFull()) condFull_.wait(lk);
+        verifyFailed();
+        if (isClosed_) throw ClosedError();
+    }
 public:
     class ClosedError : public std::exception {
     public:
@@ -669,6 +676,16 @@ public:
     void push(const T &t) {
         static_assert(IsCopyableT::value, "T is not copyable.");
         pushInner(t);
+    }
+    template<class F>
+    void pushInplace(F f) {
+        AutoLock lk(mutex_);
+        waitForPush(lk);
+
+        bool isEmpty0 = isEmpty();
+        queue_.emplace();
+        f(queue_.back());
+        if (isEmpty0) { condEmpty_.notify_all(); }
     }
     /**
      * Pop an item.
@@ -757,11 +774,7 @@ private:
     template <typename U>
     void pushInner(U &&t) {
         AutoLock lk(mutex_);
-        verifyFailed();
-        if (isClosed_) throw ClosedError();
-        while (!isFailed_ && !isClosed_ && isFull()) condFull_.wait(lk);
-        verifyFailed();
-        if (isClosed_) throw ClosedError();
+        waitForPush(lk);
 
         bool isEmpty0 = isEmpty();
         queue_.push(std::forward<U>(t));

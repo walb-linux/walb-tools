@@ -554,4 +554,100 @@ private:
     }
 };
 
+class VirtualFullImageReader
+{
+private:
+    using Buffer = std::vector<char>;
+    static constexpr const char *NAME() { return "VirtualFullImageReader"; }
+    using BufferQ = cybozu::thread::BoundedQueue<Buffer>;
+
+    Logger &logger_;
+    std::atomic<bool> isEnd_;
+    std::atomic<bool> isFailed_;
+    BufferQ bufferQ_;
+
+    walb::diff::VirtualFullScanner virt_;
+    uint64_t sizeLb_;
+    uint16_t bulkLb_;
+
+    cybozu::thread::ThreadRunner readVirtThread_;
+
+    struct ReadVirtWorker {
+        walb::diff::VirtualFullScanner& virt_;
+        const uint64_t sizeLb_;
+        const uint16_t bulkLb_;
+        BufferQ& outQ_;
+        Logger &logger_;
+        ReadVirtWorker(walb::diff::VirtualFullScanner& virt, uint64_t sizeLb, uint16_t bulkLb, BufferQ& outQ, Logger& logger)
+            : virt_(virt)
+            , sizeLb_(sizeLb)
+            , bulkLb_(bulkLb)
+            , outQ_(outQ)
+            , logger_(logger) {
+        }
+        void operator()() try {
+            uint64_t reamaining = sizeLb;
+            while (remainingLb > 0) {
+                const uint64_t lb = std::min<uint64_t>(remainingLb, bulkLb_);
+                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
+                virt_.read(buf.data(), buf.size());
+                outQ_.push(std::move(buf));
+                remainingLb -= lb;
+            }
+            outQ_.sync();
+        } catch (std::exception &e) {
+            handleError(e.what());
+            throw;
+        } catch (...) {
+            handleError("unknown error");
+            throw;
+        }
+        void handleError(const char *msg) noexcept {
+            logger_.error() << NAME() << msg;
+            outQ_.fail();
+        }
+    };
+public:
+    explicit VirtualFullImageReader(Logger &logger)
+        : logger_(logger)
+        , isEnd_(false), isFailed_(false)
+        , bufferQ_(Q_SIZE)
+        , sizeLb_(0), bulkLb_(0) {
+    }
+    ~VirtualFullImageReader() noexcept {
+        if (!isEnd_ && !isFailed_) fail();
+    }
+    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb, std::vector<cybozu::util::FileOpener>&& ops) {
+        cybozu::util::FileOpener op(bdevPath, O_RDONLY);
+        
+        virt.init(op.fd(), std::move(ops));
+        sizeLb_ = sizeLb;
+        bulkLb_ = bulkLb;
+    }
+    void start() {
+        readVirtThread_.set(ReadVirtWorker(virt_, sizeLb_, bulkLb_, bufferQ_, logger_));
+        readVirtThread_.start();
+    }
+    bool pop(Buffer &data) {
+        if (!bufferQ_.pop(data)) {
+            isEnd_ = true;
+            joinWorkers();
+            return false;
+        }
+        return true;
+    }
+    void fail() noexcept {
+        isFailed_ = true;
+        bufferQ_.fail();
+        joinWorkers();
+    }
+    bool isEnd() const {
+        return isEnd_;
+    }
+private:
+    void joinWorkers() noexcept {
+        putErrorLogIfNecessary(readVirtThread_.joinNoThrow(), logger_, NAME());
+    }
+};
+
 } // namespace walb

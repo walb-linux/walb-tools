@@ -70,8 +70,9 @@ int main(int argc, char *argv[])
                 opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             outFd = outFo->fd();
         }
-        walb::diff::VirtualFullScanner scanner(inFd, opt.inputWdiffs);
-        scanner.readAndWriteTo(outFd, opt.bufferSize);
+        walb::diff::VirtualFullScanner virt;
+        virt.init(inFd, opt.inputWdiffs);
+        virt.readAndWriteTo(outFd, opt.bufferSize);
         if (outFo) outFo->close();
         return 0;
     } catch (std::exception &e) {

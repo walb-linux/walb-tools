@@ -31,49 +31,48 @@ class VirtualFullScanner
 {
 private:
     cybozu::util::FdReader reader_;
-    const bool isInputFdSeekable_;
+    bool isInputFdSeekable_;
     std::shared_ptr<char> bufForSkip_;
     walb::diff::Merger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     walb::diff::RecIo recIo_; /* current diff rec IO. */
     uint16_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
-    const bool emptyWdiff_;
+    bool emptyWdiff_;
 
+    void init_inner(int baseFd) {
+        reader_.open(baseFd);
+        isInputFdSeekable_ = reader_.seekable();
+        bufForSkip_ = allocateBufForSkipStatic(isInputFdSeekable_);
+    }
 public:
     /**
      * @baseFd a base image file descriptor.
      *   stdin (non-seekable) or a raw image file or a block device.
      * @wdiffPaths walb diff files. Each wdiff is sorted by time.
      */
-    VirtualFullScanner(int baseFd, const std::vector<std::string> &wdiffPaths)
-        : reader_(baseFd)
-        , isInputFdSeekable_(reader_.seekable())
-        , bufForSkip_(allocateBufForSkipStatic(isInputFdSeekable_))
+    VirtualFullScanner()
+        : reader_()
+        , isInputFdSeekable_(false)
+        , bufForSkip_()
         , merger_()
         , addr_(0)
         , recIo_()
         , offInIo_(0)
         , isEndDiff_(false)
-        , emptyWdiff_(wdiffPaths.empty()) {
+        , emptyWdiff_(false) {}
+
+    void init(int baseFd, const std::vector<std::string> &wdiffPaths) {
+        init_inner(baseFd);
+        emptyWdiff_ = wdiffPaths.empty();
         if (!emptyWdiff_) {
             merger_.addWdiffs(wdiffPaths);
             merger_.prepare();
         }
     }
-    /**
-     * @ops must opened wdiff file descriptor list.
-     */
-    VirtualFullScanner(int baseFd, std::vector<cybozu::util::FileOpener> &ops)
-        : reader_(baseFd)
-        , isInputFdSeekable_(reader_.seekable())
-        , bufForSkip_(allocateBufForSkipStatic(isInputFdSeekable_))
-        , merger_()
-        , addr_(0)
-        , recIo_()
-        , offInIo_(0)
-        , isEndDiff_(false)
-        , emptyWdiff_(ops.empty()) {
+    void init(int baseFd, std::vector<cybozu::util::FileOpener> &&ops) {
+        init_inner(baseFd);
+        emptyWdiff_ = ops.empty();
         if (!emptyWdiff_) {
             merger_.addWdiffs(std::move(ops));
             merger_.prepare();
