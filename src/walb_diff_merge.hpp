@@ -65,22 +65,20 @@ private:
             reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
-        walb::diff::Reader &reader() { return reader_; }
         walb::DiffFileHeader &header() { return header_; }
         const DiffRecord &front() {
+            verifyNotEnd(__func__);
             fill();
-            assert(isFilled_);
             return rec_;
         }
         void pop(DiffIo &io) {
-            if (isEnd()) return;
+            verifyNotEnd(__func__);
 
             /* for check */
             const uint64_t endIoAddr0 = rec_.endIoAddress();
 
-            assert(isFilled_);
+            verifyFilled(__func__);
             io = std::move(io_);
-			io_.clear(); // QQQ : Who does use?
             isFilled_ = false;
             fill();
 
@@ -101,7 +99,7 @@ private:
          */
         uint64_t currentAddress() const {
             if (isEnd()) return uint64_t(-1);
-            assert(isFilled_);
+            verifyFilled(__func__);
             return rec_.io_address;
         }
     private:
@@ -110,11 +108,14 @@ private:
             if (reader_.readAndUncompressDiff(rec_, io_)) {
                 isFilled_ = true;
             } else {
-                rec_.clearExists();
-                io_ = DiffIo();
-                isFilled_ = false;
                 isEnd_ = true;
             }
+        }
+        void verifyNotEnd(const char *msg) const {
+            if (isEnd()) throw cybozu::Exception(msg) << "reached to end";
+        }
+        void verifyFilled(const char *msg) const {
+            if (!isFilled_) throw cybozu::Exception(msg) << "not filled";
         }
     };
 

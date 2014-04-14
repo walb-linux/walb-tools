@@ -328,7 +328,6 @@ public:
      */
     bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io) {
         if (!readDiff(rec, io)) {
-            rec.clearExists();
             return false;
         }
         if (!rec.isCompressed()) {
@@ -367,8 +366,6 @@ public:
      * Read a diff IO.
      * @rec diff record.
      * @io block IO to be filled.
-     *
-     * If rec.dataSize() == 0, io will not be changed.
      */
     void readDiffIo(const DiffRecord &rec, DiffIo &io) {
         if (rec.data_offset != totalSize_) {
@@ -385,6 +382,8 @@ public:
                 throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
             }
             totalSize_ += recSize;
+        } else {
+            io.clear();
         }
         recIdx_++;
     }
