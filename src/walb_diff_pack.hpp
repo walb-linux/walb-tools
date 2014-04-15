@@ -148,7 +148,28 @@ public:
     }
 
     bool isValid() const {
-        return cybozu::util::calcChecksum(rawData(), rawSize(), 0) == 0;
+        try {
+            verify();
+            return true;
+        } catch (std::exception &e) {
+            LOGs.debug() << e.what();
+            return false;
+        } catch (...) {
+            LOGs.debug() << "invalid";
+            return false;
+        }
+    }
+    void verify() const {
+        const char *const NAME = "DiffPackHeader";
+        if (cybozu::util::calcChecksum(rawData(), rawSize(), 0) != 0) {
+            throw cybozu::Exception(NAME) << "invalid checksum";
+        }
+        if (nRecords() > MAX_N_RECORDS_IN_WALB_DIFF_PACK) {
+            throw cybozu::Exception(NAME) << "invalid nRecoreds" << nRecords();
+        }
+        for (size_t i = 0; i < nRecords(); i++) {
+            record(i).verify();
+        }
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -197,52 +218,21 @@ class MemoryPack
 {
 private:
     const char *p_;
+    size_t size_;
 public:
-    explicit MemoryPack(const char *p) : p_() {
-        reset(p);
+    explicit MemoryPack(const char *p, size_t size) : p_(), size_(0) {
+        reset(p, size);
     }
-    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_) {}
+    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
+    }
     MemoryPack(MemoryPack &&) = delete;
     MemoryPack &operator=(const MemoryPack &rhs) {
-        reset(rhs.p_);
+        reset(rhs.p_, rhs.size_);
         return *this;
     }
     MemoryPack &operator=(MemoryPack &&) = delete;
 
-    size_t size() const {
-        return ::WALB_DIFF_PACK_SIZE + header().total_size;
-    }
-    bool isValid(std::string *errMsg = nullptr) const {
-        return isValid(true, errMsg);
-    }
-    bool isValid(bool checkHeaderCsum, std::string *errMsg = nullptr) const try {
-        std::string err;
-        DiffPackHeader packh((char *)&header());
-        if (checkHeaderCsum && !packh.isValid()) {
-            err = "pack header invalid.";
-        } else {
-            for (size_t i = 0; i < packh.nRecords(); i++) {
-                const DiffRecord& rec = packh.record(i);
-                if (!rec.isValid()) {
-                    err = cybozu::util::formatString("record invalid: %zu.", i);
-                    goto err_exit;
-                }
-                uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
-                if (csum != rec.checksum) {
-                    err = cybozu::util::formatString("checksum of %zu differ %08x %08x."
-                                                , i, rec.checksum, csum);
-                    goto err_exit;
-                }
-            }
-            return true;
-        }
-    err_exit:
-        if (errMsg) *errMsg = std::move(err);
-        return false;
-    } catch (std::exception &e) {
-        if (errMsg) *errMsg = e.what();
-        return false;
-    }
+    size_t size() const { return size_; }
 
     const struct walb_diff_pack &header() const {
         return *reinterpret_cast<const walb_diff_pack*>(p_);
@@ -255,11 +245,36 @@ public:
     const char *rawPtr() const {
         return p_;
     }
-    void reset(const char *p) {
+    void reset(const char *p, size_t size) {
         if (!p) throw std::runtime_error("The pointer must not be null.");
         p_ = p;
+        const size_t observed = ::WALB_DIFF_PACK_SIZE + header().total_size;
+        if (size != observed) {
+            throw cybozu::Exception(__func__) << "invalid pack size" << observed << size;
+        }
+        size_ = size;
+        verify();
     }
 private:
+    void verify() const {
+        const char *const NAME = "MemoryPack";
+        DiffPackHeader packh((char *)&header());
+        packh.verify();
+        for (size_t i = 0; i < packh.nRecords(); i++) {
+            const DiffRecord& rec = packh.record(i);
+            if (offset(i) + rec.data_size > size_) {
+                throw cybozu::Exception(NAME)
+                    << "data_size out of range" << i << rec.data_size;
+            }
+            if (rec.isNormal()) {
+                const uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
+                if (csum != rec.checksum) {
+                    throw cybozu::Exception(NAME)
+                        << "invalid checksum" << csum << rec.checksum;
+                }
+            }
+        }
+    }
     size_t offset(size_t i) const {
         return ::WALB_DIFF_PACK_SIZE + header().record[i].data_offset;
     }
@@ -338,9 +353,8 @@ public:
         if (ret) assert(data_.size() == ::WALB_DIFF_PACK_SIZE);
         return ret;
     }
-    bool isValid(bool checkHeaderCsum = true, std::string *errMsg = nullptr) const {
-        MemoryPack mpack(&data_[0]);
-        return mpack.isValid(checkHeaderCsum, errMsg);
+    void verify() const {
+        MemoryPack mpack(data_.data(), data_.size());
     }
     void print(FILE *fp = ::stdout) const {
         packh_.print(fp);
@@ -352,7 +366,7 @@ public:
      */
     std::vector<char> getPackAsVector() {
         packh_.updateChecksum();
-        assert(isValid());
+        verify();
         std::vector<char> ret = std::move(data_);
         reset();
         return ret;

@@ -118,20 +118,16 @@ void testPackCompression(int type, const char *rawPack, size_t size)
     walb::PackCompressor compr(type);
     walb::PackUncompressor ucompr(type);
 
-    walb::diff::MemoryPack mpack0(rawPack);
-    CYBOZU_TEST_ASSERT(mpack0.isValid());
-    CYBOZU_TEST_EQUAL(mpack0.size(), size);
+    walb::diff::MemoryPack mpack0(rawPack, size);
 
     Buffer p1 = compr.convert(mpack0.rawPtr());
-    walb::diff::MemoryPack mpack1(p1.data());
-    CYBOZU_TEST_ASSERT(mpack1.isValid());
+    walb::diff::MemoryPack mpack1(p1.data(), p1.size());
     Buffer p2 = ucompr.convert(mpack1.rawPtr());
-    walb::diff::MemoryPack mpack2(p2.data());
-    CYBOZU_TEST_ASSERT(mpack2.isValid());
+    walb::diff::MemoryPack mpack2(p2.data(), p2.size());
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
     int ret = ::memcmp(mpack0.rawPtr(), mpack2.rawPtr(), mpack0.size());
-    CYBOZU_TEST_ASSERT(ret == 0);
+    CYBOZU_TEST_EQUAL(ret, 0);
 #if 0
     printPackRaw(mpack0.rawPtr());
     printPackRaw(mpack1.rawPtr());

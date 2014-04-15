@@ -45,22 +45,27 @@ struct DiffRecord : public walb_diff_record {
     bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
     bool isNormal() const { return !isAllZero() && !isDiscard(); }
     bool isValid() const {
+        try {
+            verify();
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+    void verify() const {
+        const char *const NAME = "DiffRecord";
         if (!isNormal()) {
             if (isAllZero() && isDiscard()) {
-                LOGd("allzero and discard flag is exclusive.\n");
-                return false;
+                throw cybozu::Exception(NAME) << "allzero and discard flag is exclusive";
             }
-            return true;
+            return;
         }
         if (::WALB_DIFF_CMPR_MAX <= compression_type) {
-            LOGd("compression type is invalid.\n");
-            return false;
+            throw cybozu::Exception(NAME) << "compression type is invalid";
         }
         if (io_blocks == 0) {
-            LOGd("ioBlocks() must not be 0 for normal IO.\n");
-            return false;
+            throw cybozu::Exception(NAME) << "ioBlocks() must not be 0 for normal IO";
         }
-        return true;
     }
 
     void print(::FILE *fp = ::stdout) const {
