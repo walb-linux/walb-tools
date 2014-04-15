@@ -35,8 +35,6 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
 
 inline void convertToLogBlockVec(LogBlockVec& blockV, const CompressedData &cd, uint32_t pbs)
 {
-    const size_t origSize = cd.originalSize();
-    assert(origSize % pbs == 0);
     std::vector<uint8_t> v;
     cd.getUncompressed(v);
     blockV.pbs = pbs;
