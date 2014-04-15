@@ -584,8 +584,6 @@ inline bool dirtyHashSyncClient(
     packet::StreamControl recvCtl(pkt.sock());
     packet::StreamControl sendCtl(pkt.sock());
     diff::Packer packer;
-    const size_t Q_SIZE = 16;
-    packer.setMaxNumRecords(Q_SIZE);
     walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
 
     cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
