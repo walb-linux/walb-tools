@@ -169,12 +169,18 @@ class FdHolder
 {
 protected:
     int fd_;
-public:
-    explicit FdHolder(int fd) : fd_(fd) {
+	void verifyFd() const {
         if (fd_ < 0) throw RT_ERR("fd < 0.");
-    }
+	}
+public:
+	FdHolder() : fd_(-1) {}
+    explicit FdHolder(int fd) : fd_(fd) { verifyFd(); }
+	void setFd(int fd) {
+		fd_ = fd;
+		verifyFd();
+	}
     int fd() const {
-        assert(0 <= fd_);
+		verifyFd();
         return fd_;
     }
 };

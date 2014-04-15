@@ -34,6 +34,7 @@
 namespace walb {
 
 typedef std::vector<std::string> StrVec;
+typedef std::vector<char> Buffer;
 typedef std::unique_lock<std::recursive_mutex> UniqueLock;
 
 namespace util {

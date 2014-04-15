@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <snappy.h>
 #include "walb/block_size.h"
+#include "walb_diff_virt.hpp"
+#include "murmurhash3.hpp"
 #include "state_machine.hpp"
 #include "action_counter.hpp"
 #include "atomic_map.hpp"
@@ -97,6 +99,471 @@ inline ArchiveSingleton& getArchiveGlobal()
 
 const ArchiveSingleton& ga = getArchiveGlobal();
 
+inline ArchiveVolState &getArchiveVolState(const std::string &volId)
+{
+    return getArchiveGlobal().stMap.get(volId);
+}
+
+inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
+{
+    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
+}
+
+namespace archive_local {
+
+/**
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool dirtyFullSyncServer(
+    packet::Packet &pkt, ArchiveVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
+{
+    const char *const FUNC = __func__;
+    const std::string lvPath = volInfo.getLv().path().str();
+    cybozu::util::BlockDevice bd(lvPath, O_RDWR);
+    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
+    std::vector<char> encBuf;
+
+    uint64_t c = 0;
+    uint64_t remainingLb = sizeLb;
+    while (0 < remainingLb) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
+        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
+        const size_t size = lb * LOGICAL_BLOCK_SIZE;
+        size_t encSize;
+        pkt.read(encSize);
+        if (encSize == 0) {
+            throw cybozu::Exception(FUNC) << "encSize is zero";
+        }
+        encBuf.resize(encSize);
+        pkt.read(&encBuf[0], encSize);
+        size_t decSize;
+        if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
+            throw cybozu::Exception(FUNC)
+                << "GetUncompressedLength" << encSize;
+        }
+        if (decSize != size) {
+            throw cybozu::Exception(FUNC)
+                << "decSize differs" << decSize << size;
+        }
+        if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
+            throw cybozu::Exception(FUNC) << "RawUncompress";
+        }
+        bd.write(&buf[0], size);
+        remainingLb -= lb;
+        c++;
+    }
+    LOGs.debug() << "number of received packets" << c;
+    bd.fdatasync();
+    return true;
+}
+
+inline std::pair<MetaState, std::vector<MetaDiff>> getDiffList(ArchiveVolInfo& volInfo, uint64_t gid, bool doApply, bool allowEmpty, const char *msg)
+{
+    const MetaDiffManager &mgr = volInfo.getDiffMgr();
+    const MetaState st = volInfo.getMetaState();
+    std::vector<MetaDiff> diffV;
+    if (doApply) {
+        diffV = mgr.getDiffListToApply(st, gid);
+    } else {
+        diffV = mgr.getDiffListToRestore(st, gid);
+    }
+    if (!allowEmpty && diffV.empty()) {
+        throw cybozu::Exception(msg) << "diffV empty" << volInfo.volId << gid;
+    }
+    return {st, diffV};
+}
+
+inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo, uint64_t gid, bool doApply, bool allowEmpty)
+{
+    const char *const FUNC = __func__;
+
+    const int maxRetryNum = 10;
+    int retryNum = 0;
+  retry:
+    MetaState st;
+    std::vector<MetaDiff> diffV;
+    std::tie(st, diffV) = getDiffList(volInfo, gid, doApply, allowEmpty, FUNC);
+    // Try to open all wdiff files.
+    for (const MetaDiff& diff : diffV) {
+        cybozu::util::FileOpener op;
+        if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
+            retryNum++;
+            if (retryNum == maxRetryNum) {
+                throw cybozu::Exception(FUNC) << "exceed max retry";
+            }
+            ops.clear();
+            goto retry;
+        }
+        ops.push_back(std::move(op));
+    }
+    return {st, diffV};
+}
+
+
+const bool doApply = true;
+const bool allowEmpty = true;
+
+inline bool dirtyHashSyncServer(
+    packet::Packet &pkt, ArchiveVolInfo &volInfo,
+    uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed, const std::atomic<int> &stopState, const MetaSnap& snap, int fd)
+{
+    const char *const FUNC = __func__;
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    if (sizeLb != lv.sizeLb()) {
+        throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
+    }
+    std::vector<cybozu::util::FileOpener> ops;
+
+    tryOpenDiffs(ops, volInfo, snap.gidB, !doApply, allowEmpty);
+
+    std::atomic<bool> quit(false);
+    auto readVirtualFullImageAndSendHash = [&]() {
+        cybozu::util::FileOpener op(lv.path().str(), O_RDONLY);
+
+        walb::diff::VirtualFullScanner virt;
+        virt.init(op.fd(), std::move(ops));
+
+        cybozu::murmurhash3::Hasher hasher(hashSeed);
+        packet::StreamControl ctrl(pkt.sock());
+
+        uint64_t remaining = sizeLb;
+
+        try {
+            while (remaining > 0) {
+                if (stopState == ForceStopping || ga.forceQuit) {
+                    quit = true;
+                    return;
+                }
+                const uint64_t lb = std::min<uint64_t>(remaining, bulkLb);
+                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
+                virt.read(buf.data(), buf.size());
+                const cybozu::murmurhash3::Hash hash = hasher(buf.data(), buf.size());
+                ctrl.next();
+                pkt.write(hash);
+                remaining -= lb;
+            }
+            ctrl.end();
+        } catch (std::exception& e) {
+            ctrl.error();
+            throw;
+        }
+    };
+    cybozu::thread::ThreadRunner reader(readVirtualFullImageAndSendHash);
+    reader.start();
+
+    cybozu::util::FdWriter fdw(fd);
+
+    {
+        DiffFileHeader wdiffH;
+        wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
+        wdiffH.setUuid(uuid);
+        wdiffH.writeTo(fdw);
+    }
+
+    packet::StreamControl ctrl(pkt.sock());
+    std::vector<char> pack;
+    while (ctrl.isNext()) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            reader.join();
+            return false;
+        }
+        pkt.read(pack);
+        // QQQ verify
+        fdw.write(pack.data(), pack.size());
+        ctrl.reset();
+    }
+    if (ctrl.isError()) {
+        throw cybozu::Exception(FUNC) << "client sent an error";
+    }
+    assert(ctrl.isEnd());
+    diff::writeEofPack(fdw);
+    
+    reader.join();
+    return !quit;
+}
+
+/**
+ * Wdiff header has been written already before calling this.
+ *
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool recvAndWriteDiffs(
+    cybozu::Socket &sock, diff::Writer &writer, const std::atomic<int> &stopState)
+{
+    const char *const FUNC = __func__;
+    packet::StreamControl ctrl(sock);
+    while (ctrl.isNext()) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
+        DiffPackHeader packH;
+        sock.read(packH.rawData(), packH.rawSize());
+        if (!packH.isValid()) {
+            throw cybozu::Exception(FUNC) << "bad packH";
+        }
+        for (size_t i = 0; i < packH.nRecords(); i++) {
+            DiffIo io;
+            const DiffRecord& rec = packH.record(i);
+            io.set(rec);
+            if (rec.data_size == 0) {
+                writer.writeDiff(rec, {});
+                continue;
+            }
+            sock.read(io.get(), rec.data_size);
+            if (!io.isValid()) {
+                throw cybozu::Exception(FUNC) << "bad io";
+            }
+            uint32_t csum = io.calcChecksum();
+            if (csum != rec.checksum) {
+                throw cybozu::Exception(FUNC)
+                    << "bad io checksum" << csum << rec.checksum;
+            }
+            writer.writeDiff(rec, std::move(io.data));
+        }
+        ctrl.reset();
+    }
+    if (!ctrl.isEnd()) {
+        throw cybozu::Exception(FUNC) << "bad ctrl not end";
+    }
+    return true;
+}
+
+inline void verifyApplicable(const std::string& volId, uint64_t gid)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    UniqueLock ul(volSt.mu);
+
+    const bool doApply = true;
+    const bool allowEmpty = false;
+    getDiffList(volInfo, gid, doApply, allowEmpty, __func__);
+}
+
+inline bool applyOpenedDiffs(std::vector<cybozu::util::FileOpener>&& ops, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
+{
+    const char *const FUNC = __func__;
+    diff::Merger merger;
+    merger.addWdiffs(std::move(ops));
+    diff::RecIo recIo;
+    cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
+    std::vector<char> zero;
+	const uint64_t lvSnapSizeLb = lv.sizeLb();
+    while (merger.pop(recIo)) {
+        if (stopState == ForceStopping || ga.forceQuit) {
+            return false;
+        }
+        const DiffRecord& rec = recIo.record();
+        assert(!rec.isCompressed());
+        const uint64_t ioAddress = rec.io_address;
+        const uint64_t ioBlocks = rec.io_blocks;
+		//LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
+		if (ioAddress + ioBlocks > lvSnapSizeLb) {
+			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
+		}
+        const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
+        const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
+
+        const char *data;
+        // Curently a discard IO is converted to an all-zero IO.
+        if (rec.isAllZero() || rec.isDiscard()) {
+            if (zero.size() < ioSizeB) zero.resize(ioSizeB);
+            data = &zero[0];
+        } else {
+            data = recIo.io().get();
+        }
+        bd.write(ioAddrB, ioSizeB, data);
+    }
+    bd.fdatasync();
+    bd.close();
+    return true;
+}
+
+inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    MetaDiffManager &mgr = volSt.diffMgr;
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
+
+    std::vector<cybozu::util::FileOpener> ops;
+    MetaState st0;
+    std::vector<MetaDiff> diffV;
+    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, gid, doApply, !allowEmpty);
+
+    const MetaState st1 = applying(st0, diffV);
+    volInfo.setMetaState(st1);
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    if (!applyOpenedDiffs(std::move(ops), lv, volSt.stopState)) {
+        return false;
+    }
+
+    const MetaState st2 = apply(st0, diffV);
+    volInfo.setMetaState(st2);
+
+    volInfo.removeDiffFiles(diffV);
+    return true;
+}
+
+/**
+ * Restore a snapshot.
+ * (1) create lvm snapshot of base lv. (with temporal lv name)
+ * (2) apply appropriate wdiff files.
+ * (3) rename the lvm snapshot.
+ *
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool restore(const std::string &volId, uint64_t gid)
+{
+    using namespace walb::diff;
+
+    const char *const FUNC = __func__;
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    const std::string targetName = volInfo.restoredSnapshotName(gid);
+    const std::string tmpLvName = targetName + "_tmp";
+    if (lv.hasSnapshot(tmpLvName)) {
+        lv.getSnapshot(tmpLvName).remove();
+    }
+    if (lv.hasSnapshot(targetName)) {
+        throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
+    }
+    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
+
+    const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+    const bool noNeedToApply = latestSnap.isClean() && latestSnap.gidB == gid;
+
+    if (!noNeedToApply) {
+        std::vector<cybozu::util::FileOpener> ops;
+        tryOpenDiffs(ops, volInfo, gid, !doApply, !allowEmpty);
+        if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
+            return false;
+        }
+    }
+    cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+    return true;
+}
+
+/**
+ * Drop a restored volume.
+ */
+inline void drop(const std::string &volId, uint64_t gid)
+{
+    const char *const FUNC = __func__;
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    const std::string targetName = volInfo.restoredSnapshotName(gid);
+    if (!lv.hasSnapshot(targetName)) {
+        throw cybozu::Exception(FUNC)
+            << "restored volume not found" << volId << gid;
+    }
+    lv.getSnapshot(targetName).remove();
+}
+
+inline void backupServer(protocol::ServerParams &p, bool isFull)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    walb::packet::Packet pkt(p.sock);
+
+    std::string hostType, volId;
+    uint64_t sizeLb, curTime, bulkLb;
+    pkt.read(hostType);
+    pkt.read(volId);
+    pkt.read(sizeLb);
+    pkt.read(curTime);
+    pkt.read(bulkLb);
+    logger.debug() << hostType << volId << sizeLb << curTime << bulkLb;
+
+    ForegroundCounterTransaction foregroundTasksTran;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    StateMachine &sm = volSt.sm;
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    const std::string &stFrom = isFull ? aSyncReady : aArchived;
+    MetaSnap snapFrom;
+    try {
+        if (hostType != storageHT && hostType != archiveHT) {
+            throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
+        }
+        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyStateIn(sm.get(), {stFrom}, FUNC);
+        if (!isFull) {
+            snapFrom = volSt.diffMgr.getLatestSnapshot(volInfo.getMetaState());
+        }
+    } catch (std::exception &e) {
+        logger.warn() << e.what();
+        pkt.write(e.what());
+        return;
+    }
+    pkt.write(msgAccept);
+    if (!isFull) pkt.write(snapFrom);
+    cybozu::Uuid uuid;
+    pkt.read(uuid);
+    packet::Ack(p.sock).send();
+
+    const std::string &stPass = isFull ? atFullSync : atHashSync;
+    StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
+    ul.unlock();
+
+    const std::string st = volInfo.getState();
+    if (st != aSyncReady) {
+        throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
+    }
+    bool isOk;
+    std::unique_ptr<cybozu::TmpFile> tmpFileP;
+    if (isFull) {
+        volInfo.createLv(sizeLb);
+        isOk = archive_local::dirtyFullSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState);
+    } else {
+        const uint32_t hashSeed = curTime;
+        tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
+        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, uuid, hashSeed, volSt.stopState, snapFrom, tmpFileP->fd());
+    }
+    if (!isOk) {
+        logger.warn() << FUNC << "force stopped" << volId;
+        return;
+    }
+
+    MetaSnap snapTo;
+    pkt.read(snapTo);
+    if (isFull) {
+        MetaState state(snapTo, curTime);
+        volInfo.setMetaState(state);
+    } else {
+        const MetaDiff diff(snapFrom, snapTo, true, curTime);
+        tmpFileP->save(volInfo.getDiffPath(diff).str());
+        tmpFileP.reset();
+        volSt.diffMgr.add(diff);
+    }
+    volInfo.setUuid(uuid);
+    volInfo.setState(aArchived);
+
+    tran.commit(aArchived);
+
+    packet::Ack(p.sock).send();
+    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
+                  << "succeeded" << volId;
+}
+
+} // archive_local
+
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, diffMgr);
@@ -107,11 +574,6 @@ inline void ArchiveVolState::initInner(const std::string& volId)
     } else {
         sm.set(aClear);
     }
-}
-
-inline ArchiveVolState &getArchiveVolState(const std::string &volId)
-{
-    return getArchiveGlobal().stMap.get(volId);
 }
 
 inline void c2aStatusServer(protocol::ServerParams &p)
@@ -152,11 +614,6 @@ inline void c2aListVolServer(protocol::ServerParams &p)
     packet::Ack(p.sock).send();
     ProtocolLogger logger(ga.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
-}
-
-inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
-{
-    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)
@@ -301,280 +758,6 @@ inline void c2aStopServer(protocol::ServerParams &p)
     }
 }
 
-namespace archive_local {
-
-/**
- * RETURN:
- *   false if force stopped.
- */
-inline bool dirtyFullSyncServer(
-    packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState, Logger& logger)
-{
-    const char *const FUNC = __func__;
-    const std::string lvPath = volInfo.getLv().path().str();
-    cybozu::util::BlockDevice bd(lvPath, O_RDWR);
-    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    std::vector<char> encBuf;
-
-    uint64_t c = 0;
-    uint64_t remainingLb = sizeLb;
-    while (0 < remainingLb) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            return false;
-        }
-        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
-        const size_t size = lb * LOGICAL_BLOCK_SIZE;
-        size_t encSize;
-        pkt.read(encSize);
-        if (encSize == 0) {
-            throw cybozu::Exception(FUNC) << "encSize is zero";
-        }
-        encBuf.resize(encSize);
-        pkt.read(&encBuf[0], encSize);
-        size_t decSize;
-        if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
-            throw cybozu::Exception(FUNC)
-                << "GetUncompressedLength" << encSize;
-        }
-        if (decSize != size) {
-            throw cybozu::Exception(FUNC)
-                << "decSize differs" << decSize << size;
-        }
-        if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
-            throw cybozu::Exception(FUNC) << "RawUncompress";
-        }
-        bd.write(&buf[0], size);
-        remainingLb -= lb;
-        c++;
-    }
-    logger.debug() << "number of received packets" << c;
-    bd.fdatasync();
-    return true;
-}
-
-inline void openWdiffs(std::vector<cybozu::util::FileOpener>& ops, std::vector<MetaDiff>& diffV, const ArchiveVolInfo& volInfo, const MetaSnap& snap)
-{
-    const char *const FUNC = __func__;
-    const int maxRetryNum = 10;
-    int retryNum = 0;
-    cybozu::Uuid uuid;
-    ;
-retry:
-    {
-        diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
-        if (diffV.empty()) return;
-        // apply wdiff files indicated by diffV to lvSnap.
-        for (const MetaDiff& diff : diffV) {
-            cybozu::util::FileOpener op;
-            if (!op.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
-                retryNum++;
-                if (retryNum == maxRetryNum) {
-                    throw cybozu::Exception(FUNC) << "exceed max retry";
-                }
-                ops.clear();
-                goto retry;
-            }
-            diff::Reader reader(op.fd());
-            DiffFileHeader header;
-            reader.readHeaderWithoutReadingPackHeader(header);
-            if (ops.empty()) {
-                uuid = header.getUuid2();
-                mergedDiff = diff;
-            } else {
-                if (uuid != header.getUuid2()) {
-                    diffV.resize(ops.size());
-                    break;
-                }
-                mergedDiff.merge(diff);
-            }
-            if (lseek(op.fd(), 0, SEEK_SET) < 0) {
-                throw cybozu::Exception(FUNC) << "lseek failed" << cybozu::ErrorNo();
-            }
-            ops.push_back(std::move(op));
-        }
-    }
-    merger.addWdiffs(std::move(ops));
-    merger.prepare();
-}
-
-const bool doApply = true;
-const bool allowEmpty = true;
-
-inline bool dirtyHashSyncServer(
-    packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed, const std::atomic<int> &stopState, const MetaSnap& snap, int fd, Logger& logger)
-{
-    const char *const FUNC = __func__;
-
-    cybozu::lvm::Lv lv = volInfo.getLv();
-    if (sizeLb != lv.sizeLb()) {
-        throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
-    }
-    std::vector<cybozu::util::FileOpener> ops;
-
-    tryOpenDiffs(ops, volInfo, snap.gidB, !doApply, allowEmpty);
-
-    std::atomic<bool> quit = false;
-    auto readVirtualFullImageAndSendHash = [&]() {
-        cybozu::util::FileOpener op(lv.path().str(), O_RDONLY);
-
-        walb::diff::VirtualFullScanner virt;
-        virt.init(op.fd(), std::move(ops));
-
-        cybozu::murmurhash3::Hasher hasher(hashSeed);
-        packet::StreamControl ctrl(pkt.sock());
-
-        uint64_t reamaining = sizeLb;
-
-        try {
-            while (remainingLb > 0) {
-                if (stopState == ForceStopping || ga.forceQuit) {
-                    quit = true;
-                    return;
-                }
-                const uint64_t lb = std::min<uint64_t>(remainingLb, bulkLb);
-                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
-                virt.read(buf.data(), buf.size());
-                const cybozu::murmurhash3::Hash hash = hasher(buf.data(), buf.size());
-                ctrl.next();
-                packet.write(hash);
-                remainingLb -= lb;
-            }
-            ctrl.end();
-        } catch (std::exception& e) {
-            ctrl.error();
-            throw;
-        }
-    };
-    cybozu::thread::ThreadRunner reader(readVirtualFullImageAndSendHash);
-    reader.start();
-
-    cybozu::util::FdWriter fdw(fd);
-
-    {
-        DiffFileHeader wdiffH;
-        wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
-        wdiffH.setUuid(uuid);
-        wdiffH.writeTo(fdw);
-    }
-
-    packet::StreamControl ctrl(pkt.sock());
-    std::vector<char> packAsVec;
-    while (ctrl.isNext()) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            reader.join();
-            return false;
-        }
-        pkt.read(packAsVec);
-        // QQQ verify
-        fdw.write(packAsVec);
-        ctrl.reset();
-    }
-    if (ctrl.isError()) {
-        throw cybozu::Exception(NAME()) << "client sent an error";
-    }
-    assert(ctrl.isEnd());
-    diff::writeEofPack(fdw);
-    
-    reader.join();
-    return !quit;
-}
-
-} // archive_local
-
-inline void backupServer(protocol::ServerParams &p, bool isFull)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    walb::packet::Packet pkt(p.sock);
-
-    std::string hostType, volId;
-    uint64_t sizeLb, curTime, bulkLb;
-    pkt.read(hostType);
-    pkt.read(volId);
-    pkt.read(sizeLb);
-    pkt.read(curTime);
-    pkt.read(bulkLb);
-    logger.debug() << hostType << volId << sizeLb << curTime << bulkLb;
-
-    ForegroundCounterTransaction foregroundTasksTran;
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    StateMachine &sm = volSt.sm;
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-
-    const std::string &stFrom = isFull ? aSyncReady : aArchived;
-    MetaSnap snapFrom;
-    try {
-        if (hostType != storageHT && hostType != archiveHT) {
-            throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
-        }
-        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
-        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
-        verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
-        verifyStateIn(sm.get(), {stFrom}, FUNC);
-        if (!isFull) {
-            snapFrom = volSt.diffMgr.getLatestSnapshot(volInfo.getMetaState());
-        }
-    } catch (std::exception &e) {
-        logger.warn() << e.what();
-        pkt.write(e.what());
-        return;
-    }
-    pkt.write(msgAccept);
-    if (!isFull) pkt.write(snapFrom);
-    cybozu::Uuid uuid;
-    pkt.read(uuid);
-    packet::Ack(p.sock).send();
-
-    const std::string &stPass = isFull ? atFullSync : atHashSync;
-    StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
-    ul.unlock();
-
-    const std::string st = volInfo.getState();
-    if (st != aSyncReady) {
-        throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
-    }
-    bool isOk;
-    std::unique_ptr<cybozu::TmpFile> tmpFileP;
-    if (isFull) {
-        volInfo.createLv(sizeLb);
-        isOk = archive_local::dirtyFullSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState, logger);
-    } else {
-        const uint32_t hashSeed = curTime;
-        tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, uuid, hashSeed, volSt.stopState, snapFrom, tmpFileP->fd(), logger);
-    }
-    if (!isOk) {
-        logger.warn() << FUNC << "force stopped" << volId;
-        return;
-    }
-
-    MetaSnap snapTo;
-    pkt.read(snapTo);
-    if (isFull) {
-        MetaState state(snapTo, curTime);
-        volInfo.setMetaState(state);
-    } else {
-        const MetaDiff diff(snapFrom, snapTo, true, curTime);
-        tmpFileP->save(volInfo.getDiffPath(diff).str());
-        tmpFileP.reset();
-        volSt.diffMgr.add(diff);
-    }
-    volInfo.setUuid(uuid);
-    volInfo.setState(aArchived);
-
-    tran.commit(aArchived);
-
-    packet::Ack(p.sock).send();
-    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
-                  << "succeeded" << volId;
-}
-
-} // archive_local
-
 /**
  * Execute dirty full sync protocol as server.
  * Client is storage server or another archive server.
@@ -594,153 +777,6 @@ inline void x2aDirtyHashSyncServer(protocol::ServerParams &p)
     const bool isFull = false;
     archive_local::backupServer(p, isFull);
 }
-
-namespace archive_local {
-
-inline std::pair<MetaState, std::vector<MetaDiff>> getDiffList(ArchiveVolInfo& volInfo, uint64_t gid, bool doApply, bool allowEmpty, const char *msg)
-{
-    const MetaDiffManager &mgr = volInfo.getDiffMgr();
-    const MetaState st = volInfo.getMetaState();
-    std::vector<MetaDiff> diffV;
-    if (doApply) {
-        diffV = mgr.getDiffListToApply(st, gid);
-    } else {
-        diffV = mgr.getDiffListToRestore(st, gid);
-    }
-    if (!allowEmpty && diffV.empty()) {
-        throw cybozu::Exception(msg) << "diffV empty" << volInfo.volId << gid;
-    }
-    return {st, diffV};
-}
-
-inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo, uint64_t gid, bool doApply, bool allowEmpty)
-{
-    const char *const FUNC = __func__;
-
-    const int maxRetryNum = 10;
-    int retryNum = 0;
-  retry:
-    MetaState st;
-    std::vector<MetaDiff> diffV;
-    std::tie(st, diffV) = getDiffList(volInfo, gid, doApply, allowEmpty, FUNC);
-    // Try to open all wdiff files.
-    for (const MetaDiff& diff : diffV) {
-        cybozu::util::FileOpener op;
-        if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
-            retryNum++;
-            if (retryNum == maxRetryNum) {
-                throw cybozu::Exception(FUNC) << "exceed max retry";
-            }
-            ops.clear();
-            goto retry;
-        }
-        ops.push_back(std::move(op));
-    }
-    return {st, diffV};
-}
-
-inline bool applyOpenedDiffs(std::vector<cybozu::util::FileOpener>&& ops, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
-{
-    const char *const FUNC = __func__;
-    diff::Merger merger;
-    merger.addWdiffs(std::move(ops));
-    diff::RecIo recIo;
-    cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
-    std::vector<char> zero;
-	const uint64_t lvSnapSizeLb = lv.sizeLb();
-    while (merger.pop(recIo)) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            return false;
-        }
-        const DiffRecord& rec = recIo.record();
-        assert(!rec.isCompressed());
-        const uint64_t ioAddress = rec.io_address;
-        const uint64_t ioBlocks = rec.io_blocks;
-		//LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
-		if (ioAddress + ioBlocks > lvSnapSizeLb) {
-			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
-		}
-        const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
-        const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
-
-        const char *data;
-        // Curently a discard IO is converted to an all-zero IO.
-        if (rec.isAllZero() || rec.isDiscard()) {
-            if (zero.size() < ioSizeB) zero.resize(ioSizeB);
-            data = &zero[0];
-        } else {
-            data = recIo.io().get();
-        }
-        bd.write(ioAddrB, ioSizeB, data);
-    }
-    bd.fdatasync();
-    bd.close();
-    return true;
-}
-
-/**
- * Restore a snapshot.
- * (1) create lvm snapshot of base lv. (with temporal lv name)
- * (2) apply appropriate wdiff files.
- * (3) rename the lvm snapshot.
- *
- * RETURN:
- *   false if force stopped.
- */
-inline bool restore(const std::string &volId, uint64_t gid)
-{
-    using namespace walb::diff;
-
-    const char *const FUNC = __func__;
-
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-
-    cybozu::lvm::Lv lv = volInfo.getLv();
-    const std::string targetName = volInfo.restoredSnapshotName(gid);
-    const std::string tmpLvName = targetName + "_tmp";
-    if (lv.hasSnapshot(tmpLvName)) {
-        lv.getSnapshot(tmpLvName).remove();
-    }
-    if (lv.hasSnapshot(targetName)) {
-        throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
-    }
-    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
-
-    const MetaSnap latestSnap = volInfo.getLatestSnapshot();
-    const bool noNeedToApply = latestSnap.isClean() && latestSnap.gidB == gid;
-
-    if (!noNeedToApply) {
-        std::vector<cybozu::util::FileOpener> ops;
-        tryOpenDiffs(ops, volInfo, gid, !doApply, !allowEmpty);
-        if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
-            return false;
-        }
-    }
-    cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
-    return true;
-}
-
-/**
- * Drop a restored volume.
- */
-inline void drop(const std::string &volId, uint64_t gid)
-{
-    const char *const FUNC = __func__;
-
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-
-    cybozu::lvm::Lv lv = volInfo.getLv();
-    const std::string targetName = volInfo.restoredSnapshotName(gid);
-    if (!lv.hasSnapshot(targetName)) {
-        throw cybozu::Exception(FUNC)
-            << "restored volume not found" << volId << gid;
-    }
-    lv.getSnapshot(targetName).remove();
-}
-
-} // namespace archive_local
 
 /**
  * Restore command.
@@ -838,57 +874,6 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
     }
 }
 
-namespace proxy_local {
-
-/**
- * Wdiff header has been written already before calling this.
- *
- * RETURN:
- *   false if force stopped.
- */
-inline bool recvAndWriteDiffs(
-    cybozu::Socket &sock, diff::Writer &writer, const std::atomic<int> &stopState)
-{
-    const char *const FUNC = __func__;
-    packet::StreamControl ctrl(sock);
-    while (ctrl.isNext()) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            return false;
-        }
-        DiffPackHeader packH;
-        sock.read(packH.rawData(), packH.rawSize());
-        if (!packH.isValid()) {
-            throw cybozu::Exception(FUNC) << "bad packH";
-        }
-        for (size_t i = 0; i < packH.nRecords(); i++) {
-            DiffIo io;
-            const DiffRecord& rec = packH.record(i);
-            io.set(rec);
-            if (rec.data_size == 0) {
-                writer.writeDiff(rec, {});
-                continue;
-            }
-            sock.read(io.get(), rec.data_size);
-            if (!io.isValid()) {
-                throw cybozu::Exception(FUNC) << "bad io";
-            }
-            uint32_t csum = io.calcChecksum();
-            if (csum != rec.checksum) {
-                throw cybozu::Exception(FUNC)
-                    << "bad io checksum" << csum << rec.checksum;
-            }
-            writer.writeDiff(rec, std::move(io.data));
-        }
-        ctrl.reset();
-    }
-    if (!ctrl.isEnd()) {
-        throw cybozu::Exception(FUNC) << "bad ctrl not end";
-    }
-    return true;
-}
-
-} // proxy_local
-
 inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
@@ -985,7 +970,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     fileH.setUuid(uuid.rawData());
     writer.writeHeader(fileH);
     logger.debug() << FUNC << "write header";
-    if (!proxy_local::recvAndWriteDiffs(p.sock, writer, volSt.stopState)) {
+    if (!archive_local::recvAndWriteDiffs(p.sock, writer, volSt.stopState)) {
         logger.warn() << FUNC << "force stopped" << volId;
         return;
     }
@@ -1010,47 +995,6 @@ inline void a2aReplSyncServer(protocol::ServerParams &/*p*/)
 {
     // QQQ
 }
-
-namespace archive_local {
-
-inline void verifyApplicable(const std::string& volId, uint64_t gid)
-{
-    ArchiveVolState& volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-    UniqueLock ul(volSt.mu);
-
-    const bool doApply = true;
-    const bool allowEmpty = false;
-    getDiffList(volInfo, gid, doApply, allowEmpty, __func__);
-}
-
-inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
-{
-    ArchiveVolState& volSt = getArchiveVolState(volId);
-    MetaDiffManager &mgr = volSt.diffMgr;
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
-
-    std::vector<cybozu::util::FileOpener> ops;
-    MetaState st0;
-    std::vector<MetaDiff> diffV;
-    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, gid, doApply, !allowEmpty);
-
-    const MetaState st1 = applying(st0, diffV);
-    volInfo.setMetaState(st1);
-
-    cybozu::lvm::Lv lv = volInfo.getLv();
-    if (!applyOpenedDiffs(std::move(ops), lv, volSt.stopState)) {
-        return false;
-    }
-
-    const MetaState st2 = apply(st0, diffV);
-    volInfo.setMetaState(st2);
-
-    volInfo.removeDiffFiles(diffV);
-    return true;
-}
-
-} // archive_local
 
 inline void c2aApplyServer(protocol::ServerParams &p)
 {

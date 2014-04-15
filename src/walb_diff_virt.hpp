@@ -41,7 +41,7 @@ private:
     bool emptyWdiff_;
 
     void init_inner(int baseFd) {
-        reader_.open(baseFd);
+        reader_.setFd(baseFd);
         isInputFdSeekable_ = reader_.seekable();
         bufForSkip_ = allocateBufForSkipStatic(isInputFdSeekable_);
     }
