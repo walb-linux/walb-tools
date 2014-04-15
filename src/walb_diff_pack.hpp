@@ -232,7 +232,7 @@ private:
     const char *p_;
     size_t size_;
 public:
-    explicit MemoryPack(const char *p, size_t size) : p_(), size_(0) {
+    MemoryPack(const char *p, size_t size) : p_(), size_(0) {
         reset(p, size);
     }
     MemoryPack(const MemoryPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
