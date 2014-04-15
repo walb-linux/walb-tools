@@ -677,16 +677,6 @@ public:
         static_assert(IsCopyableT::value, "T is not copyable.");
         pushInner(t);
     }
-    template<class F>
-    void pushInplace(F f) {
-        AutoLock lk(mutex_);
-        waitForPush(lk);
-
-        bool isEmpty0 = isEmpty();
-        queue_.emplace();
-        f(queue_.back());
-        if (isEmpty0) { condEmpty_.notify_all(); }
-    }
     /**
      * Pop an item.
      * This may block if the queue is empty.
