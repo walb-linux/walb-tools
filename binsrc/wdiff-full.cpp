@@ -32,8 +32,6 @@ public:
         cybozu::util::FdReader reader(inFd);
         walb::diff::Writer writer(outFd);
         walb::DiffFileHeader head;
-
-        head.init();
         head.setMaxIoBlocksIfNecessary(ioBlocks_);
         writer.writeHeader(head);
 
