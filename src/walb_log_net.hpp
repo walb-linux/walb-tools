@@ -21,7 +21,7 @@ constexpr size_t Q_SIZE = 16;
 
 CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress)
 {
-    const uint32_t pbs = blockS.pbs;
+    const uint32_t pbs = blockS.pbs();
     const size_t n = blockS.nBlocks();
     assert(0 < n);
     std::vector<char> d(n * pbs);
@@ -40,7 +40,7 @@ inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData
     const size_t n = v.size() / pbs;
     if (n == 0) throw cybozu::Exception(__func__) << "n must not be 0";
     if (n * pbs != v.size()) throw cybozu::Exception(__func__) << "invalid size" << v.size();
-    blockS.pbs = pbs;
+    blockS.init(pbs);
     blockS.resize(n);
     for (size_t i = 0; i < n; i++) {
         ::memcpy(blockS.get(i), &v[i * pbs], pbs);
@@ -321,8 +321,7 @@ public:
             if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
             convertToLogBlockShared(blockS, cd, pbs_);
         } else {
-            blockS.pbs = pbs_;
-            blockS.resize(0);
+            blockS.init(pbs_);
         }
         if (!isValidRecordAndBlockData(rec, blockS, h.salt())) {
             throw cybozu::Exception("Receiver:popIo:invalid.");

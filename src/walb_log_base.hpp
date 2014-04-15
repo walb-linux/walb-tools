@@ -603,18 +603,27 @@ class LogBlockShared
 {
 private:
     static constexpr const char *NAME() { return "LogBlockShared"; }
+    uint32_t pbs_; /* physical block size. */
     std::vector<LogBlock> data_; /* Each block's size must be pbs. */
 public:
-    uint32_t pbs; /* physical block size. */
-    explicit LogBlockShared(uint32_t pbs = 0) : pbs(pbs) {}
+    explicit LogBlockShared(uint32_t pbs = 0) : pbs_(pbs) {}
+    void init(size_t pbs) {
+        pbs_ = pbs;
+        checkPbs();
+        resize(0);
+    }
     size_t nBlocks() const { return data_.size(); }
     const uint8_t *get(size_t idx) const {
-        check(idx);
+        checkRange(idx);
         return data_[idx].get();
     }
     uint8_t *get(size_t idx) {
-        check(idx);
+        checkRange(idx);
         return data_[idx].get();
+    }
+    uint32_t pbs() const {
+        checkPbs();
+        return pbs_;
     }
     void resize(size_t nBlocks0) {
         if (nBlocks0 < data_.size()) {
@@ -632,7 +641,7 @@ public:
     void write(cybozu::util::FdWriter &fdw) const {
         checkPbs();
         for (size_t i = 0; i < nBlocks(); i++) {
-            fdw.write(get(i), pbs);
+            fdw.write(get(i), pbs_);
         }
     }
     bool calcIsAllZero(size_t ioSizeLb) const {
@@ -642,8 +651,7 @@ public:
         size_t i = 0;
         while (0 < remaining) {
             assert(i < nBlocks());
-            size_t s = pbs;
-            if (remaining < pbs) s = remaining;
+            const size_t s = std::min<size_t>(pbs_, remaining);
             if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
             remaining -= s;
             i++;
@@ -658,8 +666,7 @@ public:
         size_t i = 0;
         while (0 < remaining) {
             assert(i < nBlocks());
-            size_t s = pbs;
-            if (remaining < pbs) s = remaining;
+            const size_t s = std::min<size_t>(pbs_, remaining);
             csum = cybozu::util::checksumPartial(get(i), s, csum);
             remaining -= s;
             i++;
@@ -668,19 +675,20 @@ public:
     }
 private:
     LogBlock allocPb() const {
-        return cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+        checkPbs();
+        return cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
     }
     void checkPbs() const {
-        if (pbs == 0) throw cybozu::Exception(NAME()) << "pbs is zero";
+        if (pbs_ == 0) throw cybozu::Exception(NAME()) << "pbs is zero";
     }
     void checkSizeLb(size_t ioSizeLb) const {
-        if (nBlocks() * pbs < ioSizeLb * LOGICAL_BLOCK_SIZE) {
+        if (nBlocks() * pbs_ < ioSizeLb * LOGICAL_BLOCK_SIZE) {
             throw cybozu::Exception(NAME())
                 << "checkSizeLb:ioSizeLb too large"
-                << ioSizeLb << ::capacity_lb(pbs, nBlocks());
+                << ioSizeLb << ::capacity_lb(pbs_, nBlocks());
         }
     }
-    void check(size_t idx) const {
+    void checkRange(size_t idx) const {
         checkPbs();
         if (nBlocks() <= idx) {
             throw cybozu::Exception(NAME()) << "index out of range" << idx;
@@ -736,7 +744,7 @@ bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& block
         LOGd("invalid record.");
         return false; }
     if (!rec.hasDataForChecksum()) return true;
-    const uint32_t ioSizePb = rec.ioSizePb(blockS.pbs);
+    const uint32_t ioSizePb = rec.ioSizePb(blockS.pbs());
     if (blockS.nBlocks() < ioSizePb) {
         throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
             << blockS.nBlocks() << ioSizePb;
@@ -761,7 +769,8 @@ struct LogPackIo
 
     void set(const LogPackHeader &logh, size_t pos) {
         rec.copyFrom(logh, pos);
-        blockS.pbs = logh.pbs();
+        blockS.init(logh.pbs());
+        // QQQ resize is required?
     }
 
     bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockS, isChecksum); }

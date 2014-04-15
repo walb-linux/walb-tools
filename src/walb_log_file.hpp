@@ -188,7 +188,7 @@ public:
         rec.setSalt(packHeader.salt());
 
         /* Read to the blockS. */
-        blockS.pbs = pbs_;
+        blockS.init(pbs_);
         if (rec.hasData()) {
             blockS.resize(rec.ioSizePb());
             for (size_t i = 0; i < rec.ioSizePb(); i++) {
