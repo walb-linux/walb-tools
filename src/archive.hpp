@@ -266,14 +266,14 @@ inline bool dirtyHashSyncServer(
     }
 
     packet::StreamControl ctrl(pkt.sock());
-    std::vector<char> pack;
+    Buffer pack;
     while (ctrl.isNext()) {
         if (stopState == ForceStopping || ga.forceQuit) {
             reader.join();
             return false;
         }
         pkt.read(pack);
-        // QQQ verify
+        verifyDiffPack(pack);
         fdw.write(pack.data(), pack.size());
         ctrl.reset();
     }
@@ -282,7 +282,7 @@ inline bool dirtyHashSyncServer(
     }
     assert(ctrl.isEnd());
     diff::writeEofPack(fdw);
-    
+
     reader.join();
     return !quit;
 }

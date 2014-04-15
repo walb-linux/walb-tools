@@ -393,4 +393,11 @@ private:
     }
 };
 
-}} //namespace walb::diff
+} // namespace diff
+
+inline void verifyDiffPack(const std::vector<char> &buf)
+{
+    diff::MemoryPack(buf.data(), buf.size());
+}
+
+} //namespace walb
