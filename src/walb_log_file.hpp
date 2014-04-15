@@ -175,7 +175,7 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(RecordRaw& rec, walb::LogBlockVec& blockV)
+    bool readLog(RecordRaw& rec, walb::LogBlockShared& blockS)
     {
         checkReadHeader();
         fillPackIfNeed();
@@ -187,24 +187,24 @@ public:
         rec.setPbs(packHeader.pbs());
         rec.setSalt(packHeader.salt());
 
-        /* Read to the blockV. */
-        blockV.pbs = pbs_;
+        /* Read to the blockS. */
+        blockS.pbs = pbs_;
         if (rec.hasData()) {
-            blockV.resize(rec.ioSizePb());
+            blockS.resize(rec.ioSizePb());
             for (size_t i = 0; i < rec.ioSizePb(); i++) {
                 try {
-                    fdr_.read(blockV.get(i), pbs_);
+                    fdr_.read(blockS.get(i), pbs_);
                 } catch (cybozu::util::EofError &e) {
                     throw InvalidIo();
                 }
             }
         } else {
-            blockV.resize(0);
+            blockS.resize(0);
         }
 
         /* Validate. */
-        if (!isValidRB(rec, blockV)) {
-            printRB(rec, blockV);
+        if (!isValidRB(rec, blockS)) {
+            printRB(rec, blockS);
             LOGd("invalid...");
             throw InvalidIo();
         }
@@ -440,8 +440,8 @@ public:
         wh.print(fp);
 
         RecordRaw rec;
-        LogBlockVec blockV;
-        while (reader.readLog(rec, blockV)) {
+        LogBlockShared blockS;
+        while (reader.readLog(rec, blockS)) {
             rec.printOneline(fp);
         }
         /*

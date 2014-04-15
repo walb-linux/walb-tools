@@ -33,23 +33,17 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
     return doCompress ? cd.compress() : cd;
 }
 
-inline void convertToLogBlockVec(LogBlockVec& blockV, const CompressedData &cd, uint32_t pbs)
+inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t pbs)
 {
-    std::vector<uint8_t> v;
+    std::vector<char> v;
     cd.getUncompressed(v);
-    blockV.pbs = pbs;
-    blockV.setData(std::move(v));
-}
-
-inline void convertToLogBlockShared(LogBlockShared& blockDS, const CompressedData &cd, uint32_t pbs)
-{
-    LogBlockVec blockDV;
-    convertToLogBlockVec(blockDV, cd, pbs);
-    blockDS.pbs = pbs;
-    const size_t n = blockDV.nBlocks();
-    blockDS.resize(n);
+    const size_t n = v.size() / pbs;
+    if (n == 0) throw cybozu::Exception(__func__) << "n must not be 0";
+    if (n * pbs != v.size()) throw cybozu::Exception(__func__) << "invalid size" << v.size();
+    blockS.pbs = pbs;
+    blockS.resize(n);
     for (size_t i = 0; i < n; i++) {
-        ::memcpy(blockDS.get(i), blockDV.get(i), pbs);
+        ::memcpy(blockS.get(i), &v[i * pbs], pbs);
     }
 }
 

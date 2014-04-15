@@ -31,11 +31,11 @@ namespace walb {
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
- *   (R, B) = (RecordWrap, LogBlockShared) or (RecordRaw, LogBlockVec)
+ *   R = RecordWrap or RecordRaw.
  */
-template<class R, class B>
+template<class R>
 inline bool convertLogToDiff(
-    const R& rec, const B& blockD, DiffRecord& mrec, DiffIo &diffIo)
+    const R& rec, const LogBlockShared& blockS, DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -53,7 +53,7 @@ inline bool convertLogToDiff(
     }
 
     /* AllZero */
-    if (blockD.calcIsAllZero(rec.ioSizeLb())) {
+    if (blockS.calcIsAllZero(rec.ioSizeLb())) {
         mrec.setAllZero();
         mrec.data_size = 0;
         diffIo.set(mrec);
@@ -69,11 +69,11 @@ inline bool convertLogToDiff(
     const unsigned int pbs = rec.pbs();
     for (size_t i = 0; i < rec.ioSizePb(); i++) {
         if (pbs <= remaining) {
-            ::memcpy(&buf[off], blockD.get(i), pbs);
+            ::memcpy(&buf[off], blockS.get(i), pbs);
             off += pbs;
             remaining -= pbs;
         } else {
-            ::memcpy(&buf[off], blockD.get(i), remaining);
+            ::memcpy(&buf[off], blockS.get(i), remaining);
             off += remaining;
             remaining = 0;
         }
@@ -183,15 +183,15 @@ private:
         /* Convert each log. */
         while (!reader.isEnd()) {
             log::RecordRaw rec;
-            LogBlockVec blockV;
+            LogBlockShared blockS;
             if (reader.isFirstInPack()) {
                 lsid = reader.packHeader().nextLogpackLsid();
             }
-            reader.readLog(rec, blockV);
+            reader.readLog(rec, blockS);
 
             DiffRecord diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(rec, blockV, diffRec, diffIo)) {
+            if (convertLogToDiff(rec, blockS, diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;
             }

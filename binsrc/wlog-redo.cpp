@@ -528,12 +528,12 @@ public:
 
         while (!reader.isEnd()) {
             walb::log::RecordRaw rec;
-            walb::LogBlockVec blockV;
+            walb::LogBlockShared blockS;
             if (config_.isVerbose() && reader.isFirstInPack()) {
                 reader.packHeader().printShort();
             }
-            reader.readLog(rec, blockV);
-            redoPack(rec, blockV);
+            reader.readLog(rec, blockS);
+            redoPack(rec, blockS);
         }
         redoLsid = reader.endLsid();
 
@@ -788,7 +788,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(const walb::log::RecordRaw &rec, const walb::LogBlockVec& blockV) {
+    void redoNormalIo(const walb::log::RecordRaw &rec, const walb::LogBlockShared& blockS) {
         assert(rec.isExist());
         assert(!rec.isPadding());
         assert(config_.isZeroDiscard() || !rec.isDiscard());
@@ -805,7 +805,7 @@ private:
                 block = ba_.alloc();
                 ::memset(block.get(), 0, blockSize_);
             } else {
-                block = blockV.getBlock(i);
+                block = blockS.getBlock(i);
             }
             IoPtr iop;
             if (blockSize_ <= remaining) {
@@ -849,7 +849,7 @@ private:
     /**
      * Redo a logpack data.
      */
-    void redoPack(const walb::log::RecordRaw &rec, const walb::LogBlockVec& blockV) {
+    void redoPack(const walb::log::RecordRaw &rec, const walb::LogBlockShared& blockS) {
         assert(rec.isExist());
 
         if (rec.isPadding()) {
@@ -870,7 +870,7 @@ private:
             }
             /* zero-discard will use redoNormalIo(). */
         }
-        redoNormalIo(rec, blockV);
+        redoNormalIo(rec, blockS);
     }
 
     static size_t getQueueSizeStatic(size_t bufferSize, size_t blockSize) {
