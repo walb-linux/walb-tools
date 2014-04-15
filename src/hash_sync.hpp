@@ -159,6 +159,7 @@ public:
         std::vector<char> packAsVec;
         while (ctrl.isNext()) {
             packet_.read(packAsVec);
+            // QQQ : verify
             outQ_.push(std::move(packAsVec));
             ctrl.reset();
         }
@@ -403,81 +404,6 @@ private:
 };
 
 /**
- * Walb hash-sync server helper.
- * This will send hash arrays, receive diff packs.
- * You need more two threads A and B:
- *   A will call pushHash() repeatedly.
- *   B will call popPack() repeatedly.
- *
- * Usage:
- *   (1) call start() to start worker threads.
- *   (2) prpeare two threads A and B.
- *   (3) A call pushHash() repeatedly. finally call sync().
- *   (4) B call popPack() repeatedly until false is returned.
- *
- *   You can call fail() to stop all threads when an error occurs.
- */
-class HashSyncServer
-{
-private:
-    static constexpr const char *NAME() { return "HashSyncServer"; }
-    using HashQ = cybozu::thread::BoundedQueue<cybozu::murmurhash3::Hash>;
-    using PackQ = cybozu::thread::BoundedQueue<std::vector<char> >;
-
-    cybozu::Socket &sock_;
-    Logger &logger_;
-    std::atomic<bool> isEnd_;
-    std::atomic<bool> isFailed_;
-
-    HashQ hashQ_; /* Users push hashes to the queue. */
-    PackQ packQ_; /* Users pop packs from the queue. */
-
-    cybozu::thread::ThreadRunner sendHashThread_;
-    cybozu::thread::ThreadRunner receivePackThread_;
-
-public:
-    HashSyncServer(cybozu::Socket &sock, Logger &logger)
-        : sock_(sock), logger_(logger)
-        , isEnd_(false), isFailed_(false)
-        , hashQ_(Q_SIZE), packQ_(Q_SIZE) {
-    }
-    ~HashSyncServer() noexcept {
-        if (!isEnd_ && !isFailed_) fail();
-    }
-    void start() {
-        sendHashThread_.set(SendHashWorker(hashQ_, sock_, logger_));
-        receivePackThread_.set(ReceivePackWorker(packQ_, sock_, logger_));
-        sendHashThread_.start();
-        receivePackThread_.start();
-    }
-    void pushHash(const cybozu::murmurhash3::Hash &hash) {
-        hashQ_.push(hash);
-    }
-    void sync() {
-        hashQ_.sync();
-    }
-    bool popPack(std::vector<char> &v) {
-        if (!packQ_.pop(v)) {
-            isEnd_ = true;
-            joinWorkers();
-            return false;
-        }
-        return true;
-    }
-    void fail() {
-        isFailed_ = true;
-        hashQ_.fail();
-        packQ_.fail();
-        joinWorkers();
-    }
-private:
-    void joinWorkers() noexcept {
-        putErrorLogIfNecessary(sendHashThread_.joinNoThrow(), logger_, NAME());
-        putErrorLogIfNecessary(receivePackThread_.joinNoThrow(), logger_, NAME());
-    }
-};
-
-/**
  *
  * Usage:
  *   (1) call setParams()
@@ -551,102 +477,6 @@ public:
 private:
     void joinWorkers() noexcept {
         putErrorLogIfNecessary(readBdevThread_.joinNoThrow(), logger_, NAME());
-    }
-};
-
-class VirtualFullImageReader
-{
-private:
-    using Buffer = std::vector<char>;
-    static constexpr const char *NAME() { return "VirtualFullImageReader"; }
-    using BufferQ = cybozu::thread::BoundedQueue<Buffer>;
-
-    Logger &logger_;
-    std::atomic<bool> isEnd_;
-    std::atomic<bool> isFailed_;
-    BufferQ bufferQ_;
-
-    walb::diff::VirtualFullScanner virt_;
-    uint64_t sizeLb_;
-    uint16_t bulkLb_;
-
-    cybozu::thread::ThreadRunner readVirtThread_;
-
-    struct ReadVirtWorker {
-        walb::diff::VirtualFullScanner& virt_;
-        const uint64_t sizeLb_;
-        const uint16_t bulkLb_;
-        BufferQ& outQ_;
-        Logger &logger_;
-        ReadVirtWorker(walb::diff::VirtualFullScanner& virt, uint64_t sizeLb, uint16_t bulkLb, BufferQ& outQ, Logger& logger)
-            : virt_(virt)
-            , sizeLb_(sizeLb)
-            , bulkLb_(bulkLb)
-            , outQ_(outQ)
-            , logger_(logger) {
-        }
-        void operator()() try {
-            uint64_t reamaining = sizeLb;
-            while (remainingLb > 0) {
-                const uint64_t lb = std::min<uint64_t>(remainingLb, bulkLb_);
-                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
-                virt_.read(buf.data(), buf.size());
-                outQ_.push(std::move(buf));
-                remainingLb -= lb;
-            }
-            outQ_.sync();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-        void handleError(const char *msg) noexcept {
-            logger_.error() << NAME() << msg;
-            outQ_.fail();
-        }
-    };
-public:
-    explicit VirtualFullImageReader(Logger &logger)
-        : logger_(logger)
-        , isEnd_(false), isFailed_(false)
-        , bufferQ_(Q_SIZE)
-        , sizeLb_(0), bulkLb_(0) {
-    }
-    ~VirtualFullImageReader() noexcept {
-        if (!isEnd_ && !isFailed_) fail();
-    }
-    void setParams(const std::string &bdevPath, uint64_t sizeLb, uint16_t bulkLb, std::vector<cybozu::util::FileOpener>&& ops) {
-        cybozu::util::FileOpener op(bdevPath, O_RDONLY);
-        
-        virt.init(op.fd(), std::move(ops));
-        sizeLb_ = sizeLb;
-        bulkLb_ = bulkLb;
-    }
-    void start() {
-        readVirtThread_.set(ReadVirtWorker(virt_, sizeLb_, bulkLb_, bufferQ_, logger_));
-        readVirtThread_.start();
-    }
-    bool pop(Buffer &data) {
-        if (!bufferQ_.pop(data)) {
-            isEnd_ = true;
-            joinWorkers();
-            return false;
-        }
-        return true;
-    }
-    void fail() noexcept {
-        isFailed_ = true;
-        bufferQ_.fail();
-        joinWorkers();
-    }
-    bool isEnd() const {
-        return isEnd_;
-    }
-private:
-    void joinWorkers() noexcept {
-        putErrorLogIfNecessary(readVirtThread_.joinNoThrow(), logger_, NAME());
     }
 };
 

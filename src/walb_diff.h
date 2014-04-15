@@ -16,7 +16,7 @@ extern "C" {
 /**
  * Wdiff file format.
  *
- * [4KiB: walb_diff_file_header]
+ * [sizeof: walb_diff_file_header]
  * [[4KiB: walb_diff_pack, [walb_diff_record, ...]]
  *  [compressed IO data, ...], ...]
  * [4KiB: walb_diff_pack: end flag on]
@@ -76,9 +76,6 @@ struct walb_diff_file_header
                                 This is used for overlapped check. */
     uint16_t reserved1;
     uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
-
-    /* Remaining area of 4KiB may be used by application. */
-
 } __attribute__((packed));
 
 /**

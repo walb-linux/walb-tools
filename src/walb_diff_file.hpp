@@ -16,6 +16,9 @@ namespace walb {
  */
 struct DiffFileHeader : walb_diff_file_header
 {
+    DiffFileHeader() {
+        init();
+    }
     uint32_t getChecksum() const { return checksum; }
     uint16_t getMaxIoBlocks() const { return max_io_blocks; }
     const uint8_t *getUuid() const { return &uuid[0]; }
@@ -43,6 +46,9 @@ struct DiffFileHeader : walb_diff_file_header
     void setUuid(const void *uuid) {
         ::memcpy(&this->uuid[0], uuid, UUID_SIZE);
     }
+    void setUuid(const cybozu::Uuid& uuid) {
+        setUuid(uuid.rawData());
+    }
 
     void print(::FILE *fp) const {
         ::fprintf(fp, "-----walb_file_header-----\n"
@@ -61,10 +67,28 @@ struct DiffFileHeader : walb_diff_file_header
     void init() {
         ::memset(this, 0, getSize());
     }
+    template<class Writer>
+    void writeTo(Writer& writer) {
+        updateChecksum();
+        writer.write(this, getSize());
+    }
+    template<class Reader>
+    void readFrom(Reader& reader) {
+        reader.read(this, getSize());
+        if (!isValid()) throw cybozu::Exception("DiffFileHeader:readFrom:bad checksum");
+    }
 };
 
 namespace diff {
 
+template<class Writer>
+inline void writeEofPack(Writer& writer)
+{
+    DiffPackHeader pack;
+    pack.setEnd();
+    pack.updateChecksum();
+    writer.write(pack.rawData(), pack.rawSize());
+}
 /**
  * Walb diff writer.
  */
@@ -123,9 +147,7 @@ public:
         if (isWrittenHeader_) {
             throw RT_ERR("Do not call writeHeader() more than once.");
         }
-        header.updateChecksum();
-        assert(header.isValid());
-        fdw_.write(&header, header.getSize());
+        header.writeTo(fdw_);
         isWrittenHeader_ = true;
     }
 
@@ -211,10 +233,7 @@ private:
     }
 
     void writeEof() {
-        pack_.reset();
-        pack_.setEnd();
-        pack_.updateChecksum();
-        fdw_.write(pack_.rawData(), pack_.rawSize());
+        writeEofPack(fdw_);
     }
 
     void checkWrittenHeader() const {
