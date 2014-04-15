@@ -348,7 +348,7 @@ public:
     }
 
     /**
-     * Get created pack image.
+     * Get created pack image and clear buffer
      */
     std::vector<char> getPackAsVector() {
         packh_.updateChecksum();

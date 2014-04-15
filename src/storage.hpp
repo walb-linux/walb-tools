@@ -576,9 +576,69 @@ inline bool dirtyFullSyncClient(
 
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, StorageVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState, Logger &logger)
+    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState)
 {
     const char *const FUNC = __func__;
+#if 1
+    packet::StreamControl recvCtl(pkt.sock());
+    packet::StreamControl sendCtl(pkt.sock());
+    diff::Packer packer;
+    const size_t Q_SIZE = 16;
+    packer.setMaxNumRecords(Q_SIZE);
+    walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
+
+    cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
+    cybozu::murmurhash3::Hasher hasher(hashSeed);
+
+    uint64_t addr = 0;
+    uint64_t remainingLb = sizeLb;
+    Buffer buf;
+
+    auto compressAndSend = [&]() {
+        Buffer compBuf = compr.convert(packer.getPackAsVector().data());
+        sendCtl.next();
+        pkt.write(compBuf);
+    };
+    for (;;) {
+        if (stopState == ForceStopping || gs.forceQuit) {
+            return false;
+        }
+        const bool hasNext = recvCtl.isNext();
+        if (hasNext) {
+            if (remainingLb == 0) throw cybozu::Exception(FUNC) << "has next but remainingLb is zero";
+        } else {
+            if (remainingLb == 0) break;
+            throw cybozu::Exception(FUNC) << "no next but remainingLb is not zero" << remainingLb;
+        }
+        cybozu::murmurhash3::Hash recvHash;
+        pkt.read(recvHash);
+
+        const uint16_t lb = std::min<uint64_t>(remainingLb, bulkLb);
+        buf.resize(lb * LOGICAL_BLOCK_SIZE);
+        bd.read(addr * LOGICAL_BLOCK_SIZE, buf.size(), buf.data());
+
+        const cybozu::murmurhash3::Hash bdHash = hasher(buf.data(), buf.size());
+
+        if (recvHash != bdHash) {
+            if (!packer.add(addr, lb, buf.data())) {
+                compressAndSend();
+                packer.add(addr, lb, buf.data());
+            }
+        }
+        recvCtl.reset();
+
+        remainingLb -= lb;
+        addr += lb;
+    }
+    if (!packer.empty()) compressAndSend();
+    if (recvCtl.isError()) {
+        throw cybozu::Exception(FUNC) << "recvCtl";
+    }
+    sendCtl.end();
+    return true;
+
+
+#else
     BdevReader reader(logger);
     reader.setParams(volInfo.getWdevPath(), sizeLb, bulkLb);
     reader.start();
@@ -606,6 +666,7 @@ inline bool dirtyHashSyncClient(
     if (!reader.isEnd()) cybozu::Exception(FUNC) << "reader must end";
     client.sync();
     return true;
+#endif
 }
 
 inline void backupClient(protocol::ServerParams &p, bool isFull)
@@ -683,7 +744,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             }
         } else {
             const uint32_t hashSeed = curTime;
-            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState, logger)) {
+            if (!storage_local::dirtyHashSyncClient(aPkt, volInfo, sizeLb, bulkLb, hashSeed, volSt.stopState)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
