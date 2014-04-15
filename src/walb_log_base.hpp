@@ -770,7 +770,6 @@ struct LogPackIo
     void set(const LogPackHeader &logh, size_t pos) {
         rec.copyFrom(logh, pos);
         blockS.init(logh.pbs());
-        // QQQ resize is required?
     }
 
     bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockS, isChecksum); }
