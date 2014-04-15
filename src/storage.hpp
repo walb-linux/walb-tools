@@ -9,7 +9,9 @@
 #include "wdev_util.hpp"
 #include "walb_log_net.hpp"
 #include "action_counter.hpp"
-#include "hash_sync.hpp"
+#include "walb_diff_pack.hpp"
+#include "walb_diff_compressor.hpp"
+#include "murmurhash3.hpp"
 
 namespace walb {
 
@@ -579,7 +581,6 @@ inline bool dirtyHashSyncClient(
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState)
 {
     const char *const FUNC = __func__;
-#if 1
     packet::StreamControl recvCtl(pkt.sock());
     packet::StreamControl sendCtl(pkt.sock());
     diff::Packer packer;
@@ -636,37 +637,6 @@ inline bool dirtyHashSyncClient(
     }
     sendCtl.end();
     return true;
-
-
-#else
-    BdevReader reader(logger);
-    reader.setParams(volInfo.getWdevPath(), sizeLb, bulkLb);
-    reader.start();
-    HashSyncClient client(pkt.sock(), logger);
-    client.start();
-
-    cybozu::murmurhash3::Hasher hasher(hashSeed);
-    cybozu::murmurhash3::Hash hash0, hash1;
-    while (client.popHash(hash0)) {
-        if (stopState == ForceStopping || gs.forceQuit) {
-            reader.fail();
-            client.fail();
-            return false;
-        }
-        uint64_t ioAddress;
-        uint16_t ioBlocks;
-        std::vector<char> data;
-        const bool ret = reader.pop(ioAddress, ioBlocks, data);
-        if (!ret) throw cybozu::Exception(FUNC) << "reader pop failed";
-        hash1 = hasher(&data[0], data.size());
-        if (hash0 != hash1) {
-            client.pushIo(ioAddress, ioBlocks, std::move(data));
-        }
-    }
-    if (!reader.isEnd()) cybozu::Exception(FUNC) << "reader must end";
-    client.sync();
-    return true;
-#endif
 }
 
 inline void backupClient(protocol::ServerParams &p, bool isFull)
