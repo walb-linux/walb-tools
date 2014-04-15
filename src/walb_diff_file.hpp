@@ -217,8 +217,7 @@ private:
         }
 
         size_t total = 0;
-        pack_.updateChecksum();
-        fdw_.write(pack_.rawData(), pack_.rawSize());
+        pack_.writeTo(fdw_);
 
         assert(pack_.nRecords() == ioQ_.size());
         while (!ioQ_.empty()) {
@@ -304,10 +303,7 @@ public:
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
-        fdr_.read(&head, head.getSize());
-        if (!head.isValid()) {
-            throw RT_ERR("diff header invalid.\n");
-        }
+        head.readFrom(fdr_);
         isReadHeader_ = true;
         if (doReadHeader) readPackHeader();
     }
@@ -369,14 +365,11 @@ public:
 
     bool readPackHeader(DiffPackHeader& pack) {
         try {
-            fdr_.read(pack.rawData(), pack.rawSize());
+            pack.readFrom(fdr_);
         } catch (cybozu::util::EofError &e) {
             return false;
         }
-        if (!pack.isValid()) {
-            throw RT_ERR("pack header invalid.");
-        }
-        if (pack.isEnd()) { return false; }
+        if (pack.isEnd()) return false;
         recIdx_ = 0;
         totalSize_ = 0;
         return true;

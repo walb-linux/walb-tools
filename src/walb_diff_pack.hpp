@@ -193,6 +193,18 @@ public:
     void setMaxPackSize(size_t value) {
         maxPackSize_ = std::min(value, ::WALB_DIFF_PACK_MAX_SIZE);
     }
+
+    template <typename Writer>
+    void writeTo(Writer &writer) {
+        updateChecksum();
+        writer.write(rawData(), rawSize());
+    }
+    template <typename Reader>
+    void readFrom(Reader &reader) {
+        reader.read(rawData(), rawSize());
+        verify();
+    }
+
 private:
     static char *allocStatic() {
         void *p;
