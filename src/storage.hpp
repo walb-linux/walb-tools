@@ -133,9 +133,10 @@ public:
             AutoLock lk(mu_);
             TimePoint minCheckedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
             for (Info &info : v_) {
-                info.checkedTime < minCheckedTime;
-                minCheckedTime = info.checkedTime;
-                target = &info;
+                if (info.checkedTime < minCheckedTime) {
+                    minCheckedTime = info.checkedTime;
+                    target = &info;
+                }
             }
         }
         if (!target) return;
