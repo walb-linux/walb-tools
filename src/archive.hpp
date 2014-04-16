@@ -1063,69 +1063,78 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
-    ForegroundCounterTransaction foregroundTasksTran;
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    bool sendErr = true;
     try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const uint64_t gid = cybozu::atoi(v[1]);
+
+        ForegroundCounterTransaction foregroundTasksTran;
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
         archive_local::verifyApplicable(volId, gid);
+
+        pkt.write(msgAccept);
+        sendErr = false;
+
+        ActionCounterTransaction tran(volSt.ac, aApply);
+        ul.unlock();
+        if (!archive_local::applyDiffsToVolume(volId, gid)) {
+            logger.warn() << FUNC << "stopped force" << volId << gid;
+            return;
+        }
+        logger.info() << "apply succeeded" << volId << gid;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write(msgAccept);
-
-    ActionCounterTransaction tran(volSt.ac, aApply);
-    ul.unlock();
-    if (!archive_local::applyDiffsToVolume(volId, gid)) {
-        logger.warn() << FUNC << "stopped force" << volId << gid;
-        return;
-    }
-    logger.info() << "apply succeeded" << volId << gid;
 }
 
 inline void c2aMergeServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 3, FUNC);
-    const std::string &volId = v[0];
-    const uint64_t gid = cybozu::atoi(v[1]);
-    const uint32_t maxSizeMb = cybozu::atoi(v[2]);
     packet::Packet pkt(p.sock);
 
-    ForegroundCounterTransaction foregroundTasksTran;
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    bool sendErr = true;
     try {
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        if (v.size() < 2) throw cybozu::Exception(FUNC) << "missing arguments";
+        const std::string &volId = v[0];
+        const uint64_t gid = cybozu::atoi(v[1]);
+        const uint32_t maxSizeMb = (v.size() >= 3 ? cybozu::atoi(v[2]) : DEFAULT_MAX_WDIFF_MERGE_MB);
+
+        ForegroundCounterTransaction foregroundTasksTran;
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aMerge}, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
         archive_local::verifyMergeable(volId, gid);
+
+        pkt.write(msgAccept);
+        sendErr = false;
+
+        ActionCounterTransaction tran(volSt.ac, aMerge);
+        ul.unlock();
+        if (!archive_local::mergeDiffs(volId, gid, maxSizeMb)) {
+            logger.warn() << FUNC << "stopped force" << volId << gid << maxSizeMb;
+            return;
+        }
+        logger.info() << "merge succeeded" << volId << gid << maxSizeMb;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
-        pkt.write(e.what());
-        return;
+        if (sendErr) pkt.write(e.what());
     }
-    pkt.write(msgAccept);
-
-    ActionCounterTransaction tran(volSt.ac, aMerge);
-    ul.unlock();
-    if (!archive_local::mergeDiffs(volId, gid, maxSizeMb)) {
-        logger.warn() << FUNC << "stopped force" << volId << gid << maxSizeMb;
-        return;
-    }
-    logger.info() << "merge succeeded" << volId << gid << maxSizeMb;
 }
 
 inline void c2aResizeServer(protocol::ServerParams &/*p*/)

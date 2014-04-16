@@ -254,12 +254,11 @@ inline void c2aApplyClient(protocol::ClientParams &p)
 /**
  * params[0]: volId
  * params[1]: gidB: begin of the range.
- * params[2]: gidE: end of the range.
- * params[3]: maxSizeMb: (optional) max size of total input wdiff files [MiB].
+ * params[2]: maxSizeMb: (optional) max size of total input wdiff files [MiB].
  */
-inline void c2aMergeClient(protocol::ClientParams &/*p*/)
+inline void c2aMergeClient(protocol::ClientParams &p)
 {
-    // QQQ
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgAccept);
 }
 
 /**
