@@ -523,8 +523,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     ul.unlock();
 
     const std::string st = volInfo.getState();
-    if (st != aSyncReady) {
-        throw cybozu::Exception(FUNC) << "state is not SyncReady" << st;
+    if (st != stFrom) {
+        throw cybozu::Exception(FUNC) << "state is not" << stFrom << "but" << st;
     }
     bool isOk;
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
