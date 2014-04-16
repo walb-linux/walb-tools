@@ -439,8 +439,11 @@ inline bool restore(const std::string &volId, uint64_t gid)
     }
     cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
 
+    const MetaState baseSt = volInfo.getMetaState();
     const MetaSnap latestSnap = volInfo.getLatestSnapshot();
-    const bool noNeedToApply = latestSnap.isClean() && latestSnap.gidB == gid;
+    const bool noNeedToApply =
+        !baseSt.isApplying && baseSt.snapB == latestSnap &&
+        latestSnap.isClean() && latestSnap.gidB == gid;
 
     if (!noNeedToApply) {
         std::vector<cybozu::util::FileOpener> ops;
