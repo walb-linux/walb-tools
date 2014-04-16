@@ -406,7 +406,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     const MetaState st2 = apply(st0, diffV);
     volInfo.setMetaState(st2);
 
-    volInfo.removeDiffFiles(diffV);
+    volInfo.removeDiffs(diffV);
     return true;
 }
 
@@ -962,11 +962,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
     ul.unlock();
 
-    const std::string fName = createDiffFileName(diff);
-    const std::string baseDir = volInfo.volDir.str();
-    cybozu::TmpFile tmpFile(baseDir);
-    cybozu::FilePath fPath(baseDir);
-    fPath += fName;
+    const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
+    cybozu::TmpFile tmpFile(volInfo.volDir.str());
     diff::Writer writer(tmpFile.fd());
     DiffFileHeader fileH;
     fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
@@ -1003,25 +1000,34 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
+    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+    const std::string &volId = v[0];
+    const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
-    bool sendErr = true;
+    ForegroundCounterTransaction foregroundTasksTran;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const uint64_t gid = cybozu::atoi(v[1]);
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
         archive_local::verifyApplicable(volId, gid);
-        pkt.write(msgAccept);
-        sendErr = false;
-        if (!archive_local::applyDiffsToVolume(volId, gid)) {
-            logger.warn() << FUNC << "stopped force" << volId << gid;
-            return;
-        }
-        logger.info() << "apply succeeded" << volId << gid;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
-        if (sendErr) pkt.write(e.what());
+        pkt.write(e.what());
+        return;
     }
+    pkt.write(msgAccept);
+
+    ActionCounterTransaction tran(volSt.ac, aApply);
+    ul.unlock();
+    if (!archive_local::applyDiffsToVolume(volId, gid)) {
+        logger.warn() << FUNC << "stopped force" << volId << gid;
+        return;
+    }
+    logger.info() << "apply succeeded" << volId << gid;
 }
 
 inline void c2aMergeServer(protocol::ServerParams &/*p*/)

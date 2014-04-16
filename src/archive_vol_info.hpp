@@ -100,9 +100,9 @@ public:
         }
 #endif
     }
-    void removeDiffFiles(const std::vector<MetaDiff>& diffV)
+    void removeDiffs(const std::vector<MetaDiff>& diffV)
     {
-        wdiffs_.removeDiffFiles(diffV);
+        wdiffs_.removeDiffs(diffV);
     }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;

@@ -112,6 +112,13 @@ public:
         removeDiffFiles(mgr_.eraseBeforeGid(gid));
     }
     /**
+     * Remove wdiffs from memory and storage.
+     */
+    void removeDiffs(const std::vector<MetaDiff> &v) {
+        mgr_.erase(v);
+        removeDiffFiles(v);
+    }
+    /**
      * Remove diff files.
      * @diffV diff list.
      */
