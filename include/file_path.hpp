@@ -22,7 +22,7 @@
 namespace cybozu {
 
 /**
- * A wrapper of stat()/lstat().
+ * A wrapper of stat()/lstat()/fstat().
  */
 class FileStat
 {
@@ -39,6 +39,11 @@ public:
         } else {
             isFailed_ = (::stat(path.c_str(), &st_) != 0);
         }
+    }
+    explicit FileStat(int fd)
+        : st_(), isLstat_(false), isFailed_(false) {
+        ::memset(&st_, 0, sizeof(st_));
+        isFailed_ = (::fstat(fd, &st_) != 0);
     }
     bool exists() const {
         return !isFailed_;
