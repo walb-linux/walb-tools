@@ -14,7 +14,7 @@ class FileOrFd
 {
 private:
     int fd_;
-    std::shared_ptr<cybozu::util::FileOpener> fo_;
+    std::unique_ptr<cybozu::util::FileOpener> fo_;
 public:
     FileOrFd() : fd_(-1), fo_() {}
     void setFd(int fd) { fd_ = fd; }
