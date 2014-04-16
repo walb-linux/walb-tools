@@ -456,6 +456,8 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     merger.prepare();
 
     diff::Writer writer(tmpFile.fd());
+    DiffFileHeader wdiffH = merger.header();
+    writer.writeHeader(wdiffH);
     diff::RecIo recIo;
     while (merger.pop(recIo)) {
         if (volSt.stopState == ForceStopping || ga.forceQuit) {
