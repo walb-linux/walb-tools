@@ -38,6 +38,7 @@ const char *const atResetVol = "ResetVol";
 const char *const atFullSync = "FullSync";
 const char *const atHashSync = "HashSync";
 const char *const atWdiffRecv = "WdiffRecv";
+const char *const atReplSync = "ReplSyncAsServer";
 const char *const atStop = "Stop";
 const char *const atStart = "Start";
 
@@ -238,6 +239,10 @@ public:
     MetaSnap getLatestSnapshot() const {
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getLatestSnapshot(metaSt);
+    }
+    uint64_t getOldestCleanSnapshot() const {
+        const MetaState metaSt = getMetaState();
+        return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
 private:
     cybozu::lvm::Vg getVg() const {

@@ -10,6 +10,7 @@
 #include "action_counter.hpp"
 #include "atomic_map.hpp"
 #include "constant.hpp"
+#include "host_info.hpp"
 
 namespace walb {
 
@@ -19,7 +20,7 @@ namespace walb {
 const char *const aMerge = "Merge";
 const char *const aApply = "Apply";
 const char *const aRestore = "Restore";
-const char *const aReplSync = "ReplSync";
+const char *const aReplSync = "ReplSyncAsClient";
 
 /**
  * Manage one instance for each volume.
@@ -47,10 +48,15 @@ struct ArchiveVolState
             { aSyncReady, atFullSync },
             { atFullSync, aArchived },
 
+            { aSyncReady, atReplSync },
+            { atReplSync, aArchived },
+
             { aArchived, atHashSync },
             { atHashSync, aArchived },
             { aArchived, atWdiffRecv },
             { atWdiffRecv, aArchived },
+            { aArchived, atReplSync },
+            { atReplSync, aArchived },
 
             { aArchived, atStop },
             { atStop, aStopped },
@@ -630,6 +636,188 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
                   << "succeeded" << volId;
 }
 
+inline std::pair<std::string, HostInfo> parseVolIdAndHostInfo(const StrVec v, const char *msg)
+{
+    if (v.empty()) throw cybozu::Exception(msg) << "volId is required";
+    const std::string &volId = v[0];
+    if (v.size() < 2) throw cybozu::Exception(msg) << "addr:port is required.";
+    const std::string &addrPort = v[1];
+    std::string compressOpt = "snappy:0:1";
+    if (v.size() >= 3) compressOpt = v[2];
+    std::string delay = "0";
+    if (v.size() >= 4) delay = v[3];
+
+    HostInfo hostInfo;
+    hostInfo.parse(addrPort, compressOpt, delay);
+    return {volId, std::move(hostInfo)};
+}
+
+inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const HostInfo &hostInfo)
+{
+    cybozu::Socket sock;
+    cybozu::SocketAddr server(hostInfo.addr, hostInfo.port);
+    util::connectWithTimeout(sock, server, ga.socketTimeout);
+    protocol::run1stNegotiateAsClient(sock, ga.nodeId, replSyncPN);
+    protocol::sendStrVec(sock, {volId}, 1, __func__, msgAccept);
+    return sock;
+}
+
+inline bool runFullReplClient(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, Logger &logger)
+{
+    const char *const FUNC = __func__;
+
+    // QQQ
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(logger);
+
+    logger.debug() << FUNC << "full-repl-client done" << volId;
+    return false;
+}
+
+inline bool runFullReplServer(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, Logger &logger)
+{
+    // QQQ
+    cybozu::disable_warning_unused_variable(volId);
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(logger);
+    return false;
+}
+
+inline bool runHashReplClient(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, const MetaDiff &diff, Logger &logger)
+{
+    // QQQ
+    cybozu::disable_warning_unused_variable(volId);
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(diff);
+    cybozu::disable_warning_unused_variable(logger);
+    return false;
+}
+
+inline bool runHashReplServer(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, Logger &logger)
+{
+    // QQQ
+    cybozu::disable_warning_unused_variable(volId);
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(logger);
+    return false;
+}
+
+inline bool runDiffReplClient(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
+{
+
+    const std::vector<MetaDiff> diffV = volSt.diffMgr.getApplicableDiffList(srvLatestSnap);
+    if (diffV.empty()) {
+        // QQQ
+    }
+
+    // QQQ
+    cybozu::disable_warning_unused_variable(volId);
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(logger);
+    return false;
+}
+
+inline bool runDiffReplServer(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, Logger &logger)
+{
+    // QQQ
+    cybozu::disable_warning_unused_variable(volId);
+    cybozu::disable_warning_unused_variable(volSt);
+    cybozu::disable_warning_unused_variable(volInfo);
+    cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(logger);
+    return false;
+}
+
+inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, Logger &logger)
+{
+    packet::Packet pkt(sock);
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    bool isFull;
+    pkt.read(isFull);
+    if (isFull) {
+        if (!runFullReplClient(volId, volSt, volInfo, pkt, logger)) return false;
+    }
+
+    for (;;) {
+        MetaSnap srvLatestSnap;
+        pkt.read(srvLatestSnap);
+        const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
+        const bool isEnd = cliLatestSnap.gidB <= srvLatestSnap.gidB;
+        pkt.write(isEnd);
+        if (isEnd) break;
+
+        const uint64_t cliOldestGid = volInfo.getOldestCleanSnapshot();
+        const bool doHashRepl = srvLatestSnap.gidB < cliOldestGid;
+        pkt.write(doHashRepl);
+        if (doHashRepl) {
+            const MetaState metaSt = volInfo.getMetaState();
+            const MetaSnap cliOldestSnap(cliOldestGid);
+            const MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
+            if (!runHashReplClient(volId, volSt, volInfo, pkt, diff, logger)) return false;
+        } else {
+            if (!runDiffReplClient(volId, volSt, volInfo, pkt, srvLatestSnap, logger)) return false;
+        }
+    }
+    packet::Ack(sock).recv();
+    return true;
+}
+
+inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Socket &sock, Logger &logger)
+{
+    packet::Packet pkt(sock);
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    pkt.write(isFull);
+    if (isFull) {
+        if (!runFullReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+    }
+
+    for (;;) {
+        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+        pkt.write(latestSnap);
+        bool isEnd;
+        pkt.read(isEnd);
+        if (isEnd) break;
+
+        bool doHashRepl;
+        pkt.read(doHashRepl);
+        if (doHashRepl) {
+            if (!runHashReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+        } else {
+            if (!runDiffReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+        }
+    }
+    packet::Ack(sock).send();
+    return true;
+}
+
 } // archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -1051,14 +1239,96 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     logger.info() << "wdiff-transfer succeeded" << volId;
 }
 
-inline void c2aReplicateServer(protocol::ServerParams &/*p*/)
+/**
+ * This function will Work as a repl-sync client.
+ */
+inline void c2aReplicateServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId;
+        HostInfo hostInfo;
+        std::tie(volId, hostInfo) = archive_local::parseVolIdAndHostInfo(v, FUNC);
+
+        ForegroundCounterTransaction foregroundTasksTran;
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aReplSync}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+
+        ActionCounterTransaction tran(volSt.ac, aReplSync);
+        ul.unlock();
+        cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo);
+        pkt.write(msgAccept);
+        sendErr = false;
+        if (!archive_local::runReplSyncClient(volId, aSock, logger)) {
+            logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
+            return;
+        }
+        logger.info() << "replication as client succeeded" << volId;
+    } catch (std::exception &e) {
+        logger.error() << FUNC << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
 }
 
-inline void a2aReplSyncServer(protocol::ServerParams &/*p*/)
+inline void a2aReplSyncServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
+        const std::string &volId = v[0];
+
+        ForegroundCounterTransaction foregroundTasksTran;
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        std::string stFrom = volSt.sm.get();
+        verifyStateIn(stFrom, {aClear, aSyncReady, aArchived}, FUNC);
+
+        // Run init-vol if necessary.
+        if (stFrom == aClear) {
+            StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
+            ul.unlock();
+            ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+            volInfo.init();
+            ul.lock();
+            tran.commit(aSyncReady);
+            logger.info() << "initVol succeeded" << volId;
+            stFrom = aSyncReady;
+        }
+
+        pkt.write(msgAccept);
+        sendErr = false;
+
+        StateMachineTransaction tran(volSt.sm, stFrom, atReplSync, FUNC);
+        ul.unlock();
+        const bool isFull = stFrom == aSyncReady;
+        if (!archive_local::runReplSyncServer(volId, isFull, p.sock, logger)) {
+            logger.warn() << FUNC << "replication as server force stopped" << volId;
+            return;
+        }
+        tran.commit(aArchived);
+        logger.info() << "replicattion as server succeeded" << volId;
+    } catch (std::exception &e) {
+        logger.error() << FUNC << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
 }
 
 inline void c2aApplyServer(protocol::ServerParams &p)
