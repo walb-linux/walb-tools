@@ -29,7 +29,9 @@ struct HostInfo
         : addr(addr), port(port)
         , compressionType(type), compressionLevel(level)
         , compressionNumCPU(compressionNumCPU)
-        , wdiffSendDelaySec(wdiffSendDelaySec) {}
+        , wdiffSendDelaySec(wdiffSendDelaySec) {
+        verify();
+    }
     bool operator==(const HostInfo &rhs) const {
         return addr == rhs.addr && port == rhs.port
             && compressionType == rhs.compressionType
