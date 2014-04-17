@@ -570,7 +570,7 @@ inline MetaState applying(const MetaState &st, const MetaDiff &diff)
     if (!canApply(st, diff)) {
         throw cybozu::Exception("applying:can not apply") << st << diff;
     }
-    return MetaState(st.snapB, apply(st.snapB, diff));
+    return MetaState(st.snapB, apply(st.snapB, diff), diff.timestamp);
 }
 
 inline MetaState apply(const MetaState &st, const MetaDiff &diff)
@@ -578,7 +578,7 @@ inline MetaState apply(const MetaState &st, const MetaDiff &diff)
     if (!canApply(st, diff)) {
         throw cybozu::Exception("applying:can not apply") << st << diff;
     }
-    return MetaState(apply(st.snapB, diff));
+    return MetaState(apply(st.snapB, diff), diff.timestamp);
 }
 
 inline bool canApply(const MetaState &st, const std::vector<MetaDiff> &v)
@@ -597,7 +597,7 @@ inline MetaState applying(const MetaState &st, const std::vector<MetaDiff> &v)
     if (!canApply(st, v)) {
         throw cybozu::Exception("applying:can not apply") << st << v.size();
     }
-    return MetaState(st.snapB, apply(st.snapB, v));
+    return MetaState(st.snapB, apply(st.snapB, v), v.back().timestamp);
 }
 
 inline MetaState apply(const MetaState &st, const std::vector<MetaDiff> &v)
@@ -605,7 +605,7 @@ inline MetaState apply(const MetaState &st, const std::vector<MetaDiff> &v)
     if (!canApply(st, v)) {
         throw cybozu::Exception("apply:can not apply") << st << v.size();
     }
-    return MetaState(apply(st.snapB, v));
+    return MetaState(apply(st.snapB, v), v.back().timestamp);
 }
 
 /**
