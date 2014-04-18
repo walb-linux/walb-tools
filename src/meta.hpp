@@ -229,8 +229,6 @@ struct MetaDiff
         return snapB.isDirty() || snapE.isDirty();
     }
     void verify() const {
-        snapB.verify();
-        snapE.verify();
         if (snapB.gidB >= snapE.gidB) {
             throw cybozu::Exception("MetaDiff::broken progress constraint")
                 << snapB.str() << snapE.str();
@@ -329,9 +327,7 @@ struct MetaState
         return !operator==(rhs);
     }
     void verify() const {
-        snapB.verify();
         if (isApplying) {
-            snapE.verify();
             if (snapB.gidB >= snapE.gidB) {
                 throw cybozu::Exception("MetaState::broken progress constraint")
                     << snapB.str() << snapE.str();
@@ -708,6 +704,8 @@ inline MetaDiff parseDiffFileName(const std::string &name)
     default:
         throw cybozu::Exception("parseDiffFileName:parse failure3") << name;
     }
+    diff.snapB.verify();
+    diff.snapE.verify();
     diff.verify();
     return diff;
 }
