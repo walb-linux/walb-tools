@@ -1299,19 +1299,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
         std::string stFrom = volSt.sm.get();
-        verifyStateIn(stFrom, {aClear, aSyncReady, aArchived}, FUNC);
-
-        // Run init-vol if necessary.
-        if (stFrom == aClear) {
-            StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
-            ul.unlock();
-            ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-            volInfo.init();
-            ul.lock();
-            tran.commit(aSyncReady);
-            logger.info() << "initVol succeeded" << volId;
-            stFrom = aSyncReady;
-        }
+        verifyStateIn(stFrom, {aSyncReady, aArchived}, FUNC);
 
         pkt.write(msgAccept);
         sendErr = false;
