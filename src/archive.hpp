@@ -12,6 +12,7 @@
 #include "constant.hpp"
 #include "host_info.hpp"
 #include "dirty_full_sync.hpp"
+#include "dirty_hash_sync.hpp"
 
 namespace walb {
 
@@ -174,9 +175,9 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybo
 
 const bool allowEmpty = true;
 
-inline bool dirtyHashSyncServer(
-    packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed, const std::atomic<int> &stopState, const MetaSnap& snap, int fd)
+inline void prepareVirtualFullScanner(
+    diff::VirtualFullScanner<cybozu::util::FileOpener> &virt,
+    ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
     const char *const FUNC = __func__;
 
@@ -187,70 +188,8 @@ inline bool dirtyHashSyncServer(
     std::vector<cybozu::util::FileOpener> ops;
     tryOpenDiffs(ops, volInfo, snap, aReplSync, allowEmpty);
 
-    std::atomic<bool> quit(false);
-    auto readVirtualFullImageAndSendHash = [&]() {
-        cybozu::util::FileOpener op(lv.path().str(), O_RDONLY);
-
-        walb::diff::VirtualFullScanner virt;
-        virt.init(op.fd(), std::move(ops));
-
-        cybozu::murmurhash3::Hasher hasher(hashSeed);
-        packet::StreamControl ctrl(pkt.sock());
-
-        uint64_t remaining = sizeLb;
-
-        try {
-            while (remaining > 0) {
-                if (stopState == ForceStopping || ga.forceQuit) {
-                    quit = true;
-                    return;
-                }
-                const uint64_t lb = std::min<uint64_t>(remaining, bulkLb);
-                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
-                virt.read(buf.data(), buf.size());
-                const cybozu::murmurhash3::Hash hash = hasher(buf.data(), buf.size());
-                ctrl.next();
-                pkt.write(hash);
-                remaining -= lb;
-            }
-            ctrl.end();
-        } catch (std::exception& e) {
-            ctrl.error();
-            throw;
-        }
-    };
-    cybozu::thread::ThreadRunner reader(readVirtualFullImageAndSendHash);
-    reader.start();
-
-    cybozu::util::FdWriter fdw(fd);
-
-    {
-        DiffFileHeader wdiffH;
-        wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
-        wdiffH.setUuid(uuid);
-        wdiffH.writeTo(fdw);
-    }
-
-    packet::StreamControl ctrl(pkt.sock());
-    Buffer pack;
-    while (ctrl.isNext()) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            reader.join();
-            return false;
-        }
-        pkt.read(pack);
-        verifyDiffPack(pack);
-        fdw.write(pack.data(), pack.size());
-        ctrl.reset();
-    }
-    if (ctrl.isError()) {
-        throw cybozu::Exception(FUNC) << "client sent an error";
-    }
-    assert(ctrl.isEnd());
-    diff::writeEofPack(fdw);
-
-    reader.join();
-    return !quit;
+    cybozu::util::FileOpener op(lv.path().str(), O_RDONLY);
+    virt.init(std::move(op), std::move(ops));
 }
 
 /**
@@ -565,7 +504,9 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        isOk = archive_local::dirtyHashSyncServer(pkt, volInfo, sizeLb, bulkLb, uuid, hashSeed, volSt.stopState, snapFrom, tmpFileP->fd());
+        diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+        archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
+        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.forceQuit);
     }
     if (!isOk) {
         logger.warn() << FUNC << "force stopped" << volId;
@@ -639,12 +580,12 @@ inline bool runFullReplServer(
     uint64_t sizeLb, bulkLb;
     MetaState metaSt;
     cybozu::Uuid uuid;
+    pkt.read(sizeLb);
+    pkt.read(bulkLb);
+    pkt.read(metaSt);
+    pkt.read(uuid);
+    logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
     try {
-        pkt.read(sizeLb);
-        pkt.read(bulkLb);
-        pkt.read(metaSt);
-        pkt.read(uuid);
-        logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         metaSt.verify();
@@ -671,27 +612,70 @@ inline bool runHashReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
     packet::Packet &pkt, const MetaDiff &diff, Logger &logger)
 {
-    // QQQ
-    cybozu::disable_warning_unused_variable(volId);
-    cybozu::disable_warning_unused_variable(volSt);
-    cybozu::disable_warning_unused_variable(volInfo);
-    cybozu::disable_warning_unused_variable(pkt);
-    cybozu::disable_warning_unused_variable(diff);
-    cybozu::disable_warning_unused_variable(logger);
-    return false;
+    const char *const FUNC = __func__;
+    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    const uint64_t bulkLb = DEFAULT_BULK_LB; // QQQ
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    const uint32_t hashSeed = diff.timestamp;
+    pkt.write(sizeLb);
+    pkt.write(bulkLb);
+    pkt.write(diff);
+    pkt.write(uuid);
+    pkt.write(hashSeed);
+    logger.debug() << "hash-repl-client" << sizeLb << bulkLb << diff << uuid << hashSeed;
+
+    std::string res;
+    pkt.read(res);
+    if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
+
+    diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapE);
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.forceQuit)) {
+        logger.warn() << "hash-repl-client force-stopped" << volId;
+        return false;
+    }
+    logger.info() << "hash-repl-client done" << volId;
+    return true;
 }
 
 inline bool runHashReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
     packet::Packet &pkt, Logger &logger)
 {
-    // QQQ
-    cybozu::disable_warning_unused_variable(volId);
-    cybozu::disable_warning_unused_variable(volSt);
-    cybozu::disable_warning_unused_variable(volInfo);
-    cybozu::disable_warning_unused_variable(pkt);
-    cybozu::disable_warning_unused_variable(logger);
-    return false;
+    const char *const FUNC = __func__;
+    uint64_t sizeLb, bulkLb;
+    MetaDiff diff;
+    cybozu::Uuid uuid;
+    uint32_t hashSeed;
+    pkt.read(sizeLb);
+    pkt.read(bulkLb);
+    pkt.read(diff);
+    pkt.read(uuid);
+    pkt.read(hashSeed);
+    logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
+    try {
+        if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
+        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        diff.verify();
+        pkt.write(msgOk);
+    } catch (std::exception &e) {
+        pkt.write(e.what());
+        throw;
+    }
+
+    diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapB);
+    cybozu::TmpFile tmpFile(volInfo.volDir.str());
+    if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
+                             volSt.stopState, ga.forceQuit)) {
+        logger.warn() << "hash-repl-server force-stopped" << volId;
+        return false;
+    }
+    tmpFile.save(volInfo.getDiffPath(diff).str());
+    volSt.diffMgr.add(diff);
+    volInfo.setUuid(uuid);
+    logger.info() << "hash-repl-server done" << volId;
+    return true;
 }
 
 inline bool runDiffReplClient(
@@ -699,16 +683,19 @@ inline bool runDiffReplClient(
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
 {
 
+#if 0
     const std::vector<MetaDiff> diffV = volSt.diffMgr.getApplicableDiffList(srvLatestSnap);
     if (diffV.empty()) {
         // QQQ
     }
+#endif
 
     // QQQ
     cybozu::disable_warning_unused_variable(volId);
     cybozu::disable_warning_unused_variable(volSt);
     cybozu::disable_warning_unused_variable(volInfo);
     cybozu::disable_warning_unused_variable(pkt);
+    cybozu::disable_warning_unused_variable(srvLatestSnap);
     cybozu::disable_warning_unused_variable(logger);
     return false;
 }

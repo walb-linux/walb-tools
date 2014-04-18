@@ -70,8 +70,8 @@ int main(int argc, char *argv[])
                 opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             outFd = outFo->fd();
         }
-        walb::diff::VirtualFullScanner virt;
-        virt.init(inFd, opt.inputWdiffs);
+        walb::diff::VirtualFullScanner<cybozu::util::FdHolder> virt;
+        virt.init(cybozu::util::FdHolder(inFd), opt.inputWdiffs);
         virt.readAndWriteTo(outFd, opt.bufferSize);
         if (outFo) outFo->close();
         return 0;
