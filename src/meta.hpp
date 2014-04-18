@@ -285,10 +285,10 @@ struct MetaState
     MetaState()
         : isApplying(false), timestamp(0)
         , snapB(), snapE() {}
-    explicit MetaState(const MetaSnap &snap, uint64_t ts = 0)
+    explicit MetaState(const MetaSnap &snap, uint64_t ts)
         : isApplying(false), timestamp(ts)
         , snapB(snap), snapE(snap) {}
-    MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts = 0)
+    MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts)
         : isApplying(true), timestamp(ts)
         , snapB(snapB), snapE(snapE) {}
     void set(const MetaSnap &snapB) {

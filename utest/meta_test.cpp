@@ -57,7 +57,7 @@ void testApply(const walb::MetaSnap &s0, const walb::MetaDiff &d1, const walb::M
     std::cout << "testApply start:" << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
     CYBOZU_TEST_ASSERT(walb::canApply(s0, d1));
 
-    walb::MetaState st(s0);
+    walb::MetaState st(s0, 0);
     walb::MetaState sa, sb, sc;
     CYBOZU_TEST_ASSERT(walb::canApply(st, d1));
     sa = walb::applying(st, d1);
@@ -67,9 +67,12 @@ void testApply(const walb::MetaSnap &s0, const walb::MetaDiff &d1, const walb::M
     CYBOZU_TEST_ASSERT(sa.isApplying);
     CYBOZU_TEST_ASSERT(!sb.isApplying);
     CYBOZU_TEST_ASSERT(!sc.isApplying);
+    CYBOZU_TEST_EQUAL(sa.timestamp, d1.timestamp);
+    CYBOZU_TEST_EQUAL(sb.timestamp, d1.timestamp);
+    CYBOZU_TEST_EQUAL(sc.timestamp, d1.timestamp);
     CYBOZU_TEST_EQUAL(sb, sc);
 
-    CYBOZU_TEST_EQUAL(walb::MetaState(s1), sb);
+    CYBOZU_TEST_EQUAL(walb::MetaState(s1, 0), sb);
     std::cout << "testApply end:  " << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
 }
 
@@ -227,7 +230,7 @@ CYBOZU_TEST_AUTO(contains)
 CYBOZU_TEST_AUTO(metaDiffManager1)
 {
     walb::MetaSnap snap(0);
-    walb::MetaState st(snap);
+    walb::MetaState st(snap, 0);
     std::vector<walb::MetaDiff> v;
 
     v.emplace_back(0, 1, true, 1000);
@@ -268,7 +271,7 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
 CYBOZU_TEST_AUTO(metaDiffManager2)
 {
     walb::MetaSnap snap(0, 10);
-    walb::MetaState st(snap);
+    walb::MetaState st(snap, 0);
     std::vector<walb::MetaDiff> v;
     v.emplace_back(0, 5, false, 1000);
     v.push_back(walb::MetaDiff({5, 10}, {10}, false, 1001));
@@ -289,10 +292,10 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
 
     auto st1a = walb::applying(st, v);
     auto st1b = walb::applying(st1a, v);
-    walb::MetaState st1c(walb::MetaSnap(0, 10), walb::MetaSnap(15));
+    walb::MetaState st1c(walb::MetaSnap(0, 10), walb::MetaSnap(15), 0);
     auto st2a = walb::apply(st, v);
     auto st2b = walb::apply(st1a, v);
-    walb::MetaState st2c(walb::MetaSnap(15));
+    walb::MetaState st2c(walb::MetaSnap(15), 0);
     CYBOZU_TEST_EQUAL(st1a, st1b);
     CYBOZU_TEST_EQUAL(st1a, st1c);
     CYBOZU_TEST_EQUAL(st2a, st2b);
@@ -309,7 +312,7 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
 CYBOZU_TEST_AUTO(metaDiffManager3)
 {
     walb::MetaSnap snap(0), s0(snap), s1(snap);
-    walb::MetaState st(snap);
+    walb::MetaState st(snap, 0);
     auto v = randDiffList(snap, 20);
 #if 0
     for (walb::MetaDiff &d : v) {
