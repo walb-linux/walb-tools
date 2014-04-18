@@ -603,28 +603,63 @@ inline bool runFullReplClient(
     packet::Packet &pkt, Logger &logger)
 {
     const char *const FUNC = __func__;
+    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    const uint64_t bulkLb = DEFAULT_BULK_LB; // QQQ
+    const MetaState metaSt = volInfo.getMetaState();
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    pkt.write(sizeLb);
+    pkt.write(bulkLb);
+    pkt.write(metaSt);
+    pkt.write(uuid);
+    logger.debug() << "full-repl-client" << sizeLb << bulkLb << metaSt << uuid;
 
-    // QQQ
-    cybozu::disable_warning_unused_variable(volSt);
-    cybozu::disable_warning_unused_variable(volInfo);
-    cybozu::disable_warning_unused_variable(pkt);
-    cybozu::disable_warning_unused_variable(logger);
+    std::string res;
+    pkt.read(res);
+    if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    logger.debug() << FUNC << "full-repl-client done" << volId;
-    return false;
+    const std::string lvPath = volInfo.getLv().path().str();
+    if (!dirtyFullSyncClient(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit)) {
+        logger.warn() << "full-repl-client force-stopped" << volId;
+        return false;
+    }
+    logger.info() << "full-repl-client done" << volId;
+    return true;
 }
 
 inline bool runFullReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
     packet::Packet &pkt, Logger &logger)
 {
-    // QQQ
-    cybozu::disable_warning_unused_variable(volId);
-    cybozu::disable_warning_unused_variable(volSt);
-    cybozu::disable_warning_unused_variable(volInfo);
-    cybozu::disable_warning_unused_variable(pkt);
-    cybozu::disable_warning_unused_variable(logger);
-    return false;
+    const char *const FUNC = __func__;
+    uint64_t sizeLb, bulkLb;
+    MetaState metaSt;
+    cybozu::Uuid uuid;
+    try {
+        pkt.read(sizeLb);
+        pkt.read(bulkLb);
+        pkt.read(metaSt);
+        pkt.read(uuid);
+        logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
+        if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
+        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        metaSt.verify();
+        pkt.write(msgOk);
+    } catch (std::exception &e) {
+        pkt.write(e.what());
+        throw;
+    }
+
+    volInfo.createLv(sizeLb);
+    const std::string lvPath = volInfo.getLv().path().str();
+    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit)) {
+        logger.warn() << "full-repl-server force-stopped" << volId;
+        return false;
+    }
+    volInfo.setMetaState(metaSt);
+    volInfo.setUuid(uuid);
+    volInfo.setState(aArchived);
+    logger.info() << "full-repl-server done" << volId;
+    return true;
 }
 
 inline bool runHashReplClient(

@@ -37,6 +37,7 @@ inline bool dirtyFullSyncClient(
         remainingLb -= lb;
         c++;
     }
+    packet::Ack(pkt.sock()).recv();
     LOGs.debug() << "number of sent packets" << c;
     return true;
 }
@@ -86,8 +87,9 @@ inline bool dirtyFullSyncServer(
         remainingLb -= lb;
         c++;
     }
-    LOGs.debug() << "number of received packets" << c;
     bd.fdatasync();
+    packet::Ack(pkt.sock()).send();
+    LOGs.debug() << "number of received packets" << c;
     return true;
 }
 
