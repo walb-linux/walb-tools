@@ -12,6 +12,7 @@
 #include "walb_diff_pack.hpp"
 #include "walb_diff_compressor.hpp"
 #include "murmurhash3.hpp"
+#include "dirty_full_sync.hpp"
 
 namespace walb {
 
@@ -549,34 +550,6 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
 namespace storage_local {
 
-/**
- * RETURN:
- *   false if force stopped.
- */
-inline bool dirtyFullSyncClient(
-    packet::Packet &pkt, StorageVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
-{
-    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
-    std::string encBuf;
-
-    uint64_t remainingLb = sizeLb;
-    while (0 < remainingLb) {
-        if (stopState == ForceStopping || gs.forceQuit) {
-            return false;
-        }
-        uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
-        size_t size = lb * LOGICAL_BLOCK_SIZE;
-        bd.read(&buf[0], size);
-        const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
-        pkt.write(encSize);
-        pkt.write(&encBuf[0], encSize);
-        remainingLb -= lb;
-    }
-    return true;
-}
-
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, StorageVolInfo &volInfo,
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed, const std::atomic<int> &stopState)
@@ -707,7 +680,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
 
         // (7) in storage-daemon.txt
         if (isFull) {
-            if (!storage_local::dirtyFullSyncClient(aPkt, volInfo, sizeLb, bulkLb, volSt.stopState)) {
+            const std::string bdevPath = volInfo.getWdevPath();
+            if (!dirtyFullSyncClient(aPkt, bdevPath, sizeLb, bulkLb, volSt.stopState, gs.forceQuit)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }

@@ -11,6 +11,7 @@
 #include "atomic_map.hpp"
 #include "constant.hpp"
 #include "host_info.hpp"
+#include "dirty_full_sync.hpp"
 
 namespace walb {
 
@@ -116,56 +117,6 @@ inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *m
 }
 
 namespace archive_local {
-
-/**
- * RETURN:
- *   false if force stopped.
- */
-inline bool dirtyFullSyncServer(
-    packet::Packet &pkt, ArchiveVolInfo &volInfo,
-    uint64_t sizeLb, uint64_t bulkLb, const std::atomic<int> &stopState)
-{
-    const char *const FUNC = __func__;
-    const std::string lvPath = volInfo.getLv().path().str();
-    cybozu::util::BlockDevice bd(lvPath, O_RDWR);
-    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    std::vector<char> encBuf;
-
-    uint64_t c = 0;
-    uint64_t remainingLb = sizeLb;
-    while (0 < remainingLb) {
-        if (stopState == ForceStopping || ga.forceQuit) {
-            return false;
-        }
-        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
-        const size_t size = lb * LOGICAL_BLOCK_SIZE;
-        size_t encSize;
-        pkt.read(encSize);
-        if (encSize == 0) {
-            throw cybozu::Exception(FUNC) << "encSize is zero";
-        }
-        encBuf.resize(encSize);
-        pkt.read(&encBuf[0], encSize);
-        size_t decSize;
-        if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
-            throw cybozu::Exception(FUNC)
-                << "GetUncompressedLength" << encSize;
-        }
-        if (decSize != size) {
-            throw cybozu::Exception(FUNC)
-                << "decSize differs" << decSize << size;
-        }
-        if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
-            throw cybozu::Exception(FUNC) << "RawUncompress";
-        }
-        bd.write(&buf[0], size);
-        remainingLb -= lb;
-        c++;
-    }
-    LOGs.debug() << "number of received packets" << c;
-    bd.fdatasync();
-    return true;
-}
 
 /**
  * This function will get diff list to apply, restore, or merge.
@@ -604,7 +555,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
     if (isFull) {
         volInfo.createLv(sizeLb);
-        isOk = archive_local::dirtyFullSyncServer(pkt, volInfo, sizeLb, bulkLb, volSt.stopState);
+        const std::string lvPath = volInfo.getLv().path().str();
+        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
