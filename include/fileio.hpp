@@ -175,6 +175,8 @@ protected:
 public:
 	FdHolder() : fd_(-1) {}
     explicit FdHolder(int fd) : fd_(fd) { verifyFd(); }
+    FdHolder(FdHolder&& rhs) = default;
+    FdHolder& operator=(FdHolder&& rhs) = default;
 	void setFd(int fd) {
 		fd_ = fd;
 		verifyFd();
