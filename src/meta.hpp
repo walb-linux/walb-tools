@@ -690,22 +690,16 @@ inline MetaDiff parseDiffFileName(const std::string &name)
     gidV.push_back(gid);
     switch (gidV.size()) {
     case 2:
-        diff.snapB.gidB = gidV[0];
-        diff.snapB.gidE = gidV[0];
-        diff.snapE.gidB = gidV[1];
-        diff.snapE.gidE = gidV[1];
+        diff.snapB.set(gidV[0], gidV[0]);
+        diff.snapE.set(gidV[1], gidV[1]);
         break;
     case 4:
-        diff.snapB.gidB = gidV[0];
-        diff.snapB.gidE = gidV[1];
-        diff.snapE.gidB = gidV[2];
-        diff.snapE.gidE = gidV[3];
+        diff.snapB.set(gidV[0], gidV[1]);
+        diff.snapE.set(gidV[2], gidV[3]);
         break;
     default:
         throw cybozu::Exception("parseDiffFileName:parse failure3") << name;
     }
-    diff.snapB.verify();
-    diff.snapE.verify();
     diff.verify();
     return diff;
 }
