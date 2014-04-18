@@ -512,15 +512,14 @@ inline bool runFullReplServer(
     uint64_t sizeLb, bulkLb;
     MetaState metaSt;
     cybozu::Uuid uuid;
-    pkt.read(sizeLb);
-    pkt.read(bulkLb);
-    pkt.read(metaSt);
-    pkt.read(uuid);
-    logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
     try {
+        pkt.read(sizeLb);
+        pkt.read(bulkLb);
+        pkt.read(metaSt);
+        pkt.read(uuid);
+        logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
-        metaSt.verify();
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -579,16 +578,15 @@ inline bool runHashReplServer(
     MetaDiff diff;
     cybozu::Uuid uuid;
     uint32_t hashSeed;
-    pkt.read(sizeLb);
-    pkt.read(bulkLb);
-    pkt.read(diff);
-    pkt.read(uuid);
-    pkt.read(hashSeed);
-    logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
     try {
+        pkt.read(sizeLb);
+        pkt.read(bulkLb);
+        pkt.read(diff);
+        pkt.read(uuid);
+        pkt.read(hashSeed);
+        logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
-        diff.verify();
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -628,9 +626,12 @@ inline bool runDiffReplClient(
     merger.prepare();
 
     const DiffFileHeader &fileH = merger.header();
-    pkt.write(fileH.getMaxIoBlocks());
-    pkt.write(fileH.getUuid2());
+    const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const cybozu::Uuid uuid = fileH.getUuid2();
+    pkt.write(maxIoBlocks);
+    pkt.write(uuid);
     pkt.write(mergedDiff);
+    logger.debug() << "diff-repl-client" << maxIoBlocks << uuid << mergedDiff;
 
     std::string res;
     pkt.read(res);
@@ -656,11 +657,11 @@ inline bool runDiffReplServer(
     uint16_t maxIoBlocks;
     cybozu::Uuid uuid;
     MetaDiff diff;
-    pkt.read(maxIoBlocks);
-    pkt.read(uuid);
-    pkt.read(diff);
-
     try {
+        pkt.read(maxIoBlocks);
+        pkt.read(uuid);
+        pkt.read(diff);
+        logger.debug() << "diff-repl-server" << maxIoBlocks << uuid << diff;
         const MetaSnap snap = volInfo.getLatestSnapshot();
         if (!canApply(snap, diff)) {
             throw cybozu::Exception(FUNC) << "can not apply" << snap << diff;
