@@ -127,17 +127,6 @@ inline void c2aDropClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
-namespace ctrl_local {
-
-inline void verifyEnoughParameters(const StrVec& params, size_t num, const char *msg)
-{
-    if (params.size() < num) {
-        throw cybozu::Exception(msg) << "not enough parameters";
-    }
-}
-
-} // ctrl_local
-
 /**
  * pattern (1)
  *   list <volId>
@@ -153,24 +142,17 @@ inline void verifyEnoughParameters(const StrVec& params, size_t num, const char 
 inline void c2pArchiveInfoClient(protocol::ClientParams &p)
 {
     const char * const FUNC = __func__;
-    ctrl_local::verifyEnoughParameters(p.params, 2, FUNC);
-    const std::string &cmd = p.params[0];
-    const std::string &volId = p.params[1];
+    std::string cmd, volId;
+    cybozu::util::parseStrVec(p.params, 0, 2, {&cmd, &volId});
     protocol::sendStrVec(p.sock, {cmd, volId}, 2, FUNC);
     packet::Packet pkt(p.sock);
     if (cmd != "list") {
-        ctrl_local::verifyEnoughParameters(p.params, 3, FUNC);
-        const std::string &archiveId = p.params[2];
+        std::string archiveId;
+        cybozu::util::parseStrVec(p.params, 2, 1, {&archiveId});
         pkt.write(archiveId);
     }
     if (cmd == "add" || cmd == "update") {
-        ctrl_local::verifyEnoughParameters(p.params, 4, FUNC);
-        const std::string &addrPort = p.params[3];
-        std::string compressOpt = "snappy:0:1";
-        if (p.params.size() > 4) compressOpt = p.params[4];
-        std::string delay = "0";
-        if (p.params.size() > 5) delay = p.params[5];
-        HostInfo hi = parseHostInfo(addrPort, compressOpt, delay);
+        const HostInfo hi = parseHostInfo(p.params, 3);
         LOGs.debug() << hi;
         pkt.write(hi);
     }

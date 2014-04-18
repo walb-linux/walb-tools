@@ -1063,8 +1063,7 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) throw cybozu::Exception(FUNC) << "empty param";
         const std::string &volId = v[0];
-        uint64_t gid = 0;
-        if (v.size() >= 2) gid = cybozu::atoi(v[1]);
+        const uint64_t gid = (v.size() >= 2 ? static_cast<uint64_t>(cybozu::atoi(v[1])) : 0);
 
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);

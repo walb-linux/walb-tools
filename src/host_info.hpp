@@ -2,6 +2,7 @@
 #include <string>
 #include <cassert>
 #include <iostream>
+#include "walb_util.hpp"
 #include "walb_diff_base.hpp"
 #include "cybozu/serializer.hpp"
 #include "cybozu/exception.hpp"
@@ -88,7 +89,6 @@ struct HostInfo
     }
     std::string str() const;
     void parse(const std::string &, const std::string &, const std::string &);
-    void parse(const std::string &);
     friend inline std::ostream &operator<<(std::ostream &os, const HostInfo &s) {
         os << s.str();
         return os;
@@ -142,7 +142,7 @@ inline HostInfo parseHostInfo(
 {
     HostInfo hi;
     {
-        std::vector<std::string> v = cybozu::Split(addrPort, ':', 2);
+        StrVec v = cybozu::Split(addrPort, ':', 2);
         if (v.size() != 2) {
             throw cybozu::Exception("parseHostInfo:parse error") << addrPort;
         }
@@ -150,7 +150,7 @@ inline HostInfo parseHostInfo(
         hi.port = static_cast<uint16_t>(cybozu::atoi(v[1]));
     }
     {
-        std::vector<std::string> v = cybozu::Split(compressOpt, ':', 3);
+        StrVec v = cybozu::Split(compressOpt, ':', 3);
         if (v.size() != 3) {
             throw cybozu::Exception("parseHostInfo:parse error")
                 << compressOpt;
@@ -166,34 +166,21 @@ inline HostInfo parseHostInfo(
     return hi;
 }
 
-/**
- * Parse a string into a HostInfo.
- * Input string is like "addr:port compressionType:compresionLevel delay".
- */
-inline HostInfo parseHostInfo(const std::string &s)
+inline HostInfo parseHostInfo(const StrVec &v, size_t pos = 0)
 {
-    HostInfo hi;
-    std::vector<std::string> v = cybozu::Split(s, ' ');
-    auto itr = std::remove_if(v.begin(), v.end(), [](const std::string &s) {
-            return s.empty();
-        });
-    v.erase(itr, v.end());
-    if (v.size() != 3) {
-        throw cybozu::Exception("parseHostInfo:not 3 tokens.")
-            << s;
-    }
-    return parseHostInfo(v[0], v[1], v[2]);
+    std::string addrPort;
+    std::string compressOpt = "snappy:0:1";
+    std::string delay = "0";
+
+    if (v.size() <= pos) throw cybozu::Exception(__func__) << "addr:port is required";
+    cybozu::util::parseStrVec(v, pos, 1, {&addrPort, &compressOpt, &delay});
+    return parseHostInfo(addrPort, compressOpt, delay);
 }
 
 inline void HostInfo::parse(
     const std::string &addrPort, const std::string &compressOpt, const std::string &delay)
 {
     *this = parseHostInfo(addrPort, compressOpt, delay);
-}
-
-inline void HostInfo::parse(const std::string &s)
-{
-    *this = parseHostInfo(s);
 }
 
 inline std::string HostInfo::str() const

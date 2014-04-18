@@ -636,22 +636,6 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
                   << "succeeded" << volId;
 }
 
-inline std::pair<std::string, HostInfo> parseVolIdAndHostInfo(const StrVec v, const char *msg)
-{
-    if (v.empty()) throw cybozu::Exception(msg) << "volId is required";
-    const std::string &volId = v[0];
-    if (v.size() < 2) throw cybozu::Exception(msg) << "addr:port is required.";
-    const std::string &addrPort = v[1];
-    std::string compressOpt = "snappy:0:1";
-    if (v.size() >= 3) compressOpt = v[2];
-    std::string delay = "0";
-    if (v.size() >= 4) delay = v[3];
-
-    HostInfo hostInfo;
-    hostInfo.parse(addrPort, compressOpt, delay);
-    return {volId, std::move(hostInfo)};
-}
-
 inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const HostInfo &hostInfo)
 {
     cybozu::Socket sock;
@@ -1251,9 +1235,9 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId;
-        HostInfo hostInfo;
-        std::tie(volId, hostInfo) = archive_local::parseVolIdAndHostInfo(v, FUNC);
+        if (v.empty()) throw cybozu::Exception(FUNC) << "volId is required";
+        const std::string &volId = v[0];
+        const HostInfo hostInfo = parseHostInfo(v, 1);
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);

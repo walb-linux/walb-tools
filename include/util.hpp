@@ -384,5 +384,20 @@ inline bool calcIsAllZero(const void *data, size_t size)
     return true;
 }
 
+inline void parseStrVec(
+    const std::vector<std::string>& v, size_t pos, size_t numMust,
+    std::initializer_list<std::string *> list)
+{
+    size_t i = 0;
+    for (std::string *p : list) {
+        if (pos + i >= v.size()) break;
+        *p = v[pos + i];
+        i++;
+    }
+    if (i < numMust) {
+        throw RT_ERR("missing required params %zu %zu", i, numMust);
+    }
+}
+
 } //namespace util
 } //namespace cybozu
