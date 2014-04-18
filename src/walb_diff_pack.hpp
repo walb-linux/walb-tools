@@ -412,4 +412,12 @@ inline void verifyDiffPack(const std::vector<char> &buf)
     diff::MemoryPack(buf.data(), buf.size());
 }
 
+inline void verifyDiffPackSize(size_t size, const char *msg)
+{
+    const size_t maxPackSize = ::WALB_DIFF_PACK_SIZE + ::WALB_DIFF_PACK_MAX_SIZE;
+    if (size > maxPackSize) {
+        throw cybozu::Exception(msg) << "too large pack size" << size << maxPackSize;
+    }
+}
+
 } //namespace walb

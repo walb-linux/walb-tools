@@ -32,7 +32,9 @@ inline bool dirtyHashSyncClient(
     auto compressAndSend = [&]() {
         Buffer compBuf = compr.convert(packer.getPackAsVector().data());
         sendCtl.next();
-        pkt.write(compBuf);
+        const uint32_t size = compBuf.size();
+        pkt.write(size);
+        pkt.write(compBuf.data(), compBuf.size());
     };
 
     uint64_t addr = 0;
@@ -124,22 +126,26 @@ inline bool dirtyHashSyncServer(
     }
 
     packet::StreamControl ctrl(pkt.sock());
-    Buffer pack;
+    Buffer buf;
     while (ctrl.isNext()) {
         if (stopState == ForceStopping || forceQuit) {
             readerTh.join();
             return false;
         }
-        pkt.read(pack);
-        verifyDiffPack(pack);
-        fdw.write(pack.data(), pack.size());
+        uint32_t size;
+        pkt.read(size);
+        verifyDiffPackSize(size, FUNC);
+        buf.resize(size);
+        pkt.read(buf.data(), buf.size());
+        verifyDiffPack(buf);
+        fdw.write(buf.data(), buf.size());
         ctrl.reset();
     }
     if (ctrl.isError()) {
         throw cybozu::Exception(FUNC) << "client sent an error";
     }
     assert(ctrl.isEnd());
-    diff::writeEofPack(fdw);
+    writeDiffEofPack(fdw);
 
     readerTh.join();
     return !quit;

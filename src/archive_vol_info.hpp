@@ -244,6 +244,18 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
+    /**
+     * @snap base snapshot.
+     * @size maximum total size [byte].
+     * RETURN:
+     *   MetaDiff list that can be merged and applicable to the snapshot.
+     */
+    std::vector<MetaDiff> getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
+        return wdiffs_.getDiffListToSend(snap, size);
+    }
+    std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
+        return wdiffs_.getDiffListToMerge(gid, size);
+    }
 private:
     cybozu::lvm::Vg getVg() const {
         return cybozu::lvm::getVg(vgName_);

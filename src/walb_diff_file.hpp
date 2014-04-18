@@ -79,16 +79,26 @@ struct DiffFileHeader : walb_diff_file_header
     }
 };
 
-namespace diff {
+template <class Writer>
+inline void writeDiffFileHeader(Writer& writer, uint16_t maxIoBlocks, const cybozu::Uuid &uuid)
+{
+    DiffFileHeader fileH;
+    fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
+    fileH.setUuid(uuid.rawData());
+    fileH.writeTo(writer);
+}
 
 template<class Writer>
-inline void writeEofPack(Writer& writer)
+inline void writeDiffEofPack(Writer& writer)
 {
     DiffPackHeader pack;
     pack.setEnd();
     pack.updateChecksum();
     writer.write(pack.rawData(), pack.rawSize());
 }
+
+namespace diff {
+
 /**
  * Walb diff writer.
  */
@@ -232,7 +242,7 @@ private:
     }
 
     void writeEof() {
-        writeEofPack(fdw_);
+        writeDiffEofPack(fdw_);
     }
 
     void checkWrittenHeader() const {

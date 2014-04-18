@@ -84,20 +84,27 @@ public:
      * @size max total file size [byte].
      */
     std::vector<MetaDiff> getDiffListToSend(uint64_t size) const {
-        std::vector<MetaDiff> v = mgr_.getMergeableDiffList(0);
-        if (v.empty()) return {};
-        std::vector<MetaDiff> u;
-        uint64_t total = 0;
-        for (const MetaDiff &diff : v) {
-            uint64_t size0 = getDiffFileSize(diff);
-            if (size < total + size0) break;
-            u.push_back(diff);
-            total += size0;
-        }
-        if (u.empty()) {
-            u.push_back(v[0]);
-        }
-        return u;
+        return getDiffListToMerge(0, size);
+    }
+    /**
+     * Get transfer diff list for archive repl-sync.
+     * @snap base snapshot.
+     * @size max total file size [byte].
+     */
+    std::vector<MetaDiff> getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
+        std::vector<MetaDiff> v = mgr_.getApplicableAndMergeableDiffList(snap);
+        truncateDiffVecBySize(v, size);
+        return v;
+    }
+    /**
+     * Get diff list for merge.
+     * @gid start gid.
+     * @size max total file size [byte].
+     */
+    std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
+        std::vector<MetaDiff> v = mgr_.getMergeableDiffList(gid);
+        truncateDiffVecBySize(v, size);
+        return v;
     }
     /**
      * Garbage collect.
@@ -178,6 +185,18 @@ private:
             v.push_back(createDiffFileName(diff));
         }
         return v;
+    }
+    void truncateDiffVecBySize(std::vector<MetaDiff> &v, uint64_t size) const {
+        if (v.empty()) return;
+        uint64_t total = getDiffFileSize(v[0]);
+        size_t i = 1;
+        while (i < v.size()) {
+            uint64_t s = getDiffFileSize(v[i]);
+            if (size < total + s) break;
+            total += s;
+            i++;
+        }
+        v.resize(i);
     }
 };
 

@@ -15,6 +15,7 @@
 #include "walb_diff_converter.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_log_net.hpp"
+#include "wdiff_transfer.hpp"
 
 namespace walb {
 
@@ -883,7 +884,7 @@ retry:
                 }
                 mergedDiff.merge(diff);
             }
-            if (lseek(op.fd(), 0, SEEK_SET) < 0) {
+            if (::lseek(op.fd(), 0, SEEK_SET) < 0) {
                 throw cybozu::Exception(FUNC) << "lseek failed" << cybozu::ErrorNo();
             }
             ops.push_back(std::move(op));
@@ -892,63 +893,6 @@ retry:
     merger.addWdiffs(std::move(ops));
     merger.prepare();
 }
-
-namespace proxy_local {
-
-/**
- *
- * RETURN:
- *   false if force stopped.
- */
-inline bool sendWdiffs(
-    cybozu::Socket &sock, diff::Merger &merger, const HostInfo &hi,
-    const std::atomic<int> &stopState)
-{
-    packet::StreamControl ctrl(sock);
-    diff::RecIo recIo;
-    const size_t nCPU = hi.compressionNumCPU;
-    const size_t maxPushedNum = nCPU * 2 - 1;
-    ConverterQueue conv(maxPushedNum, nCPU, true,
-                        hi.compressionType, hi.compressionLevel);
-    diff::Packer packer;
-    size_t pushedNum = 0;
-    while (merger.pop(recIo)) {
-        if (stopState == ForceStopping || gp.forceQuit) {
-            return false;
-        }
-        const DiffRecord& rec = recIo.record();
-        const DiffIo& io = recIo.io();
-        if (packer.add(rec, io.get())) {
-            continue;
-        }
-        conv.push(packer.getPackAsVector());
-        pushedNum++;
-        packer.reset();
-        packer.add(rec, io.get());
-        if (pushedNum < maxPushedNum) {
-            continue;
-        }
-        std::vector<char> v = conv.pop();
-        ctrl.next();
-        sock.write(v.data(), v.size());
-        pushedNum--;
-    }
-    if (!packer.empty()) {
-        conv.push(packer.getPackAsVector());
-    }
-    conv.quit();
-    std::vector<char> v = conv.pop();
-    while (!v.empty()) {
-        ctrl.next();
-        sock.write(v.data(), v.size());
-        v = conv.pop();
-    }
-    ctrl.end();
-    packet::Ack(sock).recv();
-    return true;
-}
-
-} // namespace proxy_local
 
 /**
  * RETURN:
@@ -1001,10 +945,14 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     std::string res;
     pkt.read(res);
     if (res == msgAccept) {
-        if (!proxy_local::sendWdiffs(sock, merger, hi, volSt.stopState)) {
+        if (!wdiffTransferClient(
+                pkt, merger,
+                hi.compressionType, hi.compressionLevel, hi.compressionNumCPU,
+                volSt.stopState, gp.forceQuit)) {
             logger.warn() << FUNC << "force stopped" << volId;
             return false;
         }
+        packet::Ack(pkt.sock()).recv();
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();
