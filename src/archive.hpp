@@ -119,29 +119,34 @@ inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *m
 namespace archive_local {
 
 /**
- * This function will get diff list to apply, restore, or merge.
+ * This function will get diff list to apply, restore, merge, or sync.
  */
-inline std::pair<MetaState, std::vector<MetaDiff>> getDiffList(ArchiveVolInfo& volInfo, uint64_t gid, const std::string& action, bool allowEmpty, const char *msg)
+inline std::pair<MetaState, std::vector<MetaDiff>> getDiffList(ArchiveVolInfo& volInfo, const MetaSnap snap, const std::string& action, bool allowEmpty, const char *msg)
 {
     const MetaDiffManager &mgr = volInfo.getDiffMgr();
     const MetaState st = volInfo.getMetaState();
     std::vector<MetaDiff> diffV;
     if (action == aApply) {
-        diffV = mgr.getDiffListToApply(st, gid);
+        assert(snap.isClean());
+        diffV = mgr.getDiffListToApply(st, snap.gidB);
     } else if (action == aRestore) {
-        diffV = mgr.getDiffListToRestore(st, gid);
+        assert(snap.isClean());
+        diffV = mgr.getDiffListToRestore(st, snap.gidB);
     } else if (action == aMerge) {
-        diffV = mgr.getMergeableDiffList(gid);
+        assert(snap.isClean());
+        diffV = mgr.getMergeableDiffList(snap.gidB);
+    } else if (action == aReplSync) {
+        diffV = mgr.getDiffListToSync(st, snap);
     } else {
         throw cybozu::Exception(msg) << "wrong action" << action;
     }
     if (!allowEmpty && diffV.empty()) {
-        throw cybozu::Exception(msg) << "diffV empty" << volInfo.volId << gid;
+        throw cybozu::Exception(msg) << "diffV empty" << volInfo.volId << snap;
     }
     return {st, diffV};
 }
 
-inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo, uint64_t gid, const std::string& action, bool allowEmpty)
+inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo, const MetaSnap snap, const std::string& action, bool allowEmpty)
 {
     const char *const FUNC = __func__;
 
@@ -150,7 +155,7 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(std::vector<cybo
   retry:
     MetaState st;
     std::vector<MetaDiff> diffV;
-    std::tie(st, diffV) = getDiffList(volInfo, gid, action, allowEmpty, FUNC);
+    std::tie(st, diffV) = getDiffList(volInfo, snap, action, allowEmpty, FUNC);
     // Try to open all wdiff files.
     for (const MetaDiff& diff : diffV) {
         cybozu::util::FileOpener op;
@@ -180,7 +185,7 @@ inline bool dirtyHashSyncServer(
         throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
     }
     std::vector<cybozu::util::FileOpener> ops;
-    tryOpenDiffs(ops, volInfo, snap.gidB, aRestore, allowEmpty);
+    tryOpenDiffs(ops, volInfo, snap, aReplSync, allowEmpty);
 
     std::atomic<bool> quit(false);
     auto readVirtualFullImageAndSendHash = [&]() {
@@ -301,7 +306,7 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     UniqueLock ul(volSt.mu);
 
-    getDiffList(volInfo, gid, aApply, !allowEmpty, __func__);
+    getDiffList(volInfo, MetaSnap(gid), aApply, !allowEmpty, __func__);
 }
 
 inline bool applyOpenedDiffs(std::vector<cybozu::util::FileOpener>&& ops, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
@@ -352,7 +357,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     std::vector<cybozu::util::FileOpener> ops;
     MetaState st0;
     std::vector<MetaDiff> diffV;
-    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, gid, aApply, !allowEmpty);
+    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, MetaSnap(gid), aApply, !allowEmpty);
 
     const MetaState st1 = applying(st0, diffV);
     volInfo.setMetaState(st1);
@@ -389,7 +394,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     std::vector<cybozu::util::FileOpener> ops;
     MetaState st;
     std::vector<MetaDiff> diffV;
-    std::tie(st, diffV) = tryOpenDiffs(ops, volInfo, gid, aMerge, allowEmpty);
+    std::tie(st, diffV) = tryOpenDiffs(ops, volInfo, MetaSnap(gid), aMerge, allowEmpty);
     if (ops.size() < 2) {
         throw cybozu::Exception(__func__) << "There is no mergeable diff.";
     }
@@ -469,7 +474,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     if (!noNeedToApply) {
         std::vector<cybozu::util::FileOpener> ops;
-        tryOpenDiffs(ops, volInfo, gid, aRestore, !allowEmpty);
+        tryOpenDiffs(ops, volInfo, MetaSnap(gid), aRestore, !allowEmpty);
         if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
             return false;
         }
