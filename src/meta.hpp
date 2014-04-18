@@ -86,7 +86,7 @@ struct MetaSnap
     uint64_t gidB, gidE;
 
     MetaSnap()
-        : MetaSnap(0) {}
+        : gidB(-1), gidE(-1) {}
     explicit MetaSnap(uint64_t gid)
         : MetaSnap(gid, gid) {}
     explicit MetaSnap(std::initializer_list<uint64_t> l)
@@ -100,9 +100,12 @@ struct MetaSnap
         } else {
             throw cybozu::Exception("MetaSnap:must have 1 or 2 arguments");
         }
+        verify();
     }
     MetaSnap(uint64_t gidB, uint64_t gidE)
-        : gidB(gidB), gidE(gidE) {}
+        : gidB(gidB), gidE(gidE) {
+        verify();
+    }
     bool isClean() const {
         return gidB == gidE;
     }
@@ -130,10 +133,12 @@ struct MetaSnap
     void set(uint64_t gid) {
         gidB = gid;
         gidE = gid;
+        verify();
     }
     void set(uint64_t gidB, uint64_t gidE) {
         this->gidB = gidB;
         this->gidE = gidE;
+        verify();
     }
     void verify() const {
         if (gidB > gidE) {
@@ -189,14 +194,16 @@ struct MetaDiff
     MetaSnap snapB, snapE;
 
     MetaDiff()
-        : MetaDiff(MetaSnap(), MetaSnap()) {}
+        : isMergeable(false), timestamp(0), snapB(), snapE() {}
     MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool isMergeable = false, uint64_t ts = 0)
         : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), isMergeable, ts) {}
     MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool isMergeable = false, uint64_t ts = 0)
         : MetaDiff(MetaSnap(b), MetaSnap(e), isMergeable, ts) {}
     MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool isMergeable = false, uint64_t ts = 0)
         : isMergeable(isMergeable), timestamp(ts)
-        , snapB(snapB), snapE(snapE) {}
+        , snapB(snapB), snapE(snapE) {
+        verify();
+    }
     bool operator==(const MetaDiff &rhs) const {
         return snapB == rhs.snapB && snapE == rhs.snapE;
     }
@@ -287,18 +294,24 @@ struct MetaState
         , snapB(), snapE() {}
     explicit MetaState(const MetaSnap &snap, uint64_t ts)
         : isApplying(false), timestamp(ts)
-        , snapB(snap), snapE(snap) {}
+        , snapB(snap), snapE(snap) {
+        verify();
+    }
     MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts)
         : isApplying(true), timestamp(ts)
-        , snapB(snapB), snapE(snapE) {}
+        , snapB(snapB), snapE(snapE) {
+        verify();
+    }
     void set(const MetaSnap &snapB) {
         isApplying = false;
         this->snapB = snapB;
+        verify();
     }
     void set(const MetaSnap &snapB, const MetaSnap &snapE) {
         isApplying = true;
         this->snapB = snapB;
         this->snapE = snapE;
+        verify();
     }
     bool operator==(const MetaState &rhs) const {
         if (isApplying != rhs.isApplying) {
@@ -317,10 +330,12 @@ struct MetaState
     }
     void verify() const {
         snapB.verify();
-        snapE.verify();
-        if (isApplying && snapB.gidB >= snapE.gidB) {
-            throw cybozu::Exception("MetaState::broken progress constraint")
-                << snapB.str() << snapE.str();
+        if (isApplying) {
+            snapE.verify();
+            if (snapB.gidB >= snapE.gidB) {
+                throw cybozu::Exception("MetaState::broken progress constraint")
+                    << snapB.str() << snapE.str();
+            }
         }
     }
     std::string str() const {
@@ -477,6 +492,7 @@ inline MetaSnap apply(const MetaSnap &snap, const MetaDiff &diff)
     } else {
         s = diff.snapE;
     }
+    s.verify();
     return s;
 }
 
@@ -514,6 +530,7 @@ inline void MetaDiff::merge(const MetaDiff& rhs)
     }
     snapE = apply(snapE, rhs);
     timestamp = rhs.timestamp;
+    verify();
 }
 
 inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1)
