@@ -249,6 +249,8 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 4).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 2).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 4).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(2)).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(4)).size(), 4);
 
     auto v1 = mgr.getMergeableDiffList(0);
     CYBOZU_TEST_EQUAL(v1.size(), 3);
@@ -289,6 +291,9 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 5).size(), 0);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 10).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5)).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5, 10)).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(10)).size(), 2);
 
     auto st1a = walb::applying(st, v);
     auto st1b = walb::applying(st1a, v);
@@ -307,9 +312,42 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 5).size(), 0);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 10).size(), 0);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 15).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, walb::MetaSnap(5)).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, walb::MetaSnap(10)).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, walb::MetaSnap(15)).size(), 3);
 }
 
 CYBOZU_TEST_AUTO(metaDiffManager3)
+{
+    walb::MetaSnap snap(0, 10);
+    walb::MetaState st(snap, 0);
+    std::vector<walb::MetaDiff> v;
+    v.emplace_back(0, 5, false, 1000);
+    v.push_back(walb::MetaDiff({5, 10}, {15, 20}, false, 1001));
+    v.emplace_back(15, 20, false, 1002);
+
+    walb::MetaDiffManager mgr;
+    for (walb::MetaDiff &d : v) mgr.add(d);
+    CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 20);
+    auto v0 = mgr.getApplicableDiffList(st.snapB);
+    CYBOZU_TEST_EQUAL(v0.size(), 3);
+    auto v1 = mgr.getMinimumApplicableDiffList(st);
+    CYBOZU_TEST_EQUAL(v1.size(), 1);
+
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 15).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 20).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 5).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 10).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 15).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 20).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5, 10)).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(15, 20)).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(20)).size(), 3);
+}
+
+CYBOZU_TEST_AUTO(metaDiffManager4)
 {
     walb::MetaSnap snap(0), s0(snap), s1(snap);
     walb::MetaState st(snap, 0);

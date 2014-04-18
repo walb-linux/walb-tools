@@ -1028,16 +1028,7 @@ public:
      *   Empty vector means the clean snapshot can not be restored.
      */
     std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
-        std::vector<MetaDiff> applicableV, minV;
-        getTargetDiffLists(applicableV, minV, st, gid);
-        if (minV.size() > applicableV.size()) return {};
-
-        const MetaState appliedSt = apply(st, applicableV);
-        if (appliedSt.snapB.isClean() && appliedSt.snapB.gidB == gid) {
-            return applicableV;
-        } else {
-            return {};
-        }
+        return getDiffListToSync(st, MetaSnap(gid));
     }
     /**
      * Get diff list to apply all diffs before a specified gid.
@@ -1049,6 +1040,22 @@ public:
         getTargetDiffLists(applicableV, minV, st, gid);
         if (minV.size() > applicableV.size()) return minV;
         return applicableV;
+    }
+    /**
+     * Get diff list to reproduce a snapshot.
+     * RETURN:
+     *   Empty vector means the snapshot can not be reprodusable.
+     */
+    std::vector<MetaDiff> getDiffListToSync(const MetaState &st, const MetaSnap &snap) const {
+        std::vector<MetaDiff> applicableV, minV;
+        getTargetDiffLists(applicableV, minV, st, snap.gidB);
+        if (minV.size() > applicableV.size()) return {};
+        const MetaState appliedSt = apply(st, applicableV);
+        if (appliedSt.snapB == snap) {
+            return applicableV;
+        } else {
+            return {};
+        }
     }
     /**
      * Get all diffs between gid0 and gid1.
