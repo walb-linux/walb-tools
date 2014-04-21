@@ -151,7 +151,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         pkt.write(archiveId);
     }
     if (cmd == "add" || cmd == "update") {
-        const HostInfo hi = parseHostInfo(p.params, 3);
+        const HostInfoForBkp hi = parseHostInfoForBkp(p.params, 3);
         LOGs.debug() << hi;
         pkt.write(hi);
     }
@@ -171,7 +171,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         return;
     }
     if (cmd == "get") {
-        HostInfo hi;
+        HostInfoForBkp hi;
         pkt.read(hi);
         std::cout << hi << std::endl;
         return;
@@ -216,11 +216,13 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 /**
  * params[0] volId
  * params[1] archiveAddrPortStr like "192.168.1.1:10000".
- * params[2] archiveCompressionOptStr like "snappy:0:1".
+ * params[2] archiveCompressionOptStr like "snappy:0:1" (optional)
+ * params[3] archiveMaxWdiffMergeSizeStr like "100M" (optional)
+ * params[4] archiveBulkSizeStr like "1M" (optional)
  */
-inline void c2aReplicateClient(protocol::ClientParams &/*p*/)
+inline void c2aReplicateClient(protocol::ClientParams &p)
 {
-    // QQQ
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgAccept);
 }
 
 /**

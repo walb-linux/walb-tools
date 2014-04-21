@@ -13,8 +13,7 @@ namespace walb {
  *   false if force stopped.
  */
 inline bool wdiffTransferClient(
-    packet::Packet &pkt, diff::Merger &merger,
-    int cmprType, size_t cmprLevel, size_t cmprNumCPU,
+    packet::Packet &pkt, diff::Merger &merger, const CompressOpt &cmpr,
     const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
 {
     packet::StreamControl ctrl(pkt.sock());
@@ -27,8 +26,8 @@ inline bool wdiffTransferClient(
     };
 
     diff::RecIo recIo;
-    const size_t maxPushedNum = cmprNumCPU * 2 - 1;
-    ConverterQueue conv(maxPushedNum, cmprNumCPU, true, cmprType, cmprLevel);
+    const size_t maxPushedNum = cmpr.numCpu * 2 - 1;
+    ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     diff::Packer packer;
     size_t pushedNum = 0;
     while (merger.pop(recIo)) {

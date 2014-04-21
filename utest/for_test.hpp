@@ -32,6 +32,7 @@ public:
         } catch (...) {
         }
     }
+    std::string getPath() const { return fp_.str(); }
 };
 
 void setDiff(walb::MetaDiff &diff, uint64_t gid0, uint64_t gid1, bool isMergeable)

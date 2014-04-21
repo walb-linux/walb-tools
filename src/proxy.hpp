@@ -316,7 +316,7 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     size_t i = 0;
     for (const std::string& archiveName : volSt.archiveSet) {
         const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
-        const HostInfo hi = volInfo.getArchiveInfo(archiveName);
+        const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
         const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
 
         ret.push_back(fmt("archive %s %s", archiveName.c_str(), hi.str().c_str()));
@@ -581,7 +581,7 @@ inline void listArchiveInfo(const std::string &volId, StrVec &archiveNameV)
     archiveNameV.assign(volSt.archiveSet.begin(), volSt.archiveSet.end());
 }
 
-inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfo &hi)
+inline void getArchiveInfo(const std::string& volId, const std::string &archiveName, HostInfoForBkp &hi)
 {
     const char *const FUNC = __func__;
     ProxyVolState& volSt = getProxyVolState(volId);
@@ -594,7 +594,7 @@ inline void getArchiveInfo(const std::string& volId, const std::string &archiveN
     hi = volInfo.getArchiveInfo(archiveName);
 }
 
-inline void addArchiveInfo(const std::string &volId, const std::string &archiveName, const HostInfo &hi, bool ensureNotExistance)
+inline void addArchiveInfo(const std::string &volId, const std::string &archiveName, const HostInfoForBkp &hi, bool ensureNotExistance)
 {
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
@@ -658,7 +658,7 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         std::string archiveName;
-        HostInfo hi;
+        HostInfoForBkp hi;
         if (cmd == "add" || cmd == "update") {
             pkt.read(archiveName);
             pkt.read(hi);
@@ -834,7 +834,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     volInfo.deleteDiffs({diff});
     for (const std::string &archiveName : volSt.archiveSet) {
         ProxyTask task(volId, archiveName);
-        HostInfo hi = volInfo.getArchiveInfo(archiveName);
+        HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
         getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
         logger.debug() << "task pushed" << task;
     }
@@ -919,11 +919,11 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         return false;
     }
 
-    const HostInfo hi = volInfo.getArchiveInfo(archiveName);
+    const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
     cybozu::Socket sock;
     ActionCounterTransaction trans(volSt.ac, archiveName);
     ul.unlock();
-    util::connectWithTimeout(sock, cybozu::SocketAddr(hi.addr, hi.port), gp.socketTimeout);
+    util::connectWithTimeout(sock, hi.addrPort.getSocketAddr(), gp.socketTimeout);
     const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
     packet::Packet aPack(sock);
 
@@ -945,10 +945,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     std::string res;
     pkt.read(res);
     if (res == msgAccept) {
-        if (!wdiffTransferClient(
-                pkt, merger,
-                hi.compressionType, hi.compressionLevel, hi.compressionNumCPU,
-                volSt.stopState, gp.forceQuit)) {
+        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit)) {
             logger.warn() << FUNC << "force stopped" << volId;
             return false;
         }

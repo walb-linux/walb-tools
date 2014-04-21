@@ -466,10 +466,10 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
                   << "succeeded" << volId;
 }
 
-inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const HostInfo &hostInfo)
+inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const AddrPort &addrPort)
 {
     cybozu::Socket sock;
-    cybozu::SocketAddr server(hostInfo.addr, hostInfo.port);
+    const cybozu::SocketAddr server = addrPort.getSocketAddr();
     util::connectWithTimeout(sock, server, ga.socketTimeout);
     protocol::run1stNegotiateAsClient(sock, ga.nodeId, replSyncPN);
     protocol::sendStrVec(sock, {volId}, 1, __func__, msgAccept);
@@ -478,11 +478,10 @@ inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const 
 
 inline bool runFullReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, Logger &logger)
+    packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
 {
     const char *const FUNC = __func__;
     const uint64_t sizeLb = volInfo.getLv().sizeLb();
-    const uint64_t bulkLb = DEFAULT_BULK_LB; // QQQ
     const MetaState metaSt = volInfo.getMetaState();
     const cybozu::Uuid uuid = volInfo.getUuid();
     pkt.write(sizeLb);
@@ -541,11 +540,10 @@ inline bool runFullReplServer(
 
 inline bool runHashReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, const MetaDiff &diff, Logger &logger)
+    packet::Packet &pkt, uint64_t bulkLb, const MetaDiff &diff, Logger &logger)
 {
     const char *const FUNC = __func__;
     const uint64_t sizeLb = volInfo.getLv().sizeLb();
-    const uint64_t bulkLb = DEFAULT_BULK_LB; // QQQ
     const cybozu::Uuid uuid = volInfo.getUuid();
     const uint32_t hashSeed = diff.timestamp;
     pkt.write(sizeLb);
@@ -610,14 +608,14 @@ inline bool runHashReplServer(
 
 inline bool runDiffReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
+    packet::Packet &pkt, const MetaSnap &srvLatestSnap, const CompressOpt &cmpr, uint64_t wdiffMergeSize, Logger &logger)
 {
     const char *const FUNC = __func__;
     MetaState st0;
     std::vector<MetaDiff> diffV;
     std::vector<cybozu::util::FileOpener> ops;
     std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, !allowEmpty, [&](const MetaState &) {
-            return volInfo.getDiffListToSend(srvLatestSnap, DEFAULT_MAX_WDIFF_MERGE_MB * MEBI); // QQQ
+            return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize);
         });
 
     const MetaDiff mergedDiff = merge(diffV);
@@ -638,9 +636,7 @@ inline bool runDiffReplClient(
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
     if (!wdiffTransferClient(
-            pkt, merger,
-            ::WALB_DIFF_CMPR_SNAPPY, 0, 1, // QQQ
-            volSt.stopState, ga.forceQuit)) {
+            pkt, merger, cmpr, volSt.stopState, ga.forceQuit)) {
         logger.warn() << "diff-repl-client force-stopped" << volId;
         return false;
     }
@@ -687,7 +683,7 @@ inline bool runDiffReplServer(
     return true;
 }
 
-inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, Logger &logger)
+inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, Logger &logger)
 {
     packet::Packet pkt(sock);
 
@@ -697,7 +693,9 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, Lo
     bool isFull;
     pkt.read(isFull);
     if (isFull) {
-        if (!runFullReplClient(volId, volSt, volInfo, pkt, logger)) return false;
+        if (!runFullReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
+            return false;
+        }
     }
 
     for (;;) {
@@ -715,9 +713,13 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, Lo
             const MetaState metaSt = volInfo.getMetaState();
             const MetaSnap cliOldestSnap(cliOldestGid);
             const MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
-            if (!runHashReplClient(volId, volSt, volInfo, pkt, diff, logger)) return false;
+            if (!runHashReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, diff, logger)) {
+                return false;
+            }
         } else {
-            if (!runDiffReplClient(volId, volSt, volInfo, pkt, srvLatestSnap, logger)) return false;
+            if (!runDiffReplClient(
+                    volId, volSt, volInfo, pkt, srvLatestSnap,
+                    hostInfo.cmpr, hostInfo.maxWdiffMergeSize, logger)) return false;
         }
     }
     packet::Ack(sock).recv();
@@ -1184,7 +1186,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) throw cybozu::Exception(FUNC) << "volId is required";
         const std::string &volId = v[0];
-        const HostInfo hostInfo = parseHostInfo(v, 1);
+        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 1);
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1197,10 +1199,10 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
 
         ActionCounterTransaction tran(volSt.ac, aReplSync);
         ul.unlock();
-        cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo);
+        cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.write(msgAccept);
         sendErr = false;
-        if (!archive_local::runReplSyncClient(volId, aSock, logger)) {
+        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
         }

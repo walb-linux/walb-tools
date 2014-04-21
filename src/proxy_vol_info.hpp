@@ -97,7 +97,7 @@ public:
         }
         return true;
     }
-    void addArchiveInfo(const std::string& name, const HostInfo &hi, bool ensureNotExistance) {
+    void addArchiveInfo(const std::string& name, const HostInfoForBkp &hi, bool ensureNotExistance) {
         util::saveFile(volDir, name + ArchiveSuffix, hi);
         util::makeDir(getSlaveDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
@@ -109,8 +109,8 @@ public:
         getArchiveInfoPath(name).remove();
         archiveSet_.erase(name);
     }
-    HostInfo getArchiveInfo(const std::string &name) const {
-        HostInfo hi;
+    HostInfoForBkp getArchiveInfo(const std::string &name) const {
+        HostInfoForBkp hi;
         util::loadFile(volDir, name + ArchiveSuffix, hi);
         return hi;
     }
