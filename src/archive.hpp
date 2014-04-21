@@ -1330,7 +1330,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
 /**
  * params[0]: volId
- * params[1]: size [byte] suffix k/m/g can be used.
+ * params[1]: size [byte] suffix k/m/g/t can be used.
  */
 inline void c2aResizeServer(protocol::ServerParams &p)
 {
@@ -1350,6 +1350,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
 
         volInfo.growLv(newSizeLb);
+        logger.info() << "resize succeeded" << volId << newSizeLb;
         pkt.write(msgOk);
     } catch (std::exception &e) {
         logger.error() << e.what();

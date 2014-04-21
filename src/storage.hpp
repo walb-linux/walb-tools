@@ -996,4 +996,38 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
     }
 }
 
+/**
+ * This will resize just walb device.
+ * You must resize underlying devices before calling it.
+ *
+ * params[0]: volId
+ * params[1]: size [byte] suffix k/m/g/t can be used.
+ */
+inline void c2sResizeServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const uint64_t newSizeLb = util::parseSizeLb(v[1], FUNC);
+
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(volSt.sm.get(), {sSyncReady, sStopped, sMaster, sSlave}, FUNC);
+
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        volInfo.growWdev(newSizeLb);
+
+        logger.info() << "resize succeeded" << volId << newSizeLb;
+        pkt.write(msgOk);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
 } // walb

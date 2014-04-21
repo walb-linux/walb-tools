@@ -344,6 +344,17 @@ public:
         qf.front(rec1);
         return {rec0.gid, rec1.gid};
     }
+    /**
+     * @sizeLb 0 can be specified (auto-detect).
+     */
+    void growWdev(uint64_t sizeLb = 0) {
+        const std::string path = getWdevPath();
+        const uint64_t curSizeLb = device::getSizeLb(path);
+        if (sizeLb > 0 && curSizeLb > sizeLb) {
+            throw cybozu::Exception(__func__) << "shrink is not supported" << curSizeLb << sizeLb;
+        }
+        device::resize(path, sizeLb);
+    }
 private:
     void loadWdevPath() {
         std::string s;

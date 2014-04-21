@@ -48,6 +48,7 @@ public:
             { stopCN, c2sStopServer },
             { fullBkpCN, c2sFullBkpServer },
             { hashBkpCN, c2sHashBkpServer },
+            { resizeCN, c2sResizeServer },
             { snapshotCN, c2sSnapshotServer },
             { hostTypeCN, c2sHostTypeServer },
         };
