@@ -690,8 +690,8 @@ inline MetaDiff parseDiffFileName(const std::string &name)
     gidV.push_back(gid);
     switch (gidV.size()) {
     case 2:
-        diff.snapB.set(gidV[0], gidV[0]);
-        diff.snapE.set(gidV[1], gidV[1]);
+        diff.snapB.set(gidV[0]);
+        diff.snapE.set(gidV[1]);
         break;
     case 4:
         diff.snapB.set(gidV[0], gidV[1]);
