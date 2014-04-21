@@ -173,6 +173,23 @@ public:
         }
         return lv;
     }
+    /**
+     * Grow the volume.
+     * @newSizeLb [logical block].
+     */
+    void growLv(uint64_t newSizeLb) {
+        cybozu::lvm::Lv lv = getLv();
+        if (lv.sizeLb() == newSizeLb) {
+            /* no need to grow. */
+            return;
+        }
+        if (newSizeLb < lv.sizeLb()) {
+            /* Shrink is not supported. */
+            throw cybozu::Exception(
+                "You tried to shrink the volume: " + lv.path().str());
+        }
+        lv.resize(newSizeLb);
+    }
     std::vector<std::string> getStatusAsStrVec() const {
         const char *const FUNC = __func__;
         std::vector<std::string> v;
@@ -264,23 +281,6 @@ private:
         return VOLUME_PREFIX + volId;
     }
 #if 0 // XXX
-    /**
-     * Grow the volume.
-     * @newSizeLb [logical block].
-     */
-    void growLv(uint64_t newSizeLb) {
-        cybozu::lvm::Lv lv = getLv();
-        if (lv.sizeLb() == newSizeLb) {
-            /* no need to grow. */
-            return;
-        }
-        if (newSizeLb < lv.sizeLb()) {
-            /* Shrink is not supported. */
-            throw cybozu::Exception(
-                "You tried to shrink the volume: " + lv.path().str());
-        }
-        lv.resize(newSizeLb);
-    }
     /**
      * Get restored snapshots.
      */

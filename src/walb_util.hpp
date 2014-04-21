@@ -21,6 +21,7 @@
 #include "thread_util.hpp"
 #include "walb_logger.hpp"
 #include "time.hpp"
+#include "walb/block_size.h"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"
@@ -164,6 +165,25 @@ inline void connectWithTimeout(cybozu::Socket &sock, const cybozu::SocketAddr &s
     sock.connect(sockAddr, timeoutMs);
     sock.setSendTimeout(timeoutMs);
     sock.setReceiveTimeout(timeoutMs);
+}
+
+/**
+ * Parse integer string with suffix character k/m/g/t/p which means kibi/mebi/gibi/tebi/pebi.
+ * and convert from [byte] to [logical block size].
+ */
+inline uint64_t parseSizeLb(const std::string &str, const char *msg, uint64_t minB = 0, uint64_t maxB = -1)
+{
+    const uint64_t sizeLb = cybozu::util::fromUnitIntString(str) / LOGICAL_BLOCK_SIZE;
+    const uint64_t minLb = minB / LOGICAL_BLOCK_SIZE;
+    const uint64_t maxLb = maxB / LOGICAL_BLOCK_SIZE;
+    if (sizeLb < minLb) throw cybozu::Exception(msg) << "too small size" << minB << sizeLb;
+    if (maxLb < sizeLb) throw cybozu::Exception(msg) << "too large size" << maxB << sizeLb;
+    return sizeLb;
+}
+
+inline uint64_t parseBulkLb(const std::string &str, const char *msg)
+{
+    return parseSizeLb(str, msg, LOGICAL_BLOCK_SIZE, MAX_BULK_SIZE);
 }
 
 }} // walb::util

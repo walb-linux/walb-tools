@@ -9,6 +9,7 @@ const uint64_t GIBI = 1024ULL * 1024ULL * 1024ULL;
 const uint64_t LBS = 512;
 
 const uint64_t DEFAULT_BULK_LB = 64 * KIBI / LBS;
+const uint64_t MAX_BULK_SIZE = 4 * MEBI;
 const size_t DEFAULT_TIMEOUT_SEC = 60;
 
 const size_t DEFAULT_MAX_FOREGROUND_TASKS = 2;

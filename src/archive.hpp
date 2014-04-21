@@ -1328,9 +1328,33 @@ inline void c2aMergeServer(protocol::ServerParams &p)
     }
 }
 
-inline void c2aResizeServer(protocol::ServerParams &/*p*/)
+/**
+ * params[0]: volId
+ * params[1]: size [byte] suffix k/m/g can be used.
+ */
+inline void c2aResizeServer(protocol::ServerParams &p)
 {
-    // QQQ
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const uint64_t newSizeLb = util::parseSizeLb(v[1], FUNC);
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+
+        volInfo.growLv(newSizeLb);
+        pkt.write(msgOk);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
 }
 
 inline void c2aHostTypeServer(protocol::ServerParams &p)
