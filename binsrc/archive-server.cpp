@@ -88,22 +88,6 @@ struct Option : cybozu::Option
     }
 };
 
-void initializeArchive(Option &/*opt*/)
-{
-    util::makeDir(ga.baseDirStr, "archiveServer", false);
-
-    // Start task dispatcher thread.
-
-    // QQQ
-}
-
-void finalizeArchive()
-{
-    // Stop task dispatcher thread.
-
-    // QQQ
-}
-
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -112,7 +96,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(opt.logFilePath(), opt.isDebug);
-    initializeArchive(opt);
+    util::makeDir(ga.baseDirStr, "archiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
@@ -124,7 +108,6 @@ int main(int argc, char *argv[]) try
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
-    finalizeArchive();
 
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());
