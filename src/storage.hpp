@@ -558,7 +558,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
 
     const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     const std::string& volId = v[0];
-    const uint64_t bulkLb = cybozu::atoi(v[1]);
+    const uint64_t bulkLb = util::parseBulkLb(v[1], FUNC);
     const uint64_t curTime = ::time(0);
     logger.debug() << volId << bulkLb << curTime;
     std::string archiveId;

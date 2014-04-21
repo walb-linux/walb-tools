@@ -88,11 +88,10 @@ namespace ctrl_local {
 
 inline StrVec makeBkpParams(const StrVec &v)
 {
-    StrVec ret = v;
-    if (v.size() == 1) {
-        ret.push_back(cybozu::itoa(walb::DEFAULT_BULK_LB));
-    }
-    return ret;
+    std::string volId;
+    std::string bulkSize = cybozu::util::toUnitIntString(DEFAULT_BULK_LB * LOGICAL_BLOCK_SIZE);
+    cybozu::util::parseStrVec(v, 0, 1, {&volId, &bulkSize});
+    return {volId, bulkSize};
 }
 
 } // ctrl_local
