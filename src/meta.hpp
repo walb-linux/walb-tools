@@ -300,17 +300,6 @@ struct MetaState
         , snapB(snapB), snapE(snapE) {
         verify();
     }
-    void set(const MetaSnap &snapB) {
-        isApplying = false;
-        this->snapB = snapB;
-        verify();
-    }
-    void set(const MetaSnap &snapB, const MetaSnap &snapE) {
-        isApplying = true;
-        this->snapB = snapB;
-        this->snapE = snapE;
-        verify();
-    }
     bool operator==(const MetaState &rhs) const {
         if (isApplying != rhs.isApplying) {
             return false;
