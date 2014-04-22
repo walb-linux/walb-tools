@@ -68,18 +68,11 @@ inline bool convertLogToDiff(
     size_t off = 0;
     const unsigned int pbs = rec.pbs();
     for (size_t i = 0; i < rec.ioSizePb(); i++) {
-        if (pbs <= remaining) {
-            ::memcpy(&buf[off], blockS.get(i), pbs);
-            off += pbs;
-            remaining -= pbs;
-        } else {
-            ::memcpy(&buf[off], blockS.get(i), remaining);
-            off += remaining;
-            remaining = 0;
-        }
+        const size_t copySize = std::min<size_t>(pbs, remaining);
+        ::memcpy(&buf[off], blockS.get(i), copySize);
+        off += copySize;
+        remaining -= copySize;
     }
-    assert(remaining == 0);
-    assert(off == ioSizeB);
     diffIo.set(mrec);
     diffIo.data.swap(buf);
 
