@@ -20,8 +20,7 @@ inline bool wdiffTransferClient(
 
     auto sendPack = [&](const Buffer& pack) {
         ctrl.next();
-        const uint32_t size = pack.size();
-        pkt.write(size);
+        pkt.write<size_t>(pack.size());
         pkt.write(pack.data(), pack.size());
     };
 
@@ -80,7 +79,7 @@ inline bool wdiffTransferServer(
         if (stopState == ForceStopping || forceQuit) {
             return false;
         }
-        uint32_t size;
+        size_t size;
         pkt.read(size);
         verifyDiffPackSize(size, FUNC);
         buf.resize(size);

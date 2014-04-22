@@ -32,8 +32,7 @@ inline bool dirtyHashSyncClient(
     auto compressAndSend = [&]() {
         Buffer compBuf = compr.convert(packer.getPackAsVector().data());
         sendCtl.next();
-        const uint32_t size = compBuf.size();
-        pkt.write(size);
+        pkt.write<size_t>(compBuf.size());
         pkt.write(compBuf.data(), compBuf.size());
     };
 
@@ -132,7 +131,7 @@ inline bool dirtyHashSyncServer(
             readerTh.join();
             return false;
         }
-        uint32_t size;
+        size_t size;
         pkt.read(size);
         verifyDiffPackSize(size, FUNC);
         buf.resize(size);
