@@ -44,6 +44,7 @@ public:
 
     void read(cybozu::util::FdReader& fdr) {
         fdr.read(ptr<char>(), WALBLOG_HEADER_SIZE);
+        verify();
     }
 
     void write(int fd) {
@@ -90,6 +91,11 @@ public:
         return true;
       error:
         return false;
+    }
+    void verify() const {
+        if (!isValid(true)) {
+            throw cybozu::Exception("log::FileHeader") << "invalid";
+        }
     }
 
     void print(FILE *fp = ::stdout) const {
@@ -141,7 +147,7 @@ private:
     uint32_t salt_;
     bool isEnd_;
 
-    std::unique_ptr<LogPackHeader> pack_;
+    LogPackHeader pack_;
     uint16_t recIdx_;
     uint64_t endLsid_;
 
@@ -164,10 +170,10 @@ public:
         if (isReadHeader_) throw RT_ERR("Wlog file header has been read already.");
         isReadHeader_ = true;
         fileH.read(fdr_);
-        if (!fileH.isValid(true)) throw RT_ERR("invalid wlog file header.");
         pbs_ = fileH.pbs();
         salt_ = fileH.salt();
         endLsid_ = fileH.beginLsid();
+        pack_.init(pbs_, salt_);
     }
     /**
      * ReadLog.
@@ -175,106 +181,78 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(RecordRaw& rec, walb::LogBlockShared& blockS)
+    bool readLog(LogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr)
     {
-        checkReadHeader();
-        fillPackIfNeed();
-        if (!pack_) return false;
+        if (!fetchNext()) return false;
 
         /* Copy to the record. */
-        const LogPackHeader& packHeader = *pack_.get();
-        rec.record() = packHeader.record(recIdx_);
-        rec.setPbs(packHeader.pbs());
-        rec.setSalt(packHeader.salt());
+        rec = pack_.record(recIdx_);
+        rec.verify();
 
         /* Read to the blockS. */
         blockS.init(pbs_);
         if (rec.hasData()) {
-            blockS.resize(rec.ioSizePb());
-            for (size_t i = 0; i < rec.ioSizePb(); i++) {
-                try {
-                    fdr_.read(blockS.get(i), pbs_);
-                } catch (cybozu::util::EofError &e) {
-                    throw InvalidIo();
-                }
+            try {
+                blockS.read(fdr_, rec.ioSizePb(pbs_));
+            } catch (cybozu::util::EofError &) {
+                throw InvalidIo(); // QQQ
             }
         } else {
             blockS.resize(0);
         }
 
         /* Validate. */
-        if (!isValidRB(rec, blockS)) {
-            printRB(rec, blockS);
-            LOGd("invalid...");
-            throw InvalidIo();
+        if (rec.hasDataForChecksum()) {
+            const uint32_t csum = blockS.calcChecksum(rec.ioSizeLb(), salt_);
+            if (rec.checksum != csum) {
+                LOGs.debug() << "invalid checksum" << rec.checksum << csum;
+                throw InvalidIo();
+            }
         }
+        if (recIdxP) *recIdxP = recIdx_;
         recIdx_++;
         return true;
     }
     /**
      * RETURN:
-     *   true if there are one or more log data remaining.
-     */
-    bool isEnd() {
-        checkReadHeader();
-        fillPackIfNeed();
-        return !pack_;
-    }
-    /**
-     * RETURN:
      *   true if the cursor indicates the first record in a pack.
      */
-    bool isFirstInPack() {
-        return !isEnd() && recIdx_ == 0;
+    bool isFirstInPack() { // QQQ
+        return fetchNext() && recIdx_ == 0;
     }
     /**
      * Get pack header reference.
      */
     LogPackHeader &packHeader() {
-        checkReadHeader();
-        fillPackIfNeed();
-        return *pack_;
+        assert(fetchNext());
+        return pack_;
+    }
+    /**
+     * RETURN:
+     *   true if there are one or more log data remaining.
+     */
+    bool fetchNext() {
+        if (!isReadHeader_) {
+            throw cybozu::Exception(__func__)
+                << "You have not called readHeader() yet";
+        }
+        if (isEnd_) return false;
+        if (recIdx_ < pack_.nRecords()) return true;
+
+        if (!pack_.read(fdr_) || pack_.isEnd()) {
+            isEnd_ = true;
+            return false;
+        }
+        recIdx_ = 0;
+        endLsid_ = pack_.nextLogpackLsid();
+        return true;
     }
     /**
      * Get the end lsid.
      */
     uint64_t endLsid() {
-        if (!isEnd()) throw RT_ERR("Must be reached to the wlog end.");
+        if (fetchNext()) throw RT_ERR("Must be reached to the wlog end.");
         return endLsid_;
-    }
-private:
-    void fillPackIfNeed() {
-        assert(isReadHeader_);
-        if (isEnd_ || (pack_ && recIdx_ < pack_->nRecords())) { return; }
-
-        std::shared_ptr<uint8_t> b = allocPb();
-        try {
-            fdr_.read(reinterpret_cast<char *>(b.get()), pbs_);
-            pack_.reset(new LogPackHeader(b, pbs_, salt_));
-            if (!pack_->isValid()) {
-                throw RT_ERR("Invalid logpack header.");
-            }
-            if (pack_->isEnd()) {
-                pack_.reset();
-                isEnd_ = true;
-                return;
-            }
-            recIdx_ = 0;
-            endLsid_ = pack_->nextLogpackLsid();
-            // pack_->print();
-        } catch (cybozu::util::EofError &e) {
-            pack_.reset();
-            isEnd_ = true;
-        }
-    }
-    std::shared_ptr<uint8_t> allocPb() {
-        assert(isReadHeader_);
-        return cybozu::util::allocateBlocks<uint8_t>(LOGICAL_BLOCK_SIZE, pbs_);
-    }
-    void checkReadHeader() const {
-        if (!isReadHeader_) {
-            throw RT_ERR("You have not called readHeader() yet.");
-        }
     }
 };
 
@@ -351,12 +329,13 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const LogPackHeader &header, std::queue<LogBlock> &&blocks) {
+    void writePack(const LogPackHeader &header, std::queue<LogBlock> &&blockQ) {
         /* Validate. */
         checkHeader(header);
-        if (header.totalIoSize() != blocks.size()) {
-            throw RT_ERR("blocks.size() must be %u but %zu."
-                         , header.totalIoSize(), blocks.size());
+        if (header.totalIoSize() != blockQ.size()) {
+            throw cybozu::Exception(__func__)
+                << "blocks.size() differ"
+                << header.totalIoSize() << blockQ.size();
         }
         std::vector<LogBlockShared> v;
         for (size_t i = 0; i < header.nRecords(); i++) {
@@ -365,17 +344,13 @@ public:
             if (rec.hasData()) {
                 const size_t ioSizePb = rec.ioSizePb(pbs_);
                 for (size_t j = 0; j < ioSizePb; j++) {
-                    blockS.addBlock(std::move(blocks.front()));
-                    blocks.pop();
+                    blockS.addBlock(std::move(blockQ.front()));
+                    blockQ.pop();
                 }
             }
-            if (!isValidRecordAndBlockData(rec, blockS, header.salt())) {
-                throw cybozu::Exception("writePack:invalid rec/blockS");
-            }
+            verifyLogChecksum(rec, blockS, header.salt());
             v.push_back(std::move(blockS));
         }
-        assert(v.size() == header.nRecords());
-        assert(blocks.empty());
 
         /* Write */
         writePackHeader(header.header());
@@ -439,10 +414,12 @@ public:
         reader.readHeader(wh);
         wh.print(fp);
 
-        RecordRaw rec;
-        LogBlockShared blockS;
-        while (reader.readLog(rec, blockS)) {
-            rec.printOneline(fp);
+        while (reader.fetchNext()) {
+            LogRecord rec;
+            LogBlockShared blockS;
+            uint16_t idx;
+            const uint32_t recIdx = reader.readLog(rec, blockS, &idx);
+            log::printRecordOneline(::stdout, recIdx, rec);
         }
         /*
          * reader.readLog() may throw InvalidIo.

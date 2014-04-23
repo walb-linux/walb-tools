@@ -31,18 +31,17 @@ namespace walb {
  * RETURN:
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
- *   R = RecordWrap or RecordRaw.
  */
-template<class R>
 inline bool convertLogToDiff(
-    const R& rec, const LogBlockShared& blockS, DiffRecord& mrec, DiffIo &diffIo)
+    uint32_t pbs, const LogRecord &rec, const LogBlockShared& blockS,
+    DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
     if (rec.isPadding()) return false;
 
     mrec.init();
-    mrec.io_address = rec.offset();
-    mrec.io_blocks = rec.ioSizeLb();
+    mrec.io_address = rec.offset;
+    mrec.io_blocks = rec.io_size;
 
     /* Discard */
     if (rec.isDiscard()) {
@@ -66,8 +65,8 @@ inline bool convertLogToDiff(
     std::vector<char> buf(ioSizeB);
     size_t remaining = ioSizeB;
     size_t off = 0;
-    const unsigned int pbs = rec.pbs();
-    for (size_t i = 0; i < rec.ioSizePb(); i++) {
+    const uint32_t ioSizePb = rec.ioSizePb(pbs);
+    for (size_t i = 0; i < ioSizePb; i++) {
         const size_t copySize = std::min<size_t>(pbs, remaining);
         ::memcpy(&buf[off], blockS.get(i), copySize);
         off += copySize;
@@ -174,17 +173,14 @@ private:
         }
 
         /* Convert each log. */
-        while (!reader.isEnd()) {
-            log::RecordRaw rec;
+        while (reader.fetchNext()) {
+            LogRecord lrec;
             LogBlockShared blockS;
-            if (reader.isFirstInPack()) {
-                lsid = reader.packHeader().nextLogpackLsid();
-            }
-            reader.readLog(rec, blockS);
+            reader.readLog(lrec, blockS);
 
             DiffRecord diffRec;
             DiffIo diffIo;
-            if (convertLogToDiff(rec, blockS, diffRec, diffIo)) {
+            if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo)) {
                 walbDiff.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;
             }

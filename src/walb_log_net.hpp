@@ -33,16 +33,15 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
     return doCompress ? cd.compress() : cd;
 }
 
-inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t pbs)
+inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs)
 {
+    const char *const FUNC = __func__;
     std::vector<char> v;
     cd.getUncompressed(v);
-    const size_t n = v.size() / pbs;
-    if (n == 0) throw cybozu::Exception(__func__) << "n must not be 0";
-    if (n * pbs != v.size()) throw cybozu::Exception(__func__) << "invalid size" << v.size();
+    if (sizePb * pbs != v.size()) throw cybozu::Exception(FUNC) << "invalid size" << v.size() << sizePb;
     blockS.init(pbs);
-    blockS.resize(n);
-    for (size_t i = 0; i < n; i++) {
+    blockS.resize(sizePb);
+    for (size_t i = 0; i < sizePb; i++) {
         ::memcpy(blockS.get(i), &v[i * pbs], pbs);
     }
 }
@@ -106,7 +105,7 @@ private:
 
     cybozu::thread::ThreadRunner compressor_;
     cybozu::thread::ThreadRunner sender_;
-    size_t recIdx_;
+    size_t recIdx_; // QQQ
 
     BoundedQ q0_; /* input to compressor_ */
     BoundedQ q1_; /* compressor_ to sender_. */
@@ -258,7 +257,6 @@ private:
 
     cybozu::thread::ThreadRunner receiver_;
     cybozu::thread::ThreadRunner uncompressor_;
-    size_t recIdx_;
 
     BoundedQ q0_; /* receiver_ to uncompressor_ */
     BoundedQ q1_; /* uncompressor_ to output. */
@@ -304,29 +302,21 @@ public:
         h.copyFrom(cd.rawData(), pbs_);
         if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
         assert(!h.isEnd());
-        recIdx_ = 0;
         return true;
     }
     /**
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const walb_logpack_header &header, size_t recIdx, LogBlockShared &blockS) {
-        assert(recIdx_ == recIdx);
-        const LogPackHeader h(&header, pbs_, salt_); // QQQ
-        assert(recIdx < h.nRecords());
-        const LogRecord &rec = h.record(recIdx);
+    void popIo(const LogRecord &rec, LogBlockShared &blockS) {
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
-            convertToLogBlockShared(blockS, cd, pbs_);
+            convertToLogBlockShared(blockS, cd, rec.ioSizePb(pbs_), pbs_);
+            verifyLogChecksum(rec, blockS, salt_);
         } else {
             blockS.init(pbs_);
         }
-        if (!isValidRecordAndBlockData(rec, blockS, h.salt())) {
-            throw cybozu::Exception("Receiver:popIo:invalid.");
-        }
-        recIdx_++;
     }
     /**
      * Notify an error.

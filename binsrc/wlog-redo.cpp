@@ -517,25 +517,33 @@ public:
         }
 
         /* Read walblog header. */
-        walb::log::Reader reader(inFd);
-        reader.readHeader(wh_);
-        if (!canApply()) {
+        cybozu::util::FdReader fdr(inFd);
+        wh_.read(fdr);
+        if (!canApply()) { // QQQ
             throw RT_ERR("This walblog can not be applied to the device.");
         }
 
         uint64_t beginLsid = wh_.beginLsid();
         uint64_t redoLsid = beginLsid;
 
-        while (!reader.isEnd()) {
-            walb::log::RecordRaw rec;
-            walb::LogBlockShared blockS;
-            if (config_.isVerbose() && reader.isFirstInPack()) {
-                reader.packHeader().printShort();
+        const uint32_t pbs = wh_.pbs();
+        const uint32_t salt = wh_.salt();
+        walb::LogPackHeader packH(pbs, salt);
+        while (!packH.read(fdr)) {
+            if (config_.isVerbose()) packH.printShort();
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                const walb::LogRecord &rec = packH.record(i);
+                walb::LogBlockShared blockS(pbs);
+                if (rec.hasData()) {
+                    blockS.read(fdr, rec.ioSizePb(pbs));
+                    walb::log::verifyLogChecksum(rec, blockS, salt);
+                } else {
+                    blockS.resize(0);
+                }
+                redoPack(rec, blockS);
             }
-            reader.readLog(rec, blockS);
-            redoPack(rec, blockS);
+            redoLsid = packH.nextLogpackLsid();
         }
-        redoLsid = reader.endLsid();
 
         /* Wait for all pending IOs. */
         submitIos();
@@ -580,7 +588,7 @@ private:
     /**
      * Redo a discard log by issuing discard command.
      */
-    void redoDiscard(const walb::log::RecordRaw& rec) {
+    void redoDiscard(const walb::LogRecord& rec) {
         assert(config_.isDiscard());
         assert(rec.isDiscard());
 
@@ -589,13 +597,13 @@ private:
 
         /* Issue the corresponding discard IOs. */
         uint64_t offsetAndSize[2];
-        offsetAndSize[0] = rec.offset() * LOGICAL_BLOCK_SIZE;
+        offsetAndSize[0] = rec.offset * LOGICAL_BLOCK_SIZE;
         offsetAndSize[1] = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         int ret = ::ioctl(bd_.getFd(), BLKDISCARD, &offsetAndSize);
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
-        nDiscard_ += rec.ioSizePb();
+        nDiscard_ += rec.ioSizePb(wh_.pbs());
     }
 
     /**
@@ -788,7 +796,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(const walb::log::RecordRaw &rec, const walb::LogBlockShared& blockS) {
+    void redoNormalIo(const walb::LogRecord &rec, const walb::LogBlockShared& blockS) {
         assert(rec.isExist());
         assert(!rec.isPadding());
         assert(config_.isZeroDiscard() || !rec.isDiscard());
@@ -796,9 +804,10 @@ private:
         /* Create IOs. */
         IoQueue tmpIoQ;
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        off_t off = static_cast<off_t>(rec.offset()) * LOGICAL_BLOCK_SIZE;
+        off_t off = rec.offset * LOGICAL_BLOCK_SIZE;
         size_t nBlocks = 0;
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+        const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
+        for (size_t i = 0; i < ioSizePb; i++) {
             LogBlock block;
             if (rec.isDiscard()) {
                 assert(config_.isZeroDiscard());
@@ -842,19 +851,20 @@ private:
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
-                     rec.offset(), rec.ioSizeLb());
+                     rec.offset, rec.ioSizeLb());
         }
     }
 
     /**
      * Redo a logpack data.
      */
-    void redoPack(const walb::log::RecordRaw &rec, const walb::LogBlockShared& blockS) {
+    void redoPack(const walb::LogRecord &rec, const walb::LogBlockShared& blockS) {
         assert(rec.isExist());
+        const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
 
         if (rec.isPadding()) {
             /* Do nothing. */
-            nPadding_ += rec.ioSizePb();
+            nPadding_ += ioSizePb;
             return;
         }
 
@@ -865,7 +875,7 @@ private:
             }
             if (!config_.isZeroDiscard()) {
                 /* Ignore discard logs. */
-                nDiscard_ += rec.ioSizePb();
+                nDiscard_ += ioSizePb;
                 return;
             }
             /* zero-discard will use redoNormalIo(). */

@@ -157,10 +157,9 @@ private:
             throw RT_ERR("wrong lsid.");
         }
         /* Read pack IO. */
-        while (!reader.isEnd()) {
-            walb::log::RecordRaw rec;
-            walb::LogBlockShared blockS;
-            reader.readLog(rec, blockS);
+        walb::LogRecord rec;
+        walb::LogBlockShared blockS;
+        while (reader.readLog(rec, blockS)) {
             updateBitmap(rec);
         }
         return reader.endLsid();
@@ -168,14 +167,13 @@ private:
     /**
      * Update bitmap with a log record.
      */
-    template <typename Record>
-    void updateBitmap(const Record &rec) {
+    void updateBitmap(const walb::LogRecord &rec) {
         if (rec.isPadding()) return;
         const unsigned int pbs = config_.blockSize();
-        uint64_t offLb = rec.offset();
-        unsigned int sizeLb = rec.ioSizeLb();
-        uint64_t offPb0 = ::addr_pb(pbs, offLb);
-        uint64_t offPb1 = ::capacity_pb(pbs, offLb + sizeLb);
+        const uint64_t offLb = rec.offset;
+        const unsigned int sizeLb = rec.ioSizeLb();
+        const uint64_t offPb0 = ::addr_pb(pbs, offLb);
+        const uint64_t offPb1 = ::capacity_pb(pbs, offLb + sizeLb);
         setRange(offPb0, offPb1);
 
         writtenLb_ += sizeLb;

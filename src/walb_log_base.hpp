@@ -62,6 +62,9 @@ struct LogRecord : public walb_log_record
         ::clear_bit_u32(LOG_RECORD_DISCARD, &flags);
     }
     bool isValid() const { return ::is_valid_log_record_const(this); }
+    void verify() const {
+        if (!isValid()) throw cybozu::Exception("LogRecord:verify");
+    }
     uint32_t ioSizePb(uint32_t pbs) const {
         return ::capacity_pb(pbs, io_size);
     }
@@ -71,7 +74,7 @@ struct LogRecord : public walb_log_record
 using LogBlock = std::shared_ptr<uint8_t>;
 inline LogBlock createLogBlock(uint32_t pbs)
 {
-   return cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
+    return cybozu::util::allocateBlocks<uint8_t>(LOGICAL_BLOCK_SIZE, pbs);
 }
 
 namespace log {
@@ -127,25 +130,35 @@ class LogPackHeader
 {
     LogBlock block_;
     walb_logpack_header *header_;
-    unsigned int pbs_;
+    uint32_t pbs_;
     uint32_t salt_;
 public:
-    LogPackHeader(const void *header = 0, unsigned int pbs = 0, uint32_t salt = 0)
+    static constexpr const char *NAME() { return "LogPackHeader"; }
+    LogPackHeader(const void *header = 0, uint32_t pbs = 0, uint32_t salt = 0)
         : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
     }
-    LogPackHeader(const LogBlock &block, unsigned int pbs, uint32_t salt)
+    LogPackHeader(const LogBlock &block, uint32_t pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
         setBlock(block);
     }
+    LogPackHeader(uint32_t pbs, uint32_t salt)
+        : header_(nullptr), pbs_(pbs), salt_(salt) {
+        setBlock(createLogBlock(pbs));
+    }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
     walb_logpack_header &header() { checkBlock(); return *header_; }
-    unsigned int pbs() const { return pbs_; }
+    uint32_t pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
-    void setPbs(unsigned int pbs) { pbs_ = pbs; }
+    void setPbs(uint32_t pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
     void setBlock(const LogBlock &block) {
         block_ = block;
         header_ = (walb_logpack_header*)block_.get();
+    }
+    void init(uint32_t pbs, uint32_t salt) {
+        setPbs(pbs);
+        setSalt(salt);
+        setBlock(createLogBlock(pbs));
     }
 
     /*
@@ -202,7 +215,7 @@ public:
     }
     void copyFrom(const void *data, size_t size)
     {
-        // QQQ veryf size
+        // QQQ verify size
         memcpy(header_, data, size);
     }
 
@@ -260,21 +273,36 @@ public:
         header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
     }
     /**
+     * RETURN:
+     *   false if read failed or invalid.
+     */
+    template <typename Reader>
+    bool read(Reader &reader) {
+        try {
+            reader.read(header_, pbs_);
+        } catch (std::exception &e) {
+            LOGs.debug() << NAME() << e.what();
+            return false;
+        }
+        return isValid(true);
+    }
+    /**
+     * Write the logpack header block.
+     */
+    template <typename Writer>
+    void write(Writer &writer) {
+        updateChecksum();
+        if (!isValid(true)) {
+            throw cybozu::Exception(NAME()) << "write:invalid";
+        }
+        writer.write(header_, pbs());
+    }
+    /**
      * Write the logpack header block.
      */
     void write(int fd) {
         cybozu::util::FdWriter fdw(fd);
         write(fdw);
-    }
-    /**
-     * Write the logpack header block.
-     */
-    void write(cybozu::util::FdWriter &fdw) {
-        updateChecksum();
-        if (!isValid(true)) {
-            throw cybozu::Exception("write:logpack header invalid.");
-        }
-        fdw.write(header_, pbs());
     }
     /**
      * Initialize logpack header block.
@@ -478,10 +506,11 @@ class MemRecord
 {
 private:
     size_t pos_;
-    unsigned int pbs_;
+    uint32_t pbs_;
     uint32_t salt_;
     LogRecord rec_;
 public:
+    static constexpr const char *NAME() { return "MemRecord"; }
     void copyFrom(const LogPackHeader &logh, size_t pos) {
         setPos(pos);
         setPbs(logh.pbs());
@@ -493,11 +522,11 @@ public:
     LogRecord &record() { return rec_; }
 
     size_t pos() const { return pos_; }
-    unsigned int pbs() const { return pbs_; }
+    uint32_t pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
 
     void setPos(size_t pos0) { pos_ = pos0; }
-    void setPbs(unsigned int pbs0) { pbs_ = pbs0; }
+    void setPbs(uint32_t pbs0) { pbs_ = pbs0; }
     void setSalt(uint32_t salt0) { salt_ = salt0; }
 };
 
@@ -507,16 +536,23 @@ private:
     LogPackHeader *logh_;
     size_t pos_;
 public:
+    static constexpr const char *NAME() { return "PtrRecord"; }
     PtrRecord(LogPackHeader *logh, size_t pos)
         : logh_(logh), pos_(pos) {
-        assert(pos < logh->nRecords());
+        const char *const NAME = "PtrRecord";
+        if (!logh) {
+            throw cybozu::Exception(NAME) << "logh is null";
+        }
+        if (pos >= logh->nRecords()) {
+            throw cybozu::Exception(NAME) << "invalid pos" << pos << logh->nRecords();
+        }
     }
 
     const LogRecord &record() const { return logh_->record(pos_); }
     LogRecord &record() { return logh_->record(pos_); }
 
     size_t pos() const { return pos_; }
-    unsigned int pbs() const { return logh_->pbs(); }
+    uint32_t pbs() const { return logh_->pbs(); }
     uint32_t salt() const { return logh_->salt(); }
 };
 
@@ -546,10 +582,13 @@ struct RecordT : T
     bool hasDataForChecksum() const {
         return isExist() && !isDiscard() && !isPadding();
     }
-    unsigned int ioSizeLb() const { return this->record().io_size; }
-    unsigned int ioSizePb() const { return ::capacity_pb(this->pbs(), ioSizeLb()); }
+    uint32_t ioSizeLb() const { return this->record().io_size; }
+    uint32_t ioSizePb() const { return ::capacity_pb(this->pbs(), ioSizeLb()); }
     uint64_t offset() const { return this->record().offset; }
     bool isValid() const { return ::is_valid_log_record_const(&this->record()); }
+    void verify() const {
+        if (!isValid()) throw cybozu::Exception(T::NAME()) << "invalid";
+    }
     uint32_t checksum() const { return this->record().checksum; }
 
     void print(::FILE *fp = ::stdout) const {
@@ -579,6 +618,7 @@ struct RecordT : T
     }
 };
 
+// QQQ: can be deleted
 template<class T>
 struct BlockDataT {
     uint32_t pbs; /* physical block size. */
@@ -638,10 +678,19 @@ public:
         data_.push_back(block);
     }
     LogBlock getBlock(size_t idx) const { return data_[idx]; }
-    void write(cybozu::util::FdWriter &fdw) const {
+    template <typename Reader>
+    void read(Reader &reader, uint32_t nBlocks0) {
+        checkPbs();
+        resize(nBlocks0);
+        for (size_t i = 0; i < nBlocks0; i++) {
+            reader.read(get(i), pbs_);
+        }
+    }
+    template <typename Writer>
+    void write(Writer &writer) const {
         checkPbs();
         for (size_t i = 0; i < nBlocks(); i++) {
-            fdw.write(get(i), pbs_);
+            writer.write(get(i), pbs_);
         }
     }
     bool calcIsAllZero(size_t ioSizeLb) const {
@@ -676,7 +725,7 @@ public:
 private:
     LogBlock allocPb() const {
         checkPbs();
-        return cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_);
+        return createLogBlock(pbs_);
     }
     void checkPbs() const {
         if (pbs_ == 0) throw cybozu::Exception(NAME()) << "pbs is zero";
@@ -698,67 +747,28 @@ private:
 
 namespace log {
 
-template<class R>
-uint32_t calcIoChecksumRB(const R& rec, const LogBlockShared& block) {
-    assert(rec.hasDataForChecksum());
-    assert(0 < rec.ioSizeLb());
-    if (block.nBlocks() < rec.ioSizePb()) {
-        throw cybozu::Exception("There is not sufficient data block.");
-    }
-    return block.calcChecksum(rec.ioSizeLb(), rec.salt());
-}
-template<class R>
-bool isValidRB(const R& rec, const LogBlockShared& block, bool isChecksum = true) {
-    if (!rec.isValid()) {
-        LOGd("invalid record.");
-        return false;
-    }
-    if (isChecksum && rec.hasDataForChecksum()) {
-        const uint32_t sum = calcIoChecksumRB(rec, block);
-        if (rec.record().checksum != sum) {
-            LOGd("invalid checksum expected %08x calculated %08x."
-                , rec.record().checksum, sum);
-            return false;
-        }
-    }
-    return true;
-}
-template<class R>
-inline void printRB(const R& rec, const LogBlockShared& block, FILE *fp = stdout)
+inline void verifyLogChecksum(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
-    rec.print(fp);
-    if (rec.hasDataForChecksum() && rec.ioSizePb() == block.nBlocks()) {
-        ::fprintf(fp, "record_checksum: %08x\n"
-                  "calculated_checksum: %08x\n",
-                  rec.record().checksum, calcIoChecksumRB(rec, block));
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            ::fprintf(fp, "----------block %zu----------\n", i);
-            cybozu::util::printByteArray(fp, block.get(i), rec.pbs());
-        }
+    if (!rec.hasDataForChecksum()) return;
+    const uint32_t checksum = blockS.calcChecksum(rec.io_size, salt);
+    if (checksum != rec.checksum) {
+        throw cybozu::Exception(__func__)
+            << "invalid checksum" << checksum << rec.checksum;
     }
 }
 
-bool isValidRecordAndBlockData(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
+inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
-    if (!rec.isValid()) {
-        LOGd("invalid record.");
-        return false; }
-    if (!rec.hasDataForChecksum()) return true;
-    const uint32_t ioSizePb = rec.ioSizePb(blockS.pbs());
-    if (blockS.nBlocks() < ioSizePb) {
-        throw cybozu::Exception("calcIoChecksum:There is not sufficient data block.")
-            << blockS.nBlocks() << ioSizePb;
-    }
-    const uint32_t checksum = blockS.calcChecksum(rec.io_size, salt);
-    if (checksum != rec.checksum) {
-        LOGd("invalid checksum expected %08x calculated %08x."
-             , rec.checksum, checksum);
+    try {
+        verifyLogChecksum(rec, blockS, salt);
+        return true;
+    } catch (std::exception &) {
         return false;
     }
-    return true;
 }
 
 } // walb::log
+
 /**
  * Logpack record and IO data.
  */
@@ -772,9 +782,16 @@ struct LogPackIo
         blockS.init(logh.pbs());
     }
 
-    bool isValid(bool isChecksum = true) const { return log::isValidRB(rec, blockS, isChecksum); }
-    uint32_t calcIoChecksumWithZeroSalt() const { return blockS.calcChecksum(rec.ioSizeLb(), 0); }
-    uint32_t calcIoChecksum() const { return log::calcIoChecksumRB(rec, blockS);
+    bool isValid(bool isChecksum = true) const {
+        if (!rec.isValid()) return false;
+        if (!isChecksum) return true;
+        return log::isLogChecksumValid(rec.record(), blockS, rec.salt());
+    }
+    uint32_t calcIoChecksumWithZeroSalt() const {
+        return blockS.calcChecksum(rec.ioSizeLb(), 0);
+    }
+    uint32_t calcIoChecksum() const {
+        return blockS.calcChecksum(rec.ioSizeLb(), rec.salt());
     }
 };
 

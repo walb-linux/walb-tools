@@ -214,14 +214,13 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            try {
-                readLogpackData(packIo);
+            if (readLogpackData(packIo)) {
                 q.push(std::move(packIo));
-            } catch (walb::log::InvalidIo& e) {
+            } else {
                 if (isVerbose_) { logh.print(::stderr); }
-                uint64_t prevLsid = logh.nextLogpackLsid();
+                const uint64_t prevLsid = logh.nextLogpackLsid();
                 logh.shrink(i);
-                uint64_t currentLsid = logh.nextLogpackLsid();
+                const uint64_t currentLsid = logh.nextLogpackLsid();
                 if (isVerbose_) { logh.print(::stderr); }
                 isEnd = true;
                 if (isVerbose_) {
@@ -236,16 +235,15 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(LogPackIo& packIo) {
+    bool readLogpackData(LogPackIo& packIo) {
         const walb::log::RecordRaw &rec = packIo.rec;
-        if (!rec.hasData()) { return; }
+        if (!rec.hasData()) return true;
         readAheadLoose();
         for (size_t i = 0; i < rec.ioSizePb(); i++) {
             packIo.blockS.addBlock(readBlock());
         }
-        if (!packIo.isValid()) {
-            throw walb::log::InvalidIo();
-        }
+        if (!packIo.isValid()) return false;
+        return true;
     }
 };
 

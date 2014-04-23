@@ -98,7 +98,7 @@ private:
         setUuid(rand, uuid);
 
         const uint32_t salt = rand.get32();
-        const unsigned int pbs = config_.pbs;
+        const uint32_t pbs = config_.pbs;
         uint64_t lsid = config_.lsid;
         LogBlock hBlock = createLogBlock(pbs);
         cybozu::util::BlockAllocator<uint8_t> ba(config_.maxPackPb, pbs, pbs);
@@ -118,9 +118,9 @@ private:
             uint64_t tmpLsid = lsid + 1;
 
             /* Prepare blocks and calc checksum if necessary. */
-            std::queue<LogBlock> blocks;
+            std::queue<LogBlock> blockQ;
             for (unsigned int i = 0; i < logh.nRecords(); i++) {
-                RecordWrap rec(&logh, i);
+                LogRecord &rec = logh.record(i);
                 LogBlockShared blockS(pbs);
 
                 if (rec.hasData()) {
@@ -128,7 +128,8 @@ private:
                     if (config_.isAllZero) {
                         isAllZero = rand.get32() % 100 < 10;
                     }
-                    for (unsigned int j = 0; j < rec.ioSizePb(); j++) {
+                    const uint32_t ioSizePb = rec.ioSizePb(pbs);
+                    for (unsigned int j = 0; j < ioSizePb; j++) {
                         LogBlock b = ba.alloc();
                         ::memset(b.get(), 0, pbs);
                         if (!isAllZero) {
@@ -136,18 +137,18 @@ private:
                         }
                         tmpLsid++;
                         blockS.addBlock(b);
-                        blocks.push(b);
+                        blockQ.push(std::move(b));
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    rec.record().checksum = log::calcIoChecksumRB(rec, blockS);
+                    rec.checksum = blockS.calcChecksum(rec.io_size, salt);
                 }
             }
-            assert(blocks.size() == logh.totalIoSize());
+            assert(blockQ.size() == logh.totalIoSize());
 
             /* Calculate header checksum and write. */
             logh.updateChecksum();
-            writer.writePack(logh, std::move(blocks));
+            writer.writePack(logh, std::move(blockQ));
 
             uint64_t w = 1 + logh.totalIoSize();
             assert(tmpLsid == lsid + w);
