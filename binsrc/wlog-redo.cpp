@@ -529,7 +529,7 @@ public:
         const uint32_t pbs = wh_.pbs();
         const uint32_t salt = wh_.salt();
         walb::LogPackHeader packH(pbs, salt);
-        while (!packH.read(fdr)) {
+        while (packH.read(fdr)) {
             if (config_.isVerbose()) packH.printShort();
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 const walb::LogRecord &rec = packH.record(i);
