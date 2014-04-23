@@ -155,10 +155,11 @@ public:
         block_ = block;
         header_ = (walb_logpack_header*)block_.get();
     }
-    void init(uint32_t pbs, uint32_t salt) {
+    void init(uint32_t pbs, uint32_t salt, LogBlock block = nullptr) {
         setPbs(pbs);
         setSalt(salt);
-        setBlock(createLogBlock(pbs));
+        if (!block) block = createLogBlock(pbs);
+        setBlock(block);
     }
 
     /*
@@ -213,12 +214,16 @@ public:
             return ::is_valid_logpack_header_and_records(header_) != 0;
         }
     }
+    void verify() const {
+        if (!isValid(true)) throw cybozu::Exception(NAME()) << "invalid";
+    }
     void copyFrom(const void *data, size_t size)
     {
         if (pbs_ != size) {
             throw cybozu::Exception(NAME()) << "invalid size" << size << pbs_;
         }
-        memcpy(header_, data, size);
+        ::memcpy(header_, data, size);
+        verify();
     }
 
     /*

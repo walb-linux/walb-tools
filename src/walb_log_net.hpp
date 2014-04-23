@@ -105,12 +105,12 @@ private:
 
     cybozu::thread::ThreadRunner compressor_;
     cybozu::thread::ThreadRunner sender_;
-    size_t recIdx_; // QQQ
 
     BoundedQ q0_; /* input to compressor_ */
     BoundedQ q1_; /* compressor_ to sender_. */
 
 public:
+    static constexpr const char *NAME() { return "LogSender"; }
     Sender(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
         , isEnd_(false), isFailed_(false)
@@ -134,31 +134,25 @@ public:
      * where n is h.nRecords().
      */
     void pushHeader(const LogPackHeader &header) {
-        assert(header.pbs() == pbs_);
-        assert(header.salt() == salt_);
+        verifyPbsAndSalt(header);
 #ifdef DEBUG
         assert(header.isValid());
 #endif
         CompressedData cd;
         cd.setUncompressed(header.rawData(), pbs_);
         q0_.push(std::move(cd));
-        recIdx_ = 0;
     }
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, size_t recIdx, const LogBlockShared &blockS) {
-        assert(header.pbs() == pbs_);
-        assert(header.salt() == salt_);
-        assert(recIdx_ == recIdx);
-        assert(recIdx < header.nRecords());
+    void pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS) {
+        verifyPbsAndSalt(header);
         const LogRecord &rec = header.record(recIdx);
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockS, false);
             assert(0 < cd.originalSize());
             q0_.push(std::move(cd));
         }
-        recIdx_++;
     }
     /**
      * Notify the end of input.
@@ -193,6 +187,14 @@ private:
             } catch (...) {
                 logger_.error() << "walb::log::Sender:unknown error";
             }
+        }
+    }
+    void verifyPbsAndSalt(const LogPackHeader &header) const {
+        if (header.pbs() != pbs_) {
+            throw cybozu::Exception(NAME()) << "invalid pbs" << pbs_ << header.pbs();
+        }
+        if (header.salt() != salt_) {
+            throw cybozu::Exception(NAME()) << "invalid salt" << salt_ << header.salt();
         }
     }
 };
@@ -262,6 +264,7 @@ private:
     BoundedQ q1_; /* uncompressor_ to output. */
 
 public:
+    static constexpr const char *NAME() { return "LogReceiver"; }
     Receiver(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
         , isEnd_(false), isFailed_(false)
@@ -287,7 +290,8 @@ public:
      * RETURN:
      *   false if the input stream has reached the end.
      */
-    bool popHeader(struct walb_logpack_header &header) {
+    bool popHeader(LogPackHeader &header) {
+        const char *const FUNC = __func__;
         CompressedData cd;
         if (!q1_.pop(cd)) {
             isEnd_ = true;
@@ -295,13 +299,11 @@ public:
             return false;
         }
         assert(!cd.isCompressed());
-        LogPackHeader h(&header, pbs_, salt_);
         if (cd.rawSize() != pbs_) {
-            throw cybozu::Exception(__func__) << "invalid pack header size" << cd.rawSize() << pbs_;
+            throw cybozu::Exception(FUNC) << "invalid pack header size" << cd.rawSize() << pbs_;
         }
-        h.copyFrom(cd.rawData(), pbs_);
-        if (!h.isValid()) throw std::runtime_error("Invalid pack header.");
-        assert(!h.isEnd());
+        header.copyFrom(cd.rawData(), pbs_);
+        if (header.isEnd()) throw cybozu::Exception(FUNC) << "end header is not permitted";
         return true;
     }
     /**
