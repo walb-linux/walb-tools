@@ -212,11 +212,12 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(LogPackIo &packIo, FdReader &fdr, BlockA &ba) {
-        const walb::log::RecordRaw &rec = packIo.rec;
-        if (!rec.hasData()) { return; }
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
-            packIo.blockS.addBlock(readBlock(fdr, ba, rec.pbs()));
+    void readLogpackData(LogPackIo &packIo, FdReader &fdr, BlockA &ba, uint32_t pbs) {
+        const walb::LogRecord &rec = packIo.rec;
+        if (!rec.hasData()) return;
+        const uint32_t ioSizePb = rec.ioSizePb(pbs);
+        for (size_t i = 0; i < ioSizePb; i++) {
+            packIo.blockS.addBlock(readBlock(fdr, ba, pbs));
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();
@@ -241,8 +242,8 @@ private:
         SuperBlock &super, BlockA &ba, WlogHeader &wlHead,
         uint64_t &restoredLsid) {
 
-        uint32_t salt = wlHead.salt();
-        uint32_t pbs = wlHead.pbs();
+        const uint32_t salt = wlHead.salt();
+        const uint32_t pbs = wlHead.pbs();
 
         /* Read logpack header. */
         LogPackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
@@ -292,19 +293,20 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            readLogpackData(packIo, fdr, ba);
-            walb::log::RecordRaw &rec = packIo.rec;
+            readLogpackData(packIo, fdr, ba, pbs);
+            walb::LogRecord &rec = packIo.rec;
             if (rec.hasData()) {
-                for (size_t j = 0; j < rec.ioSizePb(); j++) {
+                const uint32_t ioSizePb = rec.ioSizePb(pbs);
+                for (size_t j = 0; j < ioSizePb; j++) {
                     blocks.push_back(packIo.blockS.getBlock(j));
                 }
             }
             if (0 < config_.ddevLb() &&
-                config_.ddevLb() < rec.offset() + rec.ioSizeLb()) {
+                config_.ddevLb() < rec.offset + rec.ioSizeLb()) {
                 /* This IO should be clipped. */
                 rec.setPadding();
-                rec.record().offset = 0;
-                rec.record().checksum = 0;
+                rec.offset = 0;
+                rec.checksum = 0;
             }
         }
         assert(blocks.size() == logh.totalIoSize());

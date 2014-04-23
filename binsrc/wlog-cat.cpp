@@ -117,8 +117,8 @@ public:
             beginLsid = super_.getOldestLsid();
         }
 
-        uint32_t salt = super_.getLogChecksumSalt();
-        uint32_t pbs = super_.getPhysicalBlockSize();
+        const uint32_t salt = super_.getLogChecksumSalt();
+        const uint32_t pbs = super_.getPhysicalBlockSize();
 
         /* Create and write walblog header. */
         walb::log::FileHeader wh;
@@ -214,7 +214,7 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            if (readLogpackData(packIo)) {
+            if (readLogpackData(packIo, logh.pbs())) {
                 q.push(std::move(packIo));
             } else {
                 if (isVerbose_) { logh.print(::stderr); }
@@ -235,15 +235,15 @@ private:
     /**
      * Read a logpack data.
      */
-    bool readLogpackData(LogPackIo& packIo) {
-        const walb::log::RecordRaw &rec = packIo.rec;
+    bool readLogpackData(LogPackIo& packIo, uint32_t pbs) {
+        const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return true;
         readAheadLoose();
-        for (size_t i = 0; i < rec.ioSizePb(); i++) {
+        const uint32_t ioSizePb = rec.ioSizePb(pbs);
+        for (size_t i = 0; i < ioSizePb; i++) {
             packIo.blockS.addBlock(readBlock());
         }
-        if (!packIo.isValid()) return false;
-        return true;
+        return packIo.isValid();
     }
 };
 

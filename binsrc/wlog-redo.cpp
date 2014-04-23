@@ -519,7 +519,7 @@ public:
         /* Read walblog header. */
         cybozu::util::FdReader fdr(inFd);
         wh_.read(fdr);
-        if (!canApply()) { // QQQ
+        if (!canApply()) {
             throw RT_ERR("This walblog can not be applied to the device.");
         }
 

@@ -215,7 +215,9 @@ public:
     }
     void copyFrom(const void *data, size_t size)
     {
-        // QQQ verify size
+        if (pbs_ != size) {
+            throw cybozu::Exception(NAME()) << "invalid size" << size << pbs_;
+        }
         memcpy(header_, data, size);
     }
 
@@ -500,141 +502,6 @@ protected:
     }
 };
 
-namespace log_local {
-
-class MemRecord
-{
-private:
-    size_t pos_;
-    uint32_t pbs_;
-    uint32_t salt_;
-    LogRecord rec_;
-public:
-    static constexpr const char *NAME() { return "MemRecord"; }
-    void copyFrom(const LogPackHeader &logh, size_t pos) {
-        setPos(pos);
-        setPbs(logh.pbs());
-        setSalt(logh.salt());
-        rec_ = logh.record(pos);
-    }
-
-    const LogRecord &record() const { return rec_; }
-    LogRecord &record() { return rec_; }
-
-    size_t pos() const { return pos_; }
-    uint32_t pbs() const { return pbs_; }
-    uint32_t salt() const { return salt_; }
-
-    void setPos(size_t pos0) { pos_ = pos0; }
-    void setPbs(uint32_t pbs0) { pbs_ = pbs0; }
-    void setSalt(uint32_t salt0) { salt_ = salt0; }
-};
-
-class PtrRecord
-{
-private:
-    LogPackHeader *logh_;
-    size_t pos_;
-public:
-    static constexpr const char *NAME() { return "PtrRecord"; }
-    PtrRecord(LogPackHeader *logh, size_t pos)
-        : logh_(logh), pos_(pos) {
-        const char *const NAME = "PtrRecord";
-        if (!logh) {
-            throw cybozu::Exception(NAME) << "logh is null";
-        }
-        if (pos >= logh->nRecords()) {
-            throw cybozu::Exception(NAME) << "invalid pos" << pos << logh->nRecords();
-        }
-    }
-
-    const LogRecord &record() const { return logh_->record(pos_); }
-    LogRecord &record() { return logh_->record(pos_); }
-
-    size_t pos() const { return pos_; }
-    uint32_t pbs() const { return logh_->pbs(); }
-    uint32_t salt() const { return logh_->salt(); }
-};
-
-/**
- * T is MemRecord, PtrRecord
- */
-template <typename T>
-struct RecordT : T
-{
-    using T::T;
-
-    uint64_t lsid() const { return this->record().lsid; }
-    uint16_t lsidLocal() const { return this->record().lsid_local; }
-    uint64_t packLsid() const { return lsid() - lsidLocal(); }
-    bool isExist() const {
-        return ::test_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
-    }
-    bool isPadding() const {
-        return ::test_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
-    }
-    bool isDiscard() const {
-        return ::test_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
-    }
-    bool hasData() const {
-        return isExist() && !isDiscard();
-    }
-    bool hasDataForChecksum() const {
-        return isExist() && !isDiscard() && !isPadding();
-    }
-    uint32_t ioSizeLb() const { return this->record().io_size; }
-    uint32_t ioSizePb() const { return ::capacity_pb(this->pbs(), ioSizeLb()); }
-    uint64_t offset() const { return this->record().offset; }
-    bool isValid() const { return ::is_valid_log_record_const(&this->record()); }
-    void verify() const {
-        if (!isValid()) throw cybozu::Exception(T::NAME()) << "invalid";
-    }
-    uint32_t checksum() const { return this->record().checksum; }
-
-    void print(::FILE *fp = ::stdout) const {
-        log::printRecord(fp, this->pos(), this->record());
-    }
-    void printOneline(::FILE *fp = ::stdout) const {
-        log::printRecordOneline(fp, this->pos(), this->record());
-    }
-
-    void setExist() {
-        ::set_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
-    }
-    void setPadding() {
-        ::set_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
-    }
-    void setDiscard() {
-        ::set_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
-    }
-    void clearExist() {
-        ::clear_bit_u32(LOG_RECORD_EXIST, &this->record().flags);
-    }
-    void clearPadding() {
-        ::clear_bit_u32(LOG_RECORD_PADDING, &this->record().flags);
-    }
-    void clearDiscard() {
-        ::clear_bit_u32(LOG_RECORD_DISCARD, &this->record().flags);
-    }
-};
-
-// QQQ: can be deleted
-template<class T>
-struct BlockDataT {
-    uint32_t pbs; /* physical block size. */
-    explicit BlockDataT(uint32_t pbs = 0) : pbs(pbs) {}
-
-};
-
-} // walb::log_local
-
-namespace log {
-
-using RecordRaw = log_local::RecordT<log_local::MemRecord>;
-using RecordWrap = log_local::RecordT<log_local::PtrRecord>;
-
-} // walb::log
-
 /**
  * Helper class to manage multiple IO blocks.
  * This is copyable and movable.
@@ -774,24 +641,28 @@ inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& block
  */
 struct LogPackIo
 {
-    log::RecordRaw rec;
+private:
+    uint32_t salt;
+public:
+    LogRecord rec;
     LogBlockShared blockS;
 
     void set(const LogPackHeader &logh, size_t pos) {
-        rec.copyFrom(logh, pos);
+        rec = logh.record(pos);
+        salt = logh.salt();
         blockS.init(logh.pbs());
     }
 
     bool isValid(bool isChecksum = true) const {
         if (!rec.isValid()) return false;
         if (!isChecksum) return true;
-        return log::isLogChecksumValid(rec.record(), blockS, rec.salt());
+        return log::isLogChecksumValid(rec, blockS, salt);
     }
     uint32_t calcIoChecksumWithZeroSalt() const {
         return blockS.calcChecksum(rec.ioSizeLb(), 0);
     }
     uint32_t calcIoChecksum() const {
-        return blockS.calcChecksum(rec.ioSizeLb(), rec.salt());
+        return blockS.calcChecksum(rec.ioSizeLb(), salt);
     }
 };
 

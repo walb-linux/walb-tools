@@ -196,7 +196,7 @@ public:
             try {
                 blockS.read(fdr_, rec.ioSizePb(pbs_));
             } catch (cybozu::util::EofError &) {
-                throw InvalidIo(); // QQQ
+                throw InvalidIo();
             }
         } else {
             blockS.resize(0);

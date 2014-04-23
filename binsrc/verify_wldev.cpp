@@ -130,19 +130,20 @@ public:
             while (!q.empty()) {
                 LogPackIo packIo = std::move(q.front());
                 q.pop();
+                const walb::LogRecord &rec = packIo.rec;
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
                 }
                 walb::util::IoRecipe recipe = recipeParser.get();
-                if (recipe.offsetB() != packIo.rec.offset()) {
+                if (recipe.offsetB() != rec.offset) {
                     RT_ERR("offset mismatch.");
                 }
-                if (recipe.ioSizeB() != packIo.rec.ioSizeLb()) {
+                if (recipe.ioSizeB() != rec.ioSizeLb()) {
                     RT_ERR("io_size mismatch.");
                 }
                 /* Validate the log and confirm checksum equality. */
                 const uint32_t csum0 = packIo.calcIoChecksumWithZeroSalt();
-                const uint32_t csum1 = packIo.rec.checksum();
+                const uint32_t csum1 = rec.checksum;
                 const uint32_t csum2 = packIo.calcIoChecksum();
                 const bool isValid = packIo.isValid(false) &&
                     recipe.csum() == csum0 && csum1 == csum2;
@@ -179,10 +180,10 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            const walb::log::RecordRaw &rec = packIo.rec;
-            if (!rec.hasData()) { continue; }
-            const uint64_t endLsid = rec.lsid() + rec.ioSizePb();
-            for (uint64_t lsid = rec.lsid(); lsid < endLsid; lsid++) {
+            const walb::LogRecord &rec = packIo.rec;
+            if (!rec.hasData()) continue;
+            const uint64_t endLsid = rec.lsid + rec.ioSizePb(pbs_);
+            for (uint64_t lsid = rec.lsid; lsid < endLsid; lsid++) {
                 packIo.blockS.addBlock(readBlock(lsid));
             }
             if (!rec.hasDataForChecksum()) continue;
