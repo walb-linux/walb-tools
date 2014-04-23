@@ -122,7 +122,7 @@ namespace archive_local {
 
 template <typename F>
 inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(
-    std::vector<cybozu::util::FileOpener>& ops, ArchiveVolInfo& volInfo,
+    std::vector<cybozu::util::File>& fileV, ArchiveVolInfo& volInfo,
     bool allowEmpty, F getDiffList)
 {
     const char *const FUNC = __func__;
@@ -137,16 +137,16 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(
     }
     // Try to open all wdiff files.
     for (const MetaDiff& diff : diffV) {
-        cybozu::util::FileOpener op;
+        cybozu::util::File op;
         if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
             retryNum++;
             if (retryNum == maxRetryNum) {
                 throw cybozu::Exception(FUNC) << "exceed max retry";
             }
-            ops.clear();
+            fileV.clear();
             goto retry;
         }
-        ops.push_back(std::move(op));
+        fileV.push_back(std::move(op));
     }
     return {st, diffV};
 }
@@ -154,7 +154,7 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(
 const bool allowEmpty = true;
 
 inline void prepareVirtualFullScanner(
-    diff::VirtualFullScanner<cybozu::util::FileOpener> &virt,
+    diff::VirtualFullScanner &virt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
     const char *const FUNC = __func__;
@@ -163,12 +163,12 @@ inline void prepareVirtualFullScanner(
     if (sizeLb != lv.sizeLb()) {
         throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
     }
-    std::vector<cybozu::util::FileOpener> ops;
-    tryOpenDiffs(ops, volInfo, allowEmpty, [&](const MetaState &st) {
+    std::vector<cybozu::util::File> fileV;
+    tryOpenDiffs(fileV, volInfo, allowEmpty, [&](const MetaState &st) {
             return volInfo.getDiffMgr().getDiffListToSync(st, snap);
         });
-    cybozu::util::FileOpener op(lv.path().str(), O_RDONLY);
-    virt.init(std::move(op), std::move(ops));
+    cybozu::util::File fileR(lv.path().str(), O_RDONLY);
+    virt.init(std::move(fileR), std::move(fileV));
 }
 
 inline void verifyApplicable(const std::string& volId, uint64_t gid)
@@ -183,11 +183,11 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
     }
 }
 
-inline bool applyOpenedDiffs(std::vector<cybozu::util::FileOpener>&& ops, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
+inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
 {
     const char *const FUNC = __func__;
     diff::Merger merger;
-    merger.addWdiffs(std::move(ops));
+    merger.addWdiffs(std::move(fileV));
     diff::RecIo recIo;
     cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
     std::vector<char> zero;
@@ -228,11 +228,11 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     MetaDiffManager &mgr = volSt.diffMgr;
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
 
-    std::vector<cybozu::util::FileOpener> ops;
+    std::vector<cybozu::util::File> fileV;
     MetaState st0;
     std::vector<MetaDiff> diffV;
     std::tie(st0, diffV) = tryOpenDiffs(
-        ops, volInfo, !allowEmpty, [&](const MetaState &st) {
+        fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
             return mgr.getDiffListToApply(st, gid);
         });
 
@@ -240,7 +240,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     volInfo.setMetaState(st1);
 
     cybozu::lvm::Lv lv = volInfo.getLv();
-    if (!applyOpenedDiffs(std::move(ops), lv, volSt.stopState)) {
+    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState)) {
         return false;
     }
 
@@ -268,14 +268,14 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     MetaDiffManager &mgr = volSt.diffMgr;
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
 
-    std::vector<cybozu::util::FileOpener> ops;
+    std::vector<cybozu::util::File> fileV;
     MetaState st0;
     std::vector<MetaDiff> diffV;
     std::tie(st0, diffV) = tryOpenDiffs(
-        ops, volInfo, allowEmpty, [&](const MetaState &) {
+        fileV, volInfo, allowEmpty, [&](const MetaState &) {
             return volInfo.getDiffListToMerge(gid, maxSizeMb * MEBI);
         });
-    if (ops.size() < 2) {
+    if (fileV.size() < 2) {
         throw cybozu::Exception(__func__) << "There is no mergeable diff.";
     }
 
@@ -283,7 +283,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     const cybozu::FilePath diffPath = volInfo.getDiffPath(mergedDiff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     diff::Merger merger;
-    merger.addWdiffs(std::move(ops));
+    merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
     diff::Writer writer(tmpFile.fd());
@@ -342,11 +342,11 @@ inline bool restore(const std::string &volId, uint64_t gid)
         latestSnap.isClean() && latestSnap.gidB == gid;
 
     if (!noNeedToApply) {
-        std::vector<cybozu::util::FileOpener> ops;
-        tryOpenDiffs(ops, volInfo, !allowEmpty, [&](const MetaState &st) {
+        std::vector<cybozu::util::File> fileV;
+        tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
                 return volSt.diffMgr.getDiffListToRestore(st, gid);
             });
-        if (!applyOpenedDiffs(std::move(ops), lvSnap, volSt.stopState)) {
+        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState)) {
             return false;
         }
     }
@@ -436,7 +436,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+        diff::VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
         isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.forceQuit);
     }
@@ -557,7 +557,7 @@ inline bool runHashReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+    diff::VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapE);
     if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.forceQuit)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
@@ -591,7 +591,7 @@ inline bool runHashReplServer(
         throw;
     }
 
-    diff::VirtualFullScanner<cybozu::util::FileOpener> virt;
+    diff::VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
@@ -613,14 +613,14 @@ inline bool runDiffReplClient(
     const char *const FUNC = __func__;
     MetaState st0;
     std::vector<MetaDiff> diffV;
-    std::vector<cybozu::util::FileOpener> ops;
-    std::tie(st0, diffV) = tryOpenDiffs(ops, volInfo, !allowEmpty, [&](const MetaState &) {
+    std::vector<cybozu::util::File> fileV;
+    std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
             return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize);
         });
 
     const MetaDiff mergedDiff = merge(diffV);
     diff::Merger merger;
-    merger.addWdiffs(std::move(ops));
+    merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
     const DiffFileHeader &fileH = merger.header();
@@ -670,8 +670,8 @@ inline bool runDiffReplServer(
 
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
-    cybozu::util::FdWriter fdw(tmpFile.fd());
-    writeDiffFileHeader(fdw, maxIoBlocks, uuid);
+    cybozu::util::File fileW(tmpFile.fd());
+    writeDiffFileHeader(fileW, maxIoBlocks, uuid);
     if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
         logger.warn() << "diff-repl-server force-stopped" << volId;
         return false;
@@ -1156,8 +1156,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
-    cybozu::util::FdWriter fdw(tmpFile.fd());
-    writeDiffFileHeader(fdw, maxIoBlocks, uuid);
+    cybozu::util::File fileW(tmpFile.fd());
+    writeDiffFileHeader(fileW, maxIoBlocks, uuid);
     if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
         logger.warn() << FUNC << "force stopped" << volId;
         return;

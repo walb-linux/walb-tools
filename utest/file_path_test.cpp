@@ -45,7 +45,7 @@ CYBOZU_TEST_AUTO(name)
 void touchFile(const cybozu::FilePath &fp)
 {
     if (fp.stat().exists()) return;
-    cybozu::util::FileWriter writer(fp.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+    cybozu::util::File writer(fp.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
     writer.close();
 }
 

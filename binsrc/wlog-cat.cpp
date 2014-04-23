@@ -22,7 +22,6 @@
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
-#include "fileorfd.hpp"
 #include "walb_util.hpp"
 
 /**
@@ -256,14 +255,14 @@ int main(int argc, char* argv[]) try
     WlogExtractor extractor(
         config.ldevPath(), config.beginLsid(), config.endLsid(),
         config.isVerbose());
-    FileOrFd fof;
+    cybozu::util::File fileW;
     if (config.isOutStdout()) {
-        fof.setFd(1);
+        fileW.setFd(1);
     } else {
-        fof.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        fileW.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
-    extractor(fof.fd());
-    fof.close();
+    extractor(fileW.fd());
+    fileW.close();
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
     return 1;

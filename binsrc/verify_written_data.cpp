@@ -108,13 +108,13 @@ public:
         const unsigned int bs = config_.blockSize();
 
         /* Get IO recipe parser. */
-        std::shared_ptr<cybozu::util::FileOpener> fop;
+        cybozu::util::File fileR;
         if (config_.recipePath() != "-") {
-            fop.reset(new cybozu::util::FileOpener(config_.recipePath(), O_RDONLY));
+            fileR.open(config_.recipePath(), O_RDONLY);
+        } else {
+            fileR.setFd(0);
         }
-        int fd = 0;
-        if (fop) { fd = fop->fd(); }
-        walb::util::IoRecipeParser recipeParser(fd);
+        walb::util::IoRecipeParser recipeParser(fileR.fd());
 
         /* Read and verify for each IO recipe. */
         while (!recipeParser.isEnd()) {

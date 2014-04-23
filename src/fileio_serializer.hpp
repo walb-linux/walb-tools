@@ -20,10 +20,7 @@ namespace cybozu {
         }                                                               \
     }
 
-WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FdOperator);
-WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FdReader);
-WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FileOperator);
-WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FileReader);
+WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::File);
 
 #undef WALB_FILEIO_DEFINE_SERIALIZE_LOADER
 
@@ -36,10 +33,7 @@ WALB_FILEIO_DEFINE_SERIALIZE_LOADER(util::FileReader);
         }                                                               \
     }
 
-WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FdOperator);
-WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FdWriter);
-WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FileOperator);
-WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::FileWriter);
+WALB_FILEIO_DEFINE_SERIALIZE_SAVER(util::File);
 
 #undef WALB_FILEIO_DEFINE_SERIALIZE_SAVER
 

@@ -105,9 +105,7 @@ namespace diff {
 class Writer /* final */
 {
 private:
-    std::shared_ptr<cybozu::util::FileOpener> opener_;
-    int fd_;
-    cybozu::util::FdWriter fdw_;
+    cybozu::util::File fileW_;
     bool isWrittenHeader_;
     bool isClosed_;
 
@@ -117,21 +115,18 @@ private:
 
 public:
     explicit Writer(int fd)
-        : opener_(), fd_(fd), fdw_(fd)
-        , isWrittenHeader_(false)
-        , isClosed_(false)
-        , pack_()
-        , ioQ_() {}
-
-    explicit Writer(const std::string &diffPath, int flags, mode_t mode)
-        : opener_(new cybozu::util::FileOpener(diffPath, flags, mode))
-        , fd_(opener_->fd())
-        , fdw_(fd_)
+        : fileW_(fd)
         , isWrittenHeader_(false)
         , isClosed_(false)
         , pack_()
         , ioQ_() {
-        assert(0 < fd_);
+    }
+    explicit Writer(const std::string &diffPath, int flags, mode_t mode)
+        : fileW_(diffPath, flags, mode)
+        , isWrittenHeader_(false)
+        , isClosed_(false)
+        , pack_()
+        , ioQ_() {
     }
 
     ~Writer() noexcept {
@@ -144,7 +139,7 @@ public:
         if (!isClosed_) {
             flush();
             writeEof();
-            if (opener_) { opener_->close(); }
+            fileW_.close();
             isClosed_ = true;
         }
     }
@@ -157,7 +152,7 @@ public:
         if (isWrittenHeader_) {
             throw RT_ERR("Do not call writeHeader() more than once.");
         }
-        header.writeTo(fdw_);
+        header.writeTo(fileW_);
         isWrittenHeader_ = true;
     }
 
@@ -227,14 +222,14 @@ private:
         }
 
         size_t total = 0;
-        pack_.writeTo(fdw_);
+        pack_.writeTo(fileW_);
 
         assert(pack_.nRecords() == ioQ_.size());
         while (!ioQ_.empty()) {
             DiffIo io0 = std::move(ioQ_.front());
             ioQ_.pop();
             if (io0.empty()) continue;
-            fdw_.write(io0.get(), io0.getSize());
+            io0.writeTo(fileW_);
             total += io0.getSize();
         }
         assert(total == pack_.totalSize());
@@ -242,7 +237,7 @@ private:
     }
 
     void writeEof() {
-        writeDiffEofPack(fdw_);
+        writeDiffEofPack(fileW_);
     }
 
     void checkWrittenHeader() const {
@@ -266,9 +261,7 @@ private:
 class Reader
 {
 private:
-    std::unique_ptr<cybozu::util::FileOpener> opener_;
-    int fd_;
-    cybozu::util::FdReader fdr_;
+    cybozu::util::File fileR_;
     bool isReadHeader_;
 
     /* Buffers. */
@@ -278,31 +271,27 @@ private:
 
 public:
     explicit Reader(int fd)
-        : opener_(), fd_(fd), fdr_(fd)
-        , isReadHeader_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {}
-
-    explicit Reader(const std::string &diffPath, int flags)
-        : opener_(new cybozu::util::FileOpener(diffPath, flags))
-        , fd_(opener_->fd())
-        , fdr_(fd_)
+        : fileR_(fd)
         , isReadHeader_(false)
         , pack_()
         , recIdx_(0)
         , totalSize_(0) {
-        assert(0 < fd_);
+    }
+    explicit Reader(const std::string &diffPath, int flags)
+        : fileR_(diffPath, flags)
+        , isReadHeader_(false)
+        , pack_()
+        , recIdx_(0)
+        , totalSize_(0) {
     }
 
-    ~Reader() noexcept {
-        try {
-            close();
-        } catch (...) {}
+    ~Reader() noexcept try {
+        close();
+    } catch (...) {
     }
 
     void close() {
-        if (opener_) { opener_->close(); }
+        fileR_.close();
     }
 
     /**
@@ -313,7 +302,7 @@ public:
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
-        head.readFrom(fdr_);
+        head.readFrom(fileR_);
         isReadHeader_ = true;
         if (doReadHeader) readPackHeader();
     }
@@ -375,7 +364,7 @@ public:
 
     bool readPackHeader(DiffPackHeader& pack) {
         try {
-            pack.readFrom(fdr_);
+            pack.readFrom(fileR_);
         } catch (cybozu::util::EofError &e) {
             return false;
         }
@@ -391,22 +380,11 @@ public:
      */
     void readDiffIo(const DiffRecord &rec, DiffIo &io) {
         if (rec.data_offset != totalSize_) {
-            throw RT_ERR("data offset invalid %u %u.", rec.data_offset, totalSize_);
+            throw cybozu::Exception(__func__)
+                << "data offset invalid" << rec.data_offset << totalSize_;
         }
-        const size_t recSize = rec.data_size;
-        if (recSize > 0) {
-            io.ioBlocks = rec.io_blocks;
-            io.compressionType = rec.compression_type;
-            io.data.resize(recSize);
-            fdr_.read(io.get(), recSize);
-            const uint32_t csum = cybozu::util::calcChecksum(io.get(), recSize, 0);
-            if (rec.checksum != csum) {
-                throw RT_ERR("checksum invalid rec: %08x data: %08x.\n", rec.checksum, csum);
-            }
-            totalSize_ += recSize;
-        } else {
-            io.clear();
-        }
+        io.setAndReadFrom(rec, fileR_);
+        totalSize_ += rec.data_size;
         recIdx_++;
     }
 private:

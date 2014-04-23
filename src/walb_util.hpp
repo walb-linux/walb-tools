@@ -108,7 +108,7 @@ void saveFile(const cybozu::FilePath &dir, const std::string &fname, const T &t)
 template <typename T>
 void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
 {
-    cybozu::util::FileReader r((dir + fname).str(), O_RDONLY);
+    cybozu::util::File r((dir + fname).str(), O_RDONLY);
     cybozu::load(t, r);
 }
 

@@ -115,13 +115,13 @@ inline bool dirtyHashSyncServer(
     cybozu::thread::ThreadRunner readerTh(readVirtualFullImageAndSendHash);
     readerTh.start();
 
-    cybozu::util::FdWriter fdw(outDiffFd);
+    cybozu::util::File fileW(outDiffFd);
 
     {
         DiffFileHeader wdiffH;
         wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
         wdiffH.setUuid(uuid);
-        wdiffH.writeTo(fdw);
+        wdiffH.writeTo(fileW);
     }
 
     packet::StreamControl ctrl(pkt.sock());
@@ -137,14 +137,14 @@ inline bool dirtyHashSyncServer(
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
         verifyDiffPack(buf);
-        fdw.write(buf.data(), buf.size());
+        fileW.write(buf.data(), buf.size());
         ctrl.reset();
     }
     if (ctrl.isError()) {
         throw cybozu::Exception(FUNC) << "client sent an error";
     }
     assert(ctrl.isEnd());
-    writeDiffEofPack(fdw);
+    writeDiffEofPack(fileW);
 
     readerTh.join();
     return !quit;

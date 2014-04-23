@@ -248,11 +248,12 @@ struct DiffIo
         if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
+            data.resize(rec.data_size);
         } else {
             ioBlocks = 0;
             compressionType = ::WALB_DIFF_CMPR_NONE;
+            data.clear();
         }
-        data.resize(rec.data_size);
     }
     /**
      * Split an IO into multiple IOs
@@ -294,6 +295,27 @@ struct DiffIo
         }
         compressionType = WALB_DIFF_CMPR_NONE;
         data = std::move(decData);
+    }
+    template <typename Writer>
+    void writeTo(Writer &writer) const {
+        if (getSize() > 0) {
+            writer.write(get(), getSize());
+        }
+    }
+    template <typename Reader>
+    void readFrom(Reader &reader) {
+        if (getSize() > 0) {
+            reader.read(get(), getSize());
+        }
+    }
+    template <typename Reader>
+    void setAndReadFrom(const DiffRecord &rec, Reader &reader) {
+        set(rec);
+        readFrom(reader);
+        const uint32_t csum = calcChecksum();
+        if (rec.checksum != csum) {
+            throw cybozu::Exception(__func__) << "checksum differ" << rec.checksum << csum;
+        }
     }
 };
 

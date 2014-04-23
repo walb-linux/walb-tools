@@ -105,7 +105,7 @@ private:
     using WlogHeader = walb::log::FileHeader;
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
-    using FdReader = cybozu::util::FdReader;
+    using File = cybozu::util::File;
     using SuperBlock = walb::device::SuperBlock;
 
 public:
@@ -119,9 +119,9 @@ public:
      */
     void restore(int fdIn) {
         /* Read walb log file header from stdin. */
-        FdReader fdr(fdIn);
+        File fileR(fdIn);
         WlogHeader wlHead;
-        wlHead.read(fdr);
+        wlHead.readFrom(fileR);
         if (!wlHead.isValid()) {
             throw RT_ERR("Walb log file header is invalid.");
         }
@@ -160,7 +160,7 @@ public:
         /* Read and write each logpack. */
         try {
             while (readLogpackAndRestore(
-                       fdr, blkdev, super, ba, wlHead, restoredLsid)) {}
+                       fileR, blkdev, super, ba, wlHead, restoredLsid)) {}
         } catch (cybozu::util::EofError &e) {
             ::printf("Reached input EOF.\n");
         }
@@ -203,21 +203,21 @@ private:
     /**
      * Read a block data from a fd reader.
      */
-    LogBlock readBlock(FdReader& fdr, BlockA& ba, uint32_t pbs) {
+    LogBlock readBlock(File& fileR, BlockA& ba, uint32_t pbs) {
         LogBlock b = ba.alloc();
-        fdr.read(b.get(), pbs);
+        fileR.read(b.get(), pbs);
         return b;
     }
 
     /**
      * Read a logpack data.
      */
-    void readLogpackData(LogPackIo &packIo, FdReader &fdr, BlockA &ba, uint32_t pbs) {
+    void readLogpackData(LogPackIo &packIo, File &fileR, BlockA &ba, uint32_t pbs) {
         const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return;
         const uint32_t ioSizePb = rec.ioSizePb(pbs);
         for (size_t i = 0; i < ioSizePb; i++) {
-            packIo.blockS.addBlock(readBlock(fdr, ba, pbs));
+            packIo.blockS.addBlock(readBlock(fileR, ba, pbs));
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();
@@ -227,7 +227,7 @@ private:
     /**
      * Read a logpack and restore it.
      *
-     * @fdr wlog input.
+     * @fileR wlog input.
      * @blkdev log block device.
      * @super super block (with the blkdev).
      * @ba block allocator.
@@ -238,7 +238,7 @@ private:
      *   true in success, or false.
      */
     bool readLogpackAndRestore(
-        FdReader &fdr, BlockDev &blkdev,
+        File &fileR, BlockDev &blkdev,
         SuperBlock &super, BlockA &ba, WlogHeader &wlHead,
         uint64_t &restoredLsid) {
 
@@ -246,7 +246,7 @@ private:
         const uint32_t pbs = wlHead.pbs();
 
         /* Read logpack header. */
-        LogPackHeader logh(readBlock(fdr, ba, pbs), pbs, salt);
+        LogPackHeader logh(readBlock(fileR, ba, pbs), pbs, salt);
         if (logh.isEnd()) return false;
         if (!logh.isValid()) return false;
         if (config_.isVerbose()) logh.printShort();
@@ -293,7 +293,7 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            readLogpackData(packIo, fdr, ba, pbs);
+            readLogpackData(packIo, fileR, ba, pbs);
             walb::LogRecord &rec = packIo.rec;
             if (rec.hasData()) {
                 const uint32_t ioSizePb = rec.ioSizePb(pbs);

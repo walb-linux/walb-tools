@@ -103,13 +103,12 @@ public:
         : config_(config) {}
 
     void update() {
-        cybozu::util::FileOpener fo(config_.inWlogPath(), O_RDWR);
+        cybozu::util::File file(config_.inWlogPath(), O_RDWR);
         walb::log::FileHeader wh;
 
         /* Read header. */
-        cybozu::util::FdReader fdr(fo.fd());
-        fdr.lseek(0, SEEK_SET);
-        wh.read(fdr);
+        file.lseek(0, SEEK_SET);
+        wh.readFrom(file);
         if (!wh.isValid(true)) {
             throw RT_ERR("invalid wlog header.");
         }
@@ -141,10 +140,8 @@ public:
             if (!wh.isValid(false)) {
                 throw RT_ERR("Updated header is invalid.");
             }
-            cybozu::util::FdWriter fdw(fo.fd());
-            fdw.lseek(0, SEEK_SET);
-            wh.write(fdw);
-            fo.close();
+            file.lseek(0, SEEK_SET);
+            wh.writeTo(file);
             wh.print(::stderr); /* debug */
         } else {
             ::fprintf(::stderr, "Not updated.\n");

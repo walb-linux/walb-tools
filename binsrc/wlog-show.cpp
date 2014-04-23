@@ -24,7 +24,6 @@
 #include "aio_util.hpp"
 #include "memory_buffer.hpp"
 #include "walb/walb.h"
-#include "fileorfd.hpp"
 #include "walb_util.hpp"
 
 /**
@@ -80,14 +79,14 @@ int main(int argc, char* argv[]) try
     Config config(argc, argv);
     config.check();
 
-    FileOrFd fof;
+    cybozu::util::File fileR;
     if (!config.isInputStdin()) {
-        fof.open(config.inWlogPath(), O_RDONLY);
+        fileR.open(config.inWlogPath(), O_RDONLY);
     } else {
-        fof.setFd(0); /* stdin */
+        fileR.setFd(0); /* stdin */
     }
     walb::log::Printer printer;
-    printer(fof.fd());
+    printer(fileR.fd());
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
     return 1;

@@ -17,14 +17,14 @@ CYBOZU_TEST_AUTO(in1)
     checkNonExists(path);
     char buf[1024];
     {
-        cybozu::util::FileWriter writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+        cybozu::util::File writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
         int s = ::snprintf(buf, sizeof(buf), "%d\n", 10000);
         writer.write(buf, s);
         CYBOZU_TEST_ASSERT(0 < s);
     }
     {
-        cybozu::util::FileOpener opener(path.str(), O_RDONLY);
-        cybozu::ifdstream is(opener.fd());
+        cybozu::util::File file(path.str(), O_RDONLY);
+        cybozu::ifdstream is(file.fd());
         int i = 0;
         is >> i;
         CYBOZU_TEST_EQUAL(i, 10000);
@@ -38,7 +38,7 @@ CYBOZU_TEST_AUTO(in2)
     checkNonExists(path);
     char buf[1024];
     {
-        cybozu::util::FileWriter writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+        cybozu::util::File writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
         int s = ::snprintf(buf, sizeof(buf), "%d\n", 10000);
         writer.write(buf, s);
         s = ::snprintf(buf, sizeof(buf), "%d\n", 10001);
@@ -67,8 +67,8 @@ CYBOZU_TEST_AUTO(in2)
         ::printf("-------------------------\n");
     }
     {
-        cybozu::util::FileOpener opener(path.str(), O_RDONLY);
-        cybozu::ifdstream is(opener.fd());
+        cybozu::util::File file(path.str(), O_RDONLY);
+        cybozu::ifdstream is(file.fd());
 
 #if 0
         for (int i = 0; i < 20; i++) {
@@ -95,15 +95,15 @@ CYBOZU_TEST_AUTO(in3)
     cybozu::FilePath path("test3.bin");
     checkNonExists(path);
     {
-        cybozu::util::FileWriter writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+        cybozu::util::File writer(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
         char c;
         c = 'a'; writer.write(&c, 1);
         c = 'b'; writer.write(&c, 1);
         c = 'c'; writer.write(&c, 1);
     }
     {
-        cybozu::util::FileOpener opener(path.str(), O_RDONLY);
-        cybozu::ifdstream is(opener.fd());
+        cybozu::util::File file(path.str(), O_RDONLY);
+        cybozu::ifdstream is(file.fd());
         CYBOZU_TEST_EQUAL(is.get(), 'a');
         is.putback('a');
         CYBOZU_TEST_EQUAL(is.get(), 'a');
@@ -123,8 +123,8 @@ CYBOZU_TEST_AUTO(out1)
     cybozu::FilePath path("test3.bin");
     checkNonExists(path);
     {
-        cybozu::util::FileOpener opener(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
-        cybozu::ofdstream os(opener.fd());
+        cybozu::util::File file(path.str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+        cybozu::ofdstream os(file.fd());
         int i = 10000;
         os << i << '\n';
         i = 10001;

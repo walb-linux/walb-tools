@@ -8,12 +8,12 @@ CYBOZU_TEST_AUTO(serialize)
 {
     cybozu::FilePath fp("test0.bin");
 
-    cybozu::util::FileWriter writer(fp.str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+    cybozu::util::File writer(fp.str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
     int a0 = 5;
     cybozu::save(writer, a0);
     writer.close();
 
-    cybozu::util::FileReader reader(fp.str(), O_RDONLY);
+    cybozu::util::File reader(fp.str(), O_RDONLY);
     int a1;
     cybozu::load(a1, reader);
 

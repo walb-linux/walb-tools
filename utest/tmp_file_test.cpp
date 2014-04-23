@@ -13,9 +13,9 @@ CYBOZU_TEST_AUTO(tmpfile)
     CYBOZU_TEST_EQUAL(tmpFile0.path().substr(0, 3), "tmp");
 
     /* Write an integer. */
-    cybozu::util::FdWriter fdw(tmpFile0.fd());
+    cybozu::util::File fw(tmpFile0.fd());
     uint64_t a = 5;
-    fdw.write(&a, sizeof(a));
+    fw.write(&a, sizeof(a));
 
     /* Save as a name. */
     cybozu::FilePath fp("test0.bin");
@@ -24,12 +24,11 @@ CYBOZU_TEST_AUTO(tmpfile)
     CYBOZU_TEST_EQUAL(fp.stat().size(), sizeof(a));
 
     /* Check the written data. */
-    cybozu::util::FileOpener fo(fp.str(), O_RDONLY);
-    cybozu::util::FdReader fdr(fo.fd());
+    cybozu::util::File fr(fp.str(), O_RDONLY);
     uint64_t b;
-    fdr.read(&b, sizeof(b));
+    fr.read(&b, sizeof(b));
     CYBOZU_TEST_EQUAL(a, b);
-    fo.close();
+    fr.close();
 
     fp.unlink();
 }
@@ -46,7 +45,7 @@ CYBOZU_TEST_AUTO(serialize)
     cybozu::FilePath fp("test0.bin");
     tmpFile0.save(fp.str());
 
-    cybozu::util::FileReader reader(fp.str(), O_RDONLY);
+    cybozu::util::File reader(fp.str(), O_RDONLY);
     int a1;
     uint64_t b1;
     bool c1;

@@ -14,7 +14,7 @@ void serializeTest(TestDirectory &testDir, const T& t0)
     cybozu::TmpFile tmpFile(testDirStr);
     cybozu::save(tmpFile, t0);
     tmpFile.save(fpath.str());
-    cybozu::util::FileReader reader(fpath.str(), O_RDONLY);
+    cybozu::util::File reader(fpath.str(), O_RDONLY);
     T t1;
     cybozu::load(t1, reader);
     CYBOZU_TEST_EQUAL(t0, t1);

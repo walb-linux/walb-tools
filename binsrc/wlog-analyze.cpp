@@ -104,9 +104,9 @@ public:
             }
         } else {
             for (size_t i = 0; i < config_.numWlogs(); i++) {
-                cybozu::util::FileOpener fo(config_.inWlogPath(i), O_RDONLY);
-                lsid = analyzeWlog(fo.fd(), lsid, uuid);
-                fo.close();
+                cybozu::util::File file(config_.inWlogPath(i), O_RDONLY);
+                lsid = analyzeWlog(file.fd(), lsid, uuid);
+                file.close();
             }
         }
         printResult();

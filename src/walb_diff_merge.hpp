@@ -33,7 +33,7 @@ private:
     class Wdiff {
     private:
         std::string wdiffPath_;
-        cybozu::util::FileOpener fop_;
+        cybozu::util::File file_;
         mutable walb::diff::Reader reader_;
         DiffFileHeader header_;
         mutable DiffRecord rec_;
@@ -43,8 +43,8 @@ private:
     public:
         explicit Wdiff(const std::string &wdiffPath)
             : wdiffPath_(wdiffPath)
-            , fop_(wdiffPath, O_RDONLY)
-            , reader_(fop_.fd())
+            , file_(wdiffPath, O_RDONLY)
+            , reader_(file_.fd())
             , rec_()
             , io_()
             , isFilled_(false)
@@ -54,10 +54,10 @@ private:
         /**
          * You must open the file before calling this constructor.
          */
-        explicit Wdiff(cybozu::util::FileOpener &&fop)
+        explicit Wdiff(cybozu::util::File &&file)
             : wdiffPath_()
-            , fop_(std::move(fop))
-            , reader_(fop_.fd())
+            , file_(std::move(file))
+            , reader_(file_.fd())
             , rec_()
             , io_()
             , isFilled_(false)
@@ -174,11 +174,11 @@ public:
             addWdiff(s);
         }
     }
-    void addWdiffs(std::vector<cybozu::util::FileOpener> &&ops) {
-        for (cybozu::util::FileOpener &op : ops) {
-            wdiffs_.emplace_back(new Wdiff(std::move(op)));
+    void addWdiffs(std::vector<cybozu::util::File> &&fileV) {
+        for (cybozu::util::File &file : fileV) {
+            wdiffs_.emplace_back(new Wdiff(std::move(file)));
         }
-        ops.clear();
+        fileV.clear();
     }
     /**
      * Merge input wdiff files and put them into output fd.

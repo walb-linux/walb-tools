@@ -33,34 +33,83 @@ public:
 };
 
 /**
- * File descriptor operations wrapper.
+ * A simple file/fd operators.
+ * close() will be called in the destructor when you forget to call it.
  */
-template <class HasFd>
-class FdBaseT : public HasFd
+class File
 {
+private:
+    int fd_;
+    bool autoClose_;
 public:
-    using HasFd :: HasFd;
-
+    File()
+        : fd_(-1), autoClose_(false) {
+    }
+    File(const std::string& filePath, int flags)
+        : File() {
+        if (!open(filePath, flags)) throw LibcError(errno, "open failed: ");
+    }
+    File(const std::string& filePath, int flags, mode_t mode)
+        : File() {
+        if (!open(filePath, flags, mode)) throw LibcError(errno, "open failed: ");
+    }
+    explicit File(int fd, bool autoClose = false)
+        : fd_(fd), autoClose_(autoClose) {
+    }
+    File(File&& rhs)
+        : File() {
+        swap(rhs);
+    }
+    File& operator=(File&& rhs) {
+        close();
+        swap(rhs);
+        return *this;
+    }
+    void swap(File& rhs) noexcept {
+        std::swap(fd_, rhs.fd_);
+        std::swap(autoClose_, rhs.autoClose_);
+    }
+    ~File() noexcept try {
+        close();
+    } catch (...) {
+    }
+    int fd() const {
+        if (fd_ < 0) throw RT_ERR("fd < 0.");
+        return fd_;
+    }
+    bool open(const std::string& filePath, int flags) {
+        fd_ = ::open(filePath.c_str(), flags);
+        autoClose_ = true;
+        return fd_ >= 0;
+    }
+    bool open(const std::string& filePath, int flags, mode_t mode) {
+        fd_ = ::open(filePath.c_str(), flags, mode);
+        autoClose_ = true;
+        return fd_ >= 0;
+    }
+    void setFd(int fd, bool autoClose = false) {
+        fd_ = fd;
+        autoClose_ = autoClose;
+    }
+    void close() {
+        if (!autoClose_ || fd_ < 0) return;
+        if (::close(fd_) < 0) {
+            throw LibcError(errno, "close failed: ");
+        }
+        fd_ = -1;
+    }
     bool seekable() {
-        return ::lseek(HasFd::fd(), 0, SEEK_CUR) != -1;
+        return ::lseek(fd(), 0, SEEK_CUR) != -1;
     }
-    void lseek(off_t oft, int whence) {
-        if (::lseek(HasFd::fd(), oft, whence) == off_t(-1))
+    off_t lseek(off_t oft, int whence) {
+        off_t ret = ::lseek(fd(), oft, whence);
+        if (ret == off_t(-1)) {
             throw LibcError(errno, "lseek failed: ");
+        }
+        return ret;
     }
-};
-
-/**
- * File descriptor wrapper. Read only.
- */
-template <class HasFd>
-class FdReaderT : public HasFd
-{
-public:
-    using HasFd :: HasFd;
-
     size_t readsome(void *data, size_t size) {
-        ssize_t r = ::read(HasFd::fd(), data, size);
+        ssize_t r = ::read(fd(), data, size);
         if (r < 0) throw LibcError(errno, "read failed: ");
         return r;
     }
@@ -73,129 +122,32 @@ public:
             s += r;
         }
     }
-};
-
-/**
- * File descriptor wrapper. Write only.
- */
-template <class HasFd>
-class FdWriterT : public HasFd
-{
-public:
-    using HasFd :: HasFd;
-
     void write(const void *data, size_t size) {
         const char *buf = reinterpret_cast<const char *>(data);
         size_t s = 0;
         while (s < size) {
-            ssize_t r = ::write(HasFd::fd(), &buf[s], size - s);
+            ssize_t r = ::write(fd(), &buf[s], size - s);
             if (r < 0) throw LibcError(errno, "write failed: ");
             if (r == 0) throw EofError();
             s += r;
         }
     }
     void fdatasync() {
-        if (::fdatasync(HasFd::fd()) < 0)
+        if (::fdatasync(fd()) < 0) {
             throw LibcError(errno, "fdsync failed: ");
+        }
     }
     void fsync() {
-        if (::fsync(HasFd::fd()) < 0)
+        if (::fsync(fd()) < 0) {
             throw LibcError(errno, "fsync failed: ");
-    }
-};
-
-/**
- * A simple file opener.
- * close() will be called in the destructor when you forget to call it.
- */
-class FileOpener
-{
-protected:
-    int fd_;
-public:
-    FileOpener()
-        : fd_(-1) {
-    }
-    FileOpener(const std::string& filePath, int flags)
-        : FileOpener() {
-        if (!open(filePath, flags)) throw LibcError(errno, "open failed: ");
-    }
-    FileOpener(const std::string& filePath, int flags, mode_t mode)
-        : FileOpener() {
-        if (!open(filePath, flags, mode)) throw LibcError(errno, "open failed: ");
-    }
-    FileOpener(FileOpener&& rhs)
-        : FileOpener()
-    {
-        swap(rhs);
-    }
-    FileOpener& operator=(FileOpener&& rhs)
-    {
-        close();
-        swap(rhs);
-        return *this;
-    }
-    void swap(FileOpener& rhs) noexcept {
-        std::swap(fd_, rhs.fd_);
-    }
-    ~FileOpener() noexcept {
-        try {
-            close();
-        } catch (...) {
         }
     }
-    int fd() const {
-        if (fd_ < 0) throw RT_ERR("fd < 0.");
-        return fd_;
-    }
-    bool open(const std::string& filePath, int flags) {
-        fd_ = ::open(filePath.c_str(), flags);
-        return fd_ >= 0;
-    }
-    bool open(const std::string& filePath, int flags, mode_t mode) {
-        fd_ = ::open(filePath.c_str(), flags, mode);
-        return fd_ >= 0;
-    }
-    void close() {
-        if (fd_ < 0) return;
-        if (::close(fd_) < 0) {
-            throw LibcError(errno, "close failed: ");
+    void ftruncate(off_t length) {
+        if (::ftruncate(fd(), length) < 0) {
+            throw LibcError(errno, "ftruncate failed: ");
         }
-        fd_ = -1;
     }
 };
-
-class FdHolder
-{
-protected:
-    int fd_;
-	void verifyFd() const {
-        if (fd_ < 0) throw RT_ERR("fd < 0.");
-	}
-public:
-	FdHolder() : fd_(-1) {}
-    explicit FdHolder(int fd) : fd_(fd) { verifyFd(); }
-    FdHolder(FdHolder&& rhs) = default;
-    FdHolder& operator=(FdHolder&& rhs) = default;
-	void setFd(int fd) {
-		fd_ = fd;
-		verifyFd();
-	}
-    int fd() const {
-		verifyFd();
-        return fd_;
-    }
-};
-
-/*
- * Do not use them with upcast.
- */
-using FdReader = FdReaderT<FdBaseT<FdHolder> >;
-using FdWriter = FdWriterT<FdBaseT<FdHolder> >;
-using FdOperator = FdWriterT<FdReaderT<FdBaseT<FdHolder> > >;
-using FileReader = FdReaderT<FdBaseT<FileOpener> >;
-using FileWriter = FdWriterT<FdBaseT<FileOpener> >;
-using FileOperator = FdWriterT<FdReaderT<FdBaseT<FileOpener> > >;
 
 /**
  * Block device manager.
@@ -467,7 +419,7 @@ inline void createEmptyFile(const std::string &path, mode_t mode = 0644)
 {
     struct stat st;
     if (::stat(path.c_str(), &st) == 0) return;
-    FileWriter writer(path, O_CREAT | O_TRUNC | O_RDWR, mode);
+    File writer(path, O_CREAT | O_TRUNC | O_RDWR, mode);
     writer.close();
 }
 

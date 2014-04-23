@@ -101,13 +101,13 @@ public:
 
     void run() {
         /* Get IO recipe parser. */
-        std::shared_ptr<cybozu::util::FileOpener> rFop;
+        cybozu::util::File recipeFile;
         if (config_.recipePath() != "-") {
-            rFop.reset(new cybozu::util::FileOpener(config_.recipePath(), O_RDONLY));
+            recipeFile.open(config_.recipePath(), O_RDONLY);
+        } else {
+            recipeFile.setFd(0);
         }
-        int rFd = 0;
-        if (rFop) { rFd = rFop->fd(); }
-        walb::util::IoRecipeParser recipeParser(rFd);
+        walb::util::IoRecipeParser recipeParser(recipeFile.fd());
 
         /* Decide lsid range to verify. */
         uint64_t beginLsid = config_.beginLsid();

@@ -83,10 +83,8 @@ private:
  */
 uint64_t checkBlockDiff(Config& config)
 {
-    cybozu::util::FileOpener f1(config.filePath1(), O_RDONLY);
-    cybozu::util::FileOpener f2(config.filePath2(), O_RDONLY);
-    cybozu::util::FdReader fdr1(f1.fd());
-    cybozu::util::FdReader fdr2(f2.fd());
+    cybozu::util::File fileR1(config.filePath1(), O_RDONLY);
+    cybozu::util::File fileR2(config.filePath2(), O_RDONLY);
 
     const unsigned int bs = config.blockSize();
     std::unique_ptr<char> p1(new char[bs]);
@@ -99,8 +97,8 @@ uint64_t checkBlockDiff(Config& config)
     uint64_t nChecked = 0;
     try {
         while (true) {
-            fdr1.read(p1.get(), bs);
-            fdr2.read(p2.get(), bs);
+            fileR1.read(p1.get(), bs);
+            fileR2.read(p2.get(), bs);
             if (::memcmp(p1.get(), p2.get(), bs) != 0) {
                 nDiffer++;
                 if (config.isVerbose()) {
@@ -114,8 +112,8 @@ uint64_t checkBlockDiff(Config& config)
     } catch (cybozu::util::EofError& e) {
     }
 
-    f1.close();
-    f2.close();
+    fileR1.close();
+    fileR2.close();
     ::printf("%" PRIu64 "/%" PRIu64 " differs\n",
              nDiffer, nChecked);
 

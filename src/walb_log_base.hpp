@@ -279,12 +279,21 @@ public:
         header_->checksum = 0;
         header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
     }
+
+    template <typename Reader>
+    DEPRECATED bool read(Reader &reader) {
+        readFrom(reader);
+    }
+    template <typename Writer>
+    DEPRECATED void write(Writer &writer) {
+        writeTo(writer);
+    }
     /**
      * RETURN:
      *   false if read failed or invalid.
      */
     template <typename Reader>
-    bool read(Reader &reader) {
+    bool readFrom(Reader &reader) {
         try {
             reader.read(header_, pbs_);
         } catch (std::exception &e) {
@@ -297,19 +306,12 @@ public:
      * Write the logpack header block.
      */
     template <typename Writer>
-    void write(Writer &writer) {
+    void writeTo(Writer &writer) {
         updateChecksum();
         if (!isValid(true)) {
             throw cybozu::Exception(NAME()) << "write:invalid";
         }
         writer.write(header_, pbs());
-    }
-    /**
-     * Write the logpack header block.
-     */
-    void write(int fd) {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
     }
     /**
      * Initialize logpack header block.

@@ -58,22 +58,22 @@ int main(int argc, char *argv[])
         walb::util::setLogSetting("-", false);
 
         /* File descriptors for input/output. */
-        int inFd = 0, outFd = 1;
-        std::shared_ptr<cybozu::util::FileOpener> inFo, outFo;
+        cybozu::util::File inFile;
         if (opt.inputPath != "-") {
-            inFo = std::make_shared<cybozu::util::FileOpener>(
-                opt.inputPath, O_RDONLY);
-            inFd = inFo->fd();
+            inFile.open(opt.inputPath, O_RDONLY);
+        } else {
+            inFile.setFd(0);
         }
+        cybozu::util::File outFile;
         if (opt.outputPath != "-") {
-            outFo = std::make_shared<cybozu::util::FileOpener>(
-                opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            outFd = outFo->fd();
+            outFile.open(opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        } else {
+            outFile.setFd(1);
         }
-        walb::diff::VirtualFullScanner<cybozu::util::FdHolder> virt;
-        virt.init(cybozu::util::FdHolder(inFd), opt.inputWdiffs);
-        virt.readAndWriteTo(outFd, opt.bufferSize);
-        if (outFo) outFo->close();
+        walb::diff::VirtualFullScanner virt;
+        virt.init(std::move(inFile), opt.inputWdiffs);
+        virt.readAndWriteTo(outFile.fd(), opt.bufferSize);
+        outFile.close();
         return 0;
     } catch (std::exception &e) {
         ::fprintf(::stderr, "exception: %s\n", e.what());

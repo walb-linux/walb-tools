@@ -58,10 +58,8 @@ public:
             throw std::runtime_error("chmod failed.");
         }
         /* directory sync. */
-        util::FileOpener fo(newPath.parent().str(), O_RDONLY | O_DIRECTORY);
-        if (::fdatasync(fo.fd()) < 0) {
-            throw std::runtime_error("fdatasync failed.");
-        }
+        util::File file(newPath.parent().str(), O_RDONLY | O_DIRECTORY);
+        file.fdatasync();
     }
 private:
     static std::string createTmpPathStatic(const std::string &dirPath, const std::string &prefix) {

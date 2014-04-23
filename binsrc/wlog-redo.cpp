@@ -517,8 +517,8 @@ public:
         }
 
         /* Read walblog header. */
-        cybozu::util::FdReader fdr(inFd);
-        wh_.read(fdr);
+        cybozu::util::File fileR(inFd);
+        wh_.readFrom(fileR);
         if (!canApply()) {
             throw RT_ERR("This walblog can not be applied to the device.");
         }
@@ -529,13 +529,13 @@ public:
         const uint32_t pbs = wh_.pbs();
         const uint32_t salt = wh_.salt();
         walb::LogPackHeader packH(pbs, salt);
-        while (packH.read(fdr)) {
+        while (packH.readFrom(fileR)) {
             if (config_.isVerbose()) packH.printShort();
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 const walb::LogRecord &rec = packH.record(i);
                 walb::LogBlockShared blockS(pbs);
                 if (rec.hasData()) {
-                    blockS.read(fdr, rec.ioSizePb(pbs));
+                    blockS.read(fileR, rec.ioSizePb(pbs));
                     walb::log::verifyLogChecksum(rec, blockS, salt);
                 } else {
                     blockS.resize(0);
@@ -907,9 +907,9 @@ int main(int argc, char* argv[]) try
     if (config.isFromStdin()) {
         wlApp.readAndApply(0);
     } else {
-        cybozu::util::FileOpener fo(config.inWlogPath(), O_RDONLY);
-        wlApp.readAndApply(fo.fd());
-        fo.close();
+        cybozu::util::File file(config.inWlogPath(), O_RDONLY);
+        wlApp.readAndApply(file.fd());
+        file.close();
     }
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());

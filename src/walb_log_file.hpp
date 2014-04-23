@@ -20,12 +20,14 @@ class FileHeader
 private:
     std::vector<uint8_t> data_;
 
+    static_assert(WALBLOG_HEADER_SIZE >= sizeof(struct walblog_header), "WALBLOG_HEADER_SIZE too small");
+
 public:
     FileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
     void init(unsigned int pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
-        ::memset(&data_[0], 0, WALBLOG_HEADER_SIZE);
+        ::memset(data_.data(), 0, data_.size());
         header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
         header().version = WALB_LOG_VERSION;
         header().header_size = WALBLOG_HEADER_SIZE;
@@ -37,37 +39,31 @@ public:
         header().end_lsid = endLsid;
     }
 
-    void read(int fd) {
-        cybozu::util::FdReader fdr(fd);
-        read(fdr);
-    }
-
-    void read(cybozu::util::FdReader& fdr) {
-        fdr.read(ptr<char>(), WALBLOG_HEADER_SIZE);
+    template <typename Reader>
+    void readFrom(Reader& reader) {
+        reader.read(data_.data(), data_.size());
         verify();
     }
-
-    void write(int fd) {
-        cybozu::util::FdWriter fdw(fd);
-        write(fdw);
-    }
-
-    void write(cybozu::util::FdWriter& fdw) {
+    template <typename Writer>
+    void writeTo(Writer& writer) {
         updateChecksum();
-        fdw.write(ptr<char>(), WALBLOG_HEADER_SIZE);
+        writer.write(data_.data(), data_.size());
     }
 
     void updateChecksum() {
-        header().checksum = 0;
-        header().checksum = ::checksum(&data_[0], WALBLOG_HEADER_SIZE, 0);
+        header().checksum = 0; // data_ contains the checksum field.
+        header().checksum = calcChecksum();
+    }
+    uint32_t calcChecksum() const {
+        return ::checksum(data_.data(), data_.size(), 0);
     }
 
     struct walblog_header& header() {
-        return *ptr<struct walblog_header>();
+        return *(struct walblog_header *)data_.data();
     }
 
     const struct walblog_header& header() const {
-        return *ptr<struct walblog_header>();
+        return *(struct walblog_header *)data_.data();
     }
 
     uint32_t checksum() const { return header().checksum; }
@@ -86,7 +82,7 @@ public:
         CHECKd(header().version == WALB_LOG_VERSION);
         CHECKd(header().begin_lsid < header().end_lsid);
         if (isChecksum) {
-            CHECKd(::checksum(&data_[0], WALBLOG_HEADER_SIZE, 0) == 0);
+            CHECKd(calcChecksum() == 0);
         }
         return true;
       error:
@@ -126,13 +122,6 @@ public:
             header().begin_lsid,
             header().end_lsid);
     }
-
-private:
-    template <typename T>
-    T *ptr() { return reinterpret_cast<T *>(&data_[0]); }
-
-    template <typename T>
-    const T *ptr() const { return reinterpret_cast<const T *>(&data_[0]); }
 };
 
 /**
@@ -141,7 +130,7 @@ private:
 class Reader /* final */
 {
 private:
-    cybozu::util::FdReader fdr_;
+    cybozu::util::File fileR_;
     bool isReadHeader_;
     unsigned int pbs_;
     uint32_t salt_;
@@ -154,7 +143,7 @@ private:
 
 public:
     explicit Reader(int fd)
-        : fdr_(fd)
+        : fileR_(fd)
         , isReadHeader_(false)
         , pbs_(0)
         , salt_(0)
@@ -171,7 +160,7 @@ public:
     void readHeader(FileHeader &fileH) {
         if (isReadHeader_) throw RT_ERR("Wlog file header has been read already.");
         isReadHeader_ = true;
-        fileH.read(fdr_);
+        fileH.readFrom(fileR_);
         pbs_ = fileH.pbs();
         salt_ = fileH.salt();
         endLsid_ = fileH.beginLsid();
@@ -194,7 +183,7 @@ public:
         blockS.init(pbs_);
         if (rec.hasData()) {
             try {
-                blockS.read(fdr_, rec.ioSizePb(pbs_));
+                blockS.read(fileR_, rec.ioSizePb(pbs_));
             } catch (cybozu::util::EofError &) {
                 throw InvalidIo();
             }
@@ -245,7 +234,7 @@ private:
             isBegun_ = true;
         }
 
-        if (!pack_.read(fdr_) || pack_.isEnd()) {
+        if (!pack_.readFrom(fileR_) || pack_.isEnd()) {
             isEnd_ = true;
             return false;
         }
@@ -261,7 +250,7 @@ private:
 class Writer
 {
 private:
-    cybozu::util::FdWriter fdw_;
+    cybozu::util::File fileW_;
     bool isWrittenHeader_;
     bool isClosed_;
 
@@ -272,8 +261,9 @@ private:
     uint64_t lsid_;
 public:
     explicit Writer(int fd)
-        : fdw_(fd), isWrittenHeader_(false), isClosed_(false)
-        , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1) {}
+        : fileW_(fd), isWrittenHeader_(false), isClosed_(false)
+        , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1)  {
+    }
     ~Writer() noexcept {
         try {
             close();
@@ -300,7 +290,7 @@ public:
     void writeHeader(FileHeader &fileH) {
         if (isWrittenHeader_) throw RT_ERR("Wlog file header has been written already.");
         if (!fileH.isValid(false)) throw RT_ERR("Wlog file header is invalid.");
-        fileH.write(fdw_);
+        fileH.writeTo(fileW_);
         isWrittenHeader_ = true;
         pbs_ = fileH.pbs();
         salt_ = fileH.salt();
@@ -315,14 +305,14 @@ public:
     void writePackHeader(const struct walb_logpack_header &header) {
         if (!isWrittenHeader_) throw RT_ERR("You must call writeHeader() at first.");
         if (header.n_records == 0) return;
-        fdw_.write(&header, pbs_);
+        fileW_.write(&header, pbs_);
         lsid_++;
     }
     /**
      * Write a pack IO.
      */
     void writePackIo(const LogBlockShared &blockS) {
-        blockS.write(fdw_);
+        blockS.write(fileW_);
         lsid_ += blockS.nBlocks();
     }
     /**
@@ -395,7 +385,7 @@ private:
         LogBlock b = createLogBlock(pbs_);
         LogPackHeader h(b, pbs_, salt_);
         h.setEnd();
-        h.write(fdw_);
+        h.writeTo(fileW_);
     }
 };
 

@@ -854,42 +854,40 @@ inline void ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>
     const int maxRetryNum = 10;
     int retryNum = 0;
     cybozu::Uuid uuid;
-    std::vector<cybozu::util::FileOpener> ops;
+    std::vector<cybozu::util::File> fileV;
 retry:
     {
         diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
         if (diffV.empty()) return;
         // apply wdiff files indicated by diffV to lvSnap.
         for (const MetaDiff& diff : diffV) {
-            cybozu::util::FileOpener op;
-            if (!op.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
+            cybozu::util::File file;
+            if (!file.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDONLY)) {
                 retryNum++;
                 if (retryNum == maxRetryNum) {
                     throw cybozu::Exception(FUNC) << "exceed max retry";
                 }
-                ops.clear();
+                fileV.clear();
                 goto retry;
             }
-            diff::Reader reader(op.fd());
+            diff::Reader reader(file.fd());
             DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
-            if (ops.empty()) {
+            if (fileV.empty()) {
                 uuid = header.getUuid2();
                 mergedDiff = diff;
             } else {
                 if (uuid != header.getUuid2()) {
-                    diffV.resize(ops.size());
+                    diffV.resize(fileV.size());
                     break;
                 }
                 mergedDiff.merge(diff);
             }
-            if (::lseek(op.fd(), 0, SEEK_SET) < 0) {
-                throw cybozu::Exception(FUNC) << "lseek failed" << cybozu::ErrorNo();
-            }
-            ops.push_back(std::move(op));
+            file.lseek(0, SEEK_SET);
+            fileV.push_back(std::move(file));
         }
     }
-    merger.addWdiffs(std::move(ops));
+    merger.addWdiffs(std::move(fileV));
     merger.prepare();
 }
 

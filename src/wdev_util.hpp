@@ -24,8 +24,8 @@ namespace local {
 inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl, int openFlag)
 {
     const char *const FUNC = __func__;
-    cybozu::util::FileOpener f(wdevPath, openFlag);
-    int ret = ::ioctl(f.fd(), WALB_IOCTL_WDEV, ctl);
+    cybozu::util::File file(wdevPath, openFlag);
+    int ret = ::ioctl(file.fd(), WALB_IOCTL_WDEV, ctl);
     if (ret < 0) {
         throw cybozu::Exception(FUNC) << "ioctl error" << cybozu::ErrorNo();
     }
@@ -161,8 +161,8 @@ inline cybozu::FilePath getSysfsPath(const std::string& wdevName)
 
 inline std::string readOneLine(const std::string& path)
 {
-    cybozu::util::FileOpener fo(path, O_RDONLY);
-    cybozu::ifdstream is(fo.fd());
+    cybozu::util::File file(path, O_RDONLY);
+    cybozu::ifdstream is(file.fd());
     std::string line;
     is >> line;
     return line;
@@ -248,9 +248,9 @@ inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
 
 inline uint64_t getSizeLb(const std::string& wdevPath)
 {
-    cybozu::util::FileOpener f(wdevPath, O_RDONLY);
+    cybozu::util::File file(wdevPath, O_RDONLY);
     uint64_t size;
-    if (::ioctl(f.fd(), BLKGETSIZE64, &size) < 0) {
+    if (::ioctl(file.fd(), BLKGETSIZE64, &size) < 0) {
         throw cybozu::Exception("getSizeLb:bad ioctl") << cybozu::ErrorNo();
     }
     return size / LOGICAL_BLOCK_SIZE;

@@ -75,11 +75,11 @@ int main(int argc, char *argv[])
         for (std::string &path : opt.inputWdiffs) {
             merger.addWdiff(path);
         }
-        cybozu::util::FileOpener fo(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        cybozu::util::File file(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         merger.setMaxIoBlocks(opt.maxIoBlocks());
         merger.setShouldValidateUuid(false);
-        merger.mergeToFd(fo.fd());
-        fo.close();
+        merger.mergeToFd(file.fd());
+        file.close();
         return 0;
     } catch (std::exception &e) {
         ::fprintf(::stderr, "exception: %s\n", e.what());

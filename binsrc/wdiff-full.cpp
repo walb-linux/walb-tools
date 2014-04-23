@@ -29,7 +29,7 @@ public:
         , buf0_(ioSize_) {
     }
     void convert(int inFd, int outFd) {
-        cybozu::util::FdReader reader(inFd);
+        cybozu::util::File reader(inFd);
         walb::diff::Writer writer(outFd);
         walb::DiffFileHeader head;
         head.setMaxIoBlocksIfNecessary(ioBlocks_);
@@ -59,7 +59,7 @@ private:
      * RETURN:
      *   Number of read blocks [logical block]
      */
-    uint16_t readChunk(cybozu::util::FdReader &reader) {
+    uint16_t readChunk(cybozu::util::File &reader) {
         uint16_t c = 0;
         char *p = &buf0_[0];
         try {

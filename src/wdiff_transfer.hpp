@@ -72,7 +72,7 @@ inline bool wdiffTransferServer(
     const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
 {
     const char *const FUNC = __func__;
-    cybozu::util::FdWriter fdw(wdiffOutFd);
+    cybozu::util::File fileW(wdiffOutFd);
     Buffer buf;
     packet::StreamControl ctrl(pkt.sock());
     while (ctrl.isNext()) {
@@ -85,13 +85,13 @@ inline bool wdiffTransferServer(
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
         verifyDiffPack(buf);
-        fdw.write(buf.data(), buf.size());
+        fileW.write(buf.data(), buf.size());
         ctrl.reset();
     }
     if (!ctrl.isEnd()) {
         throw cybozu::Exception(FUNC) << "bad ctrl not end";
     }
-    writeDiffEofPack(fdw);
+    writeDiffEofPack(fileW);
     return true;
 }
 

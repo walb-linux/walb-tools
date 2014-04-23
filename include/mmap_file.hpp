@@ -29,7 +29,7 @@ private:
     void *mapped_;
     uint64_t mappedSize_;
     uint64_t size_;
-    FileOpener fo_;
+    File file_;
 
 public:
     /**
@@ -42,7 +42,7 @@ public:
         , mapped_(nullptr)
         , mappedSize_(0)
         , size_(size)
-        , fo_(filePath, flags) {
+        , file_(filePath, flags) {
         init();
     }
 
@@ -57,7 +57,7 @@ public:
         , mapped_(nullptr)
         , mappedSize_(0)
         , size_(size)
-        , fo_(filePath, flags, mode) {
+        , file_(filePath, flags, mode) {
         init();
     }
 
@@ -94,9 +94,7 @@ public:
         if (::msync(mapped_, mappedSize_, MS_SYNC)) {
             throw std::runtime_error("msync failed.");
         }
-        if (::fdatasync(fo_.fd())) {
-            throw std::runtime_error("fdatasync failed.");
-        }
+        file_.fdatasync();
     }
 
     /**
@@ -125,21 +123,16 @@ private:
     }
 
     uint64_t lseek(off_t offset, int whence) {
-        off_t off = ::lseek(fo_.fd(), offset, whence);
-        if (off < 0) {
-            throw std::runtime_error("lseek failed.");
-        }
-        return off;
+        return file_.lseek(offset, whence);
     }
 
     void appendZeroData(uint64_t len) {
-        FdWriter fdw(fo_.fd());
-        fdw.lseek(0, SEEK_END);
+        lseek(0, SEEK_END);
         char buf[4096];
         ::memset(buf, 0, 4096);
         while (0 < len) {
             size_t l = std::min(len, uint64_t(4096));
-            fdw.write(buf, l);
+            file_.write(buf, l);
             len -= l;
         }
     }
@@ -151,16 +144,14 @@ private:
             appendZeroData(fileSize - currFileSize);
         }
         if (fileSize < currFileSize) {
-            if (::ftruncate(fo_.fd(), fileSize)) {
-                throw std::runtime_error("ftruncate failed.");
-            }
+            file_.ftruncate(fileSize);
         }
         return fileSize;
     }
 
     void mmap(uint64_t fileSize) {
         lseek(0, SEEK_SET);
-        void *p = ::mmap(NULL, fileSize, PROT_READ | PROT_WRITE, MAP_SHARED, fo_.fd(), 0);
+        void *p = ::mmap(NULL, fileSize, PROT_READ | PROT_WRITE, MAP_SHARED, file_.fd(), 0);
         if (p == MAP_FAILED) {
             throw std::runtime_error("mmap failed.");
         }

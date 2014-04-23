@@ -243,13 +243,13 @@ public:
      */
     void run() {
         /* Read a wdiff file and redo IOs in it. */
-        cybozu::util::FileOpener fo;
-        int fd = 0; // stdin
+        cybozu::util::File file;
         if (config_.inWdiffPath() != "-") {
-            fo.open(config_.inWdiffPath(), O_RDONLY);
-            fd = fo.fd();
+            file.open(config_.inWdiffPath(), O_RDONLY);
+        } else {
+            file.setFd(0);
         }
-        walb::diff::Reader wdiffR(fd);
+        walb::diff::Reader wdiffR(file.fd());
         DiffFileHeader wdiffH;
         wdiffR.readHeader(wdiffH);
         wdiffH.print();

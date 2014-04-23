@@ -50,7 +50,8 @@ private:
     bool isVerbose_;
     std::string outPath_;
 
-    std::shared_ptr<cybozu::util::FileOpener> foP_;
+    bool isOpened_;
+    cybozu::util::File file_;
 
 public:
     Config(int argc, char* argv[])
@@ -66,7 +67,8 @@ public:
         , isNotAllZero_(false)
         , isVerbose_(false)
         , outPath_()
-        , foP_() {
+        , isOpened_(false)
+        , file_() {
         parse(argc, argv);
     }
 
@@ -84,11 +86,11 @@ public:
     const std::string& outPath() const { return outPath_; }
 
     int getOutFd() {
-        if (foP_) return foP_->fd();
+        if (isOpened_) return file_.fd();
         if (outPath() == "-") return 1;
-        foP_ = std::make_shared<cybozu::util::FileOpener>(
-            outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        return foP_->fd();
+        file_.open(outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        isOpened_ = true;
+        return file_.fd();
     }
 
     walb::log::Generator::Config genConfig() const {

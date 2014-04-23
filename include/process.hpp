@@ -131,7 +131,7 @@ inline std::string call(const std::string& cmd, const std::vector<std::string> &
 
     /* Read the stdout of the child process. */
     pipe0.closeW();
-    cybozu::util::FdReader reader(pipe0.fdR());
+    cybozu::util::File reader(pipe0.fdR());
     char buf[4096];
     std::stringstream ss;
     size_t r;

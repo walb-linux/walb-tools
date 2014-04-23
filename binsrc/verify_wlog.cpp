@@ -90,26 +90,25 @@ public:
 
     void run() {
         /* Get IO recipe parser. */
-        std::shared_ptr<cybozu::util::FileOpener> rFop;
+        cybozu::util::File recipeFile;
         if (config_.recipePath() != "-") {
-            rFop.reset(new cybozu::util::FileOpener(config_.recipePath(), O_RDONLY));
+            recipeFile.open(config_.recipePath(), O_RDONLY);
+        } else {
+            recipeFile.setFd(0);
         }
-        int rFd = 0;
-        if (rFop) { rFd = rFop->fd(); }
-        walb::util::IoRecipeParser recipeParser(rFd);
+        walb::util::IoRecipeParser recipeParser(recipeFile.fd());
 
         /* Get wlog file descriptor. */
-        std::shared_ptr<cybozu::util::FileOpener> wlFop;
+        cybozu::util::File wlFileR;
         if (config_.wlogPath() != "-") {
-            wlFop.reset(new cybozu::util::FileOpener(config_.wlogPath(), O_RDONLY));
+            wlFileR.open(config_.wlogPath(), O_RDONLY);
+        } else {
+            wlFileR.setFd(0);
         }
-        int wlFd = 0;
-        if (wlFop) { wlFd = wlFop->fd(); }
-        cybozu::util::FdReader wlFdr(wlFd);
 
         /* Read wlog header. */
         walb::log::FileHeader wh;
-        wh.read(wlFdr);
+        wh.readFrom(wlFileR);
         if (!wh.isValid(true)) {
             throw RT_ERR("invalid wlog header.");
         }
@@ -126,10 +125,10 @@ public:
         /* Read walb logs and verify them with IO recipes. */
         while (lsid < endLsid) {
             LogPackHeader logh;
-            readPackHeader(logh, wlFdr, ba, salt);
+            readPackHeader(logh, wlFileR, ba, salt);
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
             std::queue<LogPackIo> q;
-            readPackIo(logh, wlFdr, ba, q);
+            readPackIo(logh, wlFileR, ba, q);
 
             while (!q.empty()) {
                 LogPackIo packIo = std::move(q.front());
@@ -169,22 +168,23 @@ private:
     using LogBlock = walb::LogBlock;
 
     LogBlock readBlock(
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba) {
+        cybozu::util::File &fileR, cybozu::util::BlockAllocator<u8> &ba) {
         LogBlock b = ba.alloc();
         unsigned int bs = ba.blockSize();
-        fdr.read(reinterpret_cast<char *>(b.get()), bs);
+        fileR.read(b.get(), bs);
         return b;
     }
 
-    void readPackHeader(LogPackHeader& logh,
-        cybozu::util::FdReader &fdr, cybozu::util::BlockAllocator<u8> &ba, uint32_t salt) {
-        logh.setBlock(readBlock(fdr, ba));
+    void readPackHeader(
+        LogPackHeader& logh, cybozu::util::File &fileR,
+        cybozu::util::BlockAllocator<u8> &ba, uint32_t salt) {
+        logh.setBlock(readBlock(fileR, ba));
         logh.setPbs(ba.blockSize());
         logh.setSalt(salt);
     }
 
     void readPackIo(
-        LogPackHeader &logh, cybozu::util::FdReader &fdr,
+        LogPackHeader &logh, cybozu::util::File &fileR,
         cybozu::util::BlockAllocator<u8> &ba, std::queue<LogPackIo> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
@@ -193,7 +193,7 @@ private:
             if (!rec.hasData()) continue;
             const uint32_t ioSizePb = rec.ioSizePb(logh.pbs());
             for (size_t j = 0; j < ioSizePb; j++) {
-                packIo.blockS.addBlock(readBlock(fdr, ba));
+                packIo.blockS.addBlock(readBlock(fileR, ba));
             }
             if (!rec.hasDataForChecksum()) { continue; }
             /* Only normal IOs will be inserted. */

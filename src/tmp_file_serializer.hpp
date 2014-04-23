@@ -16,8 +16,8 @@ template <>
 struct InputStreamTag<TmpFile>
 {
     static inline size_t readSome(TmpFile &is, void *buf, size_t size) {
-        util::FdReader fdr(is.fd());
-        return fdr.readsome(buf, size);
+        util::File file(is.fd());
+        return file.readsome(buf, size);
     }
 };
 
@@ -25,8 +25,8 @@ template <>
 struct OutputStreamTag<TmpFile>
 {
     static inline void write(TmpFile &os, const void *buf, size_t size) {
-        util::FdWriter fdw(os.fd());
-        fdw.write(buf, size);
+        util::File file(os.fd());
+        file.write(buf, size);
     }
 };
 

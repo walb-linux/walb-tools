@@ -26,15 +26,11 @@ namespace diff {
  *
  * (1) Call readAndWriteTo() to write all the data to a file descriptor.
  * (2) Call read() multiple times for various purposes.
- *
- * Fd is cybozu::util::FileOpener or cybozu::util::FdHolder.
  */
-template <typename Fd>
 class VirtualFullScanner
 {
 private:
-    Fd fd_;
-    cybozu::util::FdReader reader_;
+    cybozu::util::File reader_;
     bool isInputFdSeekable_;
     std::shared_ptr<char> bufForSkip_;
     walb::diff::Merger merger_;
@@ -44,9 +40,8 @@ private:
     bool isEndDiff_; /* true if there is no more wdiff IO. */
     bool emptyWdiff_;
 
-    void init_inner(Fd&& fd) {
-        fd_ = std::move(fd);
-        reader_.setFd(fd_.fd());
+    void init_inner(cybozu::util::File&& reader) {
+        reader_ = std::move(reader);
         isInputFdSeekable_ = reader_.seekable();
         bufForSkip_ = allocateBufForSkipStatic(isInputFdSeekable_);
     }
@@ -57,8 +52,7 @@ public:
      * @wdiffPaths walb diff files. Each wdiff is sorted by time.
      */
     VirtualFullScanner()
-        : fd_()
-        , reader_()
+        : reader_()
         , isInputFdSeekable_(false)
         , bufForSkip_()
         , merger_()
@@ -68,19 +62,19 @@ public:
         , isEndDiff_(false)
         , emptyWdiff_(false) {}
 
-    void init(Fd&& fd, const std::vector<std::string> &wdiffPaths) {
-        init_inner(std::move(fd));
+    void init(cybozu::util::File&& reader, const std::vector<std::string> &wdiffPaths) {
+        init_inner(std::move(reader));
         emptyWdiff_ = wdiffPaths.empty();
         if (!emptyWdiff_) {
             merger_.addWdiffs(wdiffPaths);
             merger_.prepare();
         }
     }
-    void init(Fd&& fd, std::vector<cybozu::util::FileOpener> &&ops) {
-        init_inner(std::move(fd));
-        emptyWdiff_ = ops.empty();
+    void init(cybozu::util::File&& reader, std::vector<cybozu::util::File> &&fileV) {
+        init_inner(std::move(reader));
+        emptyWdiff_ = fileV.empty();
         if (!emptyWdiff_) {
-            merger_.addWdiffs(std::move(ops));
+            merger_.addWdiffs(std::move(fileV));
             merger_.prepare();
         }
     }
@@ -91,7 +85,7 @@ public:
      * @bufSize buffer size [byte].
      */
     void readAndWriteTo(int outputFd, size_t bufSize) {
-        cybozu::util::FdWriter writer(outputFd);
+        cybozu::util::File writer(outputFd);
         std::shared_ptr<char> buf =
             cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, bufSize);
         size_t rSize;
