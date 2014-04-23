@@ -145,6 +145,7 @@ private:
     bool isReadHeader_;
     unsigned int pbs_;
     uint32_t salt_;
+    bool isBegun_;
     bool isEnd_;
 
     LogPackHeader pack_;
@@ -157,6 +158,7 @@ public:
         , isReadHeader_(false)
         , pbs_(0)
         , salt_(0)
+        , isBegun_(false)
         , isEnd_(false)
         , pack_()
         , recIdx_(0)
@@ -187,7 +189,6 @@ public:
 
         /* Copy to the record. */
         rec = pack_.record(recIdx_);
-        rec.verify();
 
         /* Read to the blockS. */
         blockS.init(pbs_);
@@ -237,7 +238,11 @@ public:
                 << "You have not called readHeader() yet";
         }
         if (isEnd_) return false;
-        if (recIdx_ < pack_.nRecords()) return true;
+        if (isBegun_) {
+            if (recIdx_ < pack_.nRecords()) return true;
+        } else {
+            isBegun_ = true;
+        }
 
         if (!pack_.read(fdr_) || pack_.isEnd()) {
             isEnd_ = true;
