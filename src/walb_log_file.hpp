@@ -215,19 +215,20 @@ public:
         return true;
     }
     /**
-     * RETURN:
-     *   true if the cursor indicates the first record in a pack.
-     */
-    bool isFirstInPack() { // QQQ
-        return fetchNext() && recIdx_ == 0;
-    }
-    /**
      * Get pack header reference.
      */
     LogPackHeader &packHeader() {
         assert(fetchNext());
         return pack_;
     }
+    /**
+     * Get the end lsid.
+     */
+    uint64_t endLsid() {
+        if (fetchNext()) throw RT_ERR("Must be reached to the wlog end.");
+        return endLsid_;
+    }
+private:
     /**
      * RETURN:
      *   true if there are one or more log data remaining.
@@ -251,13 +252,6 @@ public:
         recIdx_ = 0;
         endLsid_ = pack_.nextLogpackLsid();
         return true;
-    }
-    /**
-     * Get the end lsid.
-     */
-    uint64_t endLsid() {
-        if (fetchNext()) throw RT_ERR("Must be reached to the wlog end.");
-        return endLsid_;
     }
 };
 
