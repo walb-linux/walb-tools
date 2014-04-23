@@ -423,8 +423,8 @@ public:
             LogRecord rec;
             LogBlockShared blockS;
             uint16_t idx;
-            const uint32_t recIdx = reader.readLog(rec, blockS, &idx);
-            log::printRecordOneline(::stdout, recIdx, rec);
+            reader.readLog(rec, blockS, &idx);
+            log::printRecordOneline(::stdout, idx, rec);
         }
         /*
          * reader.readLog() may throw InvalidIo.
