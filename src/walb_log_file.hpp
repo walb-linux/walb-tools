@@ -419,11 +419,10 @@ public:
         reader.readHeader(wh);
         wh.print(fp);
 
-        while (reader.fetchNext()) {
-            LogRecord rec;
-            LogBlockShared blockS;
-            uint16_t idx;
-            reader.readLog(rec, blockS, &idx);
+        LogRecord rec;
+        LogBlockShared blockS;
+        uint16_t idx;
+        while (reader.readLog(rec, blockS, &idx)) {
             log::printRecordOneline(::stdout, idx, rec);
         }
         /*

@@ -173,11 +173,9 @@ private:
         }
 
         /* Convert each log. */
-        while (reader.fetchNext()) {
-            LogRecord lrec;
-            LogBlockShared blockS;
-            reader.readLog(lrec, blockS);
-
+        LogRecord lrec;
+        LogBlockShared blockS;
+        while (reader.readLog(lrec, blockS)) {
             DiffRecord diffRec;
             DiffIo diffIo;
             if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo)) {
