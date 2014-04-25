@@ -18,6 +18,7 @@
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
+#include "walb_util.hpp"
 #include "aio_util.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"
@@ -240,7 +241,7 @@ private:
     const uint32_t pbs_;
     const uint32_t bufferPb_; /* [physical block]. */
     const uint32_t maxIoPb_;
-    std::shared_ptr<char> buffer_;
+    AlignedArray buffer_;
     SuperBlock super_;
     cybozu::aio::Aio aio_;
     uint64_t aheadLsid_;
@@ -262,7 +263,7 @@ public:
         , pbs_(bd_.getPhysicalBlockSize())
         , bufferPb_(bufferSize / pbs_)
         , maxIoPb_(maxIoSize / pbs_)
-        , buffer_(cybozu::util::allocateBlocks<char>(pbs_, pbs_, bufferPb_))
+        , buffer_(bufferPb_ * pbs_)
         , super_(bd_)
         , aio_(bd_.getFd(), bufferPb_)
         , aheadLsid_(0)
@@ -349,7 +350,7 @@ public:
     }
 private:
     char *getBuffer(size_t idx) {
-        return buffer_.get() + idx * pbs_;
+        return &buffer_[idx * pbs_];
     }
     void plusIdx(uint32_t &idx, size_t diff) {
         idx += diff;
