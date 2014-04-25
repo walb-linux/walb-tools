@@ -573,7 +573,6 @@ public:
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
         while (0 < remaining) {
-            assert(i < nBlocks());
             const size_t s = std::min<size_t>(pbs_, remaining);
             if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
             remaining -= s;
