@@ -282,7 +282,7 @@ public:
 
     template <typename Reader>
     DEPRECATED bool read(Reader &reader) {
-        readFrom(reader);
+        return readFrom(reader);
     }
     template <typename Writer>
     DEPRECATED void write(Writer &writer) {
