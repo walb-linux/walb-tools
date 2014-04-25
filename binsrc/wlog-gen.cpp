@@ -37,11 +37,11 @@
 class Config
 {
 private:
-    unsigned int pbs_; /* physical block size [byte] */
+    uint32_t pbs_; /* physical block size [byte] */
     uint64_t devSize_; /* [byte]. */
-    unsigned int minIoSize_; /* [byte]. */
-    unsigned int maxIoSize_; /* [byte]. */
-    unsigned int maxPackSize_; /* [byte]. */
+    uint32_t minIoSize_; /* [byte]. */
+    uint32_t maxIoSize_; /* [byte]. */
+    uint32_t maxPackSize_; /* [byte]. */
     uint64_t outLogSize_; /* Approximately output log size [byte]. */
     uint64_t lsid_; /* start lsid [physical block]. */
     bool isNotPadding_;
@@ -73,10 +73,10 @@ public:
     }
 
     uint64_t devLb() const { return devSize_ / LOGICAL_BLOCK_SIZE; }
-    unsigned int minIoLb() const { return minIoSize_ / LOGICAL_BLOCK_SIZE; }
-    unsigned int maxIoLb() const { return maxIoSize_ / LOGICAL_BLOCK_SIZE; }
-    unsigned int pbs() const { return pbs_; }
-    unsigned int maxPackPb() const { return maxPackSize_ / pbs(); }
+    uint32_t minIoLb() const { return minIoSize_ / LOGICAL_BLOCK_SIZE; }
+    uint32_t maxIoLb() const { return maxIoSize_ / LOGICAL_BLOCK_SIZE; }
+    uint32_t pbs() const { return pbs_; }
+    uint32_t maxPackPb() const { return maxPackSize_ / pbs(); }
     uint64_t outLogPb() const { return outLogSize_ / pbs(); }
     uint64_t lsid() const { return lsid_; }
     bool isPadding() const { return !isNotPadding_; }

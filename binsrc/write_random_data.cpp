@@ -39,11 +39,11 @@
 class Config
 {
 private:
-    unsigned int bs_; /* block size [byte] */
+    uint32_t bs_; /* block size [byte] */
     uint64_t offsetB_; /* [block]. */
     uint64_t sizeB_; /* [block]. */
-    unsigned int minIoB_; /* [block]. */
-    unsigned int maxIoB_; /* [block]. */
+    uint32_t minIoB_; /* [block]. */
+    uint32_t maxIoB_; /* [block]. */
     bool isVerbose_;
     std::string targetPath_; /* device or file path. */
 
@@ -59,11 +59,11 @@ public:
         parse(argc, argv);
     }
 
-    unsigned int blockSize() const { return bs_; }
+    uint32_t blockSize() const { return bs_; }
     uint64_t offsetB() const { return offsetB_; }
     uint64_t sizeB() const { return sizeB_; }
-    unsigned int minIoB() const { return minIoB_; }
-    unsigned int maxIoB() const { return maxIoB_; }
+    uint32_t minIoB() const { return minIoB_; }
+    uint32_t maxIoB() const { return maxIoB_; }
     bool isVerbose() const { return isVerbose_; }
     const std::string& targetPath() const { return targetPath_; }
 
@@ -112,7 +112,7 @@ class RandomDataWriter
 private:
     const Config &config_;
     cybozu::util::BlockDevice bd_;
-    cybozu::util::Random<unsigned int> randUint_;
+    cybozu::util::Random<uint32_t> randUint_;
     std::shared_ptr<char> buf_;
 
 public:
@@ -130,8 +130,8 @@ public:
         uint64_t written = 0;
 
         while (written < totalSize) {
-            const unsigned int bs = config_.blockSize();
-            unsigned int ioSize = decideIoSize(totalSize - written);
+            const uint32_t bs = config_.blockSize();
+            uint32_t ioSize = decideIoSize(totalSize - written);
             fillBufferRandomly(ioSize);
             uint32_t csum = cybozu::util::calcChecksum(buf_.get(), bs * ioSize, 0);
             bd_.write(offset * bs, bs * ioSize, buf_.get());
@@ -158,22 +158,22 @@ private:
         return size;
     }
 
-    unsigned int decideIoSize(uint64_t maxSize) {
-        unsigned int min = config_.minIoB();
-        unsigned int max = config_.maxIoB();
+    uint32_t decideIoSize(uint64_t maxSize) {
+        uint32_t min = config_.minIoB();
+        uint32_t max = config_.maxIoB();
         if (maxSize < max) { max = maxSize; }
         if (max < min) { min = max; }
         return randomUInt(min, max);
     }
 
-    unsigned int randomUInt(unsigned int min, unsigned int max) {
+    uint32_t randomUInt(uint32_t min, uint32_t max) {
         assert(min <= max);
         if (min == max) { return min; }
         return randUint_() % (max - min) + min;
     }
 
     static std::shared_ptr<char> getBufferStatic(
-        unsigned int blockSize, unsigned int maxIoB, bool isDirect) {
+        uint32_t blockSize, uint32_t maxIoB, bool isDirect) {
         assert(0 < blockSize);
         assert(0 < maxIoB);
         if (isDirect) {
@@ -183,11 +183,11 @@ private:
         }
     }
 
-    void fillBufferRandomly(unsigned int sizeB) {
+    void fillBufferRandomly(uint32_t sizeB) {
         assert(0 < sizeB);
         size_t offset = 0;
         size_t remaining = config_.blockSize() * sizeB;
-        unsigned int r;
+        uint32_t r;
         assert(0 < remaining);
         while (sizeof(r) <= remaining) {
             r = randUint_();

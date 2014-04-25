@@ -21,7 +21,7 @@
 class Config
 {
 private:
-    unsigned int blockSize_;
+    uint32_t blockSize_;
     bool isVerbose_;
     std::string file1_;
     std::string file2_;
@@ -47,7 +47,7 @@ public:
 
     const std::string& filePath1() const { return file1_; }
     const std::string& filePath2() const { return file2_; }
-    unsigned int blockSize() const { return blockSize_; }
+    uint32_t blockSize() const { return blockSize_; }
     bool isVerbose() const { return isVerbose_; }
 
     void check() const {
@@ -86,7 +86,7 @@ uint64_t checkBlockDiff(Config& config)
     cybozu::util::File fileR1(config.filePath1(), O_RDONLY);
     cybozu::util::File fileR2(config.filePath2(), O_RDONLY);
 
-    const unsigned int bs = config.blockSize();
+    const uint32_t bs = config.blockSize();
     std::unique_ptr<char> p1(new char[bs]);
     std::unique_ptr<char> p2(new char[bs]);
 #if 0

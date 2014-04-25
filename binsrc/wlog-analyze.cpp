@@ -33,7 +33,7 @@ class Config
 {
 private:
     bool isFromStdin_;
-    unsigned int blockSize_;
+    uint32_t blockSize_;
     bool isVerbose_;
     std::vector<std::string> args_;
 
@@ -49,7 +49,7 @@ public:
     size_t numWlogs() const { return isFromStdin() ? 1 : args_.size(); }
     const std::string& inWlogPath(size_t idx) const { return args_[idx]; }
     bool isFromStdin() const { return isFromStdin_; }
-    unsigned int blockSize() const { return blockSize_; }
+    uint32_t blockSize() const { return blockSize_; }
     bool isVerbose() const { return isVerbose_; }
 
     void check() const {
@@ -169,9 +169,9 @@ private:
      */
     void updateBitmap(const walb::LogRecord &rec) {
         if (rec.isPadding()) return;
-        const unsigned int pbs = config_.blockSize();
+        const uint32_t pbs = config_.blockSize();
         const uint64_t offLb = rec.offset;
-        const unsigned int sizeLb = rec.ioSizeLb();
+        const uint32_t sizeLb = rec.ioSizeLb();
         const uint64_t offPb0 = ::addr_pb(pbs, offLb);
         const uint64_t offPb1 = ::capacity_pb(pbs, offLb + sizeLb);
         setRange(offPb0, offPb1);
@@ -204,7 +204,7 @@ private:
         return rank(bits_.size());
     }
     void printResult() const {
-        unsigned int bs = config_.blockSize();
+        uint32_t bs = config_.blockSize();
 
         const uint64_t written = ::capacity_pb(bs, writtenLb_);
         const uint64_t changed = count();

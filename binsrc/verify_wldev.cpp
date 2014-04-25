@@ -84,9 +84,9 @@ private:
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
     walb::device::SuperBlock super_;
-    const unsigned int pbs_;
+    const uint32_t pbs_;
     const uint32_t salt_;
-    const unsigned int BUFFER_SIZE_;
+    const uint32_t BUFFER_SIZE_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
 
 public:

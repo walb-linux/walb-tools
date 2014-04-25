@@ -29,13 +29,13 @@
 class Config
 {
 private:
-    unsigned int bs_; /* block size [byte] */
+    uint32_t bs_; /* block size [byte] */
     uint64_t offset_; /* [byte]. */
     uint64_t size_; /* [byte]. */
-    unsigned int minIoSize_; /* [byte]. */
-    unsigned int maxIoSize_; /* [byte]. */
-    unsigned int counts_; /* The number of write IOs per thread. */
-    unsigned int numThreads_; /* The number of threads. */
+    uint32_t minIoSize_; /* [byte]. */
+    uint32_t maxIoSize_; /* [byte]. */
+    uint32_t counts_; /* The number of write IOs per thread. */
+    uint32_t numThreads_; /* The number of threads. */
     bool isVerbose_;
     std::string targetPath_; /* device or file path. */
 public:
@@ -52,13 +52,13 @@ public:
         parse(argc, argv);
     }
 
-    unsigned int blockSize() const { return bs_; }
+    uint32_t blockSize() const { return bs_; }
     uint64_t offsetB() const { return offset_ / bs_; }
     uint64_t sizeB() const { return size_ / bs_; }
-    unsigned int minIoB() const { return minIoSize_ / bs_; }
-    unsigned int maxIoB() const { return maxIoSize_ / bs_; }
-    unsigned int counts() const { return counts_; }
-    unsigned int numThreads() const { return numThreads_; }
+    uint32_t minIoB() const { return minIoSize_ / bs_; }
+    uint32_t maxIoB() const { return maxIoSize_ / bs_; }
+    uint32_t counts() const { return counts_; }
+    uint32_t numThreads() const { return numThreads_; }
     bool isVerbose() const { return isVerbose_; }
     const std::string& targetPath() const { return targetPath_; }
 
@@ -128,7 +128,7 @@ private:
     const uint64_t offsetB_;
     const uint64_t sizeB_;
 public:
-    RandomIoSpecGenerator(uint64_t offsetB, unsigned int sizeB)
+    RandomIoSpecGenerator(uint64_t offsetB, uint32_t sizeB)
         : rand_()
         , offsetB_(offsetB)
         , sizeB_(sizeB) {
@@ -138,7 +138,7 @@ public:
     DISABLE_COPY_AND_ASSIGN(RandomIoSpecGenerator);
     DISABLE_MOVE(RandomIoSpecGenerator);
 
-    void get(uint64_t &ioAddr, unsigned int &ioBlocks) {
+    void get(uint64_t &ioAddr, uint32_t &ioBlocks) {
         ioAddr = rand_() % sizeB_ + offsetB_;
         uint64_t sizeB = sizeB_ - (ioAddr - offsetB_);
         assert(0 < sizeB);
@@ -171,9 +171,9 @@ public:
         , bmp_(config.sizeB(), false) {}
 
     void operator()() {
-        const unsigned int bs = config_.blockSize();
+        const uint32_t bs = config_.blockSize();
         uint64_t ioAddr;
-        unsigned int ioBlocks;
+        uint32_t ioBlocks;
         for (size_t i = 0; i < config_.counts(); i++) {
             ioSpecGen_.get(ioAddr, ioBlocks);
             bd_.write(ioAddr * bs, ioBlocks * bs,
@@ -192,7 +192,7 @@ public:
 static bool writeConcurrentlyAndVerify(Config &config)
 {
     /* Prepare */
-    const unsigned int bs = config.blockSize();
+    const uint32_t bs = config.blockSize();
     cybozu::util::BlockDevice bd(
         config.targetPath(), O_RDWR | O_DIRECT);
     std::shared_ptr<char> block =

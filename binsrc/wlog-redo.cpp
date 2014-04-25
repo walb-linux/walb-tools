@@ -109,12 +109,12 @@ class Io
 private:
     off_t offset_; // [bytes].
     size_t size_; // [bytes].
-    unsigned int aioKey_;
+    uint32_t aioKey_;
     bool isSubmitted_;
     bool isCompleted_;
     bool isOverwritten_;
     std::deque<LogBlock> blocks_;
-    unsigned int nOverlapped_; // To serialize overlapped IOs.
+    uint32_t nOverlapped_; // To serialize overlapped IOs.
     u64 sequenceId_;
 
     using IoPtr = std::shared_ptr<Io>;
@@ -154,8 +154,8 @@ public:
     bool isCompleted() const { return isCompleted_; }
     bool isOverwritten() const { return isOverwritten_; }
     const std::deque<std::shared_ptr<uint8_t> >& blocks() const { return blocks_; }
-    unsigned int& nOverlapped() { return nOverlapped_; }
-    unsigned int& aioKey() { return aioKey_; }
+    uint32_t& nOverlapped() { return nOverlapped_; }
+    uint32_t& aioKey() { return aioKey_; }
     std::shared_ptr<uint8_t> ptr() { return blocks_.front(); }
     LogBlock block() { return ptr(); } /* This is just alias of ptr(). */
     bool empty() const { return blocks().empty(); }
@@ -634,9 +634,9 @@ private:
     /**
      * Convert [byte] to [physical block].
      */
-    unsigned int bytesToPb(unsigned int bytes) const {
+    uint32_t bytesToPb(uint32_t bytes) const {
         assert(bytes % LOGICAL_BLOCK_SIZE == 0);
-        unsigned int lb = bytes / LOGICAL_BLOCK_SIZE;
+        uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
         return ::capacity_pb(blockSize_, lb);
     }
 

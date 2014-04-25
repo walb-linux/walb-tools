@@ -38,7 +38,7 @@
 class Config
 {
 private:
-    unsigned int bs_; /* block size [byte] */
+    uint32_t bs_; /* block size [byte] */
     bool isVerbose_;
     std::string recipePath_; /* recipe file path. */
     std::string targetPath_; /* device or file path. */
@@ -52,7 +52,7 @@ public:
         parse(argc, argv);
     }
 
-    unsigned int blockSize() const { return bs_; }
+    uint32_t blockSize() const { return bs_; }
     bool isVerbose() const { return isVerbose_; }
     const std::string& targetPath() const { return targetPath_; }
     const std::string& recipePath() const { return recipePath_; }
@@ -105,7 +105,7 @@ public:
     }
 
     void run() {
-        const unsigned int bs = config_.blockSize();
+        const uint32_t bs = config_.blockSize();
 
         /* Get IO recipe parser. */
         cybozu::util::File fileR;
@@ -128,7 +128,7 @@ public:
     }
 
 private:
-    static std::shared_ptr<char> getBufferStatic(unsigned int blockSize, unsigned sizeB, bool isDirect) {
+    static std::shared_ptr<char> getBufferStatic(uint32_t blockSize, unsigned sizeB, bool isDirect) {
         assert(0 < blockSize);
         assert(0 < sizeB);
         if (isDirect) {
@@ -138,9 +138,9 @@ private:
         }
     }
 
-    void resizeBufferIfneed(unsigned int newSizeB) {
+    void resizeBufferIfneed(uint32_t newSizeB) {
         if (newSizeB <= bufSizeB_) { return; }
-        const unsigned int bs = config_.blockSize();
+        const uint32_t bs = config_.blockSize();
         if (config_.isDirect()) {
             buf_ = cybozu::util::allocateBlocks<char>(bs, bs * newSizeB);
         } else {

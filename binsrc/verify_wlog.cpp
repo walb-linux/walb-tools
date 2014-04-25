@@ -113,8 +113,8 @@ public:
             throw RT_ERR("invalid wlog header.");
         }
 
-        const unsigned int pbs = wh.pbs();
-        const unsigned int bufferSize = 16 * 1024 * 1024;
+        const uint32_t pbs = wh.pbs();
+        const uint32_t bufferSize = 16 * 1024 * 1024;
         cybozu::util::BlockAllocator<uint8_t> ba(bufferSize / pbs, pbs, pbs);
         const uint32_t salt = wh.salt();
 
@@ -170,7 +170,7 @@ private:
     LogBlock readBlock(
         cybozu::util::File &fileR, cybozu::util::BlockAllocator<u8> &ba) {
         LogBlock b = ba.alloc();
-        unsigned int bs = ba.blockSize();
+        uint32_t bs = ba.blockSize();
         fileR.read(b.get(), bs);
         return b;
     }
