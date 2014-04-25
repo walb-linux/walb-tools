@@ -83,10 +83,11 @@ private:
     using LogPackIo = walb::LogPackIo;
 
     const Config &config_;
+    uint32_t pbs_;
 
 public:
     WlogVerifier(const Config &config)
-        : config_(config) {}
+        : config_(config), pbs_(0) {}
 
     void run() {
         /* Get IO recipe parser. */
@@ -113,9 +114,8 @@ public:
             throw RT_ERR("invalid wlog header.");
         }
 
-        const uint32_t pbs = wh.pbs();
+        pbs_ = wh.pbs();
         const uint32_t bufferSize = 16 * 1024 * 1024;
-        cybozu::util::BlockAllocator<uint8_t> ba(bufferSize / pbs, pbs, pbs);
         const uint32_t salt = wh.salt();
 
         uint64_t beginLsid = wh.beginLsid();
@@ -125,10 +125,10 @@ public:
         /* Read walb logs and verify them with IO recipes. */
         while (lsid < endLsid) {
             LogPackHeader logh;
-            readPackHeader(logh, wlFileR, ba, salt);
+            readPackHeader(logh, wlFileR, salt);
             if (lsid != logh.logpackLsid()) { throw RT_ERR("wrong lsid"); }
             std::queue<LogPackIo> q;
-            readPackIo(logh, wlFileR, ba, q);
+            readPackIo(logh, wlFileR, q);
 
             while (!q.empty()) {
                 LogPackIo packIo = std::move(q.front());
@@ -165,27 +165,24 @@ public:
     }
 
 private:
-    using LogBlock = walb::LogBlock;
+    using AlignedArray = walb::AlignedArray;
 
-    LogBlock readBlock(
-        cybozu::util::File &fileR, cybozu::util::BlockAllocator<u8> &ba) {
-        LogBlock b = ba.alloc();
-        uint32_t bs = ba.blockSize();
-        fileR.read(b.get(), bs);
+    AlignedArray readBlock(
+        cybozu::util::File &fileR) {
+        AlignedArray b(pbs_);
+        fileR.read(b.data(), b.size());
         return b;
     }
 
-    void readPackHeader(
-        LogPackHeader& logh, cybozu::util::File &fileR,
-        cybozu::util::BlockAllocator<u8> &ba, uint32_t salt) {
-        logh.setBlock(readBlock(fileR, ba));
-        logh.setPbs(ba.blockSize());
+    void readPackHeader(LogPackHeader& logh, cybozu::util::File &fileR, uint32_t salt) {
+        logh.setBlock(readBlock(fileR));
+        logh.setPbs(pbs_);
         logh.setSalt(salt);
     }
 
     void readPackIo(
         LogPackHeader &logh, cybozu::util::File &fileR,
-        cybozu::util::BlockAllocator<u8> &ba, std::queue<LogPackIo> &queue) {
+        std::queue<LogPackIo> &queue) {
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
@@ -193,7 +190,7 @@ private:
             if (!rec.hasData()) continue;
             const uint32_t ioSizePb = rec.ioSizePb(logh.pbs());
             for (size_t j = 0; j < ioSizePb; j++) {
-                packIo.blockS.addBlock(readBlock(fileR, ba));
+                packIo.blockS.addBlock(readBlock(fileR));
             }
             if (!rec.hasDataForChecksum()) { continue; }
             /* Only normal IOs will be inserted. */

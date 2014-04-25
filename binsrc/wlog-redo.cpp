@@ -80,7 +80,7 @@ private:
     }
 };
 
-using LogBlock = walb::LogBlock;
+using AlignedArray = walb::AlignedArray;
 
 /**
  * Sequence id generator.
@@ -113,7 +113,7 @@ private:
     bool isSubmitted_;
     bool isCompleted_;
     bool isOverwritten_;
-    std::deque<LogBlock> blocks_;
+    std::deque<AlignedArray> blocks_;
     uint32_t nOverlapped_; // To serialize overlapped IOs.
     u64 sequenceId_;
 
@@ -127,9 +127,9 @@ public:
         , blocks_(), nOverlapped_(0)
         , sequenceId_(DefaultSequenceIdGenerator()) {}
 
-    Io(off_t offset, size_t size, LogBlock block)
+    Io(off_t offset, size_t size, AlignedArray &&block)
         : Io(offset, size) {
-        setBlock(block);
+        setBlock(std::move(block));
     }
 
     Io(const Io &rhs) = delete;
@@ -153,21 +153,16 @@ public:
     bool isSubmitted() const { return isSubmitted_; }
     bool isCompleted() const { return isCompleted_; }
     bool isOverwritten() const { return isOverwritten_; }
-    const std::deque<std::shared_ptr<uint8_t> >& blocks() const { return blocks_; }
+    const std::deque<AlignedArray>& blocks() const { return blocks_; }
     uint32_t& nOverlapped() { return nOverlapped_; }
     uint32_t& aioKey() { return aioKey_; }
-    std::shared_ptr<uint8_t> ptr() { return blocks_.front(); }
-    LogBlock block() { return ptr(); } /* This is just alias of ptr(). */
+    AlignedArray& ptr() { return blocks_.front(); }
     bool empty() const { return blocks().empty(); }
     u64 sequenceId() const { return sequenceId_; }
 
-    template<typename T>
-    T* rawPtr() { return reinterpret_cast<T*>(ptr().get()); }
-    uint8_t* rawPtr() { return ptr().get(); }
-
-    void setBlock(LogBlock b) {
+    void setBlock(AlignedArray &&b) {
         assert(blocks_.empty());
-        blocks_.push_back(b);
+        blocks_.push_back(std::move(b));
     }
 
     void overwritten() {
@@ -195,7 +190,7 @@ public:
                   offset_, size_, aioKey_,
                   isSubmitted_, isCompleted_);
         for (auto &b : blocks_) {
-            ::fprintf(p, "  block %p\n", b.get());
+            ::fprintf(p, "  block %p\n", b.data());
         }
     }
 
@@ -217,8 +212,8 @@ public:
         }
 
         /* Check buffers are contiguous. */
-        uint8_t *p0 = blocks_.front().get();
-        uint8_t *p1 = rhs->blocks_.front().get();
+        const char *p0 = blocks_.front().data();
+        const char *p1 = rhs->blocks_.front().data();
         return p0 + size_ == p1;
     }
 
@@ -234,8 +229,8 @@ public:
         }
         size_ += rhs->size_;
         while (!rhs->empty()) {
-            std::shared_ptr<uint8_t> p = rhs->blocks_.front();
-            blocks_.push_back(p);
+            AlignedArray& p = rhs->blocks_.front();
+            blocks_.push_back(std::move(p));
             rhs->blocks_.pop_front();
         }
         return true;
@@ -581,7 +576,7 @@ private:
     /**
      * Create an IO.
      */
-    IoPtr createIo(off_t offset, size_t size, LogBlock block) {
+    IoPtr createIo(off_t offset, size_t size, AlignedArray block) {
         return IoPtr(new Io(offset, size, block));
     }
 
@@ -808,7 +803,7 @@ private:
         size_t nBlocks = 0;
         const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
         for (size_t i = 0; i < ioSizePb; i++) {
-            LogBlock block;
+            AlignedArray block;
             if (rec.isDiscard()) {
                 assert(config_.isZeroDiscard());
                 block = ba_.alloc();

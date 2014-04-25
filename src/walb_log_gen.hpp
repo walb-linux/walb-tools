@@ -100,8 +100,7 @@ private:
         const uint32_t salt = rand.get32();
         const uint32_t pbs = config_.pbs;
         uint64_t lsid = config_.lsid;
-        LogBlock hBlock = createLogBlock(pbs);
-        cybozu::util::BlockAllocator<uint8_t> ba(config_.maxPackPb, pbs, pbs);
+        AlignedArray hBlock(pbs);
 
         /* Generate and write walb log header. */
         wlHead.init(pbs, salt, &uuid[0], lsid, uint64_t(-1));
@@ -112,16 +111,16 @@ private:
 
         uint64_t nPack = 0;
         while (writtenPb < config_.outLogPb) {
-            walb::LogPackHeader logh(hBlock.get(), pbs, salt);
+            walb::LogPackHeader logh(hBlock.data(), pbs, salt);
             generateLogpackHeader(rand, logh, lsid);
             assert(::is_valid_logpack_header_and_records(&logh.header()));
             uint64_t tmpLsid = lsid + 1;
 
             /* Prepare blocks and calc checksum if necessary. */
-            std::queue<LogBlock> blockQ;
+            std::queue<AlignedArray> blockQ;
             for (uint32_t i = 0; i < logh.nRecords(); i++) {
                 LogRecord &rec = logh.record(i);
-                LogBlockShared blockS(pbs);
+                ChecksumCalculator cc(rec.io_size, salt);
 
                 if (rec.hasData()) {
                     bool isAllZero = false;
@@ -130,18 +129,17 @@ private:
                     }
                     const uint32_t ioSizePb = rec.ioSizePb(pbs);
                     for (uint32_t j = 0; j < ioSizePb; j++) {
-                        LogBlock b = ba.alloc();
-                        ::memset(b.get(), 0, pbs);
+                        AlignedArray b(pbs);
                         if (!isAllZero) {
-                            ::memcpy(b.get(), &tmpLsid, sizeof(tmpLsid));
+                            ::memcpy(b.data(), &tmpLsid, sizeof(tmpLsid));
                         }
                         tmpLsid++;
-                        blockS.addBlock(b);
+                        cc.update(b.data(), b.size());
                         blockQ.push(std::move(b));
                     }
                 }
                 if (rec.hasDataForChecksum()) {
-                    rec.checksum = blockS.calcChecksum(rec.io_size, salt);
+                    rec.checksum = cc.get();
                 }
             }
             assert(blockQ.size() == logh.totalIoSize());

@@ -84,13 +84,12 @@ private:
     const uint64_t beginLsid_, endLsid_;
     walb::device::AsyncWldevReader ldevReader_;
     walb::device::SuperBlock &super_;
+    const uint32_t pbs_;
     cybozu::util::BlockAllocator<uint8_t> ba_;
     bool isVerbose_;
 
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
-    using LogBlock = walb::LogBlock;
-
 public:
     WlogExtractor(const std::string &ldevPath,
                   uint64_t beginLsid, uint64_t endLsid,
@@ -98,7 +97,8 @@ public:
         : beginLsid_(beginLsid), endLsid_(endLsid)
         , ldevReader_(ldevPath)
         , super_(ldevReader_.super())
-        , ba_(ldevReader_.queueSize() * 2, ldevReader_.pbs(), ldevReader_.pbs())
+        , pbs_(ldevReader_.pbs())
+        , ba_(ldevReader_.queueSize() * 2, pbs_, pbs_)
         , isVerbose_(isVerbose) {
     }
     DISABLE_COPY_AND_ASSIGN(WlogExtractor);
@@ -161,20 +161,21 @@ public:
         }
         writer.close();
     }
+    using AlignedArray = walb::AlignedArray;
 private:
     void readAheadLoose() {
         ldevReader_.readAhead(0.5);
     }
-    LogBlock readBlock() {
-        LogBlock b = ba_.alloc();
-        ldevReader_.read(reinterpret_cast<char *>(b.get()), 1);
+    AlignedArray readBlock() {
+        AlignedArray b(pbs_);
+        ldevReader_.read(b.data(), 1);
         return b;
     }
     /**
      * Get block list from packIo list.
      */
-    static std::queue<LogBlock> toBlocks(std::queue<LogPackIo> &src) {
-        std::queue<LogBlock> dst;
+    static std::queue<AlignedArray> toBlocks(std::queue<LogPackIo> &src) {
+        std::queue<AlignedArray> dst;
         while (!src.empty()) {
             LogPackIo packIo = std::move(src.front());
             src.pop();

@@ -318,7 +318,7 @@ public:
     /**
      * Write a pack.
      */
-    void writePack(const LogPackHeader &header, std::queue<LogBlock> &&blockQ) {
+    void writePack(const LogPackHeader &header, std::queue<AlignedArray> &&blockQ) {
         /* Validate. */
         checkHeader(header);
         if (header.totalIoSize() != blockQ.size()) {
@@ -382,8 +382,7 @@ private:
      * Write the end block.
      */
     void writeEof() {
-        LogBlock b = createLogBlock(pbs_);
-        LogPackHeader h(b, pbs_, salt_);
+        LogPackHeader h(pbs_, salt_);
         h.setEnd();
         h.writeTo(fileW_);
     }

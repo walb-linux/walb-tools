@@ -99,8 +99,7 @@ private:
     const Config& config_;
     int64_t lsidDiff_;
 
-    using LogBlock = walb::LogBlock;
-    using BlockA = cybozu::util::BlockAllocator<uint8_t>;
+    using AlignedArray = walb::AlignedArray;
     using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using LogPackHeader = walb::LogPackHeader;
@@ -145,7 +144,6 @@ public:
 
         /* Allocate buffer for logpacks. */
         const uint32_t BUFFER_SIZE = 16 * 1024 * 1024; /* 16MB */
-        BlockA ba(BUFFER_SIZE / pbs, pbs, pbs);
 
         /* Set lsid range. */
         uint64_t beginLsid = wlHead.beginLsid() + lsidDiff_;
@@ -174,11 +172,11 @@ public:
 
         /* Invalidate the last log block. */
         if (beginLsid < restoredLsid) {
-            invalidateLsid(blkdev, super, ba, pbs, restoredLsid);
+            invalidateLsid(blkdev, super, pbs, restoredLsid);
         }
         /* Invalidate the specified block. */
         if (config_.invalidLsid() != uint64_t(-1)) {
-            invalidateLsid(blkdev, super, ba, pbs, config_.invalidLsid());
+            invalidateLsid(blkdev, super, pbs, config_.invalidLsid());
         }
 
         /* Finalize the log device. */
@@ -193,26 +191,26 @@ private:
      * Invalidate a specified lsid.
      */
     void invalidateLsid(
-        BlockDev &blkdev, SuperBlock &super, BlockA &ba,
+        BlockDev &blkdev, SuperBlock &super,
         uint32_t pbs, uint64_t lsid) {
         uint64_t off = super.getOffsetFromLsid(lsid);
-        LogBlock b = ba.alloc();
-        blkdev.write(off * pbs, pbs, b.get());
+        AlignedArray b(pbs);
+        blkdev.write(off * pbs, pbs, b.data());
     }
 
     /**
      * Read a block data from a fd reader.
      */
-    LogBlock readBlock(File& fileR, BlockA& ba, uint32_t pbs) {
-        LogBlock b = ba.alloc();
-        fileR.read(b.get(), pbs);
+    AlignedArray readBlock(File& fileR, uint32_t pbs) {
+        AlignedArray b(pbs);
+        fileR.read(b.data(), pbs);
         return b;
     }
 
     /**
      * Read a logpack data.
      */
-    void readLogpackData(LogPackIo &packIo, File &fileR, BlockA &ba, uint32_t pbs) {
+    void readLogpackData(LogPackIo &packIo, File &fileR, uint32_t pbs) {
         const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return;
         const uint32_t ioSizePb = rec.ioSizePb(pbs);
@@ -239,14 +237,14 @@ private:
      */
     bool readLogpackAndRestore(
         File &fileR, BlockDev &blkdev,
-        SuperBlock &super, BlockA &ba, WlogHeader &wlHead,
+        SuperBlock &super, WlogHeader &wlHead,
         uint64_t &restoredLsid) {
 
         const uint32_t salt = wlHead.salt();
         const uint32_t pbs = wlHead.pbs();
 
         /* Read logpack header. */
-        LogPackHeader logh(readBlock(fileR, ba, pbs), pbs, salt);
+        LogPackHeader logh(readBlock(fileR, pbs), pbs, salt);
         if (logh.isEnd()) return false;
         if (!logh.isValid()) return false;
         if (config_.isVerbose()) logh.printShort();
@@ -269,7 +267,7 @@ private:
             uint32_t paddingPb = endOffPb - offPb;
             assert(0 < paddingPb);
             assert(paddingPb < (1U << 16));
-            LogPackHeader paddingLogh(ba.alloc(), pbs, wlHead.salt());
+            LogPackHeader paddingLogh(pbs, wlHead.salt());
             paddingLogh.init(logh.logpackLsid());
             paddingLogh.addPadding(paddingPb - 1);
             paddingLogh.updateChecksum();
@@ -288,12 +286,12 @@ private:
         }
 
         /* Read logpack data. */
-        std::vector<LogBlock> blocks;
+        std::vector<AlignedArray> blocks;
         blocks.reserve(logh.totalIoSize());
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            readLogpackData(packIo, fileR, ba, pbs);
+            readLogpackData(packIo, fileR, pbs);
             walb::LogRecord &rec = packIo.rec;
             if (rec.hasData()) {
                 const uint32_t ioSizePb = rec.ioSizePb(pbs);
@@ -333,8 +331,8 @@ private:
 
         if (config_.isVerify()) {
             /* Currently only header block will be verified. */
-            LogBlock b2 = ba.alloc();
-            blkdev.read(offPb * pbs, pbs, reinterpret_cast<char *>(b2.get()));
+            AlignedArray b2(pbs);
+            blkdev.read(offPb * pbs, pbs, b2.data());
             LogPackHeader logh2(b2, pbs, salt);
             int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
             if (ret) {

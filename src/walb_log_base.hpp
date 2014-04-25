@@ -22,6 +22,7 @@
 #include "walb/log_record.h"
 #include "walb_log.h"
 #include "backtrace.hpp"
+#include "walb_util.hpp"
 
 namespace walb {
 
@@ -70,12 +71,6 @@ struct LogRecord : public walb_log_record
     }
     uint32_t ioSizeLb() const { return io_size; }
 };
-
-using LogBlock = std::shared_ptr<uint8_t>;
-inline LogBlock createLogBlock(uint32_t pbs)
-{
-    return cybozu::util::allocateBlocks<uint8_t>(LOGICAL_BLOCK_SIZE, pbs);
-}
 
 namespace log {
 
@@ -128,7 +123,7 @@ inline void printRecordOneline(::FILE *fp, size_t idx, const LogRecord &rec)
  */
 class LogPackHeader
 {
-    LogBlock block_;
+    AlignedArray block_;
     walb_logpack_header *header_;
     uint32_t pbs_;
     uint32_t salt_;
@@ -137,13 +132,13 @@ public:
     LogPackHeader(const void *header = 0, uint32_t pbs = 0, uint32_t salt = 0)
         : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
     }
-    LogPackHeader(const LogBlock &block, uint32_t pbs, uint32_t salt)
+    LogPackHeader(AlignedArray &&block, uint32_t pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
-        setBlock(block);
+        setBlock(std::move(block));
     }
     LogPackHeader(uint32_t pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
-        setBlock(createLogBlock(pbs));
+        setBlock(AlignedArray(pbs));
     }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
     walb_logpack_header &header() { checkBlock(); return *header_; }
@@ -151,15 +146,14 @@ public:
     uint32_t salt() const { return salt_; }
     void setPbs(uint32_t pbs) { pbs_ = pbs; }
     void setSalt(uint32_t salt) { salt_ = salt; }
-    void setBlock(const LogBlock &block) {
-        block_ = block;
-        header_ = (walb_logpack_header*)block_.get();
+    void setBlock(AlignedArray &&block) {
+        block_ = std::move(block);
+        header_ = (walb_logpack_header*)block_.data();
     }
-    void init(uint32_t pbs, uint32_t salt, LogBlock block = nullptr) {
+    void init(uint32_t pbs, uint32_t salt) {
         setPbs(pbs);
         setSalt(salt);
-        if (!block) block = createLogBlock(pbs);
-        setBlock(block);
+        setBlock(AlignedArray(pbs_));
     }
 
     /*
@@ -509,6 +503,22 @@ protected:
     }
 };
 
+struct ChecksumCalculator {
+    size_t remaining;
+    uint32_t csum;
+    ChecksumCalculator(size_t ioSizeLb, uint32_t salt) : remaining(ioSizeLb * LOGICAL_BLOCK_SIZE), csum(salt) {}
+    void update(const char *data, size_t size)
+    {
+        const size_t s = std::min<size_t>(size, remaining);
+        csum = cybozu::util::checksumPartial(data, s, csum);
+        remaining -= s;
+    }
+    uint32_t get() const {
+        if (remaining) throw cybozu::Exception("ChecksumCalculator") << remaining;
+        return cybozu::util::checksumFinish(csum);
+    }
+};
+
 /**
  * Helper class to manage multiple IO blocks.
  * This is copyable and movable.
@@ -518,7 +528,7 @@ class LogBlockShared
 private:
     static constexpr const char *NAME() { return "LogBlockShared"; }
     uint32_t pbs_; /* physical block size. */
-    std::vector<LogBlock> data_; /* Each block's size must be pbs. */
+    std::vector<AlignedArray> data_; /* Each block's size must be pbs. */
 public:
     explicit LogBlockShared(uint32_t pbs = 0) : pbs_(pbs) {}
     void init(size_t pbs) {
@@ -527,13 +537,13 @@ public:
         resize(0);
     }
     size_t nBlocks() const { return data_.size(); }
-    const uint8_t *get(size_t idx) const {
+    const char *get(size_t idx) const {
         checkRange(idx);
-        return data_[idx].get();
+        return data_[idx].data();
     }
-    uint8_t *get(size_t idx) {
+    char *get(size_t idx) {
         checkRange(idx);
-        return data_[idx].get();
+        return data_[idx].data();
     }
     uint32_t pbs() const {
         checkPbs();
@@ -544,14 +554,13 @@ public:
             data_.resize(nBlocks0);
         }
         while (data_.size() < nBlocks0) {
-            data_.push_back(allocPb());
+            data_.emplace_back(pbs_);
         }
     }
-    void addBlock(const LogBlock &block) {
-        assert(block);
-        data_.push_back(block);
+    void addBlock(AlignedArray &&block) {
+        data_.push_back(std::move(block));
     }
-    LogBlock getBlock(size_t idx) const { return data_[idx]; }
+    AlignedArray& getBlock(size_t idx) { return data_[idx]; }
     template <typename Reader>
     void read(Reader &reader, uint32_t nBlocks0) {
         checkPbs();
@@ -583,23 +592,13 @@ public:
     uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const {
         checkPbs();
         checkSizeLb(ioSizeLb);
-        uint32_t csum = salt;
-        size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
-        size_t i = 0;
-        while (0 < remaining) {
-            assert(i < nBlocks());
-            const size_t s = std::min<size_t>(pbs_, remaining);
-            csum = cybozu::util::checksumPartial(get(i), s, csum);
-            remaining -= s;
-            i++;
+        ChecksumCalculator cc(ioSizeLb, salt);
+        for (size_t i = 0; i < nBlocks(); i++) {
+            cc.update(get(i), pbs_);
         }
-        return cybozu::util::checksumFinish(csum);
+        return cc.get();
     }
 private:
-    LogBlock allocPb() const {
-        checkPbs();
-        return createLogBlock(pbs_);
-    }
     void checkPbs() const {
         if (pbs_ == 0) throw cybozu::Exception(NAME()) << "pbs is zero";
     }

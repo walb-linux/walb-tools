@@ -80,6 +80,7 @@ class WldevVerifier
 private:
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
+    using AlignedArray = walb::AlignedArray;
 
     const Config &config_;
     cybozu::util::BlockDevice wlDev_;
@@ -161,12 +162,10 @@ public:
     }
 
 private:
-    using LogBlock = walb::LogBlock;
-
-    LogBlock readBlock(uint64_t lsid) {
-        LogBlock b = ba_.alloc();
+    AlignedArray readBlock(uint64_t lsid) {
+        AlignedArray b(pbs_);
         uint64_t offset = super_.getOffsetFromLsid(lsid);
-        wlDev_.read(offset * pbs_, pbs_, reinterpret_cast<char *>(b.get()));
+        wlDev_.read(offset * pbs_, pbs_, b.data());
         return b;
     }
 
