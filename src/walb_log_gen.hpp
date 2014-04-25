@@ -31,11 +31,11 @@ public:
     struct Config
     {
         uint64_t devLb;
-        unsigned int minIoLb;
-        unsigned int maxIoLb;
-        unsigned int pbs;
-        unsigned int maxPackPb;
-        unsigned int outLogPb;
+        uint32_t minIoLb;
+        uint32_t maxIoLb;
+        uint32_t pbs;
+        uint32_t maxPackPb;
+        uint32_t outLogPb;
         uint64_t lsid;
         bool isPadding;
         bool isDiscard;
@@ -119,7 +119,7 @@ private:
 
             /* Prepare blocks and calc checksum if necessary. */
             std::queue<LogBlock> blockQ;
-            for (unsigned int i = 0; i < logh.nRecords(); i++) {
+            for (uint32_t i = 0; i < logh.nRecords(); i++) {
                 LogRecord &rec = logh.record(i);
                 LogBlockShared blockS(pbs);
 
@@ -129,7 +129,7 @@ private:
                         isAllZero = rand.get32() % 100 < 10;
                     }
                     const uint32_t ioSizePb = rec.ioSizePb(pbs);
-                    for (unsigned int j = 0; j < ioSizePb; j++) {
+                    for (uint32_t j = 0; j < ioSizePb; j++) {
                         LogBlock b = ba.alloc();
                         ::memset(b.get(), 0, pbs);
                         if (!isAllZero) {
@@ -181,8 +181,8 @@ private:
     void generateLogpackHeader(
         Rand &rand, walb::LogPackHeader &logh, uint64_t lsid) {
         logh.init(lsid);
-        const unsigned int pbs = config_.pbs;
-        const unsigned int maxNumRecords = ::max_n_log_record_in_sector(pbs);
+        const uint32_t pbs = config_.pbs;
+        const uint32_t maxNumRecords = ::max_n_log_record_in_sector(pbs);
         const size_t nRecords = (rand.get32() % maxNumRecords) + 1;
         const uint64_t devLb = config_.devLb;
 
@@ -205,7 +205,7 @@ private:
                 break;
             }
             /* Decide IO type. */
-            unsigned int v = rand.get32() % 100;
+            uint32_t v = rand.get32() % 100;
             if (config_.isPadding && v < 10) {
                 uint16_t psize = capacity_lb(pbs, capacity_pb(pbs, ioSize));
                 if (v < 5) { psize = 0; } /* padding size can be 0. */

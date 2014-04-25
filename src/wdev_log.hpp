@@ -39,7 +39,7 @@ private:
     /* Log device. */
     cybozu::util::BlockDevice& bd_;
     /* Physical block size */
-    const unsigned int pbs_;
+    const uint32_t pbs_;
     /* Super block offset in the log device [physical block]. */
     const uint64_t offset_;
 
@@ -196,7 +196,7 @@ public:
     }
 
 private:
-    static uint64_t get1stSuperBlockOffsetStatic(unsigned int pbs) {
+    static uint64_t get1stSuperBlockOffsetStatic(uint32_t pbs) {
         return ::get_super_sector0_offset(pbs);
     }
 

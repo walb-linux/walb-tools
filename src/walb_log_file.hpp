@@ -26,7 +26,7 @@ public:
     FileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
-    void init(unsigned int pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
+    void init(uint32_t pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
         ::memset(data_.data(), 0, data_.size());
         header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
         header().version = WALB_LOG_VERSION;
@@ -68,8 +68,8 @@ public:
 
     uint32_t checksum() const { return header().checksum; }
     uint32_t salt() const { return header().log_checksum_salt; }
-    unsigned int lbs() const { return header().logical_bs; }
-    unsigned int pbs() const { return header().physical_bs; }
+    uint32_t lbs() const { return header().logical_bs; }
+    uint32_t pbs() const { return header().physical_bs; }
     uint64_t beginLsid() const { return header().begin_lsid; }
     uint64_t endLsid() const { return header().end_lsid; }
     const uint8_t* uuid() const { return &header().uuid[0]; }
@@ -132,7 +132,7 @@ class Reader /* final */
 private:
     cybozu::util::File fileR_;
     bool isReadHeader_;
-    unsigned int pbs_;
+    uint32_t pbs_;
     uint32_t salt_;
     bool isBegun_;
     bool isEnd_;
@@ -255,7 +255,7 @@ private:
     bool isClosed_;
 
     /* These members will be set in writeHeader(). */
-    unsigned int pbs_;
+    uint32_t pbs_;
     uint32_t salt_;
     uint64_t beginLsid_;
     uint64_t lsid_;
@@ -356,7 +356,7 @@ public:
     /**
      * Parameters.
      */
-    unsigned int pbs() const { return pbs_; }
+    uint32_t pbs() const { return pbs_; }
     uint32_t salt() const { return salt_; }
 private:
     /**

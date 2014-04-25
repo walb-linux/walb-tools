@@ -73,7 +73,7 @@ private:
     std::map<int, std::string> nameMap_; /* fd, name. */
 
 public:
-    explicit LogDevMonitor(unsigned int maxEvents = 1)
+    explicit LogDevMonitor(uint32_t maxEvents = 1)
         : mutex_()
         , efd_(::epoll_create(maxEvents), "epoll_create failed.")
         , ev_(maxEvents)

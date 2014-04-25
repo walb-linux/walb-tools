@@ -15,15 +15,15 @@ struct IoRecipe
 {
 private:
     const uint64_t offsetB_;
-    const unsigned int ioSizeB_;
+    const uint32_t ioSizeB_;
     const uint32_t csum_;
 public:
-    IoRecipe(uint64_t offsetB, unsigned int ioSizeB, uint32_t csum)
+    IoRecipe(uint64_t offsetB, uint32_t ioSizeB, uint32_t csum)
         : offsetB_(offsetB), ioSizeB_(ioSizeB), csum_(csum) {}
     ~IoRecipe() noexcept = default;
 
     uint64_t offsetB() const { return offsetB_; }
-    unsigned int ioSizeB() const { return ioSizeB_; }
+    uint32_t ioSizeB() const { return ioSizeB_; }
     uint32_t csum() const { return csum_; }
 
     std::string toString() const {
@@ -45,7 +45,7 @@ public:
         std::string line1(line, pos1 + 1);
         size_t pos2 = line1.find('\t');
         if (pos2 == std::string::npos) { throw RT_ERR("IoRecipe parse error."); }
-        unsigned int ioSizeB = std::stoul(line1.substr(0, pos2));
+        uint32_t ioSizeB = std::stoul(line1.substr(0, pos2));
 
         std::string line2(line1, pos2 + 1);
         uint32_t csum = std::stoul(line2, nullptr, 16);

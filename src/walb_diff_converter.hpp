@@ -149,8 +149,8 @@ private:
         }
 
         /* Block buffer. */
-        const unsigned int BUF_SIZE = 4U << 20;
-        const unsigned int pbs = wlHeader.pbs();
+        const uint32_t BUF_SIZE = 4U << 20;
+        const uint32_t pbs = wlHeader.pbs();
         cybozu::util::BlockAllocator<uint8_t> ba(BUF_SIZE / pbs, pbs, pbs);
 
         /* Initialize walb diff db. */
