@@ -14,6 +14,7 @@
 #include "murmurhash3.hpp"
 #include "dirty_full_sync.hpp"
 #include "dirty_hash_sync.hpp"
+#include "walb_util.hpp"
 
 namespace walb {
 
@@ -816,8 +817,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     sender.setParams(pbs, salt);
     sender.start();
 
-    std::shared_ptr<uint8_t> packHeaderBlock = cybozu::util::allocateBlocks<uint8_t>(pbs, pbs);
-    LogPackHeader packH(packHeaderBlock, pbs, salt);
+    LogPackHeader packH(pbs, salt);
     reader.reset(lsidB);
 
     LogBlockShared blockS(pbs);

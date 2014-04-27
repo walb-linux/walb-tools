@@ -576,8 +576,8 @@ private:
     /**
      * Create an IO.
      */
-    IoPtr createIo(off_t offset, size_t size, AlignedArray block) {
-        return IoPtr(new Io(offset, size, block));
+    IoPtr createIo(off_t offset, size_t size, AlignedArray&& block) {
+        return IoPtr(new Io(offset, size, std::move(block)));
     }
 
     /**
@@ -770,7 +770,7 @@ private:
             /* Prepare aio. */
             assert(iop->nOverlapped() == 0);
             iop->aioKey() = aio_.prepareWrite(
-                iop->offset(), iop->size(), iop->rawPtr<char>());
+                iop->offset(), iop->size(), iop->ptr().data());
             assert(iop->aioKey() > 0);
             iop->markSubmitted();
             nBulk++;
@@ -791,7 +791,7 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(const walb::LogRecord &rec, const walb::LogBlockShared& blockS) {
+    void redoNormalIo(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
         assert(rec.isExist());
         assert(!rec.isPadding());
         assert(config_.isZeroDiscard() || !rec.isDiscard());
@@ -805,23 +805,15 @@ private:
         for (size_t i = 0; i < ioSizePb; i++) {
             AlignedArray block;
             if (rec.isDiscard()) {
-                assert(config_.isZeroDiscard());
-                block = ba_.alloc();
-                ::memset(block.get(), 0, blockSize_);
+                block.resize(blockSize_);
             } else {
-                block = blockS.getBlock(i);
+                block = std::move(blockS.getBlock(i));
             }
-            IoPtr iop;
-            if (blockSize_ <= remaining) {
-                iop = createIo(off, blockSize_, block);
-                off += blockSize_;
-                remaining -= blockSize_;
-            } else {
-                iop = createIo(off, remaining, block);
-                off += remaining;
-                remaining = 0;
-            }
-            assert(iop.get() != nullptr);
+            const size_t size = std::min(blockSize_, remaining);
+
+            IoPtr iop = IoPtr(new Io(off, size, std::move(block)));
+            off += size;
+            remaining -= size;
             /* Clip if the IO area is out of range in the device. */
             if (iop->offset() + iop->size() <= bd_.getDeviceSize()) {
                 tmpIoQ.add(iop);
@@ -853,7 +845,7 @@ private:
     /**
      * Redo a logpack data.
      */
-    void redoPack(const walb::LogRecord &rec, const walb::LogBlockShared& blockS) {
+    void redoPack(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
         assert(rec.isExist());
         const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
 

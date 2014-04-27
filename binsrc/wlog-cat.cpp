@@ -177,14 +177,13 @@ private:
     static std::queue<AlignedArray> toBlocks(std::queue<LogPackIo> &src) {
         std::queue<AlignedArray> dst;
         while (!src.empty()) {
-            LogPackIo packIo = std::move(src.front());
-            src.pop();
+            LogPackIo& packIo = src.front();
             walb::LogBlockShared &blockS = packIo.blockS;
             for (size_t i = 0; i < blockS.nBlocks(); i++) {
-                dst.push(blockS.getBlock(i));
+                dst.push(std::move(blockS.getBlock(i)));
             }
+            src.pop();
         }
-        assert(src.empty());
         return dst;
     }
 

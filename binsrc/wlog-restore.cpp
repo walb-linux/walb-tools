@@ -142,9 +142,6 @@ public:
             throw RT_ERR("Physical block size differs.\n");
         }
 
-        /* Allocate buffer for logpacks. */
-        const uint32_t BUFFER_SIZE = 16 * 1024 * 1024; /* 16MB */
-
         /* Set lsid range. */
         uint64_t beginLsid = wlHead.beginLsid() + lsidDiff_;
         ::printf("Try to restore lsid range [%" PRIu64 ", %" PRIu64 ")\n",
@@ -158,7 +155,7 @@ public:
         /* Read and write each logpack. */
         try {
             while (readLogpackAndRestore(
-                       fileR, blkdev, super, ba, wlHead, restoredLsid)) {}
+                       fileR, blkdev, super, wlHead, restoredLsid)) {}
         } catch (cybozu::util::EofError &e) {
             ::printf("Reached input EOF.\n");
         }
@@ -215,7 +212,7 @@ private:
         if (!rec.hasData()) return;
         const uint32_t ioSizePb = rec.ioSizePb(pbs);
         for (size_t i = 0; i < ioSizePb; i++) {
-            packIo.blockS.addBlock(readBlock(fileR, ba, pbs));
+            packIo.blockS.addBlock(readBlock(fileR, pbs));
         }
         if (!packIo.isValid()) {
             throw walb::log::InvalidIo();
@@ -228,7 +225,6 @@ private:
      * @fileR wlog input.
      * @blkdev log block device.
      * @super super block (with the blkdev).
-     * @ba block allocator.
      * @wlHead wlog header.
      * @restoresLsid lsid of the next logpack will be set if restored.
      *
@@ -296,7 +292,7 @@ private:
             if (rec.hasData()) {
                 const uint32_t ioSizePb = rec.ioSizePb(pbs);
                 for (size_t j = 0; j < ioSizePb; j++) {
-                    blocks.push_back(packIo.blockS.getBlock(j));
+                    blocks.push_back(std::move(packIo.blockS.getBlock(j)));
                 }
             }
             if (0 < config_.ddevLb() &&
@@ -326,14 +322,14 @@ private:
         blkdev.write(offPb * pbs, pbs, logh.rawData());
         for (size_t i = 0; i < blocks.size(); i++) {
             blkdev.write((offPb + 1 + i) * pbs, pbs,
-                         reinterpret_cast<const char *>(blocks[i].get()));
+                         blocks[i].data());
         }
 
         if (config_.isVerify()) {
             /* Currently only header block will be verified. */
             AlignedArray b2(pbs);
             blkdev.read(offPb * pbs, pbs, b2.data());
-            LogPackHeader logh2(b2, pbs, salt);
+            LogPackHeader logh2(std::move(b2), pbs, salt);
             int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
             if (ret) {
                 throw RT_ERR("Logpack header verification failed: "
