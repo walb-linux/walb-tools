@@ -22,7 +22,6 @@
 #include "fileio.hpp"
 #include "walb_log_file.hpp"
 #include "aio_util.hpp"
-#include "memory_buffer.hpp"
 #include "walb/walb.h"
 #include "walb_util.hpp"
 

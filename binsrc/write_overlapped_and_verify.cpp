@@ -18,7 +18,6 @@
 #include "random.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
 #include "walb_util.hpp"
@@ -159,11 +158,11 @@ private:
     const Config &config_;
     cybozu::util::BlockDevice bd_;
     RandomIoSpecGenerator ioSpecGen_;
-    const std::shared_ptr<char> dataPtr_;
+    const char *dataPtr_;
     std::vector<bool> bmp_;
 
 public:
-    Worker(const Config &config, std::shared_ptr<char> dataPtr)
+    Worker(const Config &config, const char *dataPtr)
         : config_(config)
         , bd_(config.targetPath(), O_RDWR | O_DIRECT)
         , ioSpecGen_(config.offsetB(), config.sizeB())
@@ -177,7 +176,7 @@ public:
         for (size_t i = 0; i < config_.counts(); i++) {
             ioSpecGen_.get(ioAddr, ioBlocks);
             bd_.write(ioAddr * bs, ioBlocks * bs,
-                      &dataPtr_.get()[(ioAddr - config_.offsetB()) * bs]);
+                      &dataPtr_[(ioAddr - config_.offsetB()) * bs]);
             for (uint64_t i = ioAddr - config_.offsetB();
                  i < ioAddr - config_.offsetB() + ioBlocks; i++) {
                 bmp_[i] = true;
@@ -195,8 +194,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     const uint32_t bs = config.blockSize();
     cybozu::util::BlockDevice bd(
         config.targetPath(), O_RDWR | O_DIRECT);
-    std::shared_ptr<char> block =
-        cybozu::util::allocateBlocks<char>(LOGICAL_BLOCK_SIZE, bs);
+    walb::AlignedArray block(bs);
 
     /* Decide target area size. */
     size_t sizeB = config.sizeB();
@@ -207,22 +205,19 @@ static bool writeConcurrentlyAndVerify(Config &config)
     config.setSizeB(sizeB);
 
     /* Write zero to the target range. */
-    ::memset(block.get(), 0, bs);
     for (uint64_t i = 0; i < sizeB; i++) {
-        bd.write((config.offsetB() + i) * bs, bs, block.get());
+        bd.write((config.offsetB() + i) * bs, bs, block.data());
     }
 
     /* Prepare shared blocks and fill randomly. */
-    std::shared_ptr<char> blocks0 =
-        cybozu::util::allocateBlocks<char>(
-            LOGICAL_BLOCK_SIZE, bs, sizeB);
+    walb::AlignedArray blocks0(bs * sizeB);
     cybozu::util::Random<uint64_t> rand;
-    rand.fill(blocks0.get(), sizeB * bs);
+    rand.fill(blocks0.data(), blocks0.size());
 
     /* Prepare writer threads and run concurrently. */
-    std::vector<std::shared_ptr<Worker> > v;
+    std::vector<std::shared_ptr<Worker>> v;
     for (size_t i = 0; i < config.numThreads(); i++) {
-        v.push_back(std::make_shared<Worker>(config, blocks0));
+        v.push_back(std::make_shared<Worker>(config, blocks0.data()));
     }
     cybozu::thread::ThreadRunnerSet thSet;
     for (std::shared_ptr<Worker> &w : v) {
@@ -245,8 +240,8 @@ static bool writeConcurrentlyAndVerify(Config &config)
     for (uint64_t i = 0; i < sizeB; i++) {
         if (!bmp[i]) { continue; }
         nWritten++;
-        bd.read((config.offsetB() + i) * bs, bs, block.get());
-        if (::memcmp(block.get(), blocks0.get() + (i * bs), bs) == 0) {
+        bd.read((config.offsetB() + i) * bs, bs, block.data());
+        if (::memcmp(block.data(), blocks0.data() + (i * bs), bs) == 0) {
             nVerified++;
         } else {
             ::printf("block %" PRIu64 " invalid.\n", i);

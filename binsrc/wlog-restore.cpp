@@ -24,7 +24,6 @@
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "util.hpp"
-#include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
 #include "wdev_log.hpp"
 #include "walb_util.hpp"

@@ -28,7 +28,6 @@
 #include "util.hpp"
 #include "fileio.hpp"
 #include "io_recipe.hpp"
-#include "memory_buffer.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
 #include "walb_util.hpp"
@@ -68,11 +67,7 @@ public:
     const std::string& targetPath() const { return targetPath_; }
 
     bool isDirect() const {
-#if 0
-        return false;
-#else
         return blockSize() % LOGICAL_BLOCK_SIZE == 0;
-#endif
     }
     void check() const {
         if (blockSize() == 0) {
@@ -113,15 +108,14 @@ private:
     const Config &config_;
     cybozu::util::BlockDevice bd_;
     cybozu::util::Random<uint32_t> randUint_;
-    std::shared_ptr<char> buf_;
+    walb::AlignedArray buf_;
 
 public:
     RandomDataWriter(const Config &config)
         : config_(config)
         , bd_(config.targetPath(), O_RDWR | (config.isDirect() ? O_DIRECT : 0))
         , randUint_()
-        , buf_(getBufferStatic(config.blockSize(), config.maxIoB(), config.isDirect())) {
-        assert(buf_);
+        , buf_(config.blockSize() * config.maxIoB()) {
     }
 
     void run() {
@@ -131,17 +125,16 @@ public:
 
         while (written < totalSize) {
             const uint32_t bs = config_.blockSize();
-            uint32_t ioSize = decideIoSize(totalSize - written);
+            const uint32_t ioSize = decideIoSize(totalSize - written);
             fillBufferRandomly(ioSize);
-            uint32_t csum = cybozu::util::calcChecksum(buf_.get(), bs * ioSize, 0);
-            bd_.write(offset * bs, bs * ioSize, buf_.get());
+            const uint32_t csum = cybozu::util::calcChecksum(buf_.data(), bs * ioSize, 0);
+            bd_.write(offset * bs, bs * ioSize, buf_.data());
             walb::util::IoRecipe r(offset, ioSize, csum);
             r.print();
 
             offset += ioSize;
             written += ioSize;
         }
-        assert(written == totalSize);
 
         config_.offsetB();
         bd_.fdatasync();
@@ -172,17 +165,6 @@ private:
         return randUint_() % (max - min) + min;
     }
 
-    static std::shared_ptr<char> getBufferStatic(
-        uint32_t blockSize, uint32_t maxIoB, bool isDirect) {
-        assert(0 < blockSize);
-        assert(0 < maxIoB);
-        if (isDirect) {
-            return cybozu::util::allocateBlocks<char>(blockSize, blockSize * maxIoB);
-        } else {
-            return std::shared_ptr<char>(reinterpret_cast<char *>(::malloc(blockSize * maxIoB)));
-        }
-    }
-
     void fillBufferRandomly(uint32_t sizeB) {
         assert(0 < sizeB);
         size_t offset = 0;
@@ -191,13 +173,13 @@ private:
         assert(0 < remaining);
         while (sizeof(r) <= remaining) {
             r = randUint_();
-            ::memcpy(buf_.get() + offset, &r, sizeof(r));
+            ::memcpy(buf_.data() + offset, &r, sizeof(r));
             offset += sizeof(r);
             remaining -= sizeof(r);
         }
         if (0 < remaining) {
             r = randUint_();
-            ::memcpy(buf_.get() + offset, &r, remaining);
+            ::memcpy(buf_.data() + offset, &r, remaining);
             offset += remaining;
         }
         assert(offset == config_.blockSize() * sizeB);
