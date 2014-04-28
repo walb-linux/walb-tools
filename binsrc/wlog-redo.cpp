@@ -116,8 +116,6 @@ private:
     uint32_t nOverlapped_; // To serialize overlapped IOs.
     u64 sequenceId_;
 
-    using IoPtr = std::shared_ptr<Io>;
-
 public:
     Io(off_t offset, size_t size)
         : offset_(offset), size_(size), aioKey_(0)
@@ -196,23 +194,22 @@ public:
     /**
      * Can an IO be merged to this.
      */
-    bool canMerge(const IoPtr rhs) const {
-        assert(rhs.get() != nullptr);
+    bool canMerge(const Io& rhs) const {
 
         /* They must have data buffers. */
-        if (blocks_.empty() || rhs->blocks_.empty()) {
+        if (blocks_.empty() || rhs.blocks_.empty()) {
             return false;
         }
 
         /* Check Io targets and buffers are adjacent. */
-        if (offset_ + static_cast<off_t>(size_) != rhs->offset_) {
+        if (offset_ + static_cast<off_t>(size_) != rhs.offset_) {
             //::fprintf(::stderr, "offset mismatch\n"); //debug
             return false;
         }
 
         /* Check buffers are contiguous. */
         const char *p0 = blocks_.front().data();
-        const char *p1 = rhs->blocks_.front().data();
+        const char *p1 = rhs.blocks_.front().data();
         return p0 + size_ == p1;
     }
 
@@ -222,15 +219,14 @@ public:
      * RETURN:
      *   true if merged, or false.
      */
-    bool tryMerge(IoPtr rhs) {
+    bool tryMerge(Io& rhs) {
         if (!canMerge(rhs)) {
             return false;
         }
-        size_ += rhs->size_;
-        while (!rhs->empty()) {
-            AlignedArray& p = rhs->blocks_.front();
-            blocks_.push_back(std::move(p));
-            rhs->blocks_.pop_front();
+        size_ += rhs.size_;
+        while (!rhs.empty()) {
+            blocks_.push_back(std::move(rhs.blocks_.front()));
+            rhs.blocks_.pop_front();
         }
         return true;
     }
@@ -239,12 +235,11 @@ public:
      * RETURN:
      *   true if overlapped.
      */
-    bool isOverlapped(const IoPtr rhs) const {
-        assert(rhs.get() != nullptr);
-        const off_t off0 = offset_;
-        const off_t off1 = rhs->offset_;
-        const off_t size0 = static_cast<const off_t>(size_);
-        const off_t size1 = static_cast<const off_t>(rhs->size_);
+    bool isOverlapped(const Io& rhs) const {
+        const size_t off0 = offset_;
+        const size_t off1 = rhs.offset_;
+        const size_t size0 = size_;
+        const size_t size1 = rhs.size_;
         return off0 < off1 + size1 && off1 < off0 + size0;
     }
 
@@ -252,12 +247,11 @@ public:
      * RETURN:
      *   true if the IO is fully overwritten by rhs.
      */
-    bool isOverwrittenBy(const IoPtr rhs) const {
-        assert(rhs.get() != nullptr);
-        const off_t off0 = offset_;
-        const off_t off1 = rhs->offset_;
-        const off_t size0 = static_cast<off_t>(size_);
-        const off_t size1 = static_cast<off_t>(rhs->size_);
+    bool isOverwrittenBy(const Io& rhs) const {
+        const size_t off0 = offset_;
+        const size_t off1 = rhs.offset_;
+        const size_t size0 = size_;
+        const size_t size1 = rhs.size_;
         return off1 <= off0 && off0 + size0 <= off1 + size1;
     }
 };
@@ -286,8 +280,7 @@ public:
             ioQ_.push_back(iop);
             return;
         }
-        if (tryMerge(ioQ_.back(), iop)) {
-            //::fprintf(::stderr, "merged %zu\n", ioQ_.back()->size); //debug
+        if (tryMerge(*ioQ_.back(), *iop)) {
             return;
         }
         ioQ_.push_back(iop);
@@ -309,13 +302,13 @@ private:
     /**
      * Try to merge io1 to io0.
      */
-    bool tryMerge(IoPtr io0, IoPtr io1) {
+    bool tryMerge(Io& io0, Io& io1) {
         /* Check max io size. */
-        if (maxIoSize_ < io0->size() + io1->size()) {
+        if (maxIoSize_ < io0.size() + io1.size()) {
             return false;
         }
         /* Try merge. */
-        return io0->tryMerge(io1);
+        return io0.tryMerge(io1);
     }
 };
 
@@ -360,9 +353,9 @@ public:
         IoSet::iterator it = set_.lower_bound(k0);
         while (it != set_.end() && it->first < key1) {
             IoPtr p = it->second;
-            if (p->isOverlapped(iop)) {
+            if (p->isOverlapped(*iop)) {
                 iop->nOverlapped()++;
-                if (p->isOverwrittenBy(iop)) {
+                if (p->isOverwrittenBy(*iop)) {
                     p->overwritten();
                 }
             }
@@ -410,14 +403,9 @@ public:
         IoSet::iterator it = set_.lower_bound(k0);
         while (it != set_.end() && it->first < key1) {
             IoPtr p = it->second;
-            if (p->isOverlapped(iop)) {
+            if (p->isOverlapped(*iop)) {
                 p->nOverlapped()--;
                 if (p->nOverlapped() == 0) {
-#if 0
-                    ::printf("nOverlapped0\t%" PRIu64 "\t%zu\n",
-                             static_cast<u64>(p->offset()) >> 9,
-                             p->size() >> 9); /* debug */
-#endif
                     ioQ.push(p);
                 }
             }
@@ -568,13 +556,6 @@ private:
 
     u32 salt() const {
         return wh_.header().log_checksum_salt;
-    }
-
-    /**
-     * Create an IO.
-     */
-    IoPtr createIo(off_t offset, size_t size, AlignedArray&& block) {
-        return IoPtr(new Io(offset, size, std::move(block)));
     }
 
     /**
