@@ -62,7 +62,7 @@ using DiffIoPtr = std::shared_ptr<DiffIo>;
 /**
  * Simple diff IO executor.
  */
-class SimpleDiffIoExecutor /* final */
+class SimpleDiffIoExecutor
 {
 private:
     cybozu::util::BlockDevice bd_;
@@ -92,37 +92,6 @@ public:
 
     void sync() {
         bd_.fdatasync();
-    }
-};
-
-/**
- * Provide all-zero memory.
- */
-template <typename T>
-class ZeroMemory /* final */
-{
-private:
-    std::vector<T> v_;
-
-public:
-    ZeroMemory(size_t size)
-        : v_(size, 0) {}
-    ~ZeroMemory() noexcept {}
-
-    void resize(size_t newSize) {
-        v_.resize(newSize, 0);
-    }
-
-    std::shared_ptr<T> makePtr() {
-        return std::shared_ptr<T>(&v_[0], [](T *){});
-    }
-
-    std::vector<T> &&forMove() {
-        return std::move(v_);
-    }
-
-    void moveFrom(std::vector<T> &&v) {
-        v_ = std::move(v);
     }
 };
 
@@ -162,7 +131,7 @@ private:
     const Config &config_;
     Statistics inStat_, outStat_;
     SimpleDiffIoExecutor ioExec_;
-    ZeroMemory<char> zeroMem_;
+    walb::Buffer zeroMem_;
 
 public:
     WdiffRedoManger(const Config &config)
@@ -253,9 +222,9 @@ private:
         ioP->ioBlocks = ioBlocks;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         zeroMem_.resize(size);
-        ioP->data = zeroMem_.forMove();
+        ioP->data = std::move(zeroMem_);
         bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
-        zeroMem_.moveFrom(std::move(ioP->data));
+        zeroMem_ = std::move(ioP->data);
         return ret;
     }
 
