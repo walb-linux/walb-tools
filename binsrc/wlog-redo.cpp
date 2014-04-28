@@ -82,23 +82,9 @@ private:
 using AlignedArray = walb::AlignedArray;
 
 /**
- * Sequence id generator.
+ * Sequence id
  */
-class SimpleSequenceIdGenerator
-{
-private:
-    u64 id_;
-
-public:
-    SimpleSequenceIdGenerator() : id_(0) {}
-    SimpleSequenceIdGenerator(const SimpleSequenceIdGenerator &rhs) = delete;
-    SimpleSequenceIdGenerator(SimpleSequenceIdGenerator &&rhs) = delete;
-    ~SimpleSequenceIdGenerator() = default;
-
-    u64 operator()() {
-        return id_++;
-    }
-} DefaultSequenceIdGenerator;
+uint64_t g_id;
 
 /**
  * Io data.
@@ -122,7 +108,7 @@ public:
         , isSubmitted_(false), isCompleted_(false)
         , isOverwritten_(false)
         , blocks_(), nOverlapped_(0)
-        , sequenceId_(DefaultSequenceIdGenerator()) {}
+        , sequenceId_(g_id++) {}
 
     Io(off_t offset, size_t size, AlignedArray &&block)
         : Io(offset, size) {
