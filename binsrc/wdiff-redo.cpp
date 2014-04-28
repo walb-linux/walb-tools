@@ -75,18 +75,16 @@ public:
         }
     }
 
-    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) {
-        if (!ioP) { return false; }
-        assert(!ioP->isCompressed());
+    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIo& io) {
+        assert(!io.isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(ioP->getSize() == size);
+        assert(io.getSize() == size);
 
         /* boundary check. */
         if (bd_.getDeviceSize() < oft + size) { return false; }
 
-        //::printf("issue %zu %zu %p\n", oft, size, ioP->rawData()); /* debug */
-        bd_.write(oft, size, ioP->get());
+        bd_.write(oft, size, io.get());
         return true;
     }
 
@@ -136,13 +134,12 @@ public:
         : config_(config)
         , inStat_()
         , outStat_()
-        , ioExec_(config.devPath(), O_RDWR)
-        , zeroMem_(1 << 20) /* 1MB */ {}
+        , ioExec_(config.devPath(), O_RDWR) {}
 
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const walb::DiffRecord& rec, const DiffIoPtr ioP) {
+    void executeDiffIo(const walb::DiffRecord& rec, const DiffIo& io) {
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
@@ -163,8 +160,7 @@ public:
         } else {
             /* Normal IO. */
             assert(rec.isNormal());
-            assert(ioP);
-            isSuccess = ioExec_.submit(ioAddr, ioBlocks, ioP);
+            isSuccess = ioExec_.submit(ioAddr, ioBlocks, io);
             if (isSuccess) { outStat_.nIoNormal++; }
             inStat_.nIoNormal++;
         }
@@ -204,9 +200,7 @@ public:
                 ::printf("Invalid io: ");
                 io.printOneline();
             }
-            auto ioP = std::make_shared<DiffIo>();
-            *ioP = std::move(io);
-            executeDiffIo(rec, ioP);
+            executeDiffIo(rec, io);
         }
         ::printf("Input statistics:\n");
         inStat_.print();
@@ -221,7 +215,7 @@ private:
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
         ioP->data.clear();
         ioP->data.resize(size);
-        bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
+        bool ret = ioExec_.submit(ioAddr, ioBlocks, *ioP);
         ioP->data.clear();
         return ret;
     }
