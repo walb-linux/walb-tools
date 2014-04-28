@@ -450,7 +450,6 @@ private:
     const size_t blockSize_;
     const size_t queueSize_;
     cybozu::aio::Aio aio_;
-    cybozu::util::BlockAllocator<uint8_t> ba_;
     walb::log::FileHeader wh_;
 
     std::queue<IoPtr> ioQ_; /* serialized by lsid. */
@@ -478,7 +477,6 @@ public:
         , blockSize_(bd_.getPhysicalBlockSize())
         , queueSize_(getQueueSizeStatic(bufferSize, blockSize_))
         , aio_(bd_.getFd(), queueSize_)
-        , ba_(queueSize_ * 2, blockSize_, blockSize_)
         , wh_()
         , ioQ_()
         , readyIoQ_()

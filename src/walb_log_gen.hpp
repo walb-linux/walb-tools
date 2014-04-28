@@ -17,7 +17,6 @@
 #include "util.hpp"
 #include "walb_log_base.hpp"
 #include "walb_log_file.hpp"
-#include "memory_buffer.hpp"
 
 namespace walb {
 namespace log {

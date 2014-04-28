@@ -15,7 +15,6 @@
 #include "util.hpp"
 #include "checksum.hpp"
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "walb_logger.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"

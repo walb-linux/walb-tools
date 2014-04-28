@@ -84,7 +84,6 @@ private:
     walb::device::AsyncWldevReader ldevReader_;
     walb::device::SuperBlock &super_;
     const uint32_t pbs_;
-    cybozu::util::BlockAllocator<uint8_t> ba_;
     bool isVerbose_;
 
     using LogPackHeader = walb::LogPackHeader;
@@ -97,7 +96,6 @@ public:
         , ldevReader_(ldevPath)
         , super_(ldevReader_.super())
         , pbs_(ldevReader_.pbs())
-        , ba_(ldevReader_.queueSize() * 2, pbs_, pbs_)
         , isVerbose_(isVerbose) {
     }
     DISABLE_COPY_AND_ASSIGN(WlogExtractor);

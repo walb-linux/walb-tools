@@ -86,8 +86,6 @@ private:
     walb::device::SuperBlock super_;
     const uint32_t pbs_;
     const uint32_t salt_;
-    const uint32_t BUFFER_SIZE_;
-    cybozu::util::BlockAllocator<uint8_t> ba_;
 
 public:
     WldevVerifier(const Config &config)
@@ -95,9 +93,7 @@ public:
         , wlDev_(config.wldevPath(), O_RDONLY | O_DIRECT)
         , super_(wlDev_)
         , pbs_(super_.getPhysicalBlockSize())
-        , salt_(super_.getLogChecksumSalt())
-        , BUFFER_SIZE_(16 << 20) /* 16MB */
-        , ba_(BUFFER_SIZE_ / pbs_, pbs_, pbs_) {}
+        , salt_(super_.getLogChecksumSalt()) {}
 
     void run() {
         /* Get IO recipe parser. */

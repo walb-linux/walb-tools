@@ -13,7 +13,6 @@
 #include <snappy.h>
 
 #include "util.hpp"
-#include "memory_buffer.hpp"
 #include "fileio.hpp"
 #include "checksum.hpp"
 #include "walb_diff.h"

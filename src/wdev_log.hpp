@@ -16,7 +16,6 @@
 #include "util.hpp"
 #include "checksum.hpp"
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
 #include "walb_util.hpp"
 #include "aio_util.hpp"
@@ -45,22 +44,16 @@ private:
     const uint64_t offset_;
 
     /* Super block data. */
-    std::shared_ptr<uint8_t> data_;
+    walb::AlignedArray data_;
 
 public:
     explicit SuperBlock(cybozu::util::BlockDevice& bd)
         : bd_(bd)
         , pbs_(bd.getPhysicalBlockSize())
         , offset_(get1stSuperBlockOffsetStatic(pbs_))
-        , data_(cybozu::util::allocateBlocks<uint8_t>(pbs_, pbs_)) {
-#if 0
-        ::printf("offset %" PRIu64 " pbs %u\n", offset_ * pbs_, pbs_);
-#endif
+        , data_(pbs_) {
         /* Read the superblock. */
         read();
-#if 0
-        print(); //debug
-#endif
     }
 
     uint16_t getSectorType() const { return super()->sector_type; }
@@ -94,7 +87,7 @@ public:
     }
     void updateChecksum() {
         super()->checksum = 0;
-        super()->checksum = ::checksum(data_.get(), pbs_, 0);
+        super()->checksum = ::checksum(data_.data(), pbs_, 0);
     }
 
     /*
@@ -144,7 +137,7 @@ public:
      * Read super block from the log device.
      */
     void read() {
-        bd_.read(offset_ * pbs_, pbs_, ptr<char>());
+        bd_.read(offset_ * pbs_, pbs_, data_.data());
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
         }
@@ -158,7 +151,7 @@ public:
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
         }
-        bd_.write(offset_ * pbs_, pbs_, ptr<char>());
+        bd_.write(offset_ * pbs_, pbs_, data_.data());
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -201,22 +194,12 @@ private:
         return ::get_super_sector0_offset(pbs);
     }
 
-    template <typename T>
-    T *ptr() {
-        return reinterpret_cast<T *>(data_.get());
+    walb_super_sector* super() {
+        return reinterpret_cast<walb_super_sector*>(data_.data());
     }
 
-    template <typename T>
-    const T *ptr() const {
-        return reinterpret_cast<const T *>(data_.get());
-    }
-
-    struct walb_super_sector* super() {
-        return ptr<struct walb_super_sector>();
-    }
-
-    const struct walb_super_sector* super() const {
-        return ptr<const struct walb_super_sector>();
+    const walb_super_sector* super() const {
+        return reinterpret_cast<const walb_super_sector*>(data_.data());
     }
 
     bool isValid(bool isChecksum = true) const {
@@ -226,7 +209,7 @@ private:
         if (isChecksum) {
             return true;
         } else {
-            return ::checksum(data_.get(), pbs_, 0) == 0;
+            return ::checksum(data_.data(), pbs_, 0) == 0;
         }
     }
 };

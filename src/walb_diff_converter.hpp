@@ -16,7 +16,6 @@
 #include <thread>
 
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "walb_log_base.hpp"
 #include "walb_log_file.hpp"
 #include "walb_diff_base.hpp"
@@ -149,9 +148,7 @@ private:
         }
 
         /* Block buffer. */
-        const uint32_t BUF_SIZE = 4U << 20;
         const uint32_t pbs = wlHeader.pbs();
-        cybozu::util::BlockAllocator<uint8_t> ba(BUF_SIZE / pbs, pbs, pbs);
 
         /* Initialize walb diff db. */
         auto checkUuid = [&]() {
