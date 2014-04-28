@@ -6,7 +6,7 @@
 
 CYBOZU_TEST_AUTO(hash)
 {
-    std::vector<char> v(1024, 0);
+    std::vector<char> v(1024);
 
     cybozu::murmurhash3::Hasher hasher(0);
     cybozu::murmurhash3::Hash h0 = hasher(&v[0], v.size());

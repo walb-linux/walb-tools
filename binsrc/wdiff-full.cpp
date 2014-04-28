@@ -43,10 +43,10 @@ public:
             rec.setNormal();
             rec.data_size = blks * LOGICAL_BLOCK_SIZE;
             uint32_t csum = cybozu::util::calcChecksum(
-                &buf0_[0], blks * LOGICAL_BLOCK_SIZE, 0);
+                buf0_.data(), blks * LOGICAL_BLOCK_SIZE, 0);
             rec.checksum = csum;
 
-            writer.compressAndWriteDiff(rec, &buf0_[0]);
+            writer.compressAndWriteDiff(rec, buf0_.data());
 
             ioAddr += blks;
             blks = readChunk(reader);
@@ -60,7 +60,7 @@ private:
      */
     uint16_t readChunk(cybozu::util::File &reader) {
         uint16_t c = 0;
-        char *p = &buf0_[0];
+        char *p = buf0_.data();
         try {
             while (c < ioBlocks_) {
                 reader.read(p, LOGICAL_BLOCK_SIZE);

@@ -211,7 +211,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
         // Curently a discard IO is converted to an all-zero IO.
         if (rec.isAllZero() || rec.isDiscard()) {
             if (zero.size() < ioSizeB) zero.resize(ioSizeB);
-            data = &zero[0];
+            data = zero.data();
         } else {
             data = recIo.io().get();
         }
