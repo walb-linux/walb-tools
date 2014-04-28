@@ -60,36 +60,9 @@ using namespace walb;
 using DiffIoPtr = std::shared_ptr<DiffIo>;
 
 /**
- * Diff IO executor interface.
- */
-class DiffIoExecutor
-{
-public:
-    virtual ~DiffIoExecutor() noexcept {}
-
-    /**
-     * Submit a diff IO.
-     *
-     * @ioAddr [logical block]
-     * @ioBlocks [logical block]
-     * @ioP IO to execute.
-     *
-     * RETURN:
-     *   false if the IO can not be executable.
-     */
-    virtual bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) = 0;
-
-    /**
-     * Wait for all submitted IOs permanent.
-     */
-    virtual void sync() = 0;
-};
-
-/**
  * Simple diff IO executor.
  */
 class SimpleDiffIoExecutor /* final */
-    : public DiffIoExecutor
 {
 private:
     cybozu::util::BlockDevice bd_;
@@ -101,9 +74,8 @@ public:
             throw RT_ERR("The flag must have O_RDWR.");
         }
     }
-    ~SimpleDiffIoExecutor() noexcept override {}
 
-    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) override {
+    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIoPtr ioP) {
         if (!ioP) { return false; }
         assert(!ioP->isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
@@ -118,7 +90,7 @@ public:
         return true;
     }
 
-    void sync() override {
+    void sync() {
         bd_.fdatasync();
     }
 };
