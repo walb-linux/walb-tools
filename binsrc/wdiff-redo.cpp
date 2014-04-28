@@ -57,7 +57,6 @@ private:
 };
 
 using namespace walb;
-using DiffIoPtr = std::shared_ptr<DiffIo>;
 
 /**
  * Simple diff IO executor.
@@ -210,14 +209,9 @@ public:
 
 private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
-        auto ioP = std::make_shared<DiffIo>();
-        ioP->ioBlocks = ioBlocks;
-        size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        ioP->data.clear();
-        ioP->data.resize(size);
-        bool ret = ioExec_.submit(ioAddr, ioBlocks, *ioP);
-        ioP->data.clear();
-        return ret;
+        DiffIo io(ioBlocks);
+        io.data.resize(ioBlocks * LOGICAL_BLOCK_SIZE);
+        return ioExec_.submit(ioAddr, ioBlocks, io);
     }
 
     bool executeDiscardIo(UNUSED uint64_t ioAddr, UNUSED uint16_t ioBlocks) {
