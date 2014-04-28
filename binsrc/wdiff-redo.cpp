@@ -131,8 +131,6 @@ private:
     const Config &config_;
     Statistics inStat_, outStat_;
     SimpleDiffIoExecutor ioExec_;
-    walb::Buffer zeroMem_;
-
 public:
     WdiffRedoManger(const Config &config)
         : config_(config)
@@ -221,10 +219,10 @@ private:
         auto ioP = std::make_shared<DiffIo>();
         ioP->ioBlocks = ioBlocks;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        zeroMem_.resize(size);
-        ioP->data = std::move(zeroMem_);
+        ioP->data.clear();
+        ioP->data.resize(size);
         bool ret = ioExec_.submit(ioAddr, ioBlocks, ioP);
-        zeroMem_ = std::move(ioP->data);
+        ioP->data.clear();
         return ret;
     }
 
