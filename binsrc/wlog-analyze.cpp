@@ -20,7 +20,6 @@
 #include "walb_logger.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"

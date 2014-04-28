@@ -23,7 +23,6 @@
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "util.hpp"
-#include "memory_buffer.hpp"
 #include "wdev_log.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"

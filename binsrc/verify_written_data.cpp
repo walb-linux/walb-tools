@@ -26,7 +26,6 @@
 #include "checksum.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
-#include "memory_buffer.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
@@ -58,11 +57,7 @@ public:
     const std::string& recipePath() const { return recipePath_; }
 
     bool isDirect() const {
-#if 0
-        return false;
-#else
         return blockSize() % LOGICAL_BLOCK_SIZE == 0;
-#endif
     }
 
     void check() const {
@@ -93,15 +88,15 @@ private:
     const Config &config_;
     cybozu::util::BlockDevice bd_;
     size_t bufSizeB_; /* buffer size [block]. */
-    std::shared_ptr<char> buf_;
+    using AlignedArray = walb::AlignedArray;
+    AlignedArray buf_;
 
 public:
     IoDataVerifier(const Config &config)
         : config_(config)
         , bd_(config.targetPath(), O_RDONLY | (config.isDirect() ? O_DIRECT : 0))
         , bufSizeB_(1024 * 1024 / config.blockSize()) /* 1MB */
-        , buf_(getBufferStatic(config.blockSize(), bufSizeB_, config.isDirect())) {
-        assert(buf_);
+        , buf_(config.blockSize() * bufSizeB_) {
     }
 
     void run() {
@@ -119,35 +114,12 @@ public:
         /* Read and verify for each IO recipe. */
         while (!recipeParser.isEnd()) {
             walb::util::IoRecipe r = recipeParser.get();
-            resizeBufferIfneed(r.ioSizeB());
-            bd_.read(r.offsetB() * bs, r.ioSizeB() * bs, buf_.get());
-            uint32_t csum = cybozu::util::calcChecksum(buf_.get(), r.ioSizeB() * bs, 0);
+            buf_.resize(bs * r.ioSizeB());
+            bd_.read(buf_.size(), r.ioSizeB() * bs, buf_.data());
+            uint32_t csum = cybozu::util::calcChecksum(buf_.data(), r.ioSizeB() * bs, 0);
             ::printf("%s\t%s\t%08x\n",
                      (csum == r.csum() ? "OK" : "NG"), r.toString().c_str(), csum);
         }
-    }
-
-private:
-    static std::shared_ptr<char> getBufferStatic(uint32_t blockSize, unsigned sizeB, bool isDirect) {
-        assert(0 < blockSize);
-        assert(0 < sizeB);
-        if (isDirect) {
-            return cybozu::util::allocateBlocks<char>(blockSize, blockSize * sizeB);
-        } else {
-            return std::shared_ptr<char>(reinterpret_cast<char *>(::malloc(blockSize * sizeB)));
-        }
-    }
-
-    void resizeBufferIfneed(uint32_t newSizeB) {
-        if (newSizeB <= bufSizeB_) { return; }
-        const uint32_t bs = config_.blockSize();
-        if (config_.isDirect()) {
-            buf_ = cybozu::util::allocateBlocks<char>(bs, bs * newSizeB);
-        } else {
-            buf_.reset(reinterpret_cast<char *>(::malloc(bs * newSizeB)));
-        }
-        if (!buf_) { throw std::bad_alloc(); }
-        bufSizeB_ = newSizeB;
     }
 };
 

@@ -24,7 +24,6 @@
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "util.hpp"
-#include "memory_buffer.hpp"
 #include "fileio.hpp"
 #include "walb_log_file.hpp"
 #include "io_recipe.hpp"
@@ -115,7 +114,6 @@ public:
         }
 
         pbs_ = wh.pbs();
-        const uint32_t bufferSize = 16 * 1024 * 1024;
         const uint32_t salt = wh.salt();
 
         uint64_t beginLsid = wh.beginLsid();
