@@ -273,6 +273,13 @@ public:
     std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
         return wdiffs_.getDiffListToMerge(gid, size);
     }
+    /**
+     * RETURN:
+     *   true if there is not the diff list where applying them to snapB leads to snapE.
+     */
+    bool isHashReplNecessary(const MetaSnap &snapB, const MetaSnap &snapE) const {
+        return getDiffMgr().getDiffListToSync(MetaState(snapB, 0), snapE).empty();
+    }
 private:
     cybozu::lvm::Vg getVg() const {
         return cybozu::lvm::getVg(vgName_);

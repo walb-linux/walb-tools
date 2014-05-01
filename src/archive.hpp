@@ -703,15 +703,19 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         pkt.read(srvLatestSnap);
         const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
         const bool isEnd = cliLatestSnap.gidB <= srvLatestSnap.gidB;
+        logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap << isEnd;
         pkt.write(isEnd);
         if (isEnd) break;
 
-        const uint64_t cliOldestGid = volInfo.getOldestCleanSnapshot();
-        const bool doHashRepl = srvLatestSnap.gidB < cliOldestGid;
+        const bool doHashRepl = volInfo.isHashReplNecessary(srvLatestSnap, cliLatestSnap);
         pkt.write(doHashRepl);
         if (doHashRepl) {
             const MetaState metaSt = volInfo.getMetaState();
-            const MetaSnap cliOldestSnap(cliOldestGid);
+            const MetaSnap cliOldestSnap(volInfo.getOldestCleanSnapshot());
+            if (srvLatestSnap.gidB >= cliOldestSnap.gidB) {
+                throw cybozu::Exception(__func__)
+                    << "could not execute hash-repl" << srvLatestSnap << cliOldestSnap;
+            }
             const MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
             if (!runHashReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, diff, logger)) {
                 return false;
