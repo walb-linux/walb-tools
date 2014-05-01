@@ -1155,16 +1155,16 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.write(msg);
         return;
     }
-    const uint64_t curSizeLb = volInfo.getLv().sizeLb();
-    if (curSizeLb < sizeLb) {
-        const char *msg = "large-lv-size";
-        logger.error() << msg << volId;
+    const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+    if (selfSizeLb < sizeLb) {
+        const char *msg = "smaller-lv-size";
+        logger.error() << msg << volId << sizeLb << selfSizeLb;
         pkt.write(msg);
         return;
     }
 
-    if (sizeLb < curSizeLb) {
-        logger.warn() << "small lv size" << volId << sizeLb << curSizeLb;
+    if (sizeLb < selfSizeLb) {
+        logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
     }
     const MetaState metaState = volInfo.getMetaState();
     const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
