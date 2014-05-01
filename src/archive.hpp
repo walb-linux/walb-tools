@@ -476,6 +476,22 @@ inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const 
     return sock;
 }
 
+inline void verifyVolumeSize(ArchiveVolInfo &volInfo, uint64_t sizeLb, Logger &logger)
+{
+    const char *const FUNC = __func__;
+    const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+    if (sizeLb > selfSizeLb) {
+        throw cybozu::Exception(FUNC)
+            << "volume size is smaller than the received size"
+            << volInfo.volId << sizeLb << selfSizeLb;
+    }
+    if (sizeLb < selfSizeLb) {
+        logger.warn()
+            << FUNC << "volume size is larger than the received size"
+            << volInfo.volId << sizeLb << selfSizeLb;
+    }
+}
+
 inline bool runFullReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
@@ -519,6 +535,7 @@ inline bool runFullReplServer(
         logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        verifyVolumeSize(volInfo, sizeLb, logger);
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -585,6 +602,7 @@ inline bool runHashReplServer(
         logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        verifyVolumeSize(volInfo, sizeLb, logger);
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -623,13 +641,15 @@ inline bool runDiffReplClient(
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
+    const uint64_t sizeLb = volInfo.getLv().sizeLb();
     const DiffFileHeader &fileH = merger.header();
     const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
     const cybozu::Uuid uuid = fileH.getUuid2();
+    pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
     pkt.write(uuid);
     pkt.write(mergedDiff);
-    logger.debug() << "diff-repl-client" << maxIoBlocks << uuid << mergedDiff;
+    logger.debug() << "diff-repl-client" << sizeLb << maxIoBlocks << uuid << mergedDiff;
 
     std::string res;
     pkt.read(res);
@@ -650,14 +670,17 @@ inline bool runDiffReplServer(
     packet::Packet &pkt, Logger &logger)
 {
     const char *const FUNC = __func__;
+    uint64_t sizeLb;
     uint16_t maxIoBlocks;
     cybozu::Uuid uuid;
     MetaDiff diff;
     try {
+        pkt.read(sizeLb);
         pkt.read(maxIoBlocks);
         pkt.read(uuid);
         pkt.read(diff);
-        logger.debug() << "diff-repl-server" << maxIoBlocks << uuid << diff;
+        logger.debug() << "diff-repl-server" << sizeLb << maxIoBlocks << uuid << diff;
+        verifyVolumeSize(volInfo, sizeLb, logger);
         const MetaSnap snap = volInfo.getLatestSnapshot();
         if (!canApply(snap, diff)) {
             throw cybozu::Exception(FUNC) << "can not apply" << snap << diff;
