@@ -28,6 +28,7 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
+//#define USE_DEBUG_TRACE
 /**
  * Command line configuration.
  */
@@ -224,6 +225,110 @@ public:
     }
 };
 
+#ifdef USE_DEBUG_TRACE
+struct StrVec : std::vector<std::string> {
+    void put() const {
+        for (const std::string& s : *this) {
+            printf("%s -> ", s.c_str());
+        }
+        printf("\n");
+    }
+};
+std::ostream& operator<<(std::ostream& os, const StrVec& v) {
+    for (const std::string& s : v) {
+        os << s << " -> ";
+    }
+    os << std::endl;
+    return os;
+}
+#endif
+struct Debug {
+#ifdef USE_DEBUG_TRACE
+    typedef std::set<const Io*> IoSet;
+    typedef std::map<const Io*, StrVec> IoMap;
+    IoSet ioQ;
+    IoSet readyQ;
+    IoSet submitQ;
+    IoMap ioMap;
+    void addIoQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyAdd(ioQ, io, __func__);
+        verifyNotExist(readyQ, io, __func__);
+        verifyNotExist(submitQ, io, __func__);
+    }
+    void addReadyQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyExist(ioQ, io, __func__);
+        verifyAdd(readyQ, io, __func__);
+        verifyNotExist(submitQ, io, __func__);
+    }
+    void addSubmitQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyExist(ioQ, io, __func__);
+        verifyNotExist(readyQ, io, __func__);
+        verifyAdd(submitQ, io, __func__);
+    }
+    void delIoQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyDel(ioQ, io, __func__);
+        verifyNotExist(readyQ, io, "dellIoQ 1");
+        verifyNotExist(submitQ, io, "dellIoQ 2");
+    }
+    void delReadyQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyExist(ioQ, io, __func__);
+        verifyDel(readyQ, io, __func__);
+        verifyNotExist(submitQ, io, __func__);
+    }
+    void delSubmitQ(const Io& io)
+    {
+        ioMap[&io].push_back(__func__);
+        verifyExist(ioQ, io, __func__);
+        verifyNotExist(readyQ, io, __func__);
+        verifyDel(submitQ, io, __func__);
+    }
+    void verifyAdd(IoSet& ioSet, const Io& io, const char *msg)
+    {
+        if (!ioSet.insert(&io).second) {
+            printf("ERR verifyAdd %s %p\n", msg, &io);
+            throw cybozu::Exception(__func__) << ioMap[&io];
+        }
+    }
+    void verifyDel(IoSet& ioSet, const Io& io, const char *msg)
+    {
+        if (ioSet.erase(&io) != 1) {
+            printf("ERR verifyDel %s %p\n", msg, &io);
+            throw cybozu::Exception(__func__) << ioMap[&io];
+        }
+    }
+    void verifyNotExist(const IoSet& ioSet, const Io& io, const char *msg)
+    {
+        if (ioSet.find(&io) != ioSet.end()) {
+            printf("ERR verifyNotExist %s\n", msg);
+            throw cybozu::Exception(__func__) << ioMap[&io];
+        }
+    }
+    void verifyExist(const IoSet& ioSet, const Io& io, const char *msg)
+    {
+        if (ioSet.find(&io) == ioSet.end()) {
+            printf("ERR verifyExist %s\n", msg);
+            throw cybozu::Exception(__func__) << ioMap[&io];
+        }
+    }
+#else
+    void addIoQ(const Io&) { }
+    void addReadyQ(const Io&) { }
+    void addSubmitQ(const Io&) { }
+    void delIoQ(const Io&) { }
+    void delReadyQ(const Io&) { }
+    void delSubmitQ(const Io&) { }
+#endif
+} g_debug;
 /**
  * This class can merge the last IO in the queue
  * in order to reduce number of IOs.
@@ -398,8 +503,8 @@ private:
     walb::log::FileHeader wh_;
 
     std::queue<Io> ioQ_; /* serialized by lsid. */
-    std::deque<Io*> readyIoQ_; /* ready to submit. */
-    std::deque<Io*> submitIoQ_; /* submitted, but not completed. */
+    std::deque<Io*> readyQ_; /* ready to submit. */
+    std::deque<Io*> submitQ_; /* submitted, but not completed. */
 
     /* Number of blocks where the corresponding IO
        is submitted, but not completed. */
@@ -424,7 +529,7 @@ public:
         , aio_(bd_.getFd(), queueSize_)
         , wh_()
         , ioQ_()
-        , readyIoQ_()
+        , readyQ_()
         , nPendingBlocks_(0)
         , olData_()
         , nWritten_(0)
@@ -555,7 +660,7 @@ private:
      * There is no pending IO after returned this method.
      */
     void waitForAllPendingIos() {
-        while (!ioQ_.empty() || !readyIoQ_.empty()) {
+        while (!ioQ_.empty() || !readyQ_.empty()) {
             waitForAnIoCompletion();
         }
         assert(olData_.empty());
@@ -592,8 +697,15 @@ private:
             /* The IO is not still submitted. */
             scheduleIos();
             submitIos();
+        } else {
+            if (!io.isSubmitted() && io.isOverwritten()) {
+                auto i = std::find(submitQ_.begin(), submitQ_.end(), &io);
+                if (i != submitQ_.end()) {
+                    g_debug.delSubmitQ(io);
+                    submitQ_.erase(i);
+                }
+            }
         }
-if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
         if (io.isSubmitted()) {
             assert(!io.isCompleted());
             assert(io.aioKey() > 0);
@@ -607,7 +719,7 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
         nPendingBlocks_ -= bytesToPb(io.size());
         std::queue<Io*> tmpIoQ = deleteFromOverlappedData(io);
 
-        /* Insert to the head of readyIoQ_. */
+        /* Insert to the head of readyQ_. */
         while (!tmpIoQ.empty()) {
             Io* p = tmpIoQ.front();
             tmpIoQ.pop();
@@ -616,7 +728,8 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
                 continue;
             }
             assert(p->nOverlapped() == 0);
-            readyIoQ_.push_front(p);
+            readyQ_.push_front(p);
+            g_debug.addReadyQ(*p);
         }
 
         if (config_.isVerbose()) {
@@ -624,9 +737,7 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
                      (u64)io.offset() >> 9, io.size() >> 9,
                      nPendingBlocks_);
         }
-//        verifyNotExist(readyIoQ_, &io, "readyIoQ_");
-//verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
-
+        g_debug.delIoQ(io);
         ioQ_.pop();
     }
 
@@ -646,15 +757,17 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
         nPendingBlocks_ += nBlocks;
         nBlocks = 0;
 
-        /* Enqueue IOs to readyIoQ_. */
+        /* Enqueue IOs to readyQ_. */
         while (!mergeQ.empty()) {
             ioQ_.push(mergeQ.pop());
             Io& io = ioQ_.back();
+            g_debug.addIoQ(io);
 
             insertToOverlappedData(io);
             if (io.nOverlapped() == 0) {
                 /* Ready to submit. */
-                readyIoQ_.push_back(&io);
+                readyQ_.push_back(&io);
+                g_debug.addReadyQ(io);
             } else {
                 /* Will be submitted later. */
                 if (config_.isVerbose()) {
@@ -667,13 +780,14 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
     }
 
     /**
-     * Move IOs from readyIoQ_ to submitIoQ_ (with sorting).
+     * Move IOs from readyQ_ to submitQ_ (with sorting).
      */
     void scheduleIos() {
-        assert(readyIoQ_.size() <= queueSize_);
-        while (!readyIoQ_.empty()) {
-            Io* iop = readyIoQ_.front();
-            readyIoQ_.pop_front();
+        assert(readyQ_.size() <= queueSize_);
+        while (!readyQ_.empty()) {
+            Io* iop = readyQ_.front();
+            g_debug.delReadyQ(*iop);
+            readyQ_.pop_front();
             if (iop->isOverwritten()) {
                 /* No need to execute the IO. */
                 continue;
@@ -683,30 +797,32 @@ if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
             const auto cmp = [](const Io* p0, const Io *p1) {
                 return p0->offset() < p1->offset();
             };
-            submitIoQ_.insert(
-                std::lower_bound(submitIoQ_.begin(), submitIoQ_.end(), iop, cmp),
+            submitQ_.insert(
+                std::lower_bound(submitQ_.begin(), submitQ_.end(), iop, cmp),
                 iop);
 #else
             /* Insert to the submit queue. */
-            submitIoQ_.push_back(iop);
+            submitQ_.push_back(iop);
 #endif
+            g_debug.addSubmitQ(*iop);
 
-            if (queueSize_ <= submitIoQ_.size()) {
+            if (queueSize_ <= submitQ_.size()) {
                 submitIos();
             }
         }
     }
 
     /**
-     * Submit IOs in the submitIoQ_.
+     * Submit IOs in the submitQ_.
      */
     void submitIos() {
-        assert(submitIoQ_.size() <= queueSize_);
+        assert(submitQ_.size() <= queueSize_);
 
         size_t nBulk = 0;
-        while (!submitIoQ_.empty()) {
-            Io* iop = submitIoQ_.front();
-            submitIoQ_.pop_front();
+        while (!submitQ_.empty()) {
+            Io* iop = submitQ_.front();
+            submitQ_.pop_front();
+            g_debug.delSubmitQ(*iop);
             if (iop->isOverwritten()) {
                 continue;
             }
