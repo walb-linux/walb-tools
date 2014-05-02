@@ -92,7 +92,7 @@ uint64_t g_id;
 class Io
 {
 private:
-    off_t offset_; // [bytes].
+    uint64_t offset_; // [bytes].
     size_t size_; // [bytes].
     uint32_t aioKey_;
     bool isSubmitted_;
@@ -103,35 +103,19 @@ private:
     u64 sequenceId_;
 
 public:
-    Io(off_t offset, size_t size)
+    Io(uint64_t offset, size_t size)
         : offset_(offset), size_(size), aioKey_(0)
         , isSubmitted_(false), isCompleted_(false)
         , isOverwritten_(false)
         , blocks_(), nOverlapped_(0)
         , sequenceId_(g_id++) {}
 
-    Io(off_t offset, size_t size, AlignedArray &&block)
+    Io(uint64_t offset, size_t size, AlignedArray &&block)
         : Io(offset, size) {
         setBlock(std::move(block));
     }
 
-    Io(const Io &rhs) = delete;
-    Io(Io &&rhs) = delete;
-    Io& operator=(const Io &rhs) = delete;
-
-    Io& operator=(Io &&rhs) {
-        offset_ = rhs.offset_;
-        size_ = rhs.size_;
-        aioKey_ = rhs.aioKey_;
-        isSubmitted_ = rhs.isSubmitted_;
-        isCompleted_ = rhs.isCompleted_;
-        blocks_ = std::move(rhs.blocks_);
-        nOverlapped_ = rhs.nOverlapped_;
-        sequenceId_ = rhs.sequenceId_;
-        return *this;
-    }
-
-    off_t offset() const { return offset_; }
+    uint64_t offset() const { return offset_; }
     size_t size() const { return size_; }
     bool isSubmitted() const { return isSubmitted_; }
     bool isCompleted() const { return isCompleted_; }
@@ -188,7 +172,7 @@ public:
         }
 
         /* Check Io targets and buffers are adjacent. */
-        if (offset_ + static_cast<off_t>(size_) != rhs.offset_) {
+        if (offset_ + static_cast<uint64_t>(size_) != rhs.offset_) {
             //::fprintf(::stderr, "offset mismatch\n"); //debug
             return false;
         }
@@ -242,41 +226,31 @@ public:
     }
 };
 
-using IoPtr = std::shared_ptr<Io>;
-
 /**
  * This class can merge the last IO in the queue
  * in order to reduce number of IOs.
  */
-class IoQueue {
+class MergeIoQueue {
 private:
-    std::deque<IoPtr> ioQ_;
+    std::deque<Io> ioQ_;
     static const size_t maxIoSize_ = 1024 * 1024; //1MB.
 
 public:
-    IoQueue() : ioQ_() {}
-    ~IoQueue() = default;
+    MergeIoQueue() : ioQ_() {}
+    ~MergeIoQueue() = default;
 
-    void add(IoPtr iop) {
-        if (iop.get() == nullptr) {
-            /* Do nothing. */
+    void add(Io&& io) {
+        if (!ioQ_.empty() && tryMerge(ioQ_.back(), io)) {
             return;
         }
-        if (ioQ_.empty()) {
-            ioQ_.push_back(iop);
-            return;
-        }
-        if (tryMerge(*ioQ_.back(), *iop)) {
-            return;
-        }
-        ioQ_.push_back(iop);
+        ioQ_.push_back(std::move(io));
     }
 
     /**
      * Do not call this while empty() == true.
      */
-    IoPtr pop() {
-        IoPtr p = ioQ_.front();
+    Io pop() {
+        Io p = std::move(ioQ_.front());
         ioQ_.pop_front();
         return p;
     }
@@ -305,7 +279,7 @@ private:
 class OverlappedData
 {
 private:
-    using IoSet = std::set<std::pair<off_t, IoPtr> >;
+    using IoSet = std::set<std::pair<uint64_t, Io*>>;
     IoSet set_;
     size_t maxSize_;
 
@@ -313,7 +287,6 @@ public:
     OverlappedData()
         : set_(), maxSize_(0) {}
 
-    ~OverlappedData() = default;
     OverlappedData(const OverlappedData& rhs) = delete;
     OverlappedData& operator=(const OverlappedData& rhs) = delete;
 
@@ -323,25 +296,24 @@ public:
      * (1) count overlapped IOs.
      * (2) set iop->nOverlapped to the number of overlapped IOs.
      */
-    void ins(IoPtr iop) {
-        assert(iop.get() != nullptr);
+    void ins(Io& io) {
 
         /* Get search range. */
-        off_t key0 = 0;
-        if (static_cast<off_t>(maxSize_) < iop->offset()) {
-            key0 = iop->offset() - static_cast<off_t>(maxSize_);
+        uint64_t key0 = 0;
+        if (maxSize_ < io.offset()) {
+            key0 = io.offset() - maxSize_;
         }
-        off_t key1 = iop->offset() + iop->size();
+        uint64_t key1 = io.offset() + io.size();
 
         /* Count overlapped IOs. */
-        iop->nOverlapped() = 0;
-        const std::pair<off_t, IoPtr> k0 = {key0, IoPtr()};
+        io.nOverlapped() = 0;
+        const std::pair<uint64_t, Io*> k0 = {key0, nullptr};
         IoSet::iterator it = set_.lower_bound(k0);
         while (it != set_.end() && it->first < key1) {
-            IoPtr p = it->second;
-            if (p->isOverlapped(*iop)) {
-                iop->nOverlapped()++;
-                if (p->isOverwrittenBy(*iop)) {
+            Io* p = it->second;
+            if (p->isOverlapped(io)) {
+                io.nOverlapped()++;
+                if (p->isOverwrittenBy(io)) {
                     p->overwritten();
                 }
             }
@@ -349,11 +321,11 @@ public:
         }
 
         /* Insert iop. */
-        set_.emplace(iop->offset(), iop);
+        set_.emplace(io.offset(), &io);
 
         /* Update maxSize_. */
-        if (maxSize_ < iop->size()) {
-            maxSize_ = iop->size();
+        if (maxSize_ < io.size()) {
+            maxSize_ = io.size();
         }
     }
 
@@ -365,12 +337,11 @@ public:
      * (3) IOs where iop->nOverlapped became 0 will be added to the ioQ.
      *     You can submit them just after returned.
      */
-    void del(IoPtr iop, std::queue<IoPtr> &ioQ) {
-        assert(iop.get() != nullptr);
-        assert(iop->nOverlapped() == 0);
+    std::queue<Io*> del(Io& io) {
+        assert(io.nOverlapped() == 0);
 
         /* Delete iop. */
-        deleteFromSet(iop);
+        deleteFromSet(io);
 
         /* Reset maxSize_ if empty. */
         if (set_.empty()) {
@@ -378,25 +349,27 @@ public:
         }
 
         /* Get search range. */
-        off_t key0 = 0;
-        if (iop->offset() > static_cast<off_t>(maxSize_)) {
-            key0 = iop->offset() - static_cast<off_t>(maxSize_);
+        uint64_t key0 = 0;
+        if (io.offset() > maxSize_) {
+            key0 = io.offset() - maxSize_;
         }
-        off_t key1 = iop->offset() + iop->size();
+        const uint64_t key1 = io.offset() + io.size();
 
         /* Decrement nOverlapped of overlapped IOs. */
-        const std::pair<off_t, IoPtr> k0 = {key0, IoPtr()};
+        const std::pair<uint64_t, Io*> k0 = {key0, nullptr};
         IoSet::iterator it = set_.lower_bound(k0);
+        std::queue<Io*> ioQ;
         while (it != set_.end() && it->first < key1) {
-            IoPtr p = it->second;
-            if (p->isOverlapped(*iop)) {
+            Io* p = it->second;
+            if (p->isOverlapped(io)) {
                 p->nOverlapped()--;
                 if (p->nOverlapped() == 0) {
                     ioQ.push(p);
                 }
             }
-            it++;
+            ++it;
         }
+        return ioQ;
     }
 
     bool empty() const {
@@ -407,8 +380,8 @@ private:
     /**
      * Delete an IoPtr from the map.
      */
-    void deleteFromSet(IoPtr iop) {
-        UNUSED size_t n = set_.erase({iop->offset(), iop});
+    void deleteFromSet(Io& io) {
+        UNUSED size_t n = set_.erase({io.offset(), &io});
         assert(n == 1);
     }
 };
@@ -426,9 +399,9 @@ private:
     cybozu::aio::Aio aio_;
     walb::log::FileHeader wh_;
 
-    std::queue<IoPtr> ioQ_; /* serialized by lsid. */
-    std::deque<IoPtr> readyIoQ_; /* ready to submit. */
-    std::deque<IoPtr> submitIoQ_; /* submitted, but not completed. */
+    std::queue<Io> ioQ_; /* serialized by lsid. */
+    std::deque<Io*> readyIoQ_; /* ready to submit. */
+    std::deque<Io*> submitIoQ_; /* submitted, but not completed. */
 
     /* Number of blocks where the corresponding IO
        is submitted, but not completed. */
@@ -464,13 +437,13 @@ public:
 
     ~WalbLogApplyer() {
         while (!ioQ_.empty()) {
-            IoPtr p = ioQ_.front();
-            ioQ_.pop();
-            if (p->isSubmitted()) {
+            Io& io = ioQ_.front();
+            if (io.isSubmitted()) {
                 try {
-                    aio_.waitFor(p->aioKey());
+                    aio_.waitFor(io.aioKey());
                 } catch (...) {}
             }
+            ioQ_.pop();
         }
     }
 
@@ -568,16 +541,16 @@ private:
     /**
      * Insert to overlapped data.
      */
-    void insertToOverlappedData(IoPtr iop) {
-        olData_.ins(iop);
+    void insertToOverlappedData(Io& io) {
+        olData_.ins(io);
     }
 
     /**
      * @iop iop to be deleted.
      * @ioQ All iop(s) will be added where iop->nOverlapped became 0.
      */
-    void deleteFromOverlappedData(IoPtr iop, std::queue<IoPtr> &ioQ) {
-        olData_.del(iop, ioQ);
+    std::queue<Io*> deleteFromOverlappedData(Io& io) {
+        return olData_.del(io);
     }
 
     /**
@@ -605,32 +578,30 @@ private:
      */
     void waitForAnIoCompletion() {
         assert(!ioQ_.empty());
-        IoPtr iop = ioQ_.front();
-        ioQ_.pop();
+        Io& io = ioQ_.front();
 
-        if (!iop->isSubmitted() && !iop->isOverwritten()) {
+        if (!io.isSubmitted() && !io.isOverwritten()) {
             /* The IO is not still submitted. */
             scheduleIos();
             submitIos();
         }
 
-        if (iop->isSubmitted()) {
-            assert(!iop->isCompleted());
-            assert(iop->aioKey() > 0);
-            aio_.waitFor(iop->aioKey());
-            iop->markCompleted();
+        if (io.isSubmitted()) {
+            assert(!io.isCompleted());
+            assert(io.aioKey() > 0);
+            aio_.waitFor(io.aioKey());
+            io.markCompleted();
             nWritten_++;
         } else {
-            assert(iop->isOverwritten());
+            assert(io.isOverwritten());
             nOverwritten_++;
         }
-        nPendingBlocks_ -= bytesToPb(iop->size());
-        std::queue<IoPtr> tmpIoQ;
-        deleteFromOverlappedData(iop, tmpIoQ);
+        nPendingBlocks_ -= bytesToPb(io.size());
+        std::queue<Io*> tmpIoQ = deleteFromOverlappedData(io);
 
         /* Insert to the head of readyIoQ_. */
         while (!tmpIoQ.empty()) {
-            IoPtr p = tmpIoQ.front();
+            Io* p = tmpIoQ.front();
             tmpIoQ.pop();
             if (p->isOverwritten()) {
                 /* No need to execute the IO. */
@@ -642,9 +613,10 @@ private:
 
         if (config_.isVerbose()) {
             ::printf("COMPLETE\t\t%" PRIu64 "\t%zu\t%zu\n",
-                     (u64)iop->offset() >> 9, iop->size() >> 9,
+                     (u64)io.offset() >> 9, io.size() >> 9,
                      nPendingBlocks_);
         }
+        ioQ_.pop();
     }
 
     /**
@@ -653,7 +625,7 @@ private:
      * @ioQ IOs to make ready.
      * @nBlocks nBlocks <= queueSize_. This will be set to 0.
      */
-    void prepareIos(IoQueue &ioQ, size_t &nBlocks) {
+    void prepareIos(MergeIoQueue &ioQ, size_t &nBlocks) {
         assert(nBlocks <= queueSize_);
 
         /* Wait for pending IOs for submission. */
@@ -665,20 +637,20 @@ private:
 
         /* Enqueue IOs to readyIoQ_. */
         while (!ioQ.empty()) {
-            IoPtr iop = ioQ.pop();
-            insertToOverlappedData(iop);
-            if (iop->nOverlapped() == 0) {
+            Io io = ioQ.pop();
+            insertToOverlappedData(io);
+            if (io.nOverlapped() == 0) {
                 /* Ready to submit. */
-                readyIoQ_.push_back(iop);
+                readyIoQ_.push_back(&io);
             } else {
                 /* Will be submitted later. */
                 if (config_.isVerbose()) {
                     ::printf("OVERLAP\t\t%" PRIu64 "\t%zu\t%u\n",
-                             static_cast<u64>(iop->offset()) >> 9,
-                             iop->offset() >> 9, iop->nOverlapped());
+                             static_cast<u64>(io.offset()) >> 9,
+                             io.offset() >> 9, io.nOverlapped());
                 }
             }
-            ioQ_.push(iop);
+            ioQ_.push(std::move(io));
         }
     }
 
@@ -688,7 +660,7 @@ private:
     void scheduleIos() {
         assert(readyIoQ_.size() <= queueSize_);
         while (!readyIoQ_.empty()) {
-            IoPtr iop = readyIoQ_.front();
+            Io* iop = readyIoQ_.front();
             readyIoQ_.pop_front();
             if (iop->isOverwritten()) {
                 /* No need to execute the IO. */
@@ -696,12 +668,11 @@ private:
             }
 #if 1
             /* Insert to the submit queue (sorted by offset). */
-            const auto cmp = [](const IoPtr &p0, const IoPtr &p1) {
+            const auto cmp = [](const Io* p0, const Io *p1) {
                 return p0->offset() < p1->offset();
             };
             submitIoQ_.insert(
-                std::lower_bound(submitIoQ_.begin(), submitIoQ_.end(),
-                                 iop, std::ref(cmp)),
+                std::lower_bound(submitIoQ_.begin(), submitIoQ_.end(), iop, cmp),
                 iop);
 #else
             /* Insert to the submit queue. */
@@ -712,7 +683,6 @@ private:
                 submitIos();
             }
         }
-        assert(readyIoQ_.empty());
     }
 
     /**
@@ -725,7 +695,7 @@ private:
         assert(submitIoQ_.size() <= queueSize_);
         size_t nBulk = 0;
         while (!submitIoQ_.empty()) {
-            IoPtr iop = submitIoQ_.front();
+            Io* iop = submitIoQ_.front();
             submitIoQ_.pop_front();
             if (iop->isOverwritten()) {
                 continue;
@@ -761,9 +731,9 @@ private:
         assert(config_.isZeroDiscard() || !rec.isDiscard());
 
         /* Create IOs. */
-        IoQueue tmpIoQ;
+        MergeIoQueue mergeQ;
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        off_t off = rec.offset * LOGICAL_BLOCK_SIZE;
+        uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
         size_t nBlocks = 0;
         const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
         for (size_t i = 0; i < ioSizePb; i++) {
@@ -775,29 +745,29 @@ private:
             }
             const size_t size = std::min(blockSize_, remaining);
 
-            IoPtr iop = IoPtr(new Io(off, size, std::move(block)));
+            Io io(off, size, std::move(block));
             off += size;
             remaining -= size;
             /* Clip if the IO area is out of range in the device. */
-            if (iop->offset() + iop->size() <= bd_.getDeviceSize()) {
-                tmpIoQ.add(iop);
+            if (io.offset() + io.size() <= bd_.getDeviceSize()) {
+                mergeQ.add(std::move(io));
                 nBlocks++;
                 if (rec.isDiscard()) { nDiscard_++; }
             } else {
                 if (config_.isVerbose()) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
-                             iop->offset(), iop->size());
+                             io.offset(), io.size());
                 }
                 nClipped_++;
             }
             /* Do not prepare too many blocks at once. */
             if (queueSize_ / 2 <= nBlocks) {
-                prepareIos(tmpIoQ, nBlocks);
+                prepareIos(mergeQ, nBlocks);
                 scheduleIos();
             }
         }
         assert(remaining == 0);
-        prepareIos(tmpIoQ, nBlocks);
+        prepareIos(mergeQ, nBlocks);
         scheduleIos();
 
         if (config_.isVerbose()) {
