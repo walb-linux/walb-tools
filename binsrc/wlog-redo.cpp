@@ -172,7 +172,7 @@ public:
         }
 
         /* Check Io targets and buffers are adjacent. */
-        if (offset_ + static_cast<uint64_t>(size_) != rhs.offset_) {
+        if (offset_ + size_ != rhs.offset_) {
             //::fprintf(::stderr, "offset mismatch\n"); //debug
             return false;
         }
@@ -572,6 +572,16 @@ private:
         return ::capacity_pb(blockSize_, lb);
     }
 
+    template<class T>
+    void verifyNotExist(const T& q, const Io *iop, const char *msg)
+    {
+        for (const Io* p : q) {
+            if (p == iop) {
+                printf("ERR found !!! %s\n", msg);
+                exit(1);
+            }
+        }
+    }
     /**
      * Wait for an IO completion.
      * If not submitted, submit before waiting.
@@ -585,7 +595,7 @@ private:
             scheduleIos();
             submitIos();
         }
-
+if (!io.isOverwritten()) verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
         if (io.isSubmitted()) {
             assert(!io.isCompleted());
             assert(io.aioKey() > 0);
@@ -616,6 +626,9 @@ private:
                      (u64)io.offset() >> 9, io.size() >> 9,
                      nPendingBlocks_);
         }
+//        verifyNotExist(readyIoQ_, &io, "readyIoQ_");
+//verifyNotExist(submitIoQ_, &io, "submitIoQ_ 1");
+
         ioQ_.pop();
     }
 
@@ -625,7 +638,7 @@ private:
      * @ioQ IOs to make ready.
      * @nBlocks nBlocks <= queueSize_. This will be set to 0.
      */
-    void prepareIos(MergeIoQueue &ioQ, size_t &nBlocks) {
+    void prepareIos(MergeIoQueue &mergeQ, size_t &nBlocks) {
         assert(nBlocks <= queueSize_);
 
         /* Wait for pending IOs for submission. */
@@ -636,8 +649,10 @@ private:
         nBlocks = 0;
 
         /* Enqueue IOs to readyIoQ_. */
-        while (!ioQ.empty()) {
-            Io io = ioQ.pop();
+        while (!mergeQ.empty()) {
+            ioQ_.push(mergeQ.pop());
+            Io& io = ioQ_.back();
+
             insertToOverlappedData(io);
             if (io.nOverlapped() == 0) {
                 /* Ready to submit. */
@@ -650,7 +665,6 @@ private:
                              io.offset() >> 9, io.nOverlapped());
                 }
             }
-            ioQ_.push(std::move(io));
         }
     }
 
@@ -689,10 +703,8 @@ private:
      * Submit IOs in the submitIoQ_.
      */
     void submitIos() {
-        if (submitIoQ_.empty()) {
-            return;
-        }
         assert(submitIoQ_.size() <= queueSize_);
+
         size_t nBulk = 0;
         while (!submitIoQ_.empty()) {
             Io* iop = submitIoQ_.front();
