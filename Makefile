@@ -57,9 +57,8 @@ utest_all: $(TEST_BINARIES)
 	done 2>&1 |tee test.log |grep ^ctest:name
 	grep ctest:name test.log | grep -v "ng=0, exception=0" || echo "all unit tests succeed"
 itest: $(BINARIES)
-	make -C itest/wdiff
-	make -C itest/wlog
-
+	$(MAKE) -C itest/wdiff
+	$(MAKE) -C itest/wlog
 
 echo_binaries:
 	@echo $(BINARIES)
