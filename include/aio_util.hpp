@@ -221,7 +221,7 @@ public:
     /**
      * Prepare a write IO.
      */
-    unsigned int prepareWrite(off_t oft, size_t size, char* buf) {
+    unsigned int prepareWrite(off_t oft, size_t size, const char* buf) {
         if (submitQueue_.size() >= queueSize_) {
             return 0;
         }
@@ -232,12 +232,12 @@ public:
         ptr->type = IOTYPE_WRITE;
         ptr->oft = oft;
         ptr->size = size;
-        ptr->buf = buf;
+        ptr->buf = const_cast<char *>(buf);
         ptr->beginTime = 0.0;
         ptr->endTime = 0.0;
         ptr->done = false;
         ptr->err = 0;
-        ::io_prep_pwrite(&ptr->iocb, fd_, buf, size, oft);
+        ::io_prep_pwrite(&ptr->iocb, fd_, ptr->buf, size, oft);
         ptr->iocb.data = reinterpret_cast<void *>(ptr->key);
         return ptr->key;
     }

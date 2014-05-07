@@ -95,20 +95,21 @@ class Io
 private:
     uint64_t offset_; // [bytes].
     size_t size_; // [bytes].
-    uint32_t aioKey_;
     std::deque<AlignedArray> blocks_;
     u64 sequenceId_;
 
 public:
+    uint32_t aioKey; // IO identifier inside aio.
     uint32_t nOverlapped; // To serialize overlapped IOs.
 
     enum State {
         Init, Overwritten, Submitted
     } state;
     Io(uint64_t offset, size_t size)
-        : offset_(offset), size_(size), aioKey_(0)
+        : offset_(offset), size_(size)
         , blocks_()
         , sequenceId_(g_id++)
+        , aioKey(0)
         , nOverlapped(0)
         , state(Init) {}
     Io(uint64_t offset, size_t size, AlignedArray &&block)
@@ -119,8 +120,7 @@ public:
     uint64_t offset() const { return offset_; }
     size_t size() const { return size_; }
     const std::deque<AlignedArray>& blocks() const { return blocks_; }
-    uint32_t& aioKey() { return aioKey_; }
-    AlignedArray& ptr() { return blocks_.front(); }
+    const char *data() const { return blocks_.front().data(); }
     bool empty() const { return blocks().empty(); }
     u64 sequenceId() const { return sequenceId_; }
 
@@ -131,7 +131,7 @@ public:
     void print(::FILE *p = ::stdout) const {
         ::fprintf(p, "IO offset: %zu size: %zu aioKey: %u "
                   "state: %d\n",
-                  offset_, size_, aioKey_, state);
+                  offset_, size_, aioKey, state);
         for (auto &b : blocks_) {
             ::fprintf(p, "  block %p\n", b.data());
         }
@@ -304,7 +304,8 @@ private:
     static const size_t maxIoSize_ = 1024 * 1024; //1MB.
 
 public:
-    MergeIoQueue() : ioQ_() {}
+    size_t numBlocks;
+    MergeIoQueue() : ioQ_(), numBlocks(0) {}
     ~MergeIoQueue() = default;
 
     void add(Io&& io) {
@@ -312,6 +313,7 @@ public:
             return;
         }
         ioQ_.push_back(std::move(io));
+        numBlocks++;
     }
 
     /**
@@ -320,6 +322,7 @@ public:
     Io pop() {
         Io p = std::move(ioQ_.front());
         ioQ_.pop_front();
+        numBlocks--;
         return p;
     }
 
@@ -340,6 +343,9 @@ private:
     }
 };
 
+/**
+ * IO queue sorted by offset to submit IOs.
+ */
 class ReadyQueue
 {
 private:
@@ -350,34 +356,74 @@ private:
     };
     typedef std::multiset<Io *, Less> IoSet;
     IoSet ioSet_;
+    size_t nWritten;
+    size_t nOverwritten;
 
 public:
+    ReadyQueue() : nWritten(0), nOverwritten(0) {
+    }
     void push(Io *iop) {
         ioSet_.insert(iop);
         g_debug.addReadyQ(*iop);
     }
-    Io *popAndRemove() {
-        Io *iop;
-        IoSet::iterator i = ioSet_.begin();
-        assert(i != ioSet_.end());
-        iop = *i;
-        ioSet_.erase(i);
-        g_debug.delReadyQ(*iop);
-        return iop;
+    size_t size() const {
+        return ioSet_.size();
+    }
+    void submit(cybozu::aio::Aio &aio) {
+        size_t nBulk = 0;
+        while (!ioSet_.empty()) {
+            Io* iop = *ioSet_.begin();
+            ioSet_.erase(ioSet_.begin());
+            g_debug.delReadyQ(*iop);
+
+            assert(iop->state != Io::Submitted);
+            if (iop->state == Io::Overwritten) continue;
+            iop->state = Io::Submitted;
+
+            /* Prepare aio. */
+            assert(iop->nOverlapped == 0);
+            iop->aioKey = aio.prepareWrite(
+                iop->offset(), iop->size(), iop->data());
+            assert(iop->aioKey > 0);
+            nBulk++;
+        }
+        if (nBulk > 0) {
+            aio.submit();
+        }
+    }
+    void forceComplete(Io &io, cybozu::aio::Aio &aio) {
+        if (io.state == Io::Init) {
+            /* The IO is not still submitted. */
+            assert(io.nOverlapped == 0);
+            submit(aio);
+        } else if (io.state == Io::Overwritten) {
+            erase(io);
+        }
+        if (io.state == Io::Submitted) {
+            assert(io.aioKey > 0);
+            aio.waitFor(io.aioKey);
+            nWritten++;
+        } else {
+            assert(io.state == Io::Overwritten);
+            nOverwritten++;
+        }
+    }
+    void print() const {
+        ::printf("nWritten: %zu\n"
+                 "nOverwritten: %zu\n",
+                 nWritten, nOverwritten);
     }
     bool empty() const {
         return ioSet_.empty();
     }
-    size_t size() const {
-        return ioSet_.size();
-    }
-    void erase(Io *iop) {
+private:
+    void erase(Io& io) {
         IoSet::iterator i, e;
-        std::tie(i, e) = ioSet_.equal_range(iop);
+        std::tie(i, e) = ioSet_.equal_range(&io);
         while (i != e) {
-            if (*i == iop) {
+            if (*i == &io) {
                 ioSet_.erase(i);
-                g_debug.delReadyQ(*iop);
+                g_debug.delReadyQ(io);
                 return;
             }
             ++i;
@@ -512,8 +558,6 @@ private:
     OverlappedData overwrapped_;
 
     /* For statistics. */
-    size_t nWritten_;
-    size_t nOverwritten_;
     size_t nClipped_;
     size_t nDiscard_;
     size_t nPadding_;
@@ -531,8 +575,6 @@ public:
         , readyQ_()
         , nPendingBlocks_(0)
         , overwrapped_()
-        , nWritten_(0)
-        , nOverwritten_(0)
         , nClipped_(0)
         , nDiscard_(0)
         , nPadding_(0) {}
@@ -542,7 +584,7 @@ public:
             Io& io = ioQ_.front();
             if (io.state == Io::Submitted) {
                 try {
-                    aio_.waitFor(io.aioKey());
+                    aio_.waitFor(io.aioKey);
                 } catch (...) {}
             }
             ioQ_.pop();
@@ -587,20 +629,19 @@ public:
         }
 
         /* Wait for all pending IOs. */
-        submitIos();
+        readyQ_.submit(aio_);
         waitForAllPendingIos();
 
         /* Sync device. */
         bd_.fdatasync();
 
         ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n"
-                 "nWritten: %zu\n"
-                 "nOverwritten: %zu\n"
                  "nClipped: %zu\n"
                  "nDiscard: %zu\n"
                  "nPadding: %zu\n",
                  beginLsid, redoLsid,
-                 nWritten_, nOverwritten_, nClipped_, nDiscard_, nPadding_);
+                 nClipped_, nDiscard_, nPadding_);
+        readyQ_.print();
     }
 
 private:
@@ -676,22 +717,8 @@ private:
     void waitForAnIoCompletion() {
         assert(!ioQ_.empty());
         Io& io = ioQ_.front();
+        readyQ_.forceComplete(io, aio_);
 
-        if (io.state == Io::Init) {
-            /* The IO is not still submitted. */
-            assert(io.nOverlapped == 0);
-            submitIos();
-        } else if (io.state == Io::Overwritten) {
-            readyQ_.erase(&io);
-        }
-        if (io.state == Io::Submitted) {
-            assert(io.aioKey() > 0);
-            aio_.waitFor(io.aioKey());
-            nWritten_++;
-        } else {
-            assert(io.state == Io::Overwritten);
-            nOverwritten_++;
-        }
         nPendingBlocks_ -= bytesToPb(io.size());
         overwrapped_.delIoAndPushReadyIos(io, readyQ_);
 
@@ -710,15 +737,15 @@ private:
      * @ioQ IOs to make ready.
      * @nBlocks nBlocks <= queueSize_. This will be set to 0.
      */
-    void prepareIos(MergeIoQueue &mergeQ, size_t &nBlocks) {
-        assert(nBlocks <= queueSize_);
+    void prepareIos(MergeIoQueue &mergeQ) {
+        const size_t numBlocks = mergeQ.numBlocks;
+        assert(numBlocks <= queueSize_);
 
         /* Wait for pending IOs for submission. */
-        while (!ioQ_.empty() && queueSize_ < nPendingBlocks_ + nBlocks) {
+        while (!ioQ_.empty() && queueSize_ < nPendingBlocks_ + numBlocks) {
             waitForAnIoCompletion();
         }
-        nPendingBlocks_ += nBlocks;
-        nBlocks = 0;
+        nPendingBlocks_ += numBlocks;
 
         /* Enqueue IOs to readyQ_. */
         while (!mergeQ.empty()) {
@@ -733,37 +760,7 @@ private:
             }
         }
         if (queueSize_ <= readyQ_.size()) {
-            submitIos();
-        }
-    }
-
-    /**
-     * Submit IOs in the readyQ_.
-     */
-    void submitIos() {
-        size_t nBulk = 0;
-        while (!readyQ_.empty()) {
-            Io* iop = readyQ_.popAndRemove();
-            assert(iop->state != Io::Submitted);
-            if (iop->state == Io::Overwritten) continue;
-            iop->state = Io::Submitted;
-
-            /* Prepare aio. */
-            assert(iop->nOverlapped == 0);
-            iop->aioKey() = aio_.prepareWrite(
-                iop->offset(), iop->size(), iop->ptr().data());
-            assert(iop->aioKey() > 0);
-            nBulk++;
-            if (config_.isVerbose()) {
-                ::printf("SUBMIT\t\t%" PRIu64 "\t%zu\t%zu\n",
-                         (u64)iop->offset() >> 9, iop->size() >> 9, nPendingBlocks_);
-            }
-        }
-        if (nBulk > 0) {
-            aio_.submit();
-            if (config_.isVerbose()) {
-                ::printf("nBulk: %zu\n", nBulk);
-            }
+            readyQ_.submit(aio_);
         }
     }
 
@@ -780,7 +777,6 @@ private:
         MergeIoQueue mergeQ;
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
-        size_t nBlocks = 0;
         const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
         for (size_t i = 0; i < ioSizePb; i++) {
             AlignedArray block;
@@ -797,7 +793,6 @@ private:
             /* Clip if the IO area is out of range in the device. */
             if (io.offset() + io.size() <= bd_.getDeviceSize()) {
                 mergeQ.add(std::move(io));
-                nBlocks++;
                 if (rec.isDiscard()) { nDiscard_++; }
             } else {
                 if (config_.isVerbose()) {
@@ -807,12 +802,12 @@ private:
                 nClipped_++;
             }
             /* Do not prepare too many blocks at once. */
-            if (queueSize_ / 2 <= nBlocks) {
-                prepareIos(mergeQ, nBlocks);
+            if (queueSize_ / 2 <= mergeQ.numBlocks) {
+                prepareIos(mergeQ);
             }
         }
         assert(remaining == 0);
-        prepareIos(mergeQ, nBlocks);
+        prepareIos(mergeQ);
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
