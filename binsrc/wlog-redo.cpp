@@ -322,7 +322,6 @@ public:
     Io pop() {
         Io p = std::move(ioQ_.front());
         ioQ_.pop_front();
-        numBlocks--;
         return p;
     }
 
@@ -746,6 +745,7 @@ private:
             waitForAnIoCompletion();
         }
         nPendingBlocks_ += numBlocks;
+        mergeQ.numBlocks = 0;
 
         /* Enqueue IOs to readyQ_. */
         while (!mergeQ.empty()) {
