@@ -680,7 +680,6 @@ private:
         if (io.state == Io::Init) {
             /* The IO is not still submitted. */
             assert(io.nOverlapped == 0);
-            forceSubmit();
             submitIos();
         } else if (io.state == Io::Overwritten) {
             readyQ_.erase(&io);
@@ -733,12 +732,6 @@ private:
                 readyQ_.push(&io);
             }
         }
-    }
-
-    /**
-     * Move IOs from readyQ_ to submitQ_ (with sorting).
-     */
-    void forceSubmit() { // QQQ
         if (queueSize_ <= readyQ_.size()) {
             submitIos();
         }
@@ -816,12 +809,10 @@ private:
             /* Do not prepare too many blocks at once. */
             if (queueSize_ / 2 <= nBlocks) {
                 prepareIos(mergeQ, nBlocks);
-                forceSubmit();
             }
         }
         assert(remaining == 0);
         prepareIos(mergeQ, nBlocks);
-        forceSubmit();
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
