@@ -225,14 +225,12 @@ struct Debug {
     typedef std::map<const Io*, StrVec> IoMap;
     IoSet ioQ;
     IoSet readyQ;
-    IoSet submitQ;
     IoMap ioMap;
     void addIoQ(const Io& io)
     {
         ioMap[&io].push_back(__func__);
         verifyAdd(ioQ, io, __func__);
         verifyNotExist(readyQ, io, __func__);
-        verifyNotExist(submitQ, io, __func__);
     }
     void addReadyQ(const Io& io)
     {
@@ -240,15 +238,6 @@ struct Debug {
         ioMap[&io].push_back(__func__);
         verifyExist(ioQ, io, __func__);
         verifyAdd(readyQ, io, __func__);
-        verifyNotExist(submitQ, io, __func__);
-    }
-    void addSubmitQ(const Io& io)
-    {
-        verifyNumOverlapped(io, __func__);
-        ioMap[&io].push_back(__func__);
-        verifyExist(ioQ, io, __func__);
-        verifyNotExist(readyQ, io, __func__);
-        verifyAdd(submitQ, io, __func__);
     }
     void delIoQ(const Io& io)
     {
@@ -256,7 +245,6 @@ struct Debug {
         ioMap[&io].push_back(__func__);
         verifyDel(ioQ, io, __func__);
         verifyNotExist(readyQ, io, "dellIoQ 1");
-        verifyNotExist(submitQ, io, "dellIoQ 2");
     }
     void delReadyQ(const Io& io)
     {
@@ -264,15 +252,6 @@ struct Debug {
         ioMap[&io].push_back(__func__);
         verifyExist(ioQ, io, __func__);
         verifyDel(readyQ, io, __func__);
-        verifyNotExist(submitQ, io, __func__);
-    }
-    void delSubmitQ(const Io& io)
-    {
-        verifyNumOverlapped(io, __func__);
-        ioMap[&io].push_back(__func__);
-        verifyExist(ioQ, io, __func__);
-        verifyNotExist(readyQ, io, __func__);
-        verifyDel(submitQ, io, __func__);
     }
     void verifyAdd(IoSet& ioSet, const Io& io, const char *msg)
     {
@@ -311,10 +290,8 @@ struct Debug {
 #else
     void addIoQ(const Io&) { }
     void addReadyQ(const Io&) { }
-    void addSubmitQ(const Io&) { }
     void delIoQ(const Io&) { }
     void delReadyQ(const Io&) { }
-    void delSubmitQ(const Io&) { }
 #endif
 } g_debug;
 /**
@@ -360,6 +337,51 @@ private:
         }
         /* Try merge. */
         return io0.tryMerge(io1);
+    }
+};
+
+class ReadyQueue
+{
+private:
+    struct Less {
+        bool operator()(const Io *a, const Io *b) const {
+            return a->offset() < b->offset();
+        }
+    };
+    typedef std::multiset<Io *, Less> IoSet;
+    IoSet ioSet_;
+
+public:
+    void push(Io *iop) {
+        ioSet_.insert(iop);
+        g_debug.addReadyQ(*iop);
+    }
+    Io *popAndRemove() {
+        Io *iop;
+        IoSet::iterator i = ioSet_.begin();
+        assert(i != ioSet_.end());
+        iop = *i;
+        ioSet_.erase(i);
+        g_debug.delReadyQ(*iop);
+        return iop;
+    }
+    bool empty() const {
+        return ioSet_.empty();
+    }
+    size_t size() const {
+        return ioSet_.size();
+    }
+    void erase(Io *iop) {
+        IoSet::iterator i, e;
+        std::tie(i, e) = ioSet_.equal_range(iop);
+        while (i != e) {
+            if (*i == iop) {
+                ioSet_.erase(i);
+                g_debug.delReadyQ(*iop);
+                return;
+            }
+            ++i;
+        }
     }
 };
 
@@ -428,7 +450,7 @@ public:
      * (3) IOs where iop->nOverlapped became 0 will be added to the ioQ.
      *     You can submit them just after returned.
      */
-    void delIoAndPushReadyIos(Io& io, std::deque<Io*>& readyQ) {
+    void delIoAndPushReadyIos(Io& io, ReadyQueue& readyQ) {
         assert(io.nOverlapped == 0);
 
         /* Delete iop. */
@@ -456,8 +478,7 @@ public:
             if (p->isOverlapped(io)) {
                 p->nOverlapped--;
                 if (p->nOverlapped == 0 && p->state == Io::Init) {
-                    readyQ.push_front(p);
-                    g_debug.addReadyQ(*p);
+                    readyQ.push(p);
                 }
             }
             ++it;
@@ -482,8 +503,7 @@ private:
     walb::log::FileHeader wh_;
 
     std::queue<Io> ioQ_; /* serialized by lsid. */
-    std::deque<Io*> readyQ_; /* ready to submit. */
-    std::deque<Io*> submitQ_; /* submitted, but not completed. */
+    ReadyQueue readyQ_; /* ready to submit. */
 
     /* Number of blocks where the corresponding IO
        is submitted, but not completed. */
@@ -660,16 +680,10 @@ private:
         if (io.state == Io::Init) {
             /* The IO is not still submitted. */
             assert(io.nOverlapped == 0);
-            scheduleIos();
+            forceSubmit();
             submitIos();
-#if 1
-        } else if (io.state == Io::Overwritten) { // QQQ
-            auto i = std::find(submitQ_.begin(), submitQ_.end(), &io);
-            if (i != submitQ_.end()) {
-                g_debug.delSubmitQ(io);
-                submitQ_.erase(i);
-            }
-#endif
+        } else if (io.state == Io::Overwritten) {
+            readyQ_.erase(&io);
         }
         if (io.state == Io::Submitted) {
             assert(io.aioKey() > 0);
@@ -716,15 +730,7 @@ private:
             overwrapped_.add(io);
             if (io.nOverlapped == 0) {
                 /* Ready to submit. */
-                readyQ_.push_back(&io);
-                g_debug.addReadyQ(io);
-            } else {
-                /* Will be submitted later. */
-                if (config_.isVerbose()) {
-                    ::printf("OVERLAP\t\t%" PRIu64 "\t%zu\t%u\n",
-                             static_cast<u64>(io.offset()) >> 9,
-                             io.offset() >> 9, io.nOverlapped);
-                }
+                readyQ_.push(&io);
             }
         }
     }
@@ -732,44 +738,19 @@ private:
     /**
      * Move IOs from readyQ_ to submitQ_ (with sorting).
      */
-    void scheduleIos() {
-        assert(readyQ_.size() <= queueSize_);
-        while (!readyQ_.empty()) {
-            Io* iop = readyQ_.front();
-            g_debug.delReadyQ(*iop);
-            readyQ_.pop_front();
-#if 1
-            /* Insert to the submit queue (sorted by offset). */
-            const auto cmp = [](const Io* p0, const Io *p1) {
-                return p0->offset() < p1->offset();
-            };
-            submitQ_.insert(
-                std::lower_bound(submitQ_.begin(), submitQ_.end(), iop, cmp),
-                iop);
-#else
-            /* Insert to the submit queue. */
-            submitQ_.push_back(iop);
-#endif
-            g_debug.addSubmitQ(*iop);
-
-            if (queueSize_ <= submitQ_.size()) {
-                submitIos();
-            }
+    void forceSubmit() { // QQQ
+        if (queueSize_ <= readyQ_.size()) {
+            submitIos();
         }
     }
 
     /**
-     * Submit IOs in the submitQ_.
+     * Submit IOs in the readyQ_.
      */
     void submitIos() {
-        assert(submitQ_.size() <= queueSize_);
-
         size_t nBulk = 0;
-        while (!submitQ_.empty()) {
-            Io* iop = submitQ_.front();
-            submitQ_.pop_front();
-            g_debug.delSubmitQ(*iop);
-
+        while (!readyQ_.empty()) {
+            Io* iop = readyQ_.popAndRemove();
             assert(iop->state != Io::Submitted);
             if (iop->state == Io::Overwritten) continue;
             iop->state = Io::Submitted;
@@ -835,12 +816,12 @@ private:
             /* Do not prepare too many blocks at once. */
             if (queueSize_ / 2 <= nBlocks) {
                 prepareIos(mergeQ, nBlocks);
-                scheduleIos();
+                forceSubmit();
             }
         }
         assert(remaining == 0);
         prepareIos(mergeQ, nBlocks);
-        scheduleIos();
+        forceSubmit();
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
