@@ -542,7 +542,7 @@ class WalbLogApplyer
 private:
     const Config& config_;
     cybozu::util::BlockDevice bd_;
-    const size_t blockSize_;
+    const size_t pbs_;
     const size_t queueSize_;
     cybozu::aio::Aio aio_;
     walb::log::FileHeader wh_;
@@ -566,8 +566,8 @@ public:
         const Config& config, size_t bufferSize)
         : config_(config)
         , bd_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
-        , blockSize_(bd_.getPhysicalBlockSize())
-        , queueSize_(getQueueSizeStatic(bufferSize, blockSize_))
+        , pbs_(bd_.getPhysicalBlockSize())
+        , queueSize_(getQueueSizeStatic(bufferSize, pbs_))
         , aio_(bd_.getFd(), queueSize_)
         , wh_()
         , ioQ_()
@@ -608,16 +608,15 @@ public:
         uint64_t beginLsid = wh_.beginLsid();
         uint64_t redoLsid = beginLsid;
 
-        const uint32_t pbs = wh_.pbs();
         const uint32_t salt = wh_.salt();
-        walb::LogPackHeader packH(pbs, salt);
+        walb::LogPackHeader packH(pbs_, salt);
         while (packH.readFrom(fileR)) {
             if (config_.isVerbose()) packH.printShort();
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 const walb::LogRecord &rec = packH.record(i);
-                walb::LogBlockShared blockS(pbs);
+                walb::LogBlockShared blockS(pbs_);
                 if (rec.hasData()) {
-                    blockS.read(fileR, rec.ioSizePb(pbs));
+                    blockS.read(fileR, rec.ioSizePb(pbs_));
                     walb::log::verifyLogChecksum(rec, blockS, salt);
                 } else {
                     blockS.resize(0);
@@ -646,11 +645,11 @@ public:
 private:
     bool canApply() const {
         const struct walblog_header &h = wh_.header();
-        bool ret = blockSize_ <= h.physical_bs &&
-            h.physical_bs % blockSize_ == 0;
+        bool ret = pbs_ <= h.physical_bs &&
+            h.physical_bs % pbs_ == 0;
         if (!ret) {
             LOGe("Physical block size does not match %u %zu.\n",
-                 h.physical_bs, blockSize_);
+                 h.physical_bs, pbs_);
         }
         return ret;
     }
@@ -677,7 +676,7 @@ private:
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
-        nDiscard_ += rec.ioSizePb(wh_.pbs());
+        nDiscard_ += rec.ioSizePb(pbs_);
     }
 
     /**
@@ -696,7 +695,7 @@ private:
     uint32_t bytesToPb(uint32_t bytes) const {
         assert(bytes % LOGICAL_BLOCK_SIZE == 0);
         uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
-        return ::capacity_pb(blockSize_, lb);
+        return ::capacity_pb(pbs_, lb);
     }
 
     template<class T>
@@ -777,15 +776,15 @@ private:
         MergeIoQueue mergeQ;
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
-        const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
+        const uint32_t ioSizePb = rec.ioSizePb(pbs_);
         for (size_t i = 0; i < ioSizePb; i++) {
             AlignedArray block;
             if (rec.isDiscard()) {
-                block.resize(blockSize_);
+                block.resize(pbs_);
             } else {
                 block = std::move(blockS.getBlock(i));
             }
-            const size_t size = std::min(blockSize_, remaining);
+            const size_t size = std::min(pbs_, remaining);
 
             Io io(off, size, std::move(block));
             off += size;
@@ -820,7 +819,7 @@ private:
      */
     void redoPack(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
         assert(rec.isExist());
-        const uint32_t ioSizePb = rec.ioSizePb(wh_.pbs());
+        const uint32_t ioSizePb = rec.ioSizePb(pbs_);
 
         if (rec.isPadding()) {
             /* Do nothing. */
