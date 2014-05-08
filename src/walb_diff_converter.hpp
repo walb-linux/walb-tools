@@ -151,7 +151,7 @@ private:
         const uint32_t pbs = wlHeader.pbs();
 
         /* Initialize walb diff db. */
-        auto verifyUuid = [&]() { // QQQ
+        auto verifyUuid = [&]() {
             const cybozu::Uuid diffUuid = diffMem.header().getUuid();
             const cybozu::Uuid logUuid = wlHeader.getUuid();
             if (diffUuid != logUuid) {
