@@ -29,7 +29,7 @@ inline bool wdiffTransferClient(
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     diff::Packer packer;
     size_t pushedNum = 0;
-    while (merger.pop(recIo)) {
+    while (merger.getAndRemove(recIo)) {
         if (stopState == ForceStopping || forceQuit) {
             return false;
         }

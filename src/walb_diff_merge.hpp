@@ -69,7 +69,7 @@ private:
             fill();
             return rec_;
         }
-        void pop(DiffIo &io) {
+        void getAndRemove(DiffIo &io) {
             verifyNotEnd(__func__);
 
             /* for check */
@@ -191,7 +191,7 @@ public:
         writer.writeHeader(wdiffH_);
 
         RecIo d;
-        while (pop(d)) {
+        while (getAndRemove(d)) {
             assert(d.isValid());
             writer.compressAndWriteDiff(d.record(), d.io().get());
         }
@@ -229,11 +229,11 @@ public:
         return wdiffH_;
     }
     /**
-     * Pop a diffIo.
+     * Get a diffIo and remove.
      * RETURN:
      *   false if there is no diffIo anymore.
      */
-    bool pop(RecIo &recIo) {
+    bool getAndRemove(RecIo &recIo) {
         prepare();
         while (mergedQ_.empty()) {
             if (wdiffs_.empty()) {
@@ -243,12 +243,12 @@ public:
             }
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-				// copy rec because reference is invalid after calling wdiffs_[i]->pop
+				// copy rec because reference is invalid after calling wdiffs_[i]->getAndRemove().
                 const DiffRecord rec = wdiffs_[i]->front();
                 assert(rec.isValid());
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
-                    wdiffs_[i]->pop(io);
+                    wdiffs_[i]->getAndRemove(io);
                     assert(io.isValid());
                     mergeIo(rec, std::move(io));
                 }

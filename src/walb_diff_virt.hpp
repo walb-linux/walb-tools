@@ -221,7 +221,7 @@ private:
         assert(offInIo_ <= rec.io_blocks);
         if (offInIo_ == rec.io_blocks) {
             offInIo_ = 0;
-            if (!merger_.pop(recIo_)) {
+            if (!merger_.getAndRemove(recIo_)) {
                 isEndDiff_ = true;
                 recIo_ = walb::diff::RecIo();
             }
