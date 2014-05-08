@@ -22,7 +22,7 @@ namespace diff {
 class RecIo /* final */
 {
 private:
-	DiffRecord rec_;
+    DiffRecord rec_;
     DiffIo io_;
 public:
     const DiffRecord &record() const { return rec_; }
@@ -242,13 +242,16 @@ public:
     }
 };
 
+} // namespace diff
+
 /**
  * Simpler implementation of in-memory walb diff data.
  * IO data compression is not supported.
  */
-class MemoryData
+class DiffMemory
 {
 public:
+    using RecIo = diff::RecIo; // QQQ
     using Map = std::map<uint64_t, RecIo>;
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
@@ -258,11 +261,11 @@ private:
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
-    explicit MemoryData(uint16_t maxIoBlocks = uint16_t(-1))
+    explicit DiffMemory(uint16_t maxIoBlocks = uint16_t(-1))
         : maxIoBlocks_(maxIoBlocks), map_(), fileH_(), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
-    ~MemoryData() noexcept = default;
+    ~DiffMemory() noexcept = default;
     bool empty() const { return map_.empty(); }
 
     void add(const DiffRecord& rec, DiffIo &&io, uint16_t maxIoBlocks = 0) {
@@ -339,15 +342,15 @@ public:
             ++it;
         }
         if (nBlocks_ != nBlocks) {
-            throw cybozu::Exception("MemoryData:getNIos:bad blocks") << nBlocks_ << nBlocks;
+            throw cybozu::Exception("DiffMemory:getNIos:bad blocks") << nBlocks_ << nBlocks;
         }
         if (nIos_ != nIos) {
-            throw cybozu::Exception("MemoryData:getNIos:bad ios") << nIos_ << nIos;
+            throw cybozu::Exception("DiffMemory:getNIos:bad ios") << nIos_ << nIos;
         }
     }
     DiffFileHeader& header() { return fileH_; }
     void writeTo(int outFd, bool isCompressed = true) {
-        Writer writer(outFd);
+        diff::Writer writer(outFd);
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
         while (it != map_.cend()) {
@@ -363,7 +366,7 @@ public:
         writer.close();
     }
     void readFrom(int inFd) {
-        Reader reader(inFd);
+        diff::Reader reader(inFd);
         reader.readHeader(fileH_);
         DiffRecord rec;
         DiffIo io;
@@ -410,4 +413,4 @@ public:
 	}
 };
 
-}} //namespace walb::diff
+} //namespace walb

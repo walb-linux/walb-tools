@@ -47,12 +47,12 @@ void printRecIo(const DiffRecord &rec, const DiffIo &io)
     io.printOneline();
 }
 
-void getFromMemoryData(diff::MemoryData &m, std::vector<DiffRecord> &recV, std::vector<DiffIo> &ioV)
+void getFromDiffMemory(DiffMemory &diffMem, std::vector<DiffRecord> &recV, std::vector<DiffIo> &ioV)
 {
     recV.clear();
     ioV.clear();
-    diff::MemoryData::Map &map = m.getMap();
-    diff::MemoryData::Map::iterator itr = map.begin();
+    DiffMemory::Map &map = diffMem.getMap();
+    DiffMemory::Map::iterator itr = map.begin();
     while (itr != map.end()) {
         recV.push_back(itr->second.record());
         ioV.push_back(itr->second.io());
@@ -84,7 +84,7 @@ void verifyIoTypeEquality(const DiffRecord &rec0, const DiffRecord &rec1)
 
 void verifySplitPattern1(IoType type0, IoType type1)
 {
-    diff::MemoryData m;
+    DiffMemory diffMem;
     DiffRecord rec0, rec1;
     DiffIo io0, io1;
     /**
@@ -92,14 +92,14 @@ void verifySplitPattern1(IoType type0, IoType type1)
      */
     std::tie(rec0, io0) = genRecIo(2, 2, type0);
     std::tie(rec1, io1) = genRecIo(0, 6, type1);
-    m.add(rec0, DiffIo(io0));
-    m.add(rec1, DiffIo(io1));
-    m.checkNoOverlappedAndSorted();
+    diffMem.add(rec0, DiffIo(io0));
+    diffMem.add(rec1, DiffIo(io1));
+    diffMem.checkNoOverlappedAndSorted();
 
-    CYBOZU_TEST_EQUAL(m.getMap().size(), 1);
+    CYBOZU_TEST_EQUAL(diffMem.getMap().size(), 1);
     std::vector<DiffRecord> recV;
     std::vector<DiffIo> ioV;
-    getFromMemoryData(m, recV, ioV);
+    getFromDiffMemory(diffMem, recV, ioV);
 
     verifyIoTypeEquality(rec1, recV[0]);
     CYBOZU_TEST_EQUAL(recV[0].io_address, 0);
@@ -117,7 +117,7 @@ void verifySplitPattern1(IoType type0, IoType type1)
 
 void verifySplitPattern2(IoType type0, IoType type1)
 {
-    diff::MemoryData m;
+    DiffMemory diffMem;
     DiffRecord rec0, rec1;
     DiffIo io0, io1;
     /**
@@ -125,14 +125,14 @@ void verifySplitPattern2(IoType type0, IoType type1)
      */
     std::tie(rec0, io0) = genRecIo(0, 6, type0);
     std::tie(rec1, io1) = genRecIo(2, 2, type1);
-    m.add(rec0, DiffIo(io0));
-    m.add(rec1, DiffIo(io1));
-    m.checkNoOverlappedAndSorted();
+    diffMem.add(rec0, DiffIo(io0));
+    diffMem.add(rec1, DiffIo(io1));
+    diffMem.checkNoOverlappedAndSorted();
 
-    CYBOZU_TEST_EQUAL(m.getMap().size(), 3);
+    CYBOZU_TEST_EQUAL(diffMem.getMap().size(), 3);
     std::vector<DiffRecord> recV;
     std::vector<DiffIo> ioV;
-    getFromMemoryData(m, recV, ioV);
+    getFromDiffMemory(diffMem, recV, ioV);
 
     verifyIoTypeEquality(recV[0], rec0);
     verifyIoTypeEquality(recV[1], rec1);
@@ -159,7 +159,7 @@ void verifySplitPattern2(IoType type0, IoType type1)
 
 void verifySplitPattern3(IoType type0, IoType type1)
 {
-    diff::MemoryData m;
+    DiffMemory diffMem;
     DiffRecord rec0, rec1;
     DiffIo io0, io1;
     /**
@@ -167,14 +167,14 @@ void verifySplitPattern3(IoType type0, IoType type1)
      */
     std::tie(rec0, io0) = genRecIo(0, 4, type0);
     std::tie(rec1, io1) = genRecIo(2, 4, type1);
-    m.add(rec0, DiffIo(io0));
-    m.add(rec1, DiffIo(io1));
-    m.checkNoOverlappedAndSorted();
+    diffMem.add(rec0, DiffIo(io0));
+    diffMem.add(rec1, DiffIo(io1));
+    diffMem.checkNoOverlappedAndSorted();
 
-    CYBOZU_TEST_EQUAL(m.getMap().size(), 2);
+    CYBOZU_TEST_EQUAL(diffMem.getMap().size(), 2);
     std::vector<DiffRecord> recV;
     std::vector<DiffIo> ioV;
-    getFromMemoryData(m, recV, ioV);
+    getFromDiffMemory(diffMem, recV, ioV);
 
     verifyIoTypeEquality(recV[0], rec0);
     verifyIoTypeEquality(recV[1], rec1);
@@ -194,7 +194,7 @@ void verifySplitPattern3(IoType type0, IoType type1)
 
 void verifySplitPattern4(IoType type0, IoType type1)
 {
-    walb::diff::MemoryData m;
+    DiffMemory diffMem;
     DiffRecord rec0, rec1;
     DiffIo io0, io1;
     /**
@@ -202,14 +202,14 @@ void verifySplitPattern4(IoType type0, IoType type1)
      */
     std::tie(rec0, io0) = genRecIo(2, 4, type0);
     std::tie(rec1, io1) = genRecIo(0, 4, type1);
-    m.add(rec0, DiffIo(io0));
-    m.add(rec1, DiffIo(io1));
-    m.checkNoOverlappedAndSorted();
+    diffMem.add(rec0, DiffIo(io0));
+    diffMem.add(rec1, DiffIo(io1));
+    diffMem.checkNoOverlappedAndSorted();
 
-    CYBOZU_TEST_EQUAL(m.getMap().size(), 2);
+    CYBOZU_TEST_EQUAL(diffMem.getMap().size(), 2);
     std::vector<DiffRecord> recV;
     std::vector<DiffIo> ioV;
-    getFromMemoryData(m, recV, ioV);
+    getFromDiffMemory(diffMem, recV, ioV);
 
     verifyIoTypeEquality(recV[0], rec1);
     verifyIoTypeEquality(recV[1], rec0);

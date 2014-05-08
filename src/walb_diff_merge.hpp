@@ -123,7 +123,7 @@ private:
     WdiffPtrDeq doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
-    MemoryData wdiffMem_;
+    DiffMemory diffMem_;
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
@@ -135,7 +135,7 @@ public:
     Merger()
         : wdiffs_()
         , doneWdiffs_()
-        , wdiffMem_()
+        , diffMem_()
         , wdiffH_()
         , isHeaderPrepared_(false)
         , mergedQ_()
@@ -198,7 +198,7 @@ public:
 
         writer.flush();
         assert(wdiffs_.empty());
-        assert(wdiffMem_.empty());
+        assert(diffMem_.empty());
     }
     /**
      * Prepare wdiff header and variables.
@@ -237,7 +237,7 @@ public:
         prepare();
         while (mergedQ_.empty()) {
             if (wdiffs_.empty()) {
-                if (wdiffMem_.empty()) return false;
+                if (diffMem_.empty()) return false;
                 moveToQueueUpto(uint64_t(-1));
                 break;
             }
@@ -268,13 +268,13 @@ private:
      * to a specified queue.
      */
     void moveToQueueUpto(uint64_t maxAddr) {
-        MemoryData::Map& map = wdiffMem_.getMap();
+        DiffMemory::Map& map = diffMem_.getMap();
         auto i = map.begin();
         while (i != map.end()) {
             RecIo& recIo = i->second;
             if (recIo.record().endIoAddress() > maxAddr) break;
             mergedQ_.push(std::move(recIo));
-            wdiffMem_.eraseMap(i);
+            diffMem_.eraseMap(i);
         }
     }
     uint64_t getMinCurrentAddress() const {
@@ -299,7 +299,7 @@ private:
     }
     void mergeIo(const DiffRecord &rec, DiffIo &&io) {
         assert(!rec.isCompressed());
-        wdiffMem_.add(rec, std::move(io), maxIoBlocks_);
+        diffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
     bool canMergeIo(size_t i, const DiffRecord &rec) {
         if (i == 0) return true;

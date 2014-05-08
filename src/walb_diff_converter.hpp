@@ -96,18 +96,18 @@ public:
     void convert(int inputLogFd, int outputWdiffFd,
                  uint16_t maxIoBlocks = uint16_t(-1)) {
         /* Prepare walb diff. */
-        MemoryData walbDiff(maxIoBlocks);
+        DiffMemory diffMem(maxIoBlocks);
 
         /* Loop */
         uint64_t lsid = -1;
         uint64_t writtenBlocks = 0;
-        while (convertWlog(lsid, writtenBlocks, inputLogFd, walbDiff)) {}
+        while (convertWlog(lsid, writtenBlocks, inputLogFd, diffMem)) {}
 
 #ifdef DEBUG
         /* finalize */
         try {
             LOGd_("Check no overlapped.\n"); /* debug */
-            walbDiff.checkNoOverlappedAndSorted(); /* debug */
+            diffMem.checkNoOverlappedAndSorted(); /* debug */
         } catch (std::runtime_error &e) {
             LOGe("checkNoOverlapped failed: %s\n", e.what());
         }
@@ -119,10 +119,10 @@ public:
               "nBlocks: %" PRIu64 "\n"
               "nIos: %" PRIu64 "\n"
               "lsid: %" PRIu64 "\n",
-              writtenBlocks, walbDiff.getNBlocks(),
-              walbDiff.getNIos(), lsid);
+              writtenBlocks, diffMem.getNBlocks(),
+              diffMem.getNIos(), lsid);
 
-        walbDiff.writeTo(outputWdiffFd, ::WALB_DIFF_CMPR_SNAPPY);
+        diffMem.writeTo(outputWdiffFd, ::WALB_DIFF_CMPR_SNAPPY);
     }
 private:
     /**
@@ -131,12 +131,12 @@ private:
      * @lsid begin lsid.
      * @writtenBlocks written logical blocks.
      * @fd input wlog file descriptor.
-     * @walbDiff walb diff memory manager.
+     * @diffMem walb diff memory manager.
      *
      * RETURN:
      *   true if wlog is remaining, or false.
      */
-    bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd, MemoryData &walbDiff) {
+    bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd, DiffMemory &diffMem) {
         log::Reader reader(fd);
 
         /* Read walblog header. */
@@ -152,7 +152,7 @@ private:
 
         /* Initialize walb diff db. */
         auto verifyUuid = [&]() { // QQQ
-            const cybozu::Uuid diffUuid = walbDiff.header().getUuid();
+            const cybozu::Uuid diffUuid = diffMem.header().getUuid();
             const cybozu::Uuid logUuid = wlHeader.getUuid();
             if (diffUuid != logUuid) {
                 throw cybozu::Exception(__func__) << "uuid differ" << logUuid << diffUuid;
@@ -161,7 +161,7 @@ private:
         if (lsid == uint64_t(-1)) {
             /* First time. */
             /* Initialize uuid. */
-            walbDiff.header().setUuid(wlHeader.getUuid());
+            diffMem.header().setUuid(wlHeader.getUuid());
             lsid = wlHeader.beginLsid();
         } else {
             /* Second or more. */
@@ -178,7 +178,7 @@ private:
             DiffRecord diffRec;
             DiffIo diffIo;
             if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo)) {
-                walbDiff.add(diffRec, std::move(diffIo));
+                diffMem.add(diffRec, std::move(diffIo));
                 writtenBlocks += diffRec.io_blocks;
             }
         }

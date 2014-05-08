@@ -32,14 +32,14 @@ class Generator
 {
 private:
     const log::Generator::Config &config_;
-    MemoryData mem_;
+    DiffMemory diffMem_;
 
 public:
     explicit Generator(const log::Generator::Config &config)
-        : config_(config), mem_() {}
+        : config_(config), diffMem_() {}
     ~Generator() noexcept = default;
-    MemoryData &data() { return mem_; }
-    const MemoryData &data() const { return mem_; }
+    DiffMemory &data() { return diffMem_; }
+    const DiffMemory &data() const { return diffMem_; }
     /**
      * TODO:
      *   * Do not convert via file descriptors with threads.
@@ -100,14 +100,14 @@ public:
         struct Worker2
         {
             int inFd_;
-            MemoryData &mem_;
-            Worker2(int inFd, MemoryData &mem)
-                : inFd_(inFd), mem_(mem) {}
+            DiffMemory &diffMem_;
+            Worker2(int inFd, DiffMemory &mem)
+                : inFd_(inFd), diffMem_(mem) {}
             void operator()() {
                 std::exception_ptr ep;
                 try {
-                    mem_.clear();
-                    mem_.readFrom(inFd_);
+                    diffMem_.clear();
+                    diffMem_.readFrom(inFd_);
                 } catch (...) {
                     ep = std::current_exception();
                 }
@@ -118,7 +118,7 @@ public:
         cybozu::thread::ThreadRunnerSet thSet;
         thSet.add(std::make_shared<Worker0>(pipe0.fdW(), config_));
         thSet.add(std::make_shared<Worker1>(pipe0.fdR(), pipe1.fdW()));
-        thSet.add(std::make_shared<Worker2>(pipe1.fdR(), mem_));
+        thSet.add(std::make_shared<Worker2>(pipe1.fdR(), diffMem_));
         thSet.start();
         thSet.join();
     }

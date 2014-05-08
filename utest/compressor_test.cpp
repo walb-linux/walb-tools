@@ -68,7 +68,7 @@ std::vector<std::vector<char>> generateRawPacks()
     walb::log::Generator::Config cfg = createConfig();
     walb::diff::Generator g(cfg);
     g.generate();
-    walb::diff::MemoryData &mem0 = g.data();
+    walb::DiffMemory &diffMem0 = g.data();
 
     std::vector<std::vector<char>> packV0;
     std::vector<char> packRaw(::WALB_DIFF_PACK_SIZE);
@@ -101,7 +101,7 @@ std::vector<std::vector<char>> generateRawPacks()
     };
 
     /* Convert memory data to raw pack list. */
-    const walb::diff::MemoryData::Map& map = mem0.getMap();
+    const walb::DiffMemory::Map& map = diffMem0.getMap();
 	for (const auto& i : map) {
 		const walb::diff::RecIo& recIo = i.second;
 		addIo(recIo.record(), recIo.io().get(), recIo.io().getSize());

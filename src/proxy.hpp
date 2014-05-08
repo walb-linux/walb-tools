@@ -736,8 +736,8 @@ namespace proxy_local {
 
 inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt, Logger &logger)
 {
-    diff::MemoryData memData(DEFAULT_MAX_IO_LB);
-    memData.header().setUuid(uuid);
+    DiffMemory diffMem(DEFAULT_MAX_IO_LB);
+    diffMem.header().setUuid(uuid);
 
     LogPackHeader packH(pbs, salt);
 
@@ -753,11 +753,11 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
             DiffRecord drec;
             DiffIo diffIo;
             if (convertLogToDiff(pbs, lrec, blockS, drec, diffIo)) {
-                memData.add(drec, std::move(diffIo));
+                diffMem.add(drec, std::move(diffIo));
             }
         }
     }
-    memData.writeTo(fd);
+    diffMem.writeTo(fd);
 }
 
 } // namespace proxy_local
