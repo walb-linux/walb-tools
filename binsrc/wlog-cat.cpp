@@ -103,7 +103,7 @@ public:
     /**
      * Read walb log from the device and write to outFd with wl header.
      */
-    void operator()(int outFd) {
+    void run(int outFd) {
         if (outFd <= 0) throw RT_ERR("outFd is not valid.");
         walb::log::Writer writer(outFd);
 
@@ -129,8 +129,7 @@ public:
         uint64_t lsid = beginLsid;
         uint64_t totalPaddingPb = 0;
         uint64_t nPacks = 0;
-        LogPackHeader packH(nullptr, super_.getPhysicalBlockSize(),
-                         super_.getLogChecksumSalt());
+        LogPackHeader packH(nullptr, pbs, salt);
         while (lsid < endLsid_) {
             bool isEnd = false;
             readAheadLoose();
@@ -142,7 +141,7 @@ public:
                 break;
             }
             std::queue<LogPackIo> q;
-            isEnd = readAllLogpackData(packH, q);
+            isEnd = readAllLogpackIos(packH, q);
             writer.writePack(packH, toBlocks(q));
             lsid = packH.nextLogpackLsid();
             totalPaddingPb += packH.totalPaddingPb();
@@ -205,12 +204,12 @@ private:
      * RETURN:
      *   true if logpack has shrinked and should end.
      */
-    bool readAllLogpackData(LogPackHeader &logh, std::queue<LogPackIo> &q) {
+    bool readAllLogpackIos(LogPackHeader &logh, std::queue<LogPackIo> &q) {
         bool isEnd = false;
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            if (readLogpackData(packIo, logh.pbs())) {
+            if (readLogpackIo(packIo, logh.pbs())) {
                 q.push(std::move(packIo));
             } else {
                 if (isVerbose_) { logh.print(::stderr); }
@@ -231,7 +230,7 @@ private:
     /**
      * Read a logpack data.
      */
-    bool readLogpackData(LogPackIo& packIo, uint32_t pbs) {
+    bool readLogpackIo(LogPackIo& packIo, uint32_t pbs) {
         const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return true;
         readAheadLoose();
@@ -258,7 +257,7 @@ int main(int argc, char* argv[]) try
     } else {
         fileW.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
-    extractor(fileW.fd());
+    extractor.run(fileW.fd());
     fileW.close();
 } catch (std::exception& e) {
     LOGe("Exception: %s\n", e.what());
