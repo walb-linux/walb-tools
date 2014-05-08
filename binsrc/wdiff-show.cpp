@@ -11,10 +11,8 @@
 #include "util.hpp"
 #include "walb_diff_file.hpp"
 
-int main()
-try {
-    walb::util::setLogSetting("-", false);
-
+int doMain(int, char *[])
+{
     /* Read a wdiff file and show the contents. */
     walb::diff::Reader wdiffR(0);
     walb::DiffFileHeader wdiffH;
@@ -30,11 +28,7 @@ try {
         }
         rec.printOneline();
     }
-} catch (std::exception &e) {
-    ::fprintf(::stderr, "exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    ::fprintf(::stderr, "caught other error.\n");
-    return 1;
+    return 0;
 }
 
+DEFINE_ERROR_SAFE_MAIN("wdiff-show")

@@ -133,7 +133,6 @@ int main(int argc, char *argv[]) try
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
     finalizeProxy();
-
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());
     return 1;

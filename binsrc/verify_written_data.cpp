@@ -123,18 +123,12 @@ public:
     }
 };
 
-int main(int argc, char* argv[]) try
+int doMain(int argc, char* argv[])
 {
-    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     IoDataVerifier v(config);
     v.run();
-} catch (std::exception& e) {
-    LOGe("Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("Caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end file. */
+DEFINE_ERROR_SAFE_MAIN("verify_written_data")

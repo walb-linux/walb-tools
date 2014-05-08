@@ -120,18 +120,10 @@ uint64_t checkBlockDiff(Config& config)
     return nDiffer;
 }
 
-int main(int argc, char* argv[])
-    try
+int doMain(int argc, char* argv[])
 {
-    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
-
     return checkBlockDiff(config) != 0;
-} catch (std::exception& e) {
-    ::fprintf(::stderr, "Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    ::fprintf(::stderr, "Caught other error.\n");
-    return 1;
 }
 
+DEFINE_ERROR_SAFE_MAIN("bdiff")

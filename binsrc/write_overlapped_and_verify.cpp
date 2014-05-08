@@ -253,20 +253,14 @@ static bool writeConcurrentlyAndVerify(Config &config)
     return ret;
 };
 
-int main(int argc, char* argv[]) try
+int doMain(int argc, char* argv[])
 {
-    walb::util::setLogSetting("-", false);
     Config config(argc, argv);
     config.check();
     if (!writeConcurrentlyAndVerify(config)) {
         throw std::runtime_error("The written data could not be read.");
     }
-} catch (std::exception& e) {
-    LOGe("Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("Caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end file. */
+DEFINE_ERROR_SAFE_MAIN("write_overlapped_and_verify")

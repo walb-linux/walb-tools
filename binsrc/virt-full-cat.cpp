@@ -50,37 +50,31 @@ struct Option : public cybozu::Option
     }
 };
 
-int main(int argc, char *argv[])
+void setupFiles(cybozu::util::File &inFile, cybozu::util::File &outFile, Option &opt)
 {
-    try {
-        Option opt;
-        if (!opt.parse(argc, argv)) return 1;
-        walb::util::setLogSetting("-", false);
-
-        /* File descriptors for input/output. */
-        cybozu::util::File inFile;
-        if (opt.inputPath != "-") {
-            inFile.open(opt.inputPath, O_RDONLY);
-        } else {
-            inFile.setFd(0);
-        }
-        cybozu::util::File outFile;
-        if (opt.outputPath != "-") {
-            outFile.open(opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        } else {
-            outFile.setFd(1);
-        }
-        walb::diff::VirtualFullScanner virt;
-        virt.init(std::move(inFile), opt.inputWdiffs);
-        virt.readAndWriteTo(outFile.fd(), opt.bufferSize);
-        outFile.close();
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caught other error.\n");
+    if (opt.inputPath != "-") {
+        inFile.open(opt.inputPath, O_RDONLY);
+    } else {
+        inFile.setFd(0);
     }
-    return 1;
+    if (opt.outputPath != "-") {
+        outFile.open(opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    } else {
+        outFile.setFd(1);
+    }
 }
 
-/* end of file. */
+int doMain(int argc, char *argv[])
+{
+    Option opt;
+    if (!opt.parse(argc, argv)) return 1;
+    cybozu::util::File inFile, outFile;
+    setupFiles(inFile, outFile, opt);
+    walb::diff::VirtualFullScanner virt;
+    virt.init(std::move(inFile), opt.inputWdiffs);
+    virt.readAndWriteTo(outFile.fd(), opt.bufferSize);
+    outFile.close();
+    return 0;
+}
+
+DEFINE_ERROR_SAFE_MAIN("virt-full-cat")

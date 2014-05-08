@@ -822,28 +822,27 @@ private:
     }
 };
 
-int main(int argc, char* argv[]) try
+void setupInputFile(cybozu::util::File &fileR, const Config &config)
 {
-    walb::util::setLogSetting("-", false);
+    if (config.isFromStdin()) {
+        fileR.setFd(0);
+    } else {
+        fileR.open(config.inWlogPath(), O_RDONLY);
+    }
+}
 
+int doMain(int argc, char* argv[])
+{
     const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
     Config config(argc, argv);
     config.check();
 
     WalbLogApplyer wlApp(config, BUFFER_SIZE);
-    if (config.isFromStdin()) {
-        wlApp.readAndApply(0);
-    } else {
-        cybozu::util::File file(config.inWlogPath(), O_RDONLY);
-        wlApp.readAndApply(file.fd());
-        file.close();
-    }
-} catch (std::exception& e) {
-    LOGe("Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("Caught other error.\n");
-    return 1;
+    cybozu::util::File fileR;
+    setupInputFile(fileR, config);
+    wlApp.readAndApply(fileR.fd());
+    fileR.close();
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wlog-redo")

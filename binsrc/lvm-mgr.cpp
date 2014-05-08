@@ -155,20 +155,12 @@ void dispatch(const Option &opt)
     }
 }
 
-int main(int argc, char *argv[])
+int doMain(int argc, char *argv[])
 {
-    try {
-        walb::util::setLogSetting("-", false);
-        Option opt;
-        opt.parse(argc, argv);
-        dispatch(opt);
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caugut another error.\n");
-    }
-    return 1;
+    Option opt;
+    opt.parse(argc, argv);
+    dispatch(opt);
+    return 0;
 }
 
-/* end of file */
+DEFINE_ERROR_SAFE_MAIN("lvm-mgr")

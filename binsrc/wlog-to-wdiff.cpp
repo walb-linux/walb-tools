@@ -34,9 +34,8 @@ struct Option : public cybozu::Option
     }
 };
 
-int main(int argc, UNUSED char *argv[]) try
+int doMain(int argc, char *argv[])
 {
-    walb::util::setLogSetting("-", false);
     Option opt;
     if (!opt.parse(argc, argv)) {
         opt.usage();
@@ -45,12 +44,6 @@ int main(int argc, UNUSED char *argv[]) try
     walb::diff::Converter c;
     c.convert(0, 1, opt.maxIoSize);
     return 0;
-} catch (std::exception &e) {
-    LOGe("exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("caught other error.\n");
-    return 1;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wlog-to-wdiff")

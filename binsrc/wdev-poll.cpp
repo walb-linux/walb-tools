@@ -109,32 +109,22 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::LogDevMonitor &mo
     return true;
 }
 
-int main(int argc, char *argv[])
+int doMain(int argc, char *argv[])
 {
-    try {
-        Option opt;
-        if (!opt.parse(argc, argv)) {
-            return 1;
+    Option opt;
+    if (!opt.parse(argc, argv)) return 1;
+    walb::LogDevMonitor monitor;
+    std::atomic<bool> flag(false);
+    std::thread th(pollWorker, std::ref(flag), std::ref(monitor));
+    while (true) {
+        std::vector<std::string> cmds = commandReader(::stdin);
+        if (!commandRunner(cmds, monitor)) {
+            break;
         }
-        walb::util::setLogSetting("-", false);
-
-        walb::LogDevMonitor monitor;
-        std::atomic<bool> flag(false);
-        std::thread th(pollWorker, std::ref(flag), std::ref(monitor));
-        while (true) {
-            std::vector<std::string> cmds = commandReader(::stdin);
-            if (!commandRunner(cmds, monitor)) {
-                break;
-            }
-        }
-        flag.store(true);
-        th.join();
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caught an error.");
     }
-    return 1;
+    flag.store(true);
+    th.join();
+    return 0;
 }
-/* end of file. */
+
+DEFINE_ERROR_SAFE_MAIN("wdev-poll")

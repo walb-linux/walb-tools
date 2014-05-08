@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief File utilities.
+ * @brief walb utilities.
  * @author HOSHINO Takashi
  *
  * (C) 2014 Cybozu Labs, Inc.
@@ -189,3 +189,22 @@ inline uint64_t parseBulkLb(const std::string &str, const char *msg)
 }
 
 }} // walb::util
+
+inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)
+{
+    try {
+        walb::util::setLogSetting("-", false);
+        return doMain(argc, argv);
+    } catch (std::exception &e) {
+        LOGs.error() << msg << e.what();
+    } catch (...) {
+        LOGs.error() << msg << "unknown error";
+    }
+    return 1;
+}
+
+#define DEFINE_ERROR_SAFE_MAIN(msg)                    \
+    int main(int argc, char *argv[]) {                 \
+        return errorSafeMain(doMain, argc, argv, msg); \
+    }
+

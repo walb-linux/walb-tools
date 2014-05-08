@@ -63,30 +63,20 @@ struct Option : public cybozu::Option
     }
 };
 
-int main(int argc, char *argv[])
+int doMain(int argc, char *argv[])
 {
-    try {
-        Option opt;
-        if (!opt.parse(argc, argv)) {
-            return 1;
-        }
-        walb::util::setLogSetting("-", false);
-        walb::diff::Merger merger;
-        for (std::string &path : opt.inputWdiffs) {
-            merger.addWdiff(path);
-        }
-        cybozu::util::File file(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        merger.setMaxIoBlocks(opt.maxIoBlocks());
-        merger.setShouldValidateUuid(false);
-        merger.mergeToFd(file.fd());
-        file.close();
-        return 0;
-    } catch (std::exception &e) {
-        ::fprintf(::stderr, "exception: %s\n", e.what());
-    } catch (...) {
-        ::fprintf(::stderr, "caught other error.\n");
+    Option opt;
+    if (!opt.parse(argc, argv)) return 1;
+    walb::diff::Merger merger;
+    for (std::string &path : opt.inputWdiffs) {
+        merger.addWdiff(path);
     }
-    return 1;
+    cybozu::util::File file(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    merger.setMaxIoBlocks(opt.maxIoBlocks());
+    merger.setShouldValidateUuid(false);
+    merger.mergeToFd(file.fd());
+    file.close();
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wdiff-merge")

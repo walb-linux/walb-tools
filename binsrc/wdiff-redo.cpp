@@ -220,19 +220,12 @@ private:
     }
 };
 
-int main(int argc, char *argv[])
-    try
+int doMain(int argc, char *argv[])
 {
     Config config(argc, argv);
-    walb::util::setLogSetting("-", false);
     WdiffRedoManger m(config);
     m.run();
-} catch (std::exception &e) {
-    ::fprintf(::stderr, "exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    ::fprintf(::stderr, "caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wdiff-redo")

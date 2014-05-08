@@ -242,9 +242,17 @@ private:
     }
 };
 
-int main(int argc, char* argv[]) try
+void setupOutputFile(cybozu::util::File &fileW, const Config &config)
 {
-    walb::util::setLogSetting("-", false);
+    if (config.isOutStdout()) {
+        fileW.setFd(1);
+    } else {
+        fileW.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+}
+
+int doMain(int argc, char* argv[])
+{
     Config config(argc, argv);
     config.check();
 
@@ -252,19 +260,10 @@ int main(int argc, char* argv[]) try
         config.ldevPath(), config.beginLsid(), config.endLsid(),
         config.isVerbose());
     cybozu::util::File fileW;
-    if (config.isOutStdout()) {
-        fileW.setFd(1);
-    } else {
-        fileW.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    }
+    setupOutputFile(fileW, config);
     extractor.run(fileW.fd());
     fileW.close();
-} catch (std::exception& e) {
-    LOGe("Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("Caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wlog-cat")

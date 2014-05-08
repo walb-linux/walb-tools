@@ -75,23 +75,15 @@ private:
     }
 };
 
-int main(int argc, char *[])
-    try
+int doMain(int argc, char *[])
 {
     if (1 < argc) {
         ::printf("Usage: wdiff-full < [full image] > [wdiff]\n");
         return 1;
     }
-    walb::util::setLogSetting("-", false);
-
     FullImageToWalbDiffConverter c(64 * 1024 / LOGICAL_BLOCK_SIZE);
     c.convert(0, 1);
-} catch (std::exception &e) {
-    ::fprintf(::stderr, "%s\n", e.what());
-    return 1;
-} catch (...) {
-    ::fprintf(::stderr, "caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wdiff-full")

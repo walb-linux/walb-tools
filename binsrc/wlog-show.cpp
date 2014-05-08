@@ -71,27 +71,25 @@ private:
     }
 };
 
-int main(int argc, char* argv[]) try
+void setupInputFile(cybozu::util::File &fileR, const Config &config)
 {
-    walb::util::setLogSetting("-", false);
+    if (config.isInputStdin()) {
+        fileR.setFd(0);
+    } else {
+        fileR.open(config.inWlogPath(), O_RDONLY);
+    }
+}
 
+int doMain(int argc, char* argv[])
+{
     Config config(argc, argv);
     config.check();
 
     cybozu::util::File fileR;
-    if (!config.isInputStdin()) {
-        fileR.open(config.inWlogPath(), O_RDONLY);
-    } else {
-        fileR.setFd(0); /* stdin */
-    }
+    setupInputFile(fileR, config);
     walb::log::Printer printer;
     printer(fileR.fd());
-} catch (std::exception& e) {
-    LOGe("Exception: %s\n", e.what());
-    return 1;
-} catch (...) {
-    LOGe("Caught other error.\n");
-    return 1;
+    return 0;
 }
 
-/* end of file. */
+DEFINE_ERROR_SAFE_MAIN("wlog-show")
