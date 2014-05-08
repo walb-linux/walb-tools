@@ -80,30 +80,6 @@ private:
     }
 };
 
-struct Statistics
-{
-    size_t nClipped;
-    size_t nDiscard;
-    size_t nPadding;
-    size_t nWritten;
-    size_t nOverwritten;
-    Statistics()
-        : nClipped(0)
-        , nDiscard(0)
-        , nPadding(0)
-        , nWritten(0)
-        , nOverwritten(0) {}
-    void print() const {
-        ::printf("nClipped: %zu\n"
-                 "nDiscard: %zu\n"
-                 "nPadding: %zu\n",
-                 nClipped, nDiscard, nPadding);
-        ::printf("nWritten: %zu\n"
-                 "nOverwritten: %zu\n",
-                 nWritten, nOverwritten);
-    }
-} g_st;
-
 using AlignedArray = walb::AlignedArray;
 
 /**
@@ -328,8 +304,8 @@ private:
     static const size_t maxIoSize_ = 1024 * 1024; //1MB.
 
 public:
-    size_t numBlocks;
-    MergeIoQueue() : ioQ_(), numBlocks(0) {}
+    size_t fetchedPb;
+    MergeIoQueue() : ioQ_(), fetchedPb(0) {}
     ~MergeIoQueue() = default;
 
     void add(Io&& io) {
@@ -337,7 +313,7 @@ public:
             return;
         }
         ioQ_.push_back(std::move(io));
-        numBlocks++;
+        fetchedPb++;
     }
 
     /**
@@ -367,6 +343,75 @@ private:
 };
 
 /**
+ * Convert [byte] to [physical block].
+ */
+inline uint32_t bytesToPb(uint32_t bytes, uint32_t pbs) {
+    assert(bytes % LOGICAL_BLOCK_SIZE == 0);
+    uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
+    return ::capacity_pb(pbs, lb);
+}
+
+/**
+ *
+ * begin --- fetchedBegin_
+ */
+class IoQueue
+{
+    const size_t queuePb_;
+    const uint32_t pbs_;
+    size_t pendingPb_;
+    size_t fetchedPb_;
+    typedef std::list<Io> List;
+    List list_;
+    List::iterator fetchedBegin_;
+
+public:
+    explicit IoQueue(size_t queuePb, uint32_t pbs)
+        : queuePb_(queuePb)
+        , pbs_(pbs)
+        , pendingPb_(0)
+        , fetchedPb_(0)
+        , fetchedBegin_(list_.end())
+        {
+    }
+    void add(Io &&io) {
+        assert(io.size() == pbs_);
+        fetchedPb_ += bytesToPb(io.size(), pbs_);
+        list_.push_back(std::move(io));
+        if (fetchedBegin_ == list_.end()) {
+            --fetchedBegin_;
+        }
+    }
+    bool hasNext() const {
+        return fetchedBegin_ != list_.end();
+    }
+    Io& next() {
+        Io &io = *fetchedBegin_++;
+        const size_t pb = bytesToPb(io.size(), pbs_);
+        pendingPb_ += pb;
+        fetchedPb_ -= pb;
+        return io;
+    }
+    bool isFull() const {
+        return list_.begin() != fetchedBegin_ && queuePb_ < pendingPb_ + fetchedPb_;
+    }
+    bool shouldPrepare() const {
+        return queuePb_ <= fetchedPb_;
+    }
+
+    void waitForAllSubmitted(cybozu::aio::Aio &aio) noexcept {
+        for (List::iterator it = list_.begin(); it != fetchedBegin_; ++it) {
+            Io& io = *it;
+            if (io.state == Io::Submitted) {
+                try {
+                    aio.waitFor(io.aioKey);
+                } catch (...) {}
+            }
+        }
+    }
+};
+
+/**
  * IO queue sorted by offset to submit IOs.
  */
 class ReadyQueue
@@ -379,8 +424,12 @@ private:
     };
     typedef std::multiset<Io *, Less> IoSet;
     IoSet ioSet_;
+    size_t nWritten;
+    size_t nOverwritten;
 
 public:
+    ReadyQueue() : nWritten(0), nOverwritten(0) {
+    }
     void push(Io *iop) {
         ioSet_.insert(iop);
         g_debug.addReadyQ(*iop);
@@ -421,11 +470,16 @@ public:
         if (io.state == Io::Submitted) {
             assert(io.aioKey > 0);
             aio.waitFor(io.aioKey);
-            g_st.nWritten++;
+            nWritten++;
         } else {
             assert(io.state == Io::Overwritten);
-            g_st.nOverwritten++;
+            nOverwritten++;
         }
+    }
+    void print() const {
+        ::printf("nWritten: %zu\n"
+                 "nOverwritten: %zu\n",
+                 nWritten, nOverwritten);
     }
     bool empty() const {
         return ioSet_.empty();
@@ -558,20 +612,23 @@ private:
     const Config& config_;
     cybozu::util::BlockDevice bd_;
     const size_t pbs_;
-    const size_t queueSize_;
+    const size_t queuePb_;
     cybozu::aio::Aio aio_;
     walb::log::FileHeader wh_;
 
-    std::queue<Io> ioQ_; /* serialized by lsid. */
+    IoQueue ioX_; /* FIFO. */
     ReadyQueue readyQ_; /* ready to submit. */
 
     /* Number of blocks where the corresponding IO
        is submitted, but not completed. */
-    size_t nPendingBlocks_;
+    size_t pendingPb_;
 
     OverlappedData overwrapped_;
 
     /* For statistics. */
+    size_t nClipped_;
+    size_t nDiscard_;
+    size_t nPadding_;
 
 public:
     WalbLogApplyer(
@@ -579,24 +636,19 @@ public:
         : config_(config)
         , bd_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
         , pbs_(bd_.getPhysicalBlockSize())
-        , queueSize_(getQueueSizeStatic(bufferSize, pbs_))
-        , aio_(bd_.getFd(), queueSize_)
+        , queuePb_(getQueueSizeStatic(bufferSize, pbs_))
+        , aio_(bd_.getFd(), queuePb_)
         , wh_()
-        , ioQ_()
+        , ioX_(queuePb_, pbs_)
         , readyQ_()
-        , nPendingBlocks_(0)
-        , overwrapped_() {}
+        , pendingPb_(0)
+        , overwrapped_()
+        , nClipped_(0)
+        , nDiscard_(0)
+        , nPadding_(0) {}
 
     ~WalbLogApplyer() {
-        while (!ioQ_.empty()) {
-            Io& io = ioQ_.front();
-            if (io.state == Io::Submitted) {
-                try {
-                    aio_.waitFor(io.aioKey);
-                } catch (...) {}
-            }
-            ioQ_.pop();
-        }
+        ioX_.waitForAllSubmitted(aio_);
     }
 
     /**
@@ -642,8 +694,13 @@ public:
         /* Sync device. */
         bd_.fdatasync();
 
-        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, redoLsid);
-        g_st.print();
+        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n"
+                 "nClipped: %zu\n"
+                 "nDiscard: %zu\n"
+                 "nPadding: %zu\n",
+                 beginLsid, redoLsid,
+                 nClipped_, nDiscard_, nPadding_);
+        readyQ_.print();
     }
 
 private:
@@ -680,26 +737,17 @@ private:
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
-        g_st.nDiscard += rec.ioSizePb(pbs_);
+        nDiscard_ += rec.ioSizePb(pbs_);
     }
 
     /**
      * There is no pending IO after returned this method.
      */
     void waitForAllPendingIos() {
-        while (!ioQ_.empty() || !readyQ_.empty()) {
+        while (!ioX_.empty() || !readyQ_.empty()) {
             waitForAnIoCompletion();
         }
         assert(overwrapped_.empty());
-    }
-
-    /**
-     * Convert [byte] to [physical block].
-     */
-    uint32_t bytesToPb(uint32_t bytes) const {
-        assert(bytes % LOGICAL_BLOCK_SIZE == 0);
-        uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
-        return ::capacity_pb(pbs_, lb);
     }
 
     template<class T>
@@ -717,52 +765,40 @@ private:
      * If not submitted, submit before waiting.
      */
     void waitForAnIoCompletion() {
+        // QQQ
         assert(!ioQ_.empty());
         Io& io = ioQ_.front();
-        readyQ_.forceComplete(io, aio_);
-
-        nPendingBlocks_ -= bytesToPb(io.size());
-        overwrapped_.delIoAndPushReadyIos(io, readyQ_);
-
-        if (config_.isVerbose()) {
-            ::printf("COMPLETE\t\t%" PRIu64 "\t%zu\t%zu\n",
-                     (u64)io.offset() >> 9, io.size() >> 9,
-                     nPendingBlocks_);
-        }
         g_debug.delIoQ(io);
+        pendingPb_ -= bytesToPb(io.size(), pbs_);
         ioQ_.pop();
+
+        Io io = ioQ_.popAndRemove();
+        readyQ_.forceComplete(io, aio_);
+        overwrapped_.delIoAndPushReadyIos(io, readyQ_);
     }
 
     /**
      * Prepare IOs with 'nBlocks' blocks.
      *
      * @ioQ IOs to make ready.
-     * @nBlocks nBlocks <= queueSize_. This will be set to 0.
+     * @nBlocks nBlocks <= queuePb_. This will be set to 0.
      */
-    void prepareIos(MergeIoQueue &mergeQ) {
-        const size_t numBlocks = mergeQ.numBlocks;
-        assert(numBlocks <= queueSize_);
-
+    void prepareIos() {
         /* Wait for pending IOs for submission. */
-        while (!ioQ_.empty() && queueSize_ < nPendingBlocks_ + numBlocks) {
+        while (ioX_.isFull()) {
             waitForAnIoCompletion();
         }
-        nPendingBlocks_ += numBlocks;
-        mergeQ.numBlocks = 0;
 
-        /* Enqueue IOs to readyQ_. */
-        while (!mergeQ.empty()) {
-            ioQ_.push(mergeQ.pop());
-            Io& io = ioQ_.back();
+        while (ioX_.hasNext()) {
+            Io& io = ioX_.next();
             g_debug.addIoQ(io);
-
             overwrapped_.add(io);
             if (io.nOverlapped == 0) {
                 /* Ready to submit. */
                 readyQ_.push(&io);
             }
         }
-        if (queueSize_ <= readyQ_.size()) {
+        if (queuePb_ <= readyQ_.size()) {
             readyQ_.submit(aio_);
         }
     }
@@ -782,6 +818,9 @@ private:
         uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
         const uint32_t ioSizePb = rec.ioSizePb(pbs_);
         for (size_t i = 0; i < ioSizePb; i++) {
+            if (ioX_.shouldPrepare()) {
+                prepareIos();
+            }
             AlignedArray block;
             if (rec.isDiscard()) {
                 block.resize(pbs_);
@@ -795,22 +834,18 @@ private:
             remaining -= size;
             /* Clip if the IO area is out of range in the device. */
             if (io.offset() + io.size() <= bd_.getDeviceSize()) {
-                mergeQ.add(std::move(io));
-                if (rec.isDiscard()) { g_st.nDiscard++; }
+                ioX_.add(std::move(io));
+                if (rec.isDiscard()) { nDiscard_++; }
             } else {
                 if (config_.isVerbose()) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
                              io.offset(), io.size());
                 }
-                g_st.nClipped++;
-            }
-            /* Do not prepare too many blocks at once. */
-            if (queueSize_ / 2 <= mergeQ.numBlocks) {
-                prepareIos(mergeQ);
+                nClipped_++;
             }
         }
         assert(remaining == 0);
-        prepareIos(mergeQ);
+        prepareIos();
 
         if (config_.isVerbose()) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
@@ -827,7 +862,7 @@ private:
 
         if (rec.isPadding()) {
             /* Do nothing. */
-            g_st.nPadding += ioSizePb;
+            nPadding_ += ioSizePb;
             return;
         }
 
@@ -838,7 +873,7 @@ private:
             }
             if (!config_.isZeroDiscard()) {
                 /* Ignore discard logs. */
-                g_st.nDiscard += ioSizePb;
+                nDiscard_ += ioSizePb;
                 return;
             }
             /* zero-discard will use redoNormalIo(). */
