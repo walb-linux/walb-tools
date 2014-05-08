@@ -24,6 +24,12 @@ namespace diff {
 
 /**
  * To merge walb diff files.
+ *
+ * Usage:
+ *   (1) call setMaxIoBlocks() and setShouldValidateUuid() if necessary.
+ *   (2) add wdiffs by calling addWdiff() or addWdiffs().
+ *   (3a) call mergeToFd() to write out the merged diff data.
+ *   (3b) call prepare(), then call header() and getAndRemove() multiple times for other purpose.
  */
 class Merger /* final */
 {
@@ -63,13 +69,13 @@ private:
             reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
-        const DiffFileHeader &header() { return header_; }
-        const DiffRecord &front() {
+        const DiffFileHeader &header() const { return header_; }
+        DiffRecord getFrontRec() const {
             verifyNotEnd(__func__);
             fill();
             return rec_;
         }
-        void getAndRemove(DiffIo &io) {
+        void getAndRemoveIo(DiffIo &io) {
             verifyNotEnd(__func__);
 
             /* for check */
@@ -91,9 +97,9 @@ private:
         }
         /**
          * RETURN:
-         *   address of the current head diff record
          *   if the iterator has not reached the end,
-         *   or maximum value.
+         *   address of the current diff record.
+         *   otherwise, -1.
          */
         uint64_t currentAddress() const {
             if (isEnd()) return uint64_t(-1);
@@ -120,28 +126,24 @@ private:
     using WdiffPtr = std::unique_ptr<Wdiff>;
     using WdiffPtrDeq = std::deque<WdiffPtr>;
     WdiffPtrDeq wdiffs_;
-    WdiffPtrDeq doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
     DiffMemory diffMem_;
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
-    std::queue<DiffRecIo> mergedQ_;
+    std::queue<DiffRecIo> mergedQ_; /* merged recIos will be pushed to this. */
     bool shouldValidateUuid_;
     uint16_t maxIoBlocks_;
-    uint64_t doneAddr_;
 
 public:
     Merger()
         : wdiffs_()
-        , doneWdiffs_()
         , diffMem_()
         , wdiffH_()
         , isHeaderPrepared_(false)
         , mergedQ_()
         , shouldValidateUuid_(false)
-        , maxIoBlocks_(0)
-        , doneAddr_(0) {
+        , maxIoBlocks_(0) {
     }
     ~Merger() noexcept {
     }
@@ -216,7 +218,6 @@ public:
             wdiffH_.setMaxIoBlocksIfNecessary(
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
 
-            doneAddr_ = 0;
             removeEndedWdiffs();
 
             isHeaderPrepared_ = true;
@@ -238,26 +239,21 @@ public:
         while (mergedQ_.empty()) {
             if (wdiffs_.empty()) {
                 if (diffMem_.empty()) return false;
-                moveToQueueUpto(uint64_t(-1));
+                moveToMergedQueueUpto(uint64_t(-1));
                 break;
             }
             for (size_t i = 0; i < wdiffs_.size(); i++) {
                 assert(!wdiffs_[i]->isEnd());
-				// copy rec because reference is invalid after calling wdiffs_[i]->getAndRemove().
-                const DiffRecord rec = wdiffs_[i]->front();
-                assert(rec.isValid());
+                const DiffRecord rec = wdiffs_[i]->getFrontRec();
                 if (canMergeIo(i, rec)) {
                     DiffIo io;
-                    wdiffs_[i]->getAndRemove(io);
-                    assert(io.isValid());
+                    wdiffs_[i]->getAndRemoveIo(io);
                     mergeIo(rec, std::move(io));
                 }
             }
             removeEndedWdiffs();
-            doneAddr_ = getMinCurrentAddress();
-            moveToQueueUpto(doneAddr_);
+            moveToMergedQueueUpto(getDoneAddress());
         }
-        assert(!mergedQ_.empty());
         recIo = std::move(mergedQ_.front());
         mergedQ_.pop();
         return true;
@@ -267,17 +263,17 @@ private:
      * Move all IOs which ioAddress + ioBlocks <= maxAddr
      * to a specified queue.
      */
-    void moveToQueueUpto(uint64_t maxAddr) {
+    void moveToMergedQueueUpto(uint64_t maxAddr) {
         DiffMemory::Map& map = diffMem_.getMap();
-        auto i = map.begin();
+        DiffMemory::Map::iterator i = map.begin();
         while (i != map.end()) {
             DiffRecIo& recIo = i->second;
             if (recIo.record().endIoAddress() > maxAddr) break;
             mergedQ_.push(std::move(recIo));
-            diffMem_.eraseMap(i);
+            diffMem_.eraseFromMap(i);
         }
     }
-    uint64_t getMinCurrentAddress() const {
+    uint64_t getDoneAddress() const {
         uint64_t minAddr = uint64_t(-1);
         for (const WdiffPtr &wdiffP : wdiffs_) {
             const uint64_t addr = wdiffP->currentAddress();
@@ -288,9 +284,8 @@ private:
     void removeEndedWdiffs() {
         WdiffPtrDeq::iterator it = wdiffs_.begin();
         while (it != wdiffs_.end()) {
-            WdiffPtr &p = *it;
+            const WdiffPtr &p = *it;
             if (p->isEnd()) {
-                doneWdiffs_.push_back(std::move(p));
                 it = wdiffs_.erase(it);
             } else {
                 ++it;

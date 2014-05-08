@@ -398,7 +398,7 @@ public:
     }
     const Map& getMap() const { return map_; }
     Map& getMap() { return map_; }
-	void eraseMap(Map::iterator& i)
+	void eraseFromMap(Map::iterator& i)
 	{
         nIos_--;
         nBlocks_ -= i->second.record().io_blocks;
