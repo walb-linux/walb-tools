@@ -123,7 +123,7 @@ public:
     enum State {
         Init, Overwritten, Submitted
     } state;
-    Io(uint64_t offset, size_t size)
+    explicit Io(uint64_t offset, size_t size = 0)
         : offset_(offset), size_(size)
         , blocks_()
         , aioKey(0)
@@ -406,6 +406,15 @@ public:
     }
 };
 
+struct IoSetLess
+{
+    bool operator()(const Io *a, const Io *b) const {
+        return a->offset() < b->offset();
+    }
+};
+
+using IoSet = std::multiset<Io*, IoSetLess>;
+
 /**
  * IO queue to store IOs are ready to submit.
  * The IOs are sorted by offset for good performance.
@@ -413,12 +422,6 @@ public:
 class ReadyQueue
 {
 private:
-    struct Less {
-        bool operator()(const Io *a, const Io *b) const {
-            return a->offset() < b->offset();
-        }
-    };
-    typedef std::multiset<Io *, Less> IoSet;
     IoSet ioSet_;
 
 public:
@@ -493,17 +496,11 @@ private:
 class OverlappedSerializer
 {
 private:
-    using IoSet = std::set<std::pair<uint64_t, Io*>>;
     IoSet set_;
     size_t maxSize_;
-
 public:
     OverlappedSerializer()
         : set_(), maxSize_(0) {}
-
-    OverlappedSerializer(const OverlappedSerializer& rhs) = delete;
-    OverlappedSerializer& operator=(const OverlappedSerializer& rhs) = delete;
-
     /**
      * Insert to the overlapped data.
      *
@@ -511,38 +508,17 @@ public:
      * (2) set iop->nOverlapped to the number of overlapped IOs.
      */
     void add(Io& io) {
-
-        /* Get search range. */
-        uint64_t key0 = 0;
-        if (maxSize_ < io.offset()) {
-            key0 = io.offset() - maxSize_;
-        }
-        uint64_t key1 = io.offset() + io.size();
-
-        /* Count overlapped IOs. */
         io.nOverlapped = 0;
-        const std::pair<uint64_t, Io*> k0 = {key0, nullptr};
-        IoSet::iterator it = set_.lower_bound(k0);
-        while (it != set_.end() && it->first < key1) {
-            Io* p = it->second;
-            if (io.isOverlapped(*p)) {
+        forEachOverlapped(io, [&](Io &ioX) {
                 io.nOverlapped++;
-                if (p->isOverwrittenBy(io) && p->state == Io::Init) {
-                    p->state = Io::Overwritten;
+                if (ioX.isOverwrittenBy(io) && ioX.state == Io::Init) {
+                    ioX.state = Io::Overwritten;
                 }
-            }
-            ++it;
-        }
+            });
 
-        /* Insert iop. */
-        set_.emplace(io.offset(), &io);
-
-        /* Update maxSize_. */
-        if (maxSize_ < io.size()) {
-            maxSize_ = io.size();
-        }
+        set_.insert(&io);
+        if (maxSize_ < io.size()) maxSize_ = io.size();
     }
-
     /**
      * Delete from the overlapped data.
      *
@@ -553,40 +529,45 @@ public:
      */
     void delIoAndPushReadyIos(Io& io, ReadyQueue& readyQ) {
         assert(io.nOverlapped == 0);
+        erase(io);
+        if (set_.empty()) maxSize_ = 0;
 
-        /* Delete iop. */
-        UNUSED size_t n = set_.erase({io.offset(), &io});
-        assert(n == 1);
-
-        /* Reset maxSize_ if empty. */
-        if (set_.empty()) {
-            maxSize_ = 0;
-        }
-
-        /* Get search range. */
+        forEachOverlapped(io, [&](Io &ioX) {
+                ioX.nOverlapped--;
+                if (ioX.nOverlapped == 0 && ioX.state == Io::Init) {
+                    readyQ.push(&ioX);
+                }
+            });
+    }
+    bool empty() const { return set_.empty(); }
+private:
+    template <typename Func>
+    void forEachOverlapped(const Io &io, Func func) {
         uint64_t key0 = 0;
-        if (io.offset() > maxSize_) {
+        if (maxSize_ < io.offset()) {
             key0 = io.offset() - maxSize_;
         }
         const uint64_t key1 = io.offset() + io.size();
-
-        /* Decrement nOverlapped of overlapped IOs. */
-        const std::pair<uint64_t, Io*> k0 = {key0, nullptr};
-        IoSet::iterator it = set_.lower_bound(k0);
-        std::queue<Io*> ioQ;
-        while (it != set_.end() && it->first < key1) {
-            Io* p = it->second;
-            if (p->isOverlapped(io)) {
-                p->nOverlapped--;
-                if (p->nOverlapped == 0 && p->state == Io::Init) {
-                    readyQ.push(p);
-                }
+        Io io0(key0);
+        IoSet::iterator it = set_.lower_bound(&io0);
+        while (it != set_.end() && (*it)->offset() < key1) {
+            Io* iop = *it;
+            if (io.isOverlapped(*iop)) {
+                func(*iop);
             }
             ++it;
         }
     }
-    bool empty() const {
-        return set_.empty();
+    void erase(Io &io) {
+        IoSet::iterator i, e;
+        std::tie(i, e) = set_.equal_range(&io);
+        while (i != e) {
+            if (*i == &io) {
+                set_.erase(i);
+                return;
+            }
+        }
+        assert(false);
     }
 };
 
