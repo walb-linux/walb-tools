@@ -28,13 +28,11 @@ namespace diff {
 class Merger /* final */
 {
 private:
-    using RecIo = walb::diff::RecIo;
-
     class Wdiff {
     private:
-        std::string wdiffPath_;
+        const std::string wdiffPath_;
         cybozu::util::File file_;
-        mutable walb::diff::Reader reader_;
+        mutable Reader reader_;
         DiffFileHeader header_;
         mutable DiffRecord rec_;
         mutable DiffIo io_;
@@ -65,7 +63,7 @@ private:
             reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
-        walb::DiffFileHeader &header() { return header_; }
+        DiffFileHeader &header() { return header_; }
         const DiffRecord &front() {
             verifyNotEnd(__func__);
             fill();
@@ -119,11 +117,13 @@ private:
         }
     };
 
-    std::deque<std::shared_ptr<Wdiff>> wdiffs_;
-    std::deque<std::shared_ptr<Wdiff>> doneWdiffs_;
+    using WdiffPtr = std::unique_ptr<Wdiff>;
+    using WdiffPtrDeq = std::deque<WdiffPtr>;
+    WdiffPtrDeq wdiffs_;
+    WdiffPtrDeq doneWdiffs_;
     /* Wdiffs' lifetime must be the same as the Merger instance. */
 
-    walb::diff::MemoryData wdiffMem_;
+    MemoryData wdiffMem_;
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
     std::queue<RecIo> mergedQ_;
@@ -163,8 +163,7 @@ public:
      * Newer wdiff file must be added later.
      */
     void addWdiff(const std::string& wdiffPath) {
-        std::shared_ptr<Wdiff> p(new Wdiff(wdiffPath));
-        wdiffs_.push_back(p);
+        wdiffs_.emplace_back(new Wdiff(wdiffPath));
     }
     /**
      * Add diff files.
@@ -188,7 +187,7 @@ public:
      */
     void mergeToFd(int outFd) {
         prepare();
-        walb::diff::Writer writer(outFd);
+        Writer writer(outFd);
         writer.writeHeader(wdiffH_);
 
         RecIo d;
@@ -280,18 +279,18 @@ private:
     }
     uint64_t getMinCurrentAddress() const {
         uint64_t minAddr = uint64_t(-1);
-        for (const std::shared_ptr<Wdiff> &wdiffP : wdiffs_) {
-            uint64_t addr = wdiffP->currentAddress();
+        for (const WdiffPtr &wdiffP : wdiffs_) {
+            const uint64_t addr = wdiffP->currentAddress();
             if (addr < minAddr) { minAddr = addr; }
         }
         return minAddr;
     }
     void removeEndedWdiffs() {
-        std::deque<std::shared_ptr<Wdiff> >::iterator it = wdiffs_.begin();
+        WdiffPtrDeq::iterator it = wdiffs_.begin();
         while (it != wdiffs_.end()) {
-            std::shared_ptr<Wdiff> p = *it;
+            WdiffPtr &p = *it;
             if (p->isEnd()) {
-                doneWdiffs_.push_back(p);
+                doneWdiffs_.push_back(std::move(p));
                 it = wdiffs_.erase(it);
             } else {
                 ++it;
@@ -312,7 +311,7 @@ private:
         return true;
     }
     void checkUuid(const uint8_t *uuid) const {
-        for (const std::shared_ptr<Wdiff> &wdiffP : wdiffs_) {
+        for (const WdiffPtr &wdiffP : wdiffs_) {
             if (::memcmp(wdiffP->header().getUuid(), uuid, UUID_SIZE) != 0) {
                 throw RT_ERR("Uuids differ\n");
             }
@@ -320,8 +319,8 @@ private:
     }
     uint16_t getMaxIoBlocks() const {
         uint16_t ret = 0;
-        for (const std::shared_ptr<Wdiff> &wdiffP : wdiffs_) {
-            uint16_t m = wdiffP->header().getMaxIoBlocks();
+        for (const WdiffPtr &wdiffP : wdiffs_) {
+            const uint16_t m = wdiffP->header().getMaxIoBlocks();
             if (ret < m) { ret = m; }
         }
         return ret;
