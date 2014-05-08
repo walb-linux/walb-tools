@@ -5,24 +5,9 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <vector>
-#include <map>
-#include <string>
-#include <memory>
-#include <random>
-#include <stdexcept>
-#include <cstdint>
-#include <cinttypes>
-#include <cstdio>
-#include <cassert>
-#include <cstring>
-#include <cstdlib>
-#include <type_traits>
-
 #include "cybozu/option.hpp"
-#include "walb_logger.hpp"
-#include "util.hpp"
 #include "walb_diff_converter.hpp"
+#include "walb_util.hpp"
 
 struct Option : public cybozu::Option
 {

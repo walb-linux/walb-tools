@@ -6,6 +6,7 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
+#include <queue>
 #include "util.hpp"
 
 namespace walb {

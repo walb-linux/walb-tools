@@ -5,13 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <cstdio>
-#include <stdexcept>
-#include <cinttypes>
-#include <string>
-#include <vector>
-#include <memory>
-
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "thread_util.hpp"

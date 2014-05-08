@@ -5,11 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <string>
-#include <vector>
-#include <cstdio>
-#include <memory>
-#include <stdexcept>
 #include "cybozu/option.hpp"
 #include "walb_diff_virt.hpp"
 #include "fileio.hpp"

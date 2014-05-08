@@ -5,12 +5,7 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <cstdio>
-#include <string>
-#include <vector>
-#include <stdexcept>
 #include "cybozu/option.hpp"
-
 #include "util.hpp"
 #include "fileio.hpp"
 #include "walb_util.hpp"

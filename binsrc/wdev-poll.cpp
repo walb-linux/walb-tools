@@ -5,9 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <thread>
-#include <atomic>
-
 #include "cybozu/option.hpp"
 #include "util.hpp"
 #include "log_dev_monitor.hpp"

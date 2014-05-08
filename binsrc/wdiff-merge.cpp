@@ -5,28 +5,9 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <vector>
-#include <deque>
-#include <queue>
-#include <map>
-#include <string>
-#include <memory>
-#include <random>
-#include <stdexcept>
-#include <cstdint>
-#include <cinttypes>
-#include <cstdio>
-#include <cassert>
-#include <cstring>
-#include <cstdlib>
-#include <type_traits>
-
 #include "cybozu/option.hpp"
-
 #include "util.hpp"
 #include "walb_diff_merge.hpp"
-
-#include <sys/types.h>
 
 struct Option : public cybozu::Option
 {

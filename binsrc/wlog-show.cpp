@@ -5,17 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <string>
-#include <cstdio>
-#include <stdexcept>
-#include <queue>
-#include <memory>
-#include <deque>
-
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <linux/fs.h>
-
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
 #include "util.hpp"

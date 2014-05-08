@@ -5,11 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <cstdio>
-#include <chrono>
-#include <thread>
-#include <string>
-#include <atomic>
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
 #include "cybozu/serializer.hpp"

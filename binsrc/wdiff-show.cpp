@@ -5,9 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <memory>
-#include <cstdio>
-
 #include "util.hpp"
 #include "walb_diff_file.hpp"
 

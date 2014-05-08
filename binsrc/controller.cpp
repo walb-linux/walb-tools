@@ -5,8 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <cstdio>
-#include <string>
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
 #include "net_util.hpp"

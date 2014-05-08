@@ -5,11 +5,6 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include <memory>
-#include <stdexcept>
-#include <vector>
-#include <cstdio>
-#include <cassert>
 #include "fileio.hpp"
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
