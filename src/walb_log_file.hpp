@@ -73,7 +73,7 @@ public:
     uint32_t pbs() const { return header().physical_bs; }
     uint64_t beginLsid() const { return header().begin_lsid; }
     uint64_t endLsid() const { return header().end_lsid; }
-    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&header().uuid[0]); }
+    cybozu::Uuid getUuid() const { return cybozu::Uuid(&header().uuid[0]); }
     uint16_t sectorType() const { return header().sector_type; }
     uint16_t headerSize() const { return header().header_size; }
     uint16_t version() const { return header().version; }

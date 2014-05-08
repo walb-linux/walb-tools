@@ -63,7 +63,7 @@ public:
     uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
     uint32_t getMetadataSize() const { return super()->snapshot_metadata_size; }
     uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
-    cybozu::Uuid getUuid2() const { return cybozu::Uuid(super()->uuid); }
+    cybozu::Uuid getUuid() const { return cybozu::Uuid(super()->uuid); }
     const char* getName() const { return super()->name; }
     uint64_t getRingBufferSize() const { return super()->ring_buffer_size; }
     uint64_t getOldestLsid() const { return super()->oldest_lsid; }
@@ -183,7 +183,7 @@ public:
                   getWrittenLsid(),
                   getDeviceSize(),
                   getRingBufferOffset(),
-                  getUuid2().str().c_str());
+                  getUuid().str().c_str());
     }
 
 private:

@@ -208,7 +208,7 @@ public:
             if (wdiffs_.empty()) {
                 throw cybozu::Exception(__func__) << "Wdiffs are not set.";
             }
-            const cybozu::Uuid uuid = wdiffs_.back()->header().getUuid2();
+            const cybozu::Uuid uuid = wdiffs_.back()->header().getUuid();
             if (shouldValidateUuid_) { verifyUuid(uuid); }
 
             wdiffH_.init();
@@ -312,7 +312,7 @@ private:
     }
     void verifyUuid(const cybozu::Uuid &uuid) const {
         for (const WdiffPtr &wdiffP : wdiffs_) {
-            const cybozu::Uuid uuid1 = wdiffP->header().getUuid2();
+            const cybozu::Uuid uuid1 = wdiffP->header().getUuid();
             if (uuid1 != uuid) {
                 throw cybozu::Exception(__func__) << "uuid differ" << uuid1 << uuid;
             }

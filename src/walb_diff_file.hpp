@@ -21,7 +21,7 @@ struct DiffFileHeader : walb_diff_file_header
     }
     uint32_t getChecksum() const { return checksum; }
     uint16_t getMaxIoBlocks() const { return max_io_blocks; }
-    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&uuid[0]); }
+    cybozu::Uuid getUuid() const { return cybozu::Uuid(&uuid[0]); }
 
     void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
         if (max_io_blocks < ioBlocks) {
@@ -51,7 +51,7 @@ struct DiffFileHeader : walb_diff_file_header
                   "checksum: %08x\n"
                   "maxIoBlocks: %u\n"
                   "uuid: %s\n",
-                  checksum, max_io_blocks, getUuid2().str().c_str());
+                  checksum, max_io_blocks, getUuid().str().c_str());
     }
 
     void print() const { print(::stdout); }

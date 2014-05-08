@@ -140,9 +140,9 @@ private:
         /* Check uuid if required. */
         if (beginLsid == uint64_t(-1)) {
             /* First call. */
-            uuid = wh.getUuid2();
+            uuid = wh.getUuid();
         } else {
-            const cybozu::Uuid readUuid = wh.getUuid2();
+            const cybozu::Uuid readUuid = wh.getUuid();
             if (uuid != readUuid) {
                 throw cybozu::Exception(__func__) << "uuid differ" << uuid << readUuid;
             }

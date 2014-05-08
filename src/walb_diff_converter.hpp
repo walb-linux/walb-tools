@@ -152,8 +152,8 @@ private:
 
         /* Initialize walb diff db. */
         auto verifyUuid = [&]() { // QQQ
-            const cybozu::Uuid diffUuid = walbDiff.header().getUuid2();
-            const cybozu::Uuid logUuid = wlHeader.getUuid2();
+            const cybozu::Uuid diffUuid = walbDiff.header().getUuid();
+            const cybozu::Uuid logUuid = wlHeader.getUuid();
             if (diffUuid != logUuid) {
                 throw cybozu::Exception(__func__) << "uuid differ" << logUuid << diffUuid;
             }
@@ -161,7 +161,7 @@ private:
         if (lsid == uint64_t(-1)) {
             /* First time. */
             /* Initialize uuid. */
-            walbDiff.header().setUuid(wlHeader.getUuid2());
+            walbDiff.header().setUuid(wlHeader.getUuid());
             lsid = wlHeader.beginLsid();
         } else {
             /* Second or more. */

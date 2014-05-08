@@ -183,7 +183,7 @@ public:
         {
             cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
             device::SuperBlock super(bd);
-            setUuid(super.getUuid2());
+            setUuid(super.getUuid());
         }
         setState(sSyncReady);
     }

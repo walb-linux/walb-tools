@@ -644,7 +644,7 @@ inline bool runDiffReplClient(
     const uint64_t sizeLb = volInfo.getLv().sizeLb();
     const DiffFileHeader &fileH = merger.header();
     const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
-    const cybozu::Uuid uuid = fileH.getUuid2();
+    const cybozu::Uuid uuid = fileH.getUuid();
     pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
     pkt.write(uuid);

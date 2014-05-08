@@ -874,10 +874,10 @@ retry:
             DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
             if (fileV.empty()) {
-                uuid = header.getUuid2();
+                uuid = header.getUuid();
                 mergedDiff = diff;
             } else {
-                if (uuid != header.getUuid2()) {
+                if (uuid != header.getUuid()) {
                     diffV.resize(fileV.size());
                     break;
                 }
@@ -932,11 +932,11 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     packet::Packet pkt(sock);
     pkt.write(volId);
     pkt.write(proxyHT);
-    pkt.write(fileH.getUuid2());
+    pkt.write(fileH.getUuid());
     pkt.write(fileH.getMaxIoBlocks());
     pkt.write(volInfo.getSizeLb());
     pkt.write(mergedDiff);
-    logger.debug() << "send" << volId << proxyHT << fileH.getUuid2()
+    logger.debug() << "send" << volId << proxyHT << fileH.getUuid()
                    << fileH.getMaxIoBlocks() << volInfo.getSizeLb() << mergedDiff;
 
     std::string res;
