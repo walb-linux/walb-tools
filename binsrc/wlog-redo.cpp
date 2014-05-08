@@ -107,11 +107,6 @@ struct Statistics
 using AlignedArray = walb::AlignedArray;
 
 /**
- * Sequence id
- */
-uint64_t g_id;
-
-/**
  * Io data.
  */
 class Io
@@ -120,7 +115,6 @@ private:
     uint64_t offset_; // [bytes].
     size_t size_; // [bytes].
     std::deque<AlignedArray> blocks_;
-    u64 sequenceId_;
 
 public:
     uint32_t aioKey; // IO identifier inside aio.
@@ -132,7 +126,6 @@ public:
     Io(uint64_t offset, size_t size)
         : offset_(offset), size_(size)
         , blocks_()
-        , sequenceId_(g_id++)
         , aioKey(0)
         , nOverlapped(0)
         , state(Init) {}
@@ -146,7 +139,6 @@ public:
     const std::deque<AlignedArray>& blocks() const { return blocks_; }
     const char *data() const { return blocks_.front().data(); }
     bool empty() const { return blocks().empty(); }
-    u64 sequenceId() const { return sequenceId_; }
 
     void setBlock(AlignedArray &&b) {
         assert(blocks_.empty());
