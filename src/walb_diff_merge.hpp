@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 #include <queue>
-#include <deque>
+#include <list>
 #include <cassert>
 #include <cstring>
 
@@ -123,29 +123,35 @@ private:
         }
     };
 
-    using WdiffPtr = std::unique_ptr<Wdiff>;
-    using WdiffPtrDeq = std::deque<WdiffPtr>;
-    WdiffPtrDeq wdiffs_;
-    /* Wdiffs' lifetime must be the same as the Merger instance. */
-
-    DiffMemory diffMem_;
-    DiffFileHeader wdiffH_;
-    bool isHeaderPrepared_;
-    std::queue<DiffRecIo> mergedQ_; /* merged recIos will be pushed to this. */
     bool shouldValidateUuid_;
     uint16_t maxIoBlocks_;
 
+    DiffFileHeader wdiffH_;
+    bool isHeaderPrepared_;
+
+    using WdiffPtr = std::unique_ptr<Wdiff>;
+    using WdiffPtrList = std::list<WdiffPtr>;
+    WdiffPtrList wdiffs_;
+    DiffMemory diffMem_;
+    std::queue<DiffRecIo> mergedQ_;
+    /**
+     * Diff recIos will be read from wdiffs_,
+     * then added to diffMem_ (and merged inside it),
+     * then pushed to mergedQ_ finally.
+     *
+     * The point of the algorithm is which wdiff will be chosen to get recIos.
+     * See moveToDiffMemory() for detail.
+     */
+
 public:
     Merger()
-        : wdiffs_()
-        , diffMem_()
+        : shouldValidateUuid_(false)
+        , maxIoBlocks_(0)
         , wdiffH_()
         , isHeaderPrepared_(false)
-        , mergedQ_()
-        , shouldValidateUuid_(false)
-        , maxIoBlocks_(0) {
-    }
-    ~Merger() noexcept {
+        , wdiffs_()
+        , diffMem_()
+        , mergedQ_() {
     }
     /**
      * @maxIoBlocks Max io blocks in the output wdiff [logical block].
@@ -211,7 +217,7 @@ public:
                 throw cybozu::Exception(__func__) << "Wdiffs are not set.";
             }
             const cybozu::Uuid uuid = wdiffs_.back()->header().getUuid();
-            if (shouldValidateUuid_) { verifyUuid(uuid); }
+            if (shouldValidateUuid_) verifyUuid(uuid);
 
             wdiffH_.init();
             wdiffH_.setUuid(uuid);
@@ -219,7 +225,6 @@ public:
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
 
             removeEndedWdiffs();
-
             isHeaderPrepared_ = true;
         }
     }
@@ -227,32 +232,19 @@ public:
      * Get header.
      */
     const DiffFileHeader &header() const {
+        assert(isHeaderPrepared_);
         return wdiffH_;
     }
     /**
-     * Get a diffIo and remove.
+     * Get a DiffRecIo and remove it from the merger.
      * RETURN:
      *   false if there is no diffIo anymore.
      */
     bool getAndRemove(DiffRecIo &recIo) {
-        prepare();
+        assert(isHeaderPrepared_);
         while (mergedQ_.empty()) {
-            if (wdiffs_.empty()) {
-                if (diffMem_.empty()) return false;
-                moveToMergedQueueUpto(uint64_t(-1));
-                break;
-            }
-            for (size_t i = 0; i < wdiffs_.size(); i++) {
-                assert(!wdiffs_[i]->isEnd());
-                const DiffRecord rec = wdiffs_[i]->getFrontRec();
-                if (canMergeIo(i, rec)) {
-                    DiffIo io;
-                    wdiffs_[i]->getAndRemoveIo(io);
-                    mergeIo(rec, std::move(io));
-                }
-            }
-            removeEndedWdiffs();
-            moveToMergedQueueUpto(getDoneAddress());
+            const uint64_t doneAddr = moveToDiffMemory();
+            if (!moveToMergedQueue(doneAddr)) return false;
         }
         recIo = std::move(mergedQ_.front());
         mergedQ_.pop();
@@ -260,32 +252,57 @@ public:
     }
 private:
     /**
-     * Move all IOs which ioAddress + ioBlocks <= maxAddr
-     * to a specified queue.
+     * Try to get Ios from wdiffs and add to wdiffMem_.
+     *
+     * RETURN:
+     *   minimum current address among wdiffs.
+     *   uint64_t(-1) if there is no wdiffs.
      */
-    void moveToMergedQueueUpto(uint64_t maxAddr) {
+    uint64_t moveToDiffMemory() {
+        uint64_t minAddr = -1;
+        WdiffPtrList::iterator it = wdiffs_.begin();
+        while (it != wdiffs_.end()) {
+            bool goNext = true;
+            Wdiff &wdiff = **it;
+            const DiffRecord rec = wdiff.getFrontRec();
+            if (canMergeIo(it, rec)) {
+                DiffIo io;
+                wdiff.getAndRemoveIo(io);
+                mergeIo(rec, std::move(io));
+                if (wdiff.isEnd()) {
+                    it = wdiffs_.erase(it);
+                    goNext = false;
+                }
+            }
+            minAddr = std::min(minAddr, wdiff.currentAddress());
+            if (goNext) ++it;
+        }
+        return minAddr;
+    }
+    /**
+     * Move all IOs which ioAddress + ioBlocks <= doneAddr
+     * from diffMem_ to the mergedQ_.
+     *
+     * RETURN:
+     *   false if there is no Io to move.
+     */
+    bool moveToMergedQueue(uint64_t doneAddr) {
+        if (diffMem_.empty()) return false;
         DiffMemory::Map& map = diffMem_.getMap();
         DiffMemory::Map::iterator i = map.begin();
         while (i != map.end()) {
             DiffRecIo& recIo = i->second;
-            if (recIo.record().endIoAddress() > maxAddr) break;
+            if (recIo.record().endIoAddress() > doneAddr) break;
             mergedQ_.push(std::move(recIo));
             diffMem_.eraseFromMap(i);
         }
-    }
-    uint64_t getDoneAddress() const {
-        uint64_t minAddr = uint64_t(-1);
-        for (const WdiffPtr &wdiffP : wdiffs_) {
-            const uint64_t addr = wdiffP->currentAddress();
-            if (addr < minAddr) { minAddr = addr; }
-        }
-        return minAddr;
+        return true;
     }
     void removeEndedWdiffs() {
-        WdiffPtrDeq::iterator it = wdiffs_.begin();
+        WdiffPtrList::iterator it = wdiffs_.begin();
         while (it != wdiffs_.end()) {
-            const WdiffPtr &p = *it;
-            if (p->isEnd()) {
+            const Wdiff &wdiff = **it;
+            if (wdiff.isEnd()) {
                 it = wdiffs_.erase(it);
             } else {
                 ++it;
@@ -296,12 +313,10 @@ private:
         assert(!rec.isCompressed());
         diffMem_.add(rec, std::move(io), maxIoBlocks_);
     }
-    bool canMergeIo(size_t i, const DiffRecord &rec) {
-        if (i == 0) return true;
-        for (size_t j = 0; j < i; j++) {
-            if (!(rec.endIoAddress() <= wdiffs_[j]->currentAddress())) {
-                return false;
-            }
+    bool canMergeIo(const WdiffPtrList::iterator &i, const DiffRecord &rec) {
+        for (WdiffPtrList::iterator j = wdiffs_.begin(); j != i; ++j) {
+            const Wdiff &wdiff = **j;
+            if (rec.endIoAddress() > wdiff.currentAddress()) return false;
         }
         return true;
     }
@@ -317,7 +332,7 @@ private:
         uint16_t ret = 0;
         for (const WdiffPtr &wdiffP : wdiffs_) {
             const uint16_t m = wdiffP->header().getMaxIoBlocks();
-            if (ret < m) { ret = m; }
+            if (ret < m) ret = m;
         }
         return ret;
     }
