@@ -332,7 +332,7 @@ inline uint32_t bytesToPb(uint32_t bytes, uint32_t pbs) {
  */
 class IoQueue
 {
-    const size_t maxQueuePb_; // the max size of this queue
+    const size_t maxPb_; // the max size of each state
     const uint32_t pbs_;
     size_t processingPb_; // total pb of pending/ready/submitted
     size_t fetchedPb_;
@@ -351,8 +351,8 @@ class IoQueue
     }
 
 public:
-    explicit IoQueue(size_t maxQueuePb, uint32_t pbs)
-        : maxQueuePb_(maxQueuePb)
+    explicit IoQueue(size_t maxPb_, uint32_t pbs)
+        : maxPb_(maxPb_)
         , pbs_(pbs)
         , processingPb_(0)
         , fetchedPb_(0)
@@ -372,8 +372,8 @@ public:
     }
     bool hasFetched() const { return fetchedBegin_ != list_.end(); }
     bool hasProcessing() const { return list_.begin() != fetchedBegin_; }
-    bool isFull() const { return processingPb_ > maxQueuePb_; }
-    bool shouldProcess() const { return fetchedPb_ > maxQueuePb_; }
+    bool isFull() const { return processingPb_ > maxPb_; }
+    bool shouldProcess() const { return fetchedPb_ > maxPb_; }
 
     Io& nextFetched() {
         Io &io = *fetchedBegin_++;
@@ -580,7 +580,7 @@ private:
     const Config& config_;
     cybozu::util::BlockDevice bd_;
     const size_t pbs_;
-    const size_t maxQueuePb_;
+    const size_t maxPb_;
     cybozu::aio::Aio aio_;
     walb::log::FileHeader wh_;
 
@@ -595,10 +595,10 @@ public:
         : config_(config)
         , bd_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
         , pbs_(bd_.getPhysicalBlockSize())
-        , maxQueuePb_(getQueueSizeStatic(bufferSize, pbs_))
-        , aio_(bd_.getFd(), maxQueuePb_)
+        , maxPb_(getQueueSizeStatic(bufferSize, pbs_))
+        , aio_(bd_.getFd(), maxPb_)
         , wh_()
-        , ioQ_(maxQueuePb_, pbs_)
+        , ioQ_(maxPb_, pbs_)
         , readyQ_()
         , overlapped_()
         , isSuccess_(false)
@@ -635,7 +635,7 @@ public:
                 } else {
                     blockS.resize(0);
                 }
-                redoPack(rec, blockS);
+                redoPackIo(rec, blockS);
             }
             redoLsid = packH.nextLogpackLsid();
         }
@@ -728,7 +728,7 @@ private:
                 readyQ_.push(&io);
             }
         }
-        if (readyQ_.size() > maxQueuePb_) {
+        if (readyQ_.size() > maxPb_) {
             readyQ_.submit(aio_);
         }
     }
@@ -783,9 +783,9 @@ private:
     }
 
     /**
-     * Redo a logpack data.
+     * Redo a logpack Io.
      */
-    void redoPack(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
+    void redoPackIo(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
         assert(rec.isExist());
         const uint32_t ioSizePb = rec.ioSizePb(pbs_);
 
