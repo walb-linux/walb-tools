@@ -126,7 +126,7 @@ private:
     DiffMemory diffMem_;
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
-    std::queue<RecIo> mergedQ_;
+    std::queue<DiffRecIo> mergedQ_;
     bool shouldValidateUuid_;
     uint16_t maxIoBlocks_;
     uint64_t doneAddr_;
@@ -190,7 +190,7 @@ public:
         Writer writer(outFd);
         writer.writeHeader(wdiffH_);
 
-        RecIo d;
+        DiffRecIo d;
         while (getAndRemove(d)) {
             assert(d.isValid());
             writer.compressAndWriteDiff(d.record(), d.io().get());
@@ -233,7 +233,7 @@ public:
      * RETURN:
      *   false if there is no diffIo anymore.
      */
-    bool getAndRemove(RecIo &recIo) {
+    bool getAndRemove(DiffRecIo &recIo) {
         prepare();
         while (mergedQ_.empty()) {
             if (wdiffs_.empty()) {
@@ -271,7 +271,7 @@ private:
         DiffMemory::Map& map = diffMem_.getMap();
         auto i = map.begin();
         while (i != map.end()) {
-            RecIo& recIo = i->second;
+            DiffRecIo& recIo = i->second;
             if (recIo.record().endIoAddress() > maxAddr) break;
             mergedQ_.push(std::move(recIo));
             diffMem_.eraseMap(i);

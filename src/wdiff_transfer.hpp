@@ -24,7 +24,7 @@ inline bool wdiffTransferClient(
         pkt.write(pack.data(), pack.size());
     };
 
-    diff::RecIo recIo;
+    DiffRecIo recIo;
     const size_t maxPushedNum = cmpr.numCpu * 2 - 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     diff::Packer packer;

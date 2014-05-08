@@ -188,7 +188,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     const char *const FUNC = __func__;
     diff::Merger merger;
     merger.addWdiffs(std::move(fileV));
-    diff::RecIo recIo;
+    DiffRecIo recIo;
     cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
     std::vector<char> zero;
 	const uint64_t lvSnapSizeLb = lv.sizeLb();
@@ -289,7 +289,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     diff::Writer writer(tmpFile.fd());
     DiffFileHeader wdiffH = merger.header();
     writer.writeHeader(wdiffH);
-    diff::RecIo recIo;
+    DiffRecIo recIo;
     while (merger.getAndRemove(recIo)) {
         if (volSt.stopState == ForceStopping || ga.forceQuit) {
             return false;

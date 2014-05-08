@@ -103,7 +103,7 @@ std::vector<std::vector<char>> generateRawPacks()
     /* Convert memory data to raw pack list. */
     const walb::DiffMemory::Map& map = diffMem0.getMap();
 	for (const auto& i : map) {
-		const walb::diff::RecIo& recIo = i.second;
+		const walb::DiffRecIo& recIo = i.second;
 		addIo(recIo.record(), recIo.io().get(), recIo.io().getSize());
 	}
     packh.updateChecksum();

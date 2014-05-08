@@ -31,10 +31,10 @@ class VirtualFullScanner
 private:
     cybozu::util::File reader_;
     bool isInputFdSeekable_;
-    walb::AlignedArray bufForSkip_;
-    walb::diff::Merger merger_;
+    AlignedArray bufForSkip_;
+    diff::Merger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
-    walb::diff::RecIo recIo_; /* current diff rec IO. */
+    DiffRecIo recIo_; /* current diff rec IO. */
     uint16_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
     bool emptyWdiff_;
@@ -85,7 +85,7 @@ public:
      */
     void readAndWriteTo(int outputFd, size_t bufSize) {
         cybozu::util::File writer(outputFd);
-        walb::AlignedArray buf(bufSize);
+        AlignedArray buf(bufSize);
         for (;;) {
             const size_t rSize = readSome(buf.data(), buf.size());
             if (rSize == 0) break;
@@ -223,7 +223,7 @@ private:
             offInIo_ = 0;
             if (!merger_.getAndRemove(recIo_)) {
                 isEndDiff_ = true;
-                recIo_ = walb::diff::RecIo();
+                recIo_ = DiffRecIo();
             }
         }
     }

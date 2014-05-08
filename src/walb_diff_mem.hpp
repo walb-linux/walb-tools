@@ -13,13 +13,12 @@
 #include "walb_diff_file.hpp"
 
 namespace walb {
-namespace diff {
 
 /**
  * Diff record and its IO data.
  * Data compression is not supported.
  */
-class RecIo /* final */
+class DiffRecIo /* final */
 {
 private:
     DiffRecord rec_;
@@ -28,8 +27,8 @@ public:
     const DiffRecord &record() const { return rec_; }
     const DiffIo &io() const { return io_; }
 
-    RecIo() {}
-    RecIo(const DiffRecord &rec, DiffIo &&io)
+    DiffRecIo() {}
+    DiffRecIo(const DiffRecord &rec, DiffIo &&io)
         : rec_(rec) {
         if (rec.isNormal()) {
             io_ = std::move(io);
@@ -39,7 +38,7 @@ public:
         updateChecksum();
         assert(isValid());
     }
-    RecIo(const DiffRecord &rec, std::vector<char> &&data)
+    DiffRecIo(const DiffRecord &rec, std::vector<char> &&data)
         : rec_(rec) {
         if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
@@ -73,7 +72,7 @@ public:
             return false;
         }
         if (rec_.isCompressed()) {
-            LOGd("RecIo does not support compressed data.\n");
+            LOGd("DiffRecIo does not support compressed data.\n");
             return false;
         }
         if (isChecksum && rec_.checksum != io_.calcChecksum()) {
@@ -89,12 +88,12 @@ public:
     }
 
     /**
-     * Split the RecIo into pieces
+     * Split the DiffRecIo into pieces
      * where each ioBlocks is <= a specified one.
      */
-    std::vector<RecIo> splitAll(uint16_t ioBlocks) const {
+    std::vector<DiffRecIo> splitAll(uint16_t ioBlocks) const {
         assert(isValid());
-        std::vector<RecIo> v;
+        std::vector<DiffRecIo> v;
 
         std::vector<DiffRecord> recV = rec_.splitAll(ioBlocks);
         std::vector<DiffIo> ioV;
@@ -120,13 +119,13 @@ public:
      * The overlapped data of rhs will be used.
      * *this will not be changed.
      */
-    std::vector<RecIo> minus(const RecIo &rhs) const {
+    std::vector<DiffRecIo> minus(const DiffRecIo &rhs) const {
         assert(isValid(true));
         assert(rhs.isValid(true));
         if (!rec_.isOverlapped(rhs.rec_)) {
             throw RT_ERR("Non-overlapped.");
         }
-        std::vector<RecIo> v;
+        std::vector<DiffRecIo> v;
         /*
          * Pattern 1:
          * __oo__ + xxxxxx = xxxxxx
@@ -242,8 +241,6 @@ public:
     }
 };
 
-} // namespace diff
-
 /**
  * Simpler implementation of in-memory walb diff data.
  * IO data compression is not supported.
@@ -251,8 +248,7 @@ public:
 class DiffMemory
 {
 public:
-    using RecIo = diff::RecIo; // QQQ
-    using Map = std::map<uint64_t, RecIo>;
+    using Map = std::map<uint64_t, DiffRecIo>;
 private:
     const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
     Map map_;
@@ -278,10 +274,10 @@ public:
         }
         /* Search overlapped items. */
         uint64_t addr1 = rec.endIoAddress();
-        std::queue<RecIo> q;
+        std::queue<DiffRecIo> q;
         auto it = map_.lower_bound(addr0);
         while (it != map_.end() && it->first < addr1) {
-            RecIo &r = it->second;
+            DiffRecIo &r = it->second;
             if (r.record().isOverlapped(rec)) {
                 nIos_--;
                 nBlocks_ -= r.record().io_blocks;
@@ -292,10 +288,10 @@ public:
             }
         }
         /* Eliminate overlaps. */
-        RecIo r0(rec, std::move(io));
+        DiffRecIo r0(rec, std::move(io));
         while (!q.empty()) {
-            std::vector<RecIo> v = q.front().minus(r0);
-            for (RecIo &r : v) {
+            std::vector<DiffRecIo> v = q.front().minus(r0);
+            for (DiffRecIo &r : v) {
 				const DiffRecord& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
@@ -306,7 +302,7 @@ public:
         /* Insert the item. */
         nIos_++;
         nBlocks_ += r0.record().io_blocks;
-        std::vector<RecIo> rv;
+        std::vector<DiffRecIo> rv;
         if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
             rv = r0.splitAll(maxIoBlocks);
         } else if (maxIoBlocks_ < rec.io_blocks) {
@@ -314,7 +310,7 @@ public:
         } else {
             rv.push_back(std::move(r0));
         }
-        for (RecIo &r : rv) {
+        for (DiffRecIo &r : rv) {
             uint64_t addr = r.record().io_address;
             uint16_t blks = r.record().io_blocks;
             map_.emplace(addr, std::move(r));
@@ -354,7 +350,7 @@ public:
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
         while (it != map_.cend()) {
-            const RecIo &r = it->second;
+            const DiffRecIo &r = it->second;
             assert(r.isValid());
             if (isCompressed) {
                 writer.compressAndWriteDiff(r.record(), r.io().get());
