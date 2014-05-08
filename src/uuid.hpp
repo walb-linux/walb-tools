@@ -36,6 +36,9 @@ public:
     void set(const void *data) {
         ::memcpy(data_, data, UUID_SIZE);
     }
+    void copyTo(void *data) const {
+        ::memcpy(data, data_, UUID_SIZE);
+    }
     template <class InputStream>
     void load(InputStream &is) {
         cybozu::loadRange(data_, UUID_SIZE, is);

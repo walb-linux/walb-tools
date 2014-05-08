@@ -63,7 +63,7 @@ public:
     uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
     uint32_t getMetadataSize() const { return super()->snapshot_metadata_size; }
     uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
-    const uint8_t* getUuid() const { return super()->uuid; }
+    cybozu::Uuid getUuid2() const { return cybozu::Uuid(super()->uuid); }
     const char* getName() const { return super()->name; }
     uint64_t getRingBufferSize() const { return super()->ring_buffer_size; }
     uint64_t getOldestLsid() const { return super()->oldest_lsid; }
@@ -82,8 +82,8 @@ public:
     void setLogChecksumSalt(uint32_t salt) {
         super()->log_checksum_salt = salt;
     }
-    void setUuid(const uint8_t *uuid) {
-        ::memcpy(super()->uuid, uuid, UUID_SIZE);
+    void setUuid(const cybozu::Uuid &uuid) {
+        uuid.copyTo(super()->uuid);
     }
     void updateChecksum() {
         super()->checksum = 0;
@@ -168,7 +168,8 @@ public:
                   "oldestLsid: %" PRIu64 "\n"
                   "writtenLsid: %" PRIu64 "\n"
                   "deviceSize: %" PRIu64 "\n"
-                  "ringBufferOffset: %" PRIu64 "\n",
+                  "ringBufferOffset: %" PRIu64 "\n"
+                  "uuid: %s\n",
                   getSectorType(),
                   getVersion(),
                   getChecksum(),
@@ -181,12 +182,8 @@ public:
                   getOldestLsid(),
                   getWrittenLsid(),
                   getDeviceSize(),
-                  getRingBufferOffset());
-        ::fprintf(fp, "uuid: ");
-        for (int i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", getUuid()[i]);
-        }
-        ::fprintf(fp, "\n");
+                  getRingBufferOffset(),
+                  getUuid2().str().c_str());
     }
 
 private:

@@ -162,7 +162,7 @@ public:
         /* Create and write superblock finally. */
         super.setOldestLsid(beginLsid);
         super.setWrittenLsid(beginLsid); /* for redo */
-        super.setUuid(wlHead.uuid());
+        super.setUuid(wlHead.getUuid2());
         super.setLogChecksumSalt(wlHead.salt());
         super.write();
 

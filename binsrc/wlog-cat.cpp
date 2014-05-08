@@ -118,7 +118,7 @@ public:
 
         /* Create and write walblog header. */
         walb::log::FileHeader wh;
-        wh.init(pbs, salt, super_.getUuid(), beginLsid, endLsid_);
+        wh.init(pbs, salt, super_.getUuid2(), beginLsid, endLsid_);
         writer.writeHeader(wh);
 
         /* Read and write each logpack. */

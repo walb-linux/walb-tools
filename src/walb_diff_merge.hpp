@@ -63,7 +63,7 @@ private:
             reader_.readHeader(header_);
         }
         const std::string &path() const { return wdiffPath_; }
-        DiffFileHeader &header() { return header_; }
+        const DiffFileHeader &header() { return header_; }
         const DiffRecord &front() {
             verifyNotEnd(__func__);
             fill();
@@ -206,10 +206,10 @@ public:
     void prepare() {
         if (!isHeaderPrepared_) {
             if (wdiffs_.empty()) {
-                throw RT_ERR("Wdiff's is not set.");
+                throw cybozu::Exception(__func__) << "Wdiffs are not set.";
             }
-            const uint8_t *uuid = wdiffs_.back()->header().getUuid();
-            if (shouldValidateUuid_) { checkUuid(uuid); }
+            const cybozu::Uuid uuid = wdiffs_.back()->header().getUuid2();
+            if (shouldValidateUuid_) { verifyUuid(uuid); }
 
             wdiffH_.init();
             wdiffH_.setUuid(uuid);
@@ -310,10 +310,11 @@ private:
         }
         return true;
     }
-    void checkUuid(const uint8_t *uuid) const {
+    void verifyUuid(const cybozu::Uuid &uuid) const {
         for (const WdiffPtr &wdiffP : wdiffs_) {
-            if (::memcmp(wdiffP->header().getUuid(), uuid, UUID_SIZE) != 0) {
-                throw RT_ERR("Uuids differ\n");
+            const cybozu::Uuid uuid1 = wdiffP->header().getUuid2();
+            if (uuid1 != uuid) {
+                throw cybozu::Exception(__func__) << "uuid differ" << uuid1 << uuid;
             }
         }
     }

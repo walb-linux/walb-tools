@@ -181,11 +181,9 @@ public:
             qf.sync();
         }
         {
-            cybozu::Uuid uuid;
             cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
             device::SuperBlock super(bd);
-            uuid.set(super.getUuid());
-            setUuid(uuid);
+            setUuid(super.getUuid2());
         }
         setState(sSyncReady);
     }

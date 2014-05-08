@@ -21,7 +21,6 @@ struct DiffFileHeader : walb_diff_file_header
     }
     uint32_t getChecksum() const { return checksum; }
     uint16_t getMaxIoBlocks() const { return max_io_blocks; }
-    const uint8_t *getUuid() const { return &uuid[0]; }
     cybozu::Uuid getUuid2() const { return cybozu::Uuid(&uuid[0]); }
 
     void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
@@ -43,23 +42,16 @@ struct DiffFileHeader : walb_diff_file_header
         checksum = cybozu::util::calcChecksum(this, getSize(), 0);
     }
 
-    void setUuid(const void *uuid) {
-        ::memcpy(&this->uuid[0], uuid, UUID_SIZE);
-    }
     void setUuid(const cybozu::Uuid& uuid) {
-        setUuid(uuid.rawData());
+        uuid.copyTo(this->uuid);
     }
 
     void print(::FILE *fp) const {
         ::fprintf(fp, "-----walb_file_header-----\n"
                   "checksum: %08x\n"
                   "maxIoBlocks: %u\n"
-                  "uuid: ",
-                  checksum, max_io_blocks);
-        for (size_t i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", getUuid()[i]);
-        }
-        ::fprintf(fp, "\n");
+                  "uuid: %s\n",
+                  checksum, max_io_blocks, getUuid2().str().c_str());
     }
 
     void print() const { print(::stdout); }
@@ -84,7 +76,7 @@ inline void writeDiffFileHeader(Writer& writer, uint16_t maxIoBlocks, const cybo
 {
     DiffFileHeader fileH;
     fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
-    fileH.setUuid(uuid.rawData());
+    fileH.setUuid(uuid);
     fileH.writeTo(writer);
 }
 

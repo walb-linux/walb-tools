@@ -94,7 +94,7 @@ public:
         : config_(config), bits_(), writtenLb_(0) {}
     void analyze() {
         uint64_t lsid = -1;
-        u8 uuid[UUID_SIZE];
+        cybozu::Uuid uuid;
         if (config_.isFromStdin()) {
             while (true) {
                 uint64_t nextLsid = analyzeWlog(0, lsid, uuid);
@@ -124,13 +124,9 @@ private:
      * RETURN:
      *   end lsid of the wlog data.
      */
-    uint64_t analyzeWlog(int inFd, uint64_t beginLsid, u8 *uuid) {
-        if (inFd < 0) {
-            throw RT_ERR("inFd is not valid");
-        }
-        walb::log::Reader reader(inFd);
-
+    uint64_t analyzeWlog(int inFd, uint64_t beginLsid, cybozu::Uuid &uuid) {
         /* Read header. */
+        walb::log::Reader reader(inFd);
         walb::log::FileHeader wh;
         try {
             reader.readHeader(wh);
@@ -144,10 +140,11 @@ private:
         /* Check uuid if required. */
         if (beginLsid == uint64_t(-1)) {
             /* First call. */
-            ::memcpy(uuid, wh.uuid(), UUID_SIZE);
+            uuid = wh.getUuid2();
         } else {
-            if (::memcmp(uuid, wh.uuid(), UUID_SIZE) != 0) {
-                throw RT_ERR("Not the same wlog uuid.");
+            const cybozu::Uuid readUuid = wh.getUuid2();
+            if (uuid != readUuid) {
+                throw cybozu::Exception(__func__) << "uuid differ" << uuid << readUuid;
             }
         }
 

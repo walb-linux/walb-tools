@@ -151,22 +151,24 @@ private:
         const uint32_t pbs = wlHeader.pbs();
 
         /* Initialize walb diff db. */
-        auto checkUuid = [&]() {
-            if (::memcmp(walbDiff.header().getUuid(), wlHeader.uuid(), UUID_SIZE) != 0) {
-                throw RT_ERR("Uuid mismatch.");
+        auto verifyUuid = [&]() { // QQQ
+            const cybozu::Uuid diffUuid = walbDiff.header().getUuid2();
+            const cybozu::Uuid logUuid = wlHeader.getUuid2();
+            if (diffUuid != logUuid) {
+                throw cybozu::Exception(__func__) << "uuid differ" << logUuid << diffUuid;
             }
         };
         if (lsid == uint64_t(-1)) {
             /* First time. */
             /* Initialize uuid. */
-            walbDiff.header().setUuid(wlHeader.uuid());
+            walbDiff.header().setUuid(wlHeader.getUuid2());
             lsid = wlHeader.beginLsid();
         } else {
             /* Second or more. */
             if (lsid != wlHeader.beginLsid()) {
                 throw RT_ERR("lsid mismatch.");
             }
-            checkUuid();
+            verifyUuid();
         }
 
         /* Convert each log. */

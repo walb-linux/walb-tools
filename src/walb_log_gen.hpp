@@ -75,26 +75,13 @@ public:
 private:
     using Rand = cybozu::util::Random<uint64_t>;
 
-    static void setUuid(Rand &rand, std::vector<uint8_t> &uuid) {
-        const size_t t = sizeof(uint64_t);
-        const size_t n = uuid.size() / t;
-        const size_t m = uuid.size() % t;
-        for (size_t i = 0; i < n; i++) {
-            uint64_t v = rand.get64();
-            ::memcpy(&uuid[i * t], &v, sizeof(v));
-        }
-        for (size_t i = 0; i < m; i++) {
-            uuid[n * t + i] = static_cast<uint8_t>(rand.get32());
-        }
-    }
-
     void generateAndWrite(int fd) {
         Writer writer(fd);
         Rand rand;
         uint64_t writtenPb = 0;
         walb::log::FileHeader wlHead;
-        std::vector<uint8_t> uuid(UUID_SIZE);
-        setUuid(rand, uuid);
+        cybozu::Uuid uuid;
+        rand.fill(uuid.rawData(), uuid.rawSize());
 
         const uint32_t salt = rand.get32();
         const uint32_t pbs = config_.pbs;
@@ -102,7 +89,7 @@ private:
         AlignedArray hBlock(pbs);
 
         /* Generate and write walb log header. */
-        wlHead.init(pbs, salt, &uuid[0], lsid, uint64_t(-1));
+        wlHead.init(pbs, salt, uuid, lsid, uint64_t(-1));
         writer.writeHeader(wlHead);
         if (config_.isVerbose) {
             wlHead.print(::stderr);

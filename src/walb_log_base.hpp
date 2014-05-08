@@ -273,14 +273,6 @@ public:
         header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
     }
 
-    template <typename Reader>
-    DEPRECATED bool read(Reader &reader) {
-        return readFrom(reader);
-    }
-    template <typename Writer>
-    DEPRECATED void write(Writer &writer) {
-        writeTo(writer);
-    }
     /**
      * RETURN:
      *   false if read failed or invalid.

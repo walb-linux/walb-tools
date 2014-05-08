@@ -8,6 +8,7 @@
  */
 #include <queue>
 #include "walb_log_base.hpp"
+#include "uuid.hpp"
 
 namespace walb {
 namespace log {
@@ -26,7 +27,7 @@ public:
     FileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
-    void init(uint32_t pbs, uint32_t salt, const uint8_t *uuid, uint64_t beginLsid, uint64_t endLsid) {
+    void init(uint32_t pbs, uint32_t salt, const cybozu::Uuid &uuid, uint64_t beginLsid, uint64_t endLsid) {
         ::memset(data_.data(), 0, data_.size());
         header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
         header().version = WALB_LOG_VERSION;
@@ -34,7 +35,7 @@ public:
         header().log_checksum_salt = salt;
         header().logical_bs = LOGICAL_BLOCK_SIZE;
         header().physical_bs = pbs;
-        ::memcpy(header().uuid, uuid, UUID_SIZE);
+        uuid.copyTo(header().uuid);
         header().begin_lsid = beginLsid;
         header().end_lsid = endLsid;
     }
@@ -72,7 +73,7 @@ public:
     uint32_t pbs() const { return header().physical_bs; }
     uint64_t beginLsid() const { return header().begin_lsid; }
     uint64_t endLsid() const { return header().end_lsid; }
-    const uint8_t* uuid() const { return &header().uuid[0]; }
+    cybozu::Uuid getUuid2() const { return cybozu::Uuid(&header().uuid[0]); }
     uint16_t sectorType() const { return header().sector_type; }
     uint16_t headerSize() const { return header().header_size; }
     uint16_t version() const { return header().version; }

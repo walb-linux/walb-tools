@@ -737,7 +737,7 @@ namespace proxy_local {
 inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt, Logger &logger)
 {
     diff::MemoryData memData(DEFAULT_MAX_IO_LB);
-    memData.header().setUuid(uuid.rawData());
+    memData.header().setUuid(uuid);
 
     LogPackHeader packH(pbs, salt);
 
