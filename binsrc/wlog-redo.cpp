@@ -80,6 +80,30 @@ private:
     }
 };
 
+struct Statistics
+{
+    size_t nClipped;
+    size_t nDiscard;
+    size_t nPadding;
+    size_t nWritten;
+    size_t nOverwritten;
+    Statistics()
+        : nClipped(0)
+        , nDiscard(0)
+        , nPadding(0)
+        , nWritten(0)
+        , nOverwritten(0) {}
+    void print() const {
+        ::printf("nClipped: %zu\n"
+                 "nDiscard: %zu\n"
+                 "nPadding: %zu\n",
+                 nClipped, nDiscard, nPadding);
+        ::printf("nWritten: %zu\n"
+                 "nOverwritten: %zu\n",
+                 nWritten, nOverwritten);
+    }
+} g_st;
+
 using AlignedArray = walb::AlignedArray;
 
 /**
@@ -424,12 +448,8 @@ private:
     };
     typedef std::multiset<Io *, Less> IoSet;
     IoSet ioSet_;
-    size_t nWritten;
-    size_t nOverwritten;
 
 public:
-    ReadyQueue() : nWritten(0), nOverwritten(0) {
-    }
     void push(Io *iop) {
         ioSet_.insert(iop);
         g_debug.addReadyQ(*iop);
@@ -470,16 +490,11 @@ public:
         if (io.state == Io::Submitted) {
             assert(io.aioKey > 0);
             aio.waitFor(io.aioKey);
-            nWritten++;
+            g_st.nWritten++;
         } else {
             assert(io.state == Io::Overwritten);
-            nOverwritten++;
+            g_st.nOverwritten++;
         }
-    }
-    void print() const {
-        ::printf("nWritten: %zu\n"
-                 "nOverwritten: %zu\n",
-                 nWritten, nOverwritten);
     }
     bool empty() const {
         return ioSet_.empty();
@@ -626,9 +641,6 @@ private:
     OverlappedData overwrapped_;
 
     /* For statistics. */
-    size_t nClipped_;
-    size_t nDiscard_;
-    size_t nPadding_;
 
 public:
     WalbLogApplyer(
@@ -642,10 +654,7 @@ public:
         , ioX_(queuePb_, pbs_)
         , readyQ_()
         , pendingPb_(0)
-        , overwrapped_()
-        , nClipped_(0)
-        , nDiscard_(0)
-        , nPadding_(0) {}
+        , overwrapped_() {}
 
     ~WalbLogApplyer() {
         ioX_.waitForAllSubmitted(aio_);
@@ -694,13 +703,8 @@ public:
         /* Sync device. */
         bd_.fdatasync();
 
-        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n"
-                 "nClipped: %zu\n"
-                 "nDiscard: %zu\n"
-                 "nPadding: %zu\n",
-                 beginLsid, redoLsid,
-                 nClipped_, nDiscard_, nPadding_);
-        readyQ_.print();
+        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, redoLsid);
+        g_st.print();
     }
 
 private:
@@ -737,7 +741,7 @@ private:
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
-        nDiscard_ += rec.ioSizePb(pbs_);
+        g_st.nDiscard += rec.ioSizePb(pbs_);
     }
 
     /**
@@ -835,13 +839,13 @@ private:
             /* Clip if the IO area is out of range in the device. */
             if (io.offset() + io.size() <= bd_.getDeviceSize()) {
                 ioX_.add(std::move(io));
-                if (rec.isDiscard()) { nDiscard_++; }
+                if (rec.isDiscard()) { g_st.nDiscard++; }
             } else {
                 if (config_.isVerbose()) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
                              io.offset(), io.size());
                 }
-                nClipped_++;
+                g_st.nClipped++;
             }
         }
         assert(remaining == 0);
@@ -862,7 +866,7 @@ private:
 
         if (rec.isPadding()) {
             /* Do nothing. */
-            nPadding_ += ioSizePb;
+            g_st.nPadding += ioSizePb;
             return;
         }
 
@@ -873,7 +877,7 @@ private:
             }
             if (!config_.isZeroDiscard()) {
                 /* Ignore discard logs. */
-                nDiscard_ += ioSizePb;
+                g_st.nDiscard += ioSizePb;
                 return;
             }
             /* zero-discard will use redoNormalIo(). */
