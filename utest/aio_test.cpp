@@ -1,14 +1,13 @@
+#include "cybozu/test.hpp"
 #include "aio_util.hpp"
 #include "random.hpp"
 
-namespace cybozu {
-namespace aio {
+using namespace cybozu::aio;
 
-static void testAioDataAllocator()
+void testAioDataAllocator(size_t nTrials)
 {
     AioDataAllocator allocator;
     std::queue<AioDataPtr> queue;
-    const size_t nTrials = 1000000;
 
     while (queue.size() < 64) {
         AioDataPtr p = allocator.alloc();
@@ -16,9 +15,9 @@ static void testAioDataAllocator()
         //::printf("add %u\n", p->key);
     }
 
-    util::Random<size_t> rand;
+    cybozu::util::Random<size_t> rand;
 
-    double bTime = util::getTime();
+    const double bTime = cybozu::util::getTime();
     for (size_t i = 0; i < nTrials; i++) {
         int nr = rand() % 10;
         for (int j = 0; j < nr; j++) {
@@ -34,7 +33,7 @@ static void testAioDataAllocator()
         queue.push(p);
         //::printf("add %u\n", p->key);
     }
-    double eTime = util::getTime();
+    const double eTime = cybozu::util::getTime();
 
     while (!queue.empty()) {
         AioDataPtr p = queue.front();
@@ -46,11 +45,8 @@ static void testAioDataAllocator()
              (double)nTrials / (eTime - bTime));
 }
 
-}} //namespace cybozu::aio
-
-int main()
+CYBOZU_TEST_AUTO(testAioDataAllocator)
 {
-    cybozu::aio::testAioDataAllocator();
+    const size_t nTrials = 10000;
+    testAioDataAllocator(nTrials);
 }
-
-/* end of file. */
