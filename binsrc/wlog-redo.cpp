@@ -118,7 +118,7 @@ private:
 
 public:
     uint32_t aioKey; // IO identifier inside aio.
-    uint32_t nOverlapped; // To serialize overlapped IOs.
+    uint32_t nOverlapped; // To serialize overlapped IOs. 0 means ready to submit.
 
     enum State {
         Init, Overwritten, Submitted
@@ -127,7 +127,7 @@ public:
         : offset_(offset), size_(size)
         , blocks_()
         , aioKey(0)
-        , nOverlapped(0)
+        , nOverlapped(-1)
         , state(Init) {}
     Io(uint64_t offset, size_t size, AlignedArray &&block)
         : Io(offset, size) {
@@ -157,7 +157,6 @@ public:
      * Can an IO be merged to this.
      */
     bool canMerge(const Io& rhs) const {
-
         /* They must have data buffers. */
         if (blocks_.empty() || rhs.blocks_.empty()) {
             return false;
@@ -316,15 +315,14 @@ struct Debug {
  */
 inline uint32_t bytesToPb(uint32_t bytes, uint32_t pbs) {
     assert(bytes % LOGICAL_BLOCK_SIZE == 0);
-    uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
+    const uint32_t lb = bytes / LOGICAL_BLOCK_SIZE;
     return ::capacity_pb(pbs, lb);
 }
 
 /**
- *
  *  Io state
- *  (file-sink) ->fetched -> pending -> ready -> submitted -> (completed)
- *                           <--         processing       -->
+ *  (file-sink) -> fetched -> pending -> ready -> submitted -> (completed)
+ *                            <--       processing      -->
  *
  * the contents of list_
  * begin                   ---   fetchedBegin_    --- end
@@ -346,11 +344,9 @@ class IoQueue
      * Try to merge src to dst.
      */
     bool tryMerge(Io& dst, Io& src) {
-        /* Check max io size. */
         if (maxIoSize_ < dst.size() + src.size()) {
             return false;
         }
-        /* Try merge. */
         return dst.tryMerge(src);
     }
 
@@ -361,7 +357,7 @@ public:
         , processingPb_(0)
         , fetchedPb_(0)
         , fetchedBegin_(list_.end())
-        {
+    {
     }
     void add(Io &&io) {
         assert(io.size() == pbs_);
@@ -411,7 +407,8 @@ public:
 };
 
 /**
- * IO queue sorted by offset to submit IOs.
+ * IO queue to store IOs are ready to submit.
+ * The IOs are sorted by offset for good performance.
  */
 class ReadyQueue
 {
@@ -460,7 +457,7 @@ public:
             assert(io.nOverlapped == 0);
             submit(aio);
         } else if (io.state == Io::Overwritten) {
-            erase(io);
+            tryErase(io);
         }
         if (io.state == Io::Submitted) {
             assert(io.aioKey > 0);
@@ -475,7 +472,7 @@ public:
         return ioSet_.empty();
     }
 private:
-    void erase(Io& io) {
+    void tryErase(Io& io) {
         IoSet::iterator i, e;
         std::tie(i, e) = ioSet_.equal_range(&io);
         while (i != e) {
