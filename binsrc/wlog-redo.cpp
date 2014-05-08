@@ -28,7 +28,7 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
-//#define USE_DEBUG_TRACE
+#define USE_DEBUG_TRACE
 /**
  * Command line configuration.
  */
@@ -377,14 +377,15 @@ inline uint32_t bytesToPb(uint32_t bytes, uint32_t pbs) {
 
 /**
  *
- * begin --- fetchedBegin_
+ * begin ---   fetchedBegin_   --- end
+ * <--- prepated ---><--- fetched --->
  */
 class IoQueue
 {
     const size_t queuePb_;
     const uint32_t pbs_;
-    size_t pendingPb_;
-    size_t fetchedPb_;
+    size_t pendingPb_; // prepared, but not completed
+    size_t fetchedPb_; // added, but not prepared
     typedef std::list<Io> List;
     List list_;
     List::iterator fetchedBegin_;
@@ -398,7 +399,7 @@ public:
         , fetchedBegin_(list_.end())
         {
     }
-    void add(Io &&io) {
+    void add(Io &&io) { // QQQ
         assert(io.size() == pbs_);
         fetchedPb_ += bytesToPb(io.size(), pbs_);
         list_.push_back(std::move(io));
@@ -414,14 +415,16 @@ public:
         const size_t pb = bytesToPb(io.size(), pbs_);
         pendingPb_ += pb;
         fetchedPb_ -= pb;
+        g_debug.addIoQ(io);
         return io;
     }
     bool isFull() const {
-        return list_.begin() != fetchedBegin_ && queuePb_ < pendingPb_ + fetchedPb_;
+        return hasPrepared() && queuePb_ < pendingPb_ + fetchedPb_;
     }
     bool shouldPrepare() const {
         return queuePb_ <= fetchedPb_;
     }
+    bool hasPrepared() const { return list_.begin() != fetchedBegin_; }
 
     void waitForAllSubmitted(cybozu::aio::Aio &aio) noexcept {
         for (List::iterator it = list_.begin(); it != fetchedBegin_; ++it) {
@@ -432,6 +435,16 @@ public:
                 } catch (...) {}
             }
         }
+    }
+    Io& getFront() {
+        assert(hasPrepared());
+        return list_.front();
+    }
+    void popFront() {
+        Io& io = list_.front();
+        g_debug.delIoQ(io);
+        pendingPb_ -= bytesToPb(io.size(), pbs_);
+        list_.pop_front();
     }
 };
 
@@ -518,7 +531,7 @@ private:
  * In order to serialize overlapped IOs execution.
  * IOs must be FIFO. (add() and del()).
  */
-class OverlappedData
+class OverlappedSerializer
 {
 private:
     using IoSet = std::set<std::pair<uint64_t, Io*>>;
@@ -526,11 +539,11 @@ private:
     size_t maxSize_;
 
 public:
-    OverlappedData()
+    OverlappedSerializer()
         : set_(), maxSize_(0) {}
 
-    OverlappedData(const OverlappedData& rhs) = delete;
-    OverlappedData& operator=(const OverlappedData& rhs) = delete;
+    OverlappedSerializer(const OverlappedSerializer& rhs) = delete;
+    OverlappedSerializer& operator=(const OverlappedSerializer& rhs) = delete;
 
     /**
      * Insert to the overlapped data.
@@ -634,14 +647,8 @@ private:
     IoQueue ioX_; /* FIFO. */
     ReadyQueue readyQ_; /* ready to submit. */
 
-    /* Number of blocks where the corresponding IO
-       is submitted, but not completed. */
-    size_t pendingPb_;
-
-    OverlappedData overwrapped_;
-
-    /* For statistics. */
-
+    OverlappedSerializer overlapped_;
+    bool isSuccess_;
 public:
     WalbLogApplyer(
         const Config& config, size_t bufferSize)
@@ -653,11 +660,12 @@ public:
         , wh_()
         , ioX_(queuePb_, pbs_)
         , readyQ_()
-        , pendingPb_(0)
-        , overwrapped_() {}
+        , overlapped_()
+        , isSuccess_(false)
+    {}
 
     ~WalbLogApplyer() {
-        ioX_.waitForAllSubmitted(aio_);
+        if (!isSuccess_) ioX_.waitForAllSubmitted(aio_);
     }
 
     /**
@@ -702,6 +710,7 @@ public:
 
         /* Sync device. */
         bd_.fdatasync();
+        isSuccess_ = true;
 
         ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, redoLsid);
         g_st.print();
@@ -748,10 +757,10 @@ private:
      * There is no pending IO after returned this method.
      */
     void waitForAllPendingIos() {
-        while (!ioX_.empty() || !readyQ_.empty()) {
+        while (ioX_.hasPrepared() || !readyQ_.empty()) {
             waitForAnIoCompletion();
         }
-        assert(overwrapped_.empty());
+        assert(overlapped_.empty());
     }
 
     template<class T>
@@ -769,16 +778,10 @@ private:
      * If not submitted, submit before waiting.
      */
     void waitForAnIoCompletion() {
-        // QQQ
-        assert(!ioQ_.empty());
-        Io& io = ioQ_.front();
-        g_debug.delIoQ(io);
-        pendingPb_ -= bytesToPb(io.size(), pbs_);
-        ioQ_.pop();
-
-        Io io = ioQ_.popAndRemove();
+        Io& io = ioX_.getFront();
         readyQ_.forceComplete(io, aio_);
-        overwrapped_.delIoAndPushReadyIos(io, readyQ_);
+        overlapped_.delIoAndPushReadyIos(io, readyQ_);
+        ioX_.popFront();
     }
 
     /**
@@ -795,8 +798,7 @@ private:
 
         while (ioX_.hasNext()) {
             Io& io = ioX_.next();
-            g_debug.addIoQ(io);
-            overwrapped_.add(io);
+            overlapped_.add(io);
             if (io.nOverlapped == 0) {
                 /* Ready to submit. */
                 readyQ_.push(&io);
@@ -817,7 +819,6 @@ private:
         assert(config_.isZeroDiscard() || !rec.isDiscard());
 
         /* Create IOs. */
-        MergeIoQueue mergeQ;
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
         const uint32_t ioSizePb = rec.ioSizePb(pbs_);
