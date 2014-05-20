@@ -831,6 +831,11 @@ inline void ArchiveVolState::initInner(const std::string& volId)
     }
 }
 
+inline void c2aGetStateServer(protocol::ServerParams &p)
+{
+    protocol::c2xGetStateServer(p, getArchiveVolState, ga.nodeId, __func__);
+}
+
 inline void c2aStatusServer(protocol::ServerParams &p)
 {
     ProtocolLogger logger(ga.nodeId, p.clientId);

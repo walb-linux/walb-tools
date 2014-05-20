@@ -354,6 +354,11 @@ inline StrVec getVolStateStrVec(const std::string &volId)
 
 } // namespace proxy_local
 
+inline void c2pGetStateServer(protocol::ServerParams &p)
+{
+    protocol::c2xGetStateServer(p, getProxyVolState, gp.nodeId, __func__);
+}
+
 /**
  * params:
  *   [0]: volId or none.

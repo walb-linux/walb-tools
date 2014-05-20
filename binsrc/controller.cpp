@@ -46,6 +46,7 @@ void runClient(Option &opt)
     ProtocolLogger logger(opt.ctrlId, serverId);
 
     const std::map<std::string, protocol::ClientHandler> h = {
+        { getStateCN, c2xGetStrVecClient },
         { statusCN, c2xGetStrVecClient },
         { listVolCN, c2xListVolClient },
         { initVolCN, c2xInitVolClient },

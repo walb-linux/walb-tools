@@ -364,6 +364,11 @@ inline StrVec getVolStateStrVec(const std::string &volId, bool isVerbose)
 
 } // namespace storage_local
 
+inline void c2sGetStateServer(protocol::ServerParams &p)
+{
+    protocol::c2xGetStateServer(p, getStorageVolState, gs.nodeId, __func__);
+}
+
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet pkt(p.sock);

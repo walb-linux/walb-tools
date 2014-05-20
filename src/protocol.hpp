@@ -35,6 +35,7 @@ const char *const archiveHT = "archive";
 /**
  * Command name.
  */
+const char *const getStateCN = "get-state";
 const char *const statusCN = "status";
 const char *const initVolCN = "init-vol";
 const char *const clearVolCN = "clear-vol";
@@ -406,4 +407,26 @@ inline void runHostTypeServer(ServerParams &p, const std::string &hostType)
     packet::Ack(p.sock).send();
 }
 
+template <class VolStateGetter>
+inline void c2xGetStateServer(protocol::ServerParams &p, VolStateGetter getter, const std::string &nodeId, const char *msg)
+{
+    ProtocolLogger logger(nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 1, msg);
+        const std::string &volId = v[0];
+        const std::string state = getter(volId).sm.get();
+        pkt.write(msgOk);
+        sendErr = false;
+        pkt.write(StrVec{state});
+        packet::Ack(p.sock).send();
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
 }} // namespace walb::protocol
+

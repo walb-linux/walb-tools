@@ -32,6 +32,7 @@ public:
     using RequestWorker :: RequestWorker;
     void run() override {
         const std::map<std::string, protocol::ServerHandler> h = {
+            { getStateCN, c2aGetStateServer },
             { statusCN, c2aStatusServer },
             { listVolCN, c2aListVolServer },
             { initVolCN, c2aInitVolServer },
