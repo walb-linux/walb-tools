@@ -413,12 +413,12 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const std::string &wdevPath = v[1];
     packet::Packet pkt(p.sock);
 
     try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const std::string &wdevPath = v[1];
         StorageVolState &volSt = getStorageVolState(volId);
         StateMachineTransaction tran(volSt.sm, sClear, stInitVol, FUNC);
 
