@@ -276,7 +276,7 @@ public:
     }
 };
 
-} // storage_local
+} // namespace storage_local
 
 const StorageSingleton& gs = getStorageGlobal();
 
@@ -387,6 +387,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(v);
+        packet::Ack(p.sock).send();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());

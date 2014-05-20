@@ -26,6 +26,7 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
     for (const std::string &s : v) {
         std::cout << s << std::endl;
     }
+    packet::Ack(p.sock).recv();
 }
 
 /**

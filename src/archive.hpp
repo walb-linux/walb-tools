@@ -786,7 +786,7 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     return true;
 }
 
-} // archive_local
+} // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
@@ -824,6 +824,7 @@ inline void c2aStatusServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(statusStrVec);
+        packet::Ack(p.sock).send();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());

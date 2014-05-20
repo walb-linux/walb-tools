@@ -377,6 +377,7 @@ inline void c2pStatusServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(stStrV);
         logger.debug() << "status succeeded";
+        packet::Ack(p.sock).send();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
