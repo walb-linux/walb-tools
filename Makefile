@@ -17,15 +17,15 @@ endif
 INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
 INCLUDES_WALB = -I./walb/include -I./walb/tool
 
-CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB)
+CFLAGS = -Wall -Wextra -fPIC -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB)
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
-LDFLAGS = -static -L./src
-LDLIBS = -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
+LDFLAGS = -static -static-libgcc -static-libstdc++ -L./src
+LDLIBS = -Wl,--whole-archive -lpthread -lrt -Wl,--no-whole-archive
 else
 LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
-LDLIBS = -lpthread
+LDLIBS = -lpthread -lrt
 endif
 ifeq ($(DEBUG),1)
 LDFLAGS += -rdynamic
