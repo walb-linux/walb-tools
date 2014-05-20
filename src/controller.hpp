@@ -215,10 +215,11 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 
 /**
  * params[0] volId
- * params[1] archiveAddrPortStr like "192.168.1.1:10000".
- * params[2] archiveCompressionOptStr like "snappy:0:1" (optional)
- * params[3] archiveMaxWdiffMergeSizeStr like "100M" (optional)
- * params[4] archiveBulkSizeStr like "1M" (optional)
+ * params[1] sizeMbStr. allowed size of remaining wdiffs [MiB].
+ * params[2] archiveAddrPortStr like "192.168.1.1:10000".
+ * params[3] archiveCompressionOptStr like "snappy:0:1" (optional)
+ * params[4] archiveMaxWdiffMergeSizeStr like "100M" (optional)
+ * params[5] archiveBulkSizeStr like "1M" (optional)
  */
 inline void c2aReplicateClient(protocol::ClientParams &p)
 {

@@ -274,11 +274,25 @@ public:
         return wdiffs_.getDiffListToMerge(gid, size);
     }
     /**
+     * @srvSnap latest snapshot of the remote server.
+     * @cliSnap latest snapshot of the client server (self).
+     * @minSizeB if total wdiff size is less than this size, diff repl is not required.
+     *
      * RETURN:
-     *   true if there is not the diff list where applying them to snapB leads to snapE.
+     *   doHashRepl, doDiffRepl
      */
-    bool isHashReplNecessary(const MetaSnap &snapB, const MetaSnap &snapE) const {
-        return getDiffMgr().getDiffListToSync(MetaState(snapB, 0), snapE).empty();
+    std::pair<bool, bool> shouldDoRepl(const MetaSnap &srvSnap, const MetaSnap &cliSnap, uint64_t minSizeB) const {
+        if (srvSnap.gidB >= cliSnap.gidB) return {false, false};
+        const std::vector<MetaDiff> diffV = getDiffMgr().getDiffListToSync(MetaState(srvSnap, 0), cliSnap);
+        if (diffV.empty()) return {true, false};
+        if (minSizeB == 0) return {false, true};
+        uint64_t totalB = 0;
+        for (const MetaDiff &diff : diffV) {
+            const uint64_t diffSizeB = wdiffs_.getDiffFileSize(diff);
+            totalB += diffSizeB;
+            if (totalB > minSizeB) return {false, true};
+        }
+        return {false, false};
     }
 private:
     cybozu::lvm::Vg getVg() const {

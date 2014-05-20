@@ -706,7 +706,7 @@ inline bool runDiffReplServer(
     return true;
 }
 
-inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, Logger &logger)
+inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, uint32_t sizeMb, Logger &logger)
 {
     packet::Packet pkt(sock);
 
@@ -725,12 +725,14 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         MetaSnap srvLatestSnap;
         pkt.read(srvLatestSnap);
         const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
-        const bool isEnd = cliLatestSnap.gidB <= srvLatestSnap.gidB;
-        logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap << isEnd;
+        bool doHashRepl, doDiffRepl;
+        std::tie(doHashRepl, doDiffRepl) = volInfo.shouldDoRepl(srvLatestSnap, cliLatestSnap, sizeMb * MEBI);
+        logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap
+                       << doHashRepl << doDiffRepl;
+        const bool isEnd = !doHashRepl && !doDiffRepl;
         pkt.write(isEnd);
         if (isEnd) break;
 
-        const bool doHashRepl = volInfo.isHashReplNecessary(srvLatestSnap, cliLatestSnap);
         pkt.write(doHashRepl);
         if (doHashRepl) {
             const MetaState metaSt = volInfo.getMetaState();
@@ -1213,7 +1215,8 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) throw cybozu::Exception(FUNC) << "volId is required";
         const std::string &volId = v[0];
-        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 1);
+        const uint32_t sizeMb = cybozu::atoi(v[1]);
+        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 2);
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1229,7 +1232,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.write(msgAccept);
         sendErr = false;
-        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, logger)) {
+        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, sizeMb, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
         }
