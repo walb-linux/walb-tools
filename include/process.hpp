@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <wait.h>
+#include <thread>
 
 #include "fileio.hpp"
 
@@ -102,12 +103,28 @@ inline std::vector<char *> prepareArgv(const std::string &cmd, const std::vector
     return argv;
 }
 
+inline void streamToStr(int fdr, std::string &outStr, std::exception_ptr& ep) noexcept
+{
+    try {
+        std::stringstream ss;
+        cybozu::util::File reader(fdr);
+        char buf[4096];
+        size_t r;
+        while ((r = reader.readsome(buf, 4096)) > 0) {
+            ss.write(buf, r);
+        }
+        outStr = ss.str();
+    } catch (...) {
+        ep = std::current_exception();
+    }
+}
+
 /**
  * Call another command and get stdout as a result.
  */
 inline std::string call(const std::string& cmd, const std::vector<std::string> &args)
 {
-    Pipe pipe0;
+    Pipe pipe0, pipe1;
     pid_t cpid;
     cpid = ::fork();
     if (cpid < 0) {
@@ -117,9 +134,10 @@ inline std::string call(const std::string& cmd, const std::vector<std::string> &
         /* bind pipe and stdout. */
         pipe0.closeR();
         pipe0.dupW(1);
+        pipe1.closeR();
+        pipe1.dupW(2);
         try {
             redirectToNullDev(0);
-            redirectToNullDev(2);
         } catch (...) {
             ::exit(1);
         }
@@ -129,24 +147,34 @@ inline std::string call(const std::string& cmd, const std::vector<std::string> &
     }
     /* parent process. */
 
-    /* Read the stdout of the child process. */
+    /* Read the stdout/stderr of the child process. */
     pipe0.closeW();
-    cybozu::util::File reader(pipe0.fdR());
-    char buf[4096];
-    std::stringstream ss;
-    size_t r;
-    while ((r = reader.readsome(buf, 4096)) > 0) {
-        ss.write(buf, r);
-    }
+    pipe1.closeW();
+    std::string stdOutStr, stdErrStr;
+    std::exception_ptr epOut, epErr;
+    std::thread th0(streamToStr, pipe0.fdR(), std::ref(stdOutStr), std::ref(epOut));
+    std::thread th1(streamToStr, pipe1.fdR(), std::ref(stdErrStr), std::ref(epErr));
+    th0.join();
+    th1.join();
 
     /* wait for done */
     int status;
     ::waitpid(cpid, &status, 0);
-    if (status != 0) {
-        throw std::runtime_error("child process has returned non-zero.");
-    }
 
-    return ss.str();
+    /* handle errors */
+    if (status != 0) {
+        std::string msg("child process has returned non-zero:");
+        msg += cybozu::util::formatString("%d\n", status);
+        msg += "cmd:" + cmd + "\n";
+        msg += "args:";
+        for (const std::string &arg : args) msg += arg + " ";
+        msg += "\nstderr:" + stdErrStr;
+        throw std::runtime_error(msg);
+    }
+    if (epOut) std::rethrow_exception(epOut);
+    if (epErr) std::rethrow_exception(epErr);
+
+    return stdOutStr;
 }
 
 }} //namespace cybozu::process
