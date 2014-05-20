@@ -413,15 +413,15 @@ inline LvList listLv(const std::string &arg = "")
         = local::callLvm("/sbin/lvs", "lv_name,origin,lv_size,vg_name", args);
     for (const std::string &s0 : local::splitAndTrim(result, '\n')) {
         if (s0.empty()) continue; /* last '\n' */
-        std::vector<std::string> v = local::splitAndTrim(s0, ',');
+        const std::vector<std::string> v = local::splitAndTrim(s0, ',');
         if (v.size() != 4) {
             throw std::runtime_error("invalid output of lvs.");
         }
-        bool isSnapshot = !v[1].empty();
-        std::string lvName = isSnapshot ? v[1] : v[0];
-        std::string snapName = isSnapshot ? v[0] : "";
-        uint64_t sizeLb = local::parseSizeLb(v[2]);
-        std::string &vgName = v[3];
+        const bool isSnapshot = !v[1].empty();
+        const std::string &lvName = isSnapshot ? v[1] : v[0];
+        const std::string &snapName = isSnapshot ? v[0] : "";
+        const uint64_t sizeLb = local::parseSizeLb(v[2]);
+        const std::string &vgName = v[3];
 
         list.push_back(Lv(vgName, lvName, snapName, sizeLb, isSnapshot));
     }
