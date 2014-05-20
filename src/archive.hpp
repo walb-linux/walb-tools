@@ -512,6 +512,10 @@ inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const 
 inline void verifyVolumeSize(ArchiveVolInfo &volInfo, uint64_t sizeLb, Logger &logger)
 {
     const char *const FUNC = __func__;
+    if (!volInfo.lvExists()) {
+        logger.debug() << FUNC << "lv does not exist" << volInfo.volId;
+        return;
+    }
     const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
     if (sizeLb > selfSizeLb) {
         throw cybozu::Exception(FUNC)
