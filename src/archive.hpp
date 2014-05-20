@@ -333,7 +333,8 @@ inline bool restore(const std::string &volId, uint64_t gid)
     if (lv.hasSnapshot(targetName)) {
         throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
     }
-    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true);
+    const uint64_t snapSizeLb = uint64_t(((double)(lv.sizeLb()) * 1.2));
+    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true, snapSizeLb);
 
     const MetaState baseSt = volInfo.getMetaState();
     const MetaSnap latestSnap = volInfo.getLatestSnapshot();

@@ -187,7 +187,7 @@ public:
     }
     Lv takeSnapshot(const std::string &snapName, bool isWritable = false, uint64_t sizeLb = 0) const {
         checkVolume();
-        if (sizeLb == 0 || sizeLb_ < sizeLb) sizeLb = sizeLb_;
+        if (sizeLb == 0 || sizeLb_ < sizeLb / 2) sizeLb = sizeLb_;
         return createSnapshot(vgName_, lvName_, snapName, isWritable, sizeLb);
     }
     /**
