@@ -188,6 +188,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     const char *const FUNC = __func__;
     diff::Merger merger;
     merger.addWdiffs(std::move(fileV));
+    merger.prepare();
     DiffRecIo recIo;
     cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
     std::vector<char> zero;
