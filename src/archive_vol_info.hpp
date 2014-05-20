@@ -301,23 +301,8 @@ private:
     std::string lvName() const {
         return VOLUME_PREFIX + volId;
     }
-#if 0 // XXX
-    /**
-     * Get restored snapshots.
-     */
-    std::map<uint64_t, cybozu::lvm::Lv> getRestores() const {
-        std::map<uint64_t, cybozu::lvm::Lv> map;
-        std::string prefix = RESTORE_PREFIX + volId_ + "_";
-        for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
-            if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
-                std::string gidStr
-                    = cybozu::util::removePrefix(lv.snapName(), prefix);
-                uint64_t gid = cybozu::atoi(gidStr);
-                map.emplace(gid, lv);
-            }
-        }
-        return map;
     }
+#if 0 // XXX
     template <typename OutputStream>
     void print(OutputStream &os) const {
 
@@ -355,17 +340,6 @@ private:
             throw cybozu::Exception("fwrite failed.");
         }
         ::fflush(fp);
-    }
-    /**
-     * Drop a restored snapshot.
-     */
-    bool drop(uint64_t gid) {
-        std::string snapName = restoredSnapshotName(gid);
-        if (!getLv().hasSnapshot(snapName)) {
-            return false;
-        }
-        getLv().getSnapshot(snapName).remove();
-        return true;
     }
     /**
      * Update the base record to be dirty to start wdiffs application.

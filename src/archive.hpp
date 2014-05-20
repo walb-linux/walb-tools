@@ -355,9 +355,9 @@ inline bool restore(const std::string &volId, uint64_t gid)
 }
 
 /**
- * Drop a restored volume.
+ * Delete a restored snapshot.
  */
-inline void drop(const std::string &volId, uint64_t gid)
+inline void delRestored(const std::string &volId, uint64_t gid)
 {
     const char *const FUNC = __func__;
 
@@ -1040,9 +1040,9 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 }
 
 /**
- * Drop command.
+ * del-restored command.
  */
-inline void c2aDropServer(protocol::ServerParams &p)
+inline void c2aDelRestoredServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
@@ -1059,8 +1059,8 @@ inline void c2aDropServer(protocol::ServerParams &p)
         verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
         ul.unlock();
 
-        archive_local::drop(volId, gid);
-        logger.info() << "drop succeeded" << volId << gid;
+        archive_local::delRestored(volId, gid);
+        logger.info() << "del-restored succeeded" << volId << gid;
         pkt.write(msgOk);
     } catch (std::exception &e) {
         logger.error() << e.what();

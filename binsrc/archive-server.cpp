@@ -42,7 +42,7 @@ public:
             { dirtyFullSyncPN, x2aDirtyFullSyncServer },
             { dirtyHashSyncPN, x2aDirtyHashSyncServer },
             { restoreCN, c2aRestoreServer },
-            { dropCN, c2aDropServer },
+            { delRestoredCN, c2aDelRestoredServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataCN, c2aReloadMetadataServer },
             { replicateCN, c2aReplicateServer },

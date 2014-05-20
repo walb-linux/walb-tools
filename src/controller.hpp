@@ -119,10 +119,10 @@ inline void c2aRestoreClient(protocol::ClientParams &p)
 }
 
 /**
- * Drop command.
+ * Delete-restored command.
  * parameters: volId, gid
  */
-inline void c2aDropClient(protocol::ClientParams &p)
+inline void c2aDelRestoredClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
