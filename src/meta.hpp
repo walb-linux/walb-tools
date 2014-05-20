@@ -938,12 +938,7 @@ public:
      * This is useful for applying state.
      */
     std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st) const {
-        if (!st.isApplying) {
-            size_t c = 0;
-            return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &) {
-                return (c++) == 0;
-            });
-        }
+        if (!st.isApplying) return {};
         return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &snap) {
                 return snap.gidB <= st.snapE.gidB;
             });
@@ -954,17 +949,12 @@ public:
      * @st base state.
      */
     MetaSnap getLatestSnapshot(const MetaState &st) const {
-        std::vector<MetaDiff> v0, v1;
+        std::vector<MetaDiff> applicableV;
         {
             AutoLock lk(mu_);
-            v0 = getMinimumApplicableDiffList(st);
-            v1 = getApplicableDiffList(st.snapB);
+            applicableV = getApplicableDiffList(st.snapB);
         }
-        if (v1.size() < v0.size()) {
-            throw cybozu::Exception("MetaDiffManager::getLatestSnapshot:size bug")
-                << v0.size() << v1.size();
-        }
-        return apply(st.snapB, v1);
+        return apply(st.snapB, applicableV);
     }
     /**
      * Get the oldest clean snapshot
@@ -981,32 +971,35 @@ public:
      * Get clean snapshot list sorted by gid.
      */
     std::vector<uint64_t> getCleanSnapshotList(const MetaState &st) const {
+        const bool isAll = true;
+        const std::vector<MetaState> v = getRestorableList(st, isAll);
         std::vector<uint64_t> ret;
-        if (!st.isApplying && st.snapB.isClean()) {
+        for (const MetaState &st : v) {
             ret.push_back(st.snapB.gidB);
         }
-        std::vector<MetaDiff> v0, v1;
-        {
-            AutoLock lk(mu_);
-            v0 = getMinimumApplicableDiffList(st);
-            v1 = getApplicableDiffList(st.snapB);
-        }
-        if (v1.size() < v0.size()) {
-            throw cybozu::Exception("MetaDiffManager::getCleanSnapshotList:size bug")
-                << v0.size() << v1.size();
-        }
-        MetaSnap snap = st.snapB;
-        size_t i = 0;
-        while (i < v0.size()) {
-            assert(v0[i] == v1[i]);
-            snap = apply(snap, v0[i]);
-            ++i;
-        }
-        if (snap.isClean()) ret.push_back(snap.gidB);
-        while (i < v1.size()) {
-            snap = apply(snap, v1[i]);
-            if (snap.isClean()) ret.push_back(snap.gidB);
-            ++i;
+        return ret;
+    }
+    /**
+     * @st base meta state.
+     * @isAll if true, implicit clean snapshots will be added also.
+     *
+     * RETURN:
+     *   MetaState list sorted by state.snapB.gidB.
+     *   where all states satisfy state.isApplying is false, state.snapB.isClean() is true.
+     */
+    std::vector<MetaState> getRestorableList(const MetaState &st, bool isAll = false) const {
+        std::vector<MetaState> ret;
+        std::vector<MetaDiff> applicableV, minV;
+        getTargetDiffLists(applicableV, minV, st);
+        MetaState st0 = apply(st, minV);
+        assert(!st0.isApplying);
+        if (st0.snapB.isClean()) ret.push_back(st0);
+        for (size_t i = minV.size(); i < applicableV.size(); i++) {
+            st0 = apply(st0, applicableV[i]);
+            assert(!st0.isApplying);
+            const bool isLast = (i + 1 == applicableV.size());
+            const bool isExplicit = isLast || !applicableV[i + 1].isMergeable;
+            if (st0.snapB.isClean() && (isAll || isExplicit)) ret.push_back(st0);
         }
         return ret;
     }
@@ -1018,6 +1011,19 @@ public:
         if (applicableV.empty()) return;
 
         minV = getMinimumApplicableDiffList(st);
+    }
+    void getTargetDiffLists(std::vector<MetaDiff>& applicableV, std::vector<MetaDiff>& minV, const MetaState &st) const {
+        AutoLock lk(mu_);
+        applicableV = getApplicableDiffList(st.snapB);
+        minV = getMinimumApplicableDiffList(st);
+        if (applicableV.size() < minV.size()) {
+            throw cybozu::Exception(__func__) << "size bug" << applicableV.size() << minV.size();
+        }
+#ifdef DEBUG
+        for (size_t i = 0; i < minV.size(); i++) {
+            assert(applicableV[i] == minV[i]);
+        }
+#endif
     }
     /**
      * Get diff list to restore a clean snapshot specified by a gid.

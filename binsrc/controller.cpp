@@ -55,6 +55,8 @@ void runClient(Option &opt)
         { hashBkpCN, c2sHashBkpClient },
         { restoreCN, c2aRestoreClient },
         { delRestoredCN, c2aDelRestoredClient },
+        { listRestoredCN, c2xGetStrVecClient },
+        { listRestorableCN, c2xGetStrVecClient },
         { startCN, c2xStartClient },
         { stopCN, c2xStopClient },
         { archiveInfoCN, c2pArchiveInfoClient },

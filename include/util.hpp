@@ -327,6 +327,13 @@ inline std::string removePrefix(const std::string &name, const std::string &pref
     return name.substr(prefix.size());
 }
 
+inline bool isAllDigit(const std::string &s)
+{
+    return std::all_of(s.cbegin(), s.cend(), [](const char &c) {
+            return '0' <= c && c <= '9';
+        });
+}
+
 /**
  * @name like "XXX_YYYYY"
  * @base like "YYYYY"

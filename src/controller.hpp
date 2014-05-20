@@ -6,8 +6,8 @@
 namespace walb {
 
 /**
- * params.size() == 0 or 1.
- * params[0]: volId
+ * Send parameters.
+ * Receive string vector.
  */
 inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
@@ -29,12 +29,10 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
     packet::Ack(p.sock).recv();
 }
 
-/**
- * No parameter.
- */
 inline void c2xListVolClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
+    // No parameter will be sent.
     const StrVec volIdV = protocol::recvStrVec(p.sock, 0, FUNC);
     packet::Ack(p.sock).recv();
     for (const std::string &volId : volIdV) {

@@ -242,7 +242,36 @@ public:
         return v;
     }
     std::string restoredSnapshotName(uint64_t gid) const {
-        return RESTORE_PREFIX + volId + "_" + cybozu::itoa(gid);
+        return restoredSnapshotNamePrefix() + cybozu::itoa(gid);
+    }
+    /**
+     * Get restored snapshots.
+     *
+     * RETURN:
+     *   gid list (sorted).
+     */
+    std::vector<uint64_t> getRestoredSnapshots() const {
+        std::vector<uint64_t> v;
+        const std::string prefix = restoredSnapshotNamePrefix();
+        for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
+            if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
+                const std::string gidStr = cybozu::util::removePrefix(lv.snapName(), prefix);
+                if (cybozu::util::isAllDigit(gidStr)) {
+                    v.push_back(cybozu::atoi(gidStr));
+                }
+            }
+        }
+        std::sort(v.begin(), v.end());
+        return v;
+    }
+    /**
+     * Get restorable snapshots.
+     * RETURN:
+     *   MetaState list.
+     *   st.snapB.gidB and st.timestamp have meaning.
+     */
+    std::vector<MetaState> getRestorableSnapshots(bool isAll = false) const {
+        return getDiffMgr().getRestorableList(getMetaState(), isAll);
     }
     /**
      * Full path of the wdiff file of a corresponding meta diff.
@@ -301,6 +330,8 @@ private:
     std::string lvName() const {
         return VOLUME_PREFIX + volId;
     }
+    std::string restoredSnapshotNamePrefix() const {
+        return RESTORE_PREFIX + volId + "_";
     }
 #if 0 // XXX
     template <typename OutputStream>

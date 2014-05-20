@@ -227,6 +227,14 @@ CYBOZU_TEST_AUTO(contains)
     }
 }
 
+/**
+ *     |0|
+ * (1) |0|-->|1|
+ * (2)       |1|-->|2|
+ * (3)             |2|-->|3|
+ * (4)                   |3|-->|4|
+ * (5)                         |4|-->|5|
+ */
 CYBOZU_TEST_AUTO(metaDiffManager1)
 {
     walb::MetaSnap snap(0);
@@ -251,6 +259,8 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 4).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(2)).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(4)).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 6);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 3);
 
     auto v1 = mgr.getMergeableDiffList(0);
     CYBOZU_TEST_EQUAL(v1.size(), 3);
@@ -270,6 +280,13 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
 
 }
 
+/**
+ *     |0,       10|
+ * (1) |0|-->|5|
+ * (2)       |5, 10|
+ *           -->|10|
+ * (3)          |10|-->|15|
+ */
 CYBOZU_TEST_AUTO(metaDiffManager2)
 {
     walb::MetaSnap snap(0, 10);
@@ -285,7 +302,7 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     auto v0 = mgr.getApplicableDiffList(st.snapB);
     CYBOZU_TEST_EQUAL(v0.size(), 3);
     auto v1 = mgr.getMinimumApplicableDiffList(st);
-    CYBOZU_TEST_EQUAL(v1.size(), 1);
+    CYBOZU_TEST_EQUAL(v1.size(), 0);
 
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 2);
@@ -294,6 +311,8 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5)).size(), 0);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5, 10)).size(), 1);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(10)).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 2);
 
     auto st1a = walb::applying(st, v);
     auto st1b = walb::applying(st1a, v);
@@ -317,6 +336,12 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, walb::MetaSnap(15)).size(), 3);
 }
 
+/**
+ *     |0,       10|
+ * (1) |0|-->|5|
+ * (2)       |5, 10|-->|15,    20|
+ * (3)                 |15|-->|20|
+ */
 CYBOZU_TEST_AUTO(metaDiffManager3)
 {
     walb::MetaSnap snap(0, 10);
@@ -332,7 +357,7 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     auto v0 = mgr.getApplicableDiffList(st.snapB);
     CYBOZU_TEST_EQUAL(v0.size(), 3);
     auto v1 = mgr.getMinimumApplicableDiffList(st);
-    CYBOZU_TEST_EQUAL(v1.size(), 1);
+    CYBOZU_TEST_EQUAL(v1.size(), 0);
 
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 1);
@@ -345,8 +370,13 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(5, 10)).size(), 1);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(15, 20)).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, walb::MetaSnap(20)).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 1);
 }
 
+/**
+ * Use randomly generated diff list.
+ */
 CYBOZU_TEST_AUTO(metaDiffManager4)
 {
     walb::MetaSnap snap(0), s0(snap), s1(snap);
@@ -378,6 +408,9 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     s0 = mgr.getLatestSnapshot(st);
     uint64_t maxGid = s0.gidE;
 
+    const size_t restorable0 = mgr.getRestorableList(st, false).size();
+    const size_t restorable0a = mgr.getRestorableList(st, true).size();
+
     for (size_t i = 0; i < 10; i++) {
         auto v2 = mgr.getMergeableDiffList(rand() % maxGid);
         if (v2.size() > 1) {
@@ -387,6 +420,11 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
         s1 = mgr.getLatestSnapshot(st);
         CYBOZU_TEST_EQUAL(s0, s1);
     }
+
+    const size_t restorable1 = mgr.getRestorableList(st, false).size();
+    const size_t restorable1a = mgr.getRestorableList(st, true).size();
+    CYBOZU_TEST_EQUAL(restorable0, restorable1);
+    CYBOZU_TEST_ASSERT(restorable0a >= restorable1a);
 
     std::vector<uint64_t> gidV = mgr.getCleanSnapshotList(st);
     if (!gidV.empty()) {

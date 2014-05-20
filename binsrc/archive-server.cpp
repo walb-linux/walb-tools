@@ -43,6 +43,8 @@ public:
             { dirtyHashSyncPN, x2aDirtyHashSyncServer },
             { restoreCN, c2aRestoreServer },
             { delRestoredCN, c2aDelRestoredServer },
+            { listRestoredCN, c2aListRestoredServer },
+            { listRestorableCN, c2aListRestorableServer },
             { wdiffTransferPN, x2aWdiffTransferServer },
             { dbgReloadMetadataCN, c2aReloadMetadataServer },
             { replicateCN, c2aReplicateServer },
