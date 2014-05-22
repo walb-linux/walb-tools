@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 import time
+import socket
+import errno
 
 Server = collections.namedtuple('Server', 'name port vg')
 Config = collections.namedtuple('Config', 'debug binDir baseDir storageL proxyL archiveL')
@@ -13,12 +15,13 @@ def setConfig(config):
     global cfg
     cfg = config
 
-"""
 def getDebugOpt():
     if cfg.debug:
         return ["-debug"]
     else:
         return []
+
+"""
 
 def getExePath(exeName):
     return "/".join([cfg.binDir, execName])
@@ -37,20 +40,6 @@ import socket
 import time
 import errno
 import os
-
-def waitForServerPort(name):
-    address = "localhost"
-    port = int(cfg.PortM[name])
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(1.0)
-    for _ in range(1, 10):
-        try:
-            sock.connect((address, port))
-            return
-        except socket.error, e:
-            if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED]:
-                raise
-        time.sleep(0.1)
 
 def runCtrl(name, cmdArgs):
     return run.runCommand(cfg.getCtrlArgs(name) + cmdArgs)
@@ -81,7 +70,7 @@ def getServerCommonArgs(server):
     return ["-p", server.port,
             "-b", getBaseDir(server),
             "-l", server.name + ".log",
-            "-id", server.name]
+            "-id", server.name] + getDebugOpt()
 
 def getHostPort(server):
     return "localhost" + ":" + server.port
@@ -113,25 +102,39 @@ def runDaemon(runnable):
     os.setsid()
     os.umask(0)
 
-    try:
-        pid = os.fork()
-        if pid > 0:
-            sys.exit(0)
-    except OSError, e:
-        print >>sys.stderr, "fork#1 failed (%d) (%s)" % (e.errno, e.strerror)
-        sys.exit(1)
-
     sys.stdin = open('/dev/null', 'r')
     sys.stdout = open('/dev/null', 'w')
     sys.stderr = open('/dev/null', 'w')
 
     runnable()
+    sys.exit(0)
+
+def waitForServerPort(server):
+    address = "localhost"
+    port = int(server.port)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1.0)
+    for i in range(1, 10):
+        print i, "QQQ, ok"
+        try:
+            sock.connect((address, port))
+            sock.close()
+            return
+        except socket.error, e:
+            if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED]:
+                raise
+        time.sleep(0.1)
+
 
 def runServerDaemon(server):
     mkdirP(getBaseDir(server))
     args = getServerArgs(server)
+    if cfg.debug:
+        print 'cmd=', ' '.join(args)
     def runnable():
         subprocess.Popen(args).wait()
+
     runDaemon(runnable)
-    time.sleep(1)
+    waitForServerPort(server)
+#    subprocess.Popen(args)
 
