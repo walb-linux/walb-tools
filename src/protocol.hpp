@@ -57,6 +57,7 @@ const char *const mergeCN = "merge";
 const char *const resizeCN = "resize";
 const char *const hostTypeCN = "host-type";
 const char *const shutdownCN = "shutdown";
+const char *const isOverflowCN = "is-overflow";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 
 /**
