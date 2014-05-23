@@ -63,7 +63,7 @@ def runCommand(args):
         raise Exception("command error %d args: %s\n" % (ret, toStr(args)))
     return s
 
-def runCtrl(server, cmdArgs):
+def runCtl(server, cmdArgs):
     ctlArgs = [cfg.binDir + "/controller",
             "-id", "ctrl",
             "-a", "localhost",
@@ -105,7 +105,10 @@ def waitForServerPort(server):
         time.sleep(0.1)
 
 #def hostType(server):
-#    return runCtrl(server, ["host-type"])
+#    return runCtl(server, ["host-type"])
+
+def getState(server, vol):
+    return runCtl(server, ["get-state", vol])
 
 ##################################################################
 # user command functions
@@ -123,12 +126,71 @@ def startup_all():
         startup(s)
 
 def shutdown(server, mode="graceful"):
-    runCtrl(server, ["shutdown", mode])
+    runCtl(server, ["shutdown", mode])
 
 def shutdown_all():
     for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
         shutdown(s)
 
 def init(sx, vol, wdevPath):
-    runCtrl(sx, ["init-vol", vol, wdevPath])
-    runCtrl(sx, ["k
+    runCtl(sx, ["init-vol", vol, wdevPath])
+    runCtl(sx, ["start", vol, "slave"])
+    for p in cfg.proxyL:
+        runCtl(p, ["init-vol", vol])
+    runCtl(cfg.archiveL[0], ["init-vol", vol])
+
+def is_synchronizing(ax, vol):
+    p = cfg.proxyL[0]
+    st = runCtl(p, ["archive-info", "list", vol])
+    return ax in st.split()
+
+def stop(s, vol, mode = "graceful"):
+    runCtl(s, ["stop", vol, mode])
+
+def start(s, vol):
+    runCtl(s, ["start", vol])
+
+def stop_sync(ax, vol):
+    for p in cfg.proxyL:
+        stop(p, vol)
+        runCtl(p, ["archive-info", "del", vol, ax.name])
+        start(p, vol)
+
+def wait_for_restorable(ax, vol, gid = -1, timeoutS = 0x7ffffff):
+    for c in xrange(0, timeoutS):
+        ret = runCtl(ax, ["list-restorable", vol])
+        rs = ret.split():
+        if gid == -1:
+            if rs:
+                return True
+        else:
+            for s in rs:
+                if gid == int(s):
+                    return True
+        time.sleep(1)
+    return False
+
+def full_bkp(sx, vol):
+    st = getState(sx, vol)
+    if st == "Slave":
+        runCtl(sx, ["stop", vol])
+
+    ret = runCtl(sx, ["is-overflow", vol])
+    if ret != "0":
+        runCtl(sx, ["reset-vol", vol])
+
+    for s in cfg.storageL:
+        if s == sx:
+            continue
+        st = getState(s, vol)
+        if st != "Slave":
+            raise Exception("full_bkp : bad state", s.name, vol, st)
+
+    for a in cfg.archiveL[1:]:
+        if is_synchronizing(a, vol):
+            stop_sync(a, vol)
+
+    runCtl(sx, ["full-bkp", vol])
+
+    wait_for_restorable(cfg.archiveL[0], vol)
+
