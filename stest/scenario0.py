@@ -11,14 +11,14 @@ a0 = Server('a0', '10200', None)
 a1 = Server('a1', '10201', 'vg0')
 a2 = Server('a2', '10202', 'vg1')
 
-config = Config(True, os.getcwd() + '/../binsrc', 'tmp', [s0, s1], [p0, p1], [a0, a1])
+config = Config(True, os.getcwd() + '/../binsrc/', os.getcwd() + '/tmp/', [s0, s1], [p0, p1], [a0, a1])
 setConfig(config)
 
 def main():
-    runServerDaemon(s0)
-    #runServerDaemon(s1)
-    #runServerDaemon(p0)
-    #runServerDaemon(p1)
+#    startup_all()
+    startup(s0)
+    time.sleep(10)
+    shutdown(s0)
     #hostType = runCtrl("s0", ["host-type"])
     #shutdown("s0")
 
