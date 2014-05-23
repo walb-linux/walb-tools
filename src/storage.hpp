@@ -1040,4 +1040,36 @@ inline void c2sResizeServer(protocol::ServerParams &p)
     }
 }
 
+/**
+ * return whether vol is overflow or not
+ *
+ * params[0]: volId
+ */
+inline void c2sIsOverflowServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
+        const std::string &volId = v[0];
+        StorageVolState &volSt = getStorageVolState(volId);
+        if (volSt.sm.get() == sClear) {
+            throw cybozu::Exception(FUNC) << "bad state";
+        }
+        const StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string wdevPath = volInfo.getWdevPath();
+        const bool isOverflow = walb::device::isOverflow(wdevPath);
+        pkt.write(msgOk);
+        sendErr = false;
+        pkt.write(isOverflow);
+        packet::Ack(p.sock).send();
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
 } // walb
