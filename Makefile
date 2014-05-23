@@ -1,7 +1,7 @@
 .PHONY: all test test_all echo_binaries build clean rebuild install
 
-CXX = g++-4.8.2
-CC = gcc-4.8.2
+CXX = g++-4.9.0
+CC = gcc-4.9.0
 
 OPT_FLAGS =
 ifeq ($(DEBUG),1)

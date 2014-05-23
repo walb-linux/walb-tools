@@ -60,7 +60,8 @@ def runCommand(args):
     s = f.read().strip()
     ret = p.wait()
     if ret != 0:
-        raise Exception("command error %d args: %s\n" % (ret, toStr(args)))
+#        raise Exception(("command error %d args: %s\n" % (ret, toStr(args))))
+        raise Exception("command error ", ret, args)
     return s
 
 def runCtl(server, cmdArgs):
@@ -113,11 +114,15 @@ def getState(server, vol):
 ##################################################################
 # user command functions
 
+def kill_all_servers():
+    for s in ["storage-server", "proxy-server", "archive-server"]:
+        subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
+
 def startup(server):
     mkdirP(cfg.dataDir + server.name)
     args = getServerArgs(server)
     if cfg.debug:
-        print 'cmd=', ' '.join(args)
+        print 'cmd=', args
     runDaemon(args)
     waitForServerPort(server)
 
@@ -156,17 +161,23 @@ def stop_sync(ax, vol):
         runCtl(p, ["archive-info", "del", vol, ax.name])
         start(p, vol)
 
-def wait_for_restorable(ax, vol, gid = -1, timeoutS = 0x7ffffff):
+def list_restorable(ax, vol):
+    ret = runCtl(ax, ["list-restorable", vol])
+    return map(int, ret.split())
+
+def wait_for_restorable_any(ax, vol, timeoutS = 0x7ffffff):
     for c in xrange(0, timeoutS):
-        ret = runCtl(ax, ["list-restorable", vol])
-        rs = ret.split():
-        if gid == -1:
-            if rs:
-                return True
-        else:
-            for s in rs:
-                if gid == int(s):
-                    return True
+        gids = list_restorable(ax, vol)
+        if gids:
+            return gids[-1]
+        time.sleep(1)
+    return -1
+
+def wait_for_restorable(ax, vol, gid, timeoutS = 0x7ffffff):
+    for c in xrange(0, timeoutS):
+        gids = list_restorable(ax, vol)
+        if gid in gids:
+            return True
         time.sleep(1)
     return False
 
@@ -192,5 +203,9 @@ def full_bkp(sx, vol):
 
     runCtl(sx, ["full-bkp", vol])
 
-    wait_for_restorable(cfg.archiveL[0], vol)
+    gid = wait_for_restorable_any(cfg.archiveL[0], vol)
+    if gid == -1:
+        raise Exception("full_bkp : bad gid", s.name, vol)
+    return gid
+
 
