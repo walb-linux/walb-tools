@@ -463,13 +463,17 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
 inline void c2sStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const std::string &volId = v[0];
-    const bool isMaster = (v[1] == "master");
     packet::Packet pkt(p.sock);
 
     try {
+	    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+	    const std::string &volId = v[0];
+		const std::string& role = v[1];
+		if (role != "master" && role != "slave") {
+            throw cybozu::Exception(FUNC) << "neighter master nor slave" << role;
+		}
+        const bool isMaster = role == "master";
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);

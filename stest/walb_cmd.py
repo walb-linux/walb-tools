@@ -104,6 +104,8 @@ def waitForServerPort(server):
                 raise
         time.sleep(0.1)
 
+#def hostType(server):
+#    return runCtrl(server, ["host-type"])
 
 ##################################################################
 # user command functions
@@ -116,16 +118,17 @@ def startup(server):
     runDaemon(args)
     waitForServerPort(server)
 
-def startupAll():
+def startup_all():
     for s in cfg.archiveL + cfg.proxyL + cfg.storageL:
         startup(s)
-
-def hostType(server):
-    return runCtrl(server, ["host-type"])
 
 def shutdown(server, mode="graceful"):
     runCtrl(server, ["shutdown", mode])
 
-def shutdownALl():
+def shutdown_all():
     for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
         shutdown(s)
+
+def init(sx, vol, wdevPath):
+    runCtrl(sx, ["init-vol", vol, wdevPath])
+    runCtrl(sx, ["k
