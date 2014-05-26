@@ -32,8 +32,8 @@ def getDebugOpt():
     else:
         return []
 
-def getHostPort(server):
-    return "localhost" + ":" + server.port
+def getHostPort(s):
+    return "localhost" + ":" + s.port
 
 def getServerArgs(server):
     if server in cfg.storageL:
@@ -55,13 +55,14 @@ def getServerArgs(server):
     return ret
 
 def runCommand(args):
+    if cfg.debug:
+        print "runCommand:", toStr(args)
     p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=sys.stderr)
     f = p.stdout
     s = f.read().strip()
     ret = p.wait()
     if ret != 0:
-#        raise Exception(("command error %d args: %s\n" % (ret, toStr(args))))
-        raise Exception("command error ", ret, args)
+        raise Exception("command error %d\n" % ret)
     return s
 
 def runCtl(server, cmdArgs):
@@ -114,6 +115,15 @@ def getState(server, vol):
 ##################################################################
 # user command functions
 
+def wait_for_state(server, vol, state, timeoutS = 10):
+    for c in xrange(0, timeoutS):
+        st = getState(server, vol)
+        print "c=", server, vol, state, c, st
+        if st == state:
+            return
+        time.sleep(1)
+    raise Exception("wait_for_state", server, vol, state)
+
 def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
@@ -140,51 +150,77 @@ def shutdown_all():
 def init(sx, vol, wdevPath):
     runCtl(sx, ["init-vol", vol, wdevPath])
     runCtl(sx, ["start", vol, "slave"])
-    for p in cfg.proxyL:
-        runCtl(p, ["init-vol", vol])
+    wait_for_state(sx, vol, "Slave")
     runCtl(cfg.archiveL[0], ["init-vol", vol])
 
 def is_synchronizing(ax, vol):
-    p = cfg.proxyL[0]
-    st = runCtl(p, ["archive-info", "list", vol])
+    px = cfg.proxyL[0]
+    st = runCtl(px, ["archive-info", "list", vol])
     return ax in st.split()
 
-def stop(s, vol, mode = "graceful"):
+# stop s vol and wait until state is waitState
+def stop(s, vol, waitState, mode = "graceful"):
     runCtl(s, ["stop", vol, mode])
+    wait_for_state(s, vol, waitState)
 
-def start(s, vol):
+def start(s, vol, waitState):
     runCtl(s, ["start", vol])
+    wait_for_state(s, vol, waitState)
 
 def stop_sync(ax, vol):
-    for p in cfg.proxyL:
-        stop(p, vol)
-        runCtl(p, ["archive-info", "del", vol, ax.name])
-        start(p, vol)
+    for px in cfg.proxyL:
+        stop(px, vol, "Stopped")
+        runCtl(px, ["archive-info", "del", vol, ax.name])
+        start(px, vol, "Started")
+
+def get_gid_list(ax, vol, cmd):
+    if not cmd in ['list-restorable', 'list-restored']:
+        raise Exception('get_list_gid : bad cmd', cmd)
+    ret = runCtl(ax, [cmd, vol])
+    return map(int, ret.split())
 
 def list_restorable(ax, vol):
     ret = runCtl(ax, ["list-restorable", vol])
     return map(int, ret.split())
 
+def list_restorable(ax, vol):
+    ret = runCtl(ax, ["list-restored", vol])
+    return map(int, ret.split())
+
 def wait_for_restorable_any(ax, vol, timeoutS = 0x7ffffff):
     for c in xrange(0, timeoutS):
-        gids = list_restorable(ax, vol)
+        gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
             return gids[-1]
         time.sleep(1)
     return -1
 
-def wait_for_restorable(ax, vol, gid, timeoutS = 0x7ffffff):
+def wait_for_gid(ax, vol, gid, cmd, timeoutS = 0x7ffffff):
     for c in xrange(0, timeoutS):
-        gids = list_restorable(ax, vol)
+        gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
             return True
         time.sleep(1)
     return False
 
-def full_bkp(sx, vol):
+def wait_for_restorable(ax, vol, gid, timeoutS = 0x7ffffff):
+    return wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
+
+def wait_for_restored(ax, vol, gid, timeoutS = 0x7fffffff):
+    return wait_for_gid(ax, vol, gid, 'list-restored', timeoutS)
+
+def add_archive_to_proxy(px, vol, ax):
+    st = getState(px, vol)
+    if st == "Started":
+        stop(px, vol, "Stopped")
+    runCtl(px, ["archive-info", "add", vol, ax.name, getHostPort(ax)])
+    start(px, vol, "Started")
+
+def full_backup(sx, vol):
+    a0 = cfg.archiveL[0]
     st = getState(sx, vol)
     if st == "Slave":
-        runCtl(sx, ["stop", vol])
+        stop(sx, vol, "SyncReady")
 
     ret = runCtl(sx, ["is-overflow", vol])
     if ret != "0":
@@ -194,18 +230,35 @@ def full_bkp(sx, vol):
         if s == sx:
             continue
         st = getState(s, vol)
-        if st != "Slave":
-            raise Exception("full_bkp : bad state", s.name, vol, st)
+        if st != "Slave" and st != "Clear":
+            raise Exception("full_backup : bad state", s.name, vol, st)
 
-    for a in cfg.archiveL[1:]:
-        if is_synchronizing(a, vol):
-            stop_sync(a, vol)
+    for ax in cfg.archiveL[1:]:
+        if is_synchronizing(ax, vol):
+            stop_sync(ax, vol)
 
+    for px in cfg.proxyL:
+        add_archive_to_proxy(px, vol, a0)
     runCtl(sx, ["full-bkp", vol])
+    wait_for_state(a0, vol, "Archived", 10)
 
-    gid = wait_for_restorable_any(cfg.archiveL[0], vol)
+    gid = wait_for_restorable_any(a0, vol)
     if gid == -1:
-        raise Exception("full_bkp : bad gid", s.name, vol)
+        raise Exception("full_backup : bad gid", s.name, vol)
     return gid
 
+def writeRandom(devName, size):
+    args = [cfg.binDir + "/write_random_data",
+        '-s', str(size), devName]
+    return runCommand(args)
+
+def getSha1(devName):
+    return runCommand(['/usr/bin/sha1sum', devName])
+
+def restore(ax, vol, gid):
+    runCtl(ax, ['restore', vol, str(gid)])
+    wait_for_restored(ax, vol, gid)
+
+def getRestoredPath(ax, vol, gid):
+    return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
 

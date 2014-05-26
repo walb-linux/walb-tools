@@ -1,4 +1,4 @@
-.PHONY: all test test_all echo_binaries build clean rebuild install
+.PHONY: all test test_all echo_binaries build clean rebuild install stest
 
 CXX = g++-4.9.0
 CC = gcc-4.9.0
@@ -97,6 +97,11 @@ src/%.depend: src/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > $@
 utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
+
+stest:
+	rm -rf stest/tmp
+	mkdir stest/tmp
+	python stest/scenario0.py
 
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEPENDS)

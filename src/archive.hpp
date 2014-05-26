@@ -1124,7 +1124,7 @@ inline void c2aListRestoredServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+//        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
         const StrVec strV = archive_local::listRestored(volId);
         ul.unlock();
         logger.info() << "list-restored succeeded" << volId;
