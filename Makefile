@@ -99,8 +99,6 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 stest:
-	rm -rf stest/tmp
-	mkdir stest/tmp
 	python stest/scenario0.py
 
 ifneq "$(MAKECMDGOALS)" "clean"

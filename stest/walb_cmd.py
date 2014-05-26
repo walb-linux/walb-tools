@@ -19,7 +19,7 @@ def setConfig(config):
     global cfg
     cfg = config
 
-def mkdirP(pathStr):
+def makeDir(pathStr):
     if not os.path.exists(pathStr):
         os.makedirs(pathStr)
 
@@ -129,7 +129,7 @@ def kill_all_servers():
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
 
 def startup(server):
-    mkdirP(cfg.dataDir + server.name)
+    makeDir(cfg.dataDir + server.name)
     args = getServerArgs(server)
     if cfg.debug:
         print 'cmd=', args
@@ -253,7 +253,8 @@ def writeRandom(devName, size):
     return runCommand(args)
 
 def getSha1(devName):
-    return runCommand(['/usr/bin/sha1sum', devName])
+    ret = runCommand(['/usr/bin/sha1sum', devName])
+    return ret.split(' ')[0]
 
 def restore(ax, vol, gid):
     runCtl(ax, ['restore', vol, str(gid)])
