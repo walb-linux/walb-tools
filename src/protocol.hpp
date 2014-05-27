@@ -145,16 +145,15 @@ inline std::string run1stNegotiateAsClient(
     cybozu::Socket &sock,
     const std::string &clientId, const std::string &protocolName)
 {
-    packet::Packet packet(sock);
-    packet.write(clientId);
-    packet.write(protocolName);
+    packet::Packet pkt(sock);
+    pkt.write(clientId);
+    pkt.write(protocolName);
     packet::Version ver(sock);
     ver.send();
     std::string serverId;
-    packet.read(serverId);
+    pkt.read(serverId);
 
     ProtocolLogger logger(clientId, serverId);
-    packet::Packet pkt(sock);
     std::string msg;
     pkt.read(msg);
     if (msg != msgOk) throw cybozu::Exception(__func__) << msg;
@@ -302,7 +301,7 @@ inline void clientDispatch(
 inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
     std::atomic<walb::server::ProcessStatus> &procStat,
-    const std::map<std::string, ServerHandler> &handlers) noexcept
+    const std::map<std::string, ServerHandler> &handlers) noexcept try
 {
     std::string clientId, protocolName;
     packet::Packet pkt(sock);
@@ -323,6 +322,10 @@ inline void serverDispatch(
         LOGs.error() << e.what();
         if (sendErr) pkt.write(e.what());
     }
+} catch (std::exception &e) {
+    LOGs.error() << e.what();
+} catch (...) {
+    LOGs.error() << "other error";
 }
 
 /**
