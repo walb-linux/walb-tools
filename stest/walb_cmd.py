@@ -247,12 +247,12 @@ def full_backup(sx, vol):
         raise Exception("full_backup : bad gid", s.name, vol)
     return gid
 
-def writeRandom(devName, size):
+def write_random(devName, size):
     args = [cfg.binDir + "/write_random_data",
         '-s', str(size), devName]
     return runCommand(args)
 
-def getSha1(devName):
+def get_sha1(devName):
     ret = runCommand(['/usr/bin/sha1sum', devName])
     return ret.split(' ')[0]
 
@@ -260,6 +260,6 @@ def restore(ax, vol, gid):
     runCtl(ax, ['restore', vol, str(gid)])
     wait_for_restored(ax, vol, gid)
 
-def getRestoredPath(ax, vol, gid):
+def get_restored_path(ax, vol, gid):
     return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
 

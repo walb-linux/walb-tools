@@ -31,14 +31,14 @@ def test_n1():
     time.sleep(1)
     startup_all()
     init(s0, v0, devName)
-    writeRandom(devName, 3)
-    md0 = getSha1(devName)
+    write_random(devName, 3)
+    md0 = get_sha1(devName)
     gid = full_backup(s0, v0)
     print "gid=", gid
     restore(a0, v0, gid)
-    restoredPath = getRestoredPath(a0, v0, gid)
+    restoredPath = get_restored_path(a0, v0, gid)
     print "restoredPath=", restoredPath
-    md1 = getSha1(restoredPath)
+    md1 = get_sha1(restoredPath)
     print "len", len(md0), len(md1)
     if md0 == md1:
         print "test_n1 ok"
