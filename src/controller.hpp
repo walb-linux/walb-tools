@@ -142,6 +142,18 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
     const char * const FUNC = __func__;
     std::string cmd, volId;
     cybozu::util::parseStrVec(p.params, 0, 2, {&cmd, &volId});
+    const char *acceptCmdTbl[] = {
+        "list", "add", "update", "get", "delete"
+    };
+    bool found = false;
+    for (const char *p : acceptCmdTbl) {
+        if (cmd == p) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) throw cybozu::Exception(FUNC) << "bad command" << cmd;
+
     protocol::sendStrVec(p.sock, {cmd, volId}, 2, FUNC);
     packet::Packet pkt(p.sock);
     if (cmd != "list") {
