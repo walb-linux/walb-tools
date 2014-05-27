@@ -69,7 +69,7 @@ def test_stop(stopL, startL):
     t = startWriting(WDEV_PATH)
 
     for s in stopL:
-        stop(s, VOL, "s")
+        stop2(s, VOL)
 
     stopWriting(t)
 
@@ -86,7 +86,7 @@ def main():
     test_n1()
     test_n2()
     test_n3()
-#    test_n4()
+    test_n4()
 
 if __name__ == "__main__":
     main()

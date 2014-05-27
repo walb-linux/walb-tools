@@ -122,7 +122,7 @@ def set_slave_storage(sx, vol):
     if state == 'Slave':
         return
     if state == 'Master' or state == 'WlogSend':
-        stop(sx, vol, 'Stopped')
+        stop2(sx, vol)
     else:
         raise Exception('set_slave_storage:bad state', state)
     stop_sync(cfg.archiveL[0], vol)
@@ -182,13 +182,21 @@ def stop(s, vol, waitState, mode = "graceful"):
     run_ctl(s, ["stop", vol, mode])
     wait_for_state(s, vol, waitState)
 
+def stop2(s, vol, mode = "graceful"):
+    if s.kind == K_STORAGE and get_state(s, vol) == 'Slave':
+        waitState = 'SyncReady'
+    else:
+        waitState = 'Stopped'
+    run_ctl(s, ["stop", vol, mode])
+    wait_for_state(s, vol, waitState)
+
 def start(s, vol, waitState):
     run_ctl(s, ["start", vol])
     wait_for_state(s, vol, waitState)
 
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
-        stop(px, vol, "Stopped")
+        stop2(px, vol, "Stopped")
         run_ctl(px, ["archive-info", "delete", vol, ax.name])
         state = get_state(px, vol)
         if state == 'Stopped':
@@ -244,7 +252,7 @@ def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
     if st == "Started":
-        stop(px, vol, "Stopped")
+        stop2(px, vol)
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol, "Started")
 
@@ -252,7 +260,7 @@ def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
     st = get_state(sx, vol)
     if st == "Slave":
-        stop(sx, vol, "SyncReady")
+        stop2(sx, vol)
 
     ret = run_ctl(sx, ["is-overflow", vol])
     if ret != "0":
