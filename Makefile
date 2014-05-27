@@ -99,7 +99,7 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 stest:
-	pylint -E  stest/walb_cmd.py stest/scenario0.py
+	pylint -E --rcfile=/dev/null -i y -f colorized stest/walb_cmd.py stest/scenario0.py
 	python stest/scenario0.py
 
 ifneq "$(MAKECMDGOALS)" "clean"
