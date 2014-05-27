@@ -116,32 +116,6 @@ public:
     uint32_t get() const { return version_; }
 };
 
-class Answer : public Packet
-{
-public:
-    using Packet :: Packet;
-    void ok() { send(true, 0, ""); }
-    void ng(int err, const std::string &msg) { send(false, err, msg); }
-    void send(bool b, int err, const std::string &msg) {
-        sendDebugMsg("ANSWER");
-        write(b);
-        write(err);
-        write(msg);
-    }
-    bool recv(int *errP = nullptr, std::string *msgP = nullptr) {
-        recvDebugMsg("ANSWER");
-        bool b;
-        read(b);
-        int err;
-        read(err);
-        if (errP) *errP = err;
-        std::string msg;
-        read(msg);
-        if (msgP) *msgP = std::move(msg);
-        return b;
-    }
-};
-
 class StreamControl : public Packet
 {
 private:

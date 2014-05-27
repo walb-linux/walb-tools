@@ -154,14 +154,10 @@ inline std::string run1stNegotiateAsClient(
     packet.read(serverId);
 
     ProtocolLogger logger(clientId, serverId);
-    packet::Answer ans(sock);
-    int err;
+    packet::Packet pkt(sock);
     std::string msg;
-    if (!ans.recv(&err, &msg)) {
-        cybozu::Exception e("received NG");
-        e << "err" << err << "msg" << msg;
-        logger.throwError(e);
-    }
+    pkt.read(msg);
+    if (msg != msgOk) throw cybozu::Exception(__func__) << msg;
     return serverId;
 }
 
@@ -190,48 +186,31 @@ struct ClientParams
 using ClientHandler = void (*)(ClientParams &);
 
 /**
+ * @sock socket for the connection.
+ * @protocolName will be set.
  * @clientId will be set.
- * @protocol will be set.
  *
  * This function will do only the common negotiation.
- *
- * RETURN:
- *   true if the protocol has finished or failed that is there is nothing to do.
- *   otherwise false.
  */
-inline bool run1stNegotiateAsServer(
+inline void run1stNegotiateAsServer(
     cybozu::Socket &sock, const std::string &serverId,
-    std::string &protocolName,
-    std::string &clientId)
+    std::string &protocolName, std::string &clientId)
 {
-    packet::Packet packet(sock);
+    const char *const FUNC = __func__;
+    packet::Packet pkt(sock);
 
-    //LOGs.debug() << "run1stNegotiateAsServer start";
-    packet.read(clientId);
-    //LOGs.debug() << "clientId" << clientId;
-    packet.read(protocolName);
-    //LOGs.debug() << "protocolName" << protocolName;
+    pkt.read(clientId);
+    pkt.read(protocolName);
     packet::Version ver(sock);
-    bool isVersionSame = ver.recv();
-    //LOGs.debug() << "isVersionSame" << isVersionSame;
-    packet.write(serverId);
-
-    ProtocolLogger logger(serverId, clientId);
-    packet::Answer ans(sock);
+    const bool isVersionSame = ver.recv();
+    pkt.write(serverId);
+    LOGs.debug() << FUNC << clientId << protocolName << ver.get();
 
     if (!isVersionSame) {
-        std::string msg = cybozu::util::formatString(
-            "Version differ: client %" PRIu32 " server %" PRIu32 ""
-            , ver.get(), packet::VERSION);
-        logger.warn(msg);
-        ans.ng(1, msg);
-        return true;
+        throw cybozu::Exception(FUNC) << "version differ c/s" << ver.get() << packet::VERSION;
     }
-    ans.ok();
+    ProtocolLogger logger(serverId, clientId);
     logger.debug() << "initial negotiation succeeded" << protocolName;
-    return false;
-
-    /* Here command existance has not been checked yet. */
 }
 
 /**
@@ -252,11 +231,6 @@ struct ServerParams
         , procStat(procStat) {
     }
 };
-
-/**
- * Server handler type.
- */
-using ServerHandler = void (*)(ServerParams &);
 
 inline void shutdownClient(ClientParams &p)
 {
@@ -286,6 +260,24 @@ inline void shutdownServer(ServerParams &p)
     pkt.write(msgAccept);
 }
 
+/**
+ * Server handler type.
+ */
+using ServerHandler = void (*)(ServerParams &);
+
+inline ServerHandler findServerHandler(
+    const std::map<std::string, ServerHandler> &handlers, const std::string protocolName)
+{
+    if (protocolName == shutdownCN) {
+        return shutdownServer;
+    }
+    std::map<std::string, ServerHandler>::const_iterator it = handlers.find(protocolName);
+    if (it == handlers.cend()) {
+        throw cybozu::Exception(__func__) << "bad protocol" << protocolName;
+    }
+    return it->second;
+}
+
 inline void clientDispatch(
     const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
     const std::vector<std::string> &params,
@@ -296,13 +288,12 @@ inline void clientDispatch(
         shutdownClient(clientParams);
         return;
     }
-    auto it = handlers.find(protocolName);
-    if (it != handlers.cend()) {
-        ClientHandler h = it->second;
-        h(clientParams);
-    } else {
+    std::map<std::string, ClientHandler>::const_iterator it = handlers.find(protocolName);
+    if (it == handlers.cend()) {
         throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;
     }
+    ClientHandler h = it->second;
+    h(clientParams);
 }
 
 /**
@@ -314,34 +305,23 @@ inline void serverDispatch(
     const std::map<std::string, ServerHandler> &handlers) noexcept
 {
     std::string clientId, protocolName;
+    packet::Packet pkt(sock);
+    bool sendErr = true;
     try {
-        if (run1stNegotiateAsServer(sock, nodeId, protocolName, clientId)) {
-            /* The protocol has finished or failed. */
-            return;
-        }
-    } catch (std::exception &e) {
-        LOGe("run1stNegotiateAsServer failed: %s", e.what());
-    } catch (...) {
-        LOGe("run1stNegotiateAsServer failed: other error");
-    }
-    ProtocolLogger logger(nodeId, clientId);
-    try {
+        run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
+        ServerHandler handler = findServerHandler(handlers, protocolName);
         ServerParams serverParams(sock, clientId, procStat);
-        if (protocolName == shutdownCN) {
-            shutdownServer(serverParams);
-            return;
-        }
-        auto it = handlers.find(protocolName);
-        if (it != handlers.cend()) {
-            ServerHandler h = it->second;
-            h(serverParams);
-        } else {
-            throw cybozu::Exception("serverDispatch:bad protocolName") << protocolName;
-        }
+        pkt.write(msgOk);
+        sendErr = false;
+        handler(serverParams);
     } catch (std::exception &e) {
-        logger.error() << e.what();
+        LOGs.error() << e.what();
+        if (sendErr) pkt.write(e.what());
     } catch (...) {
-        logger.error("serverDispatch: other error.");
+        cybozu::Exception e(__func__);
+        e << "other error";
+        LOGs.error() << e.what();
+        if (sendErr) pkt.write(e.what());
     }
 }
 
