@@ -16,12 +16,15 @@ a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
 WORK_DIR = os.getcwd() + '/stest/tmp/'
 isDebug = True
 
-config = Config(isDebug, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
+config = Config(isDebug, os.getcwd() + '/binsrc/',
+                WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
+
 
 WDEV_PATH = '/dev/walb/0'
 VOL = 'vol0'
 
 set_config(config)
+
 
 def setup_test():
     run_command(['/bin/rm', '-rf', WORK_DIR])
@@ -45,6 +48,7 @@ def test_n1():
     gid = full_backup(s0, VOL)
     restore_and_verify_sha1('test_n1', md0, a0, VOL, gid)
 
+
 def test_n2():
     """
         write -> sha1 -> snapshot -> restore -> sha1
@@ -56,6 +60,7 @@ def test_n2():
     print "gid=", gid
     print list_restorable(a0, VOL)
     restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
+
 
 def test_n3():
     """
@@ -69,6 +74,7 @@ def test_n3():
     print "gid=", gid
     restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
 
+
 def printL(aL, bL):
     print '[',
     for a in aL:
@@ -77,6 +83,7 @@ def printL(aL, bL):
     for b in bL:
         print b.name,
     print ']'
+
 
 def test_stop(stopL, startL):
     printL(stopL, startL)
@@ -111,6 +118,7 @@ def test_n4():
                 test_stop(stopL, startL)
 #                printL(stopL, startL)
 
+
 def test_n5():
     """
         apply -> sha1
@@ -126,6 +134,7 @@ def test_n5():
     del_restored(a0, VOL, gid)
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
+
 
 def main():
     setup_test()

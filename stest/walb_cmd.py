@@ -14,9 +14,11 @@ K_PROXY = 1
 K_ARCHIVE = 2
 
 Server = collections.namedtuple('Server', 'name port kind vg')
-Config = collections.namedtuple('Config', 'debug binDir dataDir storageL proxyL archiveL')
+Config = collections.namedtuple(
+    'Config', 'debug binDir dataDir storageL proxyL archiveL')
 
 cfg = None
+
 
 def set_config(config):
     if config.binDir[0] != '/' or config.binDir[-1] != '/':
@@ -26,12 +28,15 @@ def set_config(config):
     global cfg
     cfg = config
 
+
 def make_dir(pathStr):
     if not os.path.exists(pathStr):
         os.makedirs(pathStr)
 
+
 def to_str(ss):
     return " ".join(ss)
+
 
 def get_debug_opt():
     if cfg.debug:
@@ -39,8 +44,10 @@ def get_debug_opt():
     else:
         return []
 
+
 def get_host_port(s):
     return "localhost" + ":" + s.port
+
 
 def get_server_args(s):
     if s.kind == K_STORAGE:
@@ -50,7 +57,7 @@ def get_server_args(s):
     elif s.kind == K_PROXY:
         ret = [cfg.binDir + "proxy-server"]
 
-    else: # s.kind == K_ARCHIVE
+    else:  # s.kind == K_ARCHIVE
         ret = [cfg.binDir + "archive-server", "-vg", s.vg]
 
     ret += ["-p", s.port,
@@ -58,6 +65,7 @@ def get_server_args(s):
             "-l", s.name + ".log",
             "-id", s.name] + get_debug_opt()
     return ret
+
 
 def run_command(args):
     if cfg.debug:
@@ -70,12 +78,14 @@ def run_command(args):
         raise Exception("command error %d\n" % ret)
     return s
 
+
 def run_ctl(server, cmdArgs):
     ctlArgs = [cfg.binDir + "/controller",
             "-id", "ctrl",
             "-a", "localhost",
             "-p", server.port] + get_debug_opt()
     return run_command(ctlArgs + cmdArgs)
+
 
 def run_daemon(args):
     try:
@@ -96,6 +106,7 @@ def run_daemon(args):
     subprocess.Popen(args).wait()
     sys.exit(0)
 
+
 def wait_for_server_port(server):
     address = "localhost"
     port = int(server.port)
@@ -114,8 +125,10 @@ def wait_for_server_port(server):
 #def hostType(server):
 #    return run_ctl(server, ["host-type"])
 
+
 def get_state(server, vol):
     return run_ctl(server, ["get-state", vol])
+
 
 def set_slave_storage(sx, vol):
     state = get_state(sx, vol)
@@ -132,7 +145,8 @@ def set_slave_storage(sx, vol):
 ##################################################################
 # user command functions
 
-def wait_for_state(server, vol, stateL, timeoutS = 10):
+
+def wait_for_state(server, vol, stateL, timeoutS=10):
     for c in xrange(0, timeoutS):
         st = get_state(server, vol)
 #        print "c=", server, vol, stateL, c, st
@@ -141,10 +155,12 @@ def wait_for_state(server, vol, stateL, timeoutS = 10):
         time.sleep(0.3)
     raise Exception("wait_for_state", server, vol, stateL)
 
+
 def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
     time.sleep(0.3)
+
 
 def startup(server):
     make_dir(cfg.dataDir + server.name)
@@ -154,36 +170,45 @@ def startup(server):
     run_daemon(args)
     wait_for_server_port(server)
 
+
 def startup_all():
     for s in cfg.archiveL + cfg.proxyL + cfg.storageL:
         startup(s)
 
+
 def shutdown(server, mode="graceful"):
     run_ctl(server, ["shutdown", mode])
+
 
 def shutdown_all():
     for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
         shutdown(s)
+
 
 def init(sx, vol, wdevPath):
     run_ctl(sx, ["init-vol", vol, wdevPath])
     start(sx, vol)
     run_ctl(cfg.archiveL[0], ["init-vol", vol])
 
+
 def is_synchronizing(ax, vol):
     px = cfg.proxyL[0]
     st = run_ctl(px, ["archive-info", "list", vol])
     return ax in st.split()
 
-# stop s vol and wait until state is waitState
 
-def stop(s, vol, mode = "graceful"):
+def stop(s, vol, mode="graceful"):
+    """
+    stop s vol and wait until state is waitState
+
+    """
     if s.kind == K_STORAGE and get_state(s, vol) == 'Slave':
         waitState = 'SyncReady'
     else:
         waitState = 'Stopped'
     run_ctl(s, ["stop", vol, mode])
     wait_for_state(s, vol, [waitState])
+
 
 def start(s, vol):
     if s.kind == K_STORAGE:
@@ -197,9 +222,10 @@ def start(s, vol):
     elif s.kind == K_PROXY:
         run_ctl(s, ['start', vol])
         wait_for_state(s, vol, ['Started'])
-    else: # s.kind == K_ARCHIVE
+    else:  # s.kind == K_ARCHIVE
         run_ctl(s, ['start', vol])
         wait_for_state(s, vol, ['Archived'])
+
 
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
@@ -209,19 +235,23 @@ def stop_sync(ax, vol):
         if state == 'Stopped':
             start(px, vol)
 
+
 def get_gid_list(ax, vol, cmd):
     if not cmd in ['list-restorable', 'list-restored']:
         raise Exception('get_list_gid : bad cmd', cmd)
     ret = run_ctl(ax, [cmd, vol])
     return map(int, ret.split())
 
+
 def list_restorable(ax, vol):
     ret = run_ctl(ax, ["list-restorable", vol])
     return map(int, ret.split())
 
+
 def list_restored(ax, vol):
     ret = run_ctl(ax, ["list-restored", vol])
     return map(int, ret.split())
+
 
 def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
@@ -231,6 +261,7 @@ def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     return -1
 
+
 def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, cmd)
@@ -238,6 +269,7 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
             return True
         time.sleep(0.3)
     return False
+
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
@@ -247,14 +279,18 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     return False
 
+
 def wait_for_restorable(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
+
 
 def wait_for_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restored', timeoutS)
 
+
 def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
+
 
 def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
@@ -264,12 +300,14 @@ def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     raise Exception("wait_for_applied:timeout", ax, vol)
 
+
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
     if st == "Started":
         stop(px, vol)
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol)
+
 
 def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
@@ -295,6 +333,7 @@ def prepare_backup(sx, vol):
     for px in cfg.proxyL:
         add_archive_to_proxy(px, vol, a0)
 
+
 def full_backup(sx, vol):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
@@ -307,6 +346,7 @@ def full_backup(sx, vol):
             return gids[-1]
         time.sleep(0.3)
     raise Exception('full_backup:timeout', sx, vol)
+
 
 def hash_backup(sx, vol):
     a0 = cfg.archiveL[0]
@@ -327,25 +367,31 @@ def hash_backup(sx, vol):
         time.sleep(0.3)
     raise Exception('hash_backup:timeout', sx, vol)
 
+
 def write_random(devName, size):
     args = [cfg.binDir + "/write_random_data",
         '-s', str(size), devName]
     return run_command(args)
 
+
 def get_sha1(devName):
     ret = run_command(['/usr/bin/sha1sum', devName])
     return ret.split(' ')[0]
+
 
 def restore(ax, vol, gid):
     run_ctl(ax, ['restore', vol, str(gid)])
     wait_for_restored(ax, vol, gid)
 
+
 def del_restored(ax, vol, gid):
     run_ctl(ax, ['del-restored', vol, str(gid)])
     wait_for_not_restored(ax, vol, gid)
 
+
 def get_restored_path(ax, vol, gid):
     return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
+
 
 def snapshot_async(sx, vol):
     state = get_state(sx, vol)
@@ -354,17 +400,20 @@ def snapshot_async(sx, vol):
     gid = run_ctl(sx, ['snapshot', vol])
     return int(gid)
 
+
 def snapshot_sync(sx, vol, axs):
     gid = snapshot_async(sx, vol)
     for ax in axs:
         wait_for_restorable(ax, vol, gid)
     return gid
 
+
 def verify_equal_sha1(msg, md0, md1):
     if md0 == md1:
         print msg + ' ok :', md0
     else:
         raise Exception('fail ' + msg, md0, md1)
+
 
 def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     restore(ax, vol, gid)
@@ -376,10 +425,12 @@ def restore_and_verify_sha1(msg, md0, ax, vol, gid):
 
 quitWriting = False
 
+
 def writing(path):
     while not quitWriting:
         write_random(path, 1)
         time.sleep(0.05)
+
 
 def startWriting(path):
     global quitWriting
@@ -388,12 +439,13 @@ def startWriting(path):
     t.start()
     return t
 
+
 def stopWriting(t):
     global quitWriting
     quitWriting = True
     t.join()
 
+
 def apply_diff(ax, vol, gid):
     run_ctl(ax, ["apply", vol, str(gid)])
     wait_for_applied(ax, vol, gid)
-
