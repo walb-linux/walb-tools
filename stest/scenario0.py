@@ -14,29 +14,30 @@ a1 = Server('a1', '10201', 'vg1')
 WORK_DIR = os.getcwd() + '/stest/tmp/'
 
 config = Config(True, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
-setConfig(config)
+
+WDEV_PATH = '/dev/walb/0'
+VOL = 'vol0'
+
+set_config(config)
 
 def setup_test():
-    runCommand(['/bin/rm', '-rf', WORK_DIR])
+    run_command(['/bin/rm', '-rf', WORK_DIR])
     if os.path.isdir('/dev/vg0'):
         for f in os.listdir('/dev/vg0'):
             if f[0] == 'i':
-                runCommand(['/sbin/lvremove', '-f', '/dev/vg0/' + f])
-    makeDir(WORK_DIR)
+                run_command(['/sbin/lvremove', '-f', '/dev/vg0/' + f])
+    make_dir(WORK_DIR)
+    kill_all_servers()
+    startup_all()
 
 def test_n1():
-    devName = '/dev/walb/0'
-    v0 = 'vol0'
-    kill_all_servers()
-    time.sleep(1)
-    startup_all()
-    init(s0, v0, devName)
-    write_random(devName, 3)
-    md0 = get_sha1(devName)
-    gid = full_backup(s0, v0)
+    init(s0, VOL, WDEV_PATH)
+    write_random(WDEV_PATH, 1)
+    md0 = get_sha1(WDEV_PATH)
+    gid = full_backup(s0, VOL)
     print "gid=", gid
-    restore(a0, v0, gid)
-    restoredPath = get_restored_path(a0, v0, gid)
+    restore(a0, VOL, gid)
+    restoredPath = get_restored_path(a0, VOL, gid)
     print "restoredPath=", restoredPath
     md1 = get_sha1(restoredPath)
     print "len", len(md0), len(md1)
@@ -44,10 +45,18 @@ def test_n1():
         print "test_n1 ok"
     else:
         raise Exception('fail test_n1', md0, md1)
+    del_restored(a0, VOL, gid)
+
+def test_n2():
+    write_random(WDEV_PATH, 1)
+    gid = snapshot_sync(s0, VOL, [a0])
+    print "gid=", gid
+    print list_restorable(a0, VOL)
 
 def main():
     setup_test()
     test_n1()
+    test_n2()
 
 if __name__ == "__main__":
     main()
