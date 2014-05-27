@@ -30,33 +30,45 @@ def setup_test():
     kill_all_servers()
     startup_all()
 
+
 def test_n1():
+    """
+        full-backup -> sha1 -> restore -> sha1
+    """
     init(s0, VOL, WDEV_PATH)
     write_random(WDEV_PATH, 1)
     md0 = get_sha1(WDEV_PATH)
     gid = full_backup(s0, VOL)
     print "gid=", gid
-    restore(a0, VOL, gid)
-    restoredPath = get_restored_path(a0, VOL, gid)
-    print "restoredPath=", restoredPath
-    md1 = get_sha1(restoredPath)
-    print "len", len(md0), len(md1)
-    if md0 == md1:
-        print "test_n1 ok"
-    else:
-        raise Exception('fail test_n1', md0, md1)
-    del_restored(a0, VOL, gid)
+    restore_and_verify_sha1('test_n1', md0, a0, VOL, gid)
 
 def test_n2():
+    """
+        write -> sha1 -> snapshot -> restore -> sha1
+    """
     write_random(WDEV_PATH, 1)
+    md0 = get_sha1(WDEV_PATH)
     gid = snapshot_sync(s0, VOL, [a0])
     print "gid=", gid
     print list_restorable(a0, VOL)
+    restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
+
+def test_n3():
+    """
+        hash-backup -> sha1 -> restore -> sha1
+    """
+    set_slave_storage(s0, VOL)
+    write_random(WDEV_PATH, 1)
+    md0 = get_sha1(WDEV_PATH)
+    gid = hash_backup(s0, VOL)
+    print "gid=", gid
+    restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
 
 def main():
     setup_test()
     test_n1()
     test_n2()
+    test_n3()
 
 if __name__ == "__main__":
     main()

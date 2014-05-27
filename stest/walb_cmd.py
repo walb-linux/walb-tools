@@ -6,6 +6,8 @@ import time
 import socket
 import errno
 
+TIMEOUT_SEC = 1000
+
 Server = collections.namedtuple('Server', 'name port vg')
 Config = collections.namedtuple('Config', 'debug binDir dataDir storageL proxyL archiveL')
 
@@ -112,6 +114,19 @@ def wait_for_server_port(server):
 def get_state(server, vol):
     return run_ctl(server, ["get-state", vol])
 
+def set_slave_storage(sx, vol):
+    state = get_state(sx, vol)
+    if state == 'Slave':
+        return
+    if state == 'Master' or state == 'WlogSend':
+        stop(sx, vol, 'Stopped')
+    else:
+        raise Exception('set_slave_storage:bad state', state)
+    stop_sync(cfg.archiveL[0], vol)
+    run_ctl(sx, ["reset-vol", vol])
+    run_ctl(sx, ["start", vol, "slave"])
+    wait_for_state(sx, vol, "Slave")
+
 ##################################################################
 # user command functions
 
@@ -171,8 +186,10 @@ def start(s, vol, waitState):
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
         stop(px, vol, "Stopped")
-        run_ctl(px, ["archive-info", "del", vol, ax.name])
-        start(px, vol, "Started")
+        run_ctl(px, ["archive-info", "delete", vol, ax.name])
+        state = get_state(px, vol)
+        if state == 'Stopped':
+            start(px, vol, "Started")
 
 def get_gid_list(ax, vol, cmd):
     if not cmd in ['list-restorable', 'list-restored']:
@@ -228,7 +245,7 @@ def add_archive_to_proxy(px, vol, ax):
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol, "Started")
 
-def full_backup(sx, vol):
+def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
     st = get_state(sx, vol)
     if st == "Slave":
@@ -251,13 +268,38 @@ def full_backup(sx, vol):
 
     for px in cfg.proxyL:
         add_archive_to_proxy(px, vol, a0)
-    run_ctl(sx, ["full-bkp", vol])
-    wait_for_state(a0, vol, "Archived", 10)
 
-    gid = wait_for_restorable_any(a0, vol)
-    if gid == -1:
-        raise Exception("full_backup : bad gid", s.name, vol)
-    return gid
+def full_backup(sx, vol):
+    a0 = cfg.archiveL[0]
+    prepare_backup(sx, vol)
+    run_ctl(sx, ["full-bkp", vol])
+    wait_for_state(a0, vol, "Archived", TIMEOUT_SEC)
+
+    for c in xrange(0, TIMEOUT_SEC):
+        gids = get_gid_list(a0, vol, 'list-restorable')
+        if gids:
+            return gids[-1]
+        time.sleep(1)
+    raise Exception('full_backup:timeout', sx, vol)
+
+def hash_backup(sx, vol):
+    a0 = cfg.archiveL[0]
+    prepare_backup(sx, vol)
+    prev_gids = get_gid_list(a0, vol, 'list-restorable')
+    if prev_gids:
+        max_gid = prev_gids[-1]
+    else:
+        max_gid = -1
+
+    run_ctl(sx, ["hash-bkp", vol])
+    wait_for_state(a0, vol, "Archived", TIMEOUT_SEC)
+
+    for c in xrange(0, TIMEOUT_SEC):
+        gids = get_gid_list(a0, vol, 'list-restorable')
+        if gids and gids[-1] > max_gid:
+            return gids[-1]
+        time.sleep(1)
+    raise Exception('hash_backup:timeout', sx, vol)
 
 def write_random(devName, size):
     args = [cfg.binDir + "/write_random_data",
@@ -292,3 +334,16 @@ def snapshot_sync(sx, vol, axs):
         wait_for_restorable(ax, vol, gid)
     return gid
 
+def verify_equal_sha1(msg, md0, md1):
+    if md0 == md1:
+        print msg + ' ok'
+    else:
+        raise Exception('fail ' + msg, md0, md1)
+
+def restore_and_verify_sha1(msg, md0, ax, vol, gid):
+    restore(ax, vol, gid)
+    restoredPath = get_restored_path(ax, vol, gid)
+    print "restoredPath=", restoredPath
+    md1 = get_sha1(restoredPath)
+    verify_equal_sha1(msg, md0, md1)
+    del_restored(ax, vol, gid)
