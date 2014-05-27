@@ -150,7 +150,7 @@ def startup(server):
     make_dir(cfg.dataDir + server.name)
     args = get_server_args(server)
     if cfg.debug:
-        print 'cmd=', args
+        print 'cmd=', to_str(args)
     run_daemon(args)
     wait_for_server_port(server)
 
