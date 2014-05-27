@@ -1,5 +1,6 @@
 import collections
 import os
+import threading
 import subprocess
 import sys
 import time
@@ -8,7 +9,11 @@ import errno
 
 TIMEOUT_SEC = 1000
 
-Server = collections.namedtuple('Server', 'name port vg')
+K_STORAGE = 0
+K_PROXY = 1
+K_ARCHIVE = 2
+
+Server = collections.namedtuple('Server', 'name port kind vg')
 Config = collections.namedtuple('Config', 'debug binDir dataDir storageL proxyL archiveL')
 
 cfg = None
@@ -37,23 +42,21 @@ def get_debug_opt():
 def get_host_port(s):
     return "localhost" + ":" + s.port
 
-def get_server_args(server):
-    if server in cfg.storageL:
+def get_server_args(s):
+    if s.kind == K_STORAGE:
         ret = [cfg.binDir + "storage-server",
                "-archive", get_host_port(cfg.archiveL[0]),
                "-proxy", ",".join(map(get_host_port, cfg.proxyL))]
-
-    elif server in cfg.proxyL:
+    elif s.kind == K_PROXY:
         ret = [cfg.binDir + "proxy-server"]
 
-    elif server in cfg.archiveL:
-        ret = [cfg.binDir + "archive-server", "-vg", server.vg]
-    else:
-        raise Exception("Server name %s is not found in all lists" % server.name)
-    ret += ["-p", server.port,
-            "-b", cfg.dataDir + server.name,
-            "-l", server.name + ".log",
-            "-id", server.name] + get_debug_opt()
+    else: # s.kind == K_ARCHIVE
+        ret = [cfg.binDir + "archive-server", "-vg", s.vg]
+
+    ret += ["-p", s.port,
+            "-b", cfg.dataDir + s.name,
+            "-l", s.name + ".log",
+            "-id", s.name] + get_debug_opt()
     return ret
 
 def run_command(args):
@@ -205,7 +208,7 @@ def list_restored(ax, vol):
     ret = run_ctl(ax, ["list-restored", vol])
     return map(int, ret.split())
 
-def wait_for_restorable_any(ax, vol, timeoutS = 0x7ffffff):
+def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
@@ -213,7 +216,7 @@ def wait_for_restorable_any(ax, vol, timeoutS = 0x7ffffff):
         time.sleep(1)
     return -1
 
-def wait_for_gid(ax, vol, gid, cmd, timeoutS = 0x7ffffff):
+def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
@@ -221,7 +224,7 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS = 0x7ffffff):
         time.sleep(1)
     return False
 
-def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = 0x7ffffff):
+def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
@@ -229,13 +232,13 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = 0x7ffffff):
         time.sleep(1)
     return False
 
-def wait_for_restorable(ax, vol, gid, timeoutS = 0x7ffffff):
+def wait_for_restorable(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
 
-def wait_for_restored(ax, vol, gid, timeoutS = 0x7fffffff):
+def wait_for_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restored', timeoutS)
 
-def wait_for_not_restored(ax, vol, gid, timeoutS = 0x7fffffff):
+def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
 
 def add_archive_to_proxy(px, vol, ax):
@@ -347,3 +350,22 @@ def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     md1 = get_sha1(restoredPath)
     verify_equal_sha1(msg, md0, md1)
     del_restored(ax, vol, gid)
+
+quitWriting = False
+
+def writing(path):
+    while not quitWriting:
+        write_random(path, 1)
+        time.sleep(0.1)
+
+def startWriting(path):
+    global quitWriting
+    quitWriting = False
+    t = threading.Thread(target = writing, args = (path,))
+    t.start()
+    return t
+
+def stopWriting(t):
+    global quitWriting
+    quitWriting = True
+    t.join()

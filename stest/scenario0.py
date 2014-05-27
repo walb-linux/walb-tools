@@ -1,14 +1,15 @@
 import os
 from walb_cmd import *
 
-s0 = Server('s0', '10000', None)
-s1 = Server('s1', '10001', None)
-s2 = Server('s2', '10002', None)
-p0 = Server('p0', '10100', None)
-p1 = Server('p1', '10101', None)
-p2 = Server('p2', '10102', None)
-a0 = Server('a0', '10200', 'vg0')
-a1 = Server('a1', '10201', 'vg1')
+
+s0 = Server('s0', '10000', K_STORAGE, None)
+s1 = Server('s1', '10001', K_STORAGE, None)
+s2 = Server('s2', '10002', K_STORAGE, None)
+p0 = Server('p0', '10100', K_PROXY, None)
+p1 = Server('p1', '10101', K_PROXY, None)
+p2 = Server('p2', '10102', K_PROXY, None)
+a0 = Server('a0', '10200', K_ARCHIVE, 'vg0')
+a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
 #a2 = Server('a2', '10202', None)
 
 WORK_DIR = os.getcwd() + '/stest/tmp/'
@@ -64,11 +65,28 @@ def test_n3():
     print "gid=", gid
     restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
 
+def test_stop(stopL, startL):
+    t = startWriting(WDEV_PATH)
+
+    for s in stopL:
+        stop(s, VOL, "s")
+
+    stopWriting(t)
+
+def test_n4():
+    """
+        stop -> start -> snapshot -> sha1
+    """
+    stopL = [s0]
+    startL = [s0]
+    test_stop(stopL, startL)
+
 def main():
     setup_test()
     test_n1()
     test_n2()
     test_n3()
+#    test_n4()
 
 if __name__ == "__main__":
     main()
