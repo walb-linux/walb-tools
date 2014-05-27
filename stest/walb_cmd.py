@@ -122,25 +122,24 @@ def set_slave_storage(sx, vol):
     if state == 'Slave':
         return
     if state == 'Master' or state == 'WlogSend':
-        stop2(sx, vol)
+        stop(sx, vol)
     else:
         raise Exception('set_slave_storage:bad state', state)
     stop_sync(cfg.archiveL[0], vol)
     run_ctl(sx, ["reset-vol", vol])
-    run_ctl(sx, ["start", vol, "slave"])
-    wait_for_state(sx, vol, "Slave")
+    start(sx, vol)
 
 ##################################################################
 # user command functions
 
-def wait_for_state(server, vol, state, timeoutS = 10):
+def wait_for_state(server, vol, stateL, timeoutS = 10):
     for c in xrange(0, timeoutS):
         st = get_state(server, vol)
-        print "c=", server, vol, state, c, st
-        if st == state:
+        print "c=", server, vol, stateL, c, st
+        if st in stateL:
             return
         time.sleep(1)
-    raise Exception("wait_for_state", server, vol, state)
+    raise Exception("wait_for_state", server, vol, stateL)
 
 def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
@@ -168,8 +167,7 @@ def shutdown_all():
 
 def init(sx, vol, wdevPath):
     run_ctl(sx, ["init-vol", vol, wdevPath])
-    run_ctl(sx, ["start", vol, "slave"])
-    wait_for_state(sx, vol, "Slave")
+    start(sx, vol)
     run_ctl(cfg.archiveL[0], ["init-vol", vol])
 
 def is_synchronizing(ax, vol):
@@ -178,29 +176,38 @@ def is_synchronizing(ax, vol):
     return ax in st.split()
 
 # stop s vol and wait until state is waitState
-def stop(s, vol, waitState, mode = "graceful"):
-    run_ctl(s, ["stop", vol, mode])
-    wait_for_state(s, vol, waitState)
 
-def stop2(s, vol, mode = "graceful"):
+def stop(s, vol, mode = "graceful"):
     if s.kind == K_STORAGE and get_state(s, vol) == 'Slave':
         waitState = 'SyncReady'
     else:
         waitState = 'Stopped'
     run_ctl(s, ["stop", vol, mode])
-    wait_for_state(s, vol, waitState)
+    wait_for_state(s, vol, [waitState])
 
-def start(s, vol, waitState):
-    run_ctl(s, ["start", vol])
-    wait_for_state(s, vol, waitState)
+def start(s, vol):
+    if s.kind == K_STORAGE:
+        st = get_state(s, vol)
+        if st == 'SyncReady':
+            run_ctl(s, ['start', vol, 'slave'])
+            wait_for_state(s, vol, ['Slave'])
+        else:
+            run_ctl(s, ['start', vol, 'master'])
+            wait_for_state(s, vol, ['Master', 'WlogSend'])
+    elif s.kind == K_PROXY:
+        run_ctl(s, ['start', vol])
+        wait_for_state(s, vol, ['Started'])
+    else: # s.kind == K_ARCHIVE
+        run_ctl(s, ['start', vol])
+        wait_for_state(s, vol, ['Archived'])
 
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
-        stop2(px, vol, "Stopped")
+        stop(px, vol, "Stopped")
         run_ctl(px, ["archive-info", "delete", vol, ax.name])
         state = get_state(px, vol)
         if state == 'Stopped':
-            start(px, vol, "Started")
+            start(px, vol)
 
 def get_gid_list(ax, vol, cmd):
     if not cmd in ['list-restorable', 'list-restored']:
@@ -252,15 +259,15 @@ def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
     if st == "Started":
-        stop2(px, vol)
+        stop(px, vol)
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
-    start(px, vol, "Started")
+    start(px, vol)
 
 def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
     st = get_state(sx, vol)
     if st == "Slave":
-        stop2(sx, vol)
+        stop(sx, vol)
 
     ret = run_ctl(sx, ["is-overflow", vol])
     if ret != "0":
@@ -284,7 +291,7 @@ def full_backup(sx, vol):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
     run_ctl(sx, ["full-bkp", vol])
-    wait_for_state(a0, vol, "Archived", TIMEOUT_SEC)
+    wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
 
     for c in xrange(0, TIMEOUT_SEC):
         gids = get_gid_list(a0, vol, 'list-restorable')
@@ -303,7 +310,7 @@ def hash_backup(sx, vol):
         max_gid = -1
 
     run_ctl(sx, ["hash-bkp", vol])
-    wait_for_state(a0, vol, "Archived", TIMEOUT_SEC)
+    wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
 
     for c in xrange(0, TIMEOUT_SEC):
         gids = get_gid_list(a0, vol, 'list-restorable')
