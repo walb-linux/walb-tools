@@ -135,16 +135,16 @@ def set_slave_storage(sx, vol):
 def wait_for_state(server, vol, stateL, timeoutS = 10):
     for c in xrange(0, timeoutS):
         st = get_state(server, vol)
-        print "c=", server, vol, stateL, c, st
+#        print "c=", server, vol, stateL, c, st
         if st in stateL:
             return
-        time.sleep(1)
+        time.sleep(0.3)
     raise Exception("wait_for_state", server, vol, stateL)
 
 def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
-    time.sleep(1)
+    time.sleep(0.3)
 
 def startup(server):
     make_dir(cfg.dataDir + server.name)
@@ -228,7 +228,7 @@ def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
         gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
             return gids[-1]
-        time.sleep(1)
+        time.sleep(0.3)
     return -1
 
 def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
@@ -236,7 +236,7 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
             return True
-        time.sleep(1)
+        time.sleep(0.3)
     return False
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
@@ -244,7 +244,7 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
             return True
-        time.sleep(1)
+        time.sleep(0.3)
     return False
 
 def wait_for_restorable(ax, vol, gid, timeoutS = TIMEOUT_SEC):
@@ -297,7 +297,7 @@ def full_backup(sx, vol):
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids:
             return gids[-1]
-        time.sleep(1)
+        time.sleep(0.3)
     raise Exception('full_backup:timeout', sx, vol)
 
 def hash_backup(sx, vol):
@@ -316,7 +316,7 @@ def hash_backup(sx, vol):
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids and gids[-1] > max_gid:
             return gids[-1]
-        time.sleep(1)
+        time.sleep(0.3)
     raise Exception('hash_backup:timeout', sx, vol)
 
 def write_random(devName, size):
@@ -354,14 +354,14 @@ def snapshot_sync(sx, vol, axs):
 
 def verify_equal_sha1(msg, md0, md1):
     if md0 == md1:
-        print msg + ' ok'
+        print msg + ' ok :', md0
     else:
         raise Exception('fail ' + msg, md0, md1)
 
 def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     restore(ax, vol, gid)
     restoredPath = get_restored_path(ax, vol, gid)
-    print "restoredPath=", restoredPath
+#    print "restoredPath=", restoredPath
     md1 = get_sha1(restoredPath)
     verify_equal_sha1(msg, md0, md1)
     del_restored(ax, vol, gid)
@@ -371,7 +371,7 @@ quitWriting = False
 def writing(path):
     while not quitWriting:
         write_random(path, 1)
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 def startWriting(path):
     global quitWriting

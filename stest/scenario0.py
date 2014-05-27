@@ -1,4 +1,5 @@
 import os
+import itertools
 from walb_cmd import *
 
 
@@ -14,7 +15,7 @@ a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
 
 WORK_DIR = os.getcwd() + '/stest/tmp/'
 
-config = Config(True, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
+config = Config(False, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
 WDEV_PATH = '/dev/walb/0'
 VOL = 'vol0'
@@ -36,17 +37,18 @@ def test_n1():
     """
         full-backup -> sha1 -> restore -> sha1
     """
+    print "test_n1:full-backup"
     init(s0, VOL, WDEV_PATH)
     write_random(WDEV_PATH, 1)
     md0 = get_sha1(WDEV_PATH)
     gid = full_backup(s0, VOL)
-    print "gid=", gid
     restore_and_verify_sha1('test_n1', md0, a0, VOL, gid)
 
 def test_n2():
     """
         write -> sha1 -> snapshot -> restore -> sha1
     """
+    print "test_n2:snapshot"
     write_random(WDEV_PATH, 1)
     md0 = get_sha1(WDEV_PATH)
     gid = snapshot_sync(s0, VOL, [a0])
@@ -58,6 +60,7 @@ def test_n3():
     """
         hash-backup -> sha1 -> restore -> sha1
     """
+    print "test_n3:hash-backup"
     set_slave_storage(s0, VOL)
     write_random(WDEV_PATH, 1)
     md0 = get_sha1(WDEV_PATH)
@@ -65,33 +68,54 @@ def test_n3():
     print "gid=", gid
     restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
 
+def printL(aL, bL):
+    print '[',
+    for a in aL:
+        print a.name, 
+    print '], [', 
+    for b in bL:
+        print b.name, 
+    print ']'
+
 def test_stop(stopL, startL):
+    printL(stopL, startL)
     t = startWriting(WDEV_PATH)
 
     for s in stopL:
         stop(s, VOL)
+        time.sleep(0.1)
 
-    time.sleep(1)
+    time.sleep(0.5)
 
     for s in startL:
         start(s, VOL)
+        time.sleep(0.1)
 
     stopWriting(t)
+
+    md0 = get_sha1(WDEV_PATH)
+    gid = snapshot_sync(s0, VOL, [a0])
+    restore_and_verify_sha1('test_stop', md0, a0, VOL, gid)
+
 
 def test_n4():
     """
         stop -> start -> snapshot -> sha1
     """
-    stopL = [s0]
-    startL = [s0]
-    test_stop(stopL, startL)
+    print "test_n4:stop"
+    setLL = [[s0], [p0], [a0], [s0, p0], [s0, a0], [p0, a0], [s0, p0, a0]]
+    for setL in setLL:
+        for stopL in itertools.permutations(setL):
+            for startL in itertools.permutations(setL):
+                test_stop(stopL, startL)
+#                printL(stopL, startL)
 
 def main():
     setup_test()
     test_n1()
-    test_n2()
-    test_n3()
-#    test_n4()
+#    test_n2()
+#    test_n3()
+    test_n4()
 
 if __name__ == "__main__":
     main()
