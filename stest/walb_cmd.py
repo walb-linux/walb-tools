@@ -256,6 +256,14 @@ def wait_for_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
 def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
     return wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
 
+def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
+    for c in xrange(0, timeoutS):
+        gidL = get_gid_list(ax, vol, 'list-restorable')
+        if gidL and gid <= gidL[0]:
+            return
+        time.sleep(0.3)
+    raise Exception("wait_for_applied:timeout", ax, vol)
+
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
     if st == "Started":
@@ -384,3 +392,8 @@ def stopWriting(t):
     global quitWriting
     quitWriting = True
     t.join()
+
+def apply_diff(ax, vol, gid):
+    run_ctl(ax, ["apply", vol, str(gid)])
+    wait_for_applied(ax, vol, gid)
+

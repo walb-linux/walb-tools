@@ -14,8 +14,9 @@ a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
 #a2 = Server('a2', '10202', None)
 
 WORK_DIR = os.getcwd() + '/stest/tmp/'
+isDebug = True
 
-config = Config(False, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
+config = Config(isDebug, os.getcwd() + '/binsrc/', WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
 WDEV_PATH = '/dev/walb/0'
 VOL = 'vol0'
@@ -71,10 +72,10 @@ def test_n3():
 def printL(aL, bL):
     print '[',
     for a in aL:
-        print a.name, 
-    print '], [', 
+        print a.name,
+    print '], [',
     for b in bL:
-        print b.name, 
+        print b.name,
     print ']'
 
 def test_stop(stopL, startL):
@@ -110,12 +111,29 @@ def test_n4():
                 test_stop(stopL, startL)
 #                printL(stopL, startL)
 
+def test_n5():
+    """
+        apply -> sha1
+    """
+    print "test_n5:apply"
+    t = startWriting(WDEV_PATH)
+    time.sleep(0.5)
+    gid = snapshot_sync(s0, VOL, [a0])
+    time.sleep(0.5)
+    stopWriting(t)
+    restore(a0, VOL, gid)
+    md0 = get_sha1(get_restored_path(a0, VOL, gid))
+    del_restored(a0, VOL, gid)
+    apply_diff(a0, VOL, gid)
+    restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
+
 def main():
     setup_test()
     test_n1()
 #    test_n2()
 #    test_n3()
-    test_n4()
+#    test_n4()
+    test_n5()
 
 if __name__ == "__main__":
     main()
