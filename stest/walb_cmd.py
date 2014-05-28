@@ -202,6 +202,8 @@ def stop(s, vol, mode="graceful"):
     stop s vol and wait until state is waitState
 
     """
+    if mode not in ['graceful', 'empty', 'force']:
+        raise Exception('stop:bad mode', mode)
     if s.kind == K_STORAGE and get_state(s, vol) == 'Slave':
         waitState = 'SyncReady'
     else:
@@ -243,8 +245,14 @@ def get_gid_list(ax, vol, cmd):
     return map(int, ret.split())
 
 
-def list_restorable(ax, vol):
-    ret = run_ctl(ax, ["list-restorable", vol])
+def list_restorable(ax, vol, opt = ''):
+    cmd = ["list-restorable", vol]
+    if opt:
+        if opt == 'all':
+            cmd.append(opt)
+        else:
+            raise Exception('list_restorable:bad opt', opt)
+    ret = run_ctl(ax, cmd)
     return map(int, ret.split())
 
 
@@ -300,6 +308,14 @@ def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     raise Exception("wait_for_applied:timeout", ax, vol)
 
+def wait_for_merged(ax, vol, gidB, gidE, timeoutS = TIMEOUT_SEC):
+    for c in xrange(0, timeoutS):
+        gidL = list_restorable(ax, vol, 'all')
+        pos = gidL.index(gidB)
+        if gidL[pos + 1] == gidE:
+            return
+        time.sleep(0.3)
+    raise Exception("wait_for_merged:timeout", ax, vol, gidB, gidE)
 
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
@@ -449,3 +465,9 @@ def stopWriting(t):
 def apply_diff(ax, vol, gid):
     run_ctl(ax, ["apply", vol, str(gid)])
     wait_for_applied(ax, vol, gid)
+
+
+def merge_diff(ax, vol, gidB, gidE):
+    run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
+    wait_for_merged(ax, vol, gidB, gidE)
+

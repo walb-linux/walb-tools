@@ -135,6 +135,39 @@ def test_n5():
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
 
+def test_n6():
+    """
+        merge -> sha1
+    """
+    print "test_n6:merge"
+    t = startWriting(WDEV_PATH)
+    time.sleep(0.5)
+    gidB = snapshot_sync(s0, VOL, [a0])
+    time.sleep(1)
+    # create more than two diff files
+    stop(s0, VOL)
+    stop(p0, VOL, 'empty')
+    start(s0, VOL)
+    start(p0, VOL)
+    time.sleep(1)
+    gidE = snapshot_sync(s0, VOL, [a0])
+    gidL = list_restorable(a0, VOL, 'all')
+    posB = gidL.index(gidB)
+    posE = gidL.index(gidE)
+    print "gidB", gidB, "gidE", gidE, "gidL", gidL
+    if posE - posB < 2:
+        stopWriting(t)
+        raise Exception('test_n6:bad range', gidB, gidE, gidL)
+    time.sleep(0.5)
+    stopWriting(t)
+    # merge gidB and gidE
+
+    restore(a0, VOL, gidE)
+    md0 = get_sha1(get_restored_path(a0, VOL, gidE))
+    del_restored(a0, VOL, gidE)
+    merge_diff(a0, VOL, gidB, gidE)
+    print "merged gidL", list_restorable(a0, VOL, 'all')
+    restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
 
 def main():
     setup_test()
@@ -142,7 +175,8 @@ def main():
 #    test_n2()
 #    test_n3()
 #    test_n4()
-    test_n5()
+#    test_n5()
+    test_n6()
 
 if __name__ == "__main__":
     main()
