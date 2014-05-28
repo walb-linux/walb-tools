@@ -98,7 +98,7 @@ src/%.depend: src/%.cpp
 utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
-stest:
+stest: build
 	pylint -E --rcfile=/dev/null -i y -f colorized stest/walb_cmd.py stest/scenario0.py
 	python stest/scenario0.py
 
