@@ -313,6 +313,19 @@ public:
         return v;
     }
     /**
+     * RETURN:
+     *   list of pairs of meta diff and size (bytes)
+     */
+    std::vector<std::pair<MetaDiff, uint64_t>> getDiffListWithSize() const {
+        std::vector<std::pair<MetaDiff, uint64_t>> ret;
+        const std::vector<MetaDiff> diffV = getDiffMgr().getAll();
+        for (const MetaDiff &diff : diffV) {
+            const uint64_t sizeB = wdiffs_.getDiffFileSize(diff);
+            ret.push_back(std::make_pair(diff, sizeB));
+        }
+        return ret;
+    }
+    /**
      * @srvSnap latest snapshot of the remote server.
      * @cliSnap latest snapshot of the client server (self).
      * @minSizeB if total wdiff size is less than this size, diff repl is not required.

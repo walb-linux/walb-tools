@@ -37,6 +37,7 @@ const char *const archiveHT = "archive";
  */
 const char *const getStateCN = "get-state";
 const char *const statusCN = "status";
+const char *const listDiffCN = "list-diff";
 const char *const initVolCN = "init-vol";
 const char *const clearVolCN = "clear-vol";
 const char *const listVolCN = "list-vol";

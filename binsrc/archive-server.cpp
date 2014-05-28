@@ -34,6 +34,7 @@ public:
         const std::map<std::string, protocol::ServerHandler> h = {
             { getStateCN, c2aGetStateServer },
             { statusCN, c2aStatusServer },
+            { listDiffCN, c2aListDiffServer },
             { listVolCN, c2aListVolServer },
             { initVolCN, c2aInitVolServer },
             { clearVolCN, c2aClearVolServer },
