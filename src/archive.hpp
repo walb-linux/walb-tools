@@ -887,15 +887,14 @@ inline void c2aListDiffServer(protocol::ServerParams &p)
 
         const std::vector<std::pair<MetaDiff, uint64_t>> diffSizeV = volInfo.getDiffListWithSize();
         StrVec diffListStrV;
-        diffListStrV.emplace_back("#snapB.gidB snapB.gidE snapE.gidB snapE.gidE isMergeable timestamp sizeB");
+        diffListStrV.emplace_back("#snapB-->snapE isMergeable timestamp sizeB");
         for (const std::pair<MetaDiff, uint64_t> &p : diffSizeV) {
             const MetaDiff &diff = p.first;
             const uint64_t sizeB = p.second;
             diffListStrV.push_back(
                 cybozu::util::formatString(
-                    "%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %d %s %" PRIu64 ""
-                    , diff.snapB.gidB, diff.snapB.gidE
-                    , diff.snapE.gidB, diff.snapE.gidE
+                    "%s %d %s %" PRIu64 ""
+                    , diff.str().c_str()
                     , diff.isMergeable ? 1 : 0
                     , cybozu::unixTimeToStr(diff.timestamp).c_str()
                     , sizeB));
