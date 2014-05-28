@@ -302,6 +302,16 @@ public:
     std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
         return wdiffs_.getDiffListToMerge(gid, size);
     }
+    std::vector<MetaDiff> getDiffListToMergeGid(uint64_t gidB, uint64_t gidE) const {
+        std::vector<MetaDiff> v = getDiffMgr().getMergeableDiffList(gidB);
+        for (size_t i = 0; i < v.size(); i++) {
+            if (v[i].snapB.gidB >= gidE) {
+                v.resize(i);
+                break;
+            }
+        }
+        return v;
+    }
     /**
      * @srvSnap latest snapshot of the remote server.
      * @cliSnap latest snapshot of the client server (self).

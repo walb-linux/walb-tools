@@ -263,7 +263,7 @@ inline void verifyMergeable(const std::string &volId, uint64_t gid)
     }
 }
 
-inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeMb)
+inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uint64_t param3)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
@@ -274,7 +274,13 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gid, uint32_t maxSizeM
     std::vector<MetaDiff> diffV;
     std::tie(st0, diffV) = tryOpenDiffs(
         fileV, volInfo, allowEmpty, [&](const MetaState &) {
-            return volInfo.getDiffListToMerge(gid, maxSizeMb * MEBI);
+            if (isSize) {
+                const uint64_t maxSize = param3 * MEBI;
+                return volInfo.getDiffListToMerge(gidB, maxSize);
+            } else {
+                const uint64_t gidE = param3;
+                return volInfo.getDiffListToMergeGid(gidB, gidE);
+            }
         });
     if (fileV.size() < 2) {
         throw cybozu::Exception(__func__) << "There is no mergeable diff.";
@@ -1434,11 +1440,20 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.size() < 2) throw cybozu::Exception(FUNC) << "missing arguments";
-        const std::string &volId = v[0];
-        const uint64_t gid = cybozu::atoi(v[1]);
-        const uint32_t maxSizeMb = (v.size() >= 3 ? cybozu::atoi(v[2]) : DEFAULT_MAX_WDIFF_MERGE_MB);
+        const StrVec v = protocol::recvStrVec(p.sock, 4, FUNC);
+        const std::string& volId = v[0];
+        const uint64_t gidB = cybozu::atoi(v[1]);
+        const std::string& type = v[2];
+        const uint64_t param3 = cybozu::atoi(v[3]); // gidE or maxSizeMb
+        bool isSize;
+        if (type == "size") {
+            isSize = true;
+        } else if (type == "gid") {
+            isSize = false;
+            if (param3 <= gidB) throw cybozu::Exception(FUNC) << "bad gid range" << gidB << param3;
+        } else {
+            throw cybozu::Exception(FUNC) << "bad type" << type;
+        }
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1448,18 +1463,18 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aMerge, aReplSync}, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
-        archive_local::verifyMergeable(volId, gid);
+        archive_local::verifyMergeable(volId, gidB);
 
         pkt.write(msgAccept);
         sendErr = false;
 
         ActionCounterTransaction tran(volSt.ac, aMerge);
         ul.unlock();
-        if (!archive_local::mergeDiffs(volId, gid, maxSizeMb)) {
-            logger.warn() << FUNC << "stopped force" << volId << gid << maxSizeMb;
+        if (!archive_local::mergeDiffs(volId, gidB, isSize, param3)) {
+            logger.warn() << FUNC << "stopped force" << volId << gidB << type << param3;
             return;
         }
-        logger.info() << "merge succeeded" << volId << gid << maxSizeMb;
+        logger.info() << "merge succeeded" << volId << gidB << type << param3;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
         if (sendErr) pkt.write(e.what());
