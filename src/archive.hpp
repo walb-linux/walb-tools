@@ -884,11 +884,12 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     try {
+        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
+        const std::string &volId = v[0];
+
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
