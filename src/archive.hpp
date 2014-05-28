@@ -747,7 +747,7 @@ inline bool runDiffReplServer(
     return true;
 }
 
-inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, uint32_t sizeMb, Logger &logger)
+inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, bool isSize, uint64_t param, Logger &logger)
 {
     packet::Packet pkt(sock);
 
@@ -766,16 +766,12 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         MetaSnap srvLatestSnap;
         pkt.read(srvLatestSnap);
         const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
-        bool doHashRepl, doDiffRepl;
-        std::tie(doHashRepl, doDiffRepl) = volInfo.shouldDoRepl(srvLatestSnap, cliLatestSnap, sizeMb * MEBI);
+        const int repl = volInfo.shouldDoRepl(srvLatestSnap, cliLatestSnap, isSize, param);
         logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap
-                       << doHashRepl << doDiffRepl;
-        const bool isEnd = !doHashRepl && !doDiffRepl;
-        pkt.write(isEnd);
-        if (isEnd) break;
-
-        pkt.write(doHashRepl);
-        if (doHashRepl) {
+                       << repl;
+        pkt.write(repl);
+        if (repl == ArchiveVolInfo::DONT_REPL) break;
+        if (repl == ArchiveVolInfo::DO_HASH_REPL) {
             const MetaState metaSt = volInfo.getMetaState();
             const MetaSnap cliOldestSnap(volInfo.getOldestCleanSnapshot());
             if (srvLatestSnap.gidB >= cliOldestSnap.gidB) {
@@ -807,17 +803,14 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     if (isFull) {
         if (!runFullReplServer(volId, volSt, volInfo, pkt, logger)) return false;
     }
-
     for (;;) {
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         pkt.write(latestSnap);
-        bool isEnd;
-        pkt.read(isEnd);
-        if (isEnd) break;
+        int repl;
+        pkt.read(repl);
+        if (repl == ArchiveVolInfo::DONT_REPL) break;
 
-        bool doHashRepl;
-        pkt.read(doHashRepl);
-        if (doHashRepl) {
+        if (repl == ArchiveVolInfo::DO_HASH_REPL) {
             if (!runHashReplServer(volId, volSt, volInfo, pkt, logger)) return false;
         } else {
             if (!runDiffReplServer(volId, volSt, volInfo, pkt, logger)) return false;
@@ -1329,10 +1322,18 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.empty()) throw cybozu::Exception(FUNC) << "volId is required";
+        if (v.size() < 3) throw cybozu::Exception(FUNC) << "volId type param2 are required";
         const std::string &volId = v[0];
-        const uint32_t sizeMb = cybozu::atoi(v[1]);
-        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 2);
+        bool isSize;
+        if (v[1] == "size") {
+            isSize = true;
+        } else if (v[1] == "gid") {
+            isSize = false;
+        } else {
+            throw cybozu::Exception(FUNC) << "bad type" << v[1];
+        }
+        const uint64_t param2 = cybozu::atoi(v[2]);
+        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 3);
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1348,7 +1349,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.write(msgAccept);
         sendErr = false;
-        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, sizeMb, logger)) {
+        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
         }

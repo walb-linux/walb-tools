@@ -316,22 +316,31 @@ public:
      * @srvSnap latest snapshot of the remote server.
      * @cliSnap latest snapshot of the client server (self).
      * @minSizeB if total wdiff size is less than this size, diff repl is not required.
-     *
-     * RETURN:
-     *   doHashRepl, doDiffRepl
      */
-    std::pair<bool, bool> shouldDoRepl(const MetaSnap &srvSnap, const MetaSnap &cliSnap, uint64_t minSizeB) const {
-        if (srvSnap.gidB >= cliSnap.gidB) return {false, false};
+    enum {
+        DONT_REPL = 0,
+        DO_HASH_REPL = 1,
+        DO_DIFF_REPL = 2
+    };
+    int shouldDoRepl(const MetaSnap &srvSnap, const MetaSnap &cliSnap, bool isSize, uint64_t param) const {
+        if (srvSnap.gidB >= cliSnap.gidB) return DONT_REPL;
         const std::vector<MetaDiff> diffV = getDiffMgr().getDiffListToSync(MetaState(srvSnap, 0), cliSnap);
-        if (diffV.empty()) return {true, false};
-        if (minSizeB == 0) return {false, true};
-        uint64_t totalB = 0;
-        for (const MetaDiff &diff : diffV) {
-            const uint64_t diffSizeB = wdiffs_.getDiffFileSize(diff);
-            totalB += diffSizeB;
-            if (totalB > minSizeB) return {false, true};
+        if (diffV.empty()) return DO_HASH_REPL;
+
+        if (isSize) {
+            const uint64_t minSizeB = param * MEBI;
+            if (minSizeB == 0) return DO_DIFF_REPL;
+            uint64_t totalB = 0;
+            for (const MetaDiff &diff : diffV) {
+                const uint64_t diffSizeB = wdiffs_.getDiffFileSize(diff);
+                totalB += diffSizeB;
+                if (totalB > minSizeB) return DO_DIFF_REPL;
+            }
+            return DONT_REPL;
+        } else {
+            const uint64_t gid = param;
+            return gid <= diffV[0].snapB.gidB ? DONT_REPL : DO_DIFF_REPL;
         }
-        return {false, false};
     }
 private:
     cybozu::lvm::Vg getVg() const {
