@@ -170,7 +170,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
     std::string res;
     pkt.read(res);
     if (res != msgOk) {
-        throw cybozu::Exception(FUNC) << "command failed" << res;
+        throw cybozu::Exception(FUNC) << "not ok" << res;
     }
 
     if (cmd == "list") {
@@ -205,7 +205,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
     std::string res;
     pkt.read(res);
     if (res != msgOk) {
-        throw cybozu::Exception(FUNC) << "failed" << res;
+        throw cybozu::Exception(FUNC) << "not ok" << res;
     }
 
     uint64_t gid;
