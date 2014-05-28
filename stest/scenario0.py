@@ -135,6 +135,7 @@ def test_n5():
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
 
+
 def test_n6():
     """
         merge -> sha1
@@ -168,6 +169,7 @@ def test_n6():
     merge_diff(a0, VOL, gidB, gidE)
     print "merged gidL", list_restorable(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
+
 
 def main():
     setup_test()

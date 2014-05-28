@@ -245,7 +245,7 @@ def get_gid_list(ax, vol, cmd):
     return map(int, ret.split())
 
 
-def list_restorable(ax, vol, opt = ''):
+def list_restorable(ax, vol, opt=''):
     cmd = ["list-restorable", vol]
     if opt:
         if opt == 'all':
@@ -261,7 +261,7 @@ def list_restored(ax, vol):
     return map(int, ret.split())
 
 
-def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
+def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
@@ -270,7 +270,7 @@ def wait_for_restorable_any(ax, vol, timeoutS = TIMEOUT_SEC):
     return -1
 
 
-def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
+def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
@@ -279,7 +279,7 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     return False
 
 
-def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
+def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
@@ -288,19 +288,19 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS = TIMEOUT_SEC):
     return False
 
 
-def wait_for_restorable(ax, vol, gid, timeoutS = TIMEOUT_SEC):
+def wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
 
 
-def wait_for_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
+def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     return wait_for_gid(ax, vol, gid, 'list-restored', timeoutS)
 
 
-def wait_for_not_restored(ax, vol, gid, timeoutS = TIMEOUT_SEC):
+def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     return wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
 
 
-def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
+def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gidL = get_gid_list(ax, vol, 'list-restorable')
         if gidL and gid <= gidL[0]:
@@ -308,7 +308,8 @@ def wait_for_applied(ax, vol, gid, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     raise Exception("wait_for_applied:timeout", ax, vol)
 
-def wait_for_merged(ax, vol, gidB, gidE, timeoutS = TIMEOUT_SEC):
+
+def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
     for c in xrange(0, timeoutS):
         gidL = list_restorable(ax, vol, 'all')
         pos = gidL.index(gidB)
@@ -317,12 +318,46 @@ def wait_for_merged(ax, vol, gidB, gidE, timeoutS = TIMEOUT_SEC):
         time.sleep(0.3)
     raise Exception("wait_for_merged:timeout", ax, vol, gidB, gidE)
 
+
+def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
+    for c in xrange(0, timeoutS):
+        gidL = list_restorable(ax, vol, 'all')
+        if gidL and gid <= gidL[-1]:
+            return
+        time.sleep(0.3)
+    raise Exception("wait_for_replicated:timeout", ax, vol, gid)
+
+
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
     if st == "Started":
         stop(px, vol)
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol)
+
+def replicate_sync(aSrc, vol, aDst):
+    """
+        copy current (aSrc, vol) to aDst
+    """
+    gidL = list_restorable(aSrc, vol)
+    gid = gidL[-1]
+    run_ctl(aSrc, ['replicate', vol, "gid", str(gid), get_host_port(aDst)])
+    wait_for_replicated(aDst, vol, gid)
+
+
+def synchronize(aSrc, vol, aDst):
+    """
+        synchronize aDst with (aSrc, vol)
+    """
+    for px in cfg.proxyL:
+        st = get_state(px, vol)
+        if st == "Started":
+            stop(px, vol)
+        run_ctl(px, ["archive-info", "add", vol, aDst.name, get_host_port(aDst)])
+    replicate_sync(aSrc, vol, aDst)
+
+    for px in cfg.proxyL:
+        start(px, vol)
 
 
 def prepare_backup(sx, vol):
@@ -451,7 +486,7 @@ def writing(path):
 def startWriting(path):
     global quitWriting
     quitWriting = False
-    t = threading.Thread(target = writing, args = (path,))
+    t = threading.Thread(target=writing, args=(path,))
     t.start()
     return t
 
@@ -470,4 +505,19 @@ def apply_diff(ax, vol, gid):
 def merge_diff(ax, vol, gidB, gidE):
     run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
     wait_for_merged(ax, vol, gidB, gidE)
+
+
+def replicate(aSrc, vol, aDst, synchronizing=False):
+    """
+        copy (aSrc, vol) to aDst
+    """
+    st = get_state(aDst, vol)
+    if st == 'Cleared':
+        run_ctl(aDst, ["init-vol", vol])
+
+    replicate_sync(aSrc, vol, aDst)
+    if synchronizing:
+        synchronize(aSrc, vol, aDst)
+
+
 
