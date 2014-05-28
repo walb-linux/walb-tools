@@ -1151,14 +1151,18 @@ inline void c2aListRestorableServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId, optV[2];
+        if (v.empty()) throw cybozu::Exception(FUNC) << "no vol";
+        const std::string& volId = v[0];
         bool isAll = false;
         bool isVerbose = false;
-        cybozu::util::parseStrVec(v, 0, 1, {&volId, &optV[0], &optV[1]});
-        for (const std::string &opt : optV) {
-            if (opt.empty()) continue;
-            if (opt[0] == 'v') isVerbose = true;
-            else if (opt[1] == 'a') isAll = true;
+        for (size_t i = 1; i < v.size(); i++) {
+            if (v[i] == "vervose") {
+                isVerbose = true;
+            } else if (v[i] == "all") {
+                isAll = true;
+            } else {
+                throw cybozu::Exception(FUNC) << "bad opt" << v[i];
+            }
         }
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
