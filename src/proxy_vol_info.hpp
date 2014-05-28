@@ -158,12 +158,12 @@ public:
      *   MetaDiff list that can be merged.
      *   which will be sent to the server.
      */
-    std::vector<MetaDiff> getDiffListToSend(const std::string &archiveName, uint64_t size) const {
+    MetaDiffVec getDiffListToSend(const std::string &archiveName, uint64_t size) const {
         MetaDiffManager &mgr = diffMgrMap_.get(archiveName);
         WalbDiffFiles wdiffs(mgr, getSlaveDir(archiveName).str());
         return wdiffs.getDiffListToSend(size);
     }
-    std::vector<MetaDiff> getAllDiffsInMaster() const {
+    MetaDiffVec getAllDiffsInMaster() const {
         return diffMgr_.getAll();
     }
     /**
@@ -185,7 +185,7 @@ public:
      * Delete a diff file from the master directory.
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */
-    void deleteDiffs(const std::vector<MetaDiff> &diffV, const std::string& archiveName = "") {
+    void deleteDiffs(const MetaDiffVec &diffV, const std::string& archiveName = "") {
 		const bool isMaster = archiveName.empty();
         MetaDiffManager& mgr = isMaster ? diffMgr_ : diffMgrMap_.get(archiveName);
         mgr.erase(diffV);

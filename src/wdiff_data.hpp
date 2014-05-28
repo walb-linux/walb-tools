@@ -19,9 +19,9 @@
 
 namespace walb {
 
-inline std::vector<MetaDiff> loadWdiffMetadata(const std::string &dirStr)
+inline MetaDiffVec loadWdiffMetadata(const std::string &dirStr)
 {
-    std::vector<MetaDiff> ret;
+    MetaDiffVec ret;
     for (const std::string &fname : util::getFileNameList(dirStr, "wdiff")) {
         ret.push_back(parseDiffFileName(fname));
     }
@@ -83,7 +83,7 @@ public:
      * Get transfer diff list for proxy WdiffTransfer.
      * @size max total file size [byte].
      */
-    std::vector<MetaDiff> getDiffListToSend(uint64_t size) const {
+    MetaDiffVec getDiffListToSend(uint64_t size) const {
         return getDiffListToMerge(0, size);
     }
     /**
@@ -91,8 +91,8 @@ public:
      * @snap base snapshot.
      * @size max total file size [byte].
      */
-    std::vector<MetaDiff> getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
-        std::vector<MetaDiff> v = mgr_.getApplicableAndMergeableDiffList(snap);
+    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
+        MetaDiffVec v = mgr_.getApplicableAndMergeableDiffList(snap);
         truncateDiffVecBySize(v, size);
         return v;
     }
@@ -101,8 +101,8 @@ public:
      * @gid start gid.
      * @size max total file size [byte].
      */
-    std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
-        std::vector<MetaDiff> v = mgr_.getMergeableDiffList(gid);
+    MetaDiffVec getDiffListToMerge(uint64_t gid, uint64_t size) const {
+        MetaDiffVec v = mgr_.getMergeableDiffList(gid);
         truncateDiffVecBySize(v, size);
         return v;
     }
@@ -121,7 +121,7 @@ public:
     /**
      * Remove wdiffs from memory and storage.
      */
-    void removeDiffs(const std::vector<MetaDiff> &v) {
+    void removeDiffs(const MetaDiffVec &v) {
         mgr_.erase(v);
         removeDiffFiles(v);
     }
@@ -129,7 +129,7 @@ public:
      * Remove diff files.
      * @diffV diff list.
      */
-    void removeDiffFiles(const std::vector<MetaDiff> &v) {
+    void removeDiffFiles(const MetaDiffVec &v) {
         for (const MetaDiff &d : v) {
             cybozu::FilePath p = dir_ + createDiffFileName(d);
             if (!p.stat().isFile()) continue;
@@ -151,7 +151,7 @@ public:
      * RETURN:
      *   Diff list.
      */
-    std::vector<MetaDiff> listDiff(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
+    MetaDiffVec listDiff(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
         return mgr_.getAll(gid0, gid1);
     }
     /**
@@ -179,14 +179,14 @@ private:
     /**
      * Convert diff list to name list.
      */
-    static std::vector<std::string> convertDiffToName(const std::vector<MetaDiff> &diffV) {
+    static std::vector<std::string> convertDiffToName(const MetaDiffVec &diffV) {
         std::vector<std::string> v;
         for (const MetaDiff &diff : diffV) {
             v.push_back(createDiffFileName(diff));
         }
         return v;
     }
-    void truncateDiffVecBySize(std::vector<MetaDiff> &v, uint64_t size) const {
+    void truncateDiffVecBySize(MetaDiffVec &v, uint64_t size) const {
         if (v.empty()) return;
         uint64_t total = getDiffFileSize(v[0]);
         size_t i = 1;

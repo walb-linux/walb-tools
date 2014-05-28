@@ -121,7 +121,7 @@ inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *m
 namespace archive_local {
 
 template <typename F>
-inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(
+inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
     std::vector<cybozu::util::File>& fileV, ArchiveVolInfo& volInfo,
     bool allowEmpty, F getDiffList)
 {
@@ -131,7 +131,7 @@ inline std::pair<MetaState, std::vector<MetaDiff>> tryOpenDiffs(
     int retryNum = 0;
   retry:
     const MetaState st = volInfo.getMetaState();
-    const std::vector<MetaDiff> diffV = getDiffList(st);
+    const MetaDiffVec diffV = getDiffList(st);
     if (!allowEmpty && diffV.empty()) {
         throw cybozu::Exception(FUNC) << "diffV empty" << volInfo.volId;
     }
@@ -231,7 +231,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
 
     std::vector<cybozu::util::File> fileV;
     MetaState st0;
-    std::vector<MetaDiff> diffV;
+    MetaDiffVec diffV;
     std::tie(st0, diffV) = tryOpenDiffs(
         fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
             return mgr.getDiffListToApply(st, gid);
@@ -257,7 +257,7 @@ inline void verifyMergeable(const std::string &volId, uint64_t gid)
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    std::vector<MetaDiff> diffV = volSt.diffMgr.getMergeableDiffList(gid);
+    MetaDiffVec diffV = volSt.diffMgr.getMergeableDiffList(gid);
     if (diffV.size() < 2) {
         throw cybozu::Exception(__func__) << "There is no mergeable diff.";
     }
@@ -271,7 +271,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
 
     std::vector<cybozu::util::File> fileV;
     MetaState st0;
-    std::vector<MetaDiff> diffV;
+    MetaDiffVec diffV;
     std::tie(st0, diffV) = tryOpenDiffs(
         fileV, volInfo, allowEmpty, [&](const MetaState &) {
             if (isSize) {
@@ -671,7 +671,7 @@ inline bool runDiffReplClient(
 {
     const char *const FUNC = __func__;
     MetaState st0;
-    std::vector<MetaDiff> diffV;
+    MetaDiffVec diffV;
     std::vector<cybozu::util::File> fileV;
     std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
             return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize);

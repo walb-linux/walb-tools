@@ -126,7 +126,7 @@ class ProxyWorker
 private:
     const ProxyTask task_;
 
-    void setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+    void setupMerger(diff::Merger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
@@ -196,7 +196,7 @@ inline void ProxyVolState::initInner(const std::string &volId)
     volInfo.loadAllArchiveInfo();
 
     // Retry to make hard links of wdiff files in the master directory.
-    std::vector<MetaDiff> diffV = volInfo.getAllDiffsInMaster();
+    MetaDiffVec diffV = volInfo.getAllDiffsInMaster();
     LOGs.debug() << "found diffs" << volId << diffV.size(); // debug
     for (const MetaDiff &d : diffV) {
         LOGs.debug() << "try to make hard link" << d; // debug
@@ -324,7 +324,7 @@ inline StrVec getVolStateStrVec(const std::string &volId)
         ret.push_back(fmt("  num %zu", mgr.size()));
         ret.push_back(fmt("  timestamp %s", tsStr.c_str()));
 
-        const std::vector<MetaDiff> diffV = mgr.getAll();
+        const MetaDiffVec diffV = mgr.getAll();
         uint64_t totalSize = 0;
         StrVec wdiffStrV;
         uint64_t minTs = -1;
@@ -854,7 +854,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     logger.info() << "wlog-transfer succeeded" << volId;
 }
 
-inline void ProxyWorker::setupMerger(diff::Merger& merger, std::vector<MetaDiff>& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+inline void ProxyWorker::setupMerger(diff::Merger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
 {
     const char *const FUNC = __func__;
     const int maxRetryNum = 10;
@@ -913,7 +913,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
-    std::vector<MetaDiff> diffV;
+    MetaDiffVec diffV;
     diff::Merger merger;
     MetaDiff mergedDiff;
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);

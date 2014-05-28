@@ -101,7 +101,7 @@ public:
         }
 #endif
     }
-    void removeDiffs(const std::vector<MetaDiff>& diffV)
+    void removeDiffs(const MetaDiffVec& diffV)
     {
         wdiffs_.removeDiffs(diffV);
     }
@@ -231,7 +231,7 @@ public:
             MetaSnap snap; // TODO
             v.push_back(fmt("snapshot %" PRIu64 "", snap.gidB));
         }
-        std::vector<MetaDiff> dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
+        MetaDiffVec dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
         v.push_back(fmt("numWdiff %zu", dv.size()));
         for (const MetaDiff &d : dv) {
             size_t size = wdiffs_.getDiffFileSize(d);
@@ -296,14 +296,14 @@ public:
      * RETURN:
      *   MetaDiff list that can be merged and applicable to the snapshot.
      */
-    std::vector<MetaDiff> getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
+    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
         return wdiffs_.getDiffListToSend(snap, size);
     }
-    std::vector<MetaDiff> getDiffListToMerge(uint64_t gid, uint64_t size) const {
+    MetaDiffVec getDiffListToMerge(uint64_t gid, uint64_t size) const {
         return wdiffs_.getDiffListToMerge(gid, size);
     }
-    std::vector<MetaDiff> getDiffListToMergeGid(uint64_t gidB, uint64_t gidE) const {
-        std::vector<MetaDiff> v = getDiffMgr().getMergeableDiffList(gidB);
+    MetaDiffVec getDiffListToMergeGid(uint64_t gidB, uint64_t gidE) const {
+        MetaDiffVec v = getDiffMgr().getMergeableDiffList(gidB);
         for (size_t i = 0; i < v.size(); i++) {
             if (v[i].snapB.gidB >= gidE) {
                 v.resize(i);
@@ -318,7 +318,7 @@ public:
      */
     std::vector<std::pair<MetaDiff, uint64_t>> getDiffListWithSize() const {
         std::vector<std::pair<MetaDiff, uint64_t>> ret;
-        const std::vector<MetaDiff> diffV = getDiffMgr().getAll();
+        const MetaDiffVec diffV = getDiffMgr().getAll();
         for (const MetaDiff &diff : diffV) {
             const uint64_t sizeB = wdiffs_.getDiffFileSize(diff);
             ret.push_back(std::make_pair(diff, sizeB));
@@ -337,7 +337,7 @@ public:
     };
     int shouldDoRepl(const MetaSnap &srvSnap, const MetaSnap &cliSnap, bool isSize, uint64_t param) const {
         if (srvSnap.gidB >= cliSnap.gidB) return DONT_REPL;
-        const std::vector<MetaDiff> diffV = getDiffMgr().getDiffListToSync(MetaState(srvSnap, 0), cliSnap);
+        const MetaDiffVec diffV = getDiffMgr().getDiffListToSync(MetaState(srvSnap, 0), cliSnap);
         if (diffV.empty()) return DO_HASH_REPL;
 
         if (isSize) {

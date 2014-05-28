@@ -278,6 +278,8 @@ struct MetaDiff
     void merge(const MetaDiff &rhs);
 };
 
+using MetaDiffVec = std::vector<MetaDiff>;
+
 /**
  * Base lv state record.
  */
@@ -481,7 +483,7 @@ inline MetaSnap apply(const MetaSnap &snap, const MetaDiff &diff)
     return s;
 }
 
-inline bool canApply(const MetaSnap &snap, const std::vector<MetaDiff> &v)
+inline bool canApply(const MetaSnap &snap, const MetaDiffVec &v)
 {
     MetaSnap s = snap;
     for (const MetaDiff &d : v) {
@@ -491,7 +493,7 @@ inline bool canApply(const MetaSnap &snap, const std::vector<MetaDiff> &v)
     return true;
 }
 
-inline MetaSnap apply(const MetaSnap &snap, const std::vector<MetaDiff> &v)
+inline MetaSnap apply(const MetaSnap &snap, const MetaDiffVec &v)
 {
     MetaSnap s = snap;
     for (const MetaDiff &d : v) {
@@ -525,7 +527,7 @@ inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1)
     return ret;
 }
 
-inline bool canMerge(const std::vector<MetaDiff> &v)
+inline bool canMerge(const MetaDiffVec &v)
 {
     if (v.empty()) return false;
     MetaDiff mdiff = v[0];
@@ -536,7 +538,7 @@ inline bool canMerge(const std::vector<MetaDiff> &v)
     return true;
 }
 
-inline MetaDiff merge(const std::vector<MetaDiff> &v)
+inline MetaDiff merge(const MetaDiffVec &v)
 {
     if (v.empty()) {
         throw cybozu::Exception("merge:empty vector.");
@@ -583,7 +585,7 @@ inline MetaState apply(const MetaState &st, const MetaDiff &diff)
     return MetaState(apply(st.snapB, diff), diff.timestamp);
 }
 
-inline bool canApply(const MetaState &st, const std::vector<MetaDiff> &v)
+inline bool canApply(const MetaState &st, const MetaDiffVec &v)
 {
     if (!canApply(st.snapB, v)) return false;
     const MetaSnap s = apply(st.snapB, v);
@@ -594,7 +596,7 @@ inline bool canApply(const MetaState &st, const std::vector<MetaDiff> &v)
     return true;
 }
 
-inline MetaState applying(const MetaState &st, const std::vector<MetaDiff> &v)
+inline MetaState applying(const MetaState &st, const MetaDiffVec &v)
 {
     if (!canApply(st, v)) {
         throw cybozu::Exception("applying:can not apply") << st << v.size();
@@ -603,7 +605,7 @@ inline MetaState applying(const MetaState &st, const std::vector<MetaDiff> &v)
     return MetaState(st.snapB, apply(st.snapB, v), v.back().timestamp);
 }
 
-inline MetaState apply(const MetaState &st, const std::vector<MetaDiff> &v)
+inline MetaState apply(const MetaState &st, const MetaDiffVec &v)
 {
     if (!canApply(st, v)) {
         throw cybozu::Exception("apply:can not apply") << st << v.size();
@@ -725,7 +727,7 @@ inline std::string createDiffFileName(const MetaDiff &diff)
 /**
  * Choose one diff from candidates with the maximum snapE.gidB.
  */
-inline MetaDiff getMaxProgressDiff(const std::vector<MetaDiff> &v) {
+inline MetaDiff getMaxProgressDiff(const MetaDiffVec &v) {
     if (v.empty()) throw cybozu::Exception("getMaxProgressDiff:empty");
     MetaDiff diff = v[0];
     for (size_t i = 1; i < v.size(); i++) {
@@ -762,7 +764,7 @@ public:
         AutoLock lk(mu_);
         eraseNolock(diff, doesThrowError);
     }
-    void erase(const std::vector<MetaDiff> &diffV, bool doesThrowError = false) {
+    void erase(const MetaDiffVec &diffV, bool doesThrowError = false) {
         AutoLock lk(mu_);
         for (const MetaDiff &diff : diffV) {
             eraseNolock(diff, doesThrowError);
@@ -777,9 +779,9 @@ public:
      * RETURN:
      *   Removed diffs.
      */
-    std::vector<MetaDiff> gc() {
+    MetaDiffVec gc() {
         AutoLock lk(mu_);
-        std::vector<MetaDiff> v;
+        MetaDiffVec v;
         // Get clean diffs.
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
@@ -813,7 +815,7 @@ public:
             }
             assert(s.size() + m.size() == v.size());
         }
-        return std::vector<MetaDiff>(s.begin(), s.end());
+        return MetaDiffVec(s.begin(), s.end());
     }
     /**
      * Clear all diffs.
@@ -825,7 +827,7 @@ public:
     /**
      * Clear and add diffs.
      */
-    void reset(const std::vector<MetaDiff> &v) {
+    void reset(const MetaDiffVec &v) {
         AutoLock lk(mu_);
         mmap_.clear();
         for (const MetaDiff &d : v) {
@@ -835,9 +837,9 @@ public:
     /**
      * Erase all diffs whose snapE.gidE is not greater than a specified gid.
      */
-    std::vector<MetaDiff> eraseBeforeGid(uint64_t gid) {
+    MetaDiffVec eraseBeforeGid(uint64_t gid) {
         AutoLock lk(mu_);
-        std::vector<MetaDiff> v;
+        MetaDiffVec v;
         auto it = mmap_.begin();
         while (it != mmap_.end()) {
             const MetaDiff &d = it->second;
@@ -857,22 +859,22 @@ public:
     /**
      * Erase too old diffs compared with a state.
      */
-    std::vector<MetaDiff> eraseBefore(const MetaState &st) {
+    MetaDiffVec eraseBefore(const MetaState &st) {
         return eraseBeforeGid(st.snapB.gidB);
     }
     /**
      * Get mergeable diff list started by lower-bound search with a specified gid,
      * where all the diffs satisfy a specified predicate.
      */
-    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid, const std::function<bool(const MetaDiff &)> &pred) const {
+    MetaDiffVec getMergeableDiffList(uint64_t gid, const std::function<bool(const MetaDiff &)> &pred) const {
         AutoLock lk(mu_);
-        std::vector<MetaDiff> v = getFirstDiffs(gid);
+        MetaDiffVec v = getFirstDiffs(gid);
         if (v.empty()) return {};
         MetaDiff diff = getMaxProgressDiff(v);
         v = {diff};
         MetaDiff mdiff = diff;
         for (;;) {
-            std::vector<MetaDiff> u = getMergeableCandidates(mdiff);
+            MetaDiffVec u = getMergeableCandidates(mdiff);
             if (u.empty()) break;
             diff = getMaxProgressDiff(u);
             if (!pred(diff)) break;
@@ -881,7 +883,7 @@ public:
         }
         return v;
     }
-    std::vector<MetaDiff> getMergeableDiffList(uint64_t gid) const {
+    MetaDiffVec getMergeableDiffList(uint64_t gid) const {
         auto pred = [](const MetaDiff &) { return true; };
         return getMergeableDiffList(gid, pred);
     }
@@ -889,12 +891,12 @@ public:
      * Get applicable diff list to a specified snapshot
      * where all the diffs and applied snapshot satisfy a specified predicate.
      */
-    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &, const MetaSnap &)> &pred) const {
+    MetaDiffVec getApplicableDiffList(const MetaSnap &snap, const std::function<bool(const MetaDiff &, const MetaSnap &)> &pred) const {
         AutoLock lk(mu_);
         MetaSnap s = snap;
-        std::vector<MetaDiff> v;
+        MetaDiffVec v;
         for (;;) {
-            std::vector<MetaDiff> u = getApplicableCandidates(s);
+            MetaDiffVec u = getApplicableCandidates(s);
             if (u.empty()) break;
             MetaDiff d = getMaxProgressDiff(u);
             s = apply(s, d);
@@ -903,24 +905,24 @@ public:
         }
         return v;
     }
-    std::vector<MetaDiff> getApplicableDiffList(const MetaSnap &snap) const {
+    MetaDiffVec getApplicableDiffList(const MetaSnap &snap) const {
         auto pred = [](const MetaDiff &, const MetaSnap &) { return true; };
         return getApplicableDiffList(snap, pred);
     }
-    std::vector<MetaDiff> getApplicableDiffListByGid(const MetaSnap &snap, uint64_t maxGid) const {
+    MetaDiffVec getApplicableDiffListByGid(const MetaSnap &snap, uint64_t maxGid) const {
         auto pred = [&](const MetaDiff &, const MetaSnap &snap) {
             return snap.gidB <= maxGid;
         };
         return getApplicableDiffList(snap, pred);
     }
-    std::vector<MetaDiff> getApplicableDiffListByTime(const MetaSnap &snap, uint64_t maxTimestamp) const {
+    MetaDiffVec getApplicableDiffListByTime(const MetaSnap &snap, uint64_t maxTimestamp) const {
         auto pred = [&](const MetaDiff &diff, const MetaSnap &) {
             return diff.timestamp <= maxTimestamp;
         };
         return getApplicableDiffList(snap, pred);
     }
-    std::vector<MetaDiff> getApplicableAndMergeableDiffList(const MetaSnap &snap) const {
-        std::vector<MetaDiff> v = getApplicableDiffList(snap);
+    MetaDiffVec getApplicableAndMergeableDiffList(const MetaSnap &snap) const {
+        MetaDiffVec v = getApplicableDiffList(snap);
         if (v.empty()) return {};
 
         MetaDiff diff = v[0];
@@ -937,7 +939,7 @@ public:
      * Minimum number of diffs that are applicable.
      * This is useful for applying state.
      */
-    std::vector<MetaDiff> getMinimumApplicableDiffList(const MetaState &st) const {
+    MetaDiffVec getMinimumApplicableDiffList(const MetaState &st) const {
         if (!st.isApplying) return {};
         return getApplicableDiffList(st.snapB, [&](const MetaDiff &, const MetaSnap &snap) {
                 return snap.gidB <= st.snapE.gidB;
@@ -949,7 +951,7 @@ public:
      * @st base state.
      */
     MetaSnap getLatestSnapshot(const MetaState &st) const {
-        std::vector<MetaDiff> applicableV;
+        MetaDiffVec applicableV;
         {
             AutoLock lk(mu_);
             applicableV = getApplicableDiffList(st.snapB);
@@ -989,7 +991,7 @@ public:
      */
     std::vector<MetaState> getRestorableList(const MetaState &st, bool isAll = false) const {
         std::vector<MetaState> ret;
-        std::vector<MetaDiff> applicableV, minV;
+        MetaDiffVec applicableV, minV;
         getTargetDiffLists(applicableV, minV, st);
         MetaState st0 = apply(st, minV);
         assert(!st0.isApplying);
@@ -1003,7 +1005,7 @@ public:
         }
         return ret;
     }
-    void getTargetDiffLists(std::vector<MetaDiff>& applicableV, std::vector<MetaDiff>& minV, const MetaState &st, uint64_t gid) const {
+    void getTargetDiffLists(MetaDiffVec& applicableV, MetaDiffVec& minV, const MetaState &st, uint64_t gid) const {
         AutoLock lk(mu_);
         applicableV = getApplicableDiffListByGid(st.snapB, gid);
         // use this if timestamp
@@ -1012,7 +1014,7 @@ public:
 
         minV = getMinimumApplicableDiffList(st);
     }
-    void getTargetDiffLists(std::vector<MetaDiff>& applicableV, std::vector<MetaDiff>& minV, const MetaState &st) const {
+    void getTargetDiffLists(MetaDiffVec& applicableV, MetaDiffVec& minV, const MetaState &st) const {
         AutoLock lk(mu_);
         applicableV = getApplicableDiffList(st.snapB);
         minV = getMinimumApplicableDiffList(st);
@@ -1030,7 +1032,7 @@ public:
      * RETURN:
      *   Empty vector means the clean snapshot can not be restored.
      */
-    std::vector<MetaDiff> getDiffListToRestore(const MetaState& st, uint64_t gid) const {
+    MetaDiffVec getDiffListToRestore(const MetaState& st, uint64_t gid) const {
         return getDiffListToSync(st, MetaSnap(gid));
     }
     /**
@@ -1038,8 +1040,8 @@ public:
      * RETURN:
      *   Empty vector means there is no diff to apply.
      */
-    std::vector<MetaDiff> getDiffListToApply(const MetaState &st, uint64_t gid) const {
-        std::vector<MetaDiff> applicableV, minV;
+    MetaDiffVec getDiffListToApply(const MetaState &st, uint64_t gid) const {
+        MetaDiffVec applicableV, minV;
         getTargetDiffLists(applicableV, minV, st, gid);
         if (minV.size() > applicableV.size()) return minV;
         return applicableV;
@@ -1049,8 +1051,8 @@ public:
      * RETURN:
      *   Empty vector means the snapshot can not be reprodusable.
      */
-    std::vector<MetaDiff> getDiffListToSync(const MetaState &st, const MetaSnap &snap) const {
-        std::vector<MetaDiff> applicableV, minV;
+    MetaDiffVec getDiffListToSync(const MetaState &st, const MetaSnap &snap) const {
+        MetaDiffVec applicableV, minV;
         getTargetDiffLists(applicableV, minV, st, snap.gidB);
         if (minV.size() > applicableV.size()) return {};
         const MetaState appliedSt = apply(st, applicableV);
@@ -1063,13 +1065,13 @@ public:
     /**
      * Get all diffs between gid0 and gid1.
      */
-    std::vector<MetaDiff> getAll(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
+    MetaDiffVec getAll(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
         if (gid0 >= gid1) {
             throw cybozu::Exception("MetaDiffManager::getAll:gid0 >= gid1")
                 << gid0 << gid1;
         }
         AutoLock lk(mu_);
-        std::vector<MetaDiff> v;
+        MetaDiffVec v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
             if (gid1 < d.snapB.gidB) {
@@ -1142,14 +1144,14 @@ private:
      *   Diffs that has smallest diff.snapB.gidB but not less than a specified gid
      *   and they have the same snapB.
      */
-    std::vector<MetaDiff> getFirstDiffs(uint64_t gid = 0) const {
+    MetaDiffVec getFirstDiffs(uint64_t gid = 0) const {
         Key key0 = {gid, gid};
         auto it0 = mmap_.lower_bound(key0);
         if (it0 == mmap_.cend()) return {};
         const MetaDiff &d = it0->second;
         Key key1 = getKey(d);
 
-        std::vector<MetaDiff> v;
+        MetaDiffVec v;
         decltype(it0) it, it1;
         std::tie(it, it1) = mmap_.equal_range(key1);
         while (it != it1) {
@@ -1158,8 +1160,8 @@ private:
         }
         return v;
     }
-    std::vector<MetaDiff> getMergeableCandidates(const MetaDiff &diff) const {
-        std::vector<MetaDiff> v;
+    MetaDiffVec getMergeableCandidates(const MetaDiff &diff) const {
+        MetaDiffVec v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
             if (diff.snapE.gidE < d.snapB.gidB) {
@@ -1172,8 +1174,8 @@ private:
         }
         return v;
     }
-    std::vector<MetaDiff> getApplicableCandidates(const MetaSnap &snap) const {
-        std::vector<MetaDiff> v;
+    MetaDiffVec getApplicableCandidates(const MetaSnap &snap) const {
+        MetaDiffVec v;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
             if (snap.gidE < d.snapB.gidB) {
