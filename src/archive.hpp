@@ -1201,9 +1201,12 @@ inline void c2aListRestorableServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
+        const std::string st = volSt.sm.get();
         verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
-        const StrVec strV = archive_local::listRestorable(volId, isAll, isVerbose);
+        StrVec strV;
+        if (isStateIn(st, {aArchived, atHashSync, atWdiffRecv})) {
+            strV = archive_local::listRestorable(volId, isAll, isVerbose);
+        }
         ul.unlock();
         logger.info() << "list-restored succeeded" << volId;
         pkt.write(msgOk);
