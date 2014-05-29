@@ -171,6 +171,26 @@ def test_n6():
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
 
 
+def test_n7():
+    """
+        replicate (no synchronizing, full) -> sha1
+    """
+    replicate(a0, VOL, a1, False)
+    list0 = list_restorable(a0, VOL)
+    list1 = list_restorable(a1, VOL)
+    print 'list0', list0
+    print 'list1', list1
+    if list0 != list1:
+        raise Exception('test_n7:list differ', list0, list1)
+    gid = list0[-1]
+    md0 = get_sha1_of_restorable(a0, VOL, gid)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    print 'md0', md0
+    print 'md1', md1
+    if md0 != md1:
+        raise Exception('test_n7:md differ', md0, md1)
+
+
 def main():
     setup_test()
     test_n1()
@@ -178,7 +198,9 @@ def main():
 #    test_n3()
 #    test_n4()
 #    test_n5()
-    test_n6()
+#    test_n6()
+    test_n7()
+
 
 if __name__ == "__main__":
     main()

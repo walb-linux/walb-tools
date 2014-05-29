@@ -335,6 +335,7 @@ def add_archive_to_proxy(px, vol, ax):
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol)
 
+
 def replicate_sync(aSrc, vol, aDst):
     """
         copy current (aSrc, vol) to aDst
@@ -474,6 +475,14 @@ def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     verify_equal_sha1(msg, md0, md1)
     del_restored(ax, vol, gid)
 
+
+def get_sha1_of_restorable(ax, vol, gid):
+    restore(ax, vol, gid)
+    md = get_sha1(get_restored_path(ax, vol, gid))
+    del_restored(ax, vol, gid)
+    return md
+
+
 quitWriting = False
 
 
@@ -507,17 +516,14 @@ def merge_diff(ax, vol, gidB, gidE):
     wait_for_merged(ax, vol, gidB, gidE)
 
 
-def replicate(aSrc, vol, aDst, synchronizing=False):
+def replicate(aSrc, vol, aDst, synchronizing):
     """
         copy (aSrc, vol) to aDst
     """
     st = get_state(aDst, vol)
-    if st == 'Cleared':
+    if st == 'Clear':
         run_ctl(aDst, ["init-vol", vol])
 
     replicate_sync(aSrc, vol, aDst)
     if synchronizing:
         synchronize(aSrc, vol, aDst)
-
-
-
