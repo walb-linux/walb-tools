@@ -556,23 +556,26 @@ inline void c2pStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-    std::string volId;
-    StopOpt stopOpt;
-    std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId;
+        StopOpt stopOpt;
+        std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
+        pkt.write(msgAccept);
+        sendErr = false;
+
         if (stopOpt.isEmpty()) {
             proxy_local::stopAndEmptyProxyVol(volId);
         } else {
             proxy_local::stopProxyVol(volId, stopOpt.isForce());
         }
-        pkt.write(msgOk); // TODO change to msgAccept.
         logger.info() << "stop succeeded" << volId << stopOpt;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 

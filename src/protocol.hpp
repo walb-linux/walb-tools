@@ -415,4 +415,3 @@ inline void c2xGetStateServer(protocol::ServerParams &p, VolStateGetter getter, 
 }
 
 }} // namespace walb::protocol
-

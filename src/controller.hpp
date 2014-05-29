@@ -80,7 +80,7 @@ inline void c2xStartClient(protocol::ClientParams &p)
  */
 inline void c2xStopClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 0, "c2xStopClient", msgOk);
+    protocol::sendStrVec(p.sock, p.params, 0, "c2xStopClient", msgAccept);
 }
 
 namespace ctrl_local {

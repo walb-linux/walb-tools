@@ -1020,18 +1020,22 @@ inline void c2aStopServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-    std::string volId;
-    StopOpt stopOpt;
-    std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId;
+        StopOpt stopOpt;
+        std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
+
         ArchiveVolState &volSt = getArchiveVolState(volId);
         Stopper stopper(volSt.stopState, stopOpt.isForce());
         if (!stopper.isSuccess()) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
+        pkt.write(msgAccept);
+        sendErr = false;
         UniqueLock ul(volSt.mu);
         StateMachine &sm = volSt.sm;
 
@@ -1053,12 +1057,10 @@ inline void c2aStopServer(protocol::ServerParams &p)
         }
         volInfo.setState(aStopped);
         tran.commit(aStopped);
-
-        pkt.write(msgOk);
         logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
