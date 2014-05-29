@@ -129,9 +129,7 @@ def test_n5():
     gid = snapshot_sync(s0, VOL, [a0])
     time.sleep(0.5)
     stopWriting(t)
-    restore(a0, VOL, gid)
-    md0 = get_sha1(get_restored_path(a0, VOL, gid))
-    del_restored(a0, VOL, gid)
+    md0 = get_sha1_of_restorable(a0, VOL, gid)
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
 
@@ -163,9 +161,7 @@ def test_n6():
     stopWriting(t)
     # merge gidB and gidE
 
-    restore(a0, VOL, gidE)
-    md0 = get_sha1(get_restored_path(a0, VOL, gidE))
-    del_restored(a0, VOL, gidE)
+    md0 = get_sha1_of_restorable(a0, VOL, gidE)
     merge_diff(a0, VOL, gidB, gidE)
     print "merged gidL", list_restorable(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)

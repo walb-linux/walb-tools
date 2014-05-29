@@ -468,12 +468,8 @@ def verify_equal_sha1(msg, md0, md1):
 
 
 def restore_and_verify_sha1(msg, md0, ax, vol, gid):
-    restore(ax, vol, gid)
-    restoredPath = get_restored_path(ax, vol, gid)
-#    print "restoredPath=", restoredPath
-    md1 = get_sha1(restoredPath)
+    md1 = get_sha1_of_restorable(ax, vol, gid)
     verify_equal_sha1(msg, md0, md1)
-    del_restored(ax, vol, gid)
 
 
 def get_sha1_of_restorable(ax, vol, gid):
