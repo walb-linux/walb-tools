@@ -1385,7 +1385,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aReplSync);
         ul.unlock();
