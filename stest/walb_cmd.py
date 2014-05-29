@@ -67,8 +67,8 @@ def get_server_args(s):
     return ret
 
 
-def run_command(args):
-    if cfg.debug:
+def run_command(args, putMsg=True):
+    if cfg.debug and putMsg:
         print "run_command:", to_str(args)
     p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=sys.stderr)
     f = p.stdout
@@ -76,6 +76,8 @@ def run_command(args):
     ret = p.wait()
     if ret != 0:
         raise Exception("command error %d\n" % ret)
+    if cfg.debug and putMsg:
+        print "run_command_result:", s
     return s
 
 
@@ -352,9 +354,14 @@ def synchronize(aSrc, vol, aDst):
     """
     for px in cfg.proxyL:
         st = get_state(px, vol)
-        if st == "Started":
-            stop(px, vol)
+        print 'px,st0', px, st
+        if st == 'Started' or st == 'WlogRecv':
+            stop(px, vol, 'empty')
         run_ctl(px, ["archive-info", "add", vol, aDst.name, get_host_port(aDst)])
+        st1 = get_state(px, vol)
+        print 'px,st1', px, st1
+        if st1 != 'Stopped':
+            raise Exception('synchronize: must be Stopped state', px, vol, st1)
     replicate_sync(aSrc, vol, aDst)
 
     for px in cfg.proxyL:
@@ -423,7 +430,7 @@ def hash_backup(sx, vol):
 def write_random(devName, size):
     args = [cfg.binDir + "/write_random_data",
         '-s', str(size), devName]
-    return run_command(args)
+    return run_command(args, False)
 
 
 def get_sha1(devName):

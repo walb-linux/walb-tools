@@ -229,6 +229,34 @@ def test_n9():
     verify_equal_sha1('test_n9', md0, md1)
 
 
+def test_n10():
+    """
+        replicate (sychronizing) -> sha1
+    """
+    t = startWriting(WDEV_PATH)
+    try:
+        time.sleep(0.5)
+        replicate(a0, VOL, a1, True)
+        time.sleep(0.5)
+        #gid0 = snapshot_sync(s0, VOL, [a0, a1])
+        gid0 = snapshot_async(s0, VOL)
+        wait_for_restorable(a0, VOL, gid0)
+        wait_for_restorable(a1, VOL, gid0)
+        md0 = get_sha1_of_restorable(a0, VOL, gid0)
+        md1 = get_sha1_of_restorable(a1, VOL, gid0)
+        verify_equal_sha1('test_n10', md0, md1)
+        stop_sync(a1, VOL)
+        time.sleep(0.5)
+    except Exception, e:
+        stopWriting(t)
+        raise e
+    stopWriting(t)
+    gid1 = snapshot_sync(s0, VOL, [a0])
+    gid1a1 = get_latest_clean_snapshot(a1, VOL)
+    if gid1 <= gid1a1:
+        raise Exception('test_n10: not stopped synchronizing', gid1, gid1a1)
+
+
 def main():
     setup_test()
     test_n1()
@@ -240,7 +268,13 @@ def main():
     test_n7()
     test_n8()
     test_n9()
+    test_n10()
 
 
 if __name__ == "__main__":
+    # try:
+    #     main()
+    # except:
+    #     for p in g_processList:
+    #         p.kill()
     main()
