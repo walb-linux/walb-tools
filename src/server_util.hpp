@@ -256,7 +256,7 @@ inline void verifyNotStopping(
  * RETURN:
  *   true if a specified state is found in a specified list.
  */
-inline bool isStateIn(const std::string &state, const std::vector<std::string> &v)
+inline bool isStateIn(const std::string &state, const StrVec &v)
 {
     for (const std::string &st : v) {
         if (state == st) return true;
@@ -264,7 +264,7 @@ inline bool isStateIn(const std::string &state, const std::vector<std::string> &
     return false;
 }
 
-inline void verifyStateIn(const std::string &state, const std::vector<std::string> &v, const char *msg)
+inline void verifyStateIn(const std::string &state, const StrVec &v, const char *msg)
 {
     if (!isStateIn(state, v)) {
         throw cybozu::Exception(msg) << "bad state" << state;

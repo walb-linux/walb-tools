@@ -217,7 +217,7 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
     const uint32_t len = 1000;
     const size_t bufN = 300;
-    std::vector<std::string> inData(bufN);
+    StrVec inData(bufN);
     std::vector<Buffer> inBuf(bufN);
     puts("CREATE"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {

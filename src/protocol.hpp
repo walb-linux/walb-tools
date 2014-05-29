@@ -168,12 +168,12 @@ struct ClientParams
 {
     cybozu::Socket &sock;
     ProtocolLogger &logger;
-    const std::vector<std::string> &params;
+    const StrVec &params;
 
     ClientParams(
         cybozu::Socket &sock0,
         ProtocolLogger &logger0,
-        const std::vector<std::string> &params0)
+        const StrVec &params0)
         : sock(sock0)
         , logger(logger0)
         , params(params0) {
@@ -280,7 +280,7 @@ inline ServerHandler findServerHandler(
 
 inline void clientDispatch(
     const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
-    const std::vector<std::string> &params,
+    const StrVec &params,
     const std::map<std::string, ClientHandler> &handlers)
 {
     ClientParams clientParams(sock, logger, params);
@@ -334,7 +334,7 @@ inline void serverDispatch(
  */
 inline void sendStrVec(
     cybozu::Socket &sock,
-    const std::vector<std::string> &v, size_t numToSend, const char *msg, const char *confirmMsg = nullptr)
+    const StrVec &v, size_t numToSend, const char *msg, const char *confirmMsg = nullptr)
 {
     if (numToSend != 0 && v.size() != numToSend) {
         throw cybozu::Exception(msg) << "bad size" << numToSend << v.size();
@@ -360,11 +360,11 @@ inline void sendStrVec(
 /**
  * If numToRecv == 0, it will not check the vector size.
  */
-inline std::vector<std::string> recvStrVec(
+inline StrVec recvStrVec(
     cybozu::Socket &sock, size_t numToRecv, const char *msg)
 {
     packet::Packet packet(sock);
-    std::vector<std::string> v;
+    StrVec v;
     packet.read(v);
     if (numToRecv != 0 && v.size() != numToRecv) {
         throw cybozu::Exception(msg) << "bad size" << numToRecv << v.size();

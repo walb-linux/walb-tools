@@ -62,7 +62,7 @@ CYBOZU_TEST_AUTO(directory)
     touchFile(d0 + cybozu::FilePath("f2"));
 
     cybozu::Directory dir(fp.str());
-    std::vector<std::string> v;
+    StrVec v;
     while (!dir.isEnd()) {
         v.push_back(dir.next());
     }

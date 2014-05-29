@@ -98,9 +98,9 @@ public:
      * This will throw an exception if caught SIGINT.
      *
      */
-    std::vector<std::string> poll(int timeoutMs = -1) {
+    StrVec poll(int timeoutMs = -1) {
         const char *const FUNC = __func__;
-        std::vector<std::string> v;
+        StrVec v;
         int nfds = ::epoll_wait(efd_(), &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
             LOGs.error() << FUNC << cybozu::ErrorNo();

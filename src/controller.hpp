@@ -21,7 +21,7 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
         throw cybozu::Exception(FUNC) << "not ok" << st;
     }
 
-    std::vector<std::string> v;
+    StrVec v;
     packet.read(v);
     for (const std::string &s : v) {
         std::cout << s << std::endl;

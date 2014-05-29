@@ -373,7 +373,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet pkt(p.sock);
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    std::vector<std::string> params;
+    StrVec params;
     pkt.read(params);
 
     StrVec v;

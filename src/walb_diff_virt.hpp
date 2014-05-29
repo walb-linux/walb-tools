@@ -61,7 +61,7 @@ public:
         , isEndDiff_(false)
         , emptyWdiff_(false) {}
 
-    void init(cybozu::util::File&& reader, const std::vector<std::string> &wdiffPaths) {
+    void init(cybozu::util::File&& reader, const StrVec &wdiffPaths) {
         init_inner(std::move(reader));
         emptyWdiff_ = wdiffPaths.empty();
         if (!emptyWdiff_) {

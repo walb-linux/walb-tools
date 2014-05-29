@@ -105,8 +105,8 @@ public:
     /**
      * get status as a string vector.
      */
-    std::vector<std::string> getStatusAsStrVec(bool isVerbose) const {
-        std::vector<std::string> v;
+    StrVec getStatusAsStrVec(bool isVerbose) const {
+        StrVec v;
         if (!existsVolDir()) return v;
 
         auto &fmt = cybozu::util::formatString;

@@ -144,7 +144,7 @@ public:
      *   list of wdiff name.
      *   the list does not contain overlapped ones.
      */
-    std::vector<std::string> listName(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
+    StrVec listName(uint64_t gid0 = 0, uint64_t gid1 = -1) const {
         return convertDiffToName(listDiff(gid0, gid1));
     }
     /**
@@ -179,8 +179,8 @@ private:
     /**
      * Convert diff list to name list.
      */
-    static std::vector<std::string> convertDiffToName(const MetaDiffVec &diffV) {
-        std::vector<std::string> v;
+    static StrVec convertDiffToName(const MetaDiffVec &diffV) {
+        StrVec v;
         for (const MetaDiff &diff : diffV) {
             v.push_back(createDiffFileName(diff));
         }

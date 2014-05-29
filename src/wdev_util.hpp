@@ -1,8 +1,6 @@
 #pragma once
 
 #include <type_traits>
-#include "cybozu/exception.hpp"
-#include "cybozu/string_operation.hpp"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -13,6 +11,9 @@
 #include "fdstream.hpp"
 #include "walb/ioctl.h"
 #include "walb/block_size.h"
+#include "cybozu/exception.hpp"
+#include "cybozu/string_operation.hpp"
+#include "walb_types.hpp"
 
 namespace walb {
 namespace device {
@@ -105,7 +106,7 @@ inline void setOldestLsid(const std::string& wdevPath, uint64_t lsid)
 inline std::pair<uint32_t, uint32_t> parseDeviceIdStr(const std::string& devIdStr)
 {
     const char *const FUNC = __func__;
-    std::vector<std::string> v = cybozu::Split(devIdStr, ':', 2);
+    StrVec v = cybozu::Split(devIdStr, ':', 2);
     if (v.size() != 2) {
         throw cybozu::Exception(FUNC) << "parse error" << devIdStr;
     }
@@ -135,7 +136,7 @@ inline std::string getDevPathFromId(uint32_t major, uint32_t minor)
     const std::string res = cybozu::process::call(
         "/bin/lsblk", { "-l", "-n", "-r", "-o", "KNAME,MAJ:MIN" });
     for (const std::string& line : cybozu::Split(res, '\n')) {
-        const std::vector<std::string> v = cybozu::Split(line, ' ');
+        const StrVec v = cybozu::Split(line, ' ');
         if (v.size() != 2) {
             throw cybozu::Exception(FUNC) << "lsblk output parse error" << line;
         }
@@ -304,5 +305,5 @@ inline cybozu::util::BlockDevice getWldev(const std::string& wdevName, bool isRe
         (isRead ? O_RDONLY : O_RDWR) | O_DIRECT);
 }
 
-}} // walb::device
+}} // namespace walb::device
 

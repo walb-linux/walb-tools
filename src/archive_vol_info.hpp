@@ -190,9 +190,9 @@ public:
         }
         lv.resize(newSizeLb);
     }
-    std::vector<std::string> getStatusAsStrVec() const {
+    StrVec getStatusAsStrVec() const {
         const char *const FUNC = __func__;
-        std::vector<std::string> v;
+        StrVec v;
         auto &fmt = cybozu::util::formatString;
 
         if (!existsVolDir()) {
@@ -209,7 +209,7 @@ public:
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         std::string st = getState();
         v.push_back(fmt("state %s", st.c_str()));
-        std::vector<std::string> actionV; // TODO
+        StrVec actionV; // TODO
         std::string actions;
         for (const std::string &s : actionV) {
             actions += std::string(" ") + s;
@@ -389,7 +389,7 @@ private:
         }
 
         os << "----------diff files----------" << std::endl;
-        std::vector<std::string> v = wdiffsP_->listName();
+        StrVec v = wdiffsP_->listName();
         for (std::string &fileName : v) {
             os << fileName << std::endl;
         }

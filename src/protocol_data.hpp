@@ -13,12 +13,12 @@ protected:
     cybozu::Socket &sock_;
     Logger &logger_;
     const std::atomic<bool> &forceQuit_;
-    const std::vector<std::string> &params_;
+    const StrVec &params_;
 public:
     ProtocolData(const std::string &protocolName,
                  cybozu::Socket &sock, Logger &logger,
                  const std::atomic<bool> &forceQuit,
-                 const std::vector<std::string> &params)
+                 const StrVec &params)
         : protocolName_(protocolName)
         , sock_(sock), logger_(logger)
         , forceQuit_(forceQuit), params_(params) {}

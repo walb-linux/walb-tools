@@ -19,7 +19,6 @@
 #include "task_queue.hpp"
 #include "action_counter.hpp"
 #include "thread_util.hpp"
-#include "walb_logger.hpp"
 #include "time.hpp"
 #include "walb/block_size.h"
 #include "cybozu/exception.hpp"
@@ -32,14 +31,10 @@
 #include "cybozu/file.hpp"
 #include "cybozu/serializer.hpp"
 #include "cybozu/array.hpp"
+#include "walb_logger.hpp"
+#include "walb_types.hpp"
 
 namespace walb {
-
-typedef std::vector<std::string> StrVec;
-typedef std::vector<char> Buffer;
-typedef std::unique_lock<std::recursive_mutex> UniqueLock;
-using AlignedArray = cybozu::AlignedArray<char, LOGICAL_BLOCK_SIZE>;
-
 namespace util {
 
 /**
@@ -74,9 +69,9 @@ void makeDir(const std::string &dirStr, const char *msg,
 
 namespace walb_util_local {
 
-inline std::vector<std::string> getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "")
+inline StrVec getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "")
 {
-    std::vector<std::string> ret;
+    StrVec ret;
     std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
     for (const cybozu::FileInfo &info : list) {
         if ((isDir && info.isDirectory()) ||
@@ -89,12 +84,12 @@ inline std::vector<std::string> getDirEntNameList(const std::string &dirStr, boo
 
 } // walb_util_local
 
-inline std::vector<std::string> getDirNameList(const std::string &dirStr)
+inline StrVec getDirNameList(const std::string &dirStr)
 {
     return walb_util_local::getDirEntNameList(dirStr, true);
 }
 
-inline std::vector<std::string> getFileNameList(const std::string &dirStr, const char *ext)
+inline StrVec getFileNameList(const std::string &dirStr, const char *ext)
 {
     return walb_util_local::getDirEntNameList(dirStr, false, ext);
 }

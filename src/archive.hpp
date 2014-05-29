@@ -1229,7 +1229,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const std::vector<std::string> v =
+    const StrVec v =
         protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);

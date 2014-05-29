@@ -140,8 +140,8 @@ public:
     bool existsVolDir() const {
         return volDir.stat().isDirectory();
     }
-    std::vector<std::string> getStatusAsStrVec() const {
-        std::vector<std::string> v;
+    StrVec getStatusAsStrVec() const {
+        StrVec v;
         //auto &fmt = cybozu::util::formatString;
 
         // QQQ
@@ -242,8 +242,8 @@ private:
     /**
      * Get list of name of all the archive servers.
      */
-    std::vector<std::string> getArchiveNameList() const {
-        std::vector<std::string> bnameV, fnameV;
+    StrVec getArchiveNameList() const {
+        StrVec bnameV, fnameV;
         fnameV = util::getFileNameList(volDir.str(), ArchiveExtension);
         for (const std::string &fname : fnameV) {
             bnameV.push_back(cybozu::GetBaseName(fname));

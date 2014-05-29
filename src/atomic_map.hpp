@@ -29,9 +29,9 @@ public:
         }
         return *itr->second;
     }
-    std::vector<std::string> getKeyList() const {
+    StrVec getKeyList() const {
         AutoLock al(mu_);
-        std::vector<std::string> ret;
+        StrVec ret;
         for (const typename Map::value_type &p : map_) {
             ret.push_back(p.first);
         }

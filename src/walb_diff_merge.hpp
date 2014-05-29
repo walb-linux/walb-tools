@@ -176,7 +176,7 @@ public:
     /**
      * Add diff files.
      */
-    void addWdiffs(const std::vector<std::string> &wdiffPaths) {
+    void addWdiffs(const StrVec &wdiffPaths) {
         for (const std::string &s : wdiffPaths) {
             addWdiff(s);
         }

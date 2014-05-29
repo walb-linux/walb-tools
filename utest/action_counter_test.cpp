@@ -17,7 +17,7 @@ CYBOZU_TEST_AUTO(actionCounter)
 
 CYBOZU_TEST_AUTO(actionCounters)
 {
-    std::vector<std::string> tbl({"a0", "a1", "a2"});
+    StrVec tbl({"a0", "a1", "a2"});
     std::recursive_mutex mu;
     walb::ActionCounters ac(mu);
 
