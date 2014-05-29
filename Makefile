@@ -5,7 +5,7 @@ CC = gcc-4.9.0
 
 OPT_FLAGS =
 ifeq ($(DEBUG),1)
-OPT_FLAGS += -g -DDEBUG -DWALB_DEBUG -DCYBOZU_USE_STACKTRACE
+OPT_FLAGS += -g -DDEBUG -DWALB_DEBUG -DCYBOZU_EXCEPTION_WITH_STACKTRACE -DCYBOZU_STACKTRACE_WITH_BFD_GPL
 else
 OPT_FLAGS += -O2 -DNDEBUG
 endif
@@ -28,7 +28,7 @@ LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
 LDLIBS = -lpthread -lrt
 endif
 ifeq ($(DEBUG),1)
-LDFLAGS += -rdynamic
+LDFLAGS += -rdynamic -lbfd
 endif
 
 LDLIBS_LOCAL = -lwalb-tools
