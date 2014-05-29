@@ -751,7 +751,13 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
 
 namespace proxy_local {
 
-inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt, Logger &logger)
+/**
+ * RETURN:
+ *   false if force stopped.
+ */
+inline bool recvWlogAndWriteDiff(
+    cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
+    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit, Logger &logger)
 {
     DiffMemory diffMem(DEFAULT_MAX_IO_LB);
     diffMem.header().setUuid(uuid);
@@ -763,6 +769,9 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
     receiver.start();
 
     while (receiver.popHeader(packH)) {
+        if (stopState == ForceStopping || forceQuit) {
+            return false;
+        }
         LogBlockShared blockS(pbs);
         for (size_t i = 0; i < packH.header().n_records; i++) {
             LogRecord &lrec = packH.record(i);
@@ -775,6 +784,7 @@ inline void recvWlogAndWriteDiff(cybozu::Socket &sock, int fd, const cybozu::Uui
         }
     }
     diffMem.writeTo(fd);
+    return true;
 }
 
 } // namespace proxy_local
@@ -835,7 +845,11 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
     cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
-    proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt, logger);
+    if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
+                                           volSt.stopStateWlog, gp.forceQuit, logger)) {
+        logger.warn() << FUNC << "force stopped wlog receiving" << volId;
+        return;
+    }
     MetaDiff diff;
     pkt.read(diff);
     if (!diff.isClean()) {
