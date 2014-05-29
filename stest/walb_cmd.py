@@ -231,7 +231,7 @@ def start(s, vol):
 
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
-        stop(px, vol, "Stopped")
+        stop(px, vol)
         run_ctl(px, ["archive-info", "delete", vol, ax.name])
         state = get_state(px, vol)
         if state == 'Stopped':
