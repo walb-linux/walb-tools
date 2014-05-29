@@ -1,5 +1,6 @@
 import os
 import itertools
+import random
 from walb_cmd import *
 
 
@@ -106,17 +107,25 @@ def test_stop(stopL, startL):
     restore_and_verify_sha1('test_stop', md0, a0, VOL, gid)
 
 
-def test_n4():
+def test_n4(numPatterns=0):
     """
         stop -> start -> snapshot -> sha1
+        if numPatterns == 0 then all possible patterns will be tested.
+        otherwise, numPatterns patterns only will be tested.
     """
     print "test_n4:stop"
+    perm = itertools.permutations
+    chain = itertools.chain.from_iterable
     setLL = [[s0], [p0], [a0], [s0, p0], [s0, a0], [p0, a0], [s0, p0, a0]]
-    for setL in setLL:
-        for stopL in itertools.permutations(setL):
-            for startL in itertools.permutations(setL):
-                test_stop(stopL, startL)
-#                printL(stopL, startL)
+    combiL = [(xL, yL) for xL in chain(map(perm, setLL)) for yL in perm(xL)]
+    print "combiL.len", len(combiL)
+    if numPatterns > 0 and numPatterns < len(combiL):
+        targetL = random.sample(combiL, numPatterns)
+    else:
+        targetL = combiL
+    for stopL, startL in targetL:
+        test_stop(stopL, startL)
+#        printL(stopL, startL)
 
 
 def test_n5():
