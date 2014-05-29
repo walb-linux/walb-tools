@@ -7,7 +7,7 @@ import time
 import socket
 import errno
 
-TIMEOUT_SEC = 1000
+TIMEOUT_SEC = 20
 
 K_STORAGE = 0
 K_PROXY = 1
@@ -155,7 +155,8 @@ def kick_heartbeat_all():
 
 
 def wait_for_state(server, vol, stateL, timeoutS=10):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         st = get_state(server, vol)
 #        print "c=", server, vol, stateL, c, st
         if st in stateL:
@@ -271,7 +272,8 @@ def list_restored(ax, vol):
 
 
 def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
             return gids[-1]
@@ -280,7 +282,8 @@ def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
             return True
@@ -289,7 +292,8 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
             return True
@@ -310,7 +314,8 @@ def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gidL = get_gid_list(ax, vol, 'list-restorable')
         if gidL and gid <= gidL[0]:
             return
@@ -319,7 +324,8 @@ def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gidL = list_restorable(ax, vol, 'all')
         pos = gidL.index(gidB)
         if gidL[pos + 1] == gidE:
@@ -329,7 +335,8 @@ def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    for c in xrange(0, timeoutS):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
         gidL = list_restorable(ax, vol, 'all')
         if gidL and gid <= gidL[-1]:
             return
@@ -409,7 +416,8 @@ def full_backup(sx, vol):
     run_ctl(sx, ["full-bkp", vol])
     wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
 
-    for c in xrange(0, TIMEOUT_SEC):
+    t0 = time.clock()
+    while time.clock() < t0 + TIMEOUT_SEC:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids:
             return gids[-1]
@@ -429,7 +437,8 @@ def hash_backup(sx, vol):
     run_ctl(sx, ["hash-bkp", vol])
     wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
 
-    for c in xrange(0, TIMEOUT_SEC):
+    t0 = time.clock()
+    while time.clock() < t0 + TIMEOUT_SEC:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids and gids[-1] > max_gid:
             return gids[-1]
