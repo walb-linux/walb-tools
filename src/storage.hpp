@@ -129,24 +129,7 @@ public:
             v_.emplace_back(proxy);
         }
     }
-    void tryCheckAvailability() {
-        Info *target = nullptr;
-        {
-            TimePoint now = Clock::now();
-            AutoLock lk(mu_);
-            TimePoint minCheckedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
-            for (Info &info : v_) {
-                if (info.checkedTime < minCheckedTime) {
-                    minCheckedTime = info.checkedTime;
-                    target = &info;
-                }
-            }
-        }
-        if (!target) return;
-        Info info = checkAvailability(target->proxy);
-        AutoLock lk(mu_);
-        *target = info;
-    }
+    void tryCheckAvailability();
     void kick() {
         TimePoint now = Clock::now();
         AutoLock lk(mu_);
@@ -925,6 +908,37 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
     }
     info.checkedTime = Clock::now();
     return info;
+}
+
+inline void ProxyManager::tryCheckAvailability()
+{
+    Info *target = nullptr;
+    bool isAllUnavailable = true;
+    {
+        TimePoint now = Clock::now();
+        AutoLock lk(mu_);
+        TimePoint minCheckedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
+        for (Info &info : v_) {
+            if (info.checkedTime < minCheckedTime) {
+                minCheckedTime = info.checkedTime;
+                target = &info;
+                if (info.isAvailable) isAllUnavailable = false;
+            }
+        }
+    }
+    if (!target) return;
+    Info info = checkAvailability(target->proxy);
+    {
+        AutoLock lk(mu_);
+        *target = info;
+    }
+    if (isAllUnavailable && info.isAvailable) {
+        StorageSingleton& g = getStorageGlobal();
+        for (const auto &pair : g.taskQueue.getAll()) {
+            const std::string &volId = pair.first;
+            g.taskQueue.pushForce(volId, 0); // run immediately.
+        }
+    }
 }
 
 } // namespace storage_local
