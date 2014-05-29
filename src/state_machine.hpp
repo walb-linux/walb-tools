@@ -103,7 +103,8 @@ public:
         StateMachine::AutoLock al(sm_.m_);
         if (sm_.inTrans_) {
             throw cybozu::Exception(errMsg_)
-                << "StateMachineTransaction:tryChange:already called";
+                << "StateMachineTransaction:tryChange:already called"
+                << sm_.get() << from << pass;
         }
         from_ = sm_.cur_;
         if (!sm_.changeNoLock(sm_.cur_, from, pass)) return false;
