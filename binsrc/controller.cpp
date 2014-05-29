@@ -69,6 +69,7 @@ void runClient(Option &opt)
         { resizeCN, c2xResizeClient },
         { hostTypeCN, c2xHostTypeClient },
         { isOverflowCN, c2sIsOverflowClient },
+        { kickHeartbeatCN, c2sKickHeartbeatClient },
         { dbgReloadMetadataCN, c2aReloadMetadataClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);

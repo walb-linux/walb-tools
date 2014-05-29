@@ -47,6 +47,7 @@ public:
             { resizeCN, c2sResizeServer },
             { snapshotCN, c2sSnapshotServer },
             { isOverflowCN, c2sIsOverflowServer },
+            { kickHeartbeatCN, c2sKickHeartbeatServer },
             { hostTypeCN, c2sHostTypeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);

@@ -147,6 +147,13 @@ public:
         AutoLock lk(mu_);
         *target = info;
     }
+    void kick() {
+        TimePoint now = Clock::now();
+        AutoLock lk(mu_);
+        for (Info &info : v_) {
+            info.checkedTime = now;
+        }
+    }
 private:
     void removeFromList(const cybozu::SocketAddr &proxy) {
         v_.erase(std::remove_if(v_.begin(), v_.end(), [&](const Info &info) {
@@ -945,6 +952,7 @@ inline void wdevMonitorWorker() noexcept
 
 inline void proxyMonitorWorker() noexcept
 {
+    const char *const FUNC = __func__;
     StorageSingleton& g = getStorageGlobal();
     const int intervalMs = 1000;
     while (!g.quitProxyMonitor) {
@@ -952,9 +960,9 @@ inline void proxyMonitorWorker() noexcept
             g.proxyManager.tryCheckAvailability();
             util::sleepMs(intervalMs);
         } catch (std::exception& e) {
-            LOGs.error() << "proxyMonitorWorker" << e.what();
+            LOGs.error() << FUNC << e.what();
         } catch (...) {
-            LOGs.error() << "proxyMonitorWorker:unknown error";
+            LOGs.error() << FUNC << "unknown error";
         }
     }
 }
@@ -1069,6 +1077,25 @@ inline void c2sIsOverflowServer(protocol::ServerParams &p)
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
+    }
+}
+
+/**
+ * Kick heartbeat protocol to proxy servers.
+ * No parameter is required.
+ */
+inline void c2sKickHeartbeatServer(protocol::ServerParams &p)
+{
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        getStorageGlobal().proxyManager.kick();
+        pkt.write(msgOk);
+        logger.info() << "kick-heartbeat succeeded";
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
     }
 }
 

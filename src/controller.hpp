@@ -298,4 +298,12 @@ inline void c2xResetVolClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
 }
 
+/**
+ * No parameter is required.
+ */
+inline void c2sKickHeartbeatClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+
 } // namespace walb
