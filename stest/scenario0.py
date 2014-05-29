@@ -208,6 +208,27 @@ def test_n8():
     verify_equal_sha1('test_n8', md0, md1)
 
 
+def test_n9():
+    """
+        replicate (no synchronizing, hash) -> sha1
+    """
+    write_random(WDEV_PATH, 1)
+    gid0 = snapshot_sync(s0, VOL, [a0])
+    apply_diff(a0, VOL, gid0)
+    list0 = list_restorable(a0, VOL)
+    if len(list0) != 1:
+        raise Exception('test_n9: list size must be 1', list0)
+    write_random(WDEV_PATH, 1)
+    replicate(a0, VOL, a1, False)
+    gid1a0 = get_latest_clean_snapshot(a0, VOL)
+    gid1a1 = get_latest_clean_snapshot(a1, VOL)
+    if gid1a0 != gid1a1:
+        raise Exception('test_n9: gid differ', gid1a0, gid1a1)
+    md0 = get_sha1_of_restorable(a0, VOL, gid1a0)
+    md1 = get_sha1_of_restorable(a1, VOL, gid1a1)
+    verify_equal_sha1('test_n9', md0, md1)
+
+
 def main():
     setup_test()
     test_n1()
@@ -218,6 +239,7 @@ def main():
 #    test_n6()
     test_n7()
     test_n8()
+    test_n9()
 
 
 if __name__ == "__main__":
