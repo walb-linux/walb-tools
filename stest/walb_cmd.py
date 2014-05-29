@@ -144,6 +144,12 @@ def set_slave_storage(sx, vol):
     run_ctl(sx, ["reset-vol", vol])
     start(sx, vol)
 
+
+def kick_heartbeat_all():
+    for sx in cfg.storageL:
+        run_ctl(sx, ["kick-heartbeat"])
+
+
 ##################################################################
 # user command functions
 
@@ -238,6 +244,7 @@ def stop_sync(ax, vol):
         state = get_state(px, vol)
         if state == 'Stopped':
             start(px, vol)
+    kick_heartbeat_all()
 
 
 def get_gid_list(ax, vol, cmd):
@@ -336,6 +343,7 @@ def add_archive_to_proxy(px, vol, ax):
         stop(px, vol)
     run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
     start(px, vol)
+    kick_heartbeat_all()
 
 
 def replicate_sync(aSrc, vol, aDst):
@@ -357,7 +365,8 @@ def synchronize(aSrc, vol, aDst):
         print 'px,st0', px, st
         if st == 'Started' or st == 'WlogRecv':
             stop(px, vol, 'empty')
-        run_ctl(px, ["archive-info", "add", vol, aDst.name, get_host_port(aDst)])
+        run_ctl(px, ["archive-info", "add", vol,
+                     aDst.name, get_host_port(aDst)])
         st1 = get_state(px, vol)
         print 'px,st1', px, st1
         if st1 != 'Stopped':
@@ -366,6 +375,7 @@ def synchronize(aSrc, vol, aDst):
 
     for px in cfg.proxyL:
         start(px, vol)
+    kick_heartbeat_all()
 
 
 def prepare_backup(sx, vol):
