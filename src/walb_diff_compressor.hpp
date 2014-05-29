@@ -102,7 +102,9 @@ public:
         } catch (std::bad_alloc&) {
             throw;
         } catch (std::exception& e) {
+#if 0
             LOGd("encode error %s\n", e.what());
+#endif
             // through
         }
         if (encSize < inSize) {
