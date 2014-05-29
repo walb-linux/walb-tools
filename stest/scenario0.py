@@ -180,6 +180,7 @@ def test_n7():
     """
         replicate (no synchronizing, full) -> sha1
     """
+    print "test_n7:replicate-full"
     replicate(a0, VOL, a1, False)
     verify_equal_list_restorable('test_n7', a0, a1, VOL)
     gid = get_latest_clean_snapshot(a0, VOL)
@@ -192,6 +193,7 @@ def test_n8():
     """
         replicate (no synchronizing, diff) -> sha1
     """
+    print "test_n8:replicate-diff"
     write_random(WDEV_PATH, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     gidA0 = get_latest_clean_snapshot(a0, VOL)
@@ -212,6 +214,7 @@ def test_n9():
     """
         replicate (no synchronizing, hash) -> sha1
     """
+    print "test_n9:replicate-hash"
     write_random(WDEV_PATH, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     apply_diff(a0, VOL, gid0)
@@ -233,6 +236,7 @@ def test_n10():
     """
         replicate (sychronizing) -> sha1
     """
+    print "test_n10:replicate-synchronizing"
     t = startWriting(WDEV_PATH)
     try:
         time.sleep(0.5)
@@ -260,11 +264,11 @@ def test_n10():
 def main():
     setup_test()
     test_n1()
-#    test_n2()
-#    test_n3()
-#    test_n4(0)
-#    test_n5()
-#    test_n6()
+    test_n2()
+    test_n3()
+    test_n4(5)
+    test_n5()
+    test_n6()
     test_n7()
     test_n8()
     test_n9()

@@ -81,12 +81,12 @@ def run_command(args, putMsg=True):
     return s
 
 
-def run_ctl(server, cmdArgs):
+def run_ctl(server, cmdArgs, putMsg=True):
     ctlArgs = [cfg.binDir + "/controller",
             "-id", "ctrl",
             "-a", "localhost",
             "-p", server.port] + get_debug_opt()
-    return run_command(ctlArgs + cmdArgs)
+    return run_command(ctlArgs + cmdArgs, putMsg)
 
 
 def run_daemon(args):
