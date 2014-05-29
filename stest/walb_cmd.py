@@ -479,6 +479,24 @@ def get_sha1_of_restorable(ax, vol, gid):
     return md
 
 
+def verify_equal_list_restorable(msg, ax, ay, vol):
+    xL = list_restorable(ax, vol)
+    yL = list_restorable(ay, vol)
+    if cfg.debug:
+        print 'list0', xL
+        print 'list1', yL
+    if xL != yL:
+        raise Exception(msg, 'list_restorable differ', xL, yL)
+
+
+def get_latest_clean_snapshot(ax, vol):
+    xL = list_restorable(ax, vol)
+    if xL:
+        return xL[-1]
+    else:
+        raise Exception('get_latest_clean_snapshot:not found')
+
+
 quitWriting = False
 
 

@@ -181,19 +181,31 @@ def test_n7():
         replicate (no synchronizing, full) -> sha1
     """
     replicate(a0, VOL, a1, False)
-    list0 = list_restorable(a0, VOL)
-    list1 = list_restorable(a1, VOL)
-    print 'list0', list0
-    print 'list1', list1
-    if list0 != list1:
-        raise Exception('test_n7:list differ', list0, list1)
-    gid = list0[-1]
+    verify_equal_list_restorable('test_n7', a0, a1, VOL)
+    gid = get_latest_clean_snapshot(a0, VOL)
     md0 = get_sha1_of_restorable(a0, VOL, gid)
-    md1 = get_sha1_of_restorable(a0, VOL, gid)
-    print 'md0', md0
-    print 'md1', md1
-    if md0 != md1:
-        raise Exception('test_n7:md differ', md0, md1)
+    md1 = get_sha1_of_restorable(a1, VOL, gid)
+    verify_equal_sha1('test_n7', md0, md1)
+
+
+def test_n8():
+    """
+        replicate (no synchronizing, diff) -> sha1
+    """
+    write_random(WDEV_PATH, 1)
+    gid0 = snapshot_sync(s0, VOL, [a0])
+    gidA0 = get_latest_clean_snapshot(a0, VOL)
+    if gidA0 != gid0:
+        raise Exception('test_n8:wrong gid', gidA0, gid0)
+    gidA1 = get_latest_clean_snapshot(a1, VOL)
+    if gidA0 <= gidA1:
+        raise Exception('test_n8:no progress', gidA0, gidA1)
+    replicate(a0, VOL, a1, False)
+    verify_equal_list_restorable('test_n8', a0, a1, VOL)
+    gid1 = get_latest_clean_snapshot(a0, VOL)
+    md0 = get_sha1_of_restorable(a0, VOL, gid1)
+    md1 = get_sha1_of_restorable(a1, VOL, gid1)
+    verify_equal_sha1('test_n8', md0, md1)
 
 
 def main():
@@ -201,10 +213,11 @@ def main():
     test_n1()
 #    test_n2()
 #    test_n3()
-#    test_n4()
+#    test_n4(0)
 #    test_n5()
 #    test_n6()
     test_n7()
+    test_n8()
 
 
 if __name__ == "__main__":
