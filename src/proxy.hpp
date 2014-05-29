@@ -652,17 +652,17 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
  */
 inline void c2pArchiveInfoServer(protocol::ServerParams &p)
 {
-    const char * const FUNC = "c2pArchiveInfoServer";
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &cmd = v[0];
-    const std::string &volId = v[1];
-
+    const char * const FUNC = __func__;
     ProtocolLogger logger(gp.nodeId, p.clientId);
-    logger.debug() << cmd << volId;
-
     packet::Packet pkt(p.sock);
+
     bool sendErr = true;
     try {
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &cmd = v[0];
+        const std::string &volId = v[1];
+        logger.debug() << cmd << volId;
+
         std::string archiveName;
         HostInfoForBkp hi;
         if (cmd == "add" || cmd == "update") {
