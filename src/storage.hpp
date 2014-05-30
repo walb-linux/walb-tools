@@ -510,8 +510,8 @@ inline void c2sStopServer(protocol::ServerParams &p)
         std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
 
         StorageVolState &volSt = getStorageVolState(volId);
-        Stopper stopper(volSt.stopState, stopOpt.isForce());
-        if (!stopper.isSuccess()) {
+        Stopper stopper(volSt.stopState);
+        if (!stopper.changeFromNotStopping(stopOpt.isForce() ? ForceStopping : Stopping)) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
         pkt.write(msgAccept);

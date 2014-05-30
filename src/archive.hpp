@@ -1030,8 +1030,8 @@ inline void c2aStopServer(protocol::ServerParams &p)
         std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        Stopper stopper(volSt.stopState, stopOpt.isForce());
-        if (!stopper.isSuccess()) {
+        Stopper stopper(volSt.stopState);
+        if (!stopper.changeFromNotStopping(stopOpt.isForce() ? ForceStopping : Stopping)) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
         pkt.write(msgAccept);

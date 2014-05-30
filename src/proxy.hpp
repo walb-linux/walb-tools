@@ -22,8 +22,7 @@ namespace walb {
 struct ProxyVolState
 {
     std::recursive_mutex mu;
-    std::atomic<int> stopStateWlog; // for WlogRecv
-    std::atomic<int> stopStateWdiff; // for WdiffSend
+    std::atomic<int> stopState;
     StateMachine sm;
     ActionCounters ac; // archive name is action identifier here.
 
@@ -51,7 +50,7 @@ struct ProxyVolState
     std::map<std::string, uint64_t> lastWdiffSentTimeMap;
 
     explicit ProxyVolState(const std::string &volId)
-        : stopStateWlog(NotStopping), stopStateWdiff(NotStopping), sm(mu), ac(mu)
+        : stopState(NotStopping), sm(mu), ac(mu)
         , diffMgr(), diffMgrMap(), archiveSet()
         , lastWlogReceivedTime(0), lastWdiffSentTimeMap() {
         const struct StateMachine::Pair tbl[] = {
@@ -405,8 +404,7 @@ inline void startProxyVol(const std::string &volId)
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopStateWlog, volId, FUNC);
-    verifyNotStopping(volSt.stopStateWdiff, volId, FUNC);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &st = volSt.sm.get();
     if (st != pStopped) {
@@ -446,8 +444,8 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    Stopper stopperWlog(volSt.stopStateWlog, false);
-    if (!stopperWlog.isSuccess()) {
+    Stopper stopper(volSt.stopState);
+    if (!stopper.changeFromNotStopping(WaitingForEmpty)) {
         throw cybozu::Exception(FUNC) << "already under stopping wlog receiver" << volId;
     }
 
@@ -472,9 +470,8 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
             return !hasDiffs;
         }, FUNC);
 
-    Stopper stopperWdiff(volSt.stopStateWdiff, false);
-    if (!stopperWdiff.isSuccess()) {
-        throw cybozu::Exception(FUNC) << "already under stopping wdiff sender" << volId;
+    if (!stopper.changeFromWaitingForEmpty(Stopping)) {
+        throw cybozu::Exception(FUNC) << "BUG : not here, already under stopping wdiff sender" << volId;
     }
 
     verifyStateIn(volSt.sm.get(), {pWaitForEmpty}, FUNC);
@@ -500,13 +497,9 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    Stopper stopperWlog(volSt.stopStateWlog, isForce);
-    if (!stopperWlog.isSuccess()) {
+    Stopper stopper(volSt.stopState);
+    if (!stopper.changeFromNotStopping(isForce ? ForceStopping : Stopping)) {
         throw cybozu::Exception(FUNC) << "already under stopping wlog" << volId;
-    }
-    Stopper stopperWdiff(volSt.stopStateWdiff, isForce);
-    if (!stopperWdiff.isSuccess()) {
-        throw cybozu::Exception(FUNC) << "already under stopping wdiff" << volId;
     }
 
     waitUntil(ul, [&]() {
@@ -731,8 +724,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
 
-        verifyNotStopping(volSt.stopStateWlog, volId, FUNC);
-        verifyNotStopping(volSt.stopStateWdiff, volId, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
 
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
@@ -831,7 +823,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     try {
         verifyMaxForegroundTasks(gp.maxForegroundTasks, FUNC);
         proxy_local::verifyMaxConversionMemory(FUNC);
-        verifyNotStopping(volSt.stopStateWlog, volId, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
     } catch (std::exception &e) {
         logger.warn() << e.what();
@@ -846,7 +838,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
     cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
-                                           volSt.stopStateWlog, gp.forceQuit, logger)) {
+                                           volSt.stopState, gp.forceQuit, logger)) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
         return;
     }
@@ -933,7 +925,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     const std::string& archiveName = task_.archiveName;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNotStopping(volSt.stopStateWdiff, volId, FUNC);
+    verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, FUNC);
     verifyStateIn(volSt.sm.get(), {pStarted, pWaitForEmpty}, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
@@ -973,7 +965,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     std::string res;
     pkt.read(res);
     if (res == msgAccept) {
-        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopStateWdiff, gp.forceQuit)) {
+        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit)) {
             logger.warn() << FUNC << "force stopped wdiff sending" << volId;
             return false;
         }
@@ -1061,8 +1053,7 @@ inline void c2pResizeServer(protocol::ServerParams &p)
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
 
-        verifyNotStopping(volSt.stopStateWlog, volId, FUNC);
-        verifyNotStopping(volSt.stopStateWdiff, volId, FUNC);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStopped}, FUNC);
 
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);

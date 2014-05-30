@@ -114,31 +114,32 @@ public:
 } //namespace server
 
 enum StopState {
-    NotStopping,
-    Stopping,
-    ForceStopping
+    NotStopping = 1,
+    WaitingForEmpty = 2,
+    Stopping = 4,
+    ForceStopping = 8
 };
 
 class Stopper
 {
 private:
     std::atomic<int> &stopState;
-    bool success;
 public:
-    Stopper(std::atomic<int> &stopState, bool isForce)
-        : stopState(stopState), success(false) {
-        int before = NotStopping;
-        const int after = isForce ? ForceStopping : Stopping;
-        success = stopState.compare_exchange_strong(before, after);
+    Stopper(std::atomic<int> &stopState)
+        : stopState(stopState) {
+    }
+    bool changeFromNotStopping(StopState toState) {
+        if (toState == NotStopping) throw cybozu::Exception("Stopper:changeFromNotStopping:bad state") << toState;
+        int fromState = NotStopping;
+        return stopState.compare_exchange_strong(fromState, toState);
+    }
+    bool changeFromWaitingForEmpty(StopState toState) {
+        if (toState != Stopping && toState != ForceStopping) throw cybozu::Exception("Stopper:changeFromWaitingForEmpty:bad state") << toState;
+        int fromState = WaitingForEmpty;
+        return stopState.compare_exchange_strong(fromState, toState);
     }
     ~Stopper() noexcept {
-        if (success) {
-            assert(stopState != NotStopping);
-            stopState = NotStopping;
-        }
-    }
-    bool isSuccess() const {
-        return success;
+        stopState = NotStopping;
     }
 };
 
@@ -240,16 +241,18 @@ public:
     }
 };
 
-inline void verifyNotStopping(
-    const std::atomic<int> &stopState,
-    const std::string &volId, const char *msg)
+inline void verifyStopState(
+    const std::atomic<int> &stopState, int acceptState, const char *msg)
 {
-    int st = stopState.load();
-    if (st != NotStopping) {
-        cybozu::Exception e(msg);
-        e << "must be NotStopping" << volId << st;
-        throw e;
+    int st = stopState;
+    if ((st & acceptState) == 0) {
+        throw cybozu::Exception("verifyStopState") << msg << st << acceptState;
     }
+}
+
+inline void verifyNotStopping(const std::atomic<int> & stopState, const std::string&, const char *msg)
+{
+    verifyStopState(stopState, NotStopping, msg);
 }
 
 /**
