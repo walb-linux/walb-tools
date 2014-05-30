@@ -242,17 +242,17 @@ public:
 };
 
 inline void verifyStopState(
-    const std::atomic<int> &stopState, int acceptState, const char *msg)
+    const std::atomic<int> &stopState, int acceptState, const std::string& volId, const char *msg)
 {
     int st = stopState;
     if ((st & acceptState) == 0) {
-        throw cybozu::Exception("verifyStopState") << msg << st << acceptState;
+        throw cybozu::Exception(msg) << __func__ << volId << st << acceptState;
     }
 }
 
-inline void verifyNotStopping(const std::atomic<int> & stopState, const std::string&, const char *msg)
+inline void verifyNotStopping(const std::atomic<int> & stopState, const std::string& volId, const char *msg)
 {
-    verifyStopState(stopState, NotStopping, msg);
+    verifyStopState(stopState, NotStopping, volId, msg);
 }
 
 /**

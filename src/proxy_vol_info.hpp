@@ -14,17 +14,15 @@ namespace walb {
 const char *const pClear = "Clear";
 const char *const pStopped = "Stopped";
 const char *const pStarted = "Started";
-const char *const pWaitForEmpty = "WaitForEmpty";
 
 // temporary state
 const char *const ptStart = "Start";
 const char *const ptStop = "Stop";
-const char *const ptPreWaitForEmpty = "PreWaitForEmpty";
-const char *const ptPostWaitForEmpty = "PostWaitForEmpty";
 const char *const ptClearVol = "ClearVol";
 const char *const ptAddArchiveInfo = "AddArchiveInfo";
 const char *const ptDeleteArchiveInfo = "DeleteArchiveInfo";
 const char *const ptWlogRecv = "WlogRecv";
+const char *const ptWaitForEmpty = "WaitForEmpty";
 
 const char *const ArchiveSuffix = ".archive";
 const char *const ArchiveExtension = "archive";

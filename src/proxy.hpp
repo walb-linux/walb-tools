@@ -78,13 +78,9 @@ struct ProxyVolState
             { pStarted, ptWlogRecv },
             { ptWlogRecv, pStarted },
 
-            { pStarted, ptPreWaitForEmpty },
-            { ptPreWaitForEmpty, pWaitForEmpty },
-            { pWaitForEmpty, ptPostWaitForEmpty },
-            { ptPostWaitForEmpty, pStopped },
+            { pStarted, ptWaitForEmpty },
+            { ptWaitForEmpty, pStopped },
 
-            { pWaitForEmpty, ptStop },
-            //{ ptStop, pStopped },
         };
         sm.init(tbl);
         initInner(volId);
@@ -435,7 +431,7 @@ inline bool hasDiffs(ProxyVolState &volSt)
 }
 
 /**
- * pStarted --> pWaitForEmpty --> pStopped.
+ * pStarted --> ptWaitForEmpty --> pStopped.
  */
 inline void stopAndEmptyProxyVol(const std::string &volId)
 {
@@ -450,17 +446,13 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
     }
 
     waitUntil(ul, [&]() {
-            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted, pWaitForEmpty});
+            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
         }, FUNC);
 
     verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
-    {
-        StateMachineTransaction tran0(volSt.sm, pStarted, ptPreWaitForEmpty);
-        tran0.commit(pWaitForEmpty);
-    }
+    StateMachineTransaction tran(volSt.sm, pStarted, ptWaitForEmpty);
 
     waitUntil(ul, [&]() {
-            if (volSt.sm.get() != pWaitForEmpty) return true;
             const bool hasDiffs = proxy_local::hasDiffs(volSt);
             if (hasDiffs) {
                 for (const std::string &archiveName : volSt.archiveSet) {
@@ -474,22 +466,17 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
         throw cybozu::Exception(FUNC) << "BUG : not here, already under stopping wdiff sender" << volId;
     }
 
-    verifyStateIn(volSt.sm.get(), {pWaitForEmpty}, FUNC);
     verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
-    StateMachineTransaction tran1(volSt.sm, pWaitForEmpty, ptPostWaitForEmpty, FUNC);
-    ul.unlock();
 
     // Clear all related tasks from the task queue.
     g.taskQueue.remove([&](const ProxyTask &task) {
             return task.volId == volId;
         });
-
-    tran1.commit(pStopped);
+    tran.commit(pStopped);
 }
 
 /**
- *   pStarted --> pStopped or
- *   pWaitForEmpty --> pStopped
+ *   pStarted --> pStopped
  */
 inline void stopProxyVol(const std::string &volId, bool isForce)
 {
@@ -504,11 +491,11 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
 
     waitUntil(ul, [&]() {
             if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
-            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted, pWaitForEmpty});
+            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
         }, FUNC);
 
     const std::string &stFrom = volSt.sm.get();
-    if (stFrom != pStarted && stFrom != pWaitForEmpty) {
+    if (stFrom != pStarted) {
         throw cybozu::Exception(FUNC) << "bad state" << stFrom;
     }
 
@@ -925,8 +912,8 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     const std::string& archiveName = task_.archiveName;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, FUNC);
-    verifyStateIn(volSt.sm.get(), {pStarted, pWaitForEmpty}, FUNC);
+    verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, volId, FUNC);
+    verifyStateIn(volSt.sm.get(), {pStarted, ptWaitForEmpty}, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
