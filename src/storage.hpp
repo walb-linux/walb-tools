@@ -1109,6 +1109,7 @@ inline void c2sKickHeartbeatServer(protocol::ServerParams &p)
     try {
         getStorageGlobal().proxyManager.kick();
         pkt.write(msgOk);
+        p.sock.waitForClosed();
         logger.info() << "kick-heartbeat succeeded";
     } catch (std::exception &e) {
         logger.error() << e.what();
