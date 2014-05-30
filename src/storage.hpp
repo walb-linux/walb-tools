@@ -134,7 +134,7 @@ public:
         TimePoint now = Clock::now();
         AutoLock lk(mu_);
         for (Info &info : v_) {
-            info.checkedTime = now;
+            info.checkedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
         }
     }
 private:
