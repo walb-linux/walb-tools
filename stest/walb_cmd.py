@@ -606,3 +606,12 @@ def resize(vol, sizeMb):
 
 def resizeLv(path, sizeMb):
     run_command(['/sbin/lvresize', '-f', '-L', str(sizeMb) + 'm', path])
+
+
+def getLvSizeMb(path):
+    ret = run_command(['/sbin/lvdisplay', '-C', '--noheadings', '-o', 'lv_size', '--units', 'm', path])
+    ret.strip()
+    if ret[-1] != 'm':
+        raise Exception('getLvSizeMb: bad return value', ret)
+    return int(float(ret[0:-2]))
+

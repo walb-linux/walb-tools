@@ -1545,7 +1545,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aMerge, aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
         archive_local::verifyMergeable(volId, gidB);
 
         pkt.write(msgAccept);

@@ -26,6 +26,7 @@ WDEV_ID = 0
 WDEV_PATH = '/dev/walb/%d' % WDEV_ID
 WDEV_DATA_PATH = '/dev/test/data'
 WDEV_LOG_PATH = '/dev/test/log'
+WDEV_SIZE_MB = 12
 
 
 def get_walb_dev_sizeMb():
@@ -50,7 +51,8 @@ def setup_test():
     kill_all_servers()
     if os.path.exists(WDEV_PATH):
         delete_walb_dev(WDEV_PATH)
-    resizeLv(WDEV_DATA_PATH, 12) # 12MiB
+    if getLvSizeMb(WDEV_DATA_PATH) != WDEV_SIZE_MB:
+        resizeLv(WDEV_DATA_PATH, WDEV_SIZE_MB)
     create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
     startup_all()
 
@@ -298,7 +300,6 @@ def test_n11():
 def main():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -310,6 +311,7 @@ def main():
     test_n10()
     """
     test_n11()
+    """
 
 
 if __name__ == "__main__":
@@ -318,9 +320,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    main()
-    """
     for i in xrange(100):
         print "===============================", i, datetime.datetime.today()
         main()
-    """
