@@ -1,6 +1,7 @@
 import os
 import itertools
 import random
+import datetime
 from walb_cmd import *
 
 
@@ -21,7 +22,17 @@ config = Config(isDebug, os.getcwd() + '/binsrc/',
                 WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
 
-WDEV_PATH = '/dev/walb/0'
+WDEV_ID = 0
+WDEV_PATH = '/dev/walb/%d' % WDEV_ID
+WDEV_DATA_PATH = '/dev/test/data'
+
+def get_walb_dev_sizeMb():
+    sysName = '/sys/block/walb!%d/size' % WDEV_ID
+    f = open(sysName, 'r')
+    size = int(f.read().strip()) * 512 / 1024 / 1024
+    f.close()
+    return size
+
 VOL = 'vol0'
 
 set_config(config)
@@ -261,9 +272,27 @@ def test_n10():
         raise Exception('test_n10: not stopped synchronizing', gid1, gid1a1)
 
 
+def test_n11():
+    t = startWriting(WDEV_PATH)
+    prevSize = get_walb_dev_sizeMb()
+    snapshot_sync(s0, VOL, [a0])
+    resizeLv(WDEV_DATA_PATH, prevSize + 1)
+    resize(VOL, prevSize + 1)
+    curSize = get_walb_dev_sizeMb()
+    if curSize != prevSize + 1:
+        raise Exception('test_n11:bad size', prevSize, curSize)
+    stopWriting(t)
+    write_random(WDEV_PATH, 1, prevSize * 1024 * 1024 / 512)
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1_of_restorable(a0, VOL, gid)
+    md1 = get_sha1(WDEV_PATH)
+    verify_equal_sha1('test_n11:bad sha1', md0, md1)
+
+
 def main():
     setup_test()
     test_n1()
+    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -273,6 +302,8 @@ def main():
     test_n8()
     test_n9()
     test_n10()
+    """
+    test_n11()
 
 
 if __name__ == "__main__":
@@ -281,4 +312,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    main()
+    for i in xrange(100):
+        print "===============================", i, datetime.datetime.today()
+        main()

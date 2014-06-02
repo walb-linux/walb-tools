@@ -446,9 +446,9 @@ def hash_backup(sx, vol):
     raise Exception('hash_backup:timeout', sx, vol)
 
 
-def write_random(devName, size):
+def write_random(devName, size, offset=0):
     args = [cfg.binDir + "/write_random_data",
-        '-s', str(size), devName]
+        '-s', str(size), '-o', str(offset), devName]
     return run_command(args, False)
 
 
@@ -567,3 +567,24 @@ def replicate(aSrc, vol, aDst, synchronizing):
     replicate_sync(aSrc, vol, aDst)
     if synchronizing:
         synchronize(aSrc, vol, aDst)
+
+
+def resize(vol, sizeMb):
+    for ax in cfg.archiveL:
+        st = get_state(ax, vol)
+        if st == 'Clear':
+            continue
+        elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
+            run_ctl(ax, ['resize', vol, str(sizeMb) + 'm'])
+        else:
+            raise Exception('resize:bad state', st)
+    for sx in cfg.storageL:
+        st = get_state(sx, vol)
+        if st == 'Clear':
+            continue
+        else:
+            run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])
+
+
+def resizeLv(path, sizeMb):
+    run_command(['/sbin/lvresize', '-L', str(sizeMb) + 'm', path])
