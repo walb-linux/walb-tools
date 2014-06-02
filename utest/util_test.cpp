@@ -1,6 +1,7 @@
 #include "cybozu/test.hpp"
 #include "random.hpp"
 #include "util.hpp"
+#include "walb_types.hpp"
 
 template <typename IntType>
 void checkHex(IntType x0)
@@ -53,7 +54,7 @@ std::string randomString(cybozu::util::Random<uint32_t> &rand, size_t min, size_
 
 void randomStringSplitTest(cybozu::util::Random<uint32_t> &rand)
 {
-    StrVec v0, v1;
+    walb::StrVec v0, v1;
     std::string s1 = randomString(rand, 0, 5);
     v1.push_back(s1);
     size_t len = rand() % 10;
@@ -74,7 +75,7 @@ void randomStringSplitTest(cybozu::util::Random<uint32_t> &rand)
 CYBOZU_TEST_AUTO(string)
 {
     std::string s0 = "0,1.,3.4,";
-    StrVec v0, v1;
+    walb::StrVec v0, v1;
     v0 = cybozu::util::splitString(s0, ",.");
     CYBOZU_TEST_EQUAL(v0.size(), 6);
     CYBOZU_TEST_EQUAL(v0[0], "0");

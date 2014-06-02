@@ -3,6 +3,7 @@
 #include <string>
 #include <mutex>
 #include "cybozu/array.hpp"
+#include "walb/block_size.h"
 
 namespace walb {
 

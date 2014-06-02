@@ -1,10 +1,8 @@
 #pragma once
 #include <map>
 #include <memory>
-#include <mutex>
 #include <cassert>
-#include <vector>
-#include <string>
+#include "walb_types.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {

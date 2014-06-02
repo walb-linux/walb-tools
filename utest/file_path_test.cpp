@@ -2,6 +2,7 @@
 #include "cybozu/test.hpp"
 #include "file_path.hpp"
 #include "fileio.hpp"
+#include "walb_types.hpp"
 
 void checkRedundancy(const std::string &srcPath, const std::string &dstPath)
 {
@@ -62,7 +63,7 @@ CYBOZU_TEST_AUTO(directory)
     touchFile(d0 + cybozu::FilePath("f2"));
 
     cybozu::Directory dir(fp.str());
-    StrVec v;
+    walb::StrVec v;
     while (!dir.isEnd()) {
         v.push_back(dir.next());
     }

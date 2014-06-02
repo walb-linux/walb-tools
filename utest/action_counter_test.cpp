@@ -1,5 +1,6 @@
 #include "cybozu/test.hpp"
 #include "action_counter.hpp"
+#include "walb_types.hpp"
 #include <thread>
 #include <vector>
 #include <mutex>
@@ -17,7 +18,7 @@ CYBOZU_TEST_AUTO(actionCounter)
 
 CYBOZU_TEST_AUTO(actionCounters)
 {
-    StrVec tbl({"a0", "a1", "a2"});
+    walb::StrVec tbl({"a0", "a1", "a2"});
     std::recursive_mutex mu;
     walb::ActionCounters ac(mu);
 
