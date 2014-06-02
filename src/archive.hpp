@@ -1549,8 +1549,8 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv, atHashSync, aStopped}, FUNC);
 
         volInfo.growLv(newSizeLb);
         logger.info() << "resize succeeded" << volId << newSizeLb;
