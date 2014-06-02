@@ -1285,7 +1285,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(sm.get(), {aArchived, aStopped}, FUNC);
+        verifyStateIn(sm.get(), {aArchived, aStopped, atWdiffRecv}, FUNC);
     } catch (std::exception &e) {
         logger.warn() << e.what();
         pkt.write(e.what());
@@ -1299,11 +1299,13 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.write(msg);
         return;
     }
-    if (sm.get() == aStopped) {
-        const char *msg = "stopped";
-        logger.info() << msg << volId;
-        pkt.write(msg);
-        return;
+    {
+        const std::string st = sm.get();
+        if (st == aStopped || st == atWdiffRecv) {
+            logger.info() << st << volId;
+            pkt.write(st);
+            return;
+        }
     }
     if (hostType == proxyHT && volInfo.getUuid() != uuid) {
         const char *msg = "different-uuid";
