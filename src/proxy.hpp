@@ -966,7 +966,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         return true;
     }
     cybozu::Exception e("ProxyWorker");
-    if (res == aStopped || res == atWdiffRecv || res == "too-new-diff") {
+    if (res == "stopped" || res == "wdiff-recv" || res == "too-new-diff") {
         const uint64_t curTs = ::time(0);
         ul.lock();
         if (volSt.lastWlogReceivedTime != 0 &&
