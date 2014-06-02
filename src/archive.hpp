@@ -1301,9 +1301,15 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     }
     {
         const std::string st = sm.get();
-        if (st == aStopped || st == atWdiffRecv) {
-            logger.info() << st << volId;
-            pkt.write(st);
+		const char *msg = nullptr;
+		if (st == aStopped) {
+			msg = "stopped";
+		} else if (st == atWdiffRecv) {
+			msg = "wdiff-recv";
+		}
+		if (msg) {
+            logger.info() << msg << volId;
+            pkt.write(msg);
             return;
         }
     }
