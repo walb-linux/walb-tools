@@ -276,17 +276,17 @@ def test_n11():
     t = startWriting(WDEV_PATH)
     prevSize = get_walb_dev_sizeMb()
     snapshot_sync(s0, VOL, [a0])
-    resizeLv(WDEV_DATA_PATH, prevSize + 1)
-    resize(VOL, prevSize + 1)
+    resizeLv(WDEV_DATA_PATH, prevSize + 4) # lvm extent size is 4MiB
+    resize(VOL, prevSize + 4)
     curSize = get_walb_dev_sizeMb()
-    if curSize != prevSize + 1:
+    if curSize != prevSize + 4:
         raise Exception('test_n11:bad size', prevSize, curSize)
     stopWriting(t)
     write_random(WDEV_PATH, 1, prevSize * 1024 * 1024 / 512)
     gid = snapshot_sync(s0, VOL, [a0])
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     md1 = get_sha1(WDEV_PATH)
-    verify_equal_sha1('test_n11:bad sha1', md0, md1)
+    verify_equal_sha1('test_n11', md0, md1)
 
 
 def main():
