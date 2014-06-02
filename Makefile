@@ -28,7 +28,8 @@ LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
 LDLIBS = -lpthread -lrt
 endif
 ifeq ($(DEBUG),1)
-LDFLAGS += -rdynamic -lbfd
+LDFLAGS += -rdynamic
+LDLIBS += -lbfd
 endif
 
 LDLIBS_LOCAL = -lwalb-tools
