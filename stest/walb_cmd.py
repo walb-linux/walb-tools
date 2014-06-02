@@ -150,6 +150,24 @@ def kick_heartbeat_all():
         run_ctl(sx, ["kick-heartbeat"])
 
 
+def run_walbctl(cmdArgs):
+    run_command([cfg.binDir + 'walbctl'] + cmdArgs)
+
+
+def create_walb_dev(ldevPath, ddevPath, wdevId):
+    run_walbctl(['format_ldev',
+                 '--ldev', ldevPath,
+                 '--ddev', ddevPath])
+    run_walbctl(['create_wdev',
+                 '--ldev', ldevPath,
+                 '--ddev', ddevPath,
+                 '--name', str(wdevId)])
+
+
+def delete_walb_dev(wdevPath):
+    run_walbctl(['delete_wdev', '--wdev', wdevPath])
+
+
 ##################################################################
 # user command functions
 
@@ -587,4 +605,4 @@ def resize(vol, sizeMb):
 
 
 def resizeLv(path, sizeMb):
-    run_command(['/sbin/lvresize', '-L', str(sizeMb) + 'm', path])
+    run_command(['/sbin/lvresize', '-f', '-L', str(sizeMb) + 'm', path])

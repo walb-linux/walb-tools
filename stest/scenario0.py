@@ -25,6 +25,8 @@ config = Config(isDebug, os.getcwd() + '/binsrc/',
 WDEV_ID = 0
 WDEV_PATH = '/dev/walb/%d' % WDEV_ID
 WDEV_DATA_PATH = '/dev/test/data'
+WDEV_LOG_PATH = '/dev/test/log'
+
 
 def get_walb_dev_sizeMb():
     sysName = '/sys/block/walb!%d/size' % WDEV_ID
@@ -46,6 +48,10 @@ def setup_test():
                 run_command(['/sbin/lvremove', '-f', '/dev/vg0/' + f])
     make_dir(WORK_DIR)
     kill_all_servers()
+    if os.path.exists(WDEV_PATH):
+        delete_walb_dev(WDEV_PATH)
+    resizeLv(WDEV_DATA_PATH, 12) # 12MiB
+    create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
     startup_all()
 
 
@@ -312,6 +318,9 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
+    main()
+    """
     for i in xrange(100):
         print "===============================", i, datetime.datetime.today()
         main()
+    """
