@@ -499,6 +499,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     tran.commit(aArchived);
 
     packet::Ack(p.sock).send();
+    p.sock.waitForClose();
     logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
                   << "succeeded" << volId;
 }
@@ -817,6 +818,7 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
         }
     }
     packet::Ack(sock).send();
+    sock.waitForClose();
     return true;
 }
 
@@ -864,6 +866,7 @@ inline void c2aStatusServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(statusStrVec);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -903,6 +906,7 @@ inline void c2aListDiffServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(diffListStrV);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -915,6 +919,7 @@ inline void c2aListVolServer(protocol::ServerParams &p)
     StrVec v = util::getDirNameList(ga.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC);
     packet::Ack(p.sock).send();
+    p.sock.waitForClose();
     ProtocolLogger logger(ga.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }
@@ -939,6 +944,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
         volInfo.init();
         tran.commit(aSyncReady);
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "initVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -968,6 +974,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
         volInfo.clear();
         tran.commit(aClear);
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -1004,6 +1011,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
         tran.commit(aArchived);
 
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -1036,6 +1044,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
         }
         pkt.write(msgAccept);
         sendErr = false;
+        p.sock.waitForClose();
         UniqueLock ul(volSt.mu);
         StateMachine &sm = volSt.sm;
 
@@ -1110,6 +1119,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         return;
     }
     pkt.write(msgAccept);
+    p.sock.waitForClose();
 
     ActionCounterTransaction tran(volSt.ac, aRestore);
     ul.unlock();
@@ -1127,12 +1137,14 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const uint64_t gid = cybozu::atoi(v[1]);
+
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -1143,9 +1155,11 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         archive_local::delRestored(volId, gid);
         logger.info() << "del-restored succeeded" << volId << gid;
         pkt.write(msgOk);
+        sendErr = false;
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
@@ -1171,6 +1185,7 @@ inline void c2aListRestoredServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(strV);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1215,6 +1230,7 @@ inline void c2aListRestorableServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(strV);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1246,6 +1262,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
         wdiffs.reload();
         pkt.write(msgOk);
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -1297,6 +1314,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         const char *msg = "archive-not-found";
         logger.info() << msg << volId;
         pkt.write(msg);
+        p.sock.waitForClose();
         return;
     }
     {
@@ -1310,6 +1328,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 		if (msg) {
             logger.info() << msg << volId;
             pkt.write(msg);
+            p.sock.waitForClose();
             return;
         }
     }
@@ -1317,6 +1336,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         const char *msg = "different-uuid";
         logger.info() << msg << volId;
         pkt.write(msg);
+        p.sock.waitForClose();
         return;
     }
     const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
@@ -1324,6 +1344,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         const char *msg = "smaller-lv-size";
         logger.error() << msg << volId << sizeLb << selfSizeLb;
         pkt.write(msg);
+        p.sock.waitForClose();
         return;
     }
 
@@ -1338,6 +1359,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         const char *msg = getRelationStr(rel);
         logger.info() << msg << volId;
         pkt.write(msg);
+        p.sock.waitForClose();
         return;
     }
     pkt.write(msgAccept);
@@ -1360,6 +1382,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     tran.commit(aArchived);
 
     packet::Ack(p.sock).send();
+    p.sock.waitForClose();
     logger.info() << "wdiff-transfer succeeded" << volId;
 }
 
@@ -1402,6 +1425,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.write(msgAccept);
         sendErr = false;
+        p.sock.waitForClose();
         if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
@@ -1445,7 +1469,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
             return;
         }
         tran.commit(aArchived);
-        logger.info() << "replicattion as server succeeded" << volId;
+        logger.info() << "replication as server succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << FUNC << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1476,6 +1500,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 
         pkt.write(msgAccept);
         sendErr = false;
+        p.sock.waitForClose();
 
         ActionCounterTransaction tran(volSt.ac, aApply);
         ul.unlock();
@@ -1520,11 +1545,12 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aMerge, aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv}, FUNC);
         archive_local::verifyMergeable(volId, gidB);
 
         pkt.write(msgAccept);
         sendErr = false;
+        p.sock.waitForClose();
 
         ActionCounterTransaction tran(volSt.ac, aMerge);
         ul.unlock();
@@ -1549,6 +1575,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
         StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
@@ -1563,9 +1590,10 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         volInfo.growLv(newSizeLb);
         logger.info() << "resize succeeded" << volId << newSizeLb;
         pkt.write(msgOk);
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
@@ -1583,6 +1611,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
         StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) {
@@ -1605,10 +1634,12 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
         tran.commit(aSyncReady);
 
         pkt.write(msgOk);
+        sendErr = false;
+        p.sock.waitForClose();
         logger.info() << "reset succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 

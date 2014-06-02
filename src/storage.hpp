@@ -383,6 +383,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(v);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -395,6 +396,7 @@ inline void c2sListVolServer(protocol::ServerParams &p)
     StrVec v = util::getDirNameList(gs.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC);
     packet::Ack(p.sock).send();
+    p.sock.waitForClose();
     ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }
@@ -416,6 +418,7 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
         volInfo.init();
         tran.commit(sSyncReady);
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "initVol succeeded" << volId << wdevPath;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -439,6 +442,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
         volInfo.clear();
         tran.commit(sClear);
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -483,6 +487,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
             tran.commit(sSlave);
         }
         pkt.write(msgOk);
+        p.sock.waitForClose();
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -516,6 +521,7 @@ inline void c2sStopServer(protocol::ServerParams &p)
         }
         pkt.write(msgAccept);
         sendErr = false;
+        p.sock.waitForClose();
         UniqueLock ul(volSt.mu);
         StateMachine &sm = volSt.sm;
 
@@ -605,6 +611,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             aPkt.read(res);
             if (res == msgAccept) {
                 cPack.write(msgAccept);
+                p.sock.waitForClose();
                 p.sock.close();
             } else {
                 cybozu::Exception e(FUNC);
@@ -694,6 +701,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(gid);
+        p.sock.waitForClose();
         getStorageGlobal().taskQueue.push(volId);
         logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
@@ -1009,6 +1017,7 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
     ProtocolLogger logger(gs.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
         const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.empty()) throw cybozu::Exception(FUNC) << "empty param";
@@ -1024,10 +1033,12 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
         volInfo.resetWlog(gid);
         tran.commit(sSyncReady);
         pkt.write(msgOk);
+        sendErr = false;
+        p.sock.waitForClose();
         logger.info() << "reset succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << FUNC << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
@@ -1044,6 +1055,7 @@ inline void c2sResizeServer(protocol::ServerParams &p)
     ProtocolLogger logger(gs.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
+    bool sendErr = true;
     try {
         StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
@@ -1057,11 +1069,13 @@ inline void c2sResizeServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.growWdev(newSizeLb);
 
-        logger.info() << "resize succeeded" << volId << newSizeLb;
         pkt.write(msgOk);
+        sendErr = false;
+        p.sock.waitForClose();
+        logger.info() << "resize succeeded" << volId << newSizeLb;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        pkt.write(e.what());
+        if (sendErr) pkt.write(e.what());
     }
 }
 
@@ -1091,6 +1105,7 @@ inline void c2sIsOverflowServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(isOverflow);
         packet::Ack(p.sock).send();
+        p.sock.waitForClose();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
