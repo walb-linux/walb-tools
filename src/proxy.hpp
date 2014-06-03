@@ -379,8 +379,7 @@ inline void c2pStatusServer(protocol::ServerParams &p)
         sendErr = false;
         pkt.write(stStrV);
         logger.debug() << "status succeeded";
-        packet::Ack(p.sock).send();
-        p.sock.waitForClose();
+        packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -392,8 +391,7 @@ inline void c2pListVolServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(gp.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC);
-    packet::Ack(p.sock).send();
-    p.sock.waitForClose();
+    packet::Ack(p.sock).sendFin();
     ProtocolLogger logger(gp.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }
@@ -532,9 +530,8 @@ inline void c2pStartServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         startProxyVol(volId);
-        pkt.write(msgOk);
+        pkt.writeFin(msgOk);
         sendErr = false;
-        p.sock.waitForClose();
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -562,9 +559,8 @@ inline void c2pStopServer(protocol::ServerParams &p)
         std::string volId;
         StopOpt stopOpt;
         std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
-        pkt.write(msgAccept);
+        pkt.writeFin(msgAccept);
         sendErr = false;
-        p.sock.waitForClose();
 
         if (stopOpt.isEmpty()) {
             proxy_local::stopAndEmptyProxyVol(volId);
@@ -668,8 +664,7 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             logger.debug() << archiveName << hi;
             proxy_local::addArchiveInfo(volId, archiveName, hi, cmd == "add");
             logger.info() << "archive-info add/update succeeded" << volId << archiveName << hi;
-            pkt.write(msgOk);
-            p.sock.waitForClose();
+            pkt.writeFin(msgOk);
             return;
         } else if (cmd == "get") {
             pkt.read(archiveName);
@@ -677,15 +672,13 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             logger.info() << "archive-info get succeeded" << volId << archiveName << hi;
             pkt.write(msgOk);
             sendErr = false;
-            pkt.write(hi);
-            p.sock.waitForClose();
+            pkt.writeFin(hi);
             return;
         } else if (cmd == "delete") {
             pkt.read(archiveName);
             proxy_local::deleteArchiveInfo(volId, archiveName);
             logger.info() << "archive-info delete succeeded" << volId << archiveName;
-            pkt.write(msgOk);
-            p.sock.waitForClose();
+            pkt.writeFin(msgOk);
             return;
         } else if (cmd == "list") {
             StrVec v;
@@ -693,8 +686,7 @@ inline void c2pArchiveInfoServer(protocol::ServerParams &p)
             logger.info() << "archive-info list succeeded" << volId << v.size();
             pkt.write(msgOk);
             sendErr = false;
-            pkt.write(v);
-            p.sock.waitForClose();
+            pkt.writeFin(v);
             return;
         }
         throw cybozu::Exception(FUNC) << "invalid command name" << cmd;
@@ -717,7 +709,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
     StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
     const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
-  
+
     bool sendErr = true;
     try {
         ProxyVolState &volSt = getProxyVolState(volId);
@@ -732,9 +724,8 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         volInfo.clear();
         tran.commit(pClear);
-        pkt.write(msgOk);
+        pkt.writeFin(msgOk);
         sendErr = false;
-        p.sock.waitForClose();
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -849,8 +840,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
         throw cybozu::Exception(FUNC) << "diff is not clean" << diff;
     }
     tmpFile.save(volInfo.getDiffPath(diff).str());
-    packet::Ack(p.sock).send();
-    p.sock.waitForClose();
+    packet::Ack(p.sock).sendFin();
 
     ul.lock();
     volInfo.addDiffToMaster(diff);
@@ -1048,7 +1038,6 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     ProtocolLogger logger(gp.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
-    bool sendErr = true;
     try {
         StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
@@ -1064,13 +1053,11 @@ inline void c2pResizeServer(protocol::ServerParams &p)
         const uint64_t oldSizeLb = volInfo.getSizeLb();
         volInfo.setSizeLb(sizeLb);
 
-        pkt.write(msgOk);
-        sendErr = false;
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "resize succeeded" << volId << oldSizeLb << sizeLb;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
+        pkt.write(e.what());
     }
 }
 

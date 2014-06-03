@@ -382,8 +382,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(v);
-        packet::Ack(p.sock).send();
-        p.sock.waitForClose();
+        packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -395,8 +394,7 @@ inline void c2sListVolServer(protocol::ServerParams &p)
     const char *const FUNC = __func__;
     StrVec v = util::getDirNameList(gs.baseDirStr);
     protocol::sendStrVec(p.sock, v, 0, FUNC);
-    packet::Ack(p.sock).send();
-    p.sock.waitForClose();
+    packet::Ack(p.sock).sendFin();
     ProtocolLogger logger(gs.nodeId, p.clientId);
     logger.debug() << "listVol succeeded";
 }
@@ -417,8 +415,7 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);
-        pkt.write(msgOk);
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "initVol succeeded" << volId << wdevPath;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -441,8 +438,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.clear();
         tran.commit(sClear);
-        pkt.write(msgOk);
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "clearVol succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -486,8 +482,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
             tran.commit(sSlave);
         }
-        pkt.write(msgOk);
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "start succeeded" << volId;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -519,9 +514,8 @@ inline void c2sStopServer(protocol::ServerParams &p)
         if (!stopper.changeFromNotStopping(stopOpt.isForce() ? ForceStopping : Stopping)) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
-        pkt.write(msgAccept);
+        pkt.writeFin(msgAccept);
         sendErr = false;
-        p.sock.waitForClose();
         UniqueLock ul(volSt.mu);
         StateMachine &sm = volSt.sm;
 
@@ -610,9 +604,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             std::string res;
             aPkt.read(res);
             if (res == msgAccept) {
-                cPack.write(msgAccept);
-                p.sock.waitForClose();
-                p.sock.close();
+                cPack.writeFin(msgAccept);
             } else {
                 cybozu::Exception e(FUNC);
                 e << "bad response" << archiveId << res;
@@ -700,8 +692,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         const uint64_t gid = volInfo.takeSnapshot(gs.maxWlogSendMb);
         pkt.write(msgOk);
         sendErr = false;
-        pkt.write(gid);
-        p.sock.waitForClose();
+        pkt.writeFin(gid);
         getStorageGlobal().taskQueue.push(volId);
         logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
@@ -1032,9 +1023,8 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.resetWlog(gid);
         tran.commit(sSyncReady);
-        pkt.write(msgOk);
+        pkt.writeFin(msgOk);
         sendErr = false;
-        p.sock.waitForClose();
         logger.info() << "reset succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << FUNC << e.what();
@@ -1055,7 +1045,6 @@ inline void c2sResizeServer(protocol::ServerParams &p)
     ProtocolLogger logger(gs.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
-    bool sendErr = true;
     try {
         StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         if (v.size() != 2) throw cybozu::Exception(FUNC) << "bad params";
@@ -1070,13 +1059,11 @@ inline void c2sResizeServer(protocol::ServerParams &p)
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.growWdev(newSizeLb);
 
-        pkt.write(msgOk);
-        sendErr = false;
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "resize succeeded" << volId << newSizeLb;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
+        pkt.write(e.what());
     }
 }
 
@@ -1105,8 +1092,7 @@ inline void c2sIsOverflowServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(isOverflow);
-        packet::Ack(p.sock).send();
-        p.sock.waitForClose();
+        packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1124,8 +1110,7 @@ inline void c2sKickHeartbeatServer(protocol::ServerParams &p)
 
     try {
         getStorageGlobal().proxyManager.kick();
-        pkt.write(msgOk);
-        p.sock.waitForClose();
+        pkt.writeFin(msgOk);
         logger.info() << "kick-heartbeat succeeded";
     } catch (std::exception &e) {
         logger.error() << e.what();

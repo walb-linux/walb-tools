@@ -55,6 +55,7 @@ public:
     void writeFin(const T &t) {
         write(t);
         sock_.waitForClose();
+        sock_.close();
     }
 
 #ifdef PACKET_DEBUG

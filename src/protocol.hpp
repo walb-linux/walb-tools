@@ -259,8 +259,7 @@ inline void shutdownServer(ServerParams &p)
                   ? walb::server::ProcessStatus::FORCE_SHUTDOWN
                   : walb::server::ProcessStatus::GRACEFUL_SHUTDOWN);
     LOGs.info() << "shutdown" << (isForce ? "force" : "graceful") << p.clientId;
-    pkt.write(msgAccept);
-    p.sock.waitForClose();
+    pkt.writeFin(msgAccept);
 }
 
 /**
@@ -392,8 +391,7 @@ inline std::string runHostTypeClient(cybozu::Socket &sock)
 inline void runHostTypeServer(ServerParams &p, const std::string &hostType)
 {
     packet::Packet(p.sock).write(hostType);
-    packet::Ack(p.sock).send();
-    p.sock.waitForClose();
+    packet::Ack(p.sock).sendFin();
 }
 
 template <class VolStateGetter>
@@ -410,8 +408,7 @@ inline void c2xGetStateServer(protocol::ServerParams &p, VolStateGetter getter, 
         pkt.write(msgOk);
         sendErr = false;
         pkt.write(StrVec{state});
-        packet::Ack(p.sock).send();
-        p.sock.waitForClose();
+        packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
