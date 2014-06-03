@@ -464,9 +464,11 @@ def hash_backup(sx, vol):
     raise Exception('hash_backup:timeout', sx, vol)
 
 
-def write_random(devName, size, offset=0):
+def write_random(devName, size, offset=0, fixVar=None):
     args = [cfg.binDir + "/write_random_data",
         '-s', str(size), '-o', str(offset), devName]
+    if fixVar:
+        args += ['-set', str(fixVar)]
     return run_command(args, False)
 
 
@@ -621,8 +623,12 @@ def wait_for_no_action(s, vol, action, timeoutS=TIMEOUT_SEC):
 
 
 def zero_clear(path, offsetLb, sizeLb):
-    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + path,
+    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + path, # 'oflag=direct',
                  'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb)])
+    # flush data to avoid overwriting after walb's writing
+    fd = os.open(path, os.O_RDONLY)
+    os.fdatasync(fd)
+    os.close(fd)
 
 
 def resize_lv(path, beforeSizeMb, afterSizeMb):
