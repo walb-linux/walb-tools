@@ -261,10 +261,11 @@ inline void c2aMergeClient(protocol::ClientParams &p)
 /**
  * params[0]: volId
  * params[1]: size [byte] suffix k/m/g can be used.
+ * params[2]: doZeroClear. "zeroclear". (optional)
  */
 inline void c2xResizeClient(protocol::ClientParams &p)
 {
-    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
 inline void c2xHostTypeClient(protocol::ClientParams &p)

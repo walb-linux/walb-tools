@@ -1057,7 +1057,8 @@ inline void c2sResizeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        if (v.size() != 2) throw cybozu::Exception(FUNC) << "bad params";
         const std::string &volId = v[0];
         const uint64_t newSizeLb = util::parseSizeLb(v[1], FUNC);
 

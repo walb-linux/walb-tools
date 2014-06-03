@@ -16,6 +16,8 @@
 #include "cybozu/file.hpp"
 #include "cybozu/atoi.hpp"
 #include "lvm.hpp"
+#include "fileio.hpp"
+#include "aio_util.hpp"
 #include "file_path.hpp"
 #include "wdiff_data.hpp"
 #include "meta.hpp"
@@ -176,19 +178,43 @@ public:
     /**
      * Grow the volume.
      * @newSizeLb [logical block].
+     * @doZeroClar zero-clear the extended area if true.
      */
-    void growLv(uint64_t newSizeLb) {
+    void growLv(uint64_t newSizeLb, bool doZeroClear = false) {
         cybozu::lvm::Lv lv = getLv();
-        if (lv.sizeLb() == newSizeLb) {
+        const uint64_t oldSizeLb = lv.sizeLb();
+        if (oldSizeLb == newSizeLb) {
             /* no need to grow. */
             return;
         }
-        if (newSizeLb < lv.sizeLb()) {
+        if (newSizeLb < oldSizeLb) {
             /* Shrink is not supported. */
             throw cybozu::Exception(
                 "You tried to shrink the volume: " + lv.path().str());
         }
         lv.resize(newSizeLb);
+        if (doZeroClear) {
+            cybozu::util::File f(lv.path().str(), O_RDWR | O_DIRECT);
+            util::TemporalExistingFile existFile(getFillingZeroPath());
+            cybozu::aio::zeroClear(f.fd(), oldSizeLb, newSizeLb - oldSizeLb);
+            f.fdatasync();
+        }
+    }
+    bool isFillingZero() const {
+        cybozu::FilePath path = getFillingZeroPath();
+        return path.stat().exists();
+    }
+    /**
+     * RETURN:
+     *   false is not exists.
+     */
+    bool removeFilligZeroFile() {
+        cybozu::FilePath path = getFillingZeroPath();
+        if (!path.stat().exists()) return false;
+        if (!path.unlink()) {
+            throw cybozu::Exception(__func__) << "unlink failed" << path.str() << cybozu::ErrorNo();
+        }
+        return true;
     }
     StrVec getStatusAsStrVec() const {
         const char *const FUNC = __func__;
@@ -364,6 +390,9 @@ private:
     }
     std::string restoredSnapshotNamePrefix() const {
         return RESTORE_PREFIX + volId + "_";
+    }
+    cybozu::FilePath getFillingZeroPath() const {
+        return (volDir + "filling-zero");
     }
 #if 0 // XXX
     template <typename OutputStream>

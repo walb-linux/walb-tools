@@ -24,6 +24,7 @@ const char *const aMerge = "Merge";
 const char *const aApply = "Apply";
 const char *const aRestore = "Restore";
 const char *const aReplSync = "ReplSyncAsClient";
+const char *const aResize = "Resize";
 
 /**
  * Manage one instance for each volume.
@@ -115,7 +116,7 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
 {
-    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync}, msg);
+    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync, aResize}, msg);
 }
 
 namespace archive_local {
@@ -831,6 +832,9 @@ inline void ArchiveVolState::initInner(const std::string& volId)
         sm.set(volInfo.getState());
         WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());
         wdiffs.reload();
+        if (volInfo.removeFilligZeroFile()) {
+            LOGs.warn() << "filling-zero file has been removed." << volId;
+        }
     } else {
         sm.set(aClear);
     }
@@ -1568,6 +1572,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 /**
  * params[0]: volId
  * params[1]: size [byte] suffix k/m/g/t can be used.
+ * params[2]: doZeroClear. 'zeroclear'. optional.
  */
 inline void c2aResizeServer(protocol::ServerParams &p)
 {
@@ -1577,20 +1582,38 @@ inline void c2aResizeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const uint64_t newSizeLb = util::parseSizeLb(v[1], FUNC);
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId, newSizeLbStr, doZeroClearStr;
+        cybozu::util::parseStrVec(v, 0, 2, {&volId, &newSizeLbStr, &doZeroClearStr});
+        const uint64_t newSizeLb = util::parseSizeLb(newSizeLbStr, FUNC);
+        bool doZeroClear;
+        if (doZeroClearStr.empty()) {
+            doZeroClear = false;
+        } else if (doZeroClearStr == "zeroclear") {
+            doZeroClear = true;
+        } else {
+            throw cybozu::Exception(FUNC) << "bad param" << doZeroClearStr;
+        }
+
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
+        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync, aResize}, FUNC);
         verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv, atHashSync, aStopped}, FUNC);
 
-        volInfo.growLv(newSizeLb);
-        logger.info() << "resize succeeded" << volId << newSizeLb;
-        pkt.write(msgOk);
-        p.sock.waitForClose();
+        ActionCounterTransaction tran(volSt.ac, aResize);
+        ul.unlock();
+
+        if (doZeroClear) {
+            pkt.writeFin(msgOk);
+            // this is asynchronous.
+            volInfo.growLv(newSizeLb, true);
+        } else {
+            volInfo.growLv(newSizeLb, false);
+            pkt.writeFin(msgOk);
+        }
+        logger.info() << "resize succeeded" << volId << newSizeLb << doZeroClear;
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
