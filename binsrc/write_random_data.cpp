@@ -27,16 +27,21 @@ private:
     uint64_t sizeB_; /* [block]. */
     uint32_t minIoB_; /* [block]. */
     uint32_t maxIoB_; /* [block]. */
+public:
+    int fixVar_;
+private:
     bool isVerbose_;
     std::string targetPath_; /* device or file path. */
 
 public:
+    enum { noFixVar = ~0xff };
     Config(int argc, char* argv[])
         : bs_(LOGICAL_BLOCK_SIZE)
         , offsetB_(0)
         , sizeB_(0)
         , minIoB_(1)
         , maxIoB_(64)
+        , fixVar_(0)
         , isVerbose_(false)
         , targetPath_() {
         parse(argc, argv);
@@ -76,6 +81,7 @@ private:
         opt.appendOpt(&sizeB_, 0, "s", "SIZE: written size [block]. (default: device size)");
         opt.appendOpt(&minIoB_, 1, "n", "SIZE: minimum IO size [block]. (default: 1)");
         opt.appendOpt(&maxIoB_, 64, "x", "SIZE: maximum IO size [block]. (default: 64)");
+        opt.appendOpt(&fixVar_, noFixVar, "set", ": fill 8bit data(default:none)");
         opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         opt.appendParam(&targetPath_, "[DEVICE|FILE]");
@@ -110,7 +116,7 @@ public:
         while (written < totalSize) {
             const uint32_t bs = config_.blockSize();
             const uint32_t ioSize = decideIoSize(totalSize - written);
-            fillBufferRandomly(ioSize);
+            fillBuffer(ioSize);
             const uint32_t csum = cybozu::util::calcChecksum(buf_.data(), bs * ioSize, 0);
             bd_.write(offset * bs, bs * ioSize, buf_.data());
             walb::util::IoRecipe r(offset, ioSize, csum);
@@ -149,12 +155,16 @@ private:
         return randUint_() % (max - min) + min;
     }
 
-    void fillBufferRandomly(uint32_t sizeB) {
+    void fillBuffer(uint32_t sizeB) {
         assert(0 < sizeB);
         size_t offset = 0;
         size_t remaining = config_.blockSize() * sizeB;
         uint32_t r;
         assert(0 < remaining);
+        if (config_.fixVar_ != Config::noFixVar) {
+            ::memset(buf_.data(), config_.fixVar_, remaining);
+            return;
+        }
         while (sizeof(r) <= remaining) {
             r = randUint_();
             ::memcpy(buf_.data() + offset, &r, sizeof(r));
