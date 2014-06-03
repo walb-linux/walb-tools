@@ -26,6 +26,9 @@ const char *const aRestore = "Restore";
 const char *const aReplSync = "ReplSyncAsClient";
 const char *const aResize = "Resize";
 
+const StrVec allActionVec = {aMerge, aApply, aRestore, aReplSync, aResize};
+
+
 /**
  * Manage one instance for each volume.
  */
@@ -116,7 +119,7 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 
 inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
 {
-    verifyNoActionRunning(ac, StrVec{aMerge, aApply, aRestore, aReplSync, aResize}, msg);
+    verifyNoActionRunning(ac, allActionVec, msg);
 }
 
 namespace archive_local {
@@ -830,9 +833,6 @@ inline void ArchiveVolState::initInner(const std::string& volId)
         sm.set(volInfo.getState());
         WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());
         wdiffs.reload();
-        if (volInfo.removeFilligZeroFile()) {
-            LOGs.warn() << "filling-zero file has been removed." << volId;
-        }
     } else {
         sm.set(aClear);
     }
@@ -1641,11 +1641,12 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 }
 
 /**
- * return whether vol is under filling zero or not.
+ * return whether an action is running on a volume or not.
  *
  * params[0]: volId
+ * params[1]: action name.
  */
-inline void c2aIsFillingZeroServer(protocol::ServerParams &p)
+inline void c2aGetNumActionServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
@@ -1653,19 +1654,23 @@ inline void c2aIsFillingZeroServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
         const std::string &volId = v[0];
+        const std::string &action = v[1];
+        if (std::find(allActionVec.begin(), allActionVec.end(), action) == allActionVec.end()) {
+            throw cybozu::Exception(FUNC) << "no such action" << action;
+        }
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         if (volSt.sm.get() == aClear) {
             throw cybozu::Exception(FUNC) << "bad state";
         }
-        const ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-        const bool isFillingZero = volInfo.isFillingZero();
+        const size_t num = volSt.ac.getValue(action);
         ul.unlock();
+
         pkt.write(msgOk);
         sendErr = false;
-        pkt.write(isFillingZero);
+        pkt.write(num);
         packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();

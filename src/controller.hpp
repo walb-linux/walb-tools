@@ -293,18 +293,18 @@ inline void c2sKickHeartbeatClient(protocol::ClientParams &p)
 }
 
 /**
- * params[0]: volId
+ * Get an integer from server.
  */
-inline void c2xGetBoolClient(protocol::ClientParams &p)
+inline void c2xGetIntClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 1, FUNC, msgOk);
+    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
     packet::Packet pkt(p.sock);
 
-    bool value;
+    size_t value;
     pkt.read(value);
     packet::Ack(p.sock).recv();
-    std::cout << (value ? "1" : "0") << std::endl;
+    std::cout << value << std::endl;
 }
 
 } // namespace walb

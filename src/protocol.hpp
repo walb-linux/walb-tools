@@ -60,7 +60,7 @@ const char *const hostTypeCN = "host-type";
 const char *const shutdownCN = "shutdown";
 const char *const isOverflowCN = "is-overflow";
 const char *const kickHeartbeatCN = "kick-heartbeat";
-const char *const isFillingZeroCN = "is-filling-zero";
+const char *const getNumActionCN = "get-num-action";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 
 /**

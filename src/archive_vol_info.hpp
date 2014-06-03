@@ -195,26 +195,9 @@ public:
         lv.resize(newSizeLb);
         if (doZeroClear) {
             cybozu::util::File f(lv.path().str(), O_RDWR | O_DIRECT);
-            util::TemporalExistingFile existFile(getFillingZeroPath());
             cybozu::aio::zeroClear(f.fd(), oldSizeLb, newSizeLb - oldSizeLb);
             f.fdatasync();
         }
-    }
-    bool isFillingZero() const {
-        cybozu::FilePath path = getFillingZeroPath();
-        return path.stat().exists();
-    }
-    /**
-     * RETURN:
-     *   false is not exists.
-     */
-    bool removeFilligZeroFile() {
-        cybozu::FilePath path = getFillingZeroPath();
-        if (!path.stat().exists()) return false;
-        if (!path.unlink()) {
-            throw cybozu::Exception(__func__) << "unlink failed" << path.str() << cybozu::ErrorNo();
-        }
-        return true;
     }
     StrVec getStatusAsStrVec() const {
         const char *const FUNC = __func__;
@@ -390,9 +373,6 @@ private:
     }
     std::string restoredSnapshotNamePrefix() const {
         return RESTORE_PREFIX + volId + "_";
-    }
-    cybozu::FilePath getFillingZeroPath() const {
-        return (volDir + "filling-zero");
     }
 #if 0 // XXX
     template <typename OutputStream>

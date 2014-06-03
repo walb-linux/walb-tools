@@ -1091,7 +1091,7 @@ inline void c2sIsOverflowServer(protocol::ServerParams &p)
         const bool isOverflow = walb::device::isOverflow(wdevPath);
         pkt.write(msgOk);
         sendErr = false;
-        pkt.write(isOverflow);
+        pkt.write(int(isOverflow));
         packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
