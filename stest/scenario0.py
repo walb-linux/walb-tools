@@ -21,28 +21,13 @@ isDebug = True
 config = Config(isDebug, os.getcwd() + '/binsrc/',
                 WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
-"""
 wdev0 = Wdev(0, '/dev/walb/0', '/dev/test/data', '/dev/test/log', 12)
 wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
 wdevL = [wdev0, wdev1]
-"""
-
-WDEV_ID = 0
-WDEV_PATH = '/dev/walb/%d' % WDEV_ID
-WDEV_DATA_PATH = '/dev/test/data'
-WDEV_LOG_PATH = '/dev/test/log'
-WDEV_SIZE_MB = 12
-
-WDEV_ID2 = 1
-WDEV_PATH2 = '/dev/walb/%d' % WDEV_ID2
-WDEV_DATA_PATH2 = '/dev/test/data2'
-WDEV_LOG_PATH2 = '/dev/test/log2'
-WDEV_SIZE_MB2 = 12
 
 
-
-def get_walb_dev_sizeMb():
-    sysName = '/sys/block/walb!%d/size' % WDEV_ID
+def get_walb_dev_sizeMb(wdev):
+    sysName = '/sys/block/walb!%d/size' % wdev.iD
     f = open(sysName, 'r')
     size = int(f.read().strip()) * 512 / 1024 / 1024
     f.close()
@@ -64,15 +49,11 @@ def setup_test():
                         run_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(WORK_DIR)
     kill_all_servers()
-    if os.path.exists(WDEV_PATH):
-        delete_walb_dev(WDEV_PATH)
-    resize_lv(WDEV_DATA_PATH, get_lv_size_mb(WDEV_DATA_PATH), WDEV_SIZE_MB, False)
-    create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
-    # QQQ
-    if os.path.exists(WDEV_PATH2):
-        delete_walb_dev(WDEV_PATH2)
-    resize_lv(WDEV_DATA_PATH2, get_lv_size_mb(WDEV_DATA_PATH2), WDEV_SIZE_MB2, False)
-    create_walb_dev(WDEV_LOG_PATH2, WDEV_DATA_PATH2, WDEV_ID2)
+    for wdev in wdevL:
+        if os.path.exists(wdev.path):
+            delete_walb_dev(wdev.path)
+        resize_lv(wdev.data, get_lv_size_mb(wdev.data), wdev.sizeMb, False)
+        create_walb_dev(wdev.log, wdev.data, wdev.iD)
     startup_all()
 
 
@@ -81,10 +62,10 @@ def test_n1():
         full-backup -> sha1 -> restore -> sha1
     """
     print "test_n1:full-backup"
-    init(s0, VOL, WDEV_PATH)
-    init(s1, VOL, WDEV_PATH2) # QQQ
-    write_random(WDEV_PATH, 1)
-    md0 = get_sha1(WDEV_PATH)
+    init(s0, VOL, wdev0.path)
+    init(s1, VOL, wdev1.path)
+    write_random(wdev0.path, 1)
+    md0 = get_sha1(wdev0.path)
     gid = full_backup(s0, VOL)
     restore_and_verify_sha1('test_n1', md0, a0, VOL, gid)
 
@@ -94,8 +75,8 @@ def test_n2():
         write -> sha1 -> snapshot -> restore -> sha1
     """
     print "test_n2:snapshot"
-    write_random(WDEV_PATH, 1)
-    md0 = get_sha1(WDEV_PATH)
+    write_random(wdev0.path, 1)
+    md0 = get_sha1(wdev0.path)
     gid = snapshot_sync(s0, VOL, [a0])
     print "gid=", gid
     print list_restorable(a0, VOL)
@@ -108,8 +89,8 @@ def test_n3():
     """
     print "test_n3:hash-backup"
     set_slave_storage(s0, VOL)
-    write_random(WDEV_PATH, 1)
-    md0 = get_sha1(WDEV_PATH)
+    write_random(wdev0.path, 1)
+    md0 = get_sha1(wdev0.path)
     gid = hash_backup(s0, VOL)
     print "gid=", gid
     restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
@@ -127,7 +108,7 @@ def printL(aL, bL):
 
 def test_stop(stopL, startL):
     printL(stopL, startL)
-    t = startWriting(WDEV_PATH)
+    t = startWriting(wdev0.path)
 
     for s in stopL:
         stop(s, VOL)
@@ -141,7 +122,7 @@ def test_stop(stopL, startL):
 
     stopWriting(t)
 
-    md0 = get_sha1(WDEV_PATH)
+    md0 = get_sha1(wdev0.path)
     gid = snapshot_sync(s0, VOL, [a0])
     restore_and_verify_sha1('test_stop', md0, a0, VOL, gid)
 
@@ -172,7 +153,7 @@ def test_n5():
         apply -> sha1
     """
     print "test_n5:apply"
-    t = startWriting(WDEV_PATH)
+    t = startWriting(wdev0.path)
     time.sleep(0.5)
     gid = snapshot_sync(s0, VOL, [a0])
     time.sleep(0.5)
@@ -187,7 +168,7 @@ def test_n6():
         merge -> sha1
     """
     print "test_n6:merge"
-    t = startWriting(WDEV_PATH)
+    t = startWriting(wdev0.path)
     time.sleep(0.5)
     gidB = snapshot_sync(s0, VOL, [a0])
     time.sleep(1)
@@ -233,7 +214,7 @@ def test_n8():
         replicate (no synchronizing, diff) -> sha1
     """
     print "test_n8:replicate-diff"
-    write_random(WDEV_PATH, 1)
+    write_random(wdev0.path, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     gidA0 = get_latest_clean_snapshot(a0, VOL)
     if gidA0 != gid0:
@@ -254,13 +235,13 @@ def test_n9():
         replicate (no synchronizing, hash) -> sha1
     """
     print "test_n9:replicate-hash"
-    write_random(WDEV_PATH, 1)
+    write_random(wdev0.path, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     apply_diff(a0, VOL, gid0)
     list0 = list_restorable(a0, VOL)
     if len(list0) != 1:
         raise Exception('test_n9: list size must be 1', list0)
-    write_random(WDEV_PATH, 1)
+    write_random(wdev0.path, 1)
     replicate(a0, VOL, a1, False)
     gid1a0 = get_latest_clean_snapshot(a0, VOL)
     gid1a1 = get_latest_clean_snapshot(a1, VOL)
@@ -276,7 +257,7 @@ def test_n10():
         replicate (sychronizing) -> sha1
     """
     print "test_n10:replicate-synchronizing"
-    t = startWriting(WDEV_PATH)
+    t = startWriting(wdev0.path)
     try:
         time.sleep(0.5)
         replicate(a0, VOL, a1, True)
@@ -309,24 +290,24 @@ def test_n11(doZeroClear):
 
     """
     print "test_n11:resize", doZeroClear
-    t = startWriting(WDEV_PATH)
-    prevSize = get_walb_dev_sizeMb()
+    t = startWriting(wdev0.path)
+    prevSize = get_walb_dev_sizeMb(wdev0)
     snapshot_sync(s0, VOL, [a0])
     # lvm extent size is 4MiB
-    resize_lv(WDEV_DATA_PATH, prevSize, prevSize + 4, doZeroClear)
-    resize_lv(WDEV_DATA_PATH2, prevSize, prevSize + 4, doZeroClear)
+    resize_lv(wdev0.data, prevSize, prevSize + 4, doZeroClear)
+    resize_lv(wdev1.data, prevSize, prevSize + 4, doZeroClear)
     resize(VOL, prevSize + 4, doZeroClear)
-    curSize = get_walb_dev_sizeMb()
+    curSize = get_walb_dev_sizeMb(wdev0)
     if curSize != prevSize + 4:
         raise Exception('test_n11:bad size', prevSize, curSize)
     stopWriting(t)
-    write_random(WDEV_PATH, 1, prevSize * 1024 * 1024 / 512)
+    write_random(wdev0.path, 1, prevSize * 1024 * 1024 / 512)
     if doZeroClear:
         gid = snapshot_sync(s0, VOL, [a0])
     else:
         set_slave_storage(s0, VOL)
         gid = hash_backup(s0, VOL)
-    md0 = get_sha1(WDEV_PATH)
+    md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_n11', md0, md1)
 
@@ -340,15 +321,15 @@ def test_n12():
 
     """
     print "test_n12:exchange-master-slave"
-    t0 = startWriting(WDEV_PATH)
-    t1 = startWriting(WDEV_PATH2)
+    t0 = startWriting(wdev0.path)
+    t1 = startWriting(wdev1.path)
     time.sleep(0.3)
     set_slave_storage(s0, VOL)
     time.sleep(0.3)
     stopWriting(t0)
     stopWriting(t1)
     gid = hash_backup(s1, VOL)
-    md0 = get_sha1(WDEV_PATH2)
+    md0 = get_sha1(wdev1.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_n12', md0, md1)
     st0 = get_state(s0, VOL)
@@ -360,7 +341,7 @@ def test_n12():
 
     set_slave_storage(s1, VOL)
     gid = hash_backup(s0, VOL)
-    md0 = get_sha1(WDEV_PATH)
+    md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_n12', md0, md1)
     st0 = get_state(s0, VOL)
@@ -394,6 +375,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(100):
+    for i in xrange(2):
         print "===============================", i, datetime.datetime.today()
         main()
