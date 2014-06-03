@@ -1478,7 +1478,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived}, FUNC);
+        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv}, FUNC);
         archive_local::verifyApplicable(volId, gid);
 
         pkt.writeFin(msgAccept);
