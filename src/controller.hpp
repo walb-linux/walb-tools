@@ -276,21 +276,6 @@ inline void c2xHostTypeClient(protocol::ClientParams &p)
 
 /**
  * params[0]: volId
- */
-inline void c2sIsOverflowClient(protocol::ClientParams &p)
-{
-    const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 1, FUNC, msgOk);
-    packet::Packet pkt(p.sock);
-
-    bool isOverflow;
-    pkt.read(isOverflow);
-    packet::Ack(p.sock).recv();
-    std::cout << (isOverflow ? "1" : "0") << std::endl;
-}
-
-/**
- * params[0]: volId
  * params[1]: gid as string (optional)
  */
 inline void c2xResetVolClient(protocol::ClientParams &p)
@@ -305,6 +290,21 @@ inline void c2xResetVolClient(protocol::ClientParams &p)
 inline void c2sKickHeartbeatClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+
+/**
+ * params[0]: volId
+ */
+inline void c2xGetBoolClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    protocol::sendStrVec(p.sock, p.params, 1, FUNC, msgOk);
+    packet::Packet pkt(p.sock);
+
+    bool value;
+    pkt.read(value);
+    packet::Ack(p.sock).recv();
+    std::cout << (value ? "1" : "0") << std::endl;
 }
 
 } // namespace walb

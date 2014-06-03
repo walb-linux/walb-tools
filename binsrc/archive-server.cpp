@@ -54,6 +54,7 @@ public:
             { applyCN, c2aApplyServer },
             { mergeCN, c2aMergeServer },
             { resizeCN, c2aResizeServer },
+            { isFillingZeroCN, c2aIsFillingZeroServer },
             { hostTypeCN, c2aHostTypeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);

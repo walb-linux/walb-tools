@@ -68,8 +68,9 @@ void runClient(Option &opt)
         { mergeCN, c2aMergeClient },
         { resizeCN, c2xResizeClient },
         { hostTypeCN, c2xHostTypeClient },
-        { isOverflowCN, c2sIsOverflowClient },
+        { isOverflowCN, c2xGetBoolClient },
         { kickHeartbeatCN, c2sKickHeartbeatClient },
+        { isFillingZeroCN, c2xGetBoolClient },
         { dbgReloadMetadataCN, c2aReloadMetadataClient },
     };
     protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);

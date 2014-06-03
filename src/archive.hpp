@@ -1666,4 +1666,37 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     }
 }
 
-} // walb
+/**
+ * return whether vol is under filling zero or not.
+ *
+ * params[0]: volId
+ */
+inline void c2aIsFillingZeroServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
+        const std::string &volId = v[0];
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        if (volSt.sm.get() == aClear) {
+            throw cybozu::Exception(FUNC) << "bad state";
+        }
+        const ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        const bool isFillingZero = volInfo.isFillingZero();
+        ul.unlock();
+        pkt.write(msgOk);
+        sendErr = false;
+        pkt.write(isFillingZero);
+        packet::Ack(p.sock).sendFin();
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
+} // namespace walb
