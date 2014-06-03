@@ -1,7 +1,7 @@
 .PHONY: all test test_all echo_binaries build clean rebuild install stest
 
-CXX = g++-4.9.0
-CC = gcc-4.9.0
+CXX = clang++
+CC = clang
 
 OPT_FLAGS =
 ifeq ($(DEBUG),1)
@@ -100,7 +100,7 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 stest: build
-	pylint -E --rcfile=/dev/null -i y -f colorized stest/walb_cmd.py stest/scenario0.py
+	pylint -E --rcfile=/dev/null -f colorized stest/walb_cmd.py stest/scenario0.py
 	python stest/scenario0.py
 
 ifneq "$(MAKECMDGOALS)" "clean"
