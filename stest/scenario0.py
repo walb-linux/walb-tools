@@ -54,7 +54,7 @@ def setup_test():
     kill_all_servers()
     if os.path.exists(WDEV_PATH):
         delete_walb_dev(WDEV_PATH)
-    resize_lv(WDEV_DATA_PATH, get_lv_size_mb(WDEV_DATA_PATH), WDEV_SIZE_MB)
+    resize_lv(WDEV_DATA_PATH, get_lv_size_mb(WDEV_DATA_PATH), WDEV_SIZE_MB, False)
     create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
     startup_all()
 
@@ -282,26 +282,32 @@ def test_n10():
         raise Exception('test_n10: not stopped synchronizing', gid1, gid1a1)
 
 
-def test_n11():
+def test_n11(doZeroClear):
     t = startWriting(WDEV_PATH)
     prevSize = get_walb_dev_sizeMb()
     snapshot_sync(s0, VOL, [a0])
-    resize_lv(WDEV_DATA_PATH, prevSize, prevSize + 4)  # lvm extent size is 4MiB
-    resize(VOL, prevSize + 4, True)
+    # lvm extent size is 4MiB
+    resize_lv(WDEV_DATA_PATH, prevSize, prevSize + 4, doZeroClear)
+    resize(VOL, prevSize + 4, doZeroClear)
     curSize = get_walb_dev_sizeMb()
     if curSize != prevSize + 4:
         raise Exception('test_n11:bad size', prevSize, curSize)
     stopWriting(t)
     write_random(WDEV_PATH, 1, prevSize * 1024 * 1024 / 512)
-    gid = snapshot_sync(s0, VOL, [a0])
-    md0 = get_sha1_of_restorable(a0, VOL, gid)
-    md1 = get_sha1(WDEV_PATH)
+    if doZeroClear:
+        gid = snapshot_sync(s0, VOL, [a0])
+    else:
+        set_slave_storage(s0, VOL)
+        gid = hash_backup(s0, VOL)
+    md0 = get_sha1(WDEV_PATH)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_n11', md0, md1)
 
 
 def main():
     setup_test()
     test_n1()
+    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -311,7 +317,9 @@ def main():
     test_n8()
     test_n9()
     test_n10()
-    test_n11()
+    """
+    test_n11(True)
+    test_n11(False)
 
 
 if __name__ == "__main__":
@@ -320,6 +328,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(100):
+    for i in xrange(2):
         print "===============================", i, datetime.datetime.today()
         main()

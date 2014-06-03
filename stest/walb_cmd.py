@@ -644,7 +644,7 @@ def zero_clear(path, offsetLb, sizeLb):
     os.close(fd)
 
 
-def resize_lv(path, beforeSizeMb, afterSizeMb):
+def resize_lv(path, beforeSizeMb, afterSizeMb, doZeroClear):
     """
         this support shrink also.
     """
@@ -652,7 +652,7 @@ def resize_lv(path, beforeSizeMb, afterSizeMb):
         return
     run_command(['/sbin/lvresize', '-f', '-L', str(afterSizeMb) + 'm', path])
     # zero-clear is required for test only.
-    if beforeSizeMb < afterSizeMb:
+    if beforeSizeMb < afterSizeMb and doZeroClear:
         zero_clear(path, beforeSizeMb * 1024 * 1024 / 512,
                    (afterSizeMb - beforeSizeMb) * 1024 * 1024 / 512)
 
@@ -673,14 +673,14 @@ def wait_for_resize(ax, vol, sizeMb):
         raise Exception('wait_for_resize:failed', ax, vol, sizeMb, curSizeMb)
 
 
-def resize(vol, sizeMb, zeroclear=False):
+def resize(vol, sizeMb, doZeroClear):
     for ax in cfg.archiveL:
         st = get_state(ax, vol)
         if st == 'Clear':
             continue
         elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
             args = ['resize', vol, str(sizeMb) + 'm']
-            if zeroclear:
+            if doZeroClear:
                 args += ['zeroclear']
             run_ctl(ax, args)
             wait_for_resize(ax, vol, sizeMb)
