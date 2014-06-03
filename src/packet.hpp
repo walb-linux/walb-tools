@@ -72,8 +72,8 @@ public:
         }
     }
 #else
-    void sendDebugMsg(UNUSED const std::string &msg) {}
-    void recvDebugMsg(UNUSED const std::string &msg) {}
+    void sendDebugMsg(const std::string &) {}
+    void recvDebugMsg(const std::string &) {}
 #endif /* PACKET_DEBUG */
 };
 
