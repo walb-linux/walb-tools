@@ -572,7 +572,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
 
-    packet::Packet cPack(p.sock);
+    packet::Packet cPkt(p.sock);
 
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -604,11 +604,11 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             std::string res;
             aPkt.read(res);
             if (res == msgAccept) {
-                cPack.writeFin(msgAccept);
+                cPkt.writeFin(msgAccept);
             } else {
                 cybozu::Exception e(FUNC);
                 e << "bad response" << archiveId << res;
-                cPack.write(e.what());
+                cPkt.write(e.what());
                 throw e;
             }
         }
