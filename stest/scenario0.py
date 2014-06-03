@@ -314,6 +314,7 @@ def test_n11(doZeroClear):
     snapshot_sync(s0, VOL, [a0])
     # lvm extent size is 4MiB
     resize_lv(WDEV_DATA_PATH, prevSize, prevSize + 4, doZeroClear)
+    resize_lv(WDEV_DATA_PATH2, prevSize, prevSize + 4, doZeroClear)
     resize(VOL, prevSize + 4, doZeroClear)
     curSize = get_walb_dev_sizeMb()
     if curSize != prevSize + 4:
