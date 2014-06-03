@@ -21,12 +21,24 @@ isDebug = True
 config = Config(isDebug, os.getcwd() + '/binsrc/',
                 WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
+"""
+wdev0 = Wdev(0, '/dev/walb/0', '/dev/test/data', '/dev/test/log', 12)
+wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
+wdevL = [wdev0, wdev1]
+"""
 
 WDEV_ID = 0
 WDEV_PATH = '/dev/walb/%d' % WDEV_ID
 WDEV_DATA_PATH = '/dev/test/data'
 WDEV_LOG_PATH = '/dev/test/log'
 WDEV_SIZE_MB = 12
+
+WDEV_ID2 = 1
+WDEV_PATH2 = '/dev/walb/%d' % WDEV_ID2
+WDEV_DATA_PATH2 = '/dev/test/data2'
+WDEV_LOG_PATH2 = '/dev/test/log2'
+WDEV_SIZE_MB2 = 12
+
 
 
 def get_walb_dev_sizeMb():
@@ -56,6 +68,11 @@ def setup_test():
         delete_walb_dev(WDEV_PATH)
     resize_lv(WDEV_DATA_PATH, get_lv_size_mb(WDEV_DATA_PATH), WDEV_SIZE_MB, False)
     create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
+    # QQQ
+    if os.path.exists(WDEV_PATH2):
+        delete_walb_dev(WDEV_PATH2)
+    resize_lv(WDEV_DATA_PATH2, get_lv_size_mb(WDEV_DATA_PATH2), WDEV_SIZE_MB2, False)
+    create_walb_dev(WDEV_LOG_PATH2, WDEV_DATA_PATH2, WDEV_ID2)
     startup_all()
 
 
@@ -65,6 +82,7 @@ def test_n1():
     """
     print "test_n1:full-backup"
     init(s0, VOL, WDEV_PATH)
+    init(s1, VOL, WDEV_PATH2) # QQQ
     write_random(WDEV_PATH, 1)
     md0 = get_sha1(WDEV_PATH)
     gid = full_backup(s0, VOL)
@@ -283,6 +301,14 @@ def test_n10():
 
 
 def test_n11(doZeroClear):
+    """
+        doZeroClear is true:
+            resize -> snapshot -> sha1
+        otherwise:
+            resize -> hash backup -> sha1
+
+    """
+    print "test_n11:resize", doZeroClear
     t = startWriting(WDEV_PATH)
     prevSize = get_walb_dev_sizeMb()
     snapshot_sync(s0, VOL, [a0])
@@ -304,10 +330,49 @@ def test_n11(doZeroClear):
     verify_equal_sha1('test_n11', md0, md1)
 
 
+def test_n12():
+    """
+        change master to slave
+        -> change slave to master (hash-sync)
+        -> sha1
+        once more.
+
+    """
+    print "test_n12:exchange-master-slave"
+    t0 = startWriting(WDEV_PATH)
+    t1 = startWriting(WDEV_PATH2)
+    time.sleep(0.3)
+    set_slave_storage(s0, VOL)
+    time.sleep(0.3)
+    stopWriting(t0)
+    stopWriting(t1)
+    gid = hash_backup(s1, VOL)
+    md0 = get_sha1(WDEV_PATH2)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_n12', md0, md1)
+    st0 = get_state(s0, VOL)
+    if st0 != 'Slave':
+        raise Exception('test_n12:s0:1:bad state', st0)
+    st1 = get_state(s1, VOL)
+    if st1 != 'Master':
+        raise Exception('test_n12:s1:1:bad state', st1)
+
+    set_slave_storage(s1, VOL)
+    gid = hash_backup(s0, VOL)
+    md0 = get_sha1(WDEV_PATH)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_n12', md0, md1)
+    st0 = get_state(s0, VOL)
+    if st0 != 'Master':
+        raise Exception('test_n12:s0:2:bad state', st0)
+    st1 = get_state(s1, VOL)
+    if st1 != 'Slave':
+        raise Exception('test_n12:s0:2:bad state', st1)
+
+
 def main():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -317,9 +382,9 @@ def main():
     test_n8()
     test_n9()
     test_n10()
-    """
     test_n11(True)
     test_n11(False)
+    test_n12()
 
 
 if __name__ == "__main__":
@@ -328,6 +393,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(2):
+    for i in xrange(100):
         print "===============================", i, datetime.datetime.today()
         main()

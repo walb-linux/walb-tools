@@ -16,6 +16,8 @@ K_ARCHIVE = 2
 Server = collections.namedtuple('Server', 'name port kind vg')
 Config = collections.namedtuple(
     'Config', 'debug binDir dataDir storageL proxyL archiveL')
+Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
+
 
 cfg = None
 
@@ -230,7 +232,9 @@ def shutdown_all():
 def init(sx, vol, wdevPath):
     run_ctl(sx, ["init-vol", vol, wdevPath])
     start(sx, vol)
-    run_ctl(cfg.archiveL[0], ["init-vol", vol])
+    a0 = cfg.archiveL[0]
+    if get_state(a0, vol) == 'Clear':
+        run_ctl(a0, ["init-vol", vol])
 
 
 def is_synchronizing(ax, vol):
