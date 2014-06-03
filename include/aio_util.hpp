@@ -33,6 +33,7 @@
 #include "walb/common.h"
 #include "util.hpp"
 #include "fileio.hpp"
+#include "memory_buffer.hpp"
 
 namespace cybozu {
 namespace aio {
@@ -535,6 +536,50 @@ private:
         return ptr;
     }
 };
+
+/**
+ * Zero-clear a block device.
+ *
+ * @fd writalbe file descriptor of a block device. O_DIRECT is required.
+ * @startLb start offset to zero-clear [logical block].
+ * @sizeLb size to zero-clear [logical block].
+ */
+inline void zeroClear(int fd, uint64_t startLb, uint64_t sizeLb)
+{
+    const size_t lbs = 512;
+    const size_t bufSizeB = 64 * 1024; // 64KiB.
+    const size_t bufSizeLb = bufSizeB / lbs;
+    const size_t maxQueueSize = 64;
+
+    std::shared_ptr<char> buf = cybozu::util::allocateBlocks<char>(lbs, bufSizeB);
+    ::memset(buf.get(), 0, bufSizeB);
+    Aio aio(fd, maxQueueSize);
+
+    size_t pending = 0;
+    uint64_t offLb = startLb;
+    while (pending < maxQueueSize && offLb < startLb + sizeLb) {
+        const size_t blks = std::min(startLb + sizeLb - offLb, bufSizeLb);
+        const uint32_t key = aio.prepareWrite(offLb * lbs, blks * lbs, buf.get());
+        if (key == 0) throw std::runtime_error("zeroClear: prepare failed.");
+        aio.submit();
+        offLb += blks;
+        pending++;
+    }
+    while (offLb < startLb + sizeLb) {
+        aio.waitOne();
+        pending--;
+        const size_t blks = std::min(startLb + sizeLb - offLb, bufSizeLb);
+        const uint32_t key = aio.prepareWrite(offLb * lbs, blks * lbs, buf.get());
+        if (key == 0) throw std::runtime_error("zeroClear: prepare failed.");
+        aio.submit();
+        offLb += blks;
+        pending++;
+    }
+    while (pending > 0) {
+        aio.waitOne();
+        pending--;
+    }
+}
 
 } // namespace aio
 } // namespace walb
