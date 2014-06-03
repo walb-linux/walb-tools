@@ -475,18 +475,41 @@ def get_sha1(devName):
     return ret.split(' ')[0]
 
 
-def restore(ax, vol, gid):
-    run_ctl(ax, ['restore', vol, str(gid)])
-    wait_for_restored(ax, vol, gid)
+def get_num_opened_lv(lvPath):
+    ret = run_command(['/sbin/dmsetup', '-c', 'info', '-o', 'open',
+                       '--noheadings', lvPath])
+    ret.strip()
+    return int(ret)
 
 
-def del_restored(ax, vol, gid):
-    run_ctl(ax, ['del-restored', vol, str(gid)])
-    wait_for_not_restored(ax, vol, gid)
+def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
+        num = get_num_opened_lv(lvPath)
+        if num == 0:
+            return
+        time.sleep(0.3)
+    raise Exception('wait_for_none_open_lv', lvPath)
 
 
 def get_restored_path(ax, vol, gid):
     return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
+
+
+def get_lv_path(ax, vol):
+    return '/dev/' + ax.vg + '/i_' + vol
+
+
+def restore(ax, vol, gid):
+    run_ctl(ax, ['restore', vol, str(gid)])
+    wait_for_restored(ax, vol, gid)
+    wait_for_lv_ready(get_restored_path(ax, vol, gid))
+
+
+def del_restored(ax, vol, gid):
+    wait_for_lv_ready(get_lv_path(ax, vol))
+    run_ctl(ax, ['del-restored', vol, str(gid)])
+    wait_for_not_restored(ax, vol, gid)
 
 
 def snapshot_async(sx, vol):
@@ -587,13 +610,57 @@ def replicate(aSrc, vol, aDst, synchronizing):
         synchronize(aSrc, vol, aDst)
 
 
-def resize(vol, sizeMb):
+def wait_for_no_action(s, vol, action, timeoutS=TIMEOUT_SEC):
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
+        num = int(run_ctl(s, ['get-num-action', vol, action]))
+        if num == 0:
+            return;
+        time.sleep(0.3)
+    raise Exception("wait_for_no_action", s, vol, action)
+
+
+def zero_clear(path, offsetLb, sizeLb):
+    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + path,
+                 'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb)])
+
+
+def resize_lv(path, beforeSizeMb, afterSizeMb):
+    """
+        this support shrink also.
+    """
+    if beforeSizeMb == afterSizeMb:
+        return
+    run_command(['/sbin/lvresize', '-f', '-L', str(afterSizeMb) + 'm', path])
+    # zero-clear is required for test only.
+    if beforeSizeMb < afterSizeMb:
+        zero_clear(path, beforeSizeMb * 1024 * 1024 / 512,
+                   (afterSizeMb - beforeSizeMb) * 1024 * 1024 / 512)
+
+
+def get_lv_size_mb(path):
+    ret = run_command(['/sbin/lvdisplay', '-C', '--noheadings',
+                       '-o', 'lv_size', '--units', 'b', path])
+    ret.strip()
+    if ret[-1] != 'B':
+        raise Exception('get_lv_size_mb: bad return value', ret)
+    return int(ret[0:-1]) / 1024 / 1024
+
+
+def resize(vol, sizeMb, zeroclear=False):
     for ax in cfg.archiveL:
         st = get_state(ax, vol)
         if st == 'Clear':
             continue
         elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
-            run_ctl(ax, ['resize', vol, str(sizeMb) + 'm'])
+            args = ['resize', vol, str(sizeMb) + 'm']
+            if zeroclear:
+                args += ['zeroclear']
+            run_ctl(ax, args)
+            wait_for_no_action(ax, vol, 'Resize')
+            curSizeMb = get_lv_size_mb(get_lv_path(ax, vol))
+            if curSizeMb != sizeMb:
+                raise Exception('resize:failed', ax, vol, sizeMb, curSizeMb)
         else:
             raise Exception('resize:bad state', st)
     for sx in cfg.storageL:
@@ -603,15 +670,4 @@ def resize(vol, sizeMb):
         else:
             run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])
 
-
-def resizeLv(path, sizeMb):
-    run_command(['/sbin/lvresize', '-f', '-L', str(sizeMb) + 'm', path])
-
-
-def getLvSizeMb(path):
-    ret = run_command(['/sbin/lvdisplay', '-C', '--noheadings', '-o', 'lv_size', '--units', 'm', path])
-    ret.strip()
-    if ret[-1] != 'm':
-        raise Exception('getLvSizeMb: bad return value', ret)
-    return int(float(ret[0:-2]))
 

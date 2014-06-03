@@ -43,16 +43,18 @@ set_config(config)
 
 def setup_test():
     run_command(['/bin/rm', '-rf', WORK_DIR])
-    if os.path.isdir('/dev/vg0'):
-        for f in os.listdir('/dev/vg0'):
-            if f[0] == 'i':
-                run_command(['/sbin/lvremove', '-f', '/dev/vg0/' + f])
+    for ax in config.archiveL:
+        if ax.vg:
+            vgPath = '/dev/' + ax.vg + '/';
+            if os.path.isdir(vgPath):
+                for f in os.listdir(vgPath):
+                    if f[0] == 'i':
+                        run_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(WORK_DIR)
     kill_all_servers()
     if os.path.exists(WDEV_PATH):
         delete_walb_dev(WDEV_PATH)
-    if getLvSizeMb(WDEV_DATA_PATH) != WDEV_SIZE_MB:
-        resizeLv(WDEV_DATA_PATH, WDEV_SIZE_MB)
+    resize_lv(WDEV_DATA_PATH, get_lv_size_mb(WDEV_DATA_PATH), WDEV_SIZE_MB)
     create_walb_dev(WDEV_LOG_PATH, WDEV_DATA_PATH, WDEV_ID)
     startup_all()
 
@@ -284,8 +286,8 @@ def test_n11():
     t = startWriting(WDEV_PATH)
     prevSize = get_walb_dev_sizeMb()
     snapshot_sync(s0, VOL, [a0])
-    resizeLv(WDEV_DATA_PATH, prevSize + 4) # lvm extent size is 4MiB
-    resize(VOL, prevSize + 4)
+    resize_lv(WDEV_DATA_PATH, prevSize, prevSize + 4)  # lvm extent size is 4MiB
+    resize(VOL, prevSize + 4, True)
     curSize = get_walb_dev_sizeMb()
     if curSize != prevSize + 4:
         raise Exception('test_n11:bad size', prevSize, curSize)
@@ -300,6 +302,7 @@ def test_n11():
 def main():
     setup_test()
     test_n1()
+    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -311,7 +314,6 @@ def main():
     test_n10()
     """
     test_n11()
-    """
 
 
 if __name__ == "__main__":
@@ -320,6 +322,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(100):
+    for i in xrange(2):
         print "===============================", i, datetime.datetime.today()
         main()
