@@ -183,6 +183,30 @@ inline uint64_t parseBulkLb(const std::string &str, const char *msg)
     return parseSizeLb(str, msg, LOGICAL_BLOCK_SIZE, MAX_BULK_SIZE);
 }
 
+class TemporalExistingFile
+{
+    const cybozu::FilePath  path_;
+    static constexpr const char *NAME() { return "TemporalExistingFile"; }
+public:
+    explicit TemporalExistingFile(const cybozu::FilePath &path)
+        : path_(path) {
+        if (path.stat().exists()) {
+            throw cybozu::Exception(NAME()) << "file exists" << path.str();
+        }
+        ::FILE *fp = ::fopen(path.str().c_str(), "w");
+        if (fp) {
+            ::fclose(fp);
+        } else {
+            throw cybozu::Exception(NAME()) << "fopen failed" << path.str();
+        }
+    }
+    ~TemporalExistingFile() noexcept {
+        if (!path_.unlink()) {
+            LOGs.error() << NAME() << "unlink error" << path_.str();
+        }
+    }
+};
+
 }} // walb::util
 
 inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)
