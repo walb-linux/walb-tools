@@ -51,6 +51,12 @@ public:
     template <typename T>
     void write(const T &t) { cybozu::save(sock_, t); }
 
+    template <typename T>
+    void writeFin(const T &t) {
+        write(t);
+        sock_.waitForClose();
+    }
+
 #ifdef PACKET_DEBUG
     void sendDebugMsg(const std::string &msg) {
         write(msg);
@@ -78,6 +84,10 @@ public:
     void send() {
         sendDebugMsg("ACK");
         write(ACK_MSG);
+    }
+    void sendFin() {
+        sendDebugMsg("ACK");
+        writeFin(ACK_MSG);
     }
     void recv() {
         recvDebugMsg("ACK");
