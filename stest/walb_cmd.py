@@ -172,15 +172,30 @@ def delete_walb_dev(wdevPath):
 # user command functions
 
 
-def wait_for_state(server, vol, stateL, timeoutS=10):
+def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
+    """
+         cond: st -> bool
+    """
     t0 = time.clock()
     while time.clock() < t0 + timeoutS:
         st = get_state(server, vol)
 #        print "c=", server, vol, stateL, c, st
-        if st in stateL:
+        if cond(st):
             return
         time.sleep(0.3)
-    raise Exception("wait_for_state", server, vol, stateL)
+    raise Exception("wait_for_state_cond", server, vol, msg)
+
+
+def wait_for_state(server, vol, stateL, timeoutS=10):
+    def cond(st):
+        return st in stateL
+    wait_for_state_cond(server, vol, cond, 'stateL:' + str(stateL), timeoutS)
+
+
+def wait_for_not_state(server, vol, stateL, timeoutS=10):
+    def cond(st):
+        return st not in stateL
+    wait_for_state_cond(server, vol, cond, 'not stateL:' + str(stateL), timeoutS)
 
 
 def kill_all_servers():
@@ -324,7 +339,11 @@ def wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    return wait_for_gid(ax, vol, gid, 'list-restored', timeoutS)
+    wait_for_no_action(ax, vol, 'Restore', timeoutS)
+    gids = get_gid_list(ax, vol, 'list-restored')
+    if gid in gids:
+        return
+    raise Exception('wait_for_restored:failed', ax, vol, gid)
 
 
 def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -332,34 +351,28 @@ def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
-        gidL = get_gid_list(ax, vol, 'list-restorable')
-        if gidL and gid <= gidL[0]:
-            return
-        time.sleep(0.3)
-    raise Exception("wait_for_applied:timeout", ax, vol)
+    wait_for_no_action(ax, vol, 'Apply', timeoutS)
+    gidL = get_gid_list(ax, vol, 'list-restorable')
+    if gidL and gid <= gidL[0]:
+        return
+    raise Exception('wait_for_applied:failed', ax, vol, gid)
 
 
 def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
-        gidL = list_restorable(ax, vol, 'all')
-        pos = gidL.index(gidB)
-        if gidL[pos + 1] == gidE:
-            return
-        time.sleep(0.3)
-    raise Exception("wait_for_merged:timeout", ax, vol, gidB, gidE)
+    wait_for_no_action(ax, vol, 'Merge', timeoutS)
+    gidL = list_restorable(ax, vol, 'all')
+    pos = gidL.index(gidB)
+    if gidL[pos + 1] == gidE:
+        return
+    raise Exception("wait_for_merged:failed", ax, vol, gidB, gidE)
 
 
 def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
-        gidL = list_restorable(ax, vol, 'all')
-        if gidL and gid <= gidL[-1]:
-            return
-        time.sleep(0.3)
-    raise Exception("wait_for_replicated:timeout", ax, vol, gid)
+    wait_for_not_state(ax, vol, ['ReplSyncAsServer'], timeoutS)
+    gidL = list_restorable(ax, vol, 'all')
+    if gidL and gid <= gidL[-1]:
+        return
+    raise Exception("wait_for_replicated:replicate failed", ax, vol, gid)
 
 
 def add_archive_to_proxy(px, vol, ax):
@@ -653,6 +666,13 @@ def get_lv_size_mb(path):
     return int(ret[0:-1]) / 1024 / 1024
 
 
+def wait_for_resize(ax, vol, sizeMb):
+    wait_for_no_action(ax, vol, 'Resize')
+    curSizeMb = get_lv_size_mb(get_lv_path(ax, vol))
+    if curSizeMb != sizeMb:
+        raise Exception('wait_for_resize:failed', ax, vol, sizeMb, curSizeMb)
+
+
 def resize(vol, sizeMb, zeroclear=False):
     for ax in cfg.archiveL:
         st = get_state(ax, vol)
@@ -663,10 +683,7 @@ def resize(vol, sizeMb, zeroclear=False):
             if zeroclear:
                 args += ['zeroclear']
             run_ctl(ax, args)
-            wait_for_no_action(ax, vol, 'Resize')
-            curSizeMb = get_lv_size_mb(get_lv_path(ax, vol))
-            if curSizeMb != sizeMb:
-                raise Exception('resize:failed', ax, vol, sizeMb, curSizeMb)
+            wait_for_resize(ax, vol, sizeMb)
         else:
             raise Exception('resize:bad state', st)
     for sx in cfg.storageL:
@@ -675,5 +692,3 @@ def resize(vol, sizeMb, zeroclear=False):
             continue
         else:
             run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])
-
-

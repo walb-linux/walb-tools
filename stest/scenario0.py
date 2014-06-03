@@ -302,7 +302,6 @@ def test_n11():
 def main():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -312,7 +311,6 @@ def main():
     test_n8()
     test_n9()
     test_n10()
-    """
     test_n11()
 
 
