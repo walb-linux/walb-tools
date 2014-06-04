@@ -20,6 +20,9 @@ namespace walb {
 
 // action
 const char *const sWlogSend = "WlogSend";
+const char *const sWlogRemove = "WlogRemove";
+
+const StrVec allActionVec = {sWlogSend, sWlogRemove};
 
 struct StorageVolState {
     std::recursive_mutex mu;
@@ -39,9 +42,6 @@ struct StorageVolState {
             { stStartSlave, sSlave },
             { sSlave, stStopSlave },
             { stStopSlave, sSyncReady },
-
-            { sSlave, stWlogRemove },
-            { stWlogRemove, sSlave },
 
             { sSyncReady, stFullSync },
             { stFullSync, sStopped },
@@ -520,13 +520,11 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
-                if (!volSt.ac.isAllZero(StrVec{sWlogSend})) return false;
-                return isStateIn(sm.get(), {sClear, sSyncReady, sStopped, sMaster, sSlave});
+                return volSt.ac.isAllZero(allActionVec);
             }, FUNC);
 
         const std::string st = sm.get();
         verifyStateIn(st, {sMaster, sSlave}, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{sWlogSend}, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
@@ -868,14 +866,20 @@ inline void StorageWorker::operator()()
     verifyStateIn(st, {sMaster, stFullSync, stHashSync, sSlave}, FUNC);
 
     if (st == sSlave) {
-        StateMachineTransaction tran(volSt.sm, sSlave, stWlogRemove);
+        if (volSt.ac.getValue(sWlogRemove) > 0) {
+            LOGs.info() << FUNC << "WlogRemove already running" << volId;
+            return;
+        }
+        ActionCounterTransaction tran(volSt.ac, sWlogRemove);
         ul.unlock();
         storage_local::deleteWlogs(volId);
-        tran.commit(sSlave);
         return;
     }
 
-    verifyNoActionRunning(volSt.ac, StrVec{sWlogSend}, FUNC);
+    if (volSt.ac.getValue(sWlogSend) > 0) {
+        LOGs.info() << FUNC << "WlogSend already running" << volId;
+        return;
+    }
     ActionCounterTransaction tran(volSt.ac, sWlogSend);
     ul.unlock();
     try {

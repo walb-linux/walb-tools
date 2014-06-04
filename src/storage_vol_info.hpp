@@ -31,7 +31,6 @@ const char *const stHashSync = "HashSync";
 const char *const stStartMaster = "StartMaster";
 const char *const stStopMaster = "StopMaster";
 const char *const stReset = "Reset";
-const char *const stWlogRemove = "WlogRemove";
 
 /**
  * Persistent data for a volume managed by a storage daemon.
