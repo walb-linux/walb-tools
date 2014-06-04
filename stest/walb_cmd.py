@@ -450,14 +450,14 @@ def prepare_backup(sx, vol):
         add_archive_to_proxy(px, vol, a0)
 
 
-def full_backup(sx, vol):
+def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
     run_ctl(sx, ["full-bkp", vol])
-    wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
+    wait_for_state(a0, vol, ["Archived"], timeoutS)
 
     t0 = time.clock()
-    while time.clock() < t0 + TIMEOUT_SEC:
+    while time.clock() < t0 + timeoutS:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids:
             return gids[-1]
@@ -465,7 +465,7 @@ def full_backup(sx, vol):
     raise Exception('full_backup:timeout', sx, vol)
 
 
-def hash_backup(sx, vol):
+def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
     prev_gids = get_gid_list(a0, vol, 'list-restorable')
@@ -475,10 +475,10 @@ def hash_backup(sx, vol):
         max_gid = -1
 
     run_ctl(sx, ["hash-bkp", vol])
-    wait_for_state(a0, vol, ["Archived"], TIMEOUT_SEC)
+    wait_for_state(a0, vol, ["Archived"], timeoutS)
 
     t0 = time.clock()
-    while time.clock() < t0 + TIMEOUT_SEC:
+    while time.clock() < t0 + timeoutS:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids and gids[-1] > max_gid:
             return gids[-1]
