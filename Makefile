@@ -104,6 +104,10 @@ stest: build
 	pylint -E --rcfile=/dev/null -f colorized stest/walb_cmd.py stest/scenario0.py
 	python stest/scenario0.py
 
+stest100: build
+	pylint -E --rcfile=/dev/null -f colorized stest/walb_cmd.py stest/scenario0.py
+	python stest/scenario0.py 100
+
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEPENDS)
 endif
