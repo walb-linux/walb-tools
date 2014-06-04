@@ -527,7 +527,15 @@ def restore(ax, vol, gid):
 
 def del_restored(ax, vol, gid):
     wait_for_lv_ready(get_lv_path(ax, vol))
-    run_ctl(ax, ['del-restored', vol, str(gid)])
+    retryTimes = 3
+    for i in xrange(retryTimes):
+        try:
+            run_ctl(ax, ['del-restored', vol, str(gid)])
+        except Exception, e:
+            if i == retryTimes - 1:
+                raise
+            else:
+                print 'del-restored retry', i, e
     wait_for_not_restored(ax, vol, gid)
 
 
