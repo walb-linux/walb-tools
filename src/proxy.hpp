@@ -134,7 +134,7 @@ private:
         bool isForce;
         size_t delaySec;
     };
-    bool transferWdiffIfNecessary(PushOpt &);
+    int transferWdiffIfNecessary(PushOpt &);
 };
 
 struct ProxySingleton
@@ -906,11 +906,17 @@ retry:
     merger.prepare();
 }
 
+enum {
+    DONT_SEND,
+    CONTINUE_TO_SEND,
+    FORCE_STOP_VOL,
+};
+
 /**
  * RETURN:
- *   If true, caller must push taskQueue using pushOpt.
+ *   DONT_SEND, RETRY_SEND, or FORCE_STOP.
  */
-inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
+inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 {
     const char *const FUNC = __func__;
     const std::string& volId = task_.volId;
@@ -928,7 +934,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
     if (diffV.empty()) {
         LOGs.info() << FUNC << "no need to send wdiffs" << volId << archiveName;
-        return false;
+        return DONT_SEND;
     }
 
     const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
@@ -959,7 +965,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     if (res == msgAccept) {
         if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit)) {
             logger.warn() << FUNC << "force stopped wdiff sending" << volId;
-            return false;
+            return DONT_SEND;
         }
         packet::Ack(pkt.sock()).recv();
         ul.lock();
@@ -968,7 +974,7 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = false;
         pushOpt.delaySec = 0;
-        return true;
+        return CONTINUE_TO_SEND;
     }
     cybozu::Exception e("ProxyWorker");
     if (res == "stopped" || res == "wdiff-recv" || res == "too-new-diff") {
@@ -978,13 +984,13 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
             curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
             logger.error() << e.what();
-            return false;
+            return FORCE_STOP_VOL;
         }
         e << res << "delay time" << gp.delaySecForRetry;
         logger.info() << e.what();
         pushOpt.isForce = true;
         pushOpt.delaySec = gp.delaySecForRetry;
-        return true;
+        return CONTINUE_TO_SEND;
     }
     if (res == "different-uuid" || res == "too-old-diff") {
         e << res;
@@ -992,18 +998,17 @@ inline bool ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = true;
         pushOpt.delaySec = 0;
-        return true;
+        return CONTINUE_TO_SEND;
     }
     /**
-     * archive-not-found, not-applicable-diff, large-lv-size
+     * archive-not-found, not-applicable-diff, smaller-lv-size
      *
-     * The background task will stop, even if it is on started state.
-     * Wlog-transfer protocol will kick it again,
-     * or you must stop and start by yourself.
+     * The background task will stop, and change to stop state.
+     * You must start by hand.
      */
     e << res;
     logger.error() << e.what();
-    return false;
+    return FORCE_STOP_VOL;
 }
 
 inline void ProxyWorker::operator()()
@@ -1012,13 +1017,28 @@ inline void ProxyWorker::operator()()
     TaskQueue<ProxyTask> &q = getProxyGlobal().taskQueue;
     try {
         PushOpt opt;
-        if (transferWdiffIfNecessary(opt)) {
-            const size_t delayMs = opt.delaySec * 1000;
-            if (opt.isForce) {
-                q.pushForce(task_, delayMs);
-            } else {
-                q.push(task_, delayMs);
+        const int ret = transferWdiffIfNecessary(opt);
+        switch (ret) {
+        case CONTINUE_TO_SEND:
+            {
+                const size_t delayMs = opt.delaySec * 1000;
+                if (opt.isForce) {
+                    q.pushForce(task_, delayMs);
+                } else {
+                    q.push(task_, delayMs);
+                }
             }
+            break;
+        case FORCE_STOP_VOL:
+            try {
+                proxy_local::stopProxyVol(task_.volId, true);
+            } catch (std::exception &e) {
+                LOGs.error() << FUNC << "force stop failed" << e.what();
+            }
+            break;
+        case DONT_SEND:
+        default:
+            break;
         }
     } catch (std::exception &e) {
         LOGs.error() << FUNC << e.what();
