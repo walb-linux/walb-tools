@@ -271,9 +271,9 @@ def test_n10():
         verify_equal_sha1('test_n10', md0, md1)
         stop_sync(a1, VOL)
         time.sleep(0.5)
-    except Exception, e:
+    except Exception:
         stopWriting(t)
-        raise e
+        raise
     stopWriting(t)
     gid1 = snapshot_sync(s0, VOL, [a0])
     gid1a1 = get_latest_clean_snapshot(a1, VOL)
