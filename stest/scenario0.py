@@ -371,6 +371,28 @@ def test_m1():
     print 'test_m1:succeeded'
 
 
+def test_m2():
+    """
+        init --> hash-bkp fails.
+    """
+    print "test_m2:hash-bkp-fails."
+    stop_sync(a0, VOL)
+    stop(a0, VOL)
+    reset_vol(a0, VOL)
+    write_random(wdev0.path, 1)
+    e = [False]
+    try:
+        hash_backup(s0, VOL)
+        e[0] = True
+    except:
+        pass
+    if e[0]:
+        raise Exception('test_m2:hash_backup did not fail')
+    set_slave_storage(s0, VOL)
+    full_backup(s0, VOL)
+    print 'test_m2:succeeded'
+
+
 def main():
     setup_test()
     test_n1()
@@ -389,6 +411,7 @@ def main():
     test_n12()
     """
     test_m1()
+    test_m2()
 
 
 if __name__ == "__main__":
