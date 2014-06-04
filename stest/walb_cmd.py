@@ -138,8 +138,8 @@ def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
     """
          cond: st -> bool
     """
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         st = get_state(server, vol)
 #        print "c=", server, vol, stateL, c, st
         if cond(st):
@@ -357,8 +357,8 @@ def list_restored(ax, vol):
 
 
 def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, 'list-restorable')
         if gids:
             return gids[-1]
@@ -367,8 +367,8 @@ def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
             return True
@@ -377,8 +377,8 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
             return True
@@ -489,8 +489,8 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     run_ctl(sx, ["full-bkp", vol])
     wait_for_state(a0, vol, ["Archived"], timeoutS)
 
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids:
             return gids[-1]
@@ -510,8 +510,8 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     run_ctl(sx, ["hash-bkp", vol])
     wait_for_state(a0, vol, ["Archived"], timeoutS)
 
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         gids = get_gid_list(a0, vol, 'list-restorable')
         if gids and gids[-1] > max_gid:
             return gids[-1]
@@ -540,8 +540,8 @@ def get_num_opened_lv(lvPath):
 
 
 def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         num = get_num_opened_lv(lvPath)
         if num == 0:
             return
@@ -677,8 +677,8 @@ def replicate(aSrc, vol, aDst, synchronizing):
 
 
 def wait_for_no_action(s, vol, action, timeoutS=TIMEOUT_SEC):
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         num = int(run_ctl(s, ['get-num-action', vol, action]))
         if num == 0:
             return;
@@ -724,22 +724,30 @@ def wait_for_resize(ax, vol, sizeMb):
         raise Exception('wait_for_resize:failed', ax, vol, sizeMb, curSizeMb)
 
 
+def resize_archive(ax, vol, sizeMb, doZeroClear):
+    st = get_state(ax, vol)
+    if st == 'Clear':
+        return
+    elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
+        args = ['resize', vol, str(sizeMb) + 'm']
+        if doZeroClear:
+            args += ['zeroclear']
+        run_ctl(ax, args)
+        wait_for_resize(ax, vol, sizeMb)
+    else:
+        raise Exception('resize_archive:bad state', st)
+
+
+def resize_storage(sx, vol, sizeMb):
+    st = get_state(sx, vol)
+    if st == 'Clear':
+        return
+    else:
+        run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])
+
+
 def resize(vol, sizeMb, doZeroClear):
     for ax in cfg.archiveL:
-        st = get_state(ax, vol)
-        if st == 'Clear':
-            continue
-        elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
-            args = ['resize', vol, str(sizeMb) + 'm']
-            if doZeroClear:
-                args += ['zeroclear']
-            run_ctl(ax, args)
-            wait_for_resize(ax, vol, sizeMb)
-        else:
-            raise Exception('resize:bad state', st)
+        resize_archive(ax, vol, sizeMb, doZeroClear)
     for sx in cfg.storageL:
-        st = get_state(sx, vol)
-        if st == 'Clear':
-            continue
-        else:
-            run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])
+        resize_storage(sx, vol, sizeMb)

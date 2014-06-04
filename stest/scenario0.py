@@ -389,6 +389,40 @@ def test_m2():
     raise Exception('test_m2:hash_backup did not fail')
 
 
+def test_m3():
+    """
+        resize at storage -> write -> wdiff-transfer fails.
+    """
+    print 'test_m3:resize-fails'
+    prevSizeMb = get_walb_dev_sizeMb(wdev0)
+    snapshot_sync(s0, VOL, [a0])
+    newSizeMb = prevSizeMb + 4  # lvm extent size is 4MiB
+    resize_lv(wdev0.data, prevSizeMb, newSizeMb, True)
+    resize_lv(wdev1.data, prevSizeMb, newSizeMb, True)
+    resize_storage(s0, VOL, newSizeMb)
+    resize_storage(s1, VOL, newSizeMb)
+    write_random(wdev0.path, 1, prevSizeMb * 1024 * 1024 / 512)
+    curSizeMb = get_walb_dev_sizeMb(wdev0)
+    if curSizeMb != newSizeMb:
+        raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
+    gid1 = snapshot_async(s0, VOL)
+    if wait_for_restorable(a0, VOL, gid1, 10):
+        raise Exception('test_m3:gid must not be restorable', gid1)
+    else:
+        # expect to fail due to timeout.
+        pass
+    resize_archive(a0, VOL, newSizeMb, True)
+    for px in config.proxyL:
+        if get_state(px, VOL) == 'Stopped':
+            start(px, VOL)
+    kick_heartbeat_all()
+    wait_for_restorable(a0, VOL, gid1)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid1)
+    verify_equal_sha1('test_m3', md0, md1)
+    print 'test_m3:succeeded'
+
+
 def main():
     setup_test()
     test_n1()
@@ -405,9 +439,10 @@ def main():
     test_n11(True)
     test_n11(False)
     test_n12()
-    """
     test_m1()
     test_m2()
+    """
+    test_m3()
 
 
 if __name__ == "__main__":
@@ -416,6 +451,6 @@ if __name__ == "__main__":
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(2):
+    for i in xrange(1):
         print "===============================", i, datetime.datetime.today()
         main()
