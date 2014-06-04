@@ -352,9 +352,29 @@ def test_n12():
         raise Exception('test_n12:s0:2:bad state', st1)
 
 
+def test_m1():
+    """
+        full-bkp --> full-bkp fails.
+    """
+    print "test_m1:full-bkp-after-full-bkp-fails"
+    write_random(wdev0.path, 1)
+    stop_sync(a0, VOL)
+    e = [False]
+    try:
+        full_backup(s0, VOL)
+        e[0] = True
+    except:
+        pass
+    if e[0]:
+        raise Exception('test_m1:full_backup did not fail')
+    start_sync(a0, VOL)
+    print 'test_m1:succeeded'
+
+
 def main():
     setup_test()
     test_n1()
+    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -367,6 +387,8 @@ def main():
     test_n11(True)
     test_n11(False)
     test_n12()
+    """
+    test_m1()
 
 
 if __name__ == "__main__":

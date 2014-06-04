@@ -160,9 +160,12 @@ def wait_for_not_state(server, vol, stateL, timeoutS=10):
     wait_for_state_cond(server, vol, cond, 'not stateL:' + str(stateL), timeoutS)
 
 
-def reset_vol(sx, vol):
-    run_ctl(sx, ["reset-vol", vol])
-    wait_for_state(sx, vol, ['SyncReady'])
+def reset_vol(s, vol):
+    """
+        s is storage or archive.
+    """
+    run_ctl(s, ["reset-vol", vol])
+    wait_for_state(s, vol, ['SyncReady'])
 
 
 def set_slave_storage(sx, vol):
@@ -242,10 +245,23 @@ def init(sx, vol, wdevPath):
         run_ctl(a0, ["init-vol", vol])
 
 
-def is_synchronizing(ax, vol):
-    px = cfg.proxyL[0]
+def get_archive_info_list(px, vol):
+    """
+        return: [ax.name]
+    """
     st = run_ctl(px, ["archive-info", "list", vol])
-    return ax in st.split()
+    return st.split()
+
+
+def is_synchronizing(ax, vol):
+    ret = []
+    for px in cfg.proxyL:
+        ret.append(ax.name in get_archive_info_list(px, vol))
+    if all(ret):
+        return True
+    elif all(map(lambda x: not x, ret)):
+        return False
+    raise Exception('is_synchronizing: some are synchronizing, some are not.')
 
 
 def stop(s, vol, mode="graceful"):
@@ -280,13 +296,39 @@ def start(s, vol):
         wait_for_state(s, vol, ['Archived'])
 
 
+def del_archive_from_proxy(px, vol, ax):
+    st = get_state(px, vol)
+    if st == 'Started':
+        stop(px, vol)
+    aL = get_archive_info_list(px, vol)
+    if ax.name in aL:
+        run_ctl(px, ['archive-info', 'delete', vol, ax.name])
+    st = get_state(px, vol)
+    if st == 'Stopped':
+        start(px, vol)
+
+
+def add_archive_to_proxy(px, vol, ax):
+    st = get_state(px, vol)
+    if st == 'Started':
+        stop(px, vol)
+    aL = get_archive_info_list(px, vol)
+    if ax.name not in aL:
+        run_ctl(px, ['archive-info', 'add', vol, ax.name, get_host_port(ax)])
+    st = get_state(px, vol)
+    if st == 'Stopped':
+        start(px, vol)
+
+
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
-        stop(px, vol)
-        run_ctl(px, ["archive-info", "delete", vol, ax.name])
-        state = get_state(px, vol)
-        if state == 'Stopped':
-            start(px, vol)
+        del_archive_from_proxy(px, vol, ax)
+    kick_heartbeat_all()
+
+
+def start_sync(ax, vol):
+    for px in cfg.proxyL:
+        add_archive_to_proxy(px, vol, ax)
     kick_heartbeat_all()
 
 
@@ -384,15 +426,6 @@ def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     raise Exception("wait_for_replicated:replicate failed", ax, vol, gid)
 
 
-def add_archive_to_proxy(px, vol, ax):
-    st = get_state(px, vol)
-    if st == "Started":
-        stop(px, vol)
-    run_ctl(px, ["archive-info", "add", vol, ax.name, get_host_port(ax)])
-    start(px, vol)
-    kick_heartbeat_all()
-
-
 def replicate_sync(aSrc, vol, aDst):
     """
         copy current (aSrc, vol) to aDst
@@ -446,8 +479,7 @@ def prepare_backup(sx, vol):
         if is_synchronizing(ax, vol):
             stop_sync(ax, vol)
 
-    for px in cfg.proxyL:
-        add_archive_to_proxy(px, vol, a0)
+    start_sync(a0, vol)
 
 
 def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
