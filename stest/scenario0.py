@@ -406,11 +406,15 @@ def test_m3():
     if curSizeMb != newSizeMb:
         raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
     gid1 = snapshot_async(s0, VOL)
-    if wait_for_restorable(a0, VOL, gid1, 10):
-        raise Exception('test_m3:gid must not be restorable', gid1)
-    else:
+    e = False
+    try:
+        wait_for_restorable(a0, VOL, gid1, 10)
+        e = True
+    except:
         # expect to fail due to timeout.
         pass
+    if e:
+        raise Exception('test_m3:gid must not be restorable', gid1)
     resize_archive(a0, VOL, newSizeMb, True)
     for px in config.proxyL:
         if get_state(px, VOL) == 'Stopped':

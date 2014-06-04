@@ -371,9 +371,9 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
     while time.time() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid in gids:
-            return True
+            return
         time.sleep(0.3)
-    return False
+    raise Exception('wait_for_gid: timeout')
 
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
@@ -381,13 +381,13 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
     while time.time() < t0 + timeoutS:
         gids = get_gid_list(ax, vol, cmd)
         if gid not in gids:
-            return True
+            return
         time.sleep(0.3)
-    return False
+    raise Exception('wait_for_gid: timeout')
 
 
 def wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    return wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
+    wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
 
 
 def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -399,7 +399,7 @@ def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    return wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
+    wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
 
 
 def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -443,15 +443,14 @@ def synchronize(aSrc, vol, aDst):
     """
     for px in cfg.proxyL:
         st = get_state(px, vol)
-        print 'px,st0', px, st
         if st == 'Started' or st == 'WlogRecv':
-            stop(px, vol, 'empty')
+            run_ctl(px, ["stop", vol, 'empty'])
+
+    for px in cfg.proxyL:
+        wait_for_state(px, vol, ['Stopped'])
         run_ctl(px, ["archive-info", "add", vol,
                      aDst.name, get_host_port(aDst)])
-        st1 = get_state(px, vol)
-        print 'px,st1', px, st1
-        if st1 != 'Stopped':
-            raise Exception('synchronize: must be Stopped state', px, vol, st1)
+
     replicate_sync(aSrc, vol, aDst)
 
     for px in cfg.proxyL:
