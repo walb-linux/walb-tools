@@ -423,10 +423,9 @@ def test_m3():
     print 'test_m3:succeeded'
 
 
-def main():
+def test():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -441,16 +440,26 @@ def main():
     test_n12()
     test_m1()
     test_m2()
-    """
     test_m3()
+
+def main():
+    n = len(sys.argv)
+    if n == 1:
+        count = 1
+    elif n == 2:
+        count = int(sys.argv[1])
+    else:
+        raise Exception('bad option', sys.argv)
+    print "count", count
+    for i in xrange(count):
+        print "===============================", i, datetime.datetime.today()
+        test()
 
 
 if __name__ == "__main__":
+    main()
     # try:
     #     main()
     # except:
     #     for p in g_processList:
     #         p.kill()
-    for i in xrange(1):
-        print "===============================", i, datetime.datetime.today()
-        main()
