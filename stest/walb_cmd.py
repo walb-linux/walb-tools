@@ -536,6 +536,7 @@ def del_restored(ax, vol, gid):
     for i in xrange(retryTimes):
         try:
             run_ctl(ax, ['del-restored', vol, str(gid)])
+            break
         except Exception, e:
             if i == retryTimes - 1:
                 raise
