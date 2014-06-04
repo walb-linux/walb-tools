@@ -299,7 +299,7 @@ def start(s, vol):
 
 def del_archive_from_proxy(px, vol, ax):
     st = get_state(px, vol)
-    if st == 'Started':
+    if st in ['Started', 'WlogRecv']:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name in aL:
@@ -311,7 +311,7 @@ def del_archive_from_proxy(px, vol, ax):
 
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
-    if st == 'Started':
+    if st in ['Started', 'WlogRecv']:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name not in aL:
