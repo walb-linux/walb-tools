@@ -257,9 +257,10 @@ def is_synchronizing(ax, vol):
     ret = []
     for px in cfg.proxyL:
         ret.append(ax.name in get_archive_info_list(px, vol))
-    if all(ret):
+    v = sum(ret)
+    if v == len(ret): # all True
         return True
-    elif all(map(lambda x: not x, ret)):
+    elif v == 0: # all False
         return False
     raise Exception('is_synchronizing: some are synchronizing, some are not.')
 

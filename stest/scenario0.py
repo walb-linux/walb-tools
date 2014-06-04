@@ -359,16 +359,14 @@ def test_m1():
     print "test_m1:full-bkp-after-full-bkp-fails"
     write_random(wdev0.path, 1)
     stop_sync(a0, VOL)
-    e = [False]
     try:
         full_backup(s0, VOL)
-        e[0] = True
     except:
-        pass
-    if e[0]:
-        raise Exception('test_m1:full_backup did not fail')
-    start_sync(a0, VOL)
-    print 'test_m1:succeeded'
+        # expect to catch an exception.
+        start_sync(a0, VOL)
+        print 'test_m1:succeeded'
+        return
+    raise Exception('test_m1:full_backup did not fail')
 
 
 def test_m2():
@@ -380,17 +378,15 @@ def test_m2():
     stop(a0, VOL)
     reset_vol(a0, VOL)
     write_random(wdev0.path, 1)
-    e = [False]
     try:
         hash_backup(s0, VOL)
-        e[0] = True
     except:
-        pass
-    if e[0]:
-        raise Exception('test_m2:hash_backup did not fail')
-    set_slave_storage(s0, VOL)
-    full_backup(s0, VOL)
-    print 'test_m2:succeeded'
+        # expect to catch an exception.
+        set_slave_storage(s0, VOL)
+        full_backup(s0, VOL)
+        print 'test_m2:succeeded'
+        return
+    raise Exception('test_m2:hash_backup did not fail')
 
 
 def main():
