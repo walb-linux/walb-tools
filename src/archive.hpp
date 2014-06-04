@@ -1336,6 +1336,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 
     if (sizeLb < selfSizeLb) {
         logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
+        // no problem to continue.
     }
     const MetaState metaState = volInfo.getMetaState();
     const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
