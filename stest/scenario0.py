@@ -419,7 +419,7 @@ def test_m3():
     for px in config.proxyL:
         if get_state(px, VOL) == 'Stopped':
             start(px, VOL)
-    kick_heartbeat_all()
+    kick_all()
     wait_for_restorable(a0, VOL, gid1)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid1)

@@ -98,10 +98,14 @@ private:
             const int64_t timeDiffSec
                 = std::chrono::duration_cast<Seconds>(checkedTime - Clock::now()).count();
             std::stringstream ss;
-            ss << "sockaddr " << proxy.toStr()
+            ss << "addr " << proxy.toStr() << " port " << proxy.getPort()
                << " isAvailable " << (isAvailable ? "1" : "0")
                << " timeDiffSec " << timeDiffSec;
             return ss.str();
+        }
+        friend inline std::ostream& operator<<(std::ostream& os, const Info &info) {
+            os << info.str();
+            return os;
         }
     };
     std::vector<Info> v_;
@@ -916,7 +920,6 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
 inline void ProxyManager::tryCheckAvailability()
 {
     Info *target = nullptr;
-    bool isAllUnavailable = true;
     {
         TimePoint now = Clock::now();
         AutoLock lk(mu_);
@@ -925,7 +928,6 @@ inline void ProxyManager::tryCheckAvailability()
             if (info.checkedTime < minCheckedTime) {
                 minCheckedTime = info.checkedTime;
                 target = &info;
-                if (info.isAvailable) isAllUnavailable = false;
             }
         }
     }
@@ -934,13 +936,6 @@ inline void ProxyManager::tryCheckAvailability()
     {
         AutoLock lk(mu_);
         *target = info;
-    }
-    if (isAllUnavailable && info.isAvailable) {
-        StorageSingleton& g = getStorageGlobal();
-        for (const auto &pair : g.taskQueue.getAll()) {
-            const std::string &volId = pair.first;
-            g.taskQueue.pushForce(volId, 0); // run immediately.
-        }
     }
 }
 
@@ -1104,10 +1099,10 @@ inline void c2sIsOverflowServer(protocol::ServerParams &p)
 }
 
 /**
- * Kick heartbeat protocol to proxy servers.
+ * Kick heartbeat protocol to proxy servers and WlogTransfer retry.
  * No parameter is required.
  */
-inline void c2sKickHeartbeatServer(protocol::ServerParams &p)
+inline void c2sKickServer(protocol::ServerParams &p)
 {
     ProtocolLogger logger(gs.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
@@ -1115,8 +1110,22 @@ inline void c2sKickHeartbeatServer(protocol::ServerParams &p)
     try {
         protocol::recvStrVec(p.sock, 0, __func__);
         getStorageGlobal().proxyManager.kick();
+
+        StorageSingleton& g = getStorageGlobal();
+        size_t num = 0;
+        std::stringstream ss;
+        for (const auto &pair : g.taskQueue.getAll()) {
+            const std::string &volId = pair.first;
+            const int64_t delay = pair.second;
+            if (delay > 0) {
+                g.taskQueue.pushForce(volId, 0); // run immediately
+                ss << volId << ",";
+                num++;
+            }
+        }
+
         pkt.writeFin(msgOk);
-        logger.info() << "kick-heartbeat succeeded";
+        logger.info() << "kick" << num << ss.str();
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());

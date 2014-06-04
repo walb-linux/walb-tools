@@ -287,7 +287,7 @@ inline void c2xResetVolClient(protocol::ClientParams &p)
 /**
  * No parameter is required.
  */
-inline void c2sKickHeartbeatClient(protocol::ClientParams &p)
+inline void c2sKickClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
