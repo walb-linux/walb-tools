@@ -134,6 +134,37 @@ def get_state(server, vol):
     return run_ctl(server, ["get-state", vol])
 
 
+def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
+    """
+         cond: st -> bool
+    """
+    t0 = time.clock()
+    while time.clock() < t0 + timeoutS:
+        st = get_state(server, vol)
+#        print "c=", server, vol, stateL, c, st
+        if cond(st):
+            return
+        time.sleep(0.3)
+    raise Exception("wait_for_state_cond", server, vol, msg)
+
+
+def wait_for_state(server, vol, stateL, timeoutS=10):
+    def cond(st):
+        return st in stateL
+    wait_for_state_cond(server, vol, cond, 'stateL:' + str(stateL), timeoutS)
+
+
+def wait_for_not_state(server, vol, stateL, timeoutS=10):
+    def cond(st):
+        return st not in stateL
+    wait_for_state_cond(server, vol, cond, 'not stateL:' + str(stateL), timeoutS)
+
+
+def reset_vol(sx, vol):
+    run_ctl(sx, ["reset-vol", vol])
+    wait_for_state(sx, vol, ['SyncReady'])
+
+
 def set_slave_storage(sx, vol):
     state = get_state(sx, vol)
     if state == 'Slave':
@@ -143,7 +174,7 @@ def set_slave_storage(sx, vol):
     else:
         raise Exception('set_slave_storage:bad state', state)
     stop_sync(cfg.archiveL[0], vol)
-    run_ctl(sx, ["reset-vol", vol])
+    reset_vol(sx, vol)
     start(sx, vol)
 
 
@@ -172,32 +203,6 @@ def delete_walb_dev(wdevPath):
 
 ##################################################################
 # user command functions
-
-
-def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
-    """
-         cond: st -> bool
-    """
-    t0 = time.clock()
-    while time.clock() < t0 + timeoutS:
-        st = get_state(server, vol)
-#        print "c=", server, vol, stateL, c, st
-        if cond(st):
-            return
-        time.sleep(0.3)
-    raise Exception("wait_for_state_cond", server, vol, msg)
-
-
-def wait_for_state(server, vol, stateL, timeoutS=10):
-    def cond(st):
-        return st in stateL
-    wait_for_state_cond(server, vol, cond, 'stateL:' + str(stateL), timeoutS)
-
-
-def wait_for_not_state(server, vol, stateL, timeoutS=10):
-    def cond(st):
-        return st not in stateL
-    wait_for_state_cond(server, vol, cond, 'not stateL:' + str(stateL), timeoutS)
 
 
 def kill_all_servers():
@@ -428,16 +433,16 @@ def prepare_backup(sx, vol):
 
     ret = run_ctl(sx, ["is-overflow", vol])
     if ret != "0":
-        run_ctl(sx, ["reset-vol", vol])
+        reset_vol(sx, vol)
 
     for s in cfg.storageL:
         if s == sx:
             continue
         st = get_state(s, vol)
         if st != "Slave" and st != "Clear":
-            raise Exception("full_backup : bad state", s.name, vol, st)
+            raise Exception("prepare_backup:bad state", s.name, vol, st)
 
-    for ax in cfg.archiveL[1:]:
+    for ax in cfg.archiveL:
         if is_synchronizing(ax, vol):
             stop_sync(ax, vol)
 
