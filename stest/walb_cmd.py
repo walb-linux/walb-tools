@@ -571,10 +571,10 @@ def del_restored(ax, vol, gid):
             run_ctl(ax, ['del-restored', vol, str(gid)])
             break
         except Exception, e:
-            if i == retryTimes - 1:
-                raise
-            else:
-                print 'del-restored retry', i, e
+            print 'del-restored retry', i, e
+            time.sleep(1)
+    else:
+        raise Exception('del-restored: exceeds max retry times')
     wait_for_not_restored(ax, vol, gid)
 
 
