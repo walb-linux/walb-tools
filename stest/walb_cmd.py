@@ -214,13 +214,13 @@ def kill_all_servers():
     time.sleep(0.3)
 
 
-def startup(server):
-    make_dir(cfg.dataDir + server.name)
-    args = get_server_args(server)
+def startup(s):
+    make_dir(cfg.dataDir + s.name)
+    args = get_server_args(s)
     if cfg.debug:
         print 'cmd=', to_str(args)
     run_daemon(args)
-    wait_for_server_port(server)
+    wait_for_server_port(s)
 
 
 def startup_all():
@@ -228,8 +228,8 @@ def startup_all():
         startup(s)
 
 
-def shutdown(server, mode="graceful"):
-    run_ctl(server, ["shutdown", mode])
+def shutdown(s, mode="graceful"):
+    run_ctl(s, ["shutdown", mode])
 
 
 def shutdown_all():
@@ -518,9 +518,9 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     raise Exception('hash_backup:timeout', sx, vol)
 
 
-def write_random(devName, size, offset=0, fixVar=None):
+def write_random(devName, sizeLb, offset=0, fixVar=None):
     args = [cfg.binDir + "/write_random_data",
-        '-s', str(size), '-o', str(offset), devName]
+        '-s', str(sizeLb), '-o', str(offset), devName]
     if fixVar:
         args += ['-set', str(fixVar)]
     return run_command(args, False)
