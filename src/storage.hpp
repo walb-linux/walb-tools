@@ -136,10 +136,15 @@ public:
     void tryCheckAvailability();
     void kick() {
         TimePoint now = Clock::now();
-        AutoLock lk(mu_);
-        for (Info &info : v_) {
-            info.checkedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
+        bool isAllUnavailable = true;
+        {
+            AutoLock lk(mu_);
+            for (Info &info : v_) {
+                if (info.isAvailable) isAllUnavailable = false;
+                info.checkedTime = now - Seconds(PROXY_HEARTBEAT_INTERVAL_SEC);
+            }
         }
+        if (isAllUnavailable) tryCheckAvailability();
     }
 private:
     void removeFromList(const cybozu::SocketAddr &proxy) {
