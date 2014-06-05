@@ -173,6 +173,9 @@ def set_slave_storage(sx, vol):
     state = get_state(sx, vol)
     if state == 'Slave':
         return
+    if state == 'SyncReady':
+        start(sx, vol)
+        return
     if state == 'Master' or state == 'WlogSend':
         stop(sx, vol)
     else:
