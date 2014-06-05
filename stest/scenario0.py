@@ -68,6 +68,7 @@ def test_n1():
     md0 = get_sha1(wdev0.path)
     gid = full_backup(s0, VOL)
     restore_and_verify_sha1('test_n1', md0, a0, VOL, gid)
+    print 'test_n1:succeeded'
 
 
 def test_n2():
@@ -81,6 +82,7 @@ def test_n2():
     print "gid=", gid
     print list_restorable(a0, VOL)
     restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
+    print 'test_n2:succeeded'
 
 
 def test_n3():
@@ -94,6 +96,7 @@ def test_n3():
     gid = hash_backup(s0, VOL)
     print "gid=", gid
     restore_and_verify_sha1('test_n3', md0, a0, VOL, gid)
+    print 'test_n3:succeeded'
 
 
 def printL(aL, bL):
@@ -146,6 +149,7 @@ def test_n4(numPatterns=0):
     for stopL, startL in targetL:
         test_stop(stopL, startL)
 #        printL(stopL, startL)
+    print 'test_n4:succeeded'
 
 
 def test_n5():
@@ -161,6 +165,7 @@ def test_n5():
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
+    print 'test_n5:succeeded'
 
 
 def test_n6():
@@ -194,6 +199,7 @@ def test_n6():
     merge_diff(a0, VOL, gidB, gidE)
     print "merged gidL", list_restorable(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
+    print 'test_n6:succeeded'
 
 
 def test_n7():
@@ -207,6 +213,7 @@ def test_n7():
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     md1 = get_sha1_of_restorable(a1, VOL, gid)
     verify_equal_sha1('test_n7', md0, md1)
+    print 'test_n7:succeeded'
 
 
 def test_n8():
@@ -228,6 +235,7 @@ def test_n8():
     md0 = get_sha1_of_restorable(a0, VOL, gid1)
     md1 = get_sha1_of_restorable(a1, VOL, gid1)
     verify_equal_sha1('test_n8', md0, md1)
+    print 'test_n8:succeeded'
 
 
 def test_n9():
@@ -250,6 +258,7 @@ def test_n9():
     md0 = get_sha1_of_restorable(a0, VOL, gid1a0)
     md1 = get_sha1_of_restorable(a1, VOL, gid1a1)
     verify_equal_sha1('test_n9', md0, md1)
+    print 'test_n9:succeeded'
 
 
 def test_n10():
@@ -279,6 +288,7 @@ def test_n10():
     gid1a1 = get_latest_clean_snapshot(a1, VOL)
     if gid1 <= gid1a1:
         raise Exception('test_n10: not stopped synchronizing', gid1, gid1a1)
+    print 'test_n10:succeeded'
 
 
 def test_n11(doZeroClear):
@@ -310,6 +320,7 @@ def test_n11(doZeroClear):
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_n11', md0, md1)
+    print 'test_n11:succeeded'
 
 
 def test_n12():
@@ -350,6 +361,7 @@ def test_n12():
     st1 = get_state(s1, VOL)
     if st1 != 'Slave':
         raise Exception('test_n12:s0:2:bad state', st1)
+    print 'test_n12:succeeded'
 
 
 def test_m1():
@@ -454,6 +466,7 @@ def test_e1():
 def test():
     setup_test()
     test_n1()
+    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -469,6 +482,7 @@ def test():
     test_m1()
     test_m2()
     test_m3()
+    """
     test_e1()
 
 
