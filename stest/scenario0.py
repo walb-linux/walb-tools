@@ -436,7 +436,7 @@ def write_over_wldev(wdev):
     wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
     assert(wdevSizeLb < wldevSizeLb)
     numLoop = wldevSizeLb / wdevSizeLb + 1
-    print 'writing %d MiB' % (wdevSizeLb * 1024 * 1024 / 512 * numLoop)
+    print 'writing %d MiB' % (wdevSizeLb * 512 / 1024 / 1024 * numLoop)
     for i in xrange(numLoop):
         write_random(wdev0.path, wdevSizeLb)
         time.sleep(1)
