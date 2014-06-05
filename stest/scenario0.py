@@ -434,12 +434,14 @@ def test_m3():
 def write_over_wldev(wdev):
     wldevSizeLb = get_lv_size_mb(wdev0.log) * 1024 * 1024 / 512
     wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
-    assert(wdevSizeLb < wldevSizeLb)
-    numLoop = wldevSizeLb / wdevSizeLb + 1
-    print 'writing %d MiB' % (wdevSizeLb * 512 / 1024 / 1024 * numLoop)
-    for i in xrange(numLoop):
-        write_random(wdev0.path, wdevSizeLb)
+    # write a little bigger size than wldevSizeLb
+    remainLb = wldevSizeLb + 4
+    while remainLb > 0:
+        writeLb = min(remainLb, wdevSizeLb)
+        print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
+        write_random(wdev0.path, writeLb)
         time.sleep(1)
+        remainLb -= writeLb
 
 
 def test_e1():
