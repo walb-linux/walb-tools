@@ -141,6 +141,7 @@ int main(int argc, char *argv[]) try
     };
 
     StorageSingleton &g = getStorageGlobal();
+    LOGs.info() << "starting storage-server with options:\n" << opt;
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 1 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<StorageRequestWorker>(opt.port, createRequestWorker);
