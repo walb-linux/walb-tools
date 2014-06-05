@@ -427,6 +427,30 @@ def test_m3():
     print 'test_m3:succeeded'
 
 
+def test_e1():
+    """
+        p0 down -> write over wldev amount -> p0 up -> snapshot -> sha1
+
+    """
+    print 'test_e1:proxy-down-and-up'
+    shutdown(p0, 'force')
+    wldevSizeLb = get_lv_size_mb(wdev0.log) * 1024 * 1024 / 512
+    wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
+    assert(wdevSizeLb < wldevSizeLb)
+    numLoop = wldevSizeLb / wdevSizeLb + 1
+    for i in xrange(numLoop):
+        write_random(wdev0.path, wdevSizeLb)
+        time.sleep(1)
+
+    startup(p0)
+    kick_all()
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e1', md0, md1)
+    print 'test_e1:succeeded'
+
+
 def test():
     setup_test()
     test_n1()
@@ -445,6 +469,8 @@ def test():
     test_m1()
     test_m2()
     test_m3()
+    test_e1()
+
 
 def main():
     n = len(sys.argv)
