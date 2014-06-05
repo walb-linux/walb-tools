@@ -6,6 +6,7 @@ import sys
 import time
 import socket
 import errno
+import shutil
 
 TIMEOUT_SEC = 20
 
@@ -204,6 +205,15 @@ def delete_walb_dev(wdevPath):
     run_walbctl(['delete_wdev', '--wdev', wdevPath])
 
 
+def is_overflow(sx, vol):
+    return int(run_ctl(sx, ["is-overflow", vol])) != 0
+
+
+def verify_not_overflow(sx, vol):
+    if is_overflow(sx, vol):
+        raise Exception('verify_not_overflow', sx, vol)
+
+
 ##################################################################
 # user command functions
 
@@ -212,6 +222,13 @@ def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
     time.sleep(0.3)
+
+
+def remove_persistent_data(s):
+    """
+        call shutdown() before calling this.
+    """
+    shutil.rmtree(cfg.dataDir + s.name)
 
 
 def startup(s):
@@ -230,11 +247,13 @@ def startup_all():
 
 def shutdown(s, mode="graceful"):
     run_ctl(s, ["shutdown", mode])
+    time.sleep(1)  # shutdown is asynchronous command.
 
 
-def shutdown_all():
+def shutdown_all(mode='graceful'):
     for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
-        shutdown(s)
+        run_ctl(s, ["shutdown", mode])
+    time.sleep(1)
 
 
 def init(sx, vol, wdevPath):
@@ -427,6 +446,22 @@ def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     raise Exception("wait_for_replicated:replicate failed", ax.name, vol, gid)
 
 
+def verify_not_restorable(ax, vol, gid, waitS, msg):
+    """
+       verify a snapshot (vol, gid) does not become restorable
+       at ax in period waitS.
+    """
+    e = False
+    try:
+        wait_for_restorable(ax, vol, gid, waitS)
+        e = True
+    except:
+        # expect to fail due to timeout.
+        pass
+    if e:
+        raise Exception(msg, 'gid must not be restorable', gid)
+
+
 def replicate_sync(aSrc, vol, aDst):
     """
         copy current (aSrc, vol) to aDst
@@ -448,8 +483,11 @@ def synchronize(aSrc, vol, aDst):
 
     for px in cfg.proxyL:
         wait_for_state(px, vol, ['Stopped'])
-        run_ctl(px, ["archive-info", "add", vol,
-                     aDst.name, get_host_port(aDst)])
+        # QQQ
+        aL = get_archive_info_list(px, vol)
+        if aDst.name not in aL:
+            run_ctl(px, ["archive-info", "add", vol,
+                         aDst.name, get_host_port(aDst)])
 
     replicate_sync(aSrc, vol, aDst)
 
@@ -461,11 +499,10 @@ def synchronize(aSrc, vol, aDst):
 def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
     st = get_state(sx, vol)
-    if st == "Slave":
+    if st == 'Slave':
         stop(sx, vol)
-
-    ret = run_ctl(sx, ["is-overflow", vol])
-    if ret != "0":
+    elif st == 'Master':
+        stop(sx, vol)
         reset_vol(sx, vol)
 
     for s in cfg.storageL:

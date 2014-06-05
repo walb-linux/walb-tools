@@ -418,15 +418,7 @@ def test_m3():
     if curSizeMb != newSizeMb:
         raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
     gid1 = snapshot_async(s0, VOL)
-    e = False
-    try:
-        wait_for_restorable(a0, VOL, gid1, 10)
-        e = True
-    except:
-        # expect to fail due to timeout.
-        pass
-    if e:
-        raise Exception('test_m3:gid must not be restorable', gid1)
+    verify_not_restorable(a0, VOL, gid1, 10, 'test_m3')
     resize_archive(a0, VOL, newSizeMb, True)
     for px in config.proxyL:
         if get_state(px, VOL) == 'Stopped':
@@ -439,21 +431,26 @@ def test_m3():
     print 'test_m3:succeeded'
 
 
+def write_over_wldev(wdev):
+    wldevSizeLb = get_lv_size_mb(wdev0.log) * 1024 * 1024 / 512
+    wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
+    assert(wdevSizeLb < wldevSizeLb)
+    numLoop = wldevSizeLb / wdevSizeLb + 1
+    print 'writing %d MiB' % (wdevSizeLb * 1024 * 1024 / 512 * numLoop)
+    for i in xrange(numLoop):
+        write_random(wdev0.path, wdevSizeLb)
+        time.sleep(1)
+
+
 def test_e1():
     """
         p0 down -> write over wldev amount -> p0 up -> snapshot -> sha1
 
     """
-    print 'test_e1:proxy-down-and-up'
+    print 'test_e1:proxy-down'
     shutdown(p0, 'force')
-    wldevSizeLb = get_lv_size_mb(wdev0.log) * 1024 * 1024 / 512
-    wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
-    assert(wdevSizeLb < wldevSizeLb)
-    numLoop = wldevSizeLb / wdevSizeLb + 1
-    for i in xrange(numLoop):
-        write_random(wdev0.path, wdevSizeLb)
-        time.sleep(1)
-
+    write_over_wldev(wdev0)
+    verify_not_overflow(s0, VOL)
     startup(p0)
     kick_all()
     gid = snapshot_sync(s0, VOL, [a0])
@@ -463,10 +460,145 @@ def test_e1():
     print 'test_e1:succeeded'
 
 
+def test_e2():
+    """
+        a0 down -> write over wldev amount -> a0 up -> snapshot -> sha1
+    """
+    print 'test_e2:archive-down'
+    shutdown(a0, 'force')
+    write_over_wldev(wdev0)
+    verify_not_overflow(s0, VOL)
+    gid = snapshot_async(s0, VOL)
+    verify_not_restorable(a0, VOL, gid, 10, 'test_e2')
+    startup(a0)
+    snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e2', md0, md1)
+    print 'test_e2:succeeded'
+
+
+def test_e3():
+    """
+        s0 down -> write -> s0 up -> snapshot -> sha1
+    """
+    print 'test_e3:storage-down'
+    shutdown(s0, 'force')
+    write_random(wdev0.path, 1)
+    startup(s0)
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e3', md0, md1)
+    print 'test_e3:succeeded'
+
+
+def test_e4():
+    """
+        s0 down -> write over wldev amount -> s0 up -> hash-backup-> sha1
+    """
+    print 'test_e4:storage-down-overflow'
+    shutdown(s0, 'force')
+    write_over_wldev(wdev0)
+    startup(s0)
+    if not is_overflow(s0, VOL):
+        raise Exception('test_e4:must be overflow')
+    gid = hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e4', md0, md1)
+    print 'test_e4:succeeded'
+
+
+def test_e5():
+    """
+        p0 data lost -> p0 up -> hash-backup -> sha1
+    """
+    print 'test_e5:proxy-data-lost'
+    stop(a0, VOL, 'force')
+    write_random(wdev0.path, 1)
+    time.sleep(3)  # wait for the log is sent to p0.
+    shutdown(p0, 'force')
+    remove_persistent_data(p0)
+    start(a0, VOL)
+    startup(p0)
+    start_sync(a0, VOL)
+    write_random(wdev0.path, 1)
+    gid0 = snapshot_async(s0, VOL)
+    verify_not_restorable(a0, VOL, gid0, 10, 'test_e5')
+    gid1 = hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid1)
+    verify_equal_sha1('test_e5', md0, md1)
+    print 'test_e5:succeeded'
+
+
+def test_e6():
+    """
+        a0 data lost -> a0 up -> full-backup -> sha1
+    """
+    print 'test_e6:primary-archive-data-lost'
+    shutdown(a0, 'force')
+    remove_persistent_data(a0)
+    startup(a0)
+    run_ctl(a0, ['init-vol', VOL])
+    gid0 = snapshot_async(s0, VOL)
+    verify_not_restorable(a0, VOL, gid0, 10, 'test_e6')
+    gid1 = full_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid1)
+    verify_equal_sha1('test_e6', md0, md1)
+    print 'test_e6:succeeded'
+
+
+def test_e7():
+    """
+        a1 data lost -> a1 up -> replicate -> sha1
+    """
+    print 'test_e7:secondary-archive-data-lost'
+    write_random(wdev0.path, 1)
+    replicate(a0, VOL, a1, True)
+    shutdown(a1, 'force')
+    remove_persistent_data(a1)
+    startup(a1)
+    write_random(wdev0.path, 1)
+    gid0 = snapshot_async(s0, VOL)
+    wait_for_restorable(a0, VOL, gid0)
+    verify_not_restorable(a1, VOL, gid0, 5, 'test_e7')
+    replicate(a0, VOL, a1, True)
+    write_random(wdev0.path, 1)
+    gid1 = snapshot_sync(s0, VOL, [a0, a1])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid1)
+    md2 = get_sha1_of_restorable(a1, VOL, gid1)
+    verify_equal_sha1('test_e7:1', md0, md1)
+    verify_equal_sha1('test_e7:2', md1, md2)
+    stop_sync(a1, VOL)
+    print 'test_e7:succeeded'
+
+
+def test_e8():
+    """
+        s0 data lost -> s0 up -> hash-backup -> sha1
+    """
+    print 'test_e8:storage-data-lost'
+    write_random(wdev0.path, 1)
+    shutdown(s0, 'force')
+    remove_persistent_data(s0)
+    startup(s0)
+    write_random(wdev0.path, 1)
+    run_ctl(s0, ['init-vol', VOL, wdev0.path])
+    write_random(wdev0.path, 1)
+    gid = hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e8', md0, md1)
+    print 'test_e8:succeeded'
+
+
 def test():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -482,8 +614,14 @@ def test():
     test_m1()
     test_m2()
     test_m3()
-    """
     test_e1()
+    test_e2()
+    test_e3()
+    test_e4()
+    test_e5()
+    test_e6()
+    test_e7()
+    test_e8()
 
 
 def main():
