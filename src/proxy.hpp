@@ -1031,6 +1031,7 @@ inline void ProxyWorker::operator()()
             break;
         case FORCE_STOP_VOL:
             try {
+                LOGs.error() << "force stop" << task_.volId;
                 proxy_local::stopProxyVol(task_.volId, true);
             } catch (std::exception &e) {
                 LOGs.error() << FUNC << "force stop failed" << e.what();
