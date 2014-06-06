@@ -843,22 +843,15 @@ inline void StorageWorker::operator()()
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
     verifyStateIn(st, {sMaster, stFullSync, stHashSync, sSlave}, FUNC);
+    verifyNoActionRunning(volSt.ac, StrVec{sWlogRemove, sWlogSend}, FUNC);
 
     if (st == sSlave) {
-        if (volSt.ac.getValue(sWlogRemove) > 0) {
-            LOGs.info() << FUNC << "WlogRemove already running" << volId;
-            return;
-        }
         ActionCounterTransaction tran(volSt.ac, sWlogRemove);
         ul.unlock();
         storage_local::deleteWlogs(volId);
         return;
     }
 
-    if (volSt.ac.getValue(sWlogSend) > 0) {
-        LOGs.info() << FUNC << "WlogSend already running" << volId;
-        return;
-    }
     ActionCounterTransaction tran(volSt.ac, sWlogSend);
     ul.unlock();
     try {
