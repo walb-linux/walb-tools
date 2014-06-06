@@ -19,12 +19,41 @@
 
 namespace walb {
 
+class ActionState
+{
+    using Map = std::map<std::string, bool>;
+    mutable Map map_;
+    std::recursive_mutex &mu_;
+
+public:
+    explicit ActionState(std::recursive_mutex &mu)
+        : mu_(mu) {
+    }
+    void clearAll() {
+        UniqueLock ul(mu_);
+        map_.clear();
+    }
+    void clear(const std::string &name) {
+        UniqueLock ul(mu_);
+        map_[name] = false;
+    }
+    void set(const std::string &name) {
+        UniqueLock ul(mu_);
+        map_[name] = true;
+    }
+    bool get(const std::string &name) const {
+        UniqueLock ul(mu_);
+        return map_[name];
+    }
+};
+
 struct ProxyVolState
 {
     std::recursive_mutex mu;
     std::atomic<int> stopState;
     StateMachine sm;
     ActionCounters ac; // archive name is action identifier here.
+    ActionState actionState;
 
     MetaDiffManager diffMgr; // for the master.
     AtomicMap<MetaDiffManager> diffMgrMap; // for each archive.
@@ -50,7 +79,7 @@ struct ProxyVolState
     std::map<std::string, uint64_t> lastWdiffSentTimeMap;
 
     explicit ProxyVolState(const std::string &volId)
-        : stopState(NotStopping), sm(mu), ac(mu)
+        : stopState(NotStopping), sm(mu), ac(mu), actionState(mu)
         , diffMgr(), diffMgrMap(), archiveSet()
         , lastWlogReceivedTime(0), lastWdiffSentTimeMap() {
         sm.init(statePairTbl);
@@ -319,6 +348,15 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     return ret;
 }
 
+inline void pushAllTasksForVol(const std::string &volId)
+{
+    ProxyVolState &volSt = getProxyVolState(volId);
+    volSt.actionState.clearAll();
+    for (const std::string& archiveName : volSt.archiveSet) {
+        getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+    }
+}
+
 } // namespace proxy_local
 
 inline void c2pGetStateServer(protocol::ServerParams &p)
@@ -380,13 +418,7 @@ inline void startProxyVol(const std::string &volId)
     }
 
     StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
-    ul.unlock();
-
-    // Push all (volId, archiveName) pairs as tasks.
-    for (const std::string& archiveName : volSt.archiveSet) {
-        getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
-    }
-
+    proxy_local::pushAllTasksForVol(volId);
     tran.commit(pStarted);
 }
 
@@ -814,6 +846,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     packet::Ack(p.sock).sendFin();
 
     ul.lock();
+    volSt.actionState.clearAll();
     volInfo.addDiffToMaster(diff);
     volInfo.tryToMakeHardlinkInSlave(diff);
     volInfo.deleteDiffs({diff});
@@ -880,12 +913,12 @@ retry:
 enum {
     DONT_SEND,
     CONTINUE_TO_SEND,
-    FORCE_STOP_VOL,
+    SEND_ERROR,
 };
 
 /**
  * RETURN:
- *   DONT_SEND, RETRY_SEND, or FORCE_STOP.
+ *   DONT_SEND, CONTINUE_TO_SEND, or SEND_ERROR.
  */
 inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 {
@@ -955,7 +988,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
             curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
             e << "reached retryTimeout" << gp.retryTimeout;
             logger.error() << e.what();
-            return FORCE_STOP_VOL;
+            return SEND_ERROR;
         }
         e << res << "delay time" << gp.delaySecForRetry;
         logger.info() << e.what();
@@ -979,7 +1012,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
      */
     e << res;
     logger.error() << e.what();
-    return FORCE_STOP_VOL;
+    return SEND_ERROR;
 }
 
 inline void ProxyWorker::operator()()
@@ -1000,13 +1033,9 @@ inline void ProxyWorker::operator()()
                 }
             }
             break;
-        case FORCE_STOP_VOL:
-            try {
-                LOGs.error() << "force stop" << task_.volId;
-                proxy_local::stopProxyVol(task_.volId, true);
-            } catch (std::exception &e) {
-                LOGs.error() << FUNC << "force stop failed" << e.what();
-            }
+        case SEND_ERROR:
+            LOGs.error() << "send error" << task_.volId << task_.archiveName;
+            getProxyVolState(task_.volId).actionState.set(task_.archiveName);
             break;
         case DONT_SEND:
         default:
@@ -1056,6 +1085,41 @@ inline void c2pResizeServer(protocol::ServerParams &p)
 inline void c2pHostTypeServer(protocol::ServerParams &p)
 {
     protocol::runHostTypeServer(p, proxyHT);
+}
+
+/**
+ * params[0]: volId
+ * params[1]: archiveName (optional)
+ */
+inline void c2pKickServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId, archiveName;
+        cybozu::util::parseStrVec(v, 0, 1, {&volId, &archiveName});
+
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        if (archiveName.empty()) {
+            proxy_local::pushAllTasksForVol(volId);
+        } else {
+            if (!volInfo.existsArchiveInfo(archiveName)) {
+                throw cybozu::Exception(FUNC) << "archive does not exist" << archiveName;
+            }
+            volSt.actionState.clear(archiveName);
+            getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+        }
+        pkt.writeFin(msgOk);
+        logger.info() << "kick succeeded" << volId << archiveName;
+    } catch (std::exception &e) {
+        LOGs.error() << e.what();
+        pkt.write(e.what());
+    }
 }
 
 } // walb

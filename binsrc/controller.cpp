@@ -69,7 +69,7 @@ void runClient(Option &opt)
         { resizeCN, c2xResizeClient },
         { hostTypeCN, c2xHostTypeClient },
         { isOverflowCN, c2xGetIntClient },
-        { kickCN, c2sKickClient },
+        { kickCN, c2xKickClient },
         { getNumActionCN, c2xGetIntClient },
         { dbgReloadMetadataCN, c2aReloadMetadataClient },
     };

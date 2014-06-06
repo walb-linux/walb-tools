@@ -40,6 +40,7 @@ public:
             { clearVolCN, c2pClearVolServer },
             { wlogTransferPN, s2pWlogTransferServer },
             { resizeCN, c2pResizeServer },
+            { kickCN, c2pKickServer },
             { hostTypeCN, c2pHostTypeServer },
         };
         protocol::serverDispatch(sock_, nodeId_, procStat_, h);
