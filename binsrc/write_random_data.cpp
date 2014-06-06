@@ -15,6 +15,7 @@
 #include "walb/common.h"
 #include "walb/block_size.h"
 #include "walb_util.hpp"
+#include "aio_util.hpp"
 
 /**
  * Command line configuration.
@@ -27,6 +28,7 @@ private:
     uint64_t sizeB_; /* [block]. */
     uint32_t minIoB_; /* [block]. */
     uint32_t maxIoB_; /* [block]. */
+    size_t qSize_;
 public:
     int fixVar_;
 private:
@@ -41,6 +43,7 @@ public:
         , sizeB_(0)
         , minIoB_(1)
         , maxIoB_(64)
+        , qSize_()
         , fixVar_(0)
         , isVerbose_(false)
         , targetPath_() {
@@ -52,6 +55,7 @@ public:
     uint64_t sizeB() const { return sizeB_; }
     uint32_t minIoB() const { return minIoB_; }
     uint32_t maxIoB() const { return maxIoB_; }
+    size_t qSize() const { return qSize_; }
     bool isVerbose() const { return isVerbose_; }
     const std::string& targetPath() const { return targetPath_; }
 
@@ -82,6 +86,7 @@ private:
         opt.appendOpt(&minIoB_, 1, "n", "SIZE: minimum IO size [block]. (default: 1)");
         opt.appendOpt(&maxIoB_, 64, "x", "SIZE: maximum IO size [block]. (default: 64)");
         opt.appendOpt(&fixVar_, noFixVar, "set", ": fill 8bit data(default:none)");
+        opt.appendOpt(&qSize_, 128, "q", ": aio queue size (default: 128)");
         opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         opt.appendParam(&targetPath_, "[DEVICE|FILE]");
@@ -96,51 +101,65 @@ class RandomDataWriter
 {
 private:
     const Config &config_;
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
+    const uint64_t devSize_;
     cybozu::util::Random<uint32_t> randUint_;
-    walb::AlignedArray buf_;
+    struct Io {
+        uint32_t key;
+        walb::AlignedArray buf;
+    };
+    std::list<Io> ioL_;
 
 public:
     RandomDataWriter(const Config &config)
         : config_(config)
-        , bd_(config.targetPath(), O_RDWR | (config.isDirect() ? O_DIRECT : 0))
+        , file_(config.targetPath(), O_RDWR | (config.isDirect() ? O_DIRECT : 0))
+        , devSize_(cybozu::util::getBlockDeviceSize(file_.fd()))
         , randUint_()
-        , buf_(config.blockSize() * config.maxIoB()) {
+        , ioL_()
+    {
     }
-
     void run() {
+        const char *const FUNC = __func__;
         uint64_t totalSize = decideSize();
         uint64_t offset = config_.offsetB();
         uint64_t written = 0;
+        cybozu::aio::Aio aio(file_.fd(), config_.qSize());
 
         while (written < totalSize) {
-            const uint32_t bs = config_.blockSize();
-            const uint32_t ioSize = decideIoSize(totalSize - written);
-            fillBuffer(ioSize);
-            const uint32_t csum = cybozu::util::calcChecksum(buf_.data(), bs * ioSize, 0);
-            bd_.write(offset * bs, bs * ioSize, buf_.data());
+            const size_t bs = config_.blockSize();
+            const size_t ioSize = decideIoSize(totalSize - written);
+            ioL_.push_back(Io{0, walb::AlignedArray(ioSize * bs)});
+            Io &io = ioL_.back();
+            fillBuffer(io.buf);
+            const uint32_t csum = cybozu::util::calcChecksum(io.buf.data(), io.buf.size(), 0);
+            io.key = aio.prepareWrite(offset * bs, io.buf.size(), io.buf.data());
+            if (io.key == 0) throw cybozu::Exception(FUNC) << "prepareWrite failed" << cybozu::ErrorNo();
+            aio.submit();
             walb::util::IoRecipe r(offset, ioSize, csum);
             r.print();
-
+            if (ioL_.size() >= config_.qSize()) completeAnIo(aio);
             offset += ioSize;
             written += ioSize;
         }
-
-        config_.offsetB();
-        bd_.fdatasync();
+        while (!ioL_.empty()) completeAnIo(aio);
+        file_.fdatasync();
     }
 private:
+    void completeAnIo(cybozu::aio::Aio &aio) {
+        aio.waitFor(ioL_.front().key);
+        ioL_.pop_front();
+    }
     uint64_t decideSize() {
         uint64_t size = config_.sizeB();
         if (size == 0) {
-            size = bd_.getDeviceSize() / config_.blockSize();
+            size = devSize_ / config_.blockSize();
         }
         if (size == 0) {
             throw RT_ERR("device or file size is 0.");
         }
         return size;
     }
-
     uint32_t decideIoSize(uint64_t maxSize) {
         uint32_t min = config_.minIoB();
         uint32_t max = config_.maxIoB();
@@ -148,35 +167,17 @@ private:
         if (max < min) { min = max; }
         return randomUInt(min, max);
     }
-
     uint32_t randomUInt(uint32_t min, uint32_t max) {
         assert(min <= max);
         if (min == max) { return min; }
         return randUint_() % (max - min) + min;
     }
-
-    void fillBuffer(uint32_t sizeB) {
-        assert(0 < sizeB);
-        size_t offset = 0;
-        size_t remaining = config_.blockSize() * sizeB;
-        uint32_t r;
-        assert(0 < remaining);
+    void fillBuffer(walb::AlignedArray& array) {
         if (config_.fixVar_ != Config::noFixVar) {
-            ::memset(buf_.data(), config_.fixVar_, remaining);
-            return;
+            ::memset(array.data(), config_.fixVar_, array.size());
+        } else {
+            randUint_.fill(array.data(), array.size());
         }
-        while (sizeof(r) <= remaining) {
-            r = randUint_();
-            ::memcpy(buf_.data() + offset, &r, sizeof(r));
-            offset += sizeof(r);
-            remaining -= sizeof(r);
-        }
-        if (0 < remaining) {
-            r = randUint_();
-            ::memcpy(buf_.data() + offset, &r, remaining);
-            offset += remaining;
-        }
-        assert(offset == config_.blockSize() * sizeB);
     }
 };
 
