@@ -149,6 +149,71 @@ public:
     }
 };
 
+inline void fstat(int fd, struct stat &s)
+{
+    if (fd < 0) throw RT_ERR("fstat: fd < 0");
+    if (::fstat(fd, &s) < 0) {
+        throw LibcError(errno, "fstat failed: ");
+    }
+}
+
+inline bool isBlockDevice(int fd)
+{
+    if (fd < 0) throw RT_ERR("isBlockDevice: fd < 0");
+    struct stat s;
+    fstat(fd, s);
+    return (s.st_mode & S_IFMT) == S_IFBLK;
+}
+
+inline uint32_t getLogicalBlockSize(int fd)
+{
+    if (fd < 0) throw RT_ERR("getLogicalBlockSize: fd < 0");
+    if (!isBlockDevice(fd)) return 512;
+
+    uint32_t lbs;
+    if (::ioctl(fd, BLKSSZGET, &lbs) < 0) {
+        throw LibcError(errno, "Geting logical block size failed: ");
+    }
+    assert(lbs > 0);
+    return lbs;
+}
+
+inline uint32_t getPhysicalBlockSize(int fd)
+{
+    if (fd < 0) throw RT_ERR("getPhysicalBlockSize: fd < 0");
+    if (!isBlockDevice(fd)) return 512;
+    uint32_t pbs;
+    if (::ioctl(fd, BLKPBSZGET, &pbs) < 0) {
+        throw LibcError(errno, "Getting physical block size failed: ");
+    }
+    assert(pbs > 0);
+    return pbs;
+}
+
+/**
+ * Helper function for constructor.
+ * Get device size in bytes.
+ *
+ * RETURN:
+ *   device size [bytes].
+ * EXCEPTION:
+ *   std::runtime_error.
+ */
+inline uint64_t getBlockDeviceSize(int fd)
+{
+    if (isBlockDevice(fd)) {
+        uint64_t size;
+        if (::ioctl(fd, BLKGETSIZE64, &size) < 0) {
+            throw LibcError(errno, "ioctl failed: ");
+        }
+        return size;
+    } else {
+        struct stat s;
+        fstat(fd, s);
+        return uint64_t(s.st_size);
+    }
+}
+
 /**
  * Block device manager.
  *
@@ -179,10 +244,10 @@ public:
         : name_(name)
         , openFlags_(flags)
         , fd_(openDevice(name, flags))
-        , isBlockDevice_(isBlockDeviceStatic(fd_))
-        , deviceSize_(getDeviceSizeStatic(fd_))
-        , lbs_(getLogicalBlockSizeStatic(fd_))
-        , pbs_(getPhysicalBlockSizeStatic(fd_)) {
+        , isBlockDevice_(cybozu::util::isBlockDevice(fd_))
+        , deviceSize_(cybozu::util::getBlockDeviceSize(fd_))
+        , lbs_(cybozu::util::getLogicalBlockSize(fd_))
+        , pbs_(cybozu::util::getPhysicalBlockSize(fd_)) {
 #if 0
         ::printf("device %s size %zu isWrite %d isDirect %d isBlockDevice %d "
                  "lbs %u pbs %u\n",
@@ -324,9 +389,8 @@ public:
      *   or false.
      */
     bool isBlockDevice() const { return isBlockDevice_; }
-
-    unsigned int getPhysicalBlockSize() const { return pbs_; }
-    unsigned int getLogicalBlockSize() const { return lbs_; }
+    uint32_t getPhysicalBlockSize() const { return pbs_; }
+    uint32_t getLogicalBlockSize() const { return lbs_; }
 
 private:
     /**
@@ -339,76 +403,6 @@ private:
                 errno, formatString("open %s failed: ", name.c_str()).c_str());
         }
         return fd;
-    }
-
-    static void statStatic(int fd, struct stat *s) {
-        assert(fd >= 0);
-        assert(s);
-        if (::fstat(fd, s) < 0) {
-            throw LibcError(errno, "fstat failed: ");
-        }
-    }
-
-    static unsigned int getPhysicalBlockSizeStatic(int fd) {
-        assert(fd >= 0);
-
-        if (!isBlockDeviceStatic(fd)) {
-            return 512;
-        }
-
-        unsigned int pbs;
-        if (::ioctl(fd, BLKPBSZGET, &pbs) < 0) {
-            throw LibcError(errno, "Getting physical block size failed: ");
-        }
-        assert(pbs > 0);
-        return pbs;
-    }
-
-    static unsigned int getLogicalBlockSizeStatic(int fd) {
-        assert(fd >= 0);
-
-        if (!isBlockDeviceStatic(fd)) {
-            return 512;
-        }
-
-        unsigned int lbs;
-        if (::ioctl(fd, BLKSSZGET, &lbs) < 0) {
-            throw LibcError(errno, "Geting logical block size failed: ");
-        }
-        assert(lbs > 0);
-        return lbs;
-    }
-
-    static bool isBlockDeviceStatic(int fd) {
-        assert(fd >= 0);
-
-        struct stat s;
-        statStatic(fd, &s);
-        return (s.st_mode & S_IFMT) == S_IFBLK;
-    }
-
-    /**
-     * Helper function for constructor.
-     * Get device size in bytes.
-     *
-     * RETURN:
-     *   device size [bytes].
-     * EXCEPTION:
-     *   std::runtime_error.
-     */
-    static uint64_t getDeviceSizeStatic(int fd) {
-
-        if (isBlockDeviceStatic(fd)) {
-            uint64_t size;
-            if (::ioctl(fd, BLKGETSIZE64, &size) < 0) {
-                throw LibcError(errno, "ioctl failed: ");
-            }
-            return size;
-        } else {
-            struct stat s;
-            statStatic(fd, &s);
-            return static_cast<uint64_t>(s.st_size);
-        }
     }
 };
 
