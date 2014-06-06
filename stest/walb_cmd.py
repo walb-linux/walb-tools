@@ -232,6 +232,10 @@ def remove_persistent_data(s):
         call shutdown() before calling this.
     """
     shutil.rmtree(cfg.dataDir + s.name)
+    if s in cfg.archiveL:
+        for f in os.listdir('/dev/' + s.vg):
+            if f[0:2] == 'i_':
+                remove_lv('/dev/' + s.vg + '/' + f)
 
 
 def startup(s):
@@ -486,7 +490,6 @@ def synchronize(aSrc, vol, aDst):
 
     for px in cfg.proxyL:
         wait_for_state(px, vol, ['Stopped'])
-        # QQQ
         aL = get_archive_info_list(px, vol)
         if aDst.name not in aL:
             run_ctl(px, ["archive-info", "add", vol,
@@ -745,6 +748,19 @@ def resize_lv(path, beforeSizeMb, afterSizeMb, doZeroClear):
     if beforeSizeMb < afterSizeMb and doZeroClear:
         zero_clear(path, beforeSizeMb * 1024 * 1024 / 512,
                    (afterSizeMb - beforeSizeMb) * 1024 * 1024 / 512)
+
+
+def remove_lv(path):
+    wait_for_lv_ready(path)
+    for i in xrange(3):
+        try:
+            run_command(['/sbin/lvremove', '-f', path])
+            return
+        except:
+            print 'remove_lv failed', i, path
+            time.sleep(1)
+    else:
+        raise Exception('remove_lv:timeout', path)
 
 
 def get_lv_size_mb(path):
