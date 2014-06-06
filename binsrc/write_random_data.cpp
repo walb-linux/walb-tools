@@ -116,31 +116,29 @@ public:
         , file_(config.targetPath(), O_RDWR | (config.isDirect() ? O_DIRECT : 0))
         , devSize_(cybozu::util::getBlockDeviceSize(file_.fd()))
         , randUint_()
-        , ioL_()
-    {
+        , ioL_() {
+        if (devSize_ == 0) throw RT_ERR("device or file size is 0.");
     }
     void run() {
         const char *const FUNC = __func__;
-        uint64_t totalSize = decideSize();
-        uint64_t offset = config_.offsetB();
-        uint64_t written = 0;
+        const size_t bs = config_.blockSize();
+        uint64_t offLb = config_.offsetB();
+        uint64_t endLb = offLb + (devSize_ / config_.blockSize());
         cybozu::aio::Aio aio(file_.fd(), config_.qSize());
 
-        while (written < totalSize) {
-            const size_t bs = config_.blockSize();
-            const size_t ioSize = decideIoSize(totalSize - written);
-            ioL_.push_back(Io{0, walb::AlignedArray(ioSize * bs)});
+        while (offLb < endLb) {
+            const size_t ioLb = decideIoSizeLb(endLb - offLb);
+            ioL_.push_back(Io{0, walb::AlignedArray(ioLb * bs)});
             Io &io = ioL_.back();
             fillBuffer(io.buf);
             const uint32_t csum = cybozu::util::calcChecksum(io.buf.data(), io.buf.size(), 0);
-            io.key = aio.prepareWrite(offset * bs, io.buf.size(), io.buf.data());
+            io.key = aio.prepareWrite(offLb * bs, io.buf.size(), io.buf.data());
             if (io.key == 0) throw cybozu::Exception(FUNC) << "prepareWrite failed" << cybozu::ErrorNo();
             aio.submit();
-            walb::util::IoRecipe r(offset, ioSize, csum);
+            walb::util::IoRecipe r(offLb, ioLb, csum);
             r.print();
             if (ioL_.size() >= config_.qSize()) completeAnIo(aio);
-            offset += ioSize;
-            written += ioSize;
+            offLb += ioLb;
         }
         while (!ioL_.empty()) completeAnIo(aio);
         file_.fdatasync();
@@ -150,26 +148,14 @@ private:
         aio.waitFor(ioL_.front().key);
         ioL_.pop_front();
     }
-    uint64_t decideSize() {
-        uint64_t size = config_.sizeB();
-        if (size == 0) {
-            size = devSize_ / config_.blockSize();
-        }
-        if (size == 0) {
-            throw RT_ERR("device or file size is 0.");
-        }
-        return size;
+    uint32_t decideIoSizeLb(uint64_t maxLb) {
+        const uint32_t max = std::min<uint64_t>(config_.maxIoB(), maxLb);
+        const uint32_t min = std::min<uint64_t>(config_.minIoB(), max);
+        return getRandomUInt(min, max);
     }
-    uint32_t decideIoSize(uint64_t maxSize) {
-        uint32_t min = config_.minIoB();
-        uint32_t max = config_.maxIoB();
-        if (maxSize < max) { max = maxSize; }
-        if (max < min) { min = max; }
-        return randomUInt(min, max);
-    }
-    uint32_t randomUInt(uint32_t min, uint32_t max) {
+    uint32_t getRandomUInt(uint32_t min, uint32_t max) {
         assert(min <= max);
-        if (min == max) { return min; }
+        if (min == max) return min;
         return randUint_() % (max - min) + min;
     }
     void fillBuffer(walb::AlignedArray& array) {
