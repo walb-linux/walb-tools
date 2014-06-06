@@ -12,25 +12,9 @@
 #include "walb_util.hpp"
 #include "wdev_util.hpp"
 #include "wdev_log.hpp"
+#include "storage_constant.hpp"
 
 namespace walb {
-
-const char *const sClear = "Clear";
-const char *const sSyncReady = "SyncReady";
-const char *const sStopped = "Stopped";
-const char *const sMaster = "Master";
-const char *const sSlave = "Slave";
-
-// temporary state
-const char *const stInitVol = "InitVol";
-const char *const stClearVol = "ClearVol";
-const char *const stStartSlave = "StartSlave";
-const char *const stStopSlave = "StopSlave";
-const char *const stFullSync = "FullSync";
-const char *const stHashSync = "HashSync";
-const char *const stStartMaster = "StartMaster";
-const char *const stStopMaster = "StopMaster";
-const char *const stReset = "Reset";
 
 /**
  * Persistent data for a volume managed by a storage daemon.

@@ -18,12 +18,6 @@
 
 namespace walb {
 
-// action
-const char *const sWlogSend = "WlogSend";
-const char *const sWlogRemove = "WlogRemove";
-
-const StrVec allActionVec = {sWlogSend, sWlogRemove};
-
 struct StorageVolState {
     std::recursive_mutex mu;
     std::atomic<int> stopState;
@@ -32,31 +26,7 @@ struct StorageVolState {
 
     explicit StorageVolState(const std::string& volId)
         : stopState(NotStopping), sm(mu), ac(mu) {
-        const struct StateMachine::Pair tbl[] = {
-            { sClear, stInitVol },
-            { stInitVol, sSyncReady },
-            { sSyncReady, stClearVol },
-            { stClearVol, sClear },
-
-            { sSyncReady, stStartSlave },
-            { stStartSlave, sSlave },
-            { sSlave, stStopSlave },
-            { stStopSlave, sSyncReady },
-
-            { sSyncReady, stFullSync },
-            { stFullSync, sStopped },
-            { sSyncReady, stHashSync },
-            { stHashSync, sStopped },
-            { sStopped, stReset },
-            { stReset, sSyncReady },
-
-            { sStopped, stStartMaster },
-            { stStartMaster, sMaster },
-            { sMaster, stStopMaster },
-            { stStopMaster, sStopped },
-        };
-        sm.init(tbl);
-
+        sm.init(statePairTbl);
         initInner(volId);
     }
 private:

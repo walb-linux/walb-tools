@@ -18,18 +18,6 @@
 namespace walb {
 
 /**
- * Actions.
- */
-const char *const aMerge = "Merge";
-const char *const aApply = "Apply";
-const char *const aRestore = "Restore";
-const char *const aReplSync = "ReplSyncAsClient";
-const char *const aResize = "Resize";
-
-const StrVec allActionVec = {aMerge, aApply, aRestore, aReplSync, aResize};
-
-
-/**
  * Manage one instance for each volume.
  */
 struct ArchiveVolState
@@ -46,36 +34,7 @@ struct ArchiveVolState
         , sm(mu)
         , ac(mu)
         , diffMgr() {
-        const struct StateMachine::Pair tbl[] = {
-            { aClear, atInitVol },
-            { atInitVol, aSyncReady },
-            { aSyncReady, atClearVol },
-            { atClearVol, aClear },
-
-            { aSyncReady, atFullSync },
-            { atFullSync, aArchived },
-
-            { aSyncReady, atReplSync },
-            { atReplSync, aArchived },
-
-            { aArchived, atHashSync },
-            { atHashSync, aArchived },
-            { aArchived, atWdiffRecv },
-            { atWdiffRecv, aArchived },
-            { aArchived, atReplSync },
-            { atReplSync, aArchived },
-
-            { aArchived, atStop },
-            { atStop, aStopped },
-
-            { aStopped, atClearVol },
-            { atClearVol, aClear },
-            { aStopped, atStart },
-            { atStart, aArchived },
-            { aStopped, atResetVol },
-            { atResetVol, aSyncReady },
-        };
-        sm.init(tbl);
+        sm.init(statePairTbl);
         initInner(volId);
     }
 private:
@@ -1044,7 +1003,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
-                bool go = volSt.ac.isAllZero(StrVec{aMerge, aApply, aRestore, aReplSync});
+                bool go = volSt.ac.isAllZero(allActionVec);
                 if (!go) return false;
                 return isStateIn(sm.get(), {aClear, aSyncReady, aArchived, aStopped});
             }, FUNC);

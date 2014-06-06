@@ -53,36 +53,7 @@ struct ProxyVolState
         : stopState(NotStopping), sm(mu), ac(mu)
         , diffMgr(), diffMgrMap(), archiveSet()
         , lastWlogReceivedTime(0), lastWdiffSentTimeMap() {
-        const struct StateMachine::Pair tbl[] = {
-            { pClear, ptAddArchiveInfo },
-            { ptAddArchiveInfo, pStopped },
-
-            { pStopped, ptClearVol },
-            { ptClearVol, pClear },
-
-            { pStopped, ptAddArchiveInfo },
-            { ptAddArchiveInfo, pStopped },
-
-            { pStopped, ptDeleteArchiveInfo },
-            { ptDeleteArchiveInfo, pStopped },
-
-            { pStopped, ptDeleteArchiveInfo },
-            { ptDeleteArchiveInfo, pClear },
-
-            { pStopped, ptStart },
-            { ptStart, pStarted },
-
-            { pStarted, ptStop },
-            { ptStop, pStopped },
-
-            { pStarted, ptWlogRecv },
-            { ptWlogRecv, pStarted },
-
-            { pStarted, ptWaitForEmpty },
-            { ptWaitForEmpty, pStopped },
-
-        };
-        sm.init(tbl);
+        sm.init(statePairTbl);
         initInner(volId);
     }
 private:

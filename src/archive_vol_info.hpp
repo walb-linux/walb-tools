@@ -22,27 +22,9 @@
 #include "wdiff_data.hpp"
 #include "meta.hpp"
 #include "walb_diff_merge.hpp"
+#include "archive_constant.hpp"
 
 namespace walb {
-
-const std::string VOLUME_PREFIX = "i_";
-const std::string RESTORE_PREFIX = "r_";
-
-const char *const aClear = "Clear";
-const char *const aSyncReady = "SyncReady";
-const char *const aArchived = "Archived";
-const char *const aStopped = "Stopped";
-
-// temporary state
-const char *const atInitVol = "InitVol";
-const char *const atClearVol = "ClearVol";
-const char *const atResetVol = "ResetVol";
-const char *const atFullSync = "FullSync";
-const char *const atHashSync = "HashSync";
-const char *const atWdiffRecv = "WdiffRecv";
-const char *const atReplSync = "ReplSyncAsServer";
-const char *const atStop = "Stop";
-const char *const atStart = "Start";
 
 /**
  * Data manager for a volume in a server.

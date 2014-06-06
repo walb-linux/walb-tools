@@ -8,24 +8,9 @@
 #include "meta.hpp"
 #include "atomic_map.hpp"
 #include "wdiff_data.hpp"
+#include "proxy_constant.hpp"
 
 namespace walb {
-
-const char *const pClear = "Clear";
-const char *const pStopped = "Stopped";
-const char *const pStarted = "Started";
-
-// temporary state
-const char *const ptStart = "Start";
-const char *const ptStop = "Stop";
-const char *const ptClearVol = "ClearVol";
-const char *const ptAddArchiveInfo = "AddArchiveInfo";
-const char *const ptDeleteArchiveInfo = "DeleteArchiveInfo";
-const char *const ptWlogRecv = "WlogRecv";
-const char *const ptWaitForEmpty = "WaitForEmpty";
-
-const char *const ArchiveSuffix = ".archive";
-const char *const ArchiveExtension = "archive";
 
 /**
  * Data manager for a volume in a proxy daemon.
