@@ -31,6 +31,8 @@ VOL = 'vol0'
 set_config(config)
 
 
+g_count = 0
+
 def setup_test():
     run_command(['/bin/rm', '-rf', WORK_DIR])
     for ax in config.archiveL:
@@ -55,7 +57,7 @@ def test_n1():
     """
         full-backup -> sha1 -> restore -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n1:full-backup"
+    print "++++++++++++++++++++++++++++++++++++++ test_n1:full-backup", g_count
     init(s0, VOL, wdev0.path)
     init(s1, VOL, wdev1.path)
     write_random(wdev0.path, 1)
@@ -69,7 +71,7 @@ def test_n2():
     """
         write -> sha1 -> snapshot -> restore -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n2:snapshot"
+    print "++++++++++++++++++++++++++++++++++++++ test_n2:snapshot", g_count
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     gid = snapshot_sync(s0, VOL, [a0])
@@ -83,7 +85,7 @@ def test_n3():
     """
         hash-backup -> sha1 -> restore -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n3:hash-backup"
+    print "++++++++++++++++++++++++++++++++++++++ test_n3:hash-backup", g_count
     set_slave_storage(s0, VOL)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
@@ -130,7 +132,7 @@ def test_n4(numPatterns=0):
         if numPatterns == 0 then all possible patterns will be tested.
         otherwise, numPatterns patterns only will be tested.
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n4:stop"
+    print "++++++++++++++++++++++++++++++++++++++ test_n4:stop", g_count
     perm = itertools.permutations
     chain = itertools.chain.from_iterable
     setLL = [[s0], [p0], [a0], [s0, p0], [s0, a0], [p0, a0], [s0, p0, a0]]
@@ -150,7 +152,7 @@ def test_n5():
     """
         apply -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n5:apply"
+    print "++++++++++++++++++++++++++++++++++++++ test_n5:apply", g_count
     t = startWriting(wdev0.path)
     time.sleep(0.5)
     gid = snapshot_sync(s0, VOL, [a0])
@@ -166,7 +168,7 @@ def test_n6():
     """
         merge -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n6:merge"
+    print "++++++++++++++++++++++++++++++++++++++ test_n6:merge", g_count
     t = startWriting(wdev0.path)
     time.sleep(0.5)
     gidB = snapshot_sync(s0, VOL, [a0])
@@ -200,7 +202,7 @@ def test_n7():
     """
         replicate (no synchronizing, full) -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n7:replicate-full"
+    print "++++++++++++++++++++++++++++++++++++++ test_n7:replicate-full", g_count
     replicate(a0, VOL, a1, False)
     verify_equal_list_restorable('test_n7', a0, a1, VOL)
     gid = get_latest_clean_snapshot(a0, VOL)
@@ -214,7 +216,7 @@ def test_n8():
     """
         replicate (no synchronizing, diff) -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n8:replicate-diff"
+    print "++++++++++++++++++++++++++++++++++++++ test_n8:replicate-diff", g_count
     write_random(wdev0.path, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     gidA0 = get_latest_clean_snapshot(a0, VOL)
@@ -236,7 +238,7 @@ def test_n9():
     """
         replicate (no synchronizing, hash) -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n9:replicate-hash"
+    print "++++++++++++++++++++++++++++++++++++++ test_n9:replicate-hash", g_count
     write_random(wdev0.path, 1)
     gid0 = snapshot_sync(s0, VOL, [a0])
     apply_diff(a0, VOL, gid0)
@@ -259,7 +261,7 @@ def test_n10():
     """
         replicate (sychronizing) -> sha1
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n10:replicate-synchronizing"
+    print "++++++++++++++++++++++++++++++++++++++ test_n10:replicate-synchronizing", g_count
     t = startWriting(wdev0.path)
     try:
         time.sleep(0.5)
@@ -293,7 +295,7 @@ def test_n11(doZeroClear):
             resize -> hash backup -> sha1
 
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n11:resize", doZeroClear
+    print "++++++++++++++++++++++++++++++++++++++ test_n11:resize", doZeroClear, g_count
     t = startWriting(wdev0.path)
     prevSize = get_walb_dev_sizeMb(wdev0)
     snapshot_sync(s0, VOL, [a0])
@@ -333,7 +335,7 @@ def test_n12():
         once more.
 
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_n12:exchange-master-slave"
+    print "++++++++++++++++++++++++++++++++++++++ test_n12:exchange-master-slave", g_count
     t0 = startWriting(wdev0.path)
     t1 = startWriting(wdev1.path)
     time.sleep(0.3)
@@ -370,7 +372,7 @@ def test_m1():
     """
         full-bkp --> full-bkp fails.
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_m1:full-bkp-after-full-bkp-fails"
+    print "++++++++++++++++++++++++++++++++++++++ test_m1:full-bkp-after-full-bkp-fails", g_count
     write_random(wdev0.path, 1)
     stop_sync(a0, VOL)
     try:
@@ -387,7 +389,7 @@ def test_m2():
     """
         init --> hash-bkp fails.
     """
-    print "++++++++++++++++++++++++++++++++++++++ test_m2:hash-bkp-fails."
+    print "++++++++++++++++++++++++++++++++++++++ test_m2:hash-bkp-fails.", g_count
     stop_sync(a0, VOL)
     stop(a0, VOL)
     reset_vol(a0, VOL)
@@ -407,7 +409,7 @@ def test_m3():
     """
         resize at storage -> write -> wdiff-transfer fails.
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_m3:resize-fails'
+    print '++++++++++++++++++++++++++++++++++++++ test_m3:resize-fails', g_count
     prevSizeMb = get_walb_dev_sizeMb(wdev0)
     snapshot_sync(s0, VOL, [a0])
     newSizeMb = prevSizeMb + 4  # lvm extent size is 4MiB
@@ -439,7 +441,7 @@ def test_e1():
         p0 down -> write over wldev amount -> p0 up -> snapshot -> sha1
 
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e1:proxy-down'
+    print '++++++++++++++++++++++++++++++++++++++ test_e1:proxy-down', g_count
     shutdown(p0, 'force')
     write_over_wldev(wdev0)
     verify_not_overflow(s0, VOL)
@@ -456,7 +458,7 @@ def test_e2():
     """
         a0 down -> write over wldev amount -> a0 up -> snapshot -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e2:archive-down'
+    print '++++++++++++++++++++++++++++++++++++++ test_e2:archive-down', g_count
     shutdown(a0, 'force')
     write_over_wldev(wdev0)
     verify_not_overflow(s0, VOL)
@@ -474,7 +476,7 @@ def test_e3():
     """
         s0 down -> write -> s0 up -> snapshot -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e3:storage-down'
+    print '++++++++++++++++++++++++++++++++++++++ test_e3:storage-down', g_count
     shutdown(s0, 'force')
     write_random(wdev0.path, 1)
     startup(s0)
@@ -489,7 +491,7 @@ def test_e4():
     """
         s0 down -> write over wldev amount -> s0 up -> hash-backup-> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e4:storage-down-overflow'
+    print '++++++++++++++++++++++++++++++++++++++ test_e4:storage-down-overflow', g_count
     shutdown(s0, 'force')
     write_over_wldev(wdev0, overflow=True)
     startup(s0)
@@ -506,7 +508,7 @@ def test_e5():
     """
         p0 data lost -> p0 up -> hash-backup -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e5:proxy-data-lost'
+    print '++++++++++++++++++++++++++++++++++++++ test_e5:proxy-data-lost', g_count
     stop(a0, VOL, 'force')
     write_random(wdev0.path, 1)
     time.sleep(3)  # wait for the log is sent to p0.
@@ -529,7 +531,7 @@ def test_e6():
     """
         a0 data lost -> a0 up -> full-backup -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e6:primary-archive-data-lost'
+    print '++++++++++++++++++++++++++++++++++++++ test_e6:primary-archive-data-lost', g_count
     shutdown(a0, 'force')
     remove_persistent_data(a0)
     startup(a0)
@@ -547,7 +549,7 @@ def test_e7():
     """
         a1 data lost -> a1 up -> replicate -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e7:secondary-archive-data-lost'
+    print '++++++++++++++++++++++++++++++++++++++ test_e7:secondary-archive-data-lost', g_count
     write_random(wdev0.path, 1)
     replicate(a0, VOL, a1, True)
     shutdown(a1, 'force')
@@ -573,7 +575,7 @@ def test_e8():
     """
         s0 data lost -> s0 up -> hash-backup -> sha1
     """
-    print '++++++++++++++++++++++++++++++++++++++ test_e8:storage-data-lost'
+    print '++++++++++++++++++++++++++++++++++++++ test_e8:storage-data-lost', g_count
     write_random(wdev0.path, 1)
     shutdown(s0, 'force')
     remove_persistent_data(s0)
@@ -614,6 +616,7 @@ def main():
     print "count", count
     print 'test', testL
     for i in xrange(count):
+        g_count = i
         print "===============================", i, datetime.datetime.today()
         test(testL)
 
