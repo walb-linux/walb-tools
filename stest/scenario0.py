@@ -603,7 +603,6 @@ def test_e8():
 def test():
     setup_test()
     test_n1()
-    """
     test_n2()
     test_n3()
     test_n4(5)
@@ -619,9 +618,7 @@ def test():
     test_m1()
     test_m2()
     test_m3()
-    """
     test_e1()
-    """
     test_e2()
     test_e3()
     test_e4()
@@ -629,7 +626,6 @@ def test():
     test_e6()
     test_e7()
     test_e8()
-    """
 
 
 def main():
