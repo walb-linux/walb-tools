@@ -348,11 +348,13 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     return ret;
 }
 
-inline void pushAllTasksForVol(const std::string &volId)
+inline void pushAllTasksForVol(const std::string &volId, Logger *loggerP = nullptr)
 {
     ProxyVolState &volSt = getProxyVolState(volId);
     volSt.actionState.clearAll();
+    if (loggerP) loggerP->info() << "pushAllTasksForVol:volId" << volId;
     for (const std::string& archiveName : volSt.archiveSet) {
+        if (loggerP) loggerP->info() << "pushAllTasksForVol:archiveName" << archiveName;
         getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
     }
 }
@@ -1108,7 +1110,7 @@ inline void c2pKickServer(protocol::ServerParams &p)
                     ProxyVolState &volSt = getProxyVolState(volId);
                     UniqueLock ul(volSt.mu);
                     if (isStateIn(volSt.sm.get(), {pStarted})) {
-                        proxy_local::pushAllTasksForVol(volId);
+                        proxy_local::pushAllTasksForVol(volId, &logger);
                     }
                 } catch (std::exception &e) {
                     logger.error() << e.what();
@@ -1119,13 +1121,14 @@ inline void c2pKickServer(protocol::ServerParams &p)
             UniqueLock ul(volSt.mu);
             verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
             if (archiveName.empty()) {
-                proxy_local::pushAllTasksForVol(volId);
+                proxy_local::pushAllTasksForVol(volId, &logger);
             } else {
                 ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
                 if (!volInfo.existsArchiveInfo(archiveName)) {
                     throw cybozu::Exception(FUNC) << "archive does not exist" << archiveName;
                 }
                 volSt.actionState.clear(archiveName);
+                logger.info() << FUNC << "kick" << volId << archiveName;
                 getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
             }
         }
