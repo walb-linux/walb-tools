@@ -22,6 +22,7 @@ Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
 
 cfg = None
 
+aAcceptForResize = ['Archived', 'HashSync', 'WdiffRecv', 'ReplSyncAsServer', 'Stopped']
 pAcceptForStop = ['Started', 'WlogRecv']
 
 def set_config(config):
@@ -520,7 +521,7 @@ def prepare_backup(sx, vol):
         if s == sx:
             continue
         st = get_state(s, vol)
-        if st != "Slave" and st != "Clear":
+        if st not in ["Slave", "Clear"]:
             raise Exception("prepare_backup:bad state", s.name, vol, st)
 
     for ax in cfg.archiveL:
@@ -787,7 +788,7 @@ def resize_archive(ax, vol, sizeMb, doZeroClear):
     st = get_state(ax, vol)
     if st == 'Clear':
         return
-    elif st in ['Archived', 'WdiffRecv', 'HashSync', 'Stopped']:
+    elif st in aAcceptForResize:
         args = ['resize', vol, str(sizeMb) + 'm']
         if doZeroClear:
             args += ['zeroclear']
