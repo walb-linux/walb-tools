@@ -452,7 +452,7 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
     }
 
     waitUntil(ul, [&]() {
-            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
+            return isStateIn(volSt.sm.get(), pSteadyStates);
         }, FUNC);
 
     verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
@@ -497,7 +497,7 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
 
     waitUntil(ul, [&]() {
             if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
-            return isStateIn(volSt.sm.get(), {pClear, pStopped, pStarted});
+            return isStateIn(volSt.sm.get(), pSteadyStates);
         }, FUNC);
 
     const std::string &stFrom = volSt.sm.get();
@@ -930,7 +930,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, volId, FUNC);
-    verifyStateIn(volSt.sm.get(), {pStarted, ptWaitForEmpty}, FUNC);
+    verifyStateIn(volSt.sm.get(), pAcceptForWdiffSend, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 

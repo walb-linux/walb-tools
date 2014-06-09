@@ -22,6 +22,7 @@ Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
 
 cfg = None
 
+pAcceptForStop = ['Started', 'WlogRecv']
 
 def set_config(config):
     if config.binDir[0] != '/' or config.binDir[-1] != '/':
@@ -329,7 +330,7 @@ def start(s, vol):
 
 def del_archive_from_proxy(px, vol, ax):
     st = get_state(px, vol)
-    if st in ['Started', 'WlogRecv']:
+    if st in pAcceptForStop:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name in aL:
@@ -341,7 +342,7 @@ def del_archive_from_proxy(px, vol, ax):
 
 def add_archive_to_proxy(px, vol, ax):
     st = get_state(px, vol)
-    if st in ['Started', 'WlogRecv']:
+    if st in pAcceptForStop:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name not in aL:
@@ -489,7 +490,7 @@ def synchronize(aSrc, vol, aDst):
     """
     for px in cfg.proxyL:
         st = get_state(px, vol)
-        if st == 'Started' or st == 'WlogRecv':
+        if st in pAcceptForStop:
             run_ctl(px, ["stop", vol, 'empty'])
 
     for px in cfg.proxyL:

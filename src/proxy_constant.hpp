@@ -7,6 +7,7 @@ namespace walb {
 const char *const pClear = "Clear";
 const char *const pStopped = "Stopped";
 const char *const pStarted = "Started";
+const StrVec pSteadyStates = { pClear, pStopped, pStarted };
 
 // temporary states.
 const char *const ptStart = "Start";
@@ -48,5 +49,8 @@ const struct StateMachine::Pair statePairTbl[] = {
 
 const char *const ArchiveSuffix = ".archive";
 const char *const ArchiveExtension = "archive";
+
+const StrVec pAcceptForWdiffSend = { pStarted, ptWlogRecv, ptWaitForEmpty };
+
 
 } // namespace walb
