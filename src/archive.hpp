@@ -1398,15 +1398,16 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
-        std::string stFrom = volSt.sm.get();
+        const std::string stFrom = volSt.sm.get();
         verifyStateIn(stFrom, {aSyncReady, aArchived}, FUNC);
+        const bool isFull = stFrom == aSyncReady;
+        const std::string stTo = isFull ? atFullSync : atReplSync;
 
         pkt.write(msgAccept);
         sendErr = false;
 
-        StateMachineTransaction tran(volSt.sm, stFrom, atReplSync, FUNC);
+        StateMachineTransaction tran(volSt.sm, stFrom, stTo, FUNC);
         ul.unlock();
-        const bool isFull = stFrom == aSyncReady;
         if (!archive_local::runReplSyncServer(volId, isFull, p.sock, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;

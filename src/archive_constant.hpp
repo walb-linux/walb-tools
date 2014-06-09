@@ -34,9 +34,6 @@ const struct StateMachine::Pair statePairTbl[] = {
     { aSyncReady, atFullSync },
     { atFullSync, aArchived },
 
-    { aSyncReady, atReplSync },
-    { atReplSync, aArchived },
-
     { aArchived, atHashSync },
     { atHashSync, aArchived },
     { aArchived, atWdiffRecv },
