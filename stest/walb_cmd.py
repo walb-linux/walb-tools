@@ -185,9 +185,13 @@ def set_slave_storage(sx, vol):
     start(sx, vol)
 
 
-def kick_all():
-    for sx in cfg.storageL:
-        run_ctl(sx, ["kick"])
+def kick_all(sL):
+    for s in sL:
+        run_ctl(s, ["kick"])
+
+
+def kick_all_storage():
+    kick_all(cfg.storageL)
 
 
 def run_walbctl(cmdArgs):
@@ -350,13 +354,13 @@ def add_archive_to_proxy(px, vol, ax):
 def stop_sync(ax, vol):
     for px in cfg.proxyL:
         del_archive_from_proxy(px, vol, ax)
-    kick_all()
+    kick_all_storage()
 
 
 def start_sync(ax, vol):
     for px in cfg.proxyL:
         add_archive_to_proxy(px, vol, ax)
-    kick_all()
+    kick_all_storage()
 
 
 def get_gid_list(ax, vol, cmd):
@@ -499,7 +503,7 @@ def synchronize(aSrc, vol, aDst):
 
     for px in cfg.proxyL:
         start(px, vol)
-    kick_all()
+    kick_all_storage()
 
 
 def prepare_backup(sx, vol):
