@@ -448,15 +448,15 @@ def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
     pos = gidL.index(gidB)
     if gidL[pos + 1] == gidE:
         return
-    raise Exception("wait_for_merged:failed", ax.name, vol, gidB, gidE)
+    raise Exception("wait_for_merged:failed", ax.name, vol, gidB, gidE, gidL)
 
 
 def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    wait_for_not_state(ax, vol, ['ReplSyncAsServer'], timeoutS)
+    wait_for_not_state(ax, vol, ['ReplSyncAsServer', 'FullSync'], timeoutS)
     gidL = list_restorable(ax, vol, 'all')
     if gidL and gid <= gidL[-1]:
         return
-    raise Exception("wait_for_replicated:replicate failed", ax.name, vol, gid)
+    raise Exception("wait_for_replicated:replicate failed", ax.name, vol, gid, gidL)
 
 
 def verify_not_restorable(ax, vol, gid, waitS, msg):
