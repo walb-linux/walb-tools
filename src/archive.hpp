@@ -1169,7 +1169,7 @@ inline void c2aListRestorableServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         const std::string st = volSt.sm.get();
         StrVec strV;
-        if (isStateIn(st, {aArchived, atHashSync, atWdiffRecv})) {
+        if (isStateIn(st, aActive)) {
             strV = archive_local::listRestorable(volId, isAll, isVerbose);
         }
         ul.unlock();
