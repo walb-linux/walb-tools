@@ -496,8 +496,8 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
     }
 
     waitUntil(ul, [&]() {
-            if (!volSt.ac.isAllZero(volSt.archiveSet)) return false;
-            return isStateIn(volSt.sm.get(), pSteadyStates);
+            return isStateIn(volSt.sm.get(), pSteadyStates)
+                && volSt.ac.isAllZero(volSt.archiveSet);
         }, FUNC);
 
     const std::string &stFrom = volSt.sm.get();

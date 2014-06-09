@@ -1003,9 +1003,8 @@ inline void c2aStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
-                bool go = volSt.ac.isAllZero(allActionVec);
-                if (!go) return false;
-                return isStateIn(sm.get(), {aClear, aSyncReady, aArchived, aStopped});
+                return isStateIn(sm.get(), aSteadyStates)
+                    && volSt.ac.isAllZero(allActionVec);
             }, FUNC);
 
         logger.info() << "Tasks have been stopped" << volId;
@@ -1065,8 +1064,8 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     try {
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        verifyNoActionRunning(volSt.ac, aDenyForRestore, FUNC);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -1101,8 +1100,8 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        verifyNoActionRunning(volSt.ac, aActionOnLvm, FUNC);
         ul.unlock();
 
         archive_local::delRestored(volId, gid);
@@ -1128,8 +1127,7 @@ inline void c2aListRestoredServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
-//        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
         const StrVec strV = archive_local::listRestored(volId);
         ul.unlock();
         logger.info() << "list-restored succeeded" << volId;
@@ -1170,7 +1168,6 @@ inline void c2aListRestorableServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         const std::string st = volSt.sm.get();
-        verifyNoActionRunning(volSt.ac, StrVec{aRestore}, FUNC);
         StrVec strV;
         if (isStateIn(st, {aArchived, atHashSync, atWdiffRecv})) {
             strV = archive_local::listRestorable(volId, isAll, isVerbose);
@@ -1223,111 +1220,122 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
     const char * const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
-    std::string volId;
-    std::string hostType;
-    cybozu::Uuid uuid;
-    uint16_t maxIoBlocks;
-    uint64_t sizeLb;
-    MetaDiff diff;
-
-    pkt.read(volId);
-    pkt.read(hostType);
-    pkt.read(uuid);
-    pkt.read(maxIoBlocks);
-    pkt.read(sizeLb);
-    pkt.read(diff);
-    logger.debug() << "recv" << volId << hostType << uuid << maxIoBlocks << sizeLb << diff;
-
-    ForegroundCounterTransaction foregroundTasksTran;
-    ArchiveVolState& volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
-    StateMachine &sm = volSt.sm;
+    bool isErr = true;
+    bool sendErr = true;
     try {
+        std::string volId;
+        std::string hostType;
+        cybozu::Uuid uuid;
+        uint16_t maxIoBlocks;
+        uint64_t sizeLb;
+        MetaDiff diff;
+
+        pkt.read(volId);
+        pkt.read(hostType);
+        pkt.read(uuid);
+        pkt.read(maxIoBlocks);
+        pkt.read(sizeLb);
+        pkt.read(diff);
+        logger.debug() << "recv" << volId << hostType << uuid << maxIoBlocks << sizeLb << diff;
+
+        ForegroundCounterTransaction foregroundTasksTran;
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        StateMachine &sm = volSt.sm;
         if (volId.empty()) {
+            isErr = false;
             throw cybozu::Exception(FUNC) << "empty volId";
         }
         if (hostType != proxyHT && hostType != archiveHT) {
+            isErr = false;
             throw cybozu::Exception(FUNC) << "bad hostType" << hostType;
         }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(sm.get(), {aArchived, aStopped, atWdiffRecv}, FUNC);
-    } catch (std::exception &e) {
-        logger.warn() << e.what();
-        pkt.write(e.what());
-        return;
-    }
+        {
+            const std::string st = sm.get();
+            const char *msg = nullptr;
+            if (st == aStopped) {
+                msg = "stopped";
+            } else if (st == atWdiffRecv) {
+                msg = "wdiff-recv";
+            }
+            if (msg) {
+                logger.info() << msg << volId;
+                pkt.writeFin(msg);
+                return;
+            }
+            if (st != aArchived) {
+                isErr = false;
+                throw cybozu::Exception(FUNC) << "bad state" << st;
+            }
+        }
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-    if (!volInfo.existsVolDir()) {
-        const char *msg = "archive-not-found";
-        logger.info() << msg << volId;
-        pkt.writeFin(msg);
-        return;
-    }
-    {
-        const std::string st = sm.get();
-		const char *msg = nullptr;
-		if (st == aStopped) {
-			msg = "stopped";
-		} else if (st == atWdiffRecv) {
-			msg = "wdiff-recv";
-		}
-		if (msg) {
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        if (!volInfo.existsVolDir()) {
+            const char *msg = "archive-not-found";
             logger.info() << msg << volId;
             pkt.writeFin(msg);
             return;
         }
-    }
-    if (hostType == proxyHT && volInfo.getUuid() != uuid) {
-        const char *msg = "different-uuid";
-        logger.info() << msg << volId;
-        pkt.writeFin(msg);
-        return;
-    }
-    const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
-    if (selfSizeLb < sizeLb) {
-        const char *msg = "smaller-lv-size";
-        logger.error() << msg << volId << sizeLb << selfSizeLb;
-        pkt.writeFin(msg);
-        return;
-    }
+        if (hostType == proxyHT && volInfo.getUuid() != uuid) {
+            const char *msg = "different-uuid";
+            logger.info() << msg << volId;
+            pkt.writeFin(msg);
+            return;
+        }
+        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+        if (selfSizeLb < sizeLb) {
+            const char *msg = "smaller-lv-size";
+            logger.error() << msg << volId << sizeLb << selfSizeLb;
+            pkt.writeFin(msg);
+            return;
+        }
 
-    if (sizeLb < selfSizeLb) {
-        logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
-        // no problem to continue.
+        if (sizeLb < selfSizeLb) {
+            logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
+            // no problem to continue.
+        }
+        const MetaState metaState = volInfo.getMetaState();
+        const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
+        const Relation rel = getRelation(latestSnap, diff);
+
+        if (rel != Relation::APPLICABLE_DIFF) {
+            const char *msg = getRelationStr(rel);
+            logger.info() << msg << volId;
+            pkt.writeFin(msg);
+            return;
+        }
+        pkt.write(msgAccept);
+        sendErr = false;
+
+        // main procedure
+        StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
+        ul.unlock();
+
+        const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
+        cybozu::TmpFile tmpFile(volInfo.volDir.str());
+        cybozu::util::File fileW(tmpFile.fd());
+        writeDiffFileHeader(fileW, maxIoBlocks, uuid);
+        if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
+            logger.warn() << FUNC << "force stopped" << volId;
+            return;
+        }
+        tmpFile.save(fPath.str());
+
+        ul.lock();
+        volSt.diffMgr.add(diff);
+        tran.commit(aArchived);
+        packet::Ack(p.sock).sendFin();
+        logger.info() << "wdiff-transfer succeeded" << volId;
+    } catch (std::exception &e) {
+        if (isErr) {
+            logger.error() << e.what();
+        } else {
+            logger.warn() << e.what();
+        }
+        if (sendErr) pkt.write(e.what());
     }
-    const MetaState metaState = volInfo.getMetaState();
-    const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
-    const Relation rel = getRelation(latestSnap, diff);
-
-    if (rel != Relation::APPLICABLE_DIFF) {
-        const char *msg = getRelationStr(rel);
-        logger.info() << msg << volId;
-        pkt.writeFin(msg);
-        return;
-    }
-    pkt.write(msgAccept);
-
-    StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
-    ul.unlock();
-
-    const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
-    cybozu::TmpFile tmpFile(volInfo.volDir.str());
-    cybozu::util::File fileW(tmpFile.fd());
-    writeDiffFileHeader(fileW, maxIoBlocks, uuid);
-    if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
-        logger.warn() << FUNC << "force stopped" << volId;
-        return;
-    }
-    tmpFile.save(fPath.str());
-
-    ul.lock();
-    volSt.diffMgr.add(diff);
-    tran.commit(aArchived);
-
-    packet::Ack(p.sock).sendFin();
-    logger.info() << "wdiff-transfer succeeded" << volId;
 }
 
 /**
@@ -1361,8 +1369,8 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atHashSync, atWdiffRecv}, FUNC);
+        verifyNoActionRunning(volSt.ac, aDenyForReplSyncClient, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aReplSync);
         ul.unlock();
@@ -1399,7 +1407,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyNoArchiveActionRunning(volSt.ac, FUNC);
         const std::string stFrom = volSt.sm.get();
-        verifyStateIn(stFrom, {aSyncReady, aArchived}, FUNC);
+        verifyStateIn(stFrom, aAcceptForReplicateServer, FUNC);
         const bool isFull = stFrom == aSyncReady;
         const std::string stTo = isFull ? atFullSync : atReplSync;
 
@@ -1438,8 +1446,8 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv}, FUNC);
+        verifyNoActionRunning(volSt.ac, aDenyForApply, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
         archive_local::verifyApplicable(volId, gid);
 
         pkt.writeFin(msgAccept);
@@ -1487,8 +1495,8 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aMerge, aReplSync}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv}, FUNC);
+        verifyNoActionRunning(volSt.ac, aDenyForMerge, FUNC);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
         archive_local::verifyMergeable(volId, gidB);
 
         pkt.writeFin(msgAccept);
@@ -1537,8 +1545,8 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, StrVec{aApply, aRestore, aReplSync, aResize}, FUNC);
-        verifyStateIn(volSt.sm.get(), {aArchived, atWdiffRecv, atHashSync, aStopped}, FUNC);
+        verifyNoActionRunning(volSt.ac, aDenyForResize, FUNC);
+        verifyStateIn(volSt.sm.get(), aAcceptForResize, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aResize);
         ul.unlock();

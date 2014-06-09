@@ -11,6 +11,7 @@ const char *const aClear = "Clear";
 const char *const aSyncReady = "SyncReady";
 const char *const aArchived = "Archived";
 const char *const aStopped = "Stopped";
+const StrVec aSteadyStates = { aClear, aSyncReady, aArchived, aStopped };
 
 /**
  * Temporary states.
@@ -53,7 +54,7 @@ const struct StateMachine::Pair statePairTbl[] = {
 };
 
 /**
- * Actions.
+ * Actions. prefix : aa
  */
 const char *const aMerge = "Merge";
 const char *const aApply = "Apply";
@@ -63,8 +64,21 @@ const char *const aResize = "Resize";
 
 const StrVec allActionVec = {aMerge, aApply, aRestore, aReplSync, aResize};
 
+const StrVec aDenyForRestore = {aRestore, aResize};
+const StrVec aDenyForReplSyncClient = {aRestore, aReplSync, aApply, aMerge, aResize};
+const StrVec aDenyForApply = {aRestore, aReplSync, aApply, aResize};
+const StrVec aDenyForMerge = {aRestore, aReplSync, aApply, aMerge, aResize};
+const StrVec aDenyForResize = {aRestore, aReplSync, aApply, aResize};
+
+const StrVec aActionOnLvm = {aRestore, aResize};
 
 const std::string VOLUME_PREFIX = "i_";
 const std::string RESTORE_PREFIX = "r_";
+
+const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};
+const StrVec aActive = {aArchived, atHashSync, atWdiffRecv, atReplSync};
+// aAcceptForResize = aActiev + aStopped
+const StrVec aAcceptForResize = {aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped};
+
 
 } // namespace walb

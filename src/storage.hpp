@@ -499,7 +499,8 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
-                return isStateIn(volSt.sm.get(), sSteadyStates) && volSt.ac.isAllZero(allActionVec);
+                return isStateIn(volSt.sm.get(), sSteadyStates)
+                    && volSt.ac.isAllZero(allActionVec);
             }, FUNC);
 
         const std::string st = sm.get();
