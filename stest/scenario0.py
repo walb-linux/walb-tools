@@ -40,7 +40,7 @@ def setup_test():
                 for f in os.listdir(vgPath):
                     if f[0] == 'i':
                         run_command(['/sbin/lvremove', '-f', vgPath + f])
-    time.sleep(2)
+    lvm_sleep()
     make_dir(WORK_DIR)
     kill_all_servers()
     for wdev in wdevL:
@@ -317,6 +317,14 @@ def test_n11(doZeroClear):
     print 'test_n11:succeeded'
 
 
+def test_n11a():
+    test_n11(True)
+
+
+def test_n11b():
+    test_n11(False)
+
+
 def test_n12():
     """
         change master to slave
@@ -580,46 +588,34 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
-def test():
+def test(testL):
     setup_test()
-    test_n1()
-    test_n2()
-    test_n3()
-    test_n4(5)
-    test_n5()
-    test_n6()
-    test_n7()
-    test_n8()
-    test_n9()
-    test_n10()
-    test_n11(True)
-    test_n11(False)
-    test_n12()
-    test_m1()
-    test_m2()
-    test_m3()
-    test_e1()
-    test_e2()
-    test_e3()
-    test_e4()
-    test_e5()
-    test_e6()
-    test_e7()
-    test_e8()
+    for test in testL:
+        (globals()['test_' + test])()
+
+
+allL = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
+        'm1', 'm2', 'm3',
+        'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8']
 
 
 def main():
-    n = len(sys.argv)
-    if n == 1:
-        count = 1
-    elif n == 2:
+    try:
         count = int(sys.argv[1])
-    else:
-        raise Exception('bad option', sys.argv)
+        pos = 2
+    except:
+        count = 1
+        pos = 1
+
+    testL = sys.argv[pos:]
+    if not testL:
+        testL = allL
+
     print "count", count
+    print 'test', testL
     for i in xrange(count):
         print "===============================", i, datetime.datetime.today()
-        test()
+        test(testL)
 
 
 if __name__ == "__main__":

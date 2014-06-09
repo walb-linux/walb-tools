@@ -587,8 +587,12 @@ def get_num_opened_lv(lvPath):
     return int(ret)
 
 
-def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
+def lvm_sleep():
     time.sleep(2)
+
+
+def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
+    lvm_sleep()
     """
     t0 = time.time()
     while time.time() < t0 + timeoutS:
