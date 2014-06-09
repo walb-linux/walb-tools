@@ -537,7 +537,7 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
         if gids:
             return gids[-1]
         time.sleep(0.3)
-    raise Exception('full_backup:timeout', sx, vol)
+    raise Exception('full_backup:timeout', sx, vol, gids)
 
 
 def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
@@ -558,7 +558,7 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
         if gids and gids[-1] > max_gid:
             return gids[-1]
         time.sleep(0.3)
-    raise Exception('hash_backup:timeout', sx, vol)
+    raise Exception('hash_backup:timeout', sx, vol, max_gid, gids)
 
 
 def write_random(devName, sizeLb, offset=0, fixVar=None):
