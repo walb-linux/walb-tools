@@ -840,7 +840,7 @@ def get_walb_dev_sizeMb(wdev):
     return size
 
 
-def write_over_wldev(wdev):
+def write_over_wldev(wdev, overflow=False):
     wldevSizeLb = get_lv_size_mb(wdev.log) * 1024 * 1024 / 512
     wdevSizeLb = get_walb_dev_sizeMb(wdev) * 1024 * 1024 / 512
     print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
@@ -851,5 +851,6 @@ def write_over_wldev(wdev):
         writeLb = min(remainLb, writeMaxLb)
         print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
         write_random(wdev.path, writeLb)
-        wait_for_log_empty(wdev)
+        if not overflow:
+            wait_for_log_empty(wdev)
         remainLb -= writeLb

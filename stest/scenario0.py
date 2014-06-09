@@ -482,7 +482,7 @@ def test_e4():
     """
     print '++++++++++++++++++++++++++++++++++++++ test_e4:storage-down-overflow'
     shutdown(s0, 'force')
-    write_over_wldev(wdev0)
+    write_over_wldev(wdev0, overflow=True)
     startup(s0)
     if not is_overflow(s0, VOL):
         raise Exception('test_e4:must be overflow')
