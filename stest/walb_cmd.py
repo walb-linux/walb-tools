@@ -595,7 +595,7 @@ def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
             time.sleep(1) # avoid fail for the bug of lvm
             return
         time.sleep(0.3)
-    raise Exception('wait_for_none_open_lv', lvPath)
+    raise Exception('wait_for_lv_ready:timeout', lvPath)
 
 
 def get_restored_path(ax, vol, gid):
