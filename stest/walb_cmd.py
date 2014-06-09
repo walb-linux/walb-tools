@@ -590,6 +590,7 @@ def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
     while time.time() < t0 + timeoutS:
         num = get_num_opened_lv(lvPath)
         if num == 0:
+            time.sleep(1) # avoid fail for the bug of lvm
             return
         time.sleep(0.3)
     raise Exception('wait_for_none_open_lv', lvPath)
@@ -748,6 +749,7 @@ def resize_lv(path, beforeSizeMb, afterSizeMb, doZeroClear):
     if beforeSizeMb == afterSizeMb:
         return
     run_command(['/sbin/lvresize', '-f', '-L', str(afterSizeMb) + 'm', path])
+    wait_for_lv_ready(path)
     # zero-clear is required for test only.
     if beforeSizeMb < afterSizeMb and doZeroClear:
         zero_clear(path, beforeSizeMb * 1024 * 1024 / 512,
