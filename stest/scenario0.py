@@ -365,7 +365,7 @@ def test_m1():
     write_random(wdev0.path, 1)
     stop_sync(a0, VOL)
     try:
-        full_backup(s0, VOL)
+        full_backup(s0, VOL, 10)
     except:
         # expect to catch an exception.
         start_sync(a0, VOL)
@@ -384,7 +384,7 @@ def test_m2():
     reset_vol(a0, VOL)
     write_random(wdev0.path, 1)
     try:
-        hash_backup(s0, VOL)
+        hash_backup(s0, VOL, 10)
     except:
         # expect to catch an exception.
         set_slave_storage(s0, VOL)
@@ -547,7 +547,7 @@ def test_e7():
     write_random(wdev0.path, 1)
     gid0 = snapshot_async(s0, VOL)
     wait_for_restorable(a0, VOL, gid0)
-    verify_not_restorable(a1, VOL, gid0, 5, 'test_e7')
+    verify_not_restorable(a1, VOL, gid0, 10, 'test_e7')
     replicate(a0, VOL, a1, True)
     write_random(wdev0.path, 1)
     gid1 = snapshot_sync(s0, VOL, [a0, a1])

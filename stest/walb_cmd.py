@@ -8,7 +8,7 @@ import socket
 import errno
 import shutil
 
-TIMEOUT_SEC = 20
+TIMEOUT_SEC = 100
 
 K_STORAGE = 0
 K_PROXY = 1
@@ -405,7 +405,7 @@ def wait_for_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
         if gid in gids:
             return
         time.sleep(0.3)
-    raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd)
+    raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
 
 
 def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
@@ -415,7 +415,7 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
         if gid not in gids:
             return
         time.sleep(0.3)
-    raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd)
+    raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
 
 
 def wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -427,7 +427,7 @@ def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     gids = get_gid_list(ax, vol, 'list-restored')
     if gid in gids:
         return
-    raise Exception('wait_for_restored:failed', ax.name, vol, gid)
+    raise Exception('wait_for_restored:failed', ax.name, vol, gid, gids)
 
 
 def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -439,7 +439,7 @@ def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     gidL = get_gid_list(ax, vol, 'list-restorable')
     if gidL and gid <= gidL[0]:
         return
-    raise Exception('wait_for_applied:failed', ax.name, vol, gid)
+    raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
 
 
 def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
@@ -448,7 +448,7 @@ def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
     pos = gidL.index(gidB)
     if gidL[pos + 1] == gidE:
         return
-    raise Exception("wait_for_merged:failed", ax.name, vol, gidB, gidE, gidL)
+    raise Exception("wait_for_merged:failed", ax.name, vol, gidB, gidE, pos, gidL)
 
 
 def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
