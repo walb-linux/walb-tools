@@ -1088,7 +1088,7 @@ inline void c2pHostTypeServer(protocol::ServerParams &p)
 }
 
 /**
- * params[0]: volId
+ * params[0]: volId (optional)
  * params[1]: archiveName (optional)
  */
 inline void c2pKickServer(protocol::ServerParams &p)
@@ -1100,22 +1100,39 @@ inline void c2pKickServer(protocol::ServerParams &p)
     try {
         StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         std::string volId, archiveName;
-        cybozu::util::parseStrVec(v, 0, 1, {&volId, &archiveName});
+        cybozu::util::parseStrVec(v, 0, 0, {&volId, &archiveName});
 
-        ProxyVolState &volSt = getProxyVolState(volId);
-        UniqueLock ul(volSt.mu);
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
-        if (archiveName.empty()) {
-            proxy_local::pushAllTasksForVol(volId);
-        } else {
-            if (!volInfo.existsArchiveInfo(archiveName)) {
-                throw cybozu::Exception(FUNC) << "archive does not exist" << archiveName;
+        if (volId.empty()) {
+            for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
+                try {
+                    ProxyVolState &volSt = getProxyVolState(volId);
+                    UniqueLock ul(volSt.mu);
+                    if (isStateIn(volSt.sm.get(), {pStarted})) {
+                        proxy_local::pushAllTasksForVol(volId);
+                    }
+                } catch (std::exception &e) {
+                    logger.error() << e.what();
+                }
             }
-            volSt.actionState.clear(archiveName);
-            getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+        } else {
+            ProxyVolState &volSt = getProxyVolState(volId);
+            UniqueLock ul(volSt.mu);
+            verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+            if (archiveName.empty()) {
+                proxy_local::pushAllTasksForVol(volId);
+            } else {
+                ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+                if (!volInfo.existsArchiveInfo(archiveName)) {
+                    throw cybozu::Exception(FUNC) << "archive does not exist" << archiveName;
+                }
+                volSt.actionState.clear(archiveName);
+                getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+            }
         }
         pkt.writeFin(msgOk);
-        logger.info() << "kick succeeded" << volId << archiveName;
+        logger.info() << "kick succeeded"
+                      << (volId.empty() ? "ALL" : volId)
+                      << (archiveName.empty() ? "ALL" : archiveName);
     } catch (std::exception &e) {
         LOGs.error() << e.what();
         pkt.write(e.what());
