@@ -26,13 +26,6 @@ wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
 wdevL = [wdev0, wdev1]
 
 
-def get_walb_dev_sizeMb(wdev):
-    sysName = '/sys/block/walb!%d/size' % wdev.iD
-    f = open(sysName, 'r')
-    size = int(f.read().strip()) * 512 / 1024 / 1024
-    f.close()
-    return size
-
 VOL = 'vol0'
 
 set_config(config)
@@ -430,20 +423,6 @@ def test_m3():
     md1 = get_sha1_of_restorable(a0, VOL, gid1)
     verify_equal_sha1('test_m3', md0, md1)
     print 'test_m3:succeeded'
-
-
-def write_over_wldev(wdev):
-    wldevSizeLb = get_lv_size_mb(wdev0.log) * 1024 * 1024 / 512
-    wdevSizeLb = get_walb_dev_sizeMb(wdev0) * 1024 * 1024 / 512
-    # write a little bigger size than wldevSizeLb
-    remainLb = wldevSizeLb + 4
-    writeMaxLb = wdevSizeLb / 3
-    while remainLb > 0:
-        writeLb = min(remainLb, writeMaxLb)
-        print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
-        write_random(wdev0.path, writeLb)
-        time.sleep(1)
-        remainLb -= writeLb
 
 
 def test_e1():

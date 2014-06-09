@@ -810,3 +810,46 @@ def resize(vol, sizeMb, doZeroClear):
         resize_archive(ax, vol, sizeMb, doZeroClear)
     for sx in cfg.storageL:
         resize_storage(sx, vol, sizeMb)
+
+
+def wait_for_log_empty(wdev, timeoutS=TIMEOUT_SEC):
+    def create_key_value(ls):
+        ret = []
+        for s in ls:
+            (k, v) = s.strip().split()
+            ret.append((k, int(v)))
+        return dict(ret)
+    sysName = '/sys/block/walb!%d/walb/lsids' % wdev.iD
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
+        with open(sysName, 'r') as f:
+            kv = create_key_value(f.readlines())
+            completed = kv['completed']
+            oldest = kv['oldest']
+            if completed == oldest:
+                return
+        print "wait_for_log_empty", oldest, completed
+        time.sleep(1)
+    raise Exception("wait_for_log_empty", wdev)
+
+
+def get_walb_dev_sizeMb(wdev):
+    sysName = '/sys/block/walb!%d/size' % wdev.iD
+    with open(sysName, 'r') as f:
+        size = int(f.read().strip()) * 512 / 1024 / 1024
+    return size
+
+
+def write_over_wldev(wdev):
+    wldevSizeLb = get_lv_size_mb(wdev.log) * 1024 * 1024 / 512
+    wdevSizeLb = get_walb_dev_sizeMb(wdev) * 1024 * 1024 / 512
+    print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
+    # write a little bigger size than wldevSizeLb
+    remainLb = wldevSizeLb + 4
+    writeMaxLb = 4 * 1024 * 1024 / 512
+    while remainLb > 0:
+        writeLb = min(remainLb, writeMaxLb)
+        print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
+        write_random(wdev.path, writeLb)
+        wait_for_log_empty(wdev)
+        remainLb -= writeLb
