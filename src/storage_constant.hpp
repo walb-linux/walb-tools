@@ -10,6 +10,7 @@ const char *const sSyncReady = "SyncReady";
 const char *const sStopped = "Stopped";
 const char *const sMaster = "Master";
 const char *const sSlave = "Slave";
+const StrVec sSteadyStates = { sClear, sSyncReady, sStopped, sMaster, sSlave };
 
 // temporary states.
 const char *const stInitVol = "InitVol";
@@ -51,5 +52,10 @@ const char *const sWlogSend = "WlogSend";
 const char *const sWlogRemove = "WlogRemove";
 
 const StrVec allActionVec = {sWlogSend, sWlogRemove};
+const StrVec sAcceptForStop = { sMaster, sSlave };
+const StrVec sAcceptForSnapshot = { sMaster, sStopped };
+// action = WlogSend + WlogRemove
+const StrVec sAcceptForWlogAction = {sMaster, stFullSync, stHashSync, sSlave};
+const StrVec sAcceptForResize = {sSyncReady, sStopped, sMaster, sSlave};
 
 } // namespace walb

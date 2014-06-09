@@ -499,11 +499,11 @@ inline void c2sStopServer(protocol::ServerParams &p)
         StateMachine &sm = volSt.sm;
 
         waitUntil(ul, [&]() {
-                return volSt.ac.isAllZero(allActionVec);
+                return isStateIn(volSt.sm.get(), sSteadyStates) && volSt.ac.isAllZero(allActionVec);
             }, FUNC);
 
         const std::string st = sm.get();
-        verifyStateIn(st, {sMaster, sSlave}, FUNC);
+        verifyStateIn(st, sAcceptForStop, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
@@ -662,7 +662,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         const std::string st = volSt.sm.get();
-        verifyStateIn(st, {sMaster, sStopped}, FUNC);
+        verifyStateIn(st, sAcceptForSnapshot, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
@@ -842,8 +842,8 @@ inline void StorageWorker::operator()()
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
-    verifyStateIn(st, {sMaster, stFullSync, stHashSync, sSlave}, FUNC);
-    verifyNoActionRunning(volSt.ac, StrVec{sWlogRemove, sWlogSend}, FUNC);
+    verifyStateIn(st, sAcceptForWlogAction, FUNC);
+    verifyNoActionRunning(volSt.ac, allActionVec, FUNC);
 
     if (st == sSlave) {
         ActionCounterTransaction tran(volSt.ac, sWlogRemove);
@@ -1021,7 +1021,7 @@ inline void c2sResizeServer(protocol::ServerParams &p)
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), {sSyncReady, sStopped, sMaster, sSlave}, FUNC);
+        verifyStateIn(volSt.sm.get(), sAcceptForResize, FUNC);
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         volInfo.growWdev(newSizeLb);

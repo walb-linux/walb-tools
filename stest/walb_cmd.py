@@ -177,7 +177,7 @@ def set_slave_storage(sx, vol):
     if state == 'SyncReady':
         start(sx, vol)
         return
-    if state == 'Master' or state == 'WlogSend':
+    if state == 'Master':
         stop(sx, vol)
     else:
         raise Exception('set_slave_storage:bad state', state)
@@ -319,7 +319,7 @@ def start(s, vol):
             wait_for_state(s, vol, ['Slave'])
         else:
             run_ctl(s, ['start', vol, 'master'])
-            wait_for_state(s, vol, ['Master', 'WlogSend'])
+            wait_for_state(s, vol, ['Master'])
     elif s.kind == K_PROXY:
         run_ctl(s, ['start', vol])
         wait_for_state(s, vol, ['Started'])
@@ -627,9 +627,6 @@ def del_restored(ax, vol, gid):
 
 
 def snapshot_async(sx, vol):
-    state = get_state(sx, vol)
-    if state != 'Master' and state != 'WlogSend':
-        raise Exception('snapshot_async', state)
     gid = run_ctl(sx, ['snapshot', vol])
     return int(gid)
 
