@@ -40,6 +40,7 @@ def setup_test():
                 for f in os.listdir(vgPath):
                     if f[0] == 'i':
                         run_command(['/sbin/lvremove', '-f', vgPath + f])
+    time.sleep(2)
     make_dir(WORK_DIR)
     kill_all_servers()
     for wdev in wdevL:

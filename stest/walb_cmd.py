@@ -588,6 +588,8 @@ def get_num_opened_lv(lvPath):
 
 
 def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
+    time.sleep(2)
+    """
     t0 = time.time()
     while time.time() < t0 + timeoutS:
         num = get_num_opened_lv(lvPath)
@@ -596,6 +598,7 @@ def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
             return
         time.sleep(0.3)
     raise Exception('wait_for_lv_ready:timeout', lvPath)
+    """
 
 
 def get_restored_path(ax, vol, gid):
