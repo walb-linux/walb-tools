@@ -847,13 +847,13 @@ inline void StorageWorker::operator()()
     verifyNoActionRunning(volSt.ac, allActionVec, FUNC);
 
     if (st == sSlave) {
-        ActionCounterTransaction tran(volSt.ac, sWlogRemove);
+        ActionCounterTransaction tran(volSt.ac, saWlogRemove);
         ul.unlock();
         storage_local::deleteWlogs(volId);
         return;
     }
 
-    ActionCounterTransaction tran(volSt.ac, sWlogSend);
+    ActionCounterTransaction tran(volSt.ac, saWlogSend);
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);

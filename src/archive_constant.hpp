@@ -56,21 +56,21 @@ const struct StateMachine::Pair statePairTbl[] = {
 /**
  * Actions. prefix : aa
  */
-const char *const aMerge = "Merge";
-const char *const aApply = "Apply";
-const char *const aRestore = "Restore";
-const char *const aReplSync = "ReplSyncAsClient";
-const char *const aResize = "Resize";
+const char *const aaMerge = "Merge";
+const char *const aaApply = "Apply";
+const char *const aaRestore = "Restore";
+const char *const aaReplSync = "ReplSyncAsClient";
+const char *const aaResize = "Resize";
 
-const StrVec allActionVec = {aMerge, aApply, aRestore, aReplSync, aResize};
+const StrVec allActionVec = {aaMerge, aaApply, aaRestore, aaReplSync, aaResize};
 
-const StrVec aDenyForRestore = {aRestore, aResize};
-const StrVec aDenyForReplSyncClient = {aRestore, aReplSync, aApply, aMerge, aResize};
-const StrVec aDenyForApply = {aRestore, aReplSync, aApply, aResize};
-const StrVec aDenyForMerge = {aRestore, aReplSync, aApply, aMerge, aResize};
-const StrVec aDenyForResize = {aRestore, aReplSync, aApply, aResize};
+const StrVec aDenyForRestore = {aaRestore, aaResize};
+const StrVec aDenyForReplSyncClient = {aaRestore, aaReplSync, aaApply, aaMerge, aaResize};
+const StrVec aDenyForApply = {aaRestore, aaReplSync, aaApply, aaResize};
+const StrVec aDenyForMerge = {aaRestore, aaReplSync, aaApply, aaMerge, aaResize};
+const StrVec aDenyForResize = {aaRestore, aaReplSync, aaApply, aaResize};
 
-const StrVec aActionOnLvm = {aRestore, aResize};
+const StrVec aActionOnLvm = {aaRestore, aaResize};
 
 const std::string VOLUME_PREFIX = "i_";
 const std::string RESTORE_PREFIX = "r_";

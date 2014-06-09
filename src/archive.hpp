@@ -1073,7 +1073,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     }
     pkt.writeFin(msgAccept);
 
-    ActionCounterTransaction tran(volSt.ac, aRestore);
+    ActionCounterTransaction tran(volSt.ac, aaRestore);
     ul.unlock();
     if (!archive_local::restore(volId, gid)) {
         logger.warn() << FUNC << "force stopped" << volId << gid;
@@ -1372,7 +1372,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         verifyNoActionRunning(volSt.ac, aDenyForReplSyncClient, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
 
-        ActionCounterTransaction tran(volSt.ac, aReplSync);
+        ActionCounterTransaction tran(volSt.ac, aaReplSync);
         ul.unlock();
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.writeFin(msgAccept);
@@ -1453,7 +1453,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
         pkt.writeFin(msgAccept);
         sendErr = false;
 
-        ActionCounterTransaction tran(volSt.ac, aApply);
+        ActionCounterTransaction tran(volSt.ac, aaApply);
         ul.unlock();
         if (!archive_local::applyDiffsToVolume(volId, gid)) {
             logger.warn() << FUNC << "stopped force" << volId << gid;
@@ -1502,7 +1502,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         pkt.writeFin(msgAccept);
         sendErr = false;
 
-        ActionCounterTransaction tran(volSt.ac, aMerge);
+        ActionCounterTransaction tran(volSt.ac, aaMerge);
         ul.unlock();
         if (!archive_local::mergeDiffs(volId, gidB, isSize, param3)) {
             logger.warn() << FUNC << "stopped force" << volId << gidB << type << param3;
@@ -1548,7 +1548,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         verifyNoActionRunning(volSt.ac, aDenyForResize, FUNC);
         verifyStateIn(volSt.sm.get(), aAcceptForResize, FUNC);
 
-        ActionCounterTransaction tran(volSt.ac, aResize);
+        ActionCounterTransaction tran(volSt.ac, aaResize);
         ul.unlock();
 
         if (doZeroClear) {

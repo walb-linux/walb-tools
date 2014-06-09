@@ -48,10 +48,10 @@ const struct StateMachine::Pair statePairTbl[] = {
 };
 
 // action
-const char *const sWlogSend = "WlogSend";
-const char *const sWlogRemove = "WlogRemove";
+const char *const saWlogSend = "WlogSend";
+const char *const saWlogRemove = "WlogRemove";
 
-const StrVec allActionVec = {sWlogSend, sWlogRemove};
+const StrVec allActionVec = {saWlogSend, saWlogRemove};
 const StrVec sAcceptForStop = { sMaster, sSlave };
 const StrVec sAcceptForSnapshot = { sMaster, sStopped };
 // action = WlogSend + WlogRemove
