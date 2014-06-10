@@ -61,6 +61,7 @@ const char *const shutdownCN = "shutdown";
 const char *const isOverflowCN = "is-overflow";
 const char *const kickCN = "kick";
 const char *const getNumActionCN = "get-num-action";
+const char *const isWdiffSendErrorCN = "is-wdiff-send-error";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 
 /**

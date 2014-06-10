@@ -337,6 +337,7 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { isOverflowCN, c2xGetIntClient },
     { kickCN, c2xKickClient },
     { getNumActionCN, c2xGetIntClient },
+    { isWdiffSendErrorCN, c2xGetIntClient },
     { dbgReloadMetadataCN, c2aReloadMetadataClient },
 };
 

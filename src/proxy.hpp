@@ -1090,6 +1090,41 @@ inline void c2pHostTypeServer(protocol::ServerParams &p)
 }
 
 /**
+ * params[0]: volId
+ * params[1]: archiveName
+ */
+inline void c2pIsWdiffSendErrorServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gp.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const std::string &archiveName = v[1];
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+        if (volSt.sm.get() == pClear) {
+            throw cybozu::Exception(FUNC) << "bad state";
+        }
+        if (volSt.archiveSet.find(archiveName) == volSt.archiveSet.end()) {
+            throw cybozu::Exception(FUNC) << "bad archive name" << archiveName;
+        }
+        const bool isWdiffSendError = volSt.actionState.get(archiveName);
+        ul.unlock();
+        pkt.write(msgOk);
+        sendErr = false;
+        pkt.write(isWdiffSendError ? 1 : 0);
+        packet::Ack(p.sock).sendFin();
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
+/**
  * params[0]: volId (optional)
  * params[1]: archiveName (optional)
  */
@@ -1153,6 +1188,7 @@ const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { wlogTransferPN, s2pWlogTransferServer },
     { resizeCN, c2pResizeServer },
     { kickCN, c2pKickServer },
+    { isWdiffSendErrorCN, c2pIsWdiffSendErrorServer },
     { hostTypeCN, c2pHostTypeServer },
 };
 
