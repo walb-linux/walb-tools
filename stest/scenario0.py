@@ -613,7 +613,39 @@ def test_r2():
         replace p0 by p2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r2:replace-proxy', g_count
-    pass
+    startup(p2)
+    copy_archive_info(p0, VOL, p2)
+    stop(p0, VOL, 'empty')
+    clear_vol(p0, VOL)
+    shutdown(p0)
+    config2 = config._replace(proxyL = [p2, p1])
+    set_config(config2)
+    for sx in config2.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_r2:0', md0, md1)
+
+    # turn back to the beginning state.
+    startup(p0)
+    copy_archive_info(p2, VOL, p0)
+    stop(p2, VOL, 'empty')
+    clear_vol(p2, VOL)
+    shutdown(p2)
+    set_config(config)
+    for sx in config.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_r2:1', md0, md1)
+
+    print 'test_r2:succeeded'
 
 
 def test_r3():

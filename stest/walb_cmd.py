@@ -475,7 +475,7 @@ def del_archive_from_proxy(px, vol, ax):
         start(px, vol)
 
 
-def add_archive_to_proxy(px, vol, ax):
+def add_archive_to_proxy(px, vol, ax, doStart=True):
     st = get_state(px, vol)
     if st in pAcceptForStop:
         stop(px, vol)
@@ -483,8 +483,15 @@ def add_archive_to_proxy(px, vol, ax):
     if ax.name not in aL:
         run_ctl(px, ['archive-info', 'add', vol, ax.name, get_host_port(ax)])
     st = get_state(px, vol)
-    if st == pStopped:
+    if st == pStopped and doStart:
         start(px, vol)
+
+
+def copy_archive_info(pSrc, vol, pDst):
+    for axName in get_archive_info_list(pSrc, vol):
+        ax = [x for x in cfg.archiveL if x.name == axName][0]
+        add_archive_to_proxy(pDst, vol, ax, doStart=False)
+    start(pDst, vol)
 
 
 def stop_sync(ax, vol):
