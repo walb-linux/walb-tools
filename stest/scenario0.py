@@ -416,13 +416,14 @@ def test_m3():
         raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
     gid1 = snapshot_async(s0, VOL)
     verify_not_restorable(a0, VOL, gid1, 10, 'test_m3')
+    if not is_wdiff_send_error(p0, VOL, a0):
+        raise Exception('test_m3:must occur wdiff-send-error')
     resize_archive(a0, VOL, newSizeMb, True)
-    for px in config.proxyL:
-        if get_state(px, VOL) == pStopped:
-            start(px, VOL)
     kick_all_storage()
     kick_all(config.proxyL)
     wait_for_restorable(a0, VOL, gid1)
+    if is_wdiff_send_error(p0, VOL, a0):
+        raise Exception('test_m3:must not occur wdiff-send-error')
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid1)
     verify_equal_sha1('test_m3', md0, md1)

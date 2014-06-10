@@ -296,6 +296,10 @@ def verify_not_overflow(sx, vol):
         raise Exception('verify_not_overflow', sx, vol)
 
 
+def is_wdiff_send_error(px, vol, ax):
+    return int(run_ctl(px, ['is-wdiff-send-error', vol, ax.name])) != 0
+
+
 ##################################################################
 # user command functions
 
