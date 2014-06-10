@@ -22,8 +22,71 @@ Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
 
 cfg = None
 
-aAcceptForResize = ['Archived', 'HashSync', 'WdiffRecv', 'ReplSyncAsServer', 'Stopped']
-pAcceptForStop = ['Started', 'WlogRecv']
+# storage steady states
+sClear = "Clear"
+sSyncReady = "SyncReady"
+sStopped = "Stopped"
+sMaster = "Master"
+sSlave = "Slave"
+
+# storage temporary states
+stInitVol = "InitVol"
+stClearVol = "ClearVol"
+stStartSlave = "StartSlave"
+stStopSlave = "StopSlave"
+stFullSync = "FullSync"
+stHashSync = "HashSync"
+stStartMaster = "StartMaster"
+stStopMaster = "StopMaster"
+stReset = "Reset"
+
+# storage actions
+saWlogSend = "WlogSend"
+saWlogRemove = "WlogRemove"
+
+# proxy steady states
+pClear = "Clear"
+pStopped = "Stopped"
+pStarted = "Started"
+
+# proxy temporary states
+ptStart = "Start"
+ptStop = "Stop"
+ptClearVol = "ClearVol"
+ptAddArchiveInfo = "AddArchiveInfo"
+ptDeleteArchiveInfo = "DeleteArchiveInfo"
+ptWlogRecv = "WlogRecv"
+ptWaitForEmpty = "WaitForEmpty"
+
+# archive steady states
+aClear = "Clear"
+aSyncReady = "SyncReady"
+aArchived = "Archived"
+aStopped = "Stopped"
+
+# archive temporary states
+atInitVol = "InitVol"
+atClearVol = "ClearVol"
+atResetVol = "ResetVol"
+atFullSync = "FullSync"
+atHashSync = "HashSync"
+atWdiffRecv = "WdiffRecv"
+atReplSync = "ReplSyncAsServer"
+atStop = "Stop"
+atStart = "Start"
+
+# archive actions
+aaMerge = "Merge"
+aaApply = "Apply"
+aaRestore = "Restore"
+aaReplSync = "ReplSyncAsClient"
+aaResize = "Resize"
+
+
+aAcceptForResize = [aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped]
+pAcceptForStop = [pStarted, ptWlogRecv]
+aDuringReplicate = [atReplSync, atFullSync]
+
 
 def set_config(config):
     if config.binDir[0] != '/' or config.binDir[-1] != '/':
@@ -62,7 +125,8 @@ def get_server_args(s):
     elif s.kind == K_PROXY:
         ret = [cfg.binDir + "proxy-server"]
 
-    else:  # s.kind == K_ARCHIVE
+    else:
+        assert s.kind == K_ARCHIVE
         ret = [cfg.binDir + "archive-server", "-vg", s.vg]
 
     ret += ["-p", s.port,
@@ -168,17 +232,23 @@ def reset_vol(s, vol):
         s is storage or archive.
     """
     run_ctl(s, ["reset-vol", vol])
-    wait_for_state(s, vol, ['SyncReady'])
+    if s.kind == K_STORAGE:
+        st = sSyncReady
+    elif s.kind == K_ARCHIVE:
+        st = aSyncReady
+    else:
+        raise Exception('reset_vol:bad server', s)
+    wait_for_state(s, vol, [st])
 
 
 def set_slave_storage(sx, vol):
     state = get_state(sx, vol)
-    if state == 'Slave':
+    if state == sSlave:
         return
-    if state == 'SyncReady':
+    if state == sSyncReady:
         start(sx, vol)
         return
-    if state == 'Master':
+    if state == sMaster:
         stop(sx, vol)
     else:
         raise Exception('set_slave_storage:bad state', state)
@@ -188,6 +258,9 @@ def set_slave_storage(sx, vol):
 
 
 def kick_all(sL):
+    """
+        sL: list of s. s must be storage or proxy.
+    """
     for s in sL:
         run_ctl(s, ["kick"])
 
@@ -273,7 +346,7 @@ def init(sx, vol, wdevPath):
     run_ctl(sx, ["init-vol", vol, wdevPath])
     start(sx, vol)
     a0 = cfg.archiveL[0]
-    if get_state(a0, vol) == 'Clear':
+    if get_state(a0, vol) == aClear:
         run_ctl(a0, ["init-vol", vol])
 
 
@@ -304,10 +377,16 @@ def stop(s, vol, mode="graceful"):
     """
     if mode not in ['graceful', 'empty', 'force']:
         raise Exception('stop:bad mode', mode)
-    if s.kind == K_STORAGE and get_state(s, vol) == 'Slave':
-        waitState = 'SyncReady'
+    if s.kind == K_STORAGE:
+        if get_state(s, vol) == sSlave:
+            waitState = sSyncReady
+        else:
+            waitState = sStopped
+    elif s.kind == K_PROXY:
+        waitState = pStopped
     else:
-        waitState = 'Stopped'
+        assert s.kind == K_ARCHIVE
+        waitState = aStopped
     run_ctl(s, ["stop", vol, mode])
     wait_for_state(s, vol, [waitState])
 
@@ -315,18 +394,20 @@ def stop(s, vol, mode="graceful"):
 def start(s, vol):
     if s.kind == K_STORAGE:
         st = get_state(s, vol)
-        if st == 'SyncReady':
+        if st == sSyncReady:
             run_ctl(s, ['start', vol, 'slave'])
-            wait_for_state(s, vol, ['Slave'])
+            wait_for_state(s, vol, [sSlave])
         else:
+            assert st == sStopped
             run_ctl(s, ['start', vol, 'master'])
-            wait_for_state(s, vol, ['Master'])
+            wait_for_state(s, vol, [sMaster])
     elif s.kind == K_PROXY:
         run_ctl(s, ['start', vol])
-        wait_for_state(s, vol, ['Started'])
-    else:  # s.kind == K_ARCHIVE
+        wait_for_state(s, vol, [pStarted])
+    else:
+        assert s.kind == K_ARCHIVE
         run_ctl(s, ['start', vol])
-        wait_for_state(s, vol, ['Archived'])
+        wait_for_state(s, vol, [aArchived])
 
 
 def del_archive_from_proxy(px, vol, ax):
@@ -337,7 +418,7 @@ def del_archive_from_proxy(px, vol, ax):
     if ax.name in aL:
         run_ctl(px, ['archive-info', 'delete', vol, ax.name])
     st = get_state(px, vol)
-    if st == 'Stopped':
+    if st == pStopped:
         start(px, vol)
 
 
@@ -349,7 +430,7 @@ def add_archive_to_proxy(px, vol, ax):
     if ax.name not in aL:
         run_ctl(px, ['archive-info', 'add', vol, ax.name, get_host_port(ax)])
     st = get_state(px, vol)
-    if st == 'Stopped':
+    if st == pStopped:
         start(px, vol)
 
 
@@ -435,7 +516,7 @@ def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    wait_for_no_action(ax, vol, 'Apply', timeoutS)
+    wait_for_no_action(ax, vol, aaApply, timeoutS)
     gidL = get_gid_list(ax, vol, 'list-restorable')
     if gidL and gid <= gidL[0]:
         return
@@ -443,7 +524,7 @@ def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
-    wait_for_no_action(ax, vol, 'Merge', timeoutS)
+    wait_for_no_action(ax, vol, aaMerge, timeoutS)
     gidL = list_restorable(ax, vol, 'all')
     pos = gidL.index(gidB)
     if gidL[pos + 1] == gidE:
@@ -452,7 +533,10 @@ def wait_for_merged(ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    wait_for_not_state(ax, vol, ['ReplSyncAsServer', 'FullSync'], timeoutS)
+    """
+        ax: replication server, not client.
+    """
+    wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
     gidL = list_restorable(ax, vol, 'all')
     if gidL and gid <= gidL[-1]:
         return
@@ -495,7 +579,7 @@ def synchronize(aSrc, vol, aDst):
             run_ctl(px, ["stop", vol, 'empty'])
 
     for px in cfg.proxyL:
-        wait_for_state(px, vol, ['Stopped'])
+        wait_for_state(px, vol, [pStopped])
         aL = get_archive_info_list(px, vol)
         if aDst.name not in aL:
             run_ctl(px, ["archive-info", "add", vol,
@@ -511,9 +595,9 @@ def synchronize(aSrc, vol, aDst):
 def prepare_backup(sx, vol):
     a0 = cfg.archiveL[0]
     st = get_state(sx, vol)
-    if st == 'Slave':
+    if st == sSlave:
         stop(sx, vol)
-    elif st == 'Master':
+    elif st == sMaster:
         stop(sx, vol)
         reset_vol(sx, vol)
 
@@ -521,7 +605,7 @@ def prepare_backup(sx, vol):
         if s == sx:
             continue
         st = get_state(s, vol)
-        if st not in ["Slave", "Clear"]:
+        if st not in [sSlave, sClear]:
             raise Exception("prepare_backup:bad state", s.name, vol, st)
 
     for ax in cfg.archiveL:
@@ -535,7 +619,7 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
     run_ctl(sx, ["full-bkp", vol])
-    wait_for_state(a0, vol, ["Archived"], timeoutS)
+    wait_for_state(a0, vol, [aArchived], timeoutS)
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
@@ -556,7 +640,7 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
         max_gid = -1
 
     run_ctl(sx, ["hash-bkp", vol])
-    wait_for_state(a0, vol, ["Archived"], timeoutS)
+    wait_for_state(a0, vol, [aArchived], timeoutS)
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
@@ -719,9 +803,10 @@ def merge_diff(ax, vol, gidB, gidE):
 def replicate(aSrc, vol, aDst, synchronizing):
     """
         copy (aSrc, vol) to aDst
+        aSrc and aDst must be archive server.
     """
     st = get_state(aDst, vol)
-    if st == 'Clear':
+    if st == aClear:
         run_ctl(aDst, ["init-vol", vol])
 
     replicate_sync(aSrc, vol, aDst)
@@ -785,7 +870,7 @@ def get_lv_size_mb(path):
 
 
 def wait_for_resize(ax, vol, sizeMb):
-    wait_for_no_action(ax, vol, 'Resize')
+    wait_for_no_action(ax, vol, aaResize)
     curSizeMb = get_lv_size_mb(get_lv_path(ax, vol))
     if curSizeMb != sizeMb:
         raise Exception('wait_for_resize:failed', ax, vol, sizeMb, curSizeMb)
@@ -793,7 +878,7 @@ def wait_for_resize(ax, vol, sizeMb):
 
 def resize_archive(ax, vol, sizeMb, doZeroClear):
     st = get_state(ax, vol)
-    if st == 'Clear':
+    if st == aClear:
         return
     elif st in aAcceptForResize:
         args = ['resize', vol, str(sizeMb) + 'm']
@@ -802,12 +887,12 @@ def resize_archive(ax, vol, sizeMb, doZeroClear):
         run_ctl(ax, args)
         wait_for_resize(ax, vol, sizeMb)
     else:
-        raise Exception('resize_archive:bad state', st)
+        raise Exception('resize_archive:bad state', ax, vol, sizeMb, st)
 
 
 def resize_storage(sx, vol, sizeMb):
     st = get_state(sx, vol)
-    if st == 'Clear':
+    if st == sClear:
         return
     else:
         run_ctl(sx, ['resize', vol, str(sizeMb) + 'm'])

@@ -432,7 +432,7 @@ def test_m3():
     verify_not_restorable(a0, VOL, gid1, 10, 'test_m3')
     resize_archive(a0, VOL, newSizeMb, True)
     for px in config.proxyL:
-        if get_state(px, VOL) == 'Stopped':
+        if get_state(px, VOL) == pStopped:
             start(px, VOL)
     kick_all_storage()
     kick_all(config.proxyL)
