@@ -587,12 +587,12 @@ def get_num_opened_lv(lvPath):
     return int(ret)
 
 
-def lvm_sleep():
-    time.sleep(2)
+def flush_bufs(path):
+    run_command(['/sbin/blockdev', '--flushbufs', path])
 
 
 def wait_for_lv_ready(lvPath, timeoutS=TIMEOUT_SEC):
-    lvm_sleep()
+    flush_bufs(lvPath)
     """
     t0 = time.time()
     while time.time() < t0 + timeoutS:
@@ -755,11 +755,11 @@ def resize_lv(path, beforeSizeMb, afterSizeMb, doZeroClear):
     if beforeSizeMb == afterSizeMb:
         return
     run_command(['/sbin/lvresize', '-f', '-L', str(afterSizeMb) + 'm', path])
-    wait_for_lv_ready(path)
     # zero-clear is required for test only.
     if beforeSizeMb < afterSizeMb and doZeroClear:
         zero_clear(path, beforeSizeMb * 1024 * 1024 / 512,
                    (afterSizeMb - beforeSizeMb) * 1024 * 1024 / 512)
+    wait_for_lv_ready(path)
 
 
 def remove_lv(path):
