@@ -854,7 +854,7 @@ def write_over_wldev(wdev, overflow=False):
     print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
     # write a little bigger size than wldevSizeLb
     remainLb = wldevSizeLb + 4
-    writeMaxLb = 4 * 1024 * 1024 / 512
+    writeMaxLb = min(wldevSizeLb, wdevSizeLb) / 2
     while remainLb > 0:
         writeLb = min(remainLb, writeMaxLb)
         print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
