@@ -106,19 +106,16 @@ def printL(aL, bL):
 
 def test_stop(stopL, startL):
     printL(stopL, startL)
-    t = startWriting(wdev0.path)
+    with RandomWriter(wdev0.path):
+        for s in stopL:
+            stop(s, VOL)
+            time.sleep(0.1)
 
-    for s in stopL:
-        stop(s, VOL)
-        time.sleep(0.1)
+        time.sleep(0.5)
 
-    time.sleep(0.5)
-
-    for s in startL:
-        start(s, VOL)
-        time.sleep(0.1)
-
-    stopWriting(t)
+        for s in startL:
+            start(s, VOL)
+            time.sleep(0.1)
 
     md0 = get_sha1(wdev0.path)
     gid = snapshot_sync(s0, VOL, [a0])
@@ -160,11 +157,10 @@ def test_n5():
         apply -> sha1
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n5:apply", g_count
-    t = startWriting(wdev0.path)
-    time.sleep(0.5)
-    gid = snapshot_sync(s0, VOL, [a0])
-    time.sleep(0.5)
-    stopWriting(t)
+    with RandomWriter(wdev0.path):
+        time.sleep(0.5)
+        gid = snapshot_sync(s0, VOL, [a0])
+        time.sleep(0.5)
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     apply_diff(a0, VOL, gid)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
@@ -176,26 +172,24 @@ def test_n6():
         merge -> sha1
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n6:merge", g_count
-    t = startWriting(wdev0.path)
-    time.sleep(0.5)
-    gidB = snapshot_sync(s0, VOL, [a0])
-    time.sleep(1)
-    # create more than two diff files
-    stop(s0, VOL)
-    stop(p0, VOL, 'empty')
-    start(s0, VOL)
-    start(p0, VOL)
-    time.sleep(1)
-    gidE = snapshot_sync(s0, VOL, [a0])
-    gidL = list_restorable(a0, VOL, 'all')
-    posB = gidL.index(gidB)
-    posE = gidL.index(gidE)
-    print "gidB", gidB, "gidE", gidE, "gidL", gidL
-    if posE - posB < 2:
-        stopWriting(t)
-        raise Exception('test_n6:bad range', gidB, gidE, gidL)
-    time.sleep(0.5)
-    stopWriting(t)
+    with RandomWriter(wdev0.path):
+        time.sleep(0.5)
+        gidB = snapshot_sync(s0, VOL, [a0])
+        time.sleep(1)
+        # create more than two diff files
+        stop(s0, VOL)
+        stop(p0, VOL, 'empty')
+        start(s0, VOL)
+        start(p0, VOL)
+        time.sleep(1)
+        gidE = snapshot_sync(s0, VOL, [a0])
+        gidL = list_restorable(a0, VOL, 'all')
+        posB = gidL.index(gidB)
+        posE = gidL.index(gidE)
+        print "gidB", gidB, "gidE", gidE, "gidL", gidL
+        if posE - posB < 2:
+            raise Exception('test_n6:bad range', gidB, gidE, gidL)
+        time.sleep(0.5)
     # merge gidB and gidE
 
     md0 = get_sha1_of_restorable(a0, VOL, gidE)
@@ -269,8 +263,7 @@ def test_n10():
         replicate (sychronizing) -> sha1
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n10:replicate-synchronizing", g_count
-    t = startWriting(wdev0.path)
-    try:
+    with RandomWriter(wdev0.path):
         time.sleep(0.5)
         replicate(a0, VOL, a1, True)
         time.sleep(0.5)
@@ -283,10 +276,6 @@ def test_n10():
         verify_equal_sha1('test_n10', md0, md1)
         stop_sync(a1, VOL)
         time.sleep(0.5)
-    except Exception:
-        stopWriting(t)
-        raise
-    stopWriting(t)
     gid1 = snapshot_sync(s0, VOL, [a0])
     gid1a1 = get_latest_clean_snapshot(a1, VOL)
     if gid1 <= gid1a1:
@@ -303,17 +292,16 @@ def test_n11(doZeroClear):
 
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n11:resize", doZeroClear, g_count
-    t = startWriting(wdev0.path)
-    prevSize = get_walb_dev_sizeMb(wdev0)
-    snapshot_sync(s0, VOL, [a0])
-    # lvm extent size is 4MiB
-    resize_lv(wdev0.data, prevSize, prevSize + 4, doZeroClear)
-    resize_lv(wdev1.data, prevSize, prevSize + 4, doZeroClear)
-    resize(VOL, prevSize + 4, doZeroClear)
-    curSize = get_walb_dev_sizeMb(wdev0)
-    if curSize != prevSize + 4:
-        raise Exception('test_n11:bad size', prevSize, curSize)
-    stopWriting(t)
+    with RandomWriter(wdev0.path):
+        prevSize = get_walb_dev_sizeMb(wdev0)
+        snapshot_sync(s0, VOL, [a0])
+        # lvm extent size is 4MiB
+        resize_lv(wdev0.data, prevSize, prevSize + 4, doZeroClear)
+        resize_lv(wdev1.data, prevSize, prevSize + 4, doZeroClear)
+        resize(VOL, prevSize + 4, doZeroClear)
+        curSize = get_walb_dev_sizeMb(wdev0)
+        if curSize != prevSize + 4:
+            raise Exception('test_n11:bad size', prevSize, curSize)
     write_random(wdev0.path, 1, prevSize * 1024 * 1024 / 512)
     if doZeroClear:
         gid = snapshot_sync(s0, VOL, [a0])
@@ -343,13 +331,11 @@ def test_n12():
 
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n12:exchange-master-slave", g_count
-    t0 = startWriting(wdev0.path)
-    t1 = startWriting(wdev1.path)
-    time.sleep(0.3)
-    set_slave_storage(s0, VOL)
-    time.sleep(0.3)
-    stopWriting(t0)
-    stopWriting(t1)
+    with RandomWriter(wdev0.path):
+        with RandomWriter(wdev1.path):
+            time.sleep(0.3)
+            set_slave_storage(s0, VOL)
+            time.sleep(0.3)
     gid = hash_backup(s1, VOL)
     md0 = get_sha1(wdev1.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)

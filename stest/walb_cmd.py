@@ -767,27 +767,36 @@ def get_latest_clean_snapshot(ax, vol):
         raise Exception('get_latest_clean_snapshot:not found')
 
 
-quitWriting = False
-
-
-def writing(path):
-    while not quitWriting:
-        write_random(path, 1)
-        time.sleep(0.05)
-
-
-def startWriting(path):
-    global quitWriting
-    quitWriting = False
-    t = threading.Thread(target=writing, args=(path,))
-    t.start()
-    return t
-
-
-def stopWriting(t):
-    global quitWriting
-    quitWriting = True
-    t.join()
+class RandomWriter():
+    def __init__(self, path):
+        self.path = path
+        self.quit = True
+        self.th = None
+    def start(self):
+        print 'RandomWriter:start'  # QQQ
+        if not self.quit:
+            return
+        self.quit = False
+        self.th = threading.Thread(target=self.writing)
+        self.th.start()
+    def join(self):
+        print 'RandomWriter:join'  # QQQ
+        if self.quit:
+            return
+        self.quit = True
+        self.th.join()
+    def writing(self):
+        while not self.quit:
+            print 'writing'  # QQQ
+            write_random(self.path, 1)
+            time.sleep(0.05)
+    def __enter__(self):
+        print 'RandomWriter:enter'  # QQQ
+        self.start()
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        print 'RandomWriter:exit'  # QQQ
+        self.join()
 
 
 def apply_diff(ax, vol, gid):
