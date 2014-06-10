@@ -822,33 +822,19 @@ def get_latest_clean_snapshot(ax, vol):
 class RandomWriter():
     def __init__(self, path):
         self.path = path
-        self.quit = True
-        self.th = None
-    def start(self):
-        print 'RandomWriter:start'  # QQQ
-        if not self.quit:
-            return
-        self.quit = False
-        self.th = threading.Thread(target=self.writing)
-        self.th.start()
-    def join(self):
-        print 'RandomWriter:join'  # QQQ
-        if self.quit:
-            return
-        self.quit = True
-        self.th.join()
     def writing(self):
         while not self.quit:
-            print 'writing'  # QQQ
             write_random(self.path, 1)
             time.sleep(0.05)
     def __enter__(self):
-        print 'RandomWriter:enter'  # QQQ
-        self.start()
+        self.quit = False
+        self.th = threading.Thread(target=self.writing)
+        self.th.setDaemon(True)
+        self.th.start()
         return self
     def __exit__(self, exc_type, exc_value, traceback):
-        print 'RandomWriter:exit'  # QQQ
-        self.join()
+        self.quit = True
+        self.th.join()
 
 
 def apply_diff(ax, vol, gid):
