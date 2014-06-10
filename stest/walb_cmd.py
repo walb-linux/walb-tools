@@ -922,7 +922,7 @@ def wait_for_log_empty(wdev, timeoutS=TIMEOUT_SEC):
             if completed == oldest:
                 return
         print "wait_for_log_empty", oldest, completed
-        time.sleep(1)
+        time.sleep(0.3)
     raise Exception("wait_for_log_empty", wdev)
 
 
