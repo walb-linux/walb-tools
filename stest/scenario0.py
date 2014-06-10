@@ -623,6 +623,7 @@ def main():
     print "count", count
     print 'test', testL
     for i in xrange(count):
+        global g_count
         g_count = i
         print "===============================", i, datetime.datetime.today()
         test(testL)
