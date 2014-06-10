@@ -819,7 +819,7 @@ def wait_for_no_action(s, vol, action, timeoutS=TIMEOUT_SEC):
     while time.time() < t0 + timeoutS:
         num = int(run_ctl(s, ['get-num-action', vol, action]))
         if num == 0:
-            return;
+            return
         time.sleep(0.3)
     raise Exception("wait_for_no_action", s, vol, action)
 
