@@ -446,7 +446,7 @@ inline Relation getRelation(const MetaSnap &snap, const MetaDiff &diff)
         }
         return Relation::APPLICABLE_DIFF;
     }
-    if (snap.gidB == diff.snapB.gidB && snap.gidE == diff.snapB.gidE) {
+    if (snap == diff.snapB || (diff.snapB.isClean() && diff.snapB.gidB <= snap.gidB && snap.gidB < diff.snapE.gidB)) {
         return Relation::APPLICABLE_DIFF;
     }
     return Relation::NOT_APPLICABLE_DIFF;
