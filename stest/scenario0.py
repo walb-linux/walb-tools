@@ -28,11 +28,8 @@ wdevL = [wdev0, wdev1, wdev2]
 
 
 VOL = 'vol0'
-
-set_config(config)
-
-
 g_count = 0
+set_config(config)
 
 
 def setup_test():
@@ -597,7 +594,7 @@ def test_r1():
     verify_equal_sha1('test_r1:0', md0, md1)
     clear_vol(s0, VOL)
 
-    # turn back to the begenning state.
+    # turn back to the beginning state.
     init(s0, VOL, wdev0.path)
     set_slave_storage(s2, VOL)
     write_random(wdev0.path, 1)
@@ -606,6 +603,8 @@ def test_r1():
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r1:1', md0, md1)
 
+    clear_vol(s2, VOL)
+    shutdown(s2)
     print 'test_r1:succeeded'
 
 
