@@ -148,7 +148,7 @@ CYBOZU_TEST_AUTO(oldOrNew)
 /**
  * Generate a diff randomly that can be applied to a specified snap.
  */
-walb::MetaDiff randDiff(const walb::MetaSnap &snap)
+walb::MetaDiff randDiff(const walb::MetaSnap &snap, bool allMergeable = false)
 {
     snap.verify();
     cybozu::util::Random<uint32_t> rand;
@@ -183,16 +183,16 @@ walb::MetaDiff randDiff(const walb::MetaSnap &snap)
     ret.snapE.set(b1, e1);
     ret.verify();
     assert(canApply(snap, ret));
-    ret.isMergeable = (rand() % 2 == 0);
+    if (!allMergeable) ret.isMergeable = (rand() % 2 == 0);
     return ret;
 }
 
-std::vector<walb::MetaDiff> randDiffList(const walb::MetaSnap &snap, size_t n)
+std::vector<walb::MetaDiff> randDiffList(const walb::MetaSnap &snap, size_t n, bool allMergeable = false)
 {
     std::vector<walb::MetaDiff> v;
     walb::MetaSnap s = snap;
     for (size_t i = 0; i < n; i++) {
-        walb::MetaDiff d = randDiff(s);
+        walb::MetaDiff d = randDiff(s, allMergeable);
         v.push_back(d);
         s = walb::apply(s, d);
     }
@@ -224,6 +224,57 @@ CYBOZU_TEST_AUTO(contains)
 {
     for (size_t i = 0; i < 10; i++) {
         testContains();
+    }
+}
+
+void testApplyMerged(const walb::MetaSnap &snap, const walb::MetaDiffVec &diffV)
+{
+#if 0
+    std::cout << diffV.size() << " " << diffV << std::endl;
+#endif
+    const walb::MetaSnap snapE = apply(snap, diffV);
+    for (size_t s0 = 0; s0 < diffV.size(); s0++) {
+        walb::MetaDiffVec v0 = diffV;
+        v0.resize(s0 + 1);
+        if (!walb::canMerge(v0)) break;
+        const walb::MetaDiff mDiff = walb::merge(v0);
+        CYBOZU_TEST_ASSERT(walb::canApply(snap, mDiff));
+        const walb::MetaSnap snap1a = walb::apply(snap, mDiff);
+        const walb::MetaSnap snap1b = walb::apply(snap, v0);
+        CYBOZU_TEST_EQUAL(snap1a, snap1b);
+
+        const walb::MetaDiffVec v1(diffV.begin() + s0 + 1, diffV.end());
+        // v0 + v1 = diffV
+
+        CYBOZU_TEST_ASSERT(walb::canApply(snap1a, v1));
+        CYBOZU_TEST_EQUAL(walb::apply(snap1a, v1), snapE);
+    }
+}
+
+CYBOZU_TEST_AUTO(applyMerged)
+{
+    {
+        const walb::MetaSnap snap(0, 1);
+        const walb::MetaDiffVec diffV = {
+            walb::MetaDiff({0}, {1}, true, 0),
+            walb::MetaDiff({1, 1}, {2, 3}, true, 0),
+            walb::MetaDiff({2}, {3}, true, 0),
+            walb::MetaDiff({3}, {4}, true, 0),
+        };
+        testApplyMerged(snap, diffV);
+    }
+    const size_t n = 100;
+    for (size_t i = 0; i < n; i++) {
+        const walb::MetaSnap snap(0);
+        testApplyMerged(snap, randDiffList(snap, 10, true));
+    }
+    for (size_t i = 0; i < n; i++) {
+        const walb::MetaSnap snap(0, 5);
+        testApplyMerged(snap, randDiffList(snap, 10, true));
+    }
+    for (size_t i = 0; i < n; i++) {
+        const walb::MetaSnap snap(0, 100);
+        testApplyMerged(snap, randDiffList(snap, 10, true));
     }
 }
 

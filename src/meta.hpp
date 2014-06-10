@@ -280,6 +280,19 @@ struct MetaDiff
 
 using MetaDiffVec = std::vector<MetaDiff>;
 
+inline std::ostream &operator<<(std::ostream &os, const MetaDiffVec &diffV)
+{
+    MetaDiffVec::const_iterator i = diffV.begin();
+    if (i == diffV.end()) return os;
+    os << i->str();
+    ++i;
+    while (i != diffV.end()) {
+        os << ", " << i->str();
+        ++i;
+    }
+    return os;
+}
+
 /**
  * Base lv state record.
  */
