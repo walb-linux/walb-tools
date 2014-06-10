@@ -33,6 +33,7 @@ set_config(config)
 
 g_count = 0
 
+
 def setup_test():
     run_command(['/bin/rm', '-rf', WORK_DIR])
     for ax in config.archiveL:
@@ -45,11 +46,7 @@ def setup_test():
     make_dir(WORK_DIR)
     kill_all_servers()
     for wdev in wdevL:
-        if os.path.exists(wdev.path):
-            delete_walb_dev(wdev.path)
-        resize_lv(wdev.data, get_lv_size_mb(wdev.data), wdev.sizeMb, False)
-        create_walb_dev(wdev.log, wdev.data, wdev.iD)
-    startup_all()
+        reset_wdev(wdev)
 
 
 def test_n1():
@@ -584,12 +581,6 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
-def test(testL):
-    setup_test()
-    for test in testL:
-        (globals()['test_' + test])()
-
-
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8']
@@ -609,17 +600,18 @@ def main():
 
     print "count", count
     print 'test', testL
+    setup_test()
+    startup_all()
     for i in xrange(count):
         global g_count
         g_count = i
         print "===============================", i, datetime.datetime.today()
-        test(testL)
+        for test in testL:
+            (globals()['test_' + test])()
+        if i != count - 1:
+            cleanup(VOL, wdevL)
+    # shutdown_all()
 
 
 if __name__ == "__main__":
     main()
-    # try:
-    #     main()
-    # except:
-    #     for p in g_processList:
-    #         p.kill()

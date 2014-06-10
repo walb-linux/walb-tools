@@ -85,6 +85,7 @@ aaResize = "Resize"
 
 aAcceptForResize = [aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped]
 pAcceptForStop = [pStarted, ptWlogRecv]
+aAcceptForClearVol = [aStopped, aSyncReady]
 aDuringReplicate = [atReplSync, atFullSync]
 
 
@@ -300,6 +301,20 @@ def is_wdiff_send_error(px, vol, ax):
     return int(run_ctl(px, ['is-wdiff-send-error', vol, ax.name])) != 0
 
 
+def reset_wdev(wdev):
+    if os.path.exists(wdev.path):
+        delete_walb_dev(wdev.path)
+    resize_lv(wdev.data, get_lv_size_mb(wdev.data), wdev.sizeMb, False)
+    create_walb_dev(wdev.log, wdev.data, wdev.iD)
+
+
+def cleanup(vol, wdevL):
+    for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
+        clear_vol(s, vol)
+    for wdev in wdevL:
+        reset_wdev(wdev)
+
+
 ##################################################################
 # user command functions
 
@@ -352,6 +367,39 @@ def init(sx, vol, wdevPath):
     a0 = cfg.archiveL[0]
     if get_state(a0, vol) == aClear:
         run_ctl(a0, ["init-vol", vol])
+
+
+def clear_vol(s, vol):
+    st = get_state(s, vol)
+    if s.kind == K_STORAGE:
+        if st == sClear:
+            return
+        if st in [sMaster, sSlave]:
+            stop(s, vol)
+            st = get_state(s, vol)
+        if st == sStopped:
+            reset_vol(s, vol)
+            st = get_state(s, vol)
+        if st != sSyncReady:
+            raise Exception('clear_vol', s, vol, st)
+    elif s.kind == K_PROXY:
+        if st == pClear:
+            return
+        if st in pAcceptForStop:
+            stop(s, vol)
+            st = get_state(s, vol)
+        if st != pStopped:
+            raise Exception('clear_vol', s, vol, st)
+    else:
+        assert s.kind == K_ARCHIVE
+        if st == aClear:
+            return
+        if st == aArchived:
+            stop(s, vol)
+            st = get_state(s, vol)
+        if st not in aAcceptForClearVol:
+            raise Exception('clear_vol', s, vol, st)
+    run_ctl(s, ['clear-vol', vol])
 
 
 def get_archive_info_list(px, vol):
