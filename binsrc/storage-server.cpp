@@ -33,24 +33,7 @@ class StorageRequestWorker : public server::RequestWorker
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        const std::map<std::string, protocol::ServerHandler> h = {
-            { getStateCN, c2sGetStateServer },
-            { statusCN, c2sStatusServer },
-            { listVolCN, c2sListVolServer },
-            { initVolCN, c2sInitVolServer },
-            { clearVolCN, c2sClearVolServer },
-            { resetVolCN, c2sResetVolServer },
-            { startCN, c2sStartServer },
-            { stopCN, c2sStopServer },
-            { fullBkpCN, c2sFullBkpServer },
-            { hashBkpCN, c2sHashBkpServer },
-            { resizeCN, c2sResizeServer },
-            { snapshotCN, c2sSnapshotServer },
-            { isOverflowCN, c2sIsOverflowServer },
-            { kickCN, c2sKickServer },
-            { hostTypeCN, c2sHostTypeServer },
-        };
-        protocol::serverDispatch(sock_, nodeId_, procStat_, h);
+        protocol::serverDispatch(sock_, nodeId_, procStat_, storageHandlerMap);
     }
 };
 

@@ -44,36 +44,7 @@ void runClient(Option &opt)
     std::string serverId = protocol::run1stNegotiateAsClient(
         sock, opt.ctrlId, opt.cmd);
     ProtocolLogger logger(opt.ctrlId, serverId);
-
-    const std::map<std::string, protocol::ClientHandler> h = {
-        { getStateCN, c2xGetStrVecClient },
-        { statusCN, c2xGetStrVecClient },
-        { listDiffCN, c2xGetStrVecClient },
-        { listVolCN, c2xListVolClient },
-        { initVolCN, c2xInitVolClient },
-        { clearVolCN, c2xClearVolClient },
-        { resetVolCN, c2xResetVolClient },
-        { fullBkpCN, c2sFullBkpClient },
-        { hashBkpCN, c2sHashBkpClient },
-        { restoreCN, c2aRestoreClient },
-        { delRestoredCN, c2aDelRestoredClient },
-        { listRestoredCN, c2xGetStrVecClient },
-        { listRestorableCN, c2xGetStrVecClient },
-        { startCN, c2xStartClient },
-        { stopCN, c2xStopClient },
-        { archiveInfoCN, c2pArchiveInfoClient },
-        { snapshotCN, c2sSnapshotClient },
-        { replicateCN, c2aReplicateClient },
-        { applyCN, c2aApplyClient },
-        { mergeCN, c2aMergeClient },
-        { resizeCN, c2xResizeClient },
-        { hostTypeCN, c2xHostTypeClient },
-        { isOverflowCN, c2xGetIntClient },
-        { kickCN, c2xKickClient },
-        { getNumActionCN, c2xGetIntClient },
-        { dbgReloadMetadataCN, c2aReloadMetadataClient },
-    };
-    protocol::clientDispatch(opt.cmd, sock, logger, opt.params, h);
+    protocol::clientDispatch(opt.cmd, sock, logger, opt.params, controllerHandlerMap);
 }
 
 int main(int argc, char *argv[])

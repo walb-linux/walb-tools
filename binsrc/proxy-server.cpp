@@ -30,20 +30,7 @@ class ProxyRequestWorker : public server::RequestWorker
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        const std::map<std::string, protocol::ServerHandler> h = {
-            { getStateCN, c2pGetStateServer },
-            { statusCN, c2pStatusServer },
-            { listVolCN, c2pListVolServer },
-            { startCN, c2pStartServer },
-            { stopCN, c2pStopServer },
-            { archiveInfoCN, c2pArchiveInfoServer },
-            { clearVolCN, c2pClearVolServer },
-            { wlogTransferPN, s2pWlogTransferServer },
-            { resizeCN, c2pResizeServer },
-            { kickCN, c2pKickServer },
-            { hostTypeCN, c2pHostTypeServer },
-        };
-        protocol::serverDispatch(sock_, nodeId_, procStat_, h);
+        protocol::serverDispatch(sock_, nodeId_, procStat_, proxyHandlerMap);
     }
 };
 

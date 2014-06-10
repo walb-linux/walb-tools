@@ -311,4 +311,33 @@ inline void c2xGetIntClient(protocol::ClientParams &p)
     std::cout << value << std::endl;
 }
 
+const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
+    { getStateCN, c2xGetStrVecClient },
+    { statusCN, c2xGetStrVecClient },
+    { listDiffCN, c2xGetStrVecClient },
+    { listVolCN, c2xListVolClient },
+    { initVolCN, c2xInitVolClient },
+    { clearVolCN, c2xClearVolClient },
+    { resetVolCN, c2xResetVolClient },
+    { fullBkpCN, c2sFullBkpClient },
+    { hashBkpCN, c2sHashBkpClient },
+    { restoreCN, c2aRestoreClient },
+    { delRestoredCN, c2aDelRestoredClient },
+    { listRestoredCN, c2xGetStrVecClient },
+    { listRestorableCN, c2xGetStrVecClient },
+    { startCN, c2xStartClient },
+    { stopCN, c2xStopClient },
+    { archiveInfoCN, c2pArchiveInfoClient },
+    { snapshotCN, c2sSnapshotClient },
+    { replicateCN, c2aReplicateClient },
+    { applyCN, c2aApplyClient },
+    { mergeCN, c2aMergeClient },
+    { resizeCN, c2xResizeClient },
+    { hostTypeCN, c2xHostTypeClient },
+    { isOverflowCN, c2xGetIntClient },
+    { kickCN, c2xKickClient },
+    { getNumActionCN, c2xGetIntClient },
+    { dbgReloadMetadataCN, c2aReloadMetadataClient },
+};
+
 } // namespace walb
