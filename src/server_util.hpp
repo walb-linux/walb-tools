@@ -278,7 +278,7 @@ inline void verifyStateIn(const std::string &state, const StrVec &v, const char 
  * C must be Container<std::string> type.
  */
 template <typename C>
-void verifyNoActionRunning(const ActionCounters& ac, const C& actions, const char *msg)
+void verifyActionNotRunning(const ActionCounters& ac, const C& actions, const char *msg)
 {
     std::vector<int> v = ac.getValues(actions);
     assert(v.size() == actions.size());

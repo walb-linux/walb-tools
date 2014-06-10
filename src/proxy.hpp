@@ -413,7 +413,7 @@ inline void startProxyVol(const std::string &volId)
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &st = volSt.sm.get();
     if (st != pStopped) {
         throw cybozu::Exception("bad state") << st;
@@ -472,7 +472,7 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
         throw cybozu::Exception(FUNC) << "BUG : not here, already under stopping wdiff sender" << volId;
     }
 
-    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
 
     // Clear all related tasks from the task queue.
     g.taskQueue.remove([&](const ProxyTask &task) {
@@ -605,7 +605,7 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
     const std::string &curr = volSt.sm.get(); // pStopped or pClear
 
     StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
@@ -621,7 +621,7 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
     const char *const FUNC = __func__;
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+    verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
 
     StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
     ul.unlock();
@@ -721,7 +721,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
 
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, volSt.archiveSet, FUNC);
+        verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
 
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
         volSt.archiveSet.clear();

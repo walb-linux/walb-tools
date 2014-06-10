@@ -76,11 +76,6 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
     return getArchiveGlobal().stMap.get(volId);
 }
 
-inline void verifyNoArchiveActionRunning(const ActionCounters& ac, const char *msg)
-{
-    verifyNoActionRunning(ac, allActionVec, msg);
-}
-
 namespace archive_local {
 
 template <typename F>
@@ -403,7 +398,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         verifyStateIn(sm.get(), {stFrom}, FUNC);
         if (!isFull) {
             snapFrom = volSt.diffMgr.getLatestSnapshot(volInfo.getMetaState());
@@ -894,7 +889,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
         ul.unlock();
@@ -921,7 +916,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
 
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         StateMachine &sm = volSt.sm;
         const std::string &currSt = sm.get(); // aStopped or aSyncReady
 
@@ -953,7 +948,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
     try {
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         StateMachineTransaction tran(volSt.sm, aStopped, atStart, FUNC);
         ul.unlock();
@@ -1065,7 +1060,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
-        verifyNoActionRunning(volSt.ac, aDenyForRestore, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForRestore, FUNC);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -1101,7 +1096,7 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
-        verifyNoActionRunning(volSt.ac, aActionOnLvm, FUNC);
+        verifyActionNotRunning(volSt.ac, aActionOnLvm, FUNC);
         ul.unlock();
 
         archive_local::delRestored(volId, gid);
@@ -1203,7 +1198,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
@@ -1369,7 +1364,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, aDenyForReplSyncClient, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForReplSyncClient, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aaReplSync);
@@ -1405,7 +1400,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         const std::string stFrom = volSt.sm.get();
         verifyStateIn(stFrom, aAcceptForReplicateServer, FUNC);
         const bool isFull = stFrom == aSyncReady;
@@ -1446,7 +1441,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, aDenyForApply, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForApply, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         archive_local::verifyApplicable(volId, gid);
 
@@ -1495,7 +1490,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, aDenyForMerge, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForMerge, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         archive_local::verifyMergeable(volId, gidB);
 
@@ -1545,7 +1540,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyNoActionRunning(volSt.ac, aDenyForResize, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForResize, FUNC);
         verifyStateIn(volSt.sm.get(), aAcceptForResize, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aaResize);
@@ -1589,7 +1584,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        verifyNoArchiveActionRunning(volSt.ac, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         const std::string &currSt = volSt.sm.get(); // aStopped or aSyncReady
 
         StateMachineTransaction tran(volSt.sm, currSt, atResetVol, FUNC);

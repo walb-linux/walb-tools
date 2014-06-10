@@ -844,7 +844,7 @@ inline void StorageWorker::operator()()
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
-    verifyNoActionRunning(volSt.ac, allActionVec, FUNC);
+    verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
     if (st == sSlave) {
         ActionCounterTransaction tran(volSt.ac, saWlogRemove);
