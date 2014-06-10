@@ -13,7 +13,7 @@ p1 = Server('p1', '10101', K_PROXY, None)
 p2 = Server('p2', '10102', K_PROXY, None)
 a0 = Server('a0', '10200', K_ARCHIVE, 'vg0')
 a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
-#a2 = Server('a2', '10202', None)
+a2 = Server('a2', '10202', K_ARCHIVE, 'vg2')
 
 WORK_DIR = os.getcwd() + '/stest/tmp/'
 isDebug = True
@@ -653,7 +653,39 @@ def test_r3():
         replace a0 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
-    pass
+    startup(a2)
+    replicate(a0, VOL, a2, True)
+    stop_sync(a0, VOL)
+    clear_vol(a0, VOL)
+    shutdown(a0)
+    config2 = config._replace(archiveL = [a2, a1])
+    set_config(config2)
+    for sx in config2.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    gid = snapshot_sync(s0, VOL, [a2])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a2, VOL, gid)
+    verify_equal_sha1('test_r3:0', md0, md1)
+
+    # turn back to the beginning state.
+    startup(a0)
+    replicate(a2, VOL, a0, True)
+    stop_sync(a2, VOL)
+    clear_vol(a2, VOL)
+    shutdown(a2)
+    set_config(config)
+    for sx in config.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    gid = snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_r3:1', md0, md1)
+
+    print 'test_r3:succeeded'
 
 
 def test_r4():
