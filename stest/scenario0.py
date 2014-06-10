@@ -23,7 +23,8 @@ config = Config(isDebug, os.getcwd() + '/binsrc/',
 
 wdev0 = Wdev(0, '/dev/walb/0', '/dev/test/data', '/dev/test/log', 12)
 wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
-wdevL = [wdev0, wdev1]
+wdev2 = Wdev(2, '/dev/walb/2', '/dev/test/data3', '/dev/test/log3', 12)
+wdevL = [wdev0, wdev1, wdev2]
 
 
 VOL = 'vol0'
@@ -581,9 +582,61 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
+def test_r1():
+    """
+        replace s0 by s2
+    """
+    print '++++++++++++++++++++++++++++++++++++++ test_r1:replace-storage', g_count
+    startup(s2)
+    init(s2, VOL, wdev2.path)
+    set_slave_storage(s0, VOL)
+    write_random(wdev2.path, 1)
+    gid = hash_backup(s2, VOL)
+    md0 = get_sha1(wdev2.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_r1:0', md0, md1)
+    clear_vol(s0, VOL)
+
+    # turn back to the begenning state.
+    init(s0, VOL, wdev0.path)
+    set_slave_storage(s2, VOL)
+    write_random(wdev0.path, 1)
+    gid = hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_r1:1', md0, md1)
+
+    print 'test_r1:succeeded'
+
+
+def test_r2():
+    """
+        replace p0 by p2
+    """
+    print '++++++++++++++++++++++++++++++++++++++ test_r2:replace-proxy', g_count
+    pass
+
+
+def test_r3():
+    """
+        replace a0 by a2
+    """
+    print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
+    pass
+
+
+def test_r4():
+    """
+        replace a1 by a2
+    """
+    print '++++++++++++++++++++++++++++++++++++++ test_r4:replace-secondary-archive', g_count
+    pass
+
+
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
-        'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8']
+        'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
+        'r1', 'r2', 'r3', 'r4']
 
 
 def main():
