@@ -125,7 +125,7 @@ def test_stop(stopL, startL):
     restore_and_verify_sha1('test_stop', md0, a0, VOL, gid)
 
 
-def test_n4(numPatterns=0):
+def test_n4_detail(numPatterns=0):
     """
         stop -> start -> snapshot -> sha1
         if numPatterns == 0 then all possible patterns will be tested.
@@ -145,6 +145,14 @@ def test_n4(numPatterns=0):
         test_stop(stopL, startL)
 #        printL(stopL, startL)
     print 'test_n4:succeeded'
+
+
+def test_n4a():
+    test_n4_detail()
+
+
+def test_n4b():
+    test_n4_detail(5)
 
 
 def test_n5():
@@ -595,7 +603,7 @@ def test(testL):
         (globals()['test_' + test])()
 
 
-allL = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
+allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8']
 
