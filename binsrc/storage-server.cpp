@@ -66,6 +66,7 @@ struct Option : cybozu::Option
     }
     std::string logFilePath() const {
         if (logFileStr == "-") return logFileStr;
+        if (cybozu::FilePath(logFileStr).isFull()) return logFileStr;
         return (cybozu::FilePath(gs.baseDirStr) + logFileStr).str();
     }
 };
