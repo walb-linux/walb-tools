@@ -620,21 +620,36 @@ def test_r1():
     print 'test_r1:succeeded'
 
 
+def replace_proxy(pDel, pAdd, volL, newConfig):
+    """
+        replace pDel by pAdd.
+        Before calling this,
+            pDel must be running.
+            pAdd must be down.
+
+    """
+    startup(pAdd)
+    for vol in volL:
+        copy_archive_info(pDel, vol, pAdd)
+        run_ctl(pDel, ['stop', vol, 'empty'])
+    for vol in volL:
+        wait_for_stopped(pDel, vol)
+        clear_vol(pDel, vol)
+    shutdown(pDel)
+
+    set_config(newConfig)
+    for sx in newConfig.storageL:
+        shutdown(sx)
+        startup(sx)
+
+
 def test_r2():
     """
         replace p0 by p2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r2:replace-proxy', g_count
-    startup(p2)
-    copy_archive_info(p0, VOL, p2)
-    stop(p0, VOL, 'empty')
-    clear_vol(p0, VOL)
-    shutdown(p0)
-    config2 = config._replace(proxyL = [p2, p1])
-    set_config(config2)
-    for sx in config2.storageL:
-        shutdown(sx)
-        startup(sx)
+    config2 = config._replace(proxyL=[p2, p1])
+    replace_proxy(p0, p2, [VOL], config2)
     write_random(wdev0.path, 1)
     gid = snapshot_sync(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
@@ -642,21 +657,12 @@ def test_r2():
     verify_equal_sha1('test_r2:0', md0, md1)
 
     # turn back to the beginning state.
-    startup(p0)
-    copy_archive_info(p2, VOL, p0)
-    stop(p2, VOL, 'empty')
-    clear_vol(p2, VOL)
-    shutdown(p2)
-    set_config(config)
-    for sx in config.storageL:
-        shutdown(sx)
-        startup(sx)
+    replace_proxy(p2, p0, [VOL], config)
     write_random(wdev0.path, 1)
     gid = snapshot_sync(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r2:1', md0, md1)
-
     print 'test_r2:succeeded'
 
 
