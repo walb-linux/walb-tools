@@ -250,12 +250,11 @@ def reset_vol(s, vol):
     """
     run_ctl(s, ["reset-vol", vol])
     if s.kind == K_STORAGE:
-        st = sSyncReady
+        wait_for_state(s, vol, [sSyncReady])
     elif s.kind == K_ARCHIVE:
-        st = aSyncReady
+        wait_for_state(s, vol, [aSyncReady])
     else:
         raise Exception('reset_vol:bad server', s)
-    wait_for_state(s, vol, [st])
 
 
 def set_slave_storage(sx, vol):
