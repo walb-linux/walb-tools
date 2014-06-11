@@ -179,12 +179,13 @@ def run_daemon(args):
     sys.exit(0)
 
 
-def wait_for_server_port(server):
+def wait_for_server_port(s, timeoutS=10):
     address = "localhost"
-    port = int(server.port)
+    port = int(s.port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(1.0)
-    for i in range(1, 10):
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
         try:
             sock.connect((address, port))
             sock.close()
@@ -192,7 +193,9 @@ def wait_for_server_port(server):
         except socket.error, e:
             if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED]:
                 raise
-        time.sleep(0.1)
+        time.sleep(0.3)
+    raise Exception('wait_for_server_port:timeout', s)
+
 
 #def hostType(server):
 #    return run_ctl(server, ["host-type"])
