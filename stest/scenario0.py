@@ -666,8 +666,10 @@ def test_r3():
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
     startup(a2)
-    replicate(a0, VOL, a2, True)
-    stop_sync(a0, VOL)
+    isSync = is_synchronizing(a0, VOL)
+    replicate(a0, VOL, a2, isSync)
+    if isSync:
+        stop_sync(a0, VOL)
     clear_vol(a0, VOL)
     shutdown(a0)
     config2 = config._replace(archiveL = [a2, a1])
@@ -705,7 +707,65 @@ def test_r4():
         replace a1 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r4:replace-secondary-archive', g_count
-    pass
+
+    # preparation
+    isSync = is_synchronizing(a1, VOL)
+    print 'test_r4: isSync', isSync
+    if not isSync:
+        replicate(a0, VOL, a1, False)
+
+    startup(a2)
+    replicate(a1, VOL, a2, isSync)
+    if isSync:
+        stop_sync(a1, VOL)
+    else:
+        gid = get_latest_clean_snapshot(a1, VOL)
+        md0 = get_sha1_of_restorable(a1, VOL, gid)
+    clear_vol(a1, VOL)
+    shutdown(a1)
+    config2 = config._replace(archiveL = [a0, a2])
+    set_config(config2)
+    for sx in config2.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    if isSync:
+        gid = snapshot_sync(s0, VOL, [a2])
+        md0 = get_sha1(wdev0.path)
+        md1 = get_sha1_of_restorable(a2, VOL, gid)
+        verify_equal_sha1('test_r4:0a', md0, md1)
+    else:
+        gid = get_latest_clean_snapshot(a2, VOL)
+        md1 = get_sha1_of_restorable(a2, VOL, gid)
+        verify_equal_sha1('test_r4:0b', md0, md1)
+
+    # turn back to the beginning state.
+    startup(a1)
+    isSync = is_synchronizing(a2, VOL)
+    replicate(a2, VOL, a1, isSync)
+    if isSync:
+        stop_sync(a2, VOL)
+    else:
+        gid = get_latest_clean_snapshot(a2, VOL)
+        md0 = get_sha1_of_restorable(a2, VOL, gid)
+    clear_vol(a2, VOL)
+    shutdown(a2)
+    set_config(config)
+    for sx in config.storageL:
+        shutdown(sx)
+        startup(sx)
+    write_random(wdev0.path, 1)
+    if isSync:
+        gid = snapshot_sync(s0, VOL, [a1])
+        md0 = get_sha1(wdev0.path)
+        md1 = get_sha1_of_restorable(a1, VOL, gid)
+        verify_equal_sha1('test_r4:1a', md0, md1)
+    else:
+        gid = get_latest_clean_snapshot(a1, VOL)
+        md1 = get_sha1_of_restorable(a1, VOL, gid)
+        verify_equal_sha1('test_r4:1b', md0, md1)
+
+    print 'test_r4:succeeded'
 
 
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
