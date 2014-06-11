@@ -133,9 +133,11 @@ int main(int argc, char *argv[]) try
 
 } catch (std::exception &e) {
     LOGe("StorageServer: error: %s\n", e.what());
+    ::fprintf(::stderr, "StorageServer: error: %s\n", e.what());
     return 1;
 } catch (...) {
     LOGe("StorageServer: caught other error.");
+    ::fprintf(::stderr, "StorageServer: caught other error.");
     return 1;
 }
 

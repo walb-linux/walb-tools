@@ -86,9 +86,11 @@ int main(int argc, char *argv[]) try
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());
+    ::fprintf(::stderr, "ArchiveServer: error: %s", e.what());
     return 1;
 } catch (...) {
     LOGe("ArchiveServer: caught other error.");
+    ::fprintf(::stderr, "ArchiveServer: caught other error.");
     return 1;
 }
 

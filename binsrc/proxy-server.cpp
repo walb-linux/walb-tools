@@ -121,9 +121,11 @@ int main(int argc, char *argv[]) try
     finalizeProxy();
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());
+    ::fprintf(::stderr, "ProxyServer: error: %s", e.what());
     return 1;
 } catch (...) {
     LOGe("ProxyServer: caught other error.");
+    ::fprintf(::stderr, "ProxyServer: caught other error.");
     return 1;
 }
 
