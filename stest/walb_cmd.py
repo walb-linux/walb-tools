@@ -84,11 +84,15 @@ aaResize = "Resize"
 
 sDuringFullSync = [stFullSync, sStopped, stStartMaster]
 sDuringHashSync = [stHashSync, sStopped, stStartMaster]
+sDuringStopForMaster = [sMaster, stStopMaster]
+sDuringStopForSlave = [sSlave, stStopSlave]
 pAcceptForStop = [pStarted, ptWlogRecv]
+pDuringStop = [pStarted, ptWlogRecv, ptStop, ptWaitForEmpty]
 aActive = [aArchived, atWdiffRecv, atHashSync, atReplSync]
 aAcceptForResize = aActive + [aStopped]
 aAcceptForClearVol = [aStopped, aSyncReady]
 aDuringReplicate = [atReplSync, atFullSync]
+aDuringStop = aActive + [atStop]
 
 
 def set_config(config):
@@ -435,25 +439,36 @@ def is_synchronizing(ax, vol):
     raise Exception('is_synchronizing: some are synchronizing, some are not.')
 
 
+def wait_for_stopped(s, vol, prevSt=None):
+    if s.kind == K_STORAGE:
+        if not prevSt:
+            raise Exception('wait_for_stopped: prevSt not specified', s, vol)
+        if prevSt == sSlave:
+            tmpStL = sDuringStopForSlave
+            goalSt = sSyncReady
+        else:
+            tmpStL = sDuringStopForMaster
+            goalSt = sStopped
+    elif s.kind == K_PROXY:
+        tmpStL = pDuringStop
+        goalSt = pStopped
+    else:
+        assert s.kind == K_ARCHIVE
+        tmpStL = aDuringStop
+        goalSt = aStopped
+    wait_for_state_change(s, vol, tmpStL, [goalSt], TIMEOUT_SEC)
+
+
 def stop(s, vol, mode="graceful"):
     """
-    stop s vol and wait until state is waitState
+    stop vol of s and wait for it stopped.
 
     """
     if mode not in ['graceful', 'empty', 'force']:
         raise Exception('stop:bad mode', mode)
-    if s.kind == K_STORAGE:
-        if get_state(s, vol) == sSlave:
-            waitState = sSyncReady
-        else:
-            waitState = sStopped
-    elif s.kind == K_PROXY:
-        waitState = pStopped
-    else:
-        assert s.kind == K_ARCHIVE
-        waitState = aStopped
+    prevSt = get_state(s, vol)
     run_ctl(s, ["stop", vol, mode])
-    wait_for_state(s, vol, [waitState])
+    wait_for_stopped(s, vol, prevSt)
 
 
 def start(s, vol):
@@ -664,7 +679,7 @@ def synchronize(aSrc, vol, aDst):
             run_ctl(px, ["stop", vol, 'empty'])
 
     for px in cfg.proxyL:
-        wait_for_state(px, vol, [pStopped])
+        wait_for_stopped(px, vol)
         aL = get_archive_info_list(px, vol)
         if aDst.name not in aL:
             run_ctl(px, ["archive-info", "add", vol,
