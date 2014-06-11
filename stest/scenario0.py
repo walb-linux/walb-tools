@@ -663,7 +663,7 @@ def test_r2():
 def replace_archive(aDel, aAdd, volL, newConfig):
     isSyncL = []
     for vol in volL:
-        isSyncL.append(is_synchronizing(aDel, VOL))
+        isSyncL.append(is_synchronizing(aDel, vol))
     startup(aAdd)
     for vol, isSync in zip(volL, isSyncL):
         replicate(aDel, vol, aAdd, isSync)
