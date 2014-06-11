@@ -475,18 +475,18 @@ def start(s, vol):
         st = get_state(s, vol)
         if st == sSyncReady:
             run_ctl(s, ['start', vol, 'slave'])
-            wait_for_state(s, vol, [sSlave])
+            wait_for_state_change(s, vol, [stStartSlave], [sSlave])
         else:
             assert st == sStopped
             run_ctl(s, ['start', vol, 'master'])
-            wait_for_state(s, vol, [sMaster])
+            wait_for_state_change(s, vol, [stStartMaster], [sMaster])
     elif s.kind == K_PROXY:
         run_ctl(s, ['start', vol])
-        wait_for_state(s, vol, [pStarted])
+        wait_for_state_change(s, vol, [ptStart], [pStarted])
     else:
         assert s.kind == K_ARCHIVE
         run_ctl(s, ['start', vol])
-        wait_for_state(s, vol, [aArchived])
+        wait_for_state_change(s, vol, [atStart], aActive)
 
 
 def del_archive_from_proxy(px, vol, ax):
