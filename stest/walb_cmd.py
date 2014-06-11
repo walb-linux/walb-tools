@@ -82,9 +82,11 @@ aaRestore = "Restore"
 aaReplSync = "ReplSyncAsClient"
 aaResize = "Resize"
 
-
-aAcceptForResize = [aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped]
+sDuringFullSync = [stFullSync, sStopped, stStartMaster]
+sDuringHashSync = [stHashSync, sStopped, stStartMaster]
 pAcceptForStop = [pStarted, ptWlogRecv]
+aActive = [aArchived, atWdiffRecv, atHashSync, atReplSync]
+aAcceptForResize = aActive + [aStopped]
 aAcceptForClearVol = [aStopped, aSyncReady]
 aDuringReplicate = [atReplSync, atFullSync]
 
@@ -229,6 +231,13 @@ def wait_for_not_state(server, vol, stateL, timeoutS=10):
     def cond(st):
         return st not in stateL
     wait_for_state_cond(server, vol, cond, 'not stateL:' + str(stateL), timeoutS)
+
+
+def wait_for_state_change(s, vol, tmpStateL, goalStateL, timeoutS=10):
+    wait_for_not_state(s, vol, tmpStateL, timeoutS)
+    st = get_state(s, vol)
+    if st not in goalStateL:
+        raise Exception('wait_for_state_change:bad goal', s, vol, tmpStateL, goalStateL, st)
 
 
 def reset_vol(s, vol):
@@ -682,7 +691,10 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
     run_ctl(sx, ["full-bkp", vol])
-    wait_for_state(a0, vol, [aArchived], timeoutS)
+    wait_for_state_change(sx, vol, sDuringFullSync, [sMaster], timeoutS)
+    st = get_state(a0, vol)
+    if st not in aActive:
+        raise Exception('full_backup: sync failed', sx, a0, vol, st)
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
@@ -701,9 +713,11 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
         max_gid = prev_gids[-1]
     else:
         max_gid = -1
-
     run_ctl(sx, ["hash-bkp", vol])
-    wait_for_state(a0, vol, [aArchived], timeoutS)
+    wait_for_state_change(sx, vol, sDuringHashSync, [sMaster], timeoutS)
+    st = get_state(a0, vol)
+    if st not in aActive:
+        raise Exception('hash_backup: sync failed', sx, a0, vol, st)
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
