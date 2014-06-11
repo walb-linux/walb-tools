@@ -678,39 +678,39 @@ def replace_archive(aDel, aAdd, volL, newConfig):
         startup(sx)
 
 
-def test_replace_archive(ax, newArchiveL):
+def test_replace_archive_sync(ax, ay, config):
     """
-        replace ax(a0 or a1) by a2
+         replace ax by ay.
+         ax must be synchronizing.
+         ay must not be started.
+
     """
-    # replace and valicate
-    isSync = is_synchronizing(ax, VOL)
-    if not isSync:
-        md0 = get_sha1_of_restorable(ax, VOL, get_latest_clean_snapshot(ax, VOL))
-    config2 = config._replace(archiveL=newArchiveL)
-    replace_archive(ax, a2, [VOL], config2)
+    if not is_synchronizing(ax, VOL):
+        raise Exception('test_replace_archive_sync: not synchronizing', ax, ay)
+    replace_archive(ax, ay, [VOL], config)
     write_random(wdev0.path, 1)
-    if isSync:
-        gid = snapshot_sync(s0, VOL, [a2])
-        md0 = get_sha1(wdev0.path)
-    else:
-        gid = get_latest_clean_snapshot(a2, VOL)
-    md1 = get_sha1_of_restorable(a2, VOL, gid)
-    verify_equal_sha1('test_replace_archive:0' + str(isSync), md0, md1)
+    gid = snapshot_sync(s0, VOL, [ay])
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(ay, VOL, gid)
+    print 'test_replace_archive_sync', ax, ay
+    verify_equal_sha1('test_replace_archive_sync:', md0, md1)
 
-    # turn back to the beginning state.
-    if not isSync:
-        md0 = get_sha1_of_restorable(a2, VOL, get_latest_clean_snapshot(a2, VOL))
-    replace_archive(a2, ax, [VOL], config)
+
+def test_replace_archive_nosync(ax, ay, config):
+    """
+         replace ax by ay.
+         ax must not be synchronizing.
+         ay must not be started.
+
+    """
+    if is_synchronizing(ax, VOL):
+        raise Exception('test_replace_archive_nosync: synchronizing', ax, ay)
+    md0 = get_sha1_of_restorable(ax, VOL, get_latest_clean_snapshot(ax, VOL))
+    replace_archive(ax, ay, [VOL], config)
     write_random(wdev0.path, 1)
-    if isSync:
-        gid = snapshot_sync(s0, VOL, [ax])
-        md0 = get_sha1(wdev0.path)
-    else:
-        gid = get_latest_clean_snapshot(ax, VOL)
-    md1 = get_sha1_of_restorable(ax, VOL, gid)
-    verify_equal_sha1('test_replace_archive:1' + str(isSync), md0, md1)
-
-    print 'test_replace_archive:succeeded'
+    gid = get_latest_clean_snapshot(ay, VOL)
+    md1 = get_sha1_of_restorable(ay, VOL, gid)
+    verify_equal_sha1('test_replace_archive_nosync', md0, md1)
 
 
 def test_r3():
@@ -718,7 +718,9 @@ def test_r3():
         replace a0 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
-    test_replace_archive(a0, [a2, a1])
+    config2 = config._replace(archiveL=[a2, a1])
+    test_replace_archive_sync(a0, a2, config2)
+    test_replace_archive_sync(a2, a0, config)
     print 'test_r3:succeeded'
 
 
@@ -727,13 +729,14 @@ def test_r4():
         replace a1 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r4:replace-secondary-archive', g_count
-    # preparation
     isSync = is_synchronizing(a1, VOL)
-    print 'test_replace_archive: isSync', isSync
-    if not isSync:
-        replicate(a0, VOL, a1, False)
+    if isSync:
+        raise Exception('test_r4:a1 synchronizing', a1)
 
-    test_replace_archive(a1, [a0, a2])
+    replicate(a0, VOL, a1, False)  # preparation
+    config2 = config._replace(archiveL=[a0, a2])
+    test_replace_archive_nosync(a1, a2, config2)
+    test_replace_archive_nosync(a2, a1, config)
     print 'test_r4:succeeded'
 
 
