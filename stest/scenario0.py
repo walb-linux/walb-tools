@@ -686,7 +686,7 @@ def test_replace_archive(ax, newArchiveL):
     isSync = is_synchronizing(ax, VOL)
     if not isSync:
         md0 = get_sha1_of_restorable(ax, VOL, get_latest_clean_snapshot(ax, VOL))
-    config2 = config._replace(archiveL = newArchiveL)
+    config2 = config._replace(archiveL=newArchiveL)
     replace_archive(ax, a2, [VOL], config2)
     write_random(wdev0.path, 1)
     if isSync:
