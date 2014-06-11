@@ -134,7 +134,7 @@ def get_server_args(s):
 
     ret += ["-p", s.port,
             "-b", cfg.dataDir + s.name,
-            "-l", s.name + ".log",
+            "-l", cfg.dataDir + s.name + ".log",
             "-id", s.name] + get_debug_opt()
     return ret
 
@@ -499,9 +499,22 @@ def add_archive_to_proxy(px, vol, ax, doStart=True):
         start(px, vol)
 
 
+def get_server(name, L):
+    """
+        get only one element from L having name
+    """
+    ret = []
+    for x in L:
+        if x.name == name:
+            ret.append(x)
+    if len(ret) != 1:
+        raise Exception('get_server:not one', ret, name, L)
+    return ret[0]
+
+
 def copy_archive_info(pSrc, vol, pDst):
     for axName in get_archive_info_list(pSrc, vol):
-        ax = [x for x in cfg.archiveL if x.name == axName][0]
+        ax = get_server(axName, cfg.archiveL)
         add_archive_to_proxy(pDst, vol, ax, doStart=False)
     start(pDst, vol)
 
