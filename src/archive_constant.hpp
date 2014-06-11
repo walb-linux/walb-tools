@@ -49,7 +49,9 @@ const struct StateMachine::Pair statePairTbl[] = {
     { atClearVol, aClear },
     { aStopped, atStart },
     { atStart, aArchived },
+
     { aStopped, atResetVol },
+    { aSyncReady, atResetVol },
     { atResetVol, aSyncReady },
 };
 
