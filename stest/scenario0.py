@@ -47,6 +47,16 @@ def setup_test():
         reset_wdev(wdev)
 
 
+def resize_storage_if_necessary(sx, vol, wdev, sizeMb):
+    """
+        assume init() has been called before this.
+    """
+    if get_walb_dev_sizeMb(wdev) >= sizeMb:
+        return
+    resize_lv(wdev.data, get_lv_size_mb(wdev.data), sizeMb, False)
+    resize_storage(sx, vol, sizeMb)
+
+
 def test_n1():
     """
         full-backup -> sha1 -> restore -> sha1
@@ -586,6 +596,8 @@ def test_r1():
     print '++++++++++++++++++++++++++++++++++++++ test_r1:replace-storage', g_count
     startup(s2)
     init(s2, VOL, wdev2.path)
+    resize_storage_if_necessary(s2, VOL, wdev2, get_walb_dev_sizeMb(wdev0))
+
     set_slave_storage(s0, VOL)
     write_random(wdev2.path, 1)
     gid = hash_backup(s2, VOL)
