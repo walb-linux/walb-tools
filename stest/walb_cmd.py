@@ -86,7 +86,7 @@ sDuringFullSync = [stFullSync, sStopped, stStartMaster]
 sDuringHashSync = [stHashSync, sStopped, stStartMaster]
 sDuringStopForMaster = [sMaster, stStopMaster]
 sDuringStopForSlave = [sSlave, stStopSlave]
-pAcceptForStop = [pStarted, ptWlogRecv]
+pActive = [pStarted, ptWlogRecv]
 pDuringStop = [pStarted, ptWlogRecv, ptStop, ptWaitForEmpty]
 aActive = [aArchived, atWdiffRecv, atHashSync, atReplSync]
 aAcceptForResize = aActive + [aStopped]
@@ -401,7 +401,7 @@ def clear_vol(s, vol):
     elif s.kind == K_PROXY:
         if st == pClear:
             return
-        if st in pAcceptForStop:
+        if st in pActive:
             stop(s, vol)
             st = get_state(s, vol)
         if st != pStopped:
@@ -482,7 +482,7 @@ def start(s, vol):
             wait_for_state_change(s, vol, [stStartMaster], [sMaster])
     elif s.kind == K_PROXY:
         run_ctl(s, ['start', vol])
-        wait_for_state_change(s, vol, [ptStart], [pStarted])
+        wait_for_state_change(s, vol, [ptStart], pActive)
     else:
         assert s.kind == K_ARCHIVE
         run_ctl(s, ['start', vol])
@@ -491,7 +491,7 @@ def start(s, vol):
 
 def del_archive_from_proxy(px, vol, ax):
     st = get_state(px, vol)
-    if st in pAcceptForStop:
+    if st in pActive:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name in aL:
@@ -503,7 +503,7 @@ def del_archive_from_proxy(px, vol, ax):
 
 def add_archive_to_proxy(px, vol, ax, doStart=True):
     st = get_state(px, vol)
-    if st in pAcceptForStop:
+    if st in pActive:
         stop(px, vol)
     aL = get_archive_info_list(px, vol)
     if ax.name not in aL:
@@ -674,7 +674,7 @@ def synchronize(aSrc, vol, aDst):
     """
     for px in cfg.proxyL:
         st = get_state(px, vol)
-        if st in pAcceptForStop:
+        if st in pActive:
             run_ctl(px, ["stop", vol, 'empty'])
 
     for px in cfg.proxyL:
