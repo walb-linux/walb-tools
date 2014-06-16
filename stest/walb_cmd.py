@@ -202,10 +202,10 @@ def run_daemon(args):
 def wait_for_server_port(s, timeoutS=10):
     address = "localhost"
     port = int(s.port)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(1.0)
     t0 = time.time()
     while time.time() < t0 + timeoutS:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1.0)
         try:
             sock.connect((address, port))
             sock.close()
