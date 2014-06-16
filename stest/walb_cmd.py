@@ -213,6 +213,7 @@ def wait_for_server_port(s, timeoutS=10):
         except socket.error, e:
             if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED, errno.ECONNRESET]:
                 raise
+            print 'wait_for_server_port:ignored', s, e.errno, os.strerror(e.errno)
         time.sleep(0.3)
     raise Exception('wait_for_server_port:timeout', s)
 
