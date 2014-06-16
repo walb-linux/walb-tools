@@ -211,7 +211,7 @@ def wait_for_server_port(s, timeoutS=10):
             sock.close()
             return
         except socket.error, e:
-            if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED]:
+            if e.errno not in [errno.ECONNREFUSED, errno.ECONNABORTED, errno.ECONNRESET]:
                 raise
         time.sleep(0.3)
     raise Exception('wait_for_server_port:timeout', s)
