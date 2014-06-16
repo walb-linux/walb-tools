@@ -169,20 +169,34 @@ def run_daemon(args):
     try:
         pid = os.fork()
         if pid > 0:
+            # parent waits for child's suicide
+            os.waitpid(pid, 0)
             return
     except OSError, e:
         print >>sys.stderr, "fork#1 failed (%d) (%s)" % (e.errno, e.strerror)
+        raise
 
+    # child
     os.chdir("/")
     os.setsid()
     os.umask(0)
 
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # child exits immediately
+            os._exit(0)
+    except OSError, e:
+        print >>sys.stderr, "fork#2 failed (%d) (%s)" % (e.errno, e.strerror)
+        os._exit(1)
+
+    # grandchild
     sys.stdin = open('/dev/null', 'r')
     sys.stdout = open('/dev/null', 'w')
     sys.stderr = open('/dev/null', 'w')
 
     subprocess.Popen(args).wait()
-    sys.exit(0)
+    os._exit(0)
 
 
 def wait_for_server_port(s, timeoutS=10):
