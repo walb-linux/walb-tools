@@ -464,8 +464,10 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
                 for (const std::string &archiveName : volSt.archiveSet) {
                     g.taskQueue.push(ProxyTask(volId, archiveName));
                 }
+                return false;
+            } else {
+                return volSt.ac.isAllZero(volSt.archiveSet);
             }
-            return !hasDiffs;
         }, FUNC);
 
     if (!stopper.changeFromWaitingForEmpty(Stopping)) {
