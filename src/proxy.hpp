@@ -474,8 +474,6 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
         throw cybozu::Exception(FUNC) << "BUG : not here, already under stopping wdiff sender" << volId;
     }
 
-    verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
-
     // Clear all related tasks from the task queue.
     g.taskQueue.remove([&](const ProxyTask &task) {
             return task.volId == volId;
