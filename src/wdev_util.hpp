@@ -247,12 +247,13 @@ inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
     local::setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
 }
 
-inline uint64_t getSizeLb(const std::string& wdevPath)
+inline uint64_t getSizeLb(const std::string& bdevPath)
 {
-    cybozu::util::File file(wdevPath, O_RDONLY);
+    cybozu::util::File file(bdevPath, O_RDONLY);
     uint64_t size;
     if (::ioctl(file.fd(), BLKGETSIZE64, &size) < 0) {
-        throw cybozu::Exception("getSizeLb:bad ioctl") << cybozu::ErrorNo();
+        throw cybozu::Exception(__func__)
+            << "ioctl failed" << bdevPath << cybozu::ErrorNo();
     }
     return size / LOGICAL_BLOCK_SIZE;
 }
