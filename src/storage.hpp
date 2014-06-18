@@ -65,12 +65,13 @@ private:
         Info() : proxy(), isAvailable(false), checkedTime() {
         }
         std::string str() const {
-            const int64_t timeDiffSec
-                = std::chrono::duration_cast<Seconds>(checkedTime - Clock::now()).count();
+            const int64_t timeToNextCheck
+                = PROXY_HEARTBEAT_INTERVAL_SEC
+                - std::chrono::duration_cast<Seconds>(Clock::now() - checkedTime).count();
             std::stringstream ss;
-            ss << "addr " << proxy.toStr() << " port " << proxy.getPort()
+            ss << "host " << proxy.toStr() << ":" << proxy.getPort()
                << " isAvailable " << (isAvailable ? "1" : "0")
-               << " timeDiffSec " << timeDiffSec;
+               << " timeToNextCheck " << timeToNextCheck;
             return ss.str();
         }
         friend inline std::ostream& operator<<(std::ostream& os, const Info &info) {
@@ -272,7 +273,7 @@ inline StrVec getAllStateStrVec()
     auto fmt = cybozu::util::formatString;
 
     v.push_back("-----Archive-----");
-    v.push_back(gs.archive.toStr());
+    v.push_back(fmt("host %s:%u", gs.archive.toStr().c_str(), gs.archive.getPort()));
 
     v.push_back("-----Proxy-----");
     for (std::string &s : gs.proxyManager.getAsStrVec()) {
@@ -283,9 +284,7 @@ inline StrVec getAllStateStrVec()
     for (const auto &pair : gs.taskQueue.getAll()) {
         const std::string &volId = pair.first;
         const int64_t &timeDiffMs = pair.second;
-        std::stringstream ss;
-        ss << "volume " << volId << " timeDiffMs " << timeDiffMs;
-        v.push_back(ss.str());
+        v.push_back(fmt("volume %s timeDiffMs %" PRIi64 "", volId.c_str(), timeDiffMs));
     }
 
     v.push_back("-----Volume-----");
@@ -302,13 +301,16 @@ inline StrVec getAllStateStrVec()
         const uint64_t logCapacityPb = device::getLogCapacityPb(wdevPath);
         uint64_t oldestGid, latestGid;
         std::tie(oldestGid, latestGid) = volInfo.getGidRange();
+        const uint64_t oldestLsid = device::getOldestLsid(wdevPath);
+        const uint64_t permanentLsid = device::getPermanentLsid(wdevPath);
 
-        std::string volStStr = fmt(
-            "%s %s %" PRIu64 "/%" PRIu64 " %" PRIu64 " %" PRIu64 ""
+        const std::string volStStr = fmt(
+            "volume %s state %s logUsagePb %" PRIu64 " logCapacityPb %" PRIu64 ""
+            " oldestGid %" PRIu64 " latestGid %" PRIu64 ""
+            " oldestLsid %" PRIu64 " permanentLsid %" PRIu64 ""
             , volId.c_str(), state.c_str()
             , logUsagePb, logCapacityPb
-            , oldestGid, latestGid);
-
+            , oldestGid, latestGid, oldestLsid, permanentLsid);
         v.push_back(volStStr);
     }
     return v;
@@ -316,19 +318,32 @@ inline StrVec getAllStateStrVec()
 
 inline StrVec getVolStateStrVec(const std::string &volId, bool isVerbose)
 {
-    StrVec v;
-
+    const char *const FUNC = __func__;
+    auto fmt = cybozu::util::formatString;
+    StrVec v0, v1;
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    if (volSt.sm.get() == sClear) {
-        throw cybozu::Exception(__func__) << "not found" << volId;
+    const std::string state = volSt.sm.get();
+    if (state == sClear) {
+        throw cybozu::Exception(FUNC) << "not found" << volId;
     }
 
+    v0.push_back(fmt("volId %s", volId.c_str()));
+    v0.push_back(fmt("state %s", state.c_str()));
+    const std::vector<int> actionNumV = volSt.ac.getValues(allActionVec);
+    std::string actionStr("action");
+    for (size_t i = 0; i < allActionVec.size(); i++) {
+        actionStr += fmt(" %s %d", allActionVec[i].c_str(), actionNumV[i]);
+    }
+    v0.push_back(std::move(actionStr));
+    v0.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
+
     StorageVolInfo volInfo(gs.baseDirStr, volId);
-    // TODO: show the memory state of the volume.
-    v = volInfo.getStatusAsStrVec(isVerbose);
-    return v;
+    v1 = volInfo.getStatusAsStrVec(isVerbose);
+
+    std::move(v1.begin(), v1.end(), std::back_inserter(v0));
+    return v0;
 }
 
 } // namespace storage_local

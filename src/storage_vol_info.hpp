@@ -92,37 +92,31 @@ public:
         StrVec v;
         if (!existsVolDir()) return v;
 
+        const std::string wdevPathStr = wdevPath_.str();
         auto &fmt = cybozu::util::formatString;
-        v.push_back(fmt("volId %s", volId_.c_str()));
-        v.push_back(fmt("wdevPath %s", wdevPath_.cStr()));
-        uint64_t sizeLb = 0; // TODO
-        v.push_back(fmt("size %" PRIu64 "", sizeLb));
-        const std::string stateStr = getState();
-        v.push_back(fmt("state %s", stateStr.c_str()));
-        uint64_t logFreeSpacePb = 0; // TODO
-        v.push_back(fmt("logFreeSpace %" PRIu64 "", logFreeSpacePb));
-        uint64_t logCapacityPb = 0; // TODO
-        v.push_back(fmt("logCapacity %" PRIu64 "", logCapacityPb));
+        v.push_back(fmt("wdevPath %s", wdevPathStr.c_str()));
+        const uint64_t sizeLb = device::getSizeLb(wdevPathStr);
+        v.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+        uint64_t logUsagePb = device::getLogUsagePb(wdevPathStr);
+        v.push_back(fmt("logUsagePb %" PRIu64 "", logUsagePb));
+        uint64_t logCapacityPb = device::getLogCapacityPb(wdevPathStr);
+        v.push_back(fmt("logCapacityPb %" PRIu64 "", logCapacityPb));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
-        uint32_t pbs = 0;
+        cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
+        device::SuperBlock super(bd);
+        const uint32_t pbs = super.getPhysicalBlockSize();
         v.push_back(fmt("pbs %" PRIu32 "", pbs));
-        uint32_t salt = 0; // TODO
-        v.push_back(fmt("salt %" PRIu32 "", salt));
-
-        // TODO
-
-        // base <lsid> <gidB> <gidE> <canMerge> <timestamp>
-        // snapshot <lsid> <gid> <gid> <canMerge> <timestamp>
+        const uint32_t salt = super.getLogChecksumSalt();
+        v.push_back(fmt("salt %" PRIx32 "", salt));
 
         if (!isVerbose) return v;
-        v.push_back("verbose");
 
-        v.push_back("DoneFile");
-        MetaLsidGid doneRec = getDoneRecord();
+        v.push_back("-----DoneFile-----");
+        const MetaLsidGid doneRec = getDoneRecord();
         v.push_back(doneRec.str());
 
-        v.push_back("QueueFile");
+        v.push_back("-----QueueFile-----");
         QFile qf(queuePath().str(), O_RDWR);
         QFile::ConstIterator itr = qf.cbegin();
         while (itr != qf.cend()) {
@@ -130,7 +124,6 @@ public:
             v.push_back(rec.str());
             ++itr;
         }
-
         return v;
     }
     std::string getState() const {
