@@ -20,6 +20,7 @@
 #include "cybozu/serializer.hpp"
 #include "util.hpp"
 #include "time.hpp"
+#include "walb_util.hpp"
 
 /**
  * Backup facility of walb storage will generate a full image depicted as a MetaSnap
@@ -396,7 +397,7 @@ struct MetaLsidGid
     MetaLsidGid() : MetaLsidGid(-1, -1, false, 0) {
     }
     std::string str() const {
-        std::string ts = cybozu::unixTimeToStr(timestamp);
+        std::string ts = util::timeToPrintable(timestamp);
         return cybozu::util::formatString(
             "LsidGid timestamp %s isMergeable %d lsid %" PRIu64 " gid %" PRIu64 ""
             , ts.c_str(), isMergeable, lsid, gid);

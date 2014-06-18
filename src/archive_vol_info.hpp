@@ -228,7 +228,7 @@ public:
             size_t size = wdiffs_.getDiffFileSize(d);
             v.push_back(fmt("wdiff %s %d %" PRIu64 " %s"
                             , d.str().c_str(), d.isMergeable ? 1 : 0, size
-                            , cybozu::unixTimeToStr(d.timestamp).c_str()));
+                            , util::timeToPrintable(d.timestamp).c_str()));
         }
         return v;
     }

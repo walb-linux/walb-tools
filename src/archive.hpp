@@ -362,7 +362,7 @@ inline StrVec listRestorable(const std::string &volId, bool isAll = false, bool 
         ret.push_back(cybozu::itoa(st.snapB.gidB));
         if (isVerbose) {
             ret.back() += " ";
-            ret.back() += cybozu::unixTimeToStr(st.timestamp);
+            ret.back() += util::timeToPrintable(st.timestamp);
         }
     }
     return ret;
