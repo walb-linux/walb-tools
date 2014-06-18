@@ -242,17 +242,18 @@ inline StrVec getAllStateStrVec()
     const auto &fmt = cybozu::util::formatString;
 
     const std::vector<std::pair<ProxyTask, int64_t> > tqv = gp.taskQueue.getAll();
-    ret.push_back(fmt("TaskQueue %zu", tqv.size()));
+    ret.push_back(fmt("-----TaskQueue %zu-----", tqv.size()));
     for (const auto &pair : tqv) {
         const ProxyTask &task = pair.first;
         const int64_t &timeDiffMs = pair.second;
         std::stringstream ss;
         ss << "volume " << task.volId
-           << " archiveName " << task.archiveName
+           << " archive " << task.archiveName
            << " timeDiffMs " << timeDiffMs;
         ret.push_back(ss.str());
     }
 
+    ret.push_back("-----Volume-----");
     for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -262,7 +263,7 @@ inline StrVec getAllStateStrVec()
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
         const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
         ret.push_back(
-            fmt("%s %s %zu %s %s"
+            fmt("volume %s state %s numDiff %zu totalSize %s timestamp %s"
                 , volId.c_str(), state.c_str(), volSt.diffMgr.size()
                 , totalSizeStr.c_str(), tsStr.c_str()));
 
@@ -276,7 +277,8 @@ inline StrVec getAllStateStrVec()
             std::tie(minGid, maxGid) = mgr.getMinMaxGid();
             const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
             ret.push_back(
-                fmt("  %s %s %zu %s %" PRIu64 " %" PRIu64 " %s"
+                fmt("  archive %s action %s numDiff %zu"
+                    " totalSize %s minGid %" PRIu64 " maxGid %" PRIu64 " %s"
                     , archiveName.c_str()
                     , actionNum[i] == 0 ? "None" : "WdiffSend"
                     , mgr.size(), totalSizeStr.c_str(), minGid, maxGid
@@ -297,28 +299,35 @@ inline StrVec getVolStateStrVec(const std::string &volId)
     const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
     const std::string state = volSt.sm.get();
-    const size_t num = volSt.diffMgr.size();
+    const size_t numDiff = volSt.diffMgr.size();
     const uint64_t totalSize = volInfo.getTotalDiffFileSize();
     const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
     const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
+    const std::vector<int> numActions = volSt.ac.getValues(volSt.archiveSet);
+    int totalNumAction = 0;
+    for (int i : numActions) totalNumAction += i;
 
-    ret.push_back(fmt("volId %s", volId.c_str()));
+    ret.push_back(fmt("volume %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
-    ret.push_back(fmt("num %zu", num));
+    ret.push_back(fmt("numDiff %zu", numDiff));
     ret.push_back(fmt("totalSize %s", totalSizeStr.c_str()));
-    ret.push_back(fmt("timestamp %s", tsStr.c_str()));
+    ret.push_back(fmt("lastWlogReceivedTime %s", tsStr.c_str()));
+    ret.push_back(fmt("totalNumAction %d", totalNumAction));
 
-    const std::vector<int> actionNum = volSt.ac.getValues(volSt.archiveSet);
+    ret.push_back("-----Archive-----");
     size_t i = 0;
     for (const std::string& archiveName : volSt.archiveSet) {
         const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
         const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
         const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
 
-        ret.push_back(fmt("archive %s %s", archiveName.c_str(), hi.str().c_str()));
-        ret.push_back(fmt("  action %s", actionNum[i] == 0 ? "None" : "WdiffSend"));
-        ret.push_back(fmt("  num %zu", mgr.size()));
-        ret.push_back(fmt("  timestamp %s", tsStr.c_str()));
+        ret.push_back(fmt("  archive %s", archiveName.c_str()));
+        ret.push_back(fmt("  host %s", hi.addrPort.str().c_str()));
+        ret.push_back(fmt("  compression %s", hi.cmpr.str().c_str()));
+        ret.push_back(fmt("  wdiffSendDelay %u", hi.wdiffSendDelaySec));
+        ret.push_back(fmt("  action %s", numActions[i] == 0 ? "None" : "WdiffSend"));
+        ret.push_back(fmt("  numDiff %zu", mgr.size()));
+        ret.push_back(fmt("  lastWdiffSentTime %s", tsStr.c_str()));
 
         const MetaDiffVec diffV = mgr.getAll();
         uint64_t totalSize = 0;
@@ -340,8 +349,8 @@ inline StrVec getVolStateStrVec(const std::string &volId)
         ret.push_back(fmt("  totalSize %s", totalSizeStr.c_str()));
         uint64_t sendDelay = 0;
         if (!diffV.empty()) sendDelay = ::time(0) - minTs;
-        ret.push_back(fmt("  wdiffSendDelay %" PRIu64 "", sendDelay));
-        for (const std::string &s : wdiffStrV) ret.push_back(s);
+        ret.push_back(fmt("  wdiffSendDelayMeasured %" PRIu64 "", sendDelay));
+        for (std::string &s : wdiffStrV) ret.push_back(std::move(s));
 
         i++;
     }
