@@ -120,6 +120,22 @@ enum StopState {
     ForceStopping = 8
 };
 
+inline const char* stopStateToStr(StopState st)
+{
+    switch (st) {
+    case NotStopping:
+        return "NotStopping";
+    case WaitingForEmpty:
+        return "WAitingForEmpty";
+    case Stopping:
+        return "Stopping";
+    case ForceStopping:
+        return "ForceStopping";
+    default:
+        throw cybozu::Exception(__func__) << "bad state" << st;
+    }
+}
+
 class Stopper
 {
 private:
