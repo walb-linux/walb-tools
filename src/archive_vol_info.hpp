@@ -22,6 +22,7 @@
 #include "wdiff_data.hpp"
 #include "meta.hpp"
 #include "walb_diff_merge.hpp"
+#include "wdev_util.hpp"
 #include "archive_constant.hpp"
 
 namespace walb {
@@ -169,12 +170,14 @@ public:
             /* no need to grow. */
             return;
         }
+        const std::string lvPathStr = lv.path().str();
         if (newSizeLb < oldSizeLb) {
             /* Shrink is not supported. */
             throw cybozu::Exception(
-                "You tried to shrink the volume: " + lv.path().str());
+                "You tried to shrink the volume: " + lvPathStr);
         }
         lv.resize(newSizeLb);
+        device::flushBufferCache(lvPathStr);
         if (doZeroClear) {
             cybozu::util::File f(lv.path().str(), O_RDWR | O_DIRECT);
             cybozu::aio::zeroClear(f.fd(), oldSizeLb, newSizeLb - oldSizeLb);

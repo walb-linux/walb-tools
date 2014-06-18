@@ -258,6 +258,15 @@ inline uint64_t getSizeLb(const std::string& bdevPath)
     return size / LOGICAL_BLOCK_SIZE;
 }
 
+inline void flushBufferCache(const std::string& bdevPath)
+{
+    cybozu::util::File file(bdevPath, O_RDONLY);
+    if (::ioctl(file.fd(), BLKFLSBUF, 0) < 0) {
+        throw cybozu::Exception(__func__)
+            << "ioctl failed" << bdevPath << cybozu::ErrorNo();
+    }
+}
+
 /**
  * Get polling path.
  *
