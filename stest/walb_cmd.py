@@ -218,12 +218,12 @@ def wait_for_server_port(s, timeoutS=10):
     raise Exception('wait_for_server_port:timeout', s)
 
 
-#def hostType(server):
-#    return run_ctl(server, ["host-type"])
+def get_host_type(s, putMsg=True):
+    return run_ctl(s, ['host-type'], putMsg)
 
 
-def get_state(server, vol):
-    return run_ctl(server, ["get-state", vol])
+def get_state(server, vol, putMsg=True):
+    return run_ctl(server, ["get-state", vol], putMsg)
 
 
 def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
@@ -390,6 +390,17 @@ def shutdown_all(mode='graceful'):
     for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
         run_ctl(s, ["shutdown", mode])
     time.sleep(1)
+
+
+def get_alive_server():
+    ret = []
+    for s in cfg.storageL + cfg.proxyL + cfg.archiveL:
+        try:
+            get_host_type(s, False)
+            ret.append(s.name)
+        except:
+            pass
+    return ret
 
 
 def init(sx, vol, wdevPath):
