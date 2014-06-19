@@ -312,10 +312,7 @@ inline void c2xGetIntClient(protocol::ClientParams &p)
 }
 
 const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
-    { getStateCN, c2xGetStrVecClient },
     { statusCN, c2xGetStrVecClient },
-    { listDiffCN, c2xGetStrVecClient },
-    { listVolCN, c2xListVolClient },
     { initVolCN, c2xInitVolClient },
     { clearVolCN, c2xClearVolClient },
     { resetVolCN, c2xResetVolClient },
@@ -323,8 +320,6 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { hashBkpCN, c2sHashBkpClient },
     { restoreCN, c2aRestoreClient },
     { delRestoredCN, c2aDelRestoredClient },
-    { listRestoredCN, c2xGetStrVecClient },
-    { listRestorableCN, c2xGetStrVecClient },
     { startCN, c2xStartClient },
     { stopCN, c2xStopClient },
     { archiveInfoCN, c2pArchiveInfoClient },
@@ -333,12 +328,18 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { applyCN, c2aApplyClient },
     { mergeCN, c2aMergeClient },
     { resizeCN, c2xResizeClient },
-    { hostTypeCN, c2xHostTypeClient },
-    { isOverflowCN, c2xGetIntClient },
     { kickCN, c2xKickClient },
+    { dbgReloadMetadataCN, c2aReloadMetadataClient },
+    // these will be merged into 'get' command.
+    { getStateCN, c2xGetStrVecClient },
+    { listRestoredCN, c2xGetStrVecClient },
+    { listRestorableCN, c2xGetStrVecClient },
+    { listDiffCN, c2xGetStrVecClient },
+    { listVolCN, c2xListVolClient },
     { getNumActionCN, c2xGetIntClient },
     { isWdiffSendErrorCN, c2xGetIntClient },
-    { dbgReloadMetadataCN, c2aReloadMetadataClient },
+    { hostTypeCN, c2xHostTypeClient },
+    { isOverflowCN, c2xGetIntClient },
 };
 
 } // namespace walb

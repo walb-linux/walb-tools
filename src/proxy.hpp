@@ -1195,18 +1195,20 @@ inline void c2pKickServer(protocol::ServerParams &p)
 }
 
 const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
-    { getStateCN, c2pGetStateServer },
     { statusCN, c2pStatusServer },
-    { listVolCN, c2pListVolServer },
     { startCN, c2pStartServer },
     { stopCN, c2pStopServer },
     { archiveInfoCN, c2pArchiveInfoServer },
     { clearVolCN, c2pClearVolServer },
-    { wlogTransferPN, s2pWlogTransferServer },
     { resizeCN, c2pResizeServer },
     { kickCN, c2pKickServer },
+    // these will be merged into 'get' command.
+    { getStateCN, c2pGetStateServer },
+    { listVolCN, c2pListVolServer },
     { isWdiffSendErrorCN, c2pIsWdiffSendErrorServer },
     { hostTypeCN, c2pHostTypeServer },
+    // protocols.
+    { wlogTransferPN, s2pWlogTransferServer },
 };
 
 } // walb

@@ -1120,9 +1120,7 @@ inline void c2sKickServer(protocol::ServerParams &p)
 }
 
 const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
-    { getStateCN, c2sGetStateServer },
     { statusCN, c2sStatusServer },
-    { listVolCN, c2sListVolServer },
     { initVolCN, c2sInitVolServer },
     { clearVolCN, c2sClearVolServer },
     { resetVolCN, c2sResetVolServer },
@@ -1132,8 +1130,11 @@ const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { hashBkpCN, c2sHashBkpServer },
     { resizeCN, c2sResizeServer },
     { snapshotCN, c2sSnapshotServer },
-    { isOverflowCN, c2sIsOverflowServer },
     { kickCN, c2sKickServer },
+    // these will be merged into 'get' command.
+    { getStateCN, c2sGetStateServer },
+    { listVolCN, c2sListVolServer },
+    { isOverflowCN, c2sIsOverflowServer },
     { hostTypeCN, c2sHostTypeServer },
 };
 

@@ -1732,30 +1732,33 @@ inline void c2aGetNumActionServer(protocol::ServerParams &p)
 }
 
 const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
-    { getStateCN, c2aGetStateServer },
+    // commands
     { statusCN, c2aStatusServer },
-    { listDiffCN, c2aListDiffServer },
-    { listVolCN, c2aListVolServer },
     { initVolCN, c2aInitVolServer },
     { clearVolCN, c2aClearVolServer },
     { resetVolCN, c2aResetVolServer },
     { startCN, c2aStartServer },
     { stopCN, c2aStopServer },
-    { dirtyFullSyncPN, x2aDirtyFullSyncServer },
-    { dirtyHashSyncPN, x2aDirtyHashSyncServer },
     { restoreCN, c2aRestoreServer },
     { delRestoredCN, c2aDelRestoredServer },
-    { listRestoredCN, c2aListRestoredServer },
-    { listRestorableCN, c2aListRestorableServer },
-    { wdiffTransferPN, x2aWdiffTransferServer },
     { dbgReloadMetadataCN, c2aReloadMetadataServer },
     { replicateCN, c2aReplicateServer },
-    { replSyncPN, a2aReplSyncServer },
     { applyCN, c2aApplyServer },
     { mergeCN, c2aMergeServer },
     { resizeCN, c2aResizeServer },
+    // these will be merged into 'get' command.
+    { getStateCN, c2aGetStateServer },
+    { listDiffCN, c2aListDiffServer },
+    { listVolCN, c2aListVolServer },
+    { listRestoredCN, c2aListRestoredServer },
+    { listRestorableCN, c2aListRestorableServer },
     { getNumActionCN, c2aGetNumActionServer },
     { hostTypeCN, c2aHostTypeServer },
+    // protocols.
+    { dirtyFullSyncPN, x2aDirtyFullSyncServer },
+    { dirtyHashSyncPN, x2aDirtyHashSyncServer },
+    { wdiffTransferPN, x2aWdiffTransferServer },
+    { replSyncPN, a2aReplSyncServer },
 };
 
 } // namespace walb
