@@ -219,11 +219,11 @@ def wait_for_server_port(s, timeoutS=10):
 
 
 def get_host_type(s, putMsg=True):
-    return run_ctl(s, ['host-type'], putMsg)
+    return run_ctl(s, ['get', 'host-type'], putMsg)
 
 
 def get_state(server, vol, putMsg=True):
-    return run_ctl(server, ["get-state", vol], putMsg)
+    return run_ctl(server, ['get', 'state', vol], putMsg)
 
 
 def wait_for_state_cond(server, vol, cond, msg, timeoutS=10):
@@ -320,7 +320,7 @@ def delete_walb_dev(wdevPath):
 
 
 def is_overflow(sx, vol):
-    return int(run_ctl(sx, ["is-overflow", vol])) != 0
+    return int(run_ctl(sx, ['get', 'is-overflow', vol])) != 0
 
 
 def verify_not_overflow(sx, vol):
@@ -329,7 +329,7 @@ def verify_not_overflow(sx, vol):
 
 
 def is_wdiff_send_error(px, vol, ax):
-    return int(run_ctl(px, ['is-wdiff-send-error', vol, ax.name])) != 0
+    return int(run_ctl(px, ['get', 'is-wdiff-send-error', vol, ax.name])) != 0
 
 
 def reset_wdev(wdev):
@@ -585,33 +585,31 @@ def start_sync(ax, vol):
     kick_all_storage()
 
 
-def get_gid_list(ax, vol, cmd):
-    if not cmd in ['list-restorable', 'list-restored']:
+def get_gid_list(ax, vol, cmd, optL=[]):
+    if not cmd in ['restorable', 'restored']:
         raise Exception('get_list_gid : bad cmd', cmd)
-    ret = run_ctl(ax, [cmd, vol])
+    ret = run_ctl(ax, ['get', cmd, vol] + optL)
     return map(int, ret.split())
 
 
 def list_restorable(ax, vol, opt=''):
-    cmd = ["list-restorable", vol]
+    optL = []
     if opt:
         if opt == 'all':
-            cmd.append(opt)
+            optL.append(opt)
         else:
             raise Exception('list_restorable:bad opt', opt)
-    ret = run_ctl(ax, cmd)
-    return map(int, ret.split())
+    return get_gid_list(ax, vol, 'restorable', optL)
 
 
 def list_restored(ax, vol):
-    ret = run_ctl(ax, ["list-restored", vol])
-    return map(int, ret.split())
+    return get_gid_list(ax, vol, 'restored')
 
 
 def wait_for_restorable_any(ax, vol, timeoutS=TIMEOUT_SEC):
     t0 = time.time()
     while time.time() < t0 + timeoutS:
-        gids = get_gid_list(ax, vol, 'list-restorable')
+        gids = list_restorable(ax, vol)
         if gids:
             return gids[-1]
         time.sleep(0.3)
@@ -639,24 +637,24 @@ def wait_for_not_gid(ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
 
 
 def wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    wait_for_gid(ax, vol, gid, 'list-restorable', timeoutS)
+    wait_for_gid(ax, vol, gid, 'restorable', timeoutS)
 
 
 def wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     wait_for_no_action(ax, vol, 'Restore', timeoutS)
-    gids = get_gid_list(ax, vol, 'list-restored')
+    gids = list_restored(ax, vol)
     if gid in gids:
         return
     raise Exception('wait_for_restored:failed', ax.name, vol, gid, gids)
 
 
 def wait_for_not_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC):
-    wait_for_not_gid(ax, vol, gid, 'list-restored', timeoutS)
+    wait_for_not_gid(ax, vol, gid, 'restored', timeoutS)
 
 
 def wait_for_applied(ax, vol, gid, timeoutS=TIMEOUT_SEC):
     wait_for_no_action(ax, vol, aaApply, timeoutS)
-    gidL = get_gid_list(ax, vol, 'list-restorable')
+    gidL = list_restorable(ax, vol)
     if gidL and gid <= gidL[0]:
         return
     raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
@@ -765,7 +763,7 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
-        gids = get_gid_list(a0, vol, 'list-restorable')
+        gids = list_restorable(a0, vol)
         if gids:
             return gids[-1]
         time.sleep(0.3)
@@ -775,7 +773,7 @@ def full_backup(sx, vol, timeoutS=TIMEOUT_SEC):
 def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
     a0 = cfg.archiveL[0]
     prepare_backup(sx, vol)
-    prev_gids = get_gid_list(a0, vol, 'list-restorable')
+    prev_gids = list_restorable(a0, vol)
     if prev_gids:
         max_gid = prev_gids[-1]
     else:
@@ -788,7 +786,7 @@ def hash_backup(sx, vol, timeoutS=TIMEOUT_SEC):
 
     t0 = time.time()
     while time.time() < t0 + timeoutS:
-        gids = get_gid_list(a0, vol, 'list-restorable')
+        gids = list_restorable(a0, vol)
         if gids and gids[-1] > max_gid:
             return gids[-1]
         time.sleep(0.3)
@@ -956,7 +954,7 @@ def replicate(aSrc, vol, aDst, synchronizing):
 def wait_for_no_action(s, vol, action, timeoutS=TIMEOUT_SEC):
     t0 = time.time()
     while time.time() < t0 + timeoutS:
-        num = int(run_ctl(s, ['get-num-action', vol, action]))
+        num = int(run_ctl(s, ['get', 'num-action', vol, action]))
         if num == 0:
             return
         time.sleep(0.3)
