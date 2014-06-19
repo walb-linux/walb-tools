@@ -29,13 +29,36 @@ struct ArchiveVolState
 
     MetaDiffManager diffMgr;
 
+    /**
+     * Timestamp of the latest sync (full, hash).
+     * Lock of mu is required to access these variables.
+     * 0 means none did not do sync after the daemon started.
+     */
+    uint64_t lastSyncTime;
+    /**
+     * Timestamp of the latest wdiff received from a proxy server.
+     * Lock of mu is required to access these variables.
+     * 0 means no diff was received after the daemon started.
+     */
+    uint64_t lastWdiffReceivedTime;
+
     explicit ArchiveVolState(const std::string& volId)
         : stopState(NotStopping)
         , sm(mu)
         , ac(mu)
-        , diffMgr() {
+        , diffMgr()
+        , lastSyncTime(0)
+        , lastWdiffReceivedTime(0) {
         sm.init(statePairTbl);
         initInner(volId);
+    }
+    void updateLastSyncTime() {
+        UniqueLock ul(mu);
+        lastSyncTime = ::time(0);
+    }
+    void updateLastWdiffReceivedTime() {
+        UniqueLock ul(mu);
+        lastWdiffReceivedTime = ::time(0);
     }
 private:
     void initInner(const std::string& volId);
@@ -451,7 +474,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     }
     volInfo.setUuid(uuid);
     volInfo.setState(aArchived);
-
+    volSt.updateLastSyncTime();
     tran.commit(aArchived);
 
     packet::Ack(p.sock).sendFin();
@@ -548,6 +571,7 @@ inline bool runFullReplServer(
     volInfo.setMetaState(metaSt);
     volInfo.setUuid(uuid);
     volInfo.setState(aArchived);
+    volSt.updateLastSyncTime();
     logger.info() << "full-repl-server done" << volId;
     return true;
 }
@@ -617,6 +641,7 @@ inline bool runHashReplServer(
     tmpFile.save(volInfo.getDiffPath(diff).str());
     volSt.diffMgr.add(diff);
     volInfo.setUuid(uuid);
+    volSt.updateLastSyncTime();
     logger.info() << "hash-repl-server done" << volId;
     return true;
 }
@@ -699,6 +724,7 @@ inline bool runDiffReplServer(
     tmpFile.save(fPath.str());
     volSt.diffMgr.add(diff);
     packet::Ack(pkt.sock()).send();
+    volSt.updateLastWdiffReceivedTime();
     logger.info() << "diff-repl-server done" << volId << diff;
     return true;
 }
@@ -778,8 +804,45 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
 
 inline StrVec getAllStatusAsStrVec()
 {
-    // QQQ
-    return {};
+    auto fmt = cybozu::util::formatString;
+    StrVec v;
+
+    v.push_back("-----ArchiveGlobal-----");
+    v.push_back(fmt("nodeId %s", ga.nodeId.c_str()));
+    v.push_back(fmt("baseDir %s", ga.baseDirStr.c_str()));
+    v.push_back(fmt("volumeGroup %s", ga.volumeGroup.c_str()));
+    v.push_back(fmt("maxForegroundTasks %zu", ga.maxForegroundTasks));
+    v.push_back(fmt("socketTimeout %zu", ga.socketTimeout));
+
+    v.push_back("-----Volume-----");
+    for (const std::string &volId : ga.stMap.getKeyList()) {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        std::string s;
+        const std::string state = volSt.sm.get();
+        if (state == aClear) continue;
+
+        s += fmt("volume %s", volId.c_str());
+        s += fmt(" state %s", state.c_str());
+        const int totalNumAction = getTotalNumActions(volSt.ac, allActionVec);
+        s += fmt(" totalNumAction %d", totalNumAction);
+        s += fmt(" stopState %s", stopStateToStr(StopState(volSt.stopState.load())));
+        s += fmt(" lastSyncTime %s"
+                 , util::timeToPrintable(volSt.lastSyncTime).c_str());
+        s += fmt(" lastWdiffReceivedTime %s"
+                 , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str());
+        s += fmt(" numDiff %zu", volSt.diffMgr.size());
+
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+        s += fmt(" latestSnapshot %s", latestSnap.str().c_str());
+        const uint64_t sizeLb = volInfo.getLv().sizeLb();
+        const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
+        s += fmt(" size %s", sizeS.c_str());
+
+        v.push_back(s);
+    }
+    return v;
 }
 
 inline StrVec getVolStatusAsStrVec(const std::string &volId)
@@ -797,12 +860,14 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     v.push_back(fmt("state %s", state.c_str()));
     v.push_back(formatActions("action", volSt.ac, allActionVec));
     v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
+    v.push_back(fmt("lastSyncTime %s"
+                    , util::timeToPrintable(volSt.lastSyncTime).c_str()));
+    v.push_back(fmt("lastWdiffReceivedTime %s"
+                    , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str()));
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
-                           getArchiveVolState(volId).diffMgr);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
     StrVec v1 = volInfo.getStatusAsStrVec();
     std::move(v1.begin(), v1.end(), std::back_inserter(v));
-
     return v;
 }
 
@@ -1344,6 +1409,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         volSt.diffMgr.add(diff);
         tran.commit(aArchived);
         packet::Ack(p.sock).sendFin();
+        volSt.updateLastWdiffReceivedTime();
         logger.info() << "wdiff-transfer succeeded" << volId;
     } catch (std::exception &e) {
         if (isErr) {
