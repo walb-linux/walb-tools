@@ -378,11 +378,6 @@ inline void pushAllTasksForVol(const std::string &volId, Logger *loggerP = nullp
 
 } // namespace proxy_local
 
-inline void c2pGetStateServer(protocol::ServerParams &p)
-{
-    protocol::c2xGetStateServer(p, getProxyVolState, gp.nodeId, __func__);
-}
-
 /**
  * params:
  *   [0]: volId or none.
@@ -403,25 +398,11 @@ inline void c2pStatusServer(protocol::ServerParams &p)
             const std::string &volId = v[0];
             stStrV = proxy_local::getVolStatusAsStrVec(volId);
         }
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(stStrV);
-        logger.debug() << "status succeeded";
-        packet::Ack(p.sock).sendFin();
+        protocol::sendValueAndFin(pkt, sendErr, stStrV);
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
     }
-}
-
-inline void c2pListVolServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    StrVec v = util::getDirNameList(gp.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC);
-    packet::Ack(p.sock).sendFin();
-    ProtocolLogger logger(gp.nodeId, p.clientId);
-    logger.debug() << "listVol succeeded";
 }
 
 inline void startProxyVol(const std::string &volId)
@@ -1101,46 +1082,6 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     }
 }
 
-inline void c2pHostTypeServer(protocol::ServerParams &p)
-{
-    protocol::runHostTypeServer(p, proxyHT);
-}
-
-/**
- * params[0]: volId
- * params[1]: archiveName
- */
-inline void c2pIsWdiffSendErrorServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(gp.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const std::string &archiveName = v[1];
-        ProxyVolState &volSt = getProxyVolState(volId);
-        UniqueLock ul(volSt.mu);
-        if (volSt.sm.get() == pClear) {
-            throw cybozu::Exception(FUNC) << "bad state";
-        }
-        if (volSt.archiveSet.find(archiveName) == volSt.archiveSet.end()) {
-            throw cybozu::Exception(FUNC) << "bad archive name" << archiveName;
-        }
-        const bool isWdiffSendError = volSt.actionState.get(archiveName);
-        ul.unlock();
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(isWdiffSendError ? 1 : 0);
-        packet::Ack(p.sock).sendFin();
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
-}
-
 /**
  * params[0]: volId (optional)
  * params[1]: archiveName (optional)
@@ -1194,6 +1135,57 @@ inline void c2pKickServer(protocol::ServerParams &p)
     }
 }
 
+namespace proxy_local {
+
+inline void getState(protocol::GetCommandParams &p)
+{
+    protocol::runGetStateServer(p, getProxyVolState);
+}
+
+inline void getHostType(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, proxyHT);
+}
+
+inline void getVolList(protocol::GetCommandParams &p)
+{
+    StrVec v = util::getDirNameList(gp.baseDirStr);
+    protocol::sendValueAndFin(p, v);
+}
+
+inline void isWdiffSendError(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+
+    std::string volId, archiveName;
+    cybozu::util::parseStrVec(p.params, 1, 2, {&volId, &archiveName});
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    if (volSt.sm.get() == pClear) {
+        throw cybozu::Exception(FUNC) << "bad state" << volId << pClear;
+    }
+    if (volSt.archiveSet.find(archiveName) == volSt.archiveSet.end()) {
+        throw cybozu::Exception(FUNC) << "bad archive name" << volId << archiveName;
+    }
+    const bool isWdiffSendError = volSt.actionState.get(archiveName);
+    ul.unlock();
+    protocol::sendValueAndFin(p, size_t(isWdiffSendError));
+}
+
+} // namespace proxy_local
+
+const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
+    { stateTN, proxy_local::getState },
+    { hostTypeTN, proxy_local::getHostType },
+    { volTN, proxy_local::getVolList },
+    { isWdiffSendErrorTN, proxy_local::isWdiffSendError },
+};
+
+inline void c2pGetServer(protocol::ServerParams &p)
+{
+    protocol::runGetCommandServer(p, gp.nodeId, proxyGetHandlerMap);
+}
+
 const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { statusCN, c2pStatusServer },
     { startCN, c2pStartServer },
@@ -1202,11 +1194,7 @@ const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { clearVolCN, c2pClearVolServer },
     { resizeCN, c2pResizeServer },
     { kickCN, c2pKickServer },
-    // these will be merged into 'get' command.
-    { getStateCN, c2pGetStateServer },
-    { listVolCN, c2pListVolServer },
-    { isWdiffSendErrorCN, c2pIsWdiffSendErrorServer },
-    { hostTypeCN, c2pHostTypeServer },
+    { getCN, c2pGetServer },
     // protocols.
     { wlogTransferPN, s2pWlogTransferServer },
 };

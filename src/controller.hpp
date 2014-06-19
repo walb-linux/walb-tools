@@ -12,32 +12,8 @@ namespace walb {
 inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    packet::Packet packet(p.sock);
-    packet.write(p.params);
-
-    std::string st;
-    packet.read(st);
-    if (st != msgOk) {
-        throw cybozu::Exception(FUNC) << "not ok" << st;
-    }
-
-    StrVec v;
-    packet.read(v);
-    for (const std::string &s : v) {
-        std::cout << s << std::endl;
-    }
-    packet::Ack(p.sock).recv();
-}
-
-inline void c2xListVolClient(protocol::ClientParams &p)
-{
-    const char *const FUNC = __func__;
-    // No parameter will be sent.
-    const StrVec volIdV = protocol::recvStrVec(p.sock, 0, FUNC);
-    packet::Ack(p.sock).recv();
-    for (const std::string &volId : volIdV) {
-        std::cout << volId << std::endl;
-    }
+    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
+    protocol::recvValueAndPut(p.sock, protocol::StringVecType, FUNC);
 }
 
 /**
@@ -268,12 +244,6 @@ inline void c2xResizeClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
-inline void c2xHostTypeClient(protocol::ClientParams &p)
-{
-    const std::string hostType = protocol::runHostTypeClient(p.sock);
-    std::cout << hostType << std::endl;
-}
-
 /**
  * params[0]: volId
  * params[1]: gid as string (optional)
@@ -296,19 +266,26 @@ inline void c2xKickClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
-/**
- * Get an integer from server.
- */
-inline void c2xGetIntClient(protocol::ClientParams &p)
+inline void c2xGetClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
-    packet::Packet pkt(p.sock);
+    if (p.params.empty()) throw cybozu::Exception(FUNC) << "target not specified";
+    const std::string &targetName = p.params[0];
 
-    size_t value;
-    pkt.read(value);
-    packet::Ack(p.sock).recv();
-    std::cout << value << std::endl;
+    const protocol::ValueTypeMap typeM = {
+        { isOverflowTN, protocol::SizeType },
+        { isWdiffSendErrorTN, protocol::SizeType },
+        { numActionTN, protocol::SizeType },
+        { stateTN, protocol::StringType },
+        { hostTypeTN, protocol::StringType },
+        { volTN, protocol::StringVecType },
+        { diffTN, protocol::StringVecType },
+        { restoredTN, protocol::StringVecType },
+        { restorableTN, protocol::StringVecType },
+    };
+    const protocol::ValueType valType = protocol::getValueType(targetName, typeM, FUNC);
+    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
+    protocol::recvValueAndPut(p.sock, valType, FUNC);
 }
 
 const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
@@ -330,16 +307,7 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { resizeCN, c2xResizeClient },
     { kickCN, c2xKickClient },
     { dbgReloadMetadataCN, c2aReloadMetadataClient },
-    // these will be merged into 'get' command.
-    { getStateCN, c2xGetStrVecClient },
-    { listRestoredCN, c2xGetStrVecClient },
-    { listRestorableCN, c2xGetStrVecClient },
-    { listDiffCN, c2xGetStrVecClient },
-    { listVolCN, c2xListVolClient },
-    { getNumActionCN, c2xGetIntClient },
-    { isWdiffSendErrorCN, c2xGetIntClient },
-    { hostTypeCN, c2xHostTypeClient },
-    { isOverflowCN, c2xGetIntClient },
+    { getCN, c2xGetClient },
 };
 
 } // namespace walb

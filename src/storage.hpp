@@ -351,11 +351,6 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
 
 } // namespace storage_local
 
-inline void c2sGetStateServer(protocol::ServerParams &p)
-{
-    protocol::c2xGetStateServer(p, getStorageVolState, gs.nodeId, __func__);
-}
-
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
     packet::Packet pkt(p.sock);
@@ -376,24 +371,11 @@ inline void c2sStatusServer(protocol::ServerParams &p)
             }
             v = storage_local::getVolStatusAsStrVec(volId, isVerbose);
         }
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(v);
-        packet::Ack(p.sock).sendFin();
+        protocol::sendValueAndFin(pkt, sendErr, v);
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
     }
-}
-
-inline void c2sListVolServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    StrVec v = util::getDirNameList(gs.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC);
-    packet::Ack(p.sock).sendFin();
-    ProtocolLogger logger(gs.nodeId, p.clientId);
-    logger.debug() << "listVol succeeded";
 }
 
 inline void c2sInitVolServer(protocol::ServerParams &p)
@@ -697,11 +679,6 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
     }
 }
 
-inline void c2sHostTypeServer(protocol::ServerParams &p)
-{
-    protocol::runHostTypeServer(p, storageHT);
-}
-
 namespace storage_local {
 
 inline void readLogPackHeader(device::AsyncWldevReader &reader, LogPackHeader &packH, uint64_t lsid, const char *msg)
@@ -892,8 +869,7 @@ inline ProxyManager::Info ProxyManager::checkAvailability(const cybozu::SocketAd
     try {
         cybozu::Socket sock;
         util::connectWithTimeout(sock, proxy, PROXY_HEARTBEAT_SOCKET_TIMEOUT_SEC);
-        protocol::run1stNegotiateAsClient(sock, gs.nodeId, hostTypeCN);
-        const std::string type = protocol::runHostTypeClient(sock);
+        const std::string type = protocol::runGetHostTypeClient(sock, gs.nodeId);
         if (type == proxyHT) info.isAvailable = true;
     } catch (std::exception &e) {
         LOGs.warn() << FUNC << e.what();
@@ -1054,38 +1030,6 @@ inline void c2sResizeServer(protocol::ServerParams &p)
 }
 
 /**
- * return whether vol is overflow or not
- *
- * params[0]: volId
- */
-inline void c2sIsOverflowServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(gs.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-        const std::string &volId = v[0];
-        StorageVolState &volSt = getStorageVolState(volId);
-        if (volSt.sm.get() == sClear) {
-            throw cybozu::Exception(FUNC) << "bad state";
-        }
-        const StorageVolInfo volInfo(gs.baseDirStr, volId);
-        const std::string wdevPath = volInfo.getWdevPath();
-        const bool isOverflow = walb::device::isOverflow(wdevPath);
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(int(isOverflow));
-        packet::Ack(p.sock).sendFin();
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
-}
-
-/**
  * Kick heartbeat protocol to proxy servers and WlogTransfer retry.
  * No parameter is required.
  */
@@ -1119,6 +1063,54 @@ inline void c2sKickServer(protocol::ServerParams &p)
     }
 }
 
+namespace storage_local {
+
+inline void getState(protocol::GetCommandParams &p)
+{
+    protocol::runGetStateServer(p, getStorageVolState);
+}
+
+inline void getHostType(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, storageHT);
+}
+
+inline void getVolList(protocol::GetCommandParams &p)
+{
+    StrVec v = util::getDirNameList(gs.baseDirStr);
+    protocol::sendValueAndFin(p, v);
+}
+
+inline void isOverflow(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    StorageVolState &volSt = getStorageVolState(volId);
+    const std::string st = volSt.sm.get();
+    if (st == sClear) {
+        throw cybozu::Exception(FUNC) << "bad state" << st;
+    }
+    const StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    const bool isOverflow = walb::device::isOverflow(wdevPath);
+    protocol::sendValueAndFin(p, size_t(isOverflow));
+}
+
+} // namespace storage_local
+
+const protocol::GetCommandHandlerMap storageGetHandlerMap = {
+    { stateTN, storage_local::getState },
+    { hostTypeTN, storage_local::getHostType },
+    { volTN, storage_local::getVolList },
+    { isOverflowTN, storage_local::isOverflow },
+};
+
+inline void c2sGetServer(protocol::ServerParams &p)
+{
+    protocol::runGetCommandServer(p, gs.nodeId, storageGetHandlerMap);
+}
+
 const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { statusCN, c2sStatusServer },
     { initVolCN, c2sInitVolServer },
@@ -1131,11 +1123,7 @@ const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { resizeCN, c2sResizeServer },
     { snapshotCN, c2sSnapshotServer },
     { kickCN, c2sKickServer },
-    // these will be merged into 'get' command.
-    { getStateCN, c2sGetStateServer },
-    { listVolCN, c2sListVolServer },
-    { isOverflowCN, c2sIsOverflowServer },
-    { hostTypeCN, c2sHostTypeServer },
+    { getCN, c2sGetServer },
 };
 
 } // walb

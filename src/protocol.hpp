@@ -35,12 +35,9 @@ const char *const archiveHT = "archive";
 /**
  * Command name.
  */
-const char *const getStateCN = "get-state";
 const char *const statusCN = "status";
-const char *const listDiffCN = "list-diff";
 const char *const initVolCN = "init-vol";
 const char *const clearVolCN = "clear-vol";
-const char *const listVolCN = "list-vol";
 const char *const resetVolCN = "reset-vol";
 const char *const startCN = "start";
 const char *const stopCN = "stop";
@@ -50,19 +47,27 @@ const char *const snapshotCN = "snapshot";
 const char *const archiveInfoCN = "archive-info";
 const char *const restoreCN = "restore";
 const char *const delRestoredCN = "del-restored";
-const char *const listRestoredCN = "list-restored";
-const char *const listRestorableCN = "list-restorable";
 const char *const replicateCN = "replicate";
 const char *const applyCN = "apply";
 const char *const mergeCN = "merge";
 const char *const resizeCN = "resize";
-const char *const hostTypeCN = "host-type";
 const char *const shutdownCN = "shutdown";
-const char *const isOverflowCN = "is-overflow";
 const char *const kickCN = "kick";
-const char *const getNumActionCN = "get-num-action";
-const char *const isWdiffSendErrorCN = "is-wdiff-send-error";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
+const char *const getCN = "get";
+
+/**
+ * Target name of 'get' command.
+ */
+const char *const isOverflowTN = "is-overflow";
+const char *const isWdiffSendErrorTN = "is-wdiff-send-error";
+const char *const numActionTN = "num-action";
+const char *const stateTN = "state";
+const char *const hostTypeTN = "host-type";
+const char *const volTN = "vol";
+const char *const diffTN = "diff";
+const char *const restoredTN = "restored";
+const char *const restorableTN = "restorable";
 
 /**
  * Internal protocol name.
@@ -380,40 +385,119 @@ inline StrVec recvStrVec(
     return v;
 }
 
-inline std::string runHostTypeClient(cybozu::Socket &sock)
+enum ValueType {
+    SizeType,
+    StringType,
+    StringVecType,
+};
+
+using ValueTypeMap = std::map<std::string, ValueType>;
+
+inline ValueType getValueType(const std::string &targetName, const ValueTypeMap &typeM, const char *msg)
+{
+    ValueTypeMap::const_iterator it = typeM.find(targetName);
+    if (it == typeM.cend()) {
+        throw cybozu::Exception(msg) << "target not found" << targetName;
+    }
+    return it->second;
+}
+
+namespace local {
+
+template <typename T>
+inline T recvValue(cybozu::Socket &sock)
 {
     packet::Packet pkt(sock);
-    std::string type;
-    pkt.read(type);
+    T t;
+    pkt.read(t);
     packet::Ack(sock).recv();
-    return type;
+    return t;
 }
 
-inline void runHostTypeServer(ServerParams &p, const std::string &hostType)
+} // namespace local
+
+inline void recvValueAndPut(cybozu::Socket &sock, ValueType valType, const char *msg)
 {
-    packet::Packet(p.sock).write(hostType);
-    packet::Ack(p.sock).sendFin();
+    packet::Packet pkt(sock);
+    switch (valType) {
+    case protocol::SizeType:
+        std::cout << local::recvValue<size_t>(sock) << std::endl;
+        return;
+    case protocol::StringType:
+        std::cout << local::recvValue<std::string>(sock) << std::endl;
+        return;
+    case protocol::StringVecType:
+        for (const std::string &s : local::recvValue<StrVec>(sock)) {
+            std::cout << s << std::endl;
+        }
+        return;
+    default:
+        throw cybozu::Exception(msg) << "bad ValueType" << int(valType);
+    }
 }
 
-template <class VolStateGetter>
-inline void c2xGetStateServer(protocol::ServerParams &p, VolStateGetter getter, const std::string &nodeId, const char *msg)
+struct GetCommandParams
 {
+    const StrVec &params;
+    packet::Packet &pkt;
+    Logger &logger;
+    bool &sendErr;
+};
+
+using GetCommandHandler = void (*)(GetCommandParams&);
+using GetCommandHandlerMap = std::map<std::string, GetCommandHandler>;
+
+inline void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCommandHandlerMap &hMap)
+{
+    const char *const FUNC = __func__;
     ProtocolLogger logger(nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 1, msg);
-        const std::string &volId = v[0];
-        const std::string state = getter(volId).sm.get();
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(StrVec{state});
-        packet::Ack(p.sock).sendFin();
+        const StrVec params = recvStrVec(p.sock, 0, FUNC);
+        if (params.empty()) throw cybozu::Exception(FUNC) << "no target specified";
+        const std::string &targetName = params[0];
+        protocol::GetCommandHandlerMap::const_iterator it = hMap.find(targetName);
+        if (it == hMap.cend()) throw cybozu::Exception(FUNC) << "no such target" << targetName;
+        protocol::GetCommandHandler handler = it->second;
+        GetCommandParams cParams{params, pkt, logger, sendErr};
+        handler(cParams);
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
     }
+}
+
+template <typename T>
+inline void sendValueAndFin(packet::Packet &pkt, bool &sendErr, const T &t)
+{
+    pkt.write(msgOk);
+    sendErr = false;
+    pkt.write(t);
+    packet::Ack(pkt.sock()).sendFin();
+}
+
+template <typename T>
+inline void sendValueAndFin(GetCommandParams &p, const T &t)
+{
+    sendValueAndFin(p.pkt, p.sendErr, t);
+}
+
+template <typename VolStateGetter>
+inline void runGetStateServer(GetCommandParams &p, VolStateGetter getter)
+{
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string state = getter(volId).sm.get();
+    sendValueAndFin(p, state);
+}
+
+inline std::string runGetHostTypeClient(cybozu::Socket &sock, const std::string &nodeId)
+{
+    run1stNegotiateAsClient(sock, nodeId, getCN);
+    sendStrVec(sock, {hostTypeTN}, 1, __func__, msgOk);
+    return local::recvValue<std::string>(sock);
 }
 
 }} // namespace walb::protocol

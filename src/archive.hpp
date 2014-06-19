@@ -871,6 +871,118 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     return v;
 }
 
+inline void getState(protocol::GetCommandParams &p)
+{
+    protocol::runGetStateServer(p, getArchiveVolState);
+}
+
+inline void getHostType(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, archiveHT);
+}
+
+inline void getVolList(protocol::GetCommandParams &p)
+{
+    StrVec v = util::getDirNameList(ga.baseDirStr);
+    protocol::sendValueAndFin(p, v);
+}
+
+inline void getDiffList(protocol::GetCommandParams &p)
+{
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+
+    using Pair = std::pair<MetaDiff, uint64_t>;
+    const std::vector<Pair> diffSizeV = volInfo.getDiffListWithSize();
+    StrVec v;
+    v.emplace_back("#snapB-->snapE isMergeable timestamp sizeB");
+    for (const Pair &p : diffSizeV) {
+        const MetaDiff &diff = p.first;
+        const uint64_t sizeB = p.second;
+        v.push_back(formatMetaDiff("", diff, sizeB));
+    }
+    ul.unlock();
+    protocol::sendValueAndFin(p, v);
+}
+
+/**
+ * return whether an action is running on a volume or not.
+ *
+ * params[1]: volId
+ * params[2]: action name.
+ */
+inline void getNumAction(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId, action;
+    cybozu::util::parseStrVec(p.params, 1, 2, {&volId, &action});
+
+    if (std::find(allActionVec.begin(), allActionVec.end(), action) == allActionVec.end()) {
+        throw cybozu::Exception(FUNC) << "no such action" << action;
+    }
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    if (st == aClear) {
+        throw cybozu::Exception(FUNC) << "bad state" << volId << action << st;
+    }
+    const size_t num = volSt.ac.getValue(action);
+    ul.unlock();
+    protocol::sendValueAndFin(p, num);
+    p.logger.debug() << "get num-action succeeded" << volId;
+}
+
+inline void getRestored(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    verifyStateIn(volSt.sm.get(), aActive, FUNC);
+    const StrVec strV = archive_local::listRestored(volId);
+    ul.unlock();
+    protocol::sendValueAndFin(p, strV);
+    p.logger.debug() << "get restored succeeded" << volId;
+}
+
+inline void getRestorable(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId, opt[2];
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId, &opt[0], &opt[1]});
+    bool isAll = false;
+    bool isVerbose = false;
+    for (const std::string &o : opt) {
+        if (o.empty()) break;
+        if (o == "vervose") {
+            isVerbose = true;
+        } else if (o == "all") {
+            isAll = true;
+        } else {
+            throw cybozu::Exception(FUNC) << "bad opt" << o;
+        }
+    }
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyNotStopping(volSt.stopState, volId, FUNC);
+    const std::string st = volSt.sm.get();
+    StrVec strV;
+    if (isStateIn(st, aActive)) {
+        strV = archive_local::listRestorable(volId, isAll, isVerbose);
+    }
+    ul.unlock();
+    protocol::sendValueAndFin(p, strV);
+    p.logger.debug() << "get restorable succeeded" << volId;
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -883,11 +995,6 @@ inline void ArchiveVolState::initInner(const std::string& volId)
     } else {
         sm.set(aClear);
     }
-}
-
-inline void c2aGetStateServer(protocol::ServerParams &p)
-{
-    protocol::c2xGetStateServer(p, getArchiveVolState, ga.nodeId, __func__);
 }
 
 inline void c2aStatusServer(protocol::ServerParams &p)
@@ -906,63 +1013,11 @@ inline void c2aStatusServer(protocol::ServerParams &p)
             const std::string &volId = v[0];
             strV = archive_local::getVolStatusAsStrVec(volId);
         }
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(strV);
-        packet::Ack(p.sock).sendFin();
+        protocol::sendValueAndFin(pkt, sendErr, strV);
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
     }
-}
-
-inline void c2aListDiffServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-        const std::string &volId = v[0];
-
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-        UniqueLock ul(volSt.mu);
-
-        const std::vector<std::pair<MetaDiff, uint64_t>> diffSizeV = volInfo.getDiffListWithSize();
-        StrVec diffListStrV;
-        diffListStrV.emplace_back("#snapB-->snapE isMergeable timestamp sizeB");
-        for (const std::pair<MetaDiff, uint64_t> &p : diffSizeV) {
-            const MetaDiff &diff = p.first;
-            const uint64_t sizeB = p.second;
-            diffListStrV.push_back(
-                cybozu::util::formatString(
-                    "%s %d %s %" PRIu64 ""
-                    , diff.str().c_str()
-                    , diff.isMergeable ? 1 : 0
-                    , cybozu::unixTimeToStr(diff.timestamp).c_str()
-                    , sizeB));
-        }
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(diffListStrV);
-        packet::Ack(p.sock).sendFin();
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
-}
-
-inline void c2aListVolServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    StrVec v = util::getDirNameList(ga.baseDirStr);
-    protocol::sendStrVec(p.sock, v, 0, FUNC);
-    packet::Ack(p.sock).sendFin();
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    logger.debug() << "listVol succeeded";
 }
 
 inline void c2aInitVolServer(protocol::ServerParams &p)
@@ -1191,76 +1246,6 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         logger.info() << "del-restored succeeded" << volId << gid;
         pkt.writeFin(msgOk);
         sendErr = false;
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
-}
-
-inline void c2aListRestoredServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-        const std::string &volId = v[0];
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
-        verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), aActive, FUNC);
-        const StrVec strV = archive_local::listRestored(volId);
-        ul.unlock();
-        logger.info() << "list-restored succeeded" << volId;
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(strV);
-        packet::Ack(p.sock).sendFin();
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
-}
-
-inline void c2aListRestorableServer(protocol::ServerParams &p)
-{
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.empty()) throw cybozu::Exception(FUNC) << "no vol";
-        const std::string& volId = v[0];
-        bool isAll = false;
-        bool isVerbose = false;
-        for (size_t i = 1; i < v.size(); i++) {
-            if (v[i] == "vervose") {
-                isVerbose = true;
-            } else if (v[i] == "all") {
-                isAll = true;
-            } else {
-                throw cybozu::Exception(FUNC) << "bad opt" << v[i];
-            }
-        }
-
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
-        verifyNotStopping(volSt.stopState, volId, FUNC);
-        const std::string st = volSt.sm.get();
-        StrVec strV;
-        if (isStateIn(st, aActive)) {
-            strV = archive_local::listRestorable(volId, isAll, isVerbose);
-        }
-        ul.unlock();
-        logger.info() << "list-restored succeeded" << volId;
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(strV);
-        packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1649,11 +1634,6 @@ inline void c2aResizeServer(protocol::ServerParams &p)
     }
 }
 
-inline void c2aHostTypeServer(protocol::ServerParams &p)
-{
-    protocol::runHostTypeServer(p, archiveHT);
-}
-
 /**
  * params[0]: volId
  */
@@ -1692,43 +1672,19 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     }
 }
 
-/**
- * return whether an action is running on a volume or not.
- *
- * params[0]: volId
- * params[1]: action name.
- */
-inline void c2aGetNumActionServer(protocol::ServerParams &p)
+const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
+    { stateTN, archive_local::getState },
+    { hostTypeTN, archive_local::getHostType },
+    { volTN, archive_local::getVolList },
+    { diffTN, archive_local::getDiffList },
+    { numActionTN, archive_local::getNumAction },
+    { restoredTN, archive_local::getRestored },
+    { restorableTN, archive_local::getRestorable },
+};
+
+inline void c2aGetServer(protocol::ServerParams &p)
 {
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
-
-    bool sendErr = true;
-    try {
-        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const std::string &action = v[1];
-        if (std::find(allActionVec.begin(), allActionVec.end(), action) == allActionVec.end()) {
-            throw cybozu::Exception(FUNC) << "no such action" << action;
-        }
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
-        const std::string st = volSt.sm.get();
-        if (st == aClear) {
-            throw cybozu::Exception(FUNC) << "bad state" << volId << action << st;
-        }
-        const size_t num = volSt.ac.getValue(action);
-        ul.unlock();
-
-        pkt.write(msgOk);
-        sendErr = false;
-        pkt.write(num);
-        packet::Ack(p.sock).sendFin();
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
+    protocol::runGetCommandServer(p, ga.nodeId, archiveGetHandlerMap);
 }
 
 const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
@@ -1746,14 +1702,7 @@ const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
     { applyCN, c2aApplyServer },
     { mergeCN, c2aMergeServer },
     { resizeCN, c2aResizeServer },
-    // these will be merged into 'get' command.
-    { getStateCN, c2aGetStateServer },
-    { listDiffCN, c2aListDiffServer },
-    { listVolCN, c2aListVolServer },
-    { listRestoredCN, c2aListRestoredServer },
-    { listRestorableCN, c2aListRestorableServer },
-    { getNumActionCN, c2aGetNumActionServer },
-    { hostTypeCN, c2aHostTypeServer },
+    { getCN, c2aGetServer },
     // protocols.
     { dirtyFullSyncPN, x2aDirtyFullSyncServer },
     { dirtyHashSyncPN, x2aDirtyHashSyncServer },
