@@ -62,11 +62,6 @@ struct Option : cybozu::Option
 
         appendHelp("h");
     }
-    std::string logFilePath() const {
-        if (logFileStr == "-") return logFileStr;
-        if (cybozu::FilePath(logFileStr).isFull()) return logFileStr;
-        return (cybozu::FilePath(gp.baseDirStr) + logFileStr).str();
-    }
 };
 
 void initializeProxy(Option &opt)
@@ -104,7 +99,7 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    util::setLogSetting(createLogFilePath(opt.logFileStr, gp.baseDirStr), opt.isDebug);
     initializeProxy(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,

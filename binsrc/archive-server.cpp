@@ -56,11 +56,6 @@ struct Option : cybozu::Option
 
         appendHelp("h");
     }
-    std::string logFilePath() const {
-        if (logFileStr == "-") return logFileStr;
-        if (cybozu::FilePath(logFileStr).isFull()) return logFileStr;
-        return (cybozu::FilePath(ga.baseDirStr) + logFileStr).str();
-    }
 };
 
 int main(int argc, char *argv[]) try
@@ -70,7 +65,7 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    util::setLogSetting(opt.logFilePath(), opt.isDebug);
+    util::setLogSetting(createLogFilePath(opt.logFileStr, ga.baseDirStr), opt.isDebug);
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,

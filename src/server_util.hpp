@@ -339,4 +339,12 @@ inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff, size
         , util::timeToPrintable(diff.timestamp).c_str(), size);
 }
 
+inline std::string createLogFilePath(const std::string &fileStr, const std::string &baseDirStr)
+{
+    if (fileStr == "-") return fileStr;
+    if (cybozu::FilePath(fileStr).isFull()) return fileStr;
+    return (cybozu::FilePath(baseDirStr) + fileStr).str();
+
+}
+
 } //namespace walb
