@@ -17,6 +17,7 @@
 #include "constant.hpp"
 #include "walb_util.hpp"
 #include "counter.hpp"
+#include "meta.hpp"
 
 namespace walb {
 namespace server {
@@ -318,6 +319,24 @@ inline void verifyMaxForegroundTasks(size_t maxForegroundTasks, const char *msg)
         throw cybozu::Exception(msg)
             << "exceeds max foreground tasks" << maxForegroundTasks;
     }
+}
+
+inline std::string formatActions(const char *prefix, ActionCounters &ac, const StrVec &actionV)
+{
+    const std::vector<int> numV = ac.getValues(actionV);
+    std::string ret(prefix);
+    for (size_t i = 0; i < actionV.size(); i++) {
+        ret += cybozu::util::formatString(" %s %d", actionV[i].c_str(), numV[i]);
+    }
+    return ret;
+}
+
+inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff, size_t size)
+{
+    return cybozu::util::formatString(
+        "%s%s %d %s %" PRIu64 ""
+        , prefix, diff.str().c_str(), diff.isMergeable ? 1 : 0
+        , util::timeToPrintable(diff.timestamp).c_str(), size);
 }
 
 } //namespace walb
