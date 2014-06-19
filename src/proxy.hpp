@@ -66,7 +66,7 @@ struct ProxyVolState
     std::set<std::string> archiveSet;
 
     /**
-     * Timestamp of the latest wdiff received from a storage server.
+     * Timestamp of the latest wlog received from a storage server.
      * Lock of mu is required to access this.
      * 0 means invalid.
      */
@@ -267,8 +267,9 @@ inline StrVec getAllStatusAsStrVec()
     for (const std::string &volId : gp.stMap.getKeyList()) {
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
-        const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         const std::string state = volSt.sm.get();
+        if (state == pClear) continue;
+        const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
         const uint64_t totalSize = volInfo.getTotalDiffFileSize();
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
         const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
@@ -279,7 +280,7 @@ inline StrVec getAllStatusAsStrVec()
 
         const std::vector<int> actionNum = volSt.ac.getValues(volSt.archiveSet);
         size_t i = 0;
-        for (const auto& archiveName : volSt.archiveSet) {
+        for (const std::string& archiveName : volSt.archiveSet) {
             const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
             const uint64_t totalSize = volInfo.getTotalDiffFileSize(archiveName);
             const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
@@ -315,9 +316,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     const uint64_t totalSize = volInfo.getTotalDiffFileSize();
     const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
     const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
-    const std::vector<int> numActions = volSt.ac.getValues(volSt.archiveSet);
-    int totalNumAction = 0;
-    for (int i : numActions) totalNumAction += i;
+    const int totalNumAction = getTotalNumActions(volSt.ac, volSt.archiveSet);
 
     ret.push_back(fmt("volume %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
@@ -334,12 +333,13 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
         const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
         const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
         const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
+        const char *action = volSt.ac.getValue(archiveName) == 0 ? "None" : "WdiffSend";
 
         ret.push_back(fmt("  archive %s", archiveName.c_str()));
         ret.push_back(fmt("  host %s", hi.addrPort.str().c_str()));
         ret.push_back(fmt("  compression %s", hi.cmpr.str().c_str()));
         ret.push_back(fmt("  wdiffSendDelay %u", hi.wdiffSendDelaySec));
-        ret.push_back(fmt("  action %s", numActions[i] == 0 ? "None" : "WdiffSend"));
+        ret.push_back(fmt("  action %s", action));
         ret.push_back(fmt("  numDiff %zu", mgr.size()));
         ret.push_back(fmt("  lastWdiffSentTime %s", tsStr.c_str()));
 

@@ -331,6 +331,18 @@ inline std::string formatActions(const char *prefix, ActionCounters &ac, const S
     return ret;
 }
 
+/**
+ * C must be Container<std::string> type.
+ */
+template <typename C>
+inline int getTotalNumActions(ActionCounters &ac, const C &actions)
+{
+    const std::vector<int> v = ac.getValues(actions);
+    int total = 0;
+    for (int i : v) total += i;
+    return total;
+}
+
 inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff, size_t size)
 {
     return cybozu::util::formatString(
