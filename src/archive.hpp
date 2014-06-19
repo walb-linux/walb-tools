@@ -778,6 +778,36 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     return true;
 }
 
+inline StrVec getAllStatusAsStrVec()
+{
+    // QQQ
+    return {};
+}
+
+inline StrVec getVolStatusAsStrVec(const std::string &volId)
+{
+    const char *const FUNC = __func__;
+    auto fmt = cybozu::util::formatString;
+    StrVec v;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    const std::string &state = volSt.sm.get();
+    if (state == aClear) throw cybozu::Exception(FUNC) << "bad state" << volId << state;
+
+    v.push_back(fmt("volume %s", volId.c_str()));
+    v.push_back(fmt("state %s", state.c_str()));
+    v.push_back(formatActions("action", volSt.ac, allActionVec));
+    v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
+                           getArchiveVolState(volId).diffMgr);
+    StrVec v1 = volInfo.getStatusAsStrVec();
+    std::move(v1.begin(), v1.end(), std::back_inserter(v));
+
+    return v;
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -799,28 +829,23 @@ inline void c2aGetStateServer(protocol::ServerParams &p)
 
 inline void c2aStatusServer(protocol::ServerParams &p)
 {
+    const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
-    StrVec params;
-    pkt.read(params);
 
-    StrVec statusStrVec;
     bool sendErr = true;
     try {
-        if (params.empty()) {
-            // for all volumes
-            throw cybozu::Exception("not implemented yet");
-            // TODO
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        StrVec strV;
+        if (v.empty()) {
+            strV = archive_local::getAllStatusAsStrVec();
         } else {
-            // for a volume
-            const std::string &volId = params[0];
-            ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
-                                   getArchiveVolState(volId).diffMgr);
-            statusStrVec = volInfo.getStatusAsStrVec();
+            const std::string &volId = v[0];
+            strV = archive_local::getVolStatusAsStrVec(volId);
         }
         pkt.write(msgOk);
         sendErr = false;
-        pkt.write(statusStrVec);
+        pkt.write(strV);
         packet::Ack(p.sock).sendFin();
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -1626,8 +1651,9 @@ inline void c2aGetNumActionServer(protocol::ServerParams &p)
         }
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        if (volSt.sm.get() == aClear) {
-            throw cybozu::Exception(FUNC) << "bad state";
+        const std::string st = volSt.sm.get();
+        if (st == aClear) {
+            throw cybozu::Exception(FUNC) << "bad state" << volId << action << st;
         }
         const size_t num = volSt.ac.getValue(action);
         ul.unlock();

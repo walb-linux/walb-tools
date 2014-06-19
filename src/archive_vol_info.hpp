@@ -36,8 +36,8 @@ class ArchiveVolInfo
 public:
     const cybozu::FilePath volDir;
     const std::string volId;
+    const std::string vgName;
 private:
-    const std::string vgName_;
     WalbDiffFiles wdiffs_;
 
 public:
@@ -50,14 +50,14 @@ public:
                    const std::string &vgName, MetaDiffManager &diffMgr)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
-        , vgName_(vgName)
+        , vgName(vgName)
         , wdiffs_(diffMgr, volDir.str()) {
         cybozu::FilePath baseDir(baseDirStr);
         if (!baseDir.stat().isDirectory()) {
             throw cybozu::Exception("ArchiveVolInfo:Directory not found: " + baseDirStr);
         }
-        if (!cybozu::lvm::vgExists(vgName_)) {
-            throw cybozu::Exception("ArchiveVolInfo:Vg does not exist: " + vgName_);
+        if (!cybozu::lvm::vgExists(vgName)) {
+            throw cybozu::Exception("ArchiveVolInfo:Vg does not exist: " + vgName);
         }
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
@@ -128,7 +128,7 @@ public:
         return volDir.stat().isDirectory();
     }
     bool lvExists() const {
-        return cybozu::lvm::exists(vgName_, lvName());
+        return cybozu::lvm::exists(vgName, lvName());
     }
     /**
      * Create a volume.
@@ -151,7 +151,7 @@ public:
      * Get volume data.
      */
     cybozu::lvm::Lv getLv() const {
-        cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName_, lvName());
+        cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName, lvName());
         if (lv.isSnapshot()) {
             throw cybozu::Exception(
                 "The target must not be snapshot: " + lv.path().str());
@@ -192,46 +192,32 @@ public:
         if (!existsVolDir()) {
             throw cybozu::Exception(FUNC) << "not found volDir" << volDir.str();
         }
-        const bool existsLv = lvExists();
+        if (!lvExists()) {
+            throw cybozu::Exception(FUNC) << "not found baseLv" << vgName << lvName();
+        }
 
-        v.push_back(fmt("volId %s", volId.c_str()));
-        uint64_t sizeLb = 0;
-        if (existsLv) sizeLb = getLv().sizeLb();
-        const std::string sizeStr = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
-        v.push_back(fmt("size %" PRIu64 " %s", sizeLb, sizeStr.c_str()));
+        const uint64_t sizeLb = getLv().sizeLb();
+        v.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+        const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
+        v.push_back(fmt("size %s", sizeS.c_str()));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
-        std::string st = getState();
-        v.push_back(fmt("state %s", st.c_str()));
-        StrVec actionV; // TODO
-        std::string actions;
-        for (const std::string &s : actionV) {
-            actions += std::string(" ") + s;
-        }
-        v.push_back(fmt("actions %s", actions.c_str()));
         const MetaState metaSt = getMetaState();
         v.push_back(fmt("base %s", metaSt.str().c_str()));
         const MetaSnap latest = wdiffs_.getMgr().getLatestSnapshot(metaSt);
         v.push_back(fmt("latest %s", latest.str().c_str()));
-        size_t numRestored = 0; // TODO
+        const size_t numRestored = getRestoredSnapshots().size();
         v.push_back(fmt("numRestored %zu", numRestored));
-        for (size_t i = 0; i < numRestored; i++) {
-            uint64_t gid = 0; // TODO
-            v.push_back(fmt("restored %" PRIu64 "", gid));
-        }
-        std::vector<MetaSnap> rv; // TODO
-        v.push_back(fmt("numRestoreble %zu", rv.size()));
-        for (size_t i = 0; i < rv.size(); i++) {
-            MetaSnap snap; // TODO
-            v.push_back(fmt("snapshot %" PRIu64 "", snap.gidB));
-        }
+        const size_t numRestorable = getRestorableSnapshots(false).size();
+        v.push_back(fmt("numRestorable %zu", numRestorable));
+        const size_t numRestorableAll = getRestorableSnapshots(true).size();
+        v.push_back(fmt("numRestorableAll %zu", numRestorableAll));
+
         MetaDiffVec dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
-        v.push_back(fmt("numWdiff %zu", dv.size()));
+        v.push_back(fmt("numDiff %zu", dv.size()));
         for (const MetaDiff &d : dv) {
-            size_t size = wdiffs_.getDiffFileSize(d);
-            v.push_back(fmt("wdiff %s %d %" PRIu64 " %s"
-                            , d.str().c_str(), d.isMergeable ? 1 : 0, size
-                            , util::timeToPrintable(d.timestamp).c_str()));
+            const size_t size = wdiffs_.getDiffFileSize(d);
+            v.push_back(formatMetaDiff("wdiff ", d, size));
         }
         return v;
     }
@@ -351,7 +337,7 @@ public:
     }
 private:
     cybozu::lvm::Vg getVg() const {
-        return cybozu::lvm::getVg(vgName_);
+        return cybozu::lvm::getVg(vgName);
     }
     std::string lvName() const {
         return VOLUME_PREFIX + volId;
