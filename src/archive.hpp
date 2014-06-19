@@ -400,9 +400,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         verifyStateIn(sm.get(), {stFrom}, FUNC);
-        if (!isFull) {
-            snapFrom = volSt.diffMgr.getLatestSnapshot(volInfo.getMetaState());
-        }
+        if (!isFull) snapFrom = volInfo.getLatestSnapshot();
     } catch (std::exception &e) {
         logger.warn() << e.what();
         pkt.write(e.what());
@@ -1316,8 +1314,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
             // no problem to continue.
         }
-        const MetaState metaState = volInfo.getMetaState();
-        const MetaSnap latestSnap = volSt.diffMgr.getLatestSnapshot(metaState);
+        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         const Relation rel = getRelation(latestSnap, diff);
 
         if (rel != Relation::APPLICABLE_DIFF) {
