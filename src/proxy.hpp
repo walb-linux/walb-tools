@@ -236,7 +236,7 @@ inline void verifyMaxConversionMemory(const char *msg)
     }
 }
 
-inline StrVec getAllStateStrVec()
+inline StrVec getAllStatusAsStrVec()
 {
     StrVec ret;
     const auto &fmt = cybozu::util::formatString;
@@ -289,7 +289,7 @@ inline StrVec getAllStateStrVec()
     return ret;
 }
 
-inline StrVec getVolStateStrVec(const std::string &volId)
+inline StrVec getVolStatusAsStrVec(const std::string &volId)
 {
     StrVec ret;
     const auto &fmt = cybozu::util::formatString;
@@ -388,10 +388,10 @@ inline void c2pStatusServer(protocol::ServerParams &p)
         StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
         StrVec stStrV;
         if (v.empty()) {
-            stStrV = proxy_local::getAllStateStrVec();
+            stStrV = proxy_local::getAllStatusAsStrVec();
         } else {
             const std::string &volId = v[0];
-            stStrV = proxy_local::getVolStateStrVec(volId);
+            stStrV = proxy_local::getVolStatusAsStrVec(volId);
         }
         pkt.write(msgOk);
         sendErr = false;

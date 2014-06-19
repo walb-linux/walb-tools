@@ -267,7 +267,7 @@ inline StorageVolState &getStorageVolState(const std::string &volId)
 
 namespace storage_local {
 
-inline StrVec getAllStateStrVec()
+inline StrVec getAllStatusAsStrVec()
 {
     StrVec v;
     auto fmt = cybozu::util::formatString;
@@ -316,7 +316,7 @@ inline StrVec getAllStateStrVec()
     return v;
 }
 
-inline StrVec getVolStateStrVec(const std::string &volId, bool isVerbose)
+inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
 {
     const char *const FUNC = __func__;
     auto fmt = cybozu::util::formatString;
@@ -359,14 +359,14 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         if (params.empty()) {
-            v = storage_local::getAllStateStrVec();
+            v = storage_local::getAllStatusAsStrVec();
         } else {
             const std::string &volId = params[0];
             bool isVerbose = false;
             if (params.size() >= 2) {
                 isVerbose = static_cast<int>(cybozu::atoi(params[1])) != 0;
             }
-            v = storage_local::getVolStateStrVec(volId, isVerbose);
+            v = storage_local::getVolStatusAsStrVec(volId, isVerbose);
         }
         pkt.write(msgOk);
         sendErr = false;
