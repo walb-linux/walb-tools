@@ -241,6 +241,16 @@ inline StrVec getAllStatusAsStrVec()
     StrVec ret;
     const auto &fmt = cybozu::util::formatString;
 
+    ret.push_back("-----ProxyGlobal-----");
+    ret.push_back(fmt("nodeId %s", gp.nodeId.c_str()));
+    ret.push_back(fmt("baseDir %s", gp.baseDirStr.c_str()));
+    ret.push_back(fmt("maxWdiffSendMb %zu", gp.maxWdiffSendMb));
+    ret.push_back(fmt("delaySecForRetry %zu", gp.delaySecForRetry));
+    ret.push_back(fmt("retryTimeout %zu", gp.retryTimeout));
+    ret.push_back(fmt("maxForegroundTasks %zu", gp.maxForegroundTasks));
+    ret.push_back(fmt("maxConversionMb %zu", gp.maxConversionMb));
+    ret.push_back(fmt("socketTimeout %zu", gp.socketTimeout));
+
     const std::vector<std::pair<ProxyTask, int64_t> > tqv = gp.taskQueue.getAll();
     ret.push_back(fmt("-----TaskQueue %zu-----", tqv.size()));
     for (const auto &pair : tqv) {
@@ -254,7 +264,7 @@ inline StrVec getAllStatusAsStrVec()
     }
 
     ret.push_back("-----Volume-----");
-    for (const std::string &volId : getProxyGlobal().stMap.getKeyList()) {
+    for (const std::string &volId : gp.stMap.getKeyList()) {
         ProxyVolState &volSt = getProxyVolState(volId);
         UniqueLock ul(volSt.mu);
         const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);

@@ -272,6 +272,14 @@ inline StrVec getAllStatusAsStrVec()
     StrVec v;
     auto fmt = cybozu::util::formatString;
 
+    v.push_back("-----StorageGlobal-----");
+    v.push_back(fmt("nodeId %s", gs.nodeId.c_str()));
+    v.push_back(fmt("baseDir %s", gs.baseDirStr.c_str()));
+    v.push_back(fmt("maxWlogSendMb %" PRIu64 "", gs.maxWlogSendMb));
+    v.push_back(fmt("delaySecForRetry %zu", gs.delaySecForRetry));
+    v.push_back(fmt("maxForegroundTasks %zu", gs.maxForegroundTasks));
+    v.push_back(fmt("socketTimeout %zu", gs.socketTimeout));
+
     v.push_back("-----Archive-----");
     v.push_back(fmt("host %s:%u", gs.archive.toStr().c_str(), gs.archive.getPort()));
 
