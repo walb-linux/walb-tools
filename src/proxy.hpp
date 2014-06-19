@@ -300,6 +300,8 @@ inline StrVec getVolStateStrVec(const std::string &volId)
 
     const std::string state = volSt.sm.get();
     const size_t numDiff = volSt.diffMgr.size();
+    const uint64_t sizeLb = volInfo.getSizeLb();
+    const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
     const uint64_t totalSize = volInfo.getTotalDiffFileSize();
     const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
     const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
@@ -309,6 +311,8 @@ inline StrVec getVolStateStrVec(const std::string &volId)
 
     ret.push_back(fmt("volume %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
+    ret.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+    ret.push_back(fmt("size %s", sizeS.c_str()));
     ret.push_back(fmt("numDiff %zu", numDiff));
     ret.push_back(fmt("totalSize %s", totalSizeStr.c_str()));
     ret.push_back(fmt("lastWlogReceivedTime %s", tsStr.c_str()));
@@ -334,15 +338,9 @@ inline StrVec getVolStateStrVec(const std::string &volId)
         StrVec wdiffStrV;
         uint64_t minTs = -1;
         for (const MetaDiff &diff : diffV) {
-            const uint64_t fsize = volInfo.getDiffFileSize(diff, archiveName);
-            const std::string fsizeStr = cybozu::util::toUnitIntString(fsize);
-            wdiffStrV.push_back(
-                fmt("  wdiff %s %d %s %s"
-                    , diff.str().c_str()
-                    , diff.isMergeable ? 1 : 0
-                    , util::timeToPrintable(diff.timestamp).c_str()
-                    , fsizeStr.c_str()));
-            totalSize += fsize;
+            const uint64_t size = volInfo.getDiffFileSize(diff, archiveName);
+            wdiffStrV.push_back(formatMetaDiff("  wdiff ", diff, size));
+            totalSize += size;
             if (minTs > diff.timestamp) minTs = diff.timestamp;
         }
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);

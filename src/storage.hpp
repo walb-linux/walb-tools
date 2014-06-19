@@ -331,12 +331,7 @@ inline StrVec getVolStateStrVec(const std::string &volId, bool isVerbose)
 
     v0.push_back(fmt("volId %s", volId.c_str()));
     v0.push_back(fmt("state %s", state.c_str()));
-    const std::vector<int> actionNumV = volSt.ac.getValues(allActionVec);
-    std::string actionStr("action");
-    for (size_t i = 0; i < allActionVec.size(); i++) {
-        actionStr += fmt(" %s %d", allActionVec[i].c_str(), actionNumV[i]);
-    }
-    v0.push_back(std::move(actionStr));
+    v0.push_back(formatActions("action", volSt.ac, allActionVec));
     v0.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);

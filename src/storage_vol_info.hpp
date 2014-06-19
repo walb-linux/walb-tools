@@ -97,6 +97,8 @@ public:
         v.push_back(fmt("wdevPath %s", wdevPathStr.c_str()));
         const uint64_t sizeLb = device::getSizeLb(wdevPathStr);
         v.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+        const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
+        v.push_back(fmt("size %s", sizeS.c_str()));
         uint64_t logUsagePb = device::getLogUsagePb(wdevPathStr);
         v.push_back(fmt("logUsagePb %" PRIu64 "", logUsagePb));
         uint64_t logCapacityPb = device::getLogCapacityPb(wdevPathStr);
