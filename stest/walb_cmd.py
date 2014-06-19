@@ -350,6 +350,20 @@ def cleanup(vol, wdevL):
 # user command functions
 
 
+def status(vol=None, sL=[]):
+    '''
+        print server status.
+    '''
+    if not sL:
+        sL = cfg.storageL + cfg.proxyL + cfg.archiveL
+    for s in sL:
+        args = ['status']
+        if vol:
+            args.append(vol)
+        print '++++++++++++++++++++', s.name, '++++++++++++++++++++'
+        print run_ctl(s, args, False)
+
+
 def kill_all_servers():
     for s in ["storage-server", "proxy-server", "archive-server"]:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
