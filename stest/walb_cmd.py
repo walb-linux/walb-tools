@@ -146,7 +146,7 @@ def get_server_args(s):
 def run_command(args, putMsg=True):
     if cfg.debug and putMsg:
         print "run_command:", to_str(args)
-    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=sys.stderr)
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=sys.stderr, close_fds=True)
     f = p.stdout
     s = f.read().strip()
     ret = p.wait()
@@ -195,7 +195,7 @@ def run_daemon(args):
     sys.stdout = open('/dev/null', 'w')
     sys.stderr = open('/dev/null', 'w')
 
-    subprocess.Popen(args).wait()
+    subprocess.Popen(args, close_fds=True).wait()
     os._exit(0)
 
 
