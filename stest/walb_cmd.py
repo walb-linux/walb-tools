@@ -307,8 +307,7 @@ def run_walbctl(cmdArgs):
 def create_walb_dev(ldevPath, ddevPath, wdevId):
     run_walbctl(['format_ldev',
                  '--ldev', ldevPath,
-                 '--ddev', ddevPath,
-                 '--n_snap', '1'])
+                 '--ddev', ddevPath])
     run_walbctl(['create_wdev',
                  '--ldev', ldevPath,
                  '--ddev', ddevPath,

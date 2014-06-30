@@ -61,7 +61,7 @@ public:
     uint32_t getChecksum() const { return super()->checksum; }
     uint32_t getLogicalBlockSize() const { return super()->logical_bs; }
     uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
-    uint32_t getMetadataSize() const { return super()->snapshot_metadata_size; }
+    uint32_t getMetadataSize() const { return super()->metadata_size; }
     uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
     cybozu::Uuid getUuid() const { return cybozu::Uuid(super()->uuid); }
     const char* getName() const { return super()->name; }
@@ -97,14 +97,17 @@ public:
     uint64_t get1stSuperBlockOffset() const {
         return offset_;
     }
-
+#if 0
     uint64_t getMetadataOffset() const {
         return ::get_metadata_offset_2(super());
     }
+#endif
 
     uint64_t get2ndSuperBlockOffset() const {
         UNUSED uint64_t oft = ::get_super_sector1_offset_2(super());
+#if 0
         assert(oft == getMetadataOffset() + getMetadataSize());
+#endif
         return ::get_super_sector1_offset_2(super());
     }
 
