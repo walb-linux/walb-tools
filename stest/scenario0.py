@@ -26,6 +26,12 @@ wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
 wdev2 = Wdev(2, '/dev/walb/2', '/dev/test/data3', '/dev/test/log3', 12)
 wdevL = [wdev0, wdev1, wdev2]
 
+def replaceConfig(cfg, archiveL = None, proxyL = None):
+    if not archiveL:
+        archiveL = cfg.archiveL
+    if not proxyL:
+        proxyL = cfg.proxyL
+    return Config(cfg.debug, cfg.binDir, cfg.dataDir, cfg.storageL, proxyL, archiveL)
 
 VOL = 'vol0'
 g_count = 0
@@ -648,7 +654,7 @@ def test_r2():
         replace p0 by p2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r2:replace-proxy', g_count
-    config2 = config._replace(proxyL=[p2, p1])
+    config2 = replaceConfig(config, proxyL=[p2, p1])
     replace_proxy(p0, p2, [VOL], config2)
     write_random(wdev0.path, 1)
     gid = snapshot_sync(s0, VOL, [a0])
@@ -724,7 +730,7 @@ def test_r3():
         replace a0 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
-    config2 = config._replace(archiveL=[a2, a1])
+    config2 = replaceConfig(config, archiveL=[a2, a1])
     test_replace_archive_sync(a0, a2, config2)
     test_replace_archive_sync(a2, a0, config)
     print 'test_r3:succeeded'
@@ -740,7 +746,7 @@ def test_r4():
         raise Exception('test_r4:a1 synchronizing', a1)
 
     replicate(a0, VOL, a1, False)  # preparation
-    config2 = config._replace(archiveL=[a0, a2])
+    config2 = replaceConfig(config, archiveL=[a0, a2])
     test_replace_archive_nosync(a1, a2, config2)
     test_replace_archive_nosync(a2, a1, config)
     print 'test_r4:succeeded'
