@@ -349,7 +349,7 @@ def cleanup(vol, wdevL):
 # user command functions
 
 
-def status(vol=None, sL=[]):
+def status(sL=[], vol=None):
     '''
         print server status.
     '''
