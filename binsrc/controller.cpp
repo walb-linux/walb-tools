@@ -13,7 +13,7 @@
 
 using namespace walb;
 
-struct Option : public cybozu::Option
+struct Option
 {
     std::string addr;
     uint16_t port;
@@ -22,18 +22,23 @@ struct Option : public cybozu::Option
     std::string ctrlId;
     bool isDebug;
     size_t socketTimeout;
-    Option() {
-        appendMust(&addr, "a", "host name or address");
-        appendMust(&port, "p", "port number");
-        appendParam(&cmd, "command", "command name");
-        appendParamVec(&params, "parameters", "command parameters");
-        appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
+    Option(int argc, char *argv[]) {
+        cybozu::Option opt;
+        opt.appendMust(&addr, "a", "host name or address");
+        opt.appendMust(&port, "p", "port number");
+        opt.appendParam(&cmd, "command", "command name");
+        opt.appendParamVec(&params, "parameters", "command parameters");
+        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
+        opt.appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
 
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&ctrlId, hostName, "id", "controller identfier");
+        opt.appendOpt(&ctrlId, hostName, "id", "controller identfier");
 
-        appendHelp("h");
+        opt.appendHelp("h");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            exit(1);
+        }
     }
 };
 
@@ -49,11 +54,7 @@ void runClient(Option &opt)
 
 int main(int argc, char *argv[])
 try {
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        return 1;
-    }
+    Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
     runClient(opt);
 
