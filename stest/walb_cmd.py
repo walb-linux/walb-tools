@@ -95,16 +95,26 @@ aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
 
 
-import warning
+import warnings
 
 
 def deprecated(func):
     '''
     decorator of deprecation.
     '''
-    warning.warn('deprecated function %s.' % func.__name__,
-                 category=warning.DeprecateionWarning,
-                 stacklevel=2)
+    def f(*args, **kwargs):
+        warnings.warn('deprecated function %s.' % func.__name__,
+                      category=DeprecationWarning,
+                      stacklevel=2)
+        return func(*args, **kwargs)
+    f.__name__ = func.__name__
+    f.__doc__ = func.__doc__
+    f.__dict__.update(func.__dict__)
+    return f
+
+
+warnings.simplefilter('always', DeprecationWarning)
+
 
 @deprecated
 def set_config(config):
