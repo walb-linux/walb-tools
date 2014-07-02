@@ -18,7 +18,8 @@ K_STORAGE = 0
 K_PROXY = 1
 K_ARCHIVE = 2
 
-Server = collections.namedtuple('Server', 'name port kind vg')
+Server = collections.namedtuple(
+    'Server', 'name address port kind exePath dataDir logPath vg')
 Config = collections.namedtuple(
     'Config', 'debug binDir dataDir storageL proxyL archiveL')
 Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
@@ -97,6 +98,135 @@ aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
 
 
+class Wdev:
+    '''
+    Walb device.
+    '''
+    Mebi = (1 << 20) # mebi
+    Lbs = (1 << 9) # logical block size
+    def __init__(self, cfg, iD, ldev, ddev):
+        '''
+        cfg :: Config - configuration.
+        iD :: int     - walb device id.
+        ldev :: str   - underlying log block device path.
+        ddev :: str   - underlying data block device path.
+        '''
+        verify_type(cfg, Config)
+        verify_type(iD, int)
+        verify_type(ddev, str)
+        verify_type(ldev, str)
+        self.cfg = cfg
+        self.iD = iD
+        self.ddev = ddev
+        self.ldev = ldev
+
+    def get_path(self):
+        '''
+        Get walb device path.
+
+        '''
+        return '/dev/walb/' + str(iD)
+
+    def run_walbctl(self, cmdArgs):
+        '''
+        Run walbctl command.
+        cmdArgs :: [str] - command line arguments.
+        '''
+        verify_list_type(cmdArgs, str)
+        run_command([self.cfg.binDir + 'walbctl'] + cmdArgs)
+
+
+    def format(self):
+        '''
+        Format devices for a walb device.
+        TODO: support format_ldev options.
+        '''
+        self.run_walbctl(['format_ldev',
+                          '--ldev', self.ldev,
+                          '--ddev', self.ddev])
+
+    def create(self):
+        '''
+        Create a walb device.
+        TODO: support create_wdev options.
+        '''
+        self.run_walbctl(['create_wdev',
+                          '--ldev', self.ldev,
+                          '--ddev', self.ddev,
+                          '--name', str(self.iD)])
+
+    def delete(self):
+        '''
+        Delete a walb device.
+        '''
+        self.run_walbctl(['delete_wdev', '--wdev', self.get_path()])
+
+    def resize(self, newSizeMb):
+        '''
+        Resize a walb device.
+        Underlying data device must be resized before calling this function.
+        newSizeMb :: int - new size [MiB].
+        '''
+        newSizeLb = newSizeMb * self.Mebi / self.Lbs
+        self.run_walbctl(['resize', '--wdev', self.get_path(),
+                          '--size', str(newSizeLb)])
+
+    def reset(self):
+        '''
+        Reset a walb device.
+        This will be remove all log data in the log device.
+        You should call this to recover from log overflow.
+
+        '''
+        self.run_walbctl(['reset_wal', '--wdev', self.get_path()])
+
+
+    def get_size_mb(self):
+        '''
+        Get walb device size.
+        wdev :: Wdev -- walb device.
+        return :: int -- device size [MiB].
+        '''
+        sysName = self._get_sys_path() + 'size'
+        with open(sysName, 'r') as f:
+            sizeB = int(f.read().strip()) * self.Lbs
+            if sizeB % self.Mebi != 0:
+                raise Exception('get_size_mb:not multiple of MiB', sizeB)
+        return sizeB / self.Mebi
+
+    def wait_for_log_empty(self, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for log device becomes empty.
+        wdev :: Wdev    - walb device.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(timeoutS, int)
+        def create_key_value(ls):
+            ret = []
+            for s in ls:
+                (k, v) = s.strip().split()
+                ret.append((k, int(v)))
+            return dict(ret)
+        sysName = self._get_sys_path() + 'walb/lsids'
+        t0 = time.time()
+        while time.time() < t0 + timeoutS:
+            with open(sysName, 'r') as f:
+                kv = create_key_value(f.readlines())
+                completed = kv['completed']
+                oldest = kv['oldest']
+                if completed == oldest:
+                    return
+            print "wait_for_log_empty", oldest, completed
+            time.sleep(0.3)
+        raise Exception("wait_for_log_empty", wdev)
+
+    '''
+    private member functions.
+    '''
+    def _get_sys_path(self):
+        return '/sys/block/walb!%d/' % self.iD
+
+
 class Walb:
     '''
     Walb command set.
@@ -123,9 +253,9 @@ class Walb:
         verify_type(s, Server)
         verify_list_type(cmdArgs, str)
         ctlArgs = [self.cfg.binDir + "/controller",
-                "-id", "ctrl",
-                "-a", "localhost",
-                "-p", s.port] + self._get_debug_opt()
+                   "-id", "ctrl",
+                   "-a", s.address,
+                   "-p", str(s.port)] + self._get_debug_opt()
         return run_command(ctlArgs + cmdArgs, putMsg)
 
     def get_host_type(self, s, putMsg=True):
@@ -158,9 +288,12 @@ class Walb:
         verify_type(vol, str)
         self.run_ctl(s, ["reset-vol", vol])
         if s.kind == K_STORAGE:
-            self._wait_for_state(s, vol, [sSyncReady]) # QQQ
+            self._wait_for_state_change(
+                s, vol, [sStopped, stReset], [sSyncReady], TIMEOUT_SEC)
         elif s.kind == K_ARCHIVE:
-            self._wait_for_state(s, vol, [aSyncReady]) # QQQ
+            self._wait_for_state_chante(
+                s, vol, [aStopped, aSyncReady, atResetVol], [aSyncReady],
+                TIMEOUT_SEC)
         else:
             raise Exception('reset_vol:bad server', s)
 
@@ -209,7 +342,7 @@ class Walb:
         verify_list_type(cmdArgs, str)
         run_command([self.cfg.binDir + 'walbctl'] + cmdArgs)
 
-
+    @deprecated
     def create_walb_dev(self, ldevPath, ddevPath, wdevId):
         '''
         Create a walb device.
@@ -229,6 +362,12 @@ class Walb:
                           '--ddev', ddevPath,
                           '--name', str(wdevId)])
 
+    def create_walb_dev(self, sx, ldev, ddev, iD):
+        '''
+        QQQ
+        '''
+        pass
+
     def delete_walb_dev(self, wdevPath):
         '''
         Delete a walb device.
@@ -236,6 +375,12 @@ class Walb:
         '''
         verify_type(wdevPath, str)
         self.run_walbctl(['delete_wdev', '--wdev', wdevPath])
+
+    def delete_walb_dev2(self, iD):
+        '''
+        QQQ
+        '''
+        pass
 
     def is_overflow(self, sx, vol):
         '''
@@ -266,7 +411,7 @@ class Walb:
         verify_type(ax, Server)
         return int(self.run_ctl(px, ['get', 'is-wdiff-send-error', vol, ax.name])) != 0
 
-    def reset_wdev(self, wdev):
+    def reset_walb_dev(self, wdev): # QQQ
         '''
         Reset walb device.
         wdev :: Wdev - walb device.
@@ -277,7 +422,7 @@ class Walb:
         resize_lv(wdev.data, get_lv_size_mb(wdev.data), wdev.sizeMb, False)
         self.create_walb_dev(wdev.log, wdev.data, wdev.iD)
 
-    def cleanup(self, vol, wdevL):
+    def cleanup(self, vol, wdevL): # QQQ
         '''
         Cleanup a volume.
         vol :: str       - volume name.
@@ -288,7 +433,7 @@ class Walb:
         for s in self._get_all_servers():
             self.clear_vol(s, vol)
         for wdev in wdevL:
-            self.reset_wdev(wdev)
+            self.reset_walb_dev(wdev)
 
     def status(self, sL=[], vol=None):
         '''
@@ -1230,7 +1375,7 @@ class Walb:
         for sx in self.cfg.storageL:
             self.resize_storage(sx, vol, sizeMb)
 
-    def wait_for_log_empty(self, wdev, timeoutS=TIMEOUT_SEC):
+    def wait_for_log_empty(self, wdev, timeoutS=TIMEOUT_SEC): # QQQ
         '''
         Wait for log device becomes empty.
         wdev :: Wdev    - walb device.
@@ -1257,7 +1402,7 @@ class Walb:
             time.sleep(0.3)
         raise Exception("wait_for_log_empty", wdev)
 
-    def get_walb_dev_sizeMb(self, wdev):
+    def get_walb_dev_sizeMb(self, wdev): # QQQ
         '''
         Get walb device size.
         wdev :: Wdev -- walb device.
@@ -1276,28 +1421,6 @@ class Walb:
         '''
         return self.cfg.archiveL[0]
 
-    def write_over_wldev(self, wdev, overflow=False):
-        '''
-        Write to a walb device with size larger then log device.
-        wdev :: Wdev     - walb device.
-        overflow :: bool - True if you want to overflow the device.
-        '''
-        verify_type(wdev, Wdev)
-        verify_type(overflow, bool)
-        wldevSizeLb = get_lv_size_mb(wdev.log) * 1024 * 1024 / 512
-        wdevSizeLb = self.get_walb_dev_sizeMb(wdev) * 1024 * 1024 / 512
-        print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
-        # write a little bigger size than wldevSizeLb
-        remainLb = wldevSizeLb + 4
-        writeMaxLb = min(wldevSizeLb, wdevSizeLb) / 2
-        while remainLb > 0:
-            writeLb = min(remainLb, writeMaxLb)
-            print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
-            write_random(wdev.path, writeLb)
-            if not overflow:
-                self.wait_for_log_empty(wdev)
-            remainLb -= writeLb
-
     def get_server_args(self, s):
         '''
         Get server arguments.
@@ -1306,24 +1429,27 @@ class Walb:
         '''
         verify_type(s, Server)
         if s.kind == K_STORAGE:
-            ret = [self.cfg.binDir + "storage-server",
+            ret = [s.binDir + "storage-server",
                    "-archive", self._get_host_port(self.get_primary_archive()),
                    "-proxy", ",".join(map(self._get_host_port, self.cfg.proxyL))]
         elif s.kind == K_PROXY:
-            ret = [self.cfg.binDir + "proxy-server"]
+            ret = [s.binDir + "proxy-server"]
         else:
             assert s.kind == K_ARCHIVE
-            ret = [self.cfg.binDir + "archive-server", "-vg", s.vg]
-
-        ret += ["-p", s.port,
-                "-b", self.cfg.dataDir + s.name,
-                "-l", self.cfg.dataDir + s.name + ".log",
-                "-id", s.name] + get_debug_opt()
+            ret = [s.binDir + "archive-server", "-vg", s.vg]
+        if s.logPath:
+            logPath = s.logPath
+        else:
+            logPath = s.dataDir + '/' + s.name + '.log'
+        ret += ["-p", str(s.port),
+                "-b", s.dataPath,
+                "-l", logPath,
+                "-id", s.name] + self._get_debug_opt()
         return ret
 
 
     '''
-    Privae member functions.
+    Private member functions.
     '''
 
     def _get_all_servers(self):
@@ -1336,7 +1462,7 @@ class Walb:
             return []
 
     def _get_host_port(self, s):
-        return "localhost" + ":" + s.port
+        return "localhost" + ":" + str(s.port)
 
     def _wait_for_state_cond(self, s, vol, pred, msg, timeoutS=10):
         t0 = time.time()

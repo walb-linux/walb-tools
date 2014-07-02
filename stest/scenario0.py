@@ -6,38 +6,48 @@ import random
 import datetime
 from walb_cmd import *
 
+workDir = os.getcwd() + '/stest/tmp/'
+binDir = os.getcwd() + '/binsrc/'
 
-s0 = Server('s0', '10000', K_STORAGE, None)
-s1 = Server('s1', '10001', K_STORAGE, None)
-s2 = Server('s2', '10002', K_STORAGE, None)
-p0 = Server('p0', '10100', K_PROXY, None)
-p1 = Server('p1', '10101', K_PROXY, None)
-p2 = Server('p2', '10102', K_PROXY, None)
-a0 = Server('a0', '10200', K_ARCHIVE, 'vg0')
-a1 = Server('a1', '10201', K_ARCHIVE, 'vg1')
-a2 = Server('a2', '10202', K_ARCHIVE, 'vg2')
 
-WORK_DIR = os.getcwd() + '/stest/tmp/'
+def D(name):
+    return workDir + name
+
+
+def L(name):
+    return workDir + name + '.log'
+
+
+s0 = Server('s0', 'localhost', 10000, K_STORAGE, binDir, D('s0'), L('s0'), None)
+s1 = Server('s1', 'localhost', 10001, K_STORAGE, binDir, D('s1'), L('s1'), None)
+s2 = Server('s2', 'localhost', 10002, K_STORAGE, binDir, D('s2'), L('s2'), None)
+p0 = Server('p0', 'localhost', 10100, K_PROXY,   binDir, D('p0'), L('p0'), None)
+p1 = Server('p1', 'localhost', 10101, K_PROXY,   binDir, D('p1'), L('p1'), None)
+p2 = Server('p2', 'localhost', 10102, K_PROXY,   binDir, D('p2'), L('p2'), None)
+a0 = Server('a0', 'localhost', 10200, K_ARCHIVE, binDir, D('a0'), L('a0'), 'vg0')
+a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, D('a1'), L('a1'), 'vg1')
+a2 = Server('a2', 'localhost', 10202, K_ARCHIVE, binDir, D('a2'), L('a2'), 'vg2')
+
 isDebug = True
+config = Config(isDebug, binDir, workDir, [s0, s1], [p0, p1], [a0, a1])
 
-config = Config(isDebug, os.getcwd() + '/binsrc/',
-                WORK_DIR, [s0, s1], [p0, p1], [a0, a1])
 
 wdev0 = Wdev(0, '/dev/walb/0', '/dev/test/data', '/dev/test/log', 12)
 wdev1 = Wdev(1, '/dev/walb/1', '/dev/test/data2', '/dev/test/log2', 12)
 wdev2 = Wdev(2, '/dev/walb/2', '/dev/test/data3', '/dev/test/log3', 12)
 wdevL = [wdev0, wdev1, wdev2]
 
-def replaceConfig(cfg, archiveL = None, proxyL = None):
+VOL = 'vol0'
+g_count = 0
+
+
+def replace_config(cfg, archiveL = None, proxyL = None):
     if not archiveL:
         archiveL = cfg.archiveL
     if not proxyL:
         proxyL = cfg.proxyL
-    return Config(cfg.debug, cfg.binDir, cfg.dataDir, cfg.storageL, proxyL, archiveL)
-
-VOL = 'vol0'
-g_count = 0
-set_config(config)
+    return Config(cfg.debug, cfg.binDir, cfg.dataDir, cfg.storageL,
+                  proxyL, archiveL)
 
 
 def setup_test():
@@ -53,7 +63,7 @@ def setup_test():
     kill_all_servers()
     walb = Walb(config)
     for wdev in wdevL:
-        walb.reset_wdev(wdev)
+        walb.reset_walb_dev(wdev)
 
 
 def startup(s):
@@ -65,7 +75,7 @@ def startup(s):
     if config.debug:
         print 'cmd=', to_str(args)
     run_daemon(args)
-    wait_for_server_port(s)
+    wait_for_server_port('localhost', s.port)
 
 
 def startup_all():
@@ -85,6 +95,99 @@ def resize_storage_if_necessary(sx, vol, wdev, sizeMb):
         return
     resize_lv(wdev.data, get_lv_size_mb(wdev.data), sizeMb, False)
     walb.resize_storage(sx, vol, sizeMb)
+
+
+def remove_persistent_data(s):
+    '''
+    Remove persistent data for scenario test.
+    call shutdown() before calling this.
+    s :: Server
+    '''
+    shutil.rmtree(cfg.dataDir + s.name)
+    if s in cfg.archiveL:
+        for f in os.listdir('/dev/' + s.vg):
+            if f[0:2] == 'i_':
+                remove_lv('/dev/' + s.vg + '/' + f)
+
+
+def write_random(bdevPath, sizeLb, offset=0, fixVar=None):
+    '''
+    Write random data.
+    bdevPath :: str - block device path.
+    sizeLb :: int   - written size [logical block].
+    offset :: int   - start offset to write [logical block].
+    fixVar :: int   - 0 to 255 or None.
+    '''
+    verify_type(bdevPath, str)
+    verify_type(sizeLb, int)
+    verify_type(offset, int)
+    if fixVar is not None:
+        verify_type(fixVar, int)
+    args = [cfg.binDir + "/write_random_data",
+        '-s', str(sizeLb), '-o', str(offset), bdevPath]
+    if fixVar:
+        args += ['-set', str(fixVar)]
+    return run_command(args, False)
+
+
+class RandomWriter():
+    '''
+    Random writer using a thread.
+
+    '''
+    def __init__(self, path):
+        self.path = path
+    def writing(self):
+        while not self.quit:
+            write_random(self.path, 1)
+            time.sleep(0.05)
+    def __enter__(self):
+        self.quit = False
+        self.th = threading.Thread(target=self.writing)
+        self.th.setDaemon(True)
+        self.th.start()
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.quit = True
+        self.th.join()
+
+
+def kill_all_servers():
+    '''
+    for scenario test.
+    '''
+    for s in ["storage-server", "proxy-server", "archive-server"]:
+        subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
+    time.sleep(0.3)
+
+
+def write_over_wldev(self, wdev, overflow=False):
+    '''
+    Write to a walb device with size larger then log device.
+    wdev :: Wdev     - walb device.
+    overflow :: bool - True if you want to overflow the device.
+    '''
+    walb = Walb(config)
+    verify_type(wdev, Wdev)
+    verify_type(overflow, bool)
+    wldevSizeLb = get_lv_size_mb(wdev.log) * 1024 * 1024 / 512
+    wdevSizeLb = walb.get_walb_dev_sizeMb(wdev) * 1024 * 1024 / 512
+    print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
+    # write a little bigger size than wldevSizeLb
+    remainLb = wldevSizeLb + 4
+    writeMaxLb = min(wldevSizeLb, wdevSizeLb) / 2
+    while remainLb > 0:
+        writeLb = min(remainLb, writeMaxLb)
+        print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
+        write_random(wdev.path, writeLb)
+        if not overflow:
+            walb.wait_for_log_empty(wdev)
+        remainLb -= writeLb
+
+
+################################################################################
+# Normal scenario tests.
+################################################################################
 
 
 def test_n1():
@@ -408,6 +511,11 @@ def test_n12():
     print 'test_n12:succeeded'
 
 
+################################################################################
+# Misoperation scenario tests.
+################################################################################
+
+
 def test_m1():
     """
         full-bkp --> full-bkp fails.
@@ -480,6 +588,11 @@ def test_m3():
     print 'test_m3:succeeded'
 
 
+################################################################################
+# Error scenario tests.
+################################################################################
+
+
 def test_e1():
     """
         p0 down -> write over wldev amount -> p0 up -> snapshot -> sha1
@@ -488,7 +601,7 @@ def test_e1():
     print '++++++++++++++++++++++++++++++++++++++ test_e1:proxy-down', g_count
     walb = Walb(config)
     walb.shutdown(p0, 'force')
-    walb.write_over_wldev(wdev0)
+    write_over_wldev(wdev0)
     walb.verify_not_overflow(s0, VOL)
     startup(p0)
     walb.kick_all_storage()
@@ -506,7 +619,7 @@ def test_e2():
     print '++++++++++++++++++++++++++++++++++++++ test_e2:archive-down', g_count
     walb = Walb(config)
     walb.shutdown(a0, 'force')
-    walb.write_over_wldev(wdev0)
+    write_over_wldev(wdev0)
     walb.verify_not_overflow(s0, VOL)
     gid = walb.snapshot_async(s0, VOL)
     walb.verify_not_restorable(a0, VOL, gid, 10, 'test_e2')
@@ -541,7 +654,7 @@ def test_e4():
     print '++++++++++++++++++++++++++++++++++++++ test_e4:storage-down-overflow', g_count
     walb = Walb(config)
     walb.shutdown(s0, 'force')
-    walb.write_over_wldev(wdev0, overflow=True)
+    write_over_wldev(wdev0, overflow=True)
     startup(s0)
     if not walb.is_overflow(s0, VOL):
         raise Exception('test_e4:must be overflow')
@@ -642,6 +755,11 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
+################################################################################
+# Replacement scenario tests.
+################################################################################
+
+
 def test_r1():
     """
         replace s0 by s2
@@ -704,7 +822,7 @@ def test_r2():
         replace p0 by p2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r2:replace-proxy', g_count
-    config2 = replaceConfig(config, proxyL=[p2, p1])
+    config2 = replace_config(config, proxyL=[p2, p1])
     walb = Walb(config2)
     replace_proxy(p0, p2, [VOL], config2)
     write_random(wdev0.path, 1)
@@ -751,7 +869,7 @@ def test_replace_archive_sync(ax, ay, newConfig):
     ay :: Server        - must not be started.
     newConfig :: Config - new configuration.
     '''
-    walb0 = Walb(get_config())
+    walb0 = Walb(config)
     if not walb0.is_synchronizing(ax, VOL):
         raise Exception('test_replace_archive_sync: not synchronizing', ax, ay)
     replace_archive(ax, ay, [VOL], newConfig)
@@ -771,7 +889,7 @@ def test_replace_archive_nosync(ax, ay, newConfig):
     ay must not be started.
 
     """
-    walb0 = Walb(get_config())
+    walb0 = Walb(config)
     if walb0.is_synchronizing(ax, VOL):
         raise Exception('test_replace_archive_nosync: synchronizing', ax, ay)
     md0 = walb0.get_sha1_of_restorable(
@@ -789,7 +907,7 @@ def test_r3():
         replace a0 by a2
     """
     print '++++++++++++++++++++++++++++++++++++++ test_r3:replace-primary-archive', g_count
-    config2 = replaceConfig(config, archiveL=[a2, a1])
+    config2 = replace_config(config, archiveL=[a2, a1])
     test_replace_archive_sync(a0, a2, config2)
     test_replace_archive_sync(a2, a0, config)
     print 'test_r3:succeeded'
@@ -807,10 +925,15 @@ def test_r4():
 
     walb.replicate(a0, VOL, a1, False)  # preparation
 
-    config2 = replaceConfig(config, archiveL=[a0, a2])
+    config2 = replace_config(config, archiveL=[a0, a2])
     test_replace_archive_nosync(a1, a2, config2)
     test_replace_archive_nosync(a2, a1, config)
     print 'test_r4:succeeded'
+
+
+################################################################################
+# Main
+################################################################################
 
 
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11a', 'n11b', 'n12',
