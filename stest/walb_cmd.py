@@ -1776,7 +1776,7 @@ class Walb:
         '''
         verify_list_type(sL, Server)
         if not sL:
-            sL = self._get_all_server()
+            sL = self._get_all_servers()
         for s in sL:
             args = ['status']
             if vol:
@@ -1801,7 +1801,7 @@ class Walb:
         Shutdown all servers.
         '''
         _verify_shutdown_mode(mode, 'shutdown_all')
-        for s in self._get_all_server():
+        for s in self._get_all_servers():
             run_ctl(s, ["shutdown", mode])
         time.sleep(1)
 
@@ -1811,7 +1811,7 @@ class Walb:
         return :: [str] - list of server name.
         '''
         ret = []
-        for s in self._get_all_server():
+        for s in self._get_all_servers():
             try:
                 self.get_host_type(s, False)
                 ret.append(s.name)
@@ -1930,7 +1930,7 @@ class Walb:
             assert s.kind == K_ARCHIVE
             tmpStL = aDuringStop
             goalSt = aStopped
-        wait_for_state_change(s, vol, tmpStL, [goalSt], TIMEOUT_SEC)
+        self._wait_for_state_change(s, vol, tmpStL, [goalSt], TIMEOUT_SEC)
 
     def stop(self, s, vol, mode="graceful"):
         '''
@@ -1957,21 +1957,21 @@ class Walb:
         verify_type(s, Server)
         verify_type(vol, str)
         if s.kind == K_STORAGE:
-            st = get_state(s, vol)
+            st = self.get_state(s, vol)
             if st == sSyncReady:
-                run_ctl(s, ['start', vol, 'slave'])
-                wait_for_state_change(s, vol, [stStartSlave], [sSlave])
+                self.run_ctl(s, ['start', vol, 'slave'])
+                self._wait_for_state_change(s, vol, [stStartSlave], [sSlave])
             else:
                 assert st == sStopped
-                run_ctl(s, ['start', vol, 'master'])
-                wait_for_state_change(s, vol, [stStartMaster], [sMaster])
+                self.run_ctl(s, ['start', vol, 'master'])
+                self._wait_for_state_change(s, vol, [stStartMaster], [sMaster])
         elif s.kind == K_PROXY:
-            run_ctl(s, ['start', vol])
-            wait_for_state_change(s, vol, [ptStart], pActive)
+            self.run_ctl(s, ['start', vol])
+            self._wait_for_state_change(s, vol, [ptStart], pActive)
         else:
             assert s.kind == K_ARCHIVE
-            run_ctl(s, ['start', vol])
-            wait_for_state_change(s, vol, [atStart], aActive)
+            self.run_ctl(s, ['start', vol])
+            self._wait_for_state_change(s, vol, [atStart], aActive)
 
     def del_archive_from_proxy(self, px, vol, ax):
         '''
@@ -2230,7 +2230,7 @@ class Walb:
         gidE :: int     - end generation id.
         timeoutS :: int - timeout [sec].
         '''
-        verify_gid_range(gidB, gidE)
+        verify_gid_range(gidB, gidE, 'wait_for_merged')
         self.wait_for_no_action(ax, vol, aaMerge, timeoutS)
         gidL = self.list_restorable(ax, vol, 'all')
         pos = gidL.index(gidB)
@@ -2247,7 +2247,7 @@ class Walb:
         timeoutS :: int - timeout [sec].
         '''
         verify_type(gid, int)
-        self.wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
+        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
         gidL = self.list_restorable(ax, vol, 'all')
         if gidL and gid <= gidL[-1]:
             return
@@ -2364,7 +2364,7 @@ class Walb:
         a0 = self.get_primary_archive()
         self.prepare_backup(sx, vol)
         self.run_ctl(sx, ["full-bkp", vol])
-        self.wait_for_state_change(sx, vol, sDuringFullSync,
+        self._wait_for_state_change(sx, vol, sDuringFullSync,
                                    [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
@@ -2403,7 +2403,7 @@ class Walb:
         else:
             max_gid = -1
         self.run_ctl(sx, ["hash-bkp", vol])
-        self.wait_for_state_change(sx, vol, sDuringHashSync,
+        self._wait_for_state_change(sx, vol, sDuringHashSync,
                                    [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
@@ -2527,7 +2527,7 @@ class Walb:
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
-        verify_gid_range(gidB, gidE)
+        verify_gid_range(gidB, gidE, 'merge_diff')
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self.wait_for_merged(ax, vol, gidB, gidE)
 
