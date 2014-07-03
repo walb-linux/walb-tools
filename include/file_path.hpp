@@ -76,6 +76,10 @@ public:
         if (isFailed_) return false;
         return S_ISLNK(st_.st_mode);
     }
+    bool isExecutable() const {
+        if (isFailed_) return false;
+        return (st_.st_mode & S_IXUSR) != 0;
+    }
     uint64_t size() const {
         if (isFailed_) return 0;
         return uint64_t(st_.st_size);
