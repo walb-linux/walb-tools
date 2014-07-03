@@ -1186,6 +1186,11 @@ inline void c2pGetServer(protocol::ServerParams &p)
     protocol::runGetCommandServer(p, gp.nodeId, proxyGetHandlerMap);
 }
 
+inline void c2pExecServer(protocol::ServerParams &p)
+{
+    protocol::runExecServer(p, gp.nodeId);
+}
+
 const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { statusCN, c2pStatusServer },
     { startCN, c2pStartServer },
@@ -1195,6 +1200,7 @@ const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { resizeCN, c2pResizeServer },
     { kickCN, c2pKickServer },
     { getCN, c2pGetServer },
+    { execCN, c2pExecServer },
     // protocols.
     { wlogTransferPN, s2pWlogTransferServer },
 };

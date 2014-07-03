@@ -1111,6 +1111,11 @@ inline void c2sGetServer(protocol::ServerParams &p)
     protocol::runGetCommandServer(p, gs.nodeId, storageGetHandlerMap);
 }
 
+inline void c2sExecServer(protocol::ServerParams &p)
+{
+    protocol::runExecServer(p, gs.nodeId);
+}
+
 const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { statusCN, c2sStatusServer },
     { initVolCN, c2sInitVolServer },
@@ -1124,6 +1129,7 @@ const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { snapshotCN, c2sSnapshotServer },
     { kickCN, c2sKickServer },
     { getCN, c2sGetServer },
+    { execCN, c2sExecServer },
 };
 
 } // namespace walb

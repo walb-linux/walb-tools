@@ -15,6 +15,7 @@
 #include "walb_logger.hpp"
 #include "walb_util.hpp"
 #include "server_util.hpp"
+#include "process.hpp"
 
 namespace walb {
 
@@ -55,6 +56,7 @@ const char *const shutdownCN = "shutdown";
 const char *const kickCN = "kick";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 const char *const getCN = "get";
+const char *const execCN = "exec";
 
 /**
  * Target name of 'get' command.
@@ -498,6 +500,28 @@ inline std::string runGetHostTypeClient(cybozu::Socket &sock, const std::string 
     run1stNegotiateAsClient(sock, nodeId, getCN);
     sendStrVec(sock, {hostTypeTN}, 1, __func__, msgOk);
     return local::recvValue<std::string>(sock);
+}
+
+inline void runExecServer(ServerParams &p, const std::string &nodeId)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        const StrVec v = recvStrVec(p.sock, 0, FUNC);
+        const std::string res = cybozu::process::call(v);
+        StrVec ret = cybozu::util::splitString(res, "\r\n");
+        if (!ret.empty() && ret.back().empty()) {
+            ret.resize(ret.size() - 1); // Remove last empty string.
+        }
+        sendValueAndFin(pkt, sendErr, ret);
+        logger.info() << "exec done" << ret.size() << cybozu::util::concat(v, " ");
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
 }
 
 }} // namespace walb::protocol

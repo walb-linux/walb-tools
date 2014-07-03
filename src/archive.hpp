@@ -1687,6 +1687,11 @@ inline void c2aGetServer(protocol::ServerParams &p)
     protocol::runGetCommandServer(p, ga.nodeId, archiveGetHandlerMap);
 }
 
+inline void c2aExecServer(protocol::ServerParams &p)
+{
+    protocol::runExecServer(p, ga.nodeId);
+}
+
 const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
     // commands
     { statusCN, c2aStatusServer },
@@ -1703,6 +1708,7 @@ const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
     { mergeCN, c2aMergeServer },
     { resizeCN, c2aResizeServer },
     { getCN, c2aGetServer },
+    { execCN, c2aExecServer },
     // protocols.
     { dirtyFullSyncPN, x2aDirtyFullSyncServer },
     { dirtyHashSyncPN, x2aDirtyHashSyncServer },

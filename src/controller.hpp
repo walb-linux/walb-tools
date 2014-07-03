@@ -308,6 +308,7 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { kickCN, c2xKickClient },
     { dbgReloadMetadataCN, c2aReloadMetadataClient },
     { getCN, c2xGetClient },
+    { execCN, c2xGetStrVecClient },
 };
 
 } // namespace walb
