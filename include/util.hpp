@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cctype>
+#include <sstream>
 
 #include <sys/time.h>
 
@@ -404,6 +405,22 @@ inline void parseStrVec(
     if (i < numMust) {
         throw RT_ERR("missing required params %zu %zu", i, numMust);
     }
+}
+
+template <typename C>
+inline std::string concat(const C &list, const std::string &delim = "")
+{
+    std::stringstream ss;
+    if (list.empty()) return ss.str();
+    typename C::const_iterator it = list.cbegin();
+    ss << *it;
+    ++it;
+    while (it != list.cend()) {
+        ss << delim;
+        ss << *it;
+        ++it;
+    }
+    return ss.str();
 }
 
 } //namespace util
