@@ -1130,7 +1130,7 @@ inline void c2pKickServer(protocol::ServerParams &p)
                       << (volId.empty() ? "ALL" : volId)
                       << (archiveName.empty() ? "ALL" : archiveName);
     } catch (std::exception &e) {
-        LOGs.error() << e.what();
+        logger.error() << e.what();
         pkt.write(e.what());
     }
 }
@@ -1199,4 +1199,4 @@ const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
     { wlogTransferPN, s2pWlogTransferServer },
 };
 
-} // walb
+} // namespace walb

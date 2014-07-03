@@ -1126,4 +1126,4 @@ const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
     { getCN, c2sGetServer },
 };
 
-} // walb
+} // namespace walb
