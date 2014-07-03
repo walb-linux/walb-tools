@@ -10,6 +10,8 @@ import socket
 import errno
 import shutil
 
+Mebi = (1 << 20)  # mebi.
+Lbs = (1 << 9)  # logical block size
 
 ########################################
 # Utility functions.
@@ -29,9 +31,13 @@ def run_command(args, putMsg=True):
     '''
     run a command.
     args :: [str] - command line arguments.
+                    The head item must be full-path executable.
     putMsg :: bool - put debug message.
     return :: str  - standard output of the command.
     '''
+    verify_list_type(args, str)
+    verify_type(putMsg, bool)
+
     if putMsg:
         print "run_command:", to_str(args)
     p = subprocess.Popen(args, stdout=subprocess.PIPE,
@@ -109,32 +115,31 @@ def wait_for_server_port(address, port, timeoutS=10):
             print 'wait_for_server_port:ignored', \
                 address, port, e.errno, os.strerror(e.errno)
         time.sleep(0.3)
-    raise Exception('wait_for_server_port:timeout', s)
+    raise Exception('wait_for_server_port:timeout', address, port, timeoutS)
 
 
-def verify_shutdown_mode(mode, msg):
-    if mode not in ['graceful', 'force']:
-        raise Exception(msg, 'bad mode', mode)
-
-
-def get_sha1(bdevPath):
+def get_sha1(bdevPath, runCommand=run_command):
     '''
     Get sha1sum of a block device by full scan.
     bdevPath :: str - block device path.
+    runCommand :: RunCommand
     return :: str  - sha1sum string.
     '''
     verify_type(bdevPath, str)
-    ret = run_command(['/usr/bin/sha1sum', bdevPath])
+    verify_function(runCommand)
+    ret = runCommand(['/usr/bin/sha1sum', bdevPath])
     return ret.split(' ')[0]
 
 
-def flush_bufs(bdevPath):
+def flush_bufs(bdevPath, runCommand=run_command):
     '''
     Flush buffer of a block device.
     bdevPath :: str - block device path.
+    runCommand :: RunCommand
     '''
     verify_type(bdevPath, str)
-    run_command(['/sbin/blockdev', '--flushbufs', bdevPath])
+    verify_function(runCommand)
+    runCommand(['/sbin/blockdev', '--flushbufs', bdevPath])
 
 
 def zero_clear(bdevPath, offsetLb, sizeLb):
@@ -147,7 +152,8 @@ def zero_clear(bdevPath, offsetLb, sizeLb):
     verify_type(bdevPath, str)
     verify_type(offsetLb, int)
     verify_type(sizeLb, int)
-    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + bdevPath, # 'oflag=direct',
+    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + bdevPath,
+                 # 'oflag=direct',
                  'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb)])
     # flush data to avoid overwriting after walb's writing
     fd = os.open(bdevPath, os.O_RDONLY)
@@ -217,29 +223,40 @@ def remove_lv(lvPath):
         raise Exception('remove_lv:timeout', lvPath)
 
 
-def get_lv_size_mb(lvPath):
+def get_lv_size(lvPath, runCommand=run_command):
     '''
     Get lv size.
     lvPath :: str - lvm lv path.
-    return :: device size [MiB].
+    runCommand :: RunCommand
+    return :: device size [byte].
     '''
-    ret = run_command(['/sbin/lvdisplay', '-C', '--noheadings',
-                       '-o', 'lv_size', '--units', 'b', lvPath])
+    ret = runCommand(['/sbin/lvdisplay', '-C', '--noheadings',
+                      '-o', 'lv_size', '--units', 'b', lvPath])
     ret.strip()
     if ret[-1] != 'B':
         raise Exception('get_lv_size_mb: bad return value', ret)
-    sizeB = int(ret[0:-1])
-    miB = 1 << 20
-    if sizeB % miB != 0:
+    return int(ret[0:-1])
+
+
+def get_lv_size_mb(lvPath, runCommand=run_command):
+    '''
+    Get lv size.
+    lvPath :: str - lvm lv path.
+    runCommand :: RunCommand
+    return :: device size [MiB].
+    '''
+    sizeB = get_lv_size(lvPath, runCommand)
+    if sizeB % Mebi != 0:
         raise Exception('get_lv_size_mb: not multiple of 1MiB.', sizeB)
-    return sizeB / miB
+    return sizeB / Mebi
 
 
-def wait_for_lv_ready(lvPath):
+def wait_for_lv_ready(lvPath, runCommand=run_command):
     '''
-    lvPath :: str   - lvm device path.
+    lvPath :: str            - lvm device path.
+    runCommand :: RunCommand
     '''
-    flush_bufs(lvPath)
+    flush_bufs(lvPath, runCommand)
 
 
 ########################################
@@ -255,6 +272,17 @@ def verify_type(obj, typeValue):
     '''
     if type(obj) != typeValue:
         raise 'invalid type', type(obj), typeValue
+
+
+def verify_function(obj):
+    '''
+    obj - function object.
+
+    '''
+    def f():
+        pass
+    if type(obj) != type(f):
+        raise 'not function type', type(obj)
 
 
 def verify_list_type(obj, typeValue):

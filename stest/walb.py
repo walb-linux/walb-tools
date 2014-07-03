@@ -14,15 +14,14 @@ from util import *
 
 TIMEOUT_SEC = 100
 
+Mebi = (1 << 20)  # mebi.
+Lbs = (1 << 9)  # logical block size
+
 K_STORAGE = 0
 K_PROXY = 1
 K_ARCHIVE = 2
 
-Server = collections.namedtuple(
-    'Server', 'name address port kind exePath dataDir logPath vg')
-Config = collections.namedtuple(
-    'Config', 'debug binDir dataDir storageL proxyL archiveL')
-Wdev = collections.namedtuple('Wdev', 'iD path data log sizeMb')
+serverKinds = [K_STORAGE, K_PROXY, K_ARCHIVE]
 
 
 # storage steady states
@@ -98,34 +97,33 @@ aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
 
 
-class Wdev:
+class Device:
     '''
     Walb device.
+
     '''
-    Mebi = (1 << 20) # mebi
-    Lbs = (1 << 9) # logical block size
-    def __init__(self, cfg, iD, ldev, ddev):
+    def __init__(self, iD, ldev, ddev, walbctlPath, runCommand=run_command):
         '''
-        cfg :: Config - configuration.
-        iD :: int     - walb device id.
-        ldev :: str   - underlying log block device path.
-        ddev :: str   - underlying data block device path.
+        iD :: int          - walb device id.
+        ldev :: str        - underlying log block device path.
+        ddev :: str        - underlying data block device path.
+        walbctlPath :: str - walbctl path.
+        runCommand:: RunCommand - function that run commands.
         '''
-        verify_type(cfg, Config)
         verify_type(iD, int)
-        verify_type(ddev, str)
         verify_type(ldev, str)
-        self.cfg = cfg
+        verify_type(ddev, str)
+        verify_type(walbctlPath, str)
+        verify_function(runCommand)
         self.iD = iD
-        self.ddev = ddev
         self.ldev = ldev
+        self.ddev = ddev
+        self.walbctlPath = walbctlPath
+        self.runCommand = runCommand
 
-    def get_path(self):
-        '''
-        Get walb device path.
-
-        '''
-        return '/dev/walb/' + str(iD)
+    @property
+    def path(self):
+        return '/dev/walb/' + str(self.iD)
 
     def run_walbctl(self, cmdArgs):
         '''
@@ -133,8 +131,22 @@ class Wdev:
         cmdArgs :: [str] - command line arguments.
         '''
         verify_list_type(cmdArgs, str)
-        run_command([self.cfg.binDir + 'walbctl'] + cmdArgs)
+        self.runCommand([self.walbctlPath] + cmdArgs)
 
+    def exists(self):
+        '''
+        Check the walb device exists or not.
+        return :: bool
+        '''
+        if 0:
+            # This is local only.
+            return os.path.exists(self.path)
+        else:
+            cmd = 'if [ -b "%s" ]; ' \
+                  + 'then echo 1;' \
+                  + 'else echo 0; fi' % self.path
+            res = self.runCommand(['/bin/sh', '-c', cmd])
+            return int(res) != 0
 
     def format(self):
         '''
@@ -159,7 +171,7 @@ class Wdev:
         '''
         Delete a walb device.
         '''
-        self.run_walbctl(['delete_wdev', '--wdev', self.get_path()])
+        self.run_walbctl(['delete_wdev', '--wdev', self.path])
 
     def resize(self, newSizeMb):
         '''
@@ -167,32 +179,38 @@ class Wdev:
         Underlying data device must be resized before calling this function.
         newSizeMb :: int - new size [MiB].
         '''
-        newSizeLb = newSizeMb * self.Mebi / self.Lbs
-        self.run_walbctl(['resize', '--wdev', self.get_path(),
+        newSizeLb = newSizeMb * Mebi / Lbs
+        self.run_walbctl(['resize', '--wdev', self.path,
                           '--size', str(newSizeLb)])
 
     def reset(self):
         '''
         Reset a walb device.
-        This will be remove all log data in the log device.
+        This will remove all logs in the log device.
         You should call this to recover from log overflow.
 
         '''
-        self.run_walbctl(['reset_wal', '--wdev', self.get_path()])
+        self.run_walbctl(['reset_wal', '--wdev', self.path])
 
+    def get_size_lb(self):
+        '''
+        Get walb device size.
+        This will read sysfs to get size.
+        return :: int -- device size [logical block].
+        '''
+        path = self._get_sys_path() + 'size'
+        return int(self.runCommand(['/bin/cat', path]).strip())
 
     def get_size_mb(self):
         '''
         Get walb device size.
-        wdev :: Wdev -- walb device.
+        This will read sysfs to get size.
         return :: int -- device size [MiB].
         '''
-        sysName = self._get_sys_path() + 'size'
-        with open(sysName, 'r') as f:
-            sizeB = int(f.read().strip()) * self.Lbs
-            if sizeB % self.Mebi != 0:
-                raise Exception('get_size_mb:not multiple of MiB', sizeB)
-        return sizeB / self.Mebi
+        sizeB = self.get_size_lb() * Lbs
+        if sizeB % Mebi != 0:
+            raise Exception('get_size_mb: not multiple of MiB.', sizeB)
+        return sizeB / Mebi
 
     def wait_for_log_empty(self, timeoutS=TIMEOUT_SEC):
         '''
@@ -201,24 +219,26 @@ class Wdev:
         timeoutS :: int - timeout [sec].
         '''
         verify_type(timeoutS, int)
+
         def create_key_value(ls):
             ret = []
             for s in ls:
                 (k, v) = s.strip().split()
                 ret.append((k, int(v)))
             return dict(ret)
-        sysName = self._get_sys_path() + 'walb/lsids'
+
+        path = self._get_sys_path() + 'walb/lsids'
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            with open(sysName, 'r') as f:
-                kv = create_key_value(f.readlines())
-                completed = kv['completed']
-                oldest = kv['oldest']
-                if completed == oldest:
-                    return
+            out = self.runCommand(['/bin/cat', path]).strip()
+            kv = create_key_value(out.split('\n'))
+            completed = kv['completed']
+            oldest = kv['oldest']
+            if completed == oldest:
+                return
             print "wait_for_log_empty", oldest, completed
             time.sleep(0.3)
-        raise Exception("wait_for_log_empty", wdev)
+        raise Exception("wait_for_log_empty", self.path)
 
     '''
     private member functions.
@@ -227,22 +247,179 @@ class Wdev:
         return '/sys/block/walb!%d/' % self.iD
 
 
-class Walb:
+class Server:
     '''
-    Walb command set.
+    Server configuration.
     '''
-    def __init__(self, cfg):
+    def __init__(self, name, address, port, kind, binDir, dataDir,
+                 logPath=None, vg=None):
         '''
-        cfg :: Config - Configuration.
+        name :: str            - daemon identifier in the system.
+        address :: str         - host name
+        port :: int            - port number.
+        kind :: int            - K_STORAGE, K_PROXY, or K_ARCHIVE.
+        binDir :: str          - directory path containing server executable
+                                 at the host.
+        dataDir :: str         - persistent data directory path.
+        logPath :: str or None - log path. None means default.
+        vg :: str              - volume group name.
+                                 This is required by archive server only.
         '''
-        self.set_config(cfg)
+        verify_type(name, str)
+        verify_type(address, str)
+        verify_type(port, int)
+        verify_type(kind, int)
+        if kind not in serverKinds:
+            raise Exception('Server: wrong server kind', kind)
+        verify_type(binDir, str)
+        verify_type(dataDir, str)
+        if logPath is not None:
+            verify_type(logPath, str)
+        if kind == K_ARCHIVE or vg is not None:
+            verify_type(vg, str)
 
-    def set_config(self, cfg):
-        ''' Set configuration '''
-        verify_type(cfg, Config)
-        self.cfg = cfg
+        self.name = name
+        self.address = address
+        self.port = port
+        self.kind = kind
+        self.binDir = binDir
+        self.dataDir = dataDir
+        self.logPath = logPath
+        self.vg = vg
 
-    def run_ctl(self, s, cmdArgs, putMsg=True):
+    def get_host_port(self):
+        '''
+        Get 'address:port' string.
+        return :: str
+        '''
+        return self.address + ":" + str(self.port)
+
+
+def verify_server_kind(s, kind):
+    '''
+    s :: Server
+    kind :: int
+    '''
+    if s.kind != kind:
+        raise Exception('invalid server type', s.kind, kind)
+
+
+class ServerLayout:
+    '''
+    Server layout of a backup group.
+    '''
+    def __init__(self, storageL, proxyL, archiveL):
+        '''
+        storageL :: [Server] - storage server list.
+        proxyL :: [Server]   - proxy server list.
+                               Before items have high priority.
+        archiveL :: [Server] - archive server list. The head is primary server.
+        '''
+        verify_list_type(storageL, Server)
+        verify_list_type(proxyL, Server)
+        verify_list_type(archiveL, Server)
+
+        if len(storageL) == 0:
+            raise Exception('server_layout: no storage server')
+        if len(proxyL) == 0:
+            raise Exception('server_layout: no proxy server')
+        if len(archiveL) == 0:
+            raise Exception('server_layout: no archive server')
+
+        self.storageL = storageL
+        self.proxyL = proxyL
+        self.archiveL = archiveL
+
+    def get_primary_archive(self):
+        '''
+        return :: Server
+        '''
+        return self.archiveL[0]
+
+    def get_all(self):
+        '''
+        return :: [Server]
+        '''
+        return self.storageL + self.proxyL + self.archiveL
+
+    def replace(self, storageL=None, proxyL=None, archiveL=None):
+        '''
+        Make a copy replacing arguments which are not None.
+        storageL :: [Server] or None - if None, storageL will not unchange.
+        proxyL :: [Server] or None - if None, archiveL will not unchange.
+        archiveL :: [Server] or None - if None, archiveL will not unchange.
+        return :: ServerLayout
+        '''
+        sL = self.storageL
+        if storageL:
+            sL = storageL
+        pL = self.proxyL
+        if proxyL:
+            pL = proxyL
+        aL = self.archiveL
+        if archiveL:
+            aL = archiveL
+        return ServerLayout(sL, pL, aL)
+
+
+def get_server_args(s, sLayout, isDebug=False):
+    '''
+    Get walb-tools server arguments.
+    s :: Server     - server.
+    return :: [str] - argument list.
+    '''
+    verify_type(s, Server)
+    verify_type(sLayout, ServerLayout)
+    verify_type(isDebug, bool)
+
+    if s.kind == K_STORAGE:
+        proxies = ",".join(map(lambda p: p.get_host_port(), sLayout.proxyL))
+        ret = [s.binDir + "storage-server",
+               "-archive", sLayout.get_primary_archive().get_host_port(),
+               "-proxy", proxies]
+    elif s.kind == K_PROXY:
+        ret = [s.binDir + "proxy-server"]
+    else:
+        assert s.kind == K_ARCHIVE
+        ret = [s.binDir + "archive-server", "-vg", s.vg]
+    if s.logPath:
+        logPath = s.logPath
+    else:
+        logPath = s.dataDir + '/' + s.name + '.log'
+    ret += ["-p", str(s.port),
+            "-b", s.dataPath,
+            "-l", logPath,
+            "-id", s.name]
+    if isDebug:
+        ret += ['-debug']
+    return ret
+
+
+class Controller:
+    '''
+    To handle all walb servers in a backup group.
+
+    '''
+    def __init__(self, binDir, sLayout, isDebug=False):
+        '''
+        binDir :: str           - directory where walb controller exists.
+        sLayout :: ServerLayout - server layout.
+        isDebug :: bool
+        '''
+        verify_type(binDir, str)
+        verify_type(isDebug, bool)
+        self.controllerPath = binDir + '/controller'
+        self.isDebug = isDebug
+        self.set_server_layout(sLayout)
+
+    def set_server_layout(self, sLayout):
+        '''
+        sLayout :: ServerLayout - server layout.
+        '''
+        verify_type(sLayout, ServerLayout)
+        self.sLayout = sLayout
+
+    def run_ctl(self, s, cmdArgs, putMsg=False):
         '''
         Run walb-tools controller.
         s :: Server      - a server.
@@ -252,11 +429,44 @@ class Walb:
         '''
         verify_type(s, Server)
         verify_list_type(cmdArgs, str)
-        ctlArgs = [self.cfg.binDir + "/controller",
-                   "-id", "ctrl",
+        verify_type(putMsg, bool)
+        ctlArgs = [self.controllerPath,
+                   "-id", "ctl",
                    "-a", s.address,
-                   "-p", str(s.port)] + self._get_debug_opt()
+                   "-p", str(s.port)]
+        if putMsg:
+            ctlArgs += ['-debug']
         return run_command(ctlArgs + cmdArgs, putMsg)
+
+    def run_remote_command(self, s, args, putMsg=False):
+        '''
+        Run arbitrary executable at a remote server running walb daemon.
+        This will use walb-tools daemons to run commands.
+
+        s :: Server    - server where you want to run command.
+        args :: [str]  - command line arguments.
+                         The head item must be a full-path executable.
+        putMsg :: bool - put debug message if True.
+        return :: str  - stdout of the command if the command returned 0.
+        '''
+        verify_type(s, Server)
+        verify_list_type(args, str)
+        return self.run_ctl(s, ['exec'] + args, putMsg)
+
+    def get_remote_run_command(self, s):
+        '''
+        Get run_command function for RPC.
+        walbc :: Controller
+        s :: Server
+        return :: ([str],bool -> str)
+
+        '''
+        verify_type(s, Server)
+
+        def func(args, putMsg=False):
+            return self.run_remote_command(s, args, putMsg)
+
+        return func
 
     def get_host_type(self, s, putMsg=True):
         '''
@@ -278,6 +488,18 @@ class Walb:
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol], putMsg)
 
+    def verify_state(self, s, vol, state, putMsg=True):
+        '''
+        s :: Server
+        vol :: str
+        state :: str
+        putMsg :: bool
+        '''
+        verify_type(state, str)
+        st = self.get_state(s, vol, putMsg)
+        if st != state:
+            raise Exception('verify_state: differ', st, state)
+
     def reset_vol(self, s, vol):
         '''
         Reset a volume.
@@ -286,14 +508,11 @@ class Walb:
         '''
         verify_type(s, Server)
         verify_type(vol, str)
-        self.run_ctl(s, ["reset-vol", vol])
+        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
         if s.kind == K_STORAGE:
-            self._wait_for_state_change(
-                s, vol, [sStopped, stReset], [sSyncReady], TIMEOUT_SEC)
+            self.verify_state(s, vol, sSyncReady)
         elif s.kind == K_ARCHIVE:
-            self._wait_for_state_chante(
-                s, vol, [aStopped, aSyncReady, atResetVol], [aSyncReady],
-                TIMEOUT_SEC)
+            self.verify_state(s, vol, aSyncReady)
         else:
             raise Exception('reset_vol:bad server', s)
 
@@ -316,14 +535,15 @@ class Walb:
             self.stop(sx, vol)
         else:
             raise Exception('set_slave_storage:bad state', state)
-        self.stop_sync(self.get_primary_archive(), vol)
+        self.stop_sync(self.sLayout.get_primary_archive(), vol)
         self.reset_vol(sx, vol)
         self.start(sx, vol)
 
     def kick_all(self, sL):
         '''
         Kick all servers.
-        sL :: [Server] - list of servers each of which must be storage or proxy.
+        sL :: [Server] - list of servers each of which
+                         must be storage or proxy.
         '''
         verify_list_type(sL, Server)
         for s in sL:
@@ -331,56 +551,7 @@ class Walb:
 
     def kick_all_storage(self):
         ''' Kick all storage servers. '''
-        self.kick_all(self.cfg.storageL)
-
-
-    def run_walbctl(self, cmdArgs):
-        '''
-        Run walbctl command.
-        cmdArgs :: [str] - command line arguments.
-        '''
-        verify_list_type(cmdArgs, str)
-        run_command([self.cfg.binDir + 'walbctl'] + cmdArgs)
-
-    @deprecated
-    def create_walb_dev(self, ldevPath, ddevPath, wdevId):
-        '''
-        Create a walb device.
-        ldevPath :: str - underlying log device path.
-        ddevPath :: str - underlying data device path.
-        wdevId :: int   - walb device id.
-        TODO: support fomrat_ldev options and create_wdev options.
-        '''
-        verify_type(ldevPath, str)
-        verify_type(ddevPath, str)
-        verify_type(wdevId, int)
-        self.run_walbctl(['format_ldev',
-                          '--ldev', ldevPath,
-                          '--ddev', ddevPath])
-        self.run_walbctl(['create_wdev',
-                          '--ldev', ldevPath,
-                          '--ddev', ddevPath,
-                          '--name', str(wdevId)])
-
-    def create_walb_dev(self, sx, ldev, ddev, iD):
-        '''
-        QQQ
-        '''
-        pass
-
-    def delete_walb_dev(self, wdevPath):
-        '''
-        Delete a walb device.
-        wdevPath :: str - walb device path.
-        '''
-        verify_type(wdevPath, str)
-        self.run_walbctl(['delete_wdev', '--wdev', wdevPath])
-
-    def delete_walb_dev2(self, iD):
-        '''
-        QQQ
-        '''
-        pass
+        self.kick_all(self.sLayout.storageL)
 
     def is_overflow(self, sx, vol):
         '''
@@ -391,7 +562,9 @@ class Walb:
         '''
         verify_type(sx, Server)
         verify_type(vol, str)
-        return int(self.run_ctl(sx, ['get', 'is-overflow', vol])) != 0
+        args = ['get', 'is-overflow', vol]
+        ret = self.run_ctl(sx, args)
+        return int(ret) != 0
 
     def verify_not_overflow(self, sx, vol):
         ''' Verify a volume does not overflow. '''
@@ -409,31 +582,9 @@ class Walb:
         verify_type(px, Server)
         verify_type(vol, str)
         verify_type(ax, Server)
-        return int(self.run_ctl(px, ['get', 'is-wdiff-send-error', vol, ax.name])) != 0
-
-    def reset_walb_dev(self, wdev): # QQQ
-        '''
-        Reset walb device.
-        wdev :: Wdev - walb device.
-        '''
-        verify_type(wdev, Wdev)
-        if os.path.exists(wdev.path):
-            self.delete_walb_dev(wdev.path)
-        resize_lv(wdev.data, get_lv_size_mb(wdev.data), wdev.sizeMb, False)
-        self.create_walb_dev(wdev.log, wdev.data, wdev.iD)
-
-    def cleanup(self, vol, wdevL): # QQQ
-        '''
-        Cleanup a volume.
-        vol :: str       - volume name.
-        wdevL :: [wdevL] - list of walb devices.
-        '''
-        verify_type(vol, str)
-        verify_list_type(wdevL, Wdev)
-        for s in self._get_all_servers():
-            self.clear_vol(s, vol)
-        for wdev in wdevL:
-            self.reset_walb_dev(wdev)
+        args = ['get', 'is-wdiff-send-error', vol, ax.name]
+        ret = self.run_ctl(px, args)
+        return int(ret) != 0
 
     def status(self, sL=[], vol=None):
         '''
@@ -443,7 +594,7 @@ class Walb:
         '''
         verify_list_type(sL, Server)
         if not sL:
-            sL = self._get_all_servers()
+            sL = self.sLayout.get_all()
         for s in sL:
             args = ['status']
             if vol:
@@ -459,7 +610,7 @@ class Walb:
         '''
         verify_type(s, Server)
         verify_type(mode, str)
-        verify_shutdown_mode(mode, 'shutdown')
+        self._verify_shutdown_mode(mode, 'shutdown')
         self.run_ctl(s, ["shutdown", mode])
         time.sleep(1)  # shutdown is asynchronous command.
 
@@ -467,10 +618,10 @@ class Walb:
         '''
         Shutdown all servers.
         '''
-        verify_shutdown_mode(mode, 'shutdown_all')
-        for s in self._get_all_servers():
+        self._verify_shutdown_mode(mode, 'shutdown_all')
+        for s in self.sLayout.get_all():
             self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)
+        time.sleep(1)  # shutdown is asynchronous command.
 
     def get_alive_server(self):
         '''
@@ -478,7 +629,7 @@ class Walb:
         return :: [str] - list of server name.
         '''
         ret = []
-        for s in self._get_all_servers():
+        for s in self.sLayout.get_all():
             try:
                 self.get_host_type(s, False)
                 ret.append(s.name)
@@ -486,21 +637,19 @@ class Walb:
                 pass
         return ret
 
-    def init(self, sx, vol, wdevPath):
+    def init_storage(self, sx, vol, wdevPath):
         '''
-        Initialize a volume.
+        Initialize a volume at storage.
         sx :: Server
         vol :: str
         wdevPath :: str
         '''
         verify_type(sx, Server)
+        verify_server_kind(sx, K_STORAGE)
         verify_type(vol, str)
         verify_type(wdevPath, str)
         self.run_ctl(sx, ["init-vol", vol, wdevPath])
-        self.start(sx, vol)
-        a0 = self.get_primary_archive()
-        if self.get_state(a0, vol) == aClear:
-            self.run_ctl(a0, ["init-vol", vol])
+        self.start(sx, vol)  # start as slave.
 
     def clear_vol(self, s, vol):
         '''
@@ -561,14 +710,15 @@ class Walb:
         verify_type(ax, Server)
         verify_type(vol, str)
         ret = []
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             ret.append(ax.name in self.get_archive_info_list(px, vol))
         v = sum(ret)
-        if v == len(ret): # all True
+        if v == len(ret):  # all True
             return True
-        elif v == 0: # all False
+        elif v == 0:  # all False
             return False
-        raise Exception('is_synchronizing: some are synchronizing, some are not.')
+        raise Exception('is_synchronizing: '
+                        'some proxies are synchronizing, some are not.')
 
     def wait_for_stopped(self, s, vol, prevSt=None):
         '''
@@ -583,7 +733,8 @@ class Walb:
             verify_type(prevSt, str)
         if s.kind == K_STORAGE:
             if not prevSt:
-                raise Exception('wait_for_stopped: prevSt not specified', s, vol)
+                raise Exception('wait_for_stopped: '
+                                'prevSt not specified', s, vol)
             if prevSt == sSlave:
                 tmpStL = sDuringStopForSlave
                 goalSt = sSyncReady
@@ -599,13 +750,15 @@ class Walb:
             goalSt = aStopped
         self._wait_for_state_change(s, vol, tmpStL, [goalSt], TIMEOUT_SEC)
 
-    def stop(self, s, vol, mode="graceful"):
+    def stop_async(self, s, vol, mode='graceful'):
         '''
-        Stop a volume at a server and wait for it stopped.
+        Stop a volume at a server.
+        This is asynchrnous command. See stop().
         s :: Server
         vol :: str
         mode :: str - 'graceful' or 'force' or 'empty'.
             'empty' is valid only if s is proxy.
+        return :: str - state before running stop.
         '''
         verify_type(s, Server)
         verify_type(vol, str)
@@ -613,6 +766,13 @@ class Walb:
             raise Exception('stop:bad mode', mode)
         prevSt = self.get_state(s, vol)
         self.run_ctl(s, ["stop", vol, mode])
+        return prevSt
+
+    def stop(self, s, vol, mode='graceful'):
+        '''
+        Stop a volume at a server and wait for it stopped.
+        '''
+        prevSt = self.stop_async(s, vol, mode)
         self.wait_for_stopped(s, vol, prevSt)
 
     def start(self, s, vol):
@@ -677,7 +837,8 @@ class Walb:
             self.stop(px, vol)
         aL = self.get_archive_info_list(px, vol)
         if ax.name not in aL:
-            self.run_ctl(px, ['archive-info', 'add', vol, ax.name, self._get_host_port(ax)])
+            self.run_ctl(px, ['archive-info', 'add', vol, ax.name,
+                              ax.get_host_port()])
         st = self.get_state(px, vol)
         if st == pStopped and doStart:
             self.start(px, vol)
@@ -710,7 +871,7 @@ class Walb:
         verify_type(vol, str)
         verify_type(pDst, Server)
         for axName in self.get_archive_info_list(pSrc, vol):
-            ax = self.get_server(axName, self.cfg.archiveL)
+            ax = self.get_server(axName, self.sLayout.archiveL)
             self.add_archive_to_proxy(pDst, vol, ax, doStart=False)
         self.start(pDst, vol)
 
@@ -722,7 +883,7 @@ class Walb:
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             self.del_archive_from_proxy(px, vol, ax)
         self.kick_all_storage()
 
@@ -734,26 +895,9 @@ class Walb:
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             self.add_archive_to_proxy(px, vol, ax)
         self.kick_all_storage()
-
-    def get_gid_list(self, ax, vol, cmd, optL=[]):
-        '''
-        Get gid list
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        optL :: [str]   - options.
-        return :: [int] - gid list.
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        if not cmd in ['restorable', 'restored']:
-            raise Exception('get_list_gid : bad cmd', cmd)
-        verify_list_type(optL, str)
-        ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
-        return map(int, ret.split())
 
     def list_restorable(self, ax, vol, opt=''):
         '''
@@ -771,7 +915,7 @@ class Walb:
                 optL.append(opt)
             else:
                 raise Exception('list_restorable:bad opt', opt)
-        return self.get_gid_list(ax, vol, 'restorable', optL)
+        return self._get_gid_list(ax, vol, 'restorable', optL)
 
     def list_restored(self, ax, vol):
         '''
@@ -779,64 +923,7 @@ class Walb:
         ax :: Server - archive server.
         vol :: str   - volume name.
         '''
-        return self.get_gid_list(ax, vol, 'restored')
-
-    def wait_for_restorable_any(self, ax, vol, timeoutS=TIMEOUT_SEC):
-        '''
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(timeoutS, int)
-        t0 = time.time()
-        while time.time() < t0 + timeoutS:
-            gids = self.list_restorable(ax, vol)
-            if gids:
-                return gids[-1]
-            time.sleep(0.3)
-        return -1
-
-    def wait_for_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for an gid is available.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(gid, int)
-        verify_type(timeoutS, int)
-        t0 = time.time()
-        while time.time() < t0 + timeoutS:
-            gids = self.get_gid_list(ax, vol, cmd)
-            if gid in gids:
-                return
-            time.sleep(0.3)
-        raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
-
-    def wait_for_not_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a gid is not available.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(gid, int)
-        verify_type(timeoutS, int)
-        t0 = time.time()
-        while time.time() < t0 + timeoutS:
-            gids = self.get_gid_list(ax, vol, cmd)
-            if gid not in gids:
-                return
-            time.sleep(0.3)
-        raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
+        return self._get_gid_list(ax, vol, 'restored')
 
     def wait_for_restorable(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
@@ -846,7 +933,7 @@ class Walb:
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec].
         '''
-        self.wait_for_gid(ax, vol, gid, 'restorable', timeoutS)
+        self._wait_for_gid(ax, vol, gid, 'restorable', timeoutS)
 
     def wait_for_restored(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
@@ -857,68 +944,11 @@ class Walb:
         timeoutS :: int - timeout [sec].
         '''
         verify_type(gid, int)
-        self.wait_for_no_action(ax, vol, 'Restore', timeoutS)
+        self._wait_for_no_action(ax, vol, 'Restore', timeoutS)
         gids = self.list_restored(ax, vol)
         if gid in gids:
             return
         raise Exception('wait_for_restored:failed', ax.name, vol, gid, gids)
-
-    def wait_for_not_restored(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a restored snapshot specified of a gid to be removed
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        self.wait_for_not_gid(ax, vol, gid, 'restored', timeoutS)
-
-    def wait_for_applied(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for diffs older than a gid to be applied.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(gid, int)
-        self.wait_for_no_action(ax, vol, aaApply, timeoutS)
-        gidL = self.list_restorable(ax, vol)
-        if gidL and gid <= gidL[0]:
-            return
-        raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
-
-    def wait_for_merged(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for diffs in a gid range to be merged.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gidB :: int     - begin generation id.
-        gidE :: int     - end generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_gid_range(gidB, gidE, 'wait_for_merged')
-        self.wait_for_no_action(ax, vol, aaMerge, timeoutS)
-        gidL = self.list_restorable(ax, vol, 'all')
-        pos = gidL.index(gidB)
-        if gidL[pos + 1] == gidE:
-            return
-        raise Exception("wait_for_merged:failed", ax.name, vol, gidB, gidE, pos, gidL)
-
-    def wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a snapshot is restorable at an archive server.
-        ax :: Server    - archive server as a replication server (not client).
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(gid, int)
-        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.list_restorable(ax, vol, 'all')
-        if gidL and gid <= gidL[-1]:
-            return
-        raise Exception("wait_for_replicated:replicate failed", ax.name, vol, gid, gidL)
 
     def verify_not_restorable(self, ax, vol, gid, waitS, msg):
         '''
@@ -950,8 +980,9 @@ class Walb:
         '''
         gidL = self.list_restorable(aSrc, vol)
         gid = gidL[-1]
-        self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid), self._get_host_port(aDst)])
-        self.wait_for_replicated(aDst, vol, gid)
+        self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
+                            aDst.get_host_port()])
+        self._wait_for_replicated(aDst, vol, gid)
 
     def synchronize(self, aSrc, vol, aDst):
         '''
@@ -965,53 +996,23 @@ class Walb:
         verify_type(vol, str)
         verify_type(aDst, Server)
 
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             st = self.get_state(px, vol)
             if st in pActive:
                 self.run_ctl(px, ["stop", vol, 'empty'])
 
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             self.wait_for_stopped(px, vol)
             aL = self.get_archive_info_list(px, vol)
             if aDst.name not in aL:
                 self.run_ctl(px, ["archive-info", "add", vol,
-                                  aDst.name, self._get_host_port(aDst)])
+                                  aDst.name, aDst.get_host_port()])
 
         self.replicate_sync(aSrc, vol, aDst)
 
-        for px in self.cfg.proxyL:
+        for px in self.sLayout.proxyL:
             self.start(px, vol)
         self.kick_all_storage()
-
-    def prepare_backup(self, sx, vol):
-        '''
-        Prepare backup.
-        sx :: Server - storage server.
-        vol :: str   - volume name.
-        '''
-        verify_type(sx, Server)
-        verify_type(vol, str)
-
-        a0 = self.get_primary_archive()
-        st = self.get_state(sx, vol)
-        if st == sSlave:
-            self.stop(sx, vol)
-        elif st == sMaster:
-            self.stop(sx, vol)
-            self.reset_vol(sx, vol)
-
-        for s in self.cfg.storageL:
-            if s == sx:
-                continue
-            st = self.get_state(s, vol)
-            if st not in [sSlave, sClear]:
-                raise Exception("prepare_backup:bad state", s.name, vol, st)
-
-        for ax in self.cfg.archiveL:
-            if self.is_synchronizing(ax, vol):
-                self.stop_sync(ax, vol)
-
-        self.start_sync(a0, vol)
 
     def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC):
         '''
@@ -1028,11 +1029,11 @@ class Walb:
         verify_type(vol, str)
         verify_type(timeoutS, int)
 
-        a0 = self.get_primary_archive()
-        self.prepare_backup(sx, vol)
+        a0 = self.sLayout.get_primary_archive()
+        self._prepare_backup(sx, vol)
         self.run_ctl(sx, ["full-bkp", vol])
         self._wait_for_state_change(sx, vol, sDuringFullSync,
-                                   [sMaster], timeoutS)
+                                    [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
             raise Exception('full_backup: sync failed', sx, a0, vol, st)
@@ -1062,8 +1063,8 @@ class Walb:
         verify_type(vol, str)
         verify_type(timeoutS, int)
 
-        a0 = self.get_primary_archive()
-        self.prepare_backup(sx, vol)
+        a0 = self.sLayout.get_primary_archive()
+        self._prepare_backup(sx, vol)
         prev_gids = self.list_restorable(a0, vol)
         if prev_gids:
             max_gid = prev_gids[-1]
@@ -1071,7 +1072,7 @@ class Walb:
             max_gid = -1
         self.run_ctl(sx, ["hash-bkp", vol])
         self._wait_for_state_change(sx, vol, sDuringHashSync,
-                                   [sMaster], timeoutS)
+                                    [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
             raise Exception('hash_backup: sync failed', sx, a0, vol, st)
@@ -1083,28 +1084,6 @@ class Walb:
                 return gids[-1]
             time.sleep(0.3)
         raise Exception('hash_backup:timeout', sx, vol, max_gid, gids)
-
-    def get_restored_path(self, ax, vol, gid):
-        '''
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid :: int    - generation id.
-        return :: str - restored path.
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(gid, int)
-        return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
-
-    def get_lv_path(self, ax, vol):
-        '''
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        return :: str - lv path.
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        return '/dev/' + ax.vg + '/i_' + vol
 
     def restore(self, ax, vol, gid):
         '''
@@ -1119,7 +1098,21 @@ class Walb:
 
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid)
-        wait_for_lv_ready(self.get_restored_path(ax, vol, gid))
+        runCommand = self.get_remote_run_command(ax)
+        path = self.get_restored_path(ax, vol, gid)
+        wait_for_lv_ready(path, runCommand)
+
+    def get_restored_path(self, ax, vol, gid):
+        '''
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        gid :: int    - generation id.
+        return :: str - restored path.
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        verify_type(gid, int)
+        return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
 
     def del_restored(self, ax, vol, gid):
         '''
@@ -1132,7 +1125,9 @@ class Walb:
         verify_type(vol, str)
         verify_type(gid, int)
 
-        wait_for_lv_ready(self.get_lv_path(ax, vol))
+        runCommand = self.get_remote_run_command(ax)
+        path = self._get_lv_path(ax, vol)
+        wait_for_lv_ready(path, runCommand)
         retryTimes = 3
         for i in xrange(retryTimes):
             try:
@@ -1143,7 +1138,7 @@ class Walb:
                 time.sleep(1)
         else:
             raise Exception('del-restored: exceeds max retry times')
-        self.wait_for_not_restored(ax, vol, gid)
+        self._wait_for_not_restored(ax, vol, gid)
 
     def snapshot_async(self, sx, vol):
         '''
@@ -1182,7 +1177,7 @@ class Walb:
         verify_type(vol, str)
         verify_type(gid, int)
         self.run_ctl(ax, ["apply", vol, str(gid)])
-        self.wait_for_applied(ax, vol, gid)
+        self._wait_for_applied(ax, vol, gid)
 
     def merge_diff(self, ax, vol, gidB, gidE):
         '''
@@ -1196,7 +1191,7 @@ class Walb:
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge_diff')
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
-        self.wait_for_merged(ax, vol, gidB, gidE)
+        self._wait_for_merged(ax, vol, gidB, gidE)
 
     def replicate(self, aSrc, vol, aDst, synchronizing):
         '''
@@ -1219,79 +1214,6 @@ class Walb:
         if synchronizing:
             self.synchronize(aSrc, vol, aDst)
 
-    def wait_for_no_action(self, s, vol, action, timeoutS=TIMEOUT_SEC):
-        '''
-        s :: Server     - server.
-        vol :: str      - volume name.
-        action :: str   - action name.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(s, Server)
-        verify_type(vol, str)
-        verify_type(action, str)
-        verify_type(timeoutS, int)
-
-        t0 = time.time()
-        while time.time() < t0 + timeoutS:
-            num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
-            if num == 0:
-                return
-            time.sleep(0.3)
-        raise Exception("wait_for_no_action", s, vol, action)
-
-    def restore_and_verify_sha1(self, msg, md0, ax, vol, gid):
-        '''
-        Restore a volume and verify sha1sum.
-        msg :: str   - message for error.
-        md0 :: str   - sha1sum.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        gid :: int   - generation id.
-        '''
-        verify_type(msg, str)
-        verify_type(md0, str)
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(gid, int)
-        md1 = self.get_sha1_of_restorable(ax, vol, gid)
-        verify_equal_sha1(msg, md0, md1)
-
-    def get_sha1_of_restorable(self, ax, vol, gid):
-        '''
-        Get sha1sum of restorable snapshot.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid :: int    - generation id.
-        return :: str - sha1sum.
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(gid, int)
-        self.restore(ax, vol, gid)
-        md = get_sha1(self.get_restored_path(ax, vol, gid))
-        self.del_restored(ax, vol, gid)
-        return md
-
-    def verify_equal_list_restorable(self, msg, ax, ay, vol):
-        '''
-        msg :: str   - message for error.
-        ax :: Server - first archive server.
-        ay :: Server - second archive server.
-        vol :: str   - volume name.
-        '''
-        verify_type(msg, str)
-        verify_type(ax, Server)
-        verify_type(ay, Server)
-        verify_type(vol, str)
-
-        xL = self.list_restorable(ax, vol)
-        yL = self.list_restorable(ay, vol)
-        if self.cfg.debug:
-            print 'list0', xL
-            print 'list1', yL
-        if xL != yL:
-            raise Exception(msg, 'list_restorable differ', xL, yL)
-
     def get_latest_clean_snapshot(self, ax, vol):
         '''
         ax :: Server - archive server.
@@ -1304,21 +1226,6 @@ class Walb:
             return xL[-1]
         else:
             raise Exception('get_latest_clean_snapshot:not found')
-
-    def wait_for_resize(self, ax, vol, sizeMb):
-        '''
-        Wait for resize done.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        sizeMb :: int - new size [MiB].
-        '''
-        verify_type(ax, Server)
-        verify_type(vol, str)
-        verify_type(sizeMb, int)
-        self.wait_for_no_action(ax, vol, aaResize)
-        curSizeMb = get_lv_size_mb(self.get_lv_path(ax, vol))
-        if curSizeMb != sizeMb:
-            raise Exception('wait_for_resize:failed', ax, vol, sizeMb, curSizeMb)
 
     def resize_archive(self, ax, vol, sizeMb, doZeroClear):
         '''
@@ -1340,13 +1247,14 @@ class Walb:
             if doZeroClear:
                 args += ['zeroclear']
             self.run_ctl(ax, args)
-            self.wait_for_resize(ax, vol, sizeMb)
+            self._wait_for_resize(ax, vol, sizeMb)
         else:
             raise Exception('resize_archive:bad state', ax, vol, sizeMb, st)
 
     def resize_storage(self, sx, vol, sizeMb):
         '''
         Resize storage volume.
+        You must resize ddev before calling this.
         sx :: Server  - storage server.
         vol :: str    - voume name.
         sizeMb :: int - new size [MiB].
@@ -1362,7 +1270,8 @@ class Walb:
 
     def resize(self, vol, sizeMb, doZeroClear):
         '''
-        Resize volume.
+        Resize a volume.
+        This will affect all storage servers and archive servers.
         vol :: str          - volume name.
         sizeMb :: int       - new size [MiB].
         doZeroClear :: bool - True if you want to zero-clear the extended area.
@@ -1370,105 +1279,19 @@ class Walb:
         verify_type(vol, str)
         verify_type(sizeMb, int)
         verify_type(doZeroClear, bool)
-        for ax in self.cfg.archiveL:
+        for ax in self.sLayout.archiveL:
             self.resize_archive(ax, vol, sizeMb, doZeroClear)
-        for sx in self.cfg.storageL:
+        for sx in self.sLayout.storageL:
             self.resize_storage(sx, vol, sizeMb)
-
-    def wait_for_log_empty(self, wdev, timeoutS=TIMEOUT_SEC): # QQQ
-        '''
-        Wait for log device becomes empty.
-        wdev :: Wdev    - walb device.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(wdev, Wdev)
-        verify_type(timeoutS, int)
-        def create_key_value(ls):
-            ret = []
-            for s in ls:
-                (k, v) = s.strip().split()
-                ret.append((k, int(v)))
-            return dict(ret)
-        sysName = '/sys/block/walb!%d/walb/lsids' % wdev.iD
-        t0 = time.time()
-        while time.time() < t0 + timeoutS:
-            with open(sysName, 'r') as f:
-                kv = create_key_value(f.readlines())
-                completed = kv['completed']
-                oldest = kv['oldest']
-                if completed == oldest:
-                    return
-            print "wait_for_log_empty", oldest, completed
-            time.sleep(0.3)
-        raise Exception("wait_for_log_empty", wdev)
-
-    def get_walb_dev_sizeMb(self, wdev): # QQQ
-        '''
-        Get walb device size.
-        wdev :: Wdev -- walb device.
-        return :: int -- device size [MiB].
-        '''
-        verify_type(wdev, Wdev)
-        sysName = '/sys/block/walb!%d/size' % wdev.iD
-        with open(sysName, 'r') as f:
-            size = int(f.read().strip()) * 512 / 1024 / 1024
-        return size
-
-    def get_primary_archive(self):
-        '''
-        Get primary archive.
-        return :: Server
-        '''
-        return self.cfg.archiveL[0]
-
-    def get_server_args(self, s):
-        '''
-        Get server arguments.
-        s :: Server     - server.
-        return :: [str] - argument list.
-        '''
-        verify_type(s, Server)
-        if s.kind == K_STORAGE:
-            ret = [s.binDir + "storage-server",
-                   "-archive", self._get_host_port(self.get_primary_archive()),
-                   "-proxy", ",".join(map(self._get_host_port, self.cfg.proxyL))]
-        elif s.kind == K_PROXY:
-            ret = [s.binDir + "proxy-server"]
-        else:
-            assert s.kind == K_ARCHIVE
-            ret = [s.binDir + "archive-server", "-vg", s.vg]
-        if s.logPath:
-            logPath = s.logPath
-        else:
-            logPath = s.dataDir + '/' + s.name + '.log'
-        ret += ["-p", str(s.port),
-                "-b", s.dataPath,
-                "-l", logPath,
-                "-id", s.name] + self._get_debug_opt()
-        return ret
-
 
     '''
     Private member functions.
+
     '''
-
-    def _get_all_servers(self):
-        return self.cfg.storageL + self.cfg.proxyL + self.cfg.archiveL
-
-    def _get_debug_opt(self):
-        if self.cfg.debug:
-            return ["-debug"]
-        else:
-            return []
-
-    def _get_host_port(self, s):
-        return "localhost" + ":" + str(s.port)
-
     def _wait_for_state_cond(self, s, vol, pred, msg, timeoutS=10):
         t0 = time.time()
         while time.time() < t0 + timeoutS:
             st = self.get_state(s, vol)
-    #        print "c=", s, vol, stateL, c, st
             if pred(st):
                 return
             time.sleep(0.3)
@@ -1493,3 +1316,205 @@ class Walb:
         if st not in goalStateL:
             raise Exception('wait_for_state_change:bad goal',
                             s, vol, tmpStateL, goalStateL, st)
+
+    def _get_gid_list(self, ax, vol, cmd, optL=[]):
+        '''
+        Get gid list
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        cmd :: str      - 'restorable' or 'restored'.
+        optL :: [str]   - options.
+        return :: [int] - gid list.
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        if not cmd in ['restorable', 'restored']:
+            raise Exception('get_list_gid : bad cmd', cmd)
+        verify_list_type(optL, str)
+        ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
+        return map(int, ret.split())
+
+    def _wait_for_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for an gid is available.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        cmd :: str      - 'restorable' or 'restored'.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        verify_type(gid, int)
+        verify_type(timeoutS, int)
+        t0 = time.time()
+        while time.time() < t0 + timeoutS:
+            gids = self._get_gid_list(ax, vol, cmd)
+            if gid in gids:
+                return
+            time.sleep(0.3)
+        raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
+
+    def _wait_for_not_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for a gid is not available.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        cmd :: str      - 'restorable' or 'restored'.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        verify_type(gid, int)
+        verify_type(timeoutS, int)
+        t0 = time.time()
+        while time.time() < t0 + timeoutS:
+            gids = self._get_gid_list(ax, vol, cmd)
+            if gid not in gids:
+                return
+            time.sleep(0.3)
+        raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
+
+    def _wait_for_not_restored(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for a restored snapshot specified of a gid to be removed
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        self._wait_for_not_gid(ax, vol, gid, 'restored', timeoutS)
+
+    def _wait_for_applied(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for diffs older than a gid to be applied.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(gid, int)
+        self._wait_for_no_action(ax, vol, aaApply, timeoutS)
+        gidL = self.list_restorable(ax, vol)
+        if gidL and gid <= gidL[0]:
+            return
+        raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
+
+    def _wait_for_merged(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for diffs in a gid range to be merged.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gidB :: int     - begin generation id.
+        gidE :: int     - end generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_gid_range(gidB, gidE, 'wait_for_merged')
+        self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
+        gidL = self.list_restorable(ax, vol, 'all')
+        pos = gidL.index(gidB)
+        if gidL[pos + 1] == gidE:
+            return
+        raise Exception("wait_for_merged:failed",
+                        ax.name, vol, gidB, gidE, pos, gidL)
+
+    def _wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for a snapshot is restorable at an archive server.
+        ax :: Server    - archive server as a replication server (not client).
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(gid, int)
+        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
+        gidL = self.list_restorable(ax, vol, 'all')
+        if gidL and gid <= gidL[-1]:
+            return
+        raise Exception("wait_for_replicated:replicate failed",
+                        ax.name, vol, gid, gidL)
+
+    def _prepare_backup(self, sx, vol):
+        '''
+        Prepare backup.
+        sx :: Server - storage server.
+        vol :: str   - volume name.
+        '''
+        verify_type(sx, Server)
+        verify_type(vol, str)
+
+        st = self.get_state(sx, vol)
+        if st == sSlave:
+            self.stop(sx, vol)
+        elif st == sMaster:
+            self.stop(sx, vol)
+            self.reset_vol(sx, vol)
+
+        for s in self.sLayout.storageL:
+            if s == sx:
+                continue
+            st = self.get_state(s, vol)
+            if st not in [sSlave, sClear]:
+                raise Exception("prepare_backup:bad state", s.name, vol, st)
+
+        for ax in self.sLayout.archiveL:
+            if self.is_synchronizing(ax, vol):
+                self.stop_sync(ax, vol)
+
+        # Initialize the volume at the primary archive if necessary.
+        a0 = self.sLayout.get_primary_archive()
+        st = self.get_state(a0, vol)
+        if st == aClear:
+            self.run_ctl(a0, ["init-vol", vol])
+
+        self.start_sync(a0, vol)
+
+    def _get_lv_path(self, ax, vol):
+        '''
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        return :: str - lv path.
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        return '/dev/' + ax.vg + '/i_' + vol
+
+    def _wait_for_no_action(self, s, vol, action, timeoutS=TIMEOUT_SEC):
+        '''
+        s :: Server     - server.
+        vol :: str      - volume name.
+        action :: str   - action name.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(s, Server)
+        verify_type(vol, str)
+        verify_type(action, str)
+        verify_type(timeoutS, int)
+
+        t0 = time.time()
+        while time.time() < t0 + timeoutS:
+            num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
+            if num == 0:
+                return
+            time.sleep(0.3)
+        raise Exception("wait_for_no_action", s, vol, action)
+
+    def _wait_for_resize(self, ax, vol, sizeMb):
+        '''
+        Wait for resize done.
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        sizeMb :: int - new size [MiB].
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        verify_type(sizeMb, int)
+        self._wait_for_no_action(ax, vol, aaResize)
+        runCommand = self.get_remote_run_command(ax)
+        curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
+        if curSizeMb != sizeMb:
+            raise Exception('wait_for_resize:failed',
+                            ax, vol, sizeMb, curSizeMb)
+
+    def _verify_shutdown_mode(self, mode, msg):
+        if mode not in ['graceful', 'force']:
+            raise Exception(msg, 'bad mode', mode)
