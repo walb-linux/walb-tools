@@ -18,6 +18,7 @@
 #include <thread>
 
 #include "fileio.hpp"
+#include "file_path.hpp"
 
 namespace cybozu {
 namespace process {
@@ -124,6 +125,14 @@ inline void streamToStr(int fdr, std::string &outStr, std::exception_ptr& ep) no
  */
 inline std::string call(const std::string& cmd, const std::vector<std::string> &args)
 {
+    cybozu::FileStat stat = cybozu::FilePath(cmd).stat();
+    if (!stat.exists()) {
+        throw std::runtime_error("command not found:" + cmd);
+    }
+    if (!stat.isExecutable()) {
+        throw std::runtime_error("command not executable:" + cmd);
+    }
+
     Pipe pipe0, pipe1;
     pid_t cpid;
     cpid = ::fork();
@@ -175,6 +184,14 @@ inline std::string call(const std::string& cmd, const std::vector<std::string> &
     if (epErr) std::rethrow_exception(epErr);
 
     return stdOutStr;
+}
+
+inline std::string call(const std::vector<std::string> &args)
+{
+    if (args.empty()) throw std::runtime_error("no executable specified.");
+    const std::string &cmd = args[0];
+    const std::vector<std::string> args2(args.begin() + 1, args.end());
+    return call(cmd, args2);
 }
 
 }} //namespace cybozu::process
