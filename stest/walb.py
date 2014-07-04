@@ -143,12 +143,12 @@ class Device:
             return os.path.exists(self.path)
         else:
             cmd = 'if [ -b "%s" ]; ' \
-                  + 'then echo 1;' \
-                  + 'else echo 0; fi' % self.path
+                  'then echo 1;' \
+                  'else echo 0; fi' % self.path
             res = self.runCommand(['/bin/sh', '-c', cmd])
             return int(res) != 0
 
-    def format(self):
+    def format_ldev(self):
         '''
         Format devices for a walb device.
         TODO: support format_ldev options.
@@ -387,7 +387,7 @@ def get_server_args(s, sLayout, isDebug=False):
     else:
         logPath = s.dataDir + '/' + s.name + '.log'
     ret += ["-p", str(s.port),
-            "-b", s.dataPath,
+            "-b", s.dataDir,
             "-l", logPath,
             "-id", s.name]
     if isDebug:
@@ -451,7 +451,7 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_list_type(args, str)
-        return self.run_ctl(s, ['exec'] + args, putMsg)
+        return self.run_ctl(s, ['exec', '---'] + args, True)
 
     def get_remote_run_command(self, s):
         '''

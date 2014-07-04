@@ -84,7 +84,7 @@ def resize_storage_if_necessary(sx, vol, wdev, sizeMb):
     """
     if wdev.get_size_mb() >= sizeMb:
         return
-    resize_lv(wdev.data, get_lv_size_mb(wdev.data), sizeMb, False)
+    resize_lv(wdev.ddev, get_lv_size_mb(wdev.ddev), sizeMb, False)
     walbc.resize_storage(sx, vol, sizeMb)
 
 
@@ -163,7 +163,7 @@ def write_over_wldev(wdev, overflow=False):
     '''
     verify_type(wdev, Device)
     verify_type(overflow, bool)
-    wldevSizeLb = get_lv_size(wdev.log) / Lbs
+    wldevSizeLb = get_lv_size(wdev.ldev) / Lbs
     wdevSizeLb = wdev.get_size_lb()
     print "wldevSizeLb, wdevSizeLb", wldevSizeLb, wdevSizeLb
     # write a little bigger size than wldevSizeLb
@@ -187,6 +187,7 @@ def recreate_walb_dev(wdev):
     if wdev.exists():
         wdev.delete()
     resize_lv(wdev.ddev, get_lv_size_mb(wdev.ddev), wdevSizeMb, False)
+    wdev.format_ldev()
     wdev.create()
 
 
@@ -198,7 +199,7 @@ def cleanup(vol, wdevL):
     '''
     verify_type(vol, str)
     verify_list_type(wdevL, Device)
-    for s in sLayoutAll.get_all():
+    for s in sLayout.get_all():
         walbc.clear_vol(s, vol)
     for wdev in wdevL:
         recreate_walb_dev(wdev)

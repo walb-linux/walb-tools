@@ -17,6 +17,14 @@ Lbs = (1 << 9)  # logical block size
 # Utility functions.
 ########################################
 
+'''
+RunCommand type is function with type (args, isDebug)
+args :: [str]   - command line arguments.
+isDebug :: bool - True to put debug messages.
+return :: str   - stdout of the command.
+
+'''
+
 
 def make_dir(pathStr):
     if not os.path.exists(pathStr):
@@ -270,8 +278,8 @@ def verify_type(obj, typeValue):
     typeValue - type like int, str, list.
 
     '''
-    if type(obj) != typeValue:
-        raise 'invalid type', type(obj), typeValue
+    if not isinstance(obj, typeValue):
+        raise Exception('invalid type', type(obj), typeValue)
 
 
 def verify_function(obj):
@@ -282,7 +290,7 @@ def verify_function(obj):
     def f():
         pass
     if type(obj) != type(f):
-        raise 'not function type', type(obj)
+        raise Exception('not function type', type(obj))
 
 
 def verify_list_type(obj, typeValue):
@@ -290,11 +298,11 @@ def verify_list_type(obj, typeValue):
     obj - list object.
     typeValue - type like int, str.
     '''
-    if type(obj) != list:
-        raise 'invalid type', type(obj), list
+    if not isinstance(obj, list):
+        raise Exception('invalid type', type(obj), list)
     for x in obj:
-        if type(x) != typeValue:
-            raise 'invalid type', type(x), typeValue
+        if not isinstance(x, typeValue):
+            raise Exception('invalid type', type(x), typeValue)
 
 
 def verify_gid_range(gidB, gidE, msg):
