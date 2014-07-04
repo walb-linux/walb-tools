@@ -434,9 +434,9 @@ class Controller:
                    "-id", "ctl",
                    "-a", s.address,
                    "-p", str(s.port)]
-        if putMsg:
+        if self.isDebug:
             ctlArgs += ['-debug']
-        return run_command(ctlArgs + cmdArgs, putMsg)
+        return run_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
 
     def run_remote_command(self, s, args, putMsg=False):
         '''
@@ -451,7 +451,7 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_list_type(args, str)
-        return self.run_ctl(s, ['exec', '---'] + args, True)
+        return self.run_ctl(s, ['exec', '---'] + args, putMsg)
 
     def get_remote_run_command(self, s):
         '''
@@ -464,20 +464,20 @@ class Controller:
         verify_type(s, Server)
 
         def func(args, putMsg=False):
-            return self.run_remote_command(s, args, putMsg)
+            return self.run_remote_command(s, args, putMsg or self.isDebug)
 
         return func
 
-    def get_host_type(self, s, putMsg=True):
+    def get_host_type(self, s):
         '''
         Get host type.
         s :: Server
         return :: str - 'storage', 'proxy', or 'archive'.
         '''
         verify_type(s, Server)
-        return self.run_ctl(s, ['get', 'host-type'], putMsg)
+        return self.run_ctl(s, ['get', 'host-type'])
 
-    def get_state(self, s, vol, putMsg=True):
+    def get_state(self, s, vol):
         '''
         Get state of a volume.
         s :: Server
@@ -486,17 +486,16 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_type(vol, str)
-        return self.run_ctl(s, ['get', 'state', vol], putMsg)
+        return self.run_ctl(s, ['get', 'state', vol])
 
-    def verify_state(self, s, vol, state, putMsg=True):
+    def verify_state(self, s, vol, state):
         '''
         s :: Server
         vol :: str
         state :: str
-        putMsg :: bool
         '''
         verify_type(state, str)
-        st = self.get_state(s, vol, putMsg)
+        st = self.get_state(s, vol)
         if st != state:
             raise Exception('verify_state: differ', st, state)
 
@@ -600,7 +599,7 @@ class Controller:
             if vol:
                 args.append(vol)
             print '++++++++++++++++++++', s.name, '++++++++++++++++++++'
-            print self.run_ctl(s, args, False)
+            print self.run_ctl(s, args)
 
     def shutdown(self, s, mode="graceful"):
         '''

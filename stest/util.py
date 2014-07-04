@@ -18,10 +18,10 @@ Lbs = (1 << 9)  # logical block size
 ########################################
 
 '''
-RunCommand type is function with type (args, isDebug)
-args :: [str]   - command line arguments.
-isDebug :: bool - True to put debug messages.
-return :: str   - stdout of the command.
+RunCommand type is function with arguments type (args, isDebug).
+  args :: [str]   - command line arguments.
+  isDebug :: bool - True to put debug messages.
+  return :: str   - stdout of the command.
 
 '''
 
@@ -35,7 +35,7 @@ def to_str(ss):
     return " ".join(ss)
 
 
-def run_command(args, putMsg=True):
+def run_command(args, putMsg=False):
     '''
     run a command.
     args :: [str] - command line arguments.
@@ -126,47 +126,15 @@ def wait_for_server_port(address, port, timeoutS=10):
     raise Exception('wait_for_server_port:timeout', address, port, timeoutS)
 
 
-def get_sha1(bdevPath, runCommand=run_command):
+def get_sha1(bdevPath):
     '''
     Get sha1sum of a block device by full scan.
     bdevPath :: str - block device path.
-    runCommand :: RunCommand
     return :: str  - sha1sum string.
     '''
     verify_type(bdevPath, str)
-    verify_function(runCommand)
-    ret = runCommand(['/usr/bin/sha1sum', bdevPath])
+    ret = run_command(['/usr/bin/sha1sum', bdevPath])
     return ret.split(' ')[0]
-
-
-def flush_bufs(bdevPath, runCommand=run_command):
-    '''
-    Flush buffer of a block device.
-    bdevPath :: str - block device path.
-    runCommand :: RunCommand
-    '''
-    verify_type(bdevPath, str)
-    verify_function(runCommand)
-    runCommand(['/sbin/blockdev', '--flushbufs', bdevPath])
-
-
-def zero_clear(bdevPath, offsetLb, sizeLb):
-    '''
-    Zero-clear a block device.
-    bdevPath :: str - block device path.
-    offsetLb :: int - offset [logical block].
-    sizeLb :: innt  - size [logical block].
-    '''
-    verify_type(bdevPath, str)
-    verify_type(offsetLb, int)
-    verify_type(sizeLb, int)
-    run_command(['/bin/dd', 'if=/dev/zero', 'of=' + bdevPath,
-                 # 'oflag=direct',
-                 'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb)])
-    # flush data to avoid overwriting after walb's writing
-    fd = os.open(bdevPath, os.O_RDONLY)
-    os.fdatasync(fd)
-    os.close(fd)
 
 
 def verify_equal_sha1(msg, md0, md1):
@@ -185,12 +153,40 @@ def verify_equal_sha1(msg, md0, md1):
         raise Exception('fail ' + msg, md0, md1)
 
 
+def flush_bufs(bdevPath, runCommand=run_command):
+    '''
+    Flush buffer of a block device.
+    bdevPath :: str - block device path.
+    runCommand :: RunCommand
+    '''
+    verify_type(bdevPath, str)
+    verify_function(runCommand)
+    runCommand(['/sbin/blockdev', '--flushbufs', bdevPath])
+
+
+def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_command):
+    '''
+    Zero-clear a block device.
+    bdevPath :: str - block device path.
+    offsetLb :: int - offset [logical block].
+    sizeLb :: innt  - size [logical block].
+    runCommand :: RunCommand
+    '''
+    verify_type(bdevPath, str)
+    verify_type(offsetLb, int)
+    verify_type(sizeLb, int)
+    runCommand(['/bin/dd', 'if=/dev/zero', 'of=' + bdevPath,
+                'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb),
+                'conv=fdatasync'])
+
+
 ########################################
 # Lvm utility functions.
 ########################################
 
 
-def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear):
+def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear,
+              runCommand=run_command):
     """
     Resize a logical volume.
       This command support shrink also.
@@ -198,31 +194,35 @@ def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear):
     curSizeMb :: int    - current device size [MiB].
     newSizeMb :: int    - new device size [MiB].
     doZeroClear :: bool - True to zero-clear the extended area.
+    runCommand :: RunCommand
     """
     verify_type(lvPath, str)
     verify_type(curSizeMb, int)
     verify_type(newSizeMb, int)
     verify_type(doZeroClear, bool)
+    verify_function(runCommand)
 
     if curSizeMb == newSizeMb:
         return
-    run_command(['/sbin/lvresize', '-f', '-L', str(newSizeMb) + 'm', lvPath])
+    runCommand(['/sbin/lvresize', '-f', '-L', str(newSizeMb) + 'm', lvPath])
     # zero-clear is required for test only.
     if curSizeMb < newSizeMb and doZeroClear:
         zero_clear(lvPath, curSizeMb * 1024 * 1024 / 512,
-                   (newSizeMb - curSizeMb) * 1024 * 1024 / 512)
-    wait_for_lv_ready(lvPath)
+                   (newSizeMb - curSizeMb) * 1024 * 1024 / 512,
+                   runCommand)
+    wait_for_lv_ready(lvPath, runCommand)
 
 
-def remove_lv(lvPath):
+def remove_lv(lvPath, runCommand=run_command):
     '''
     Remove a logical volume.
+    runCommand :: RunCommand
     lvPath :: str - lvm lv path.
     '''
-    wait_for_lv_ready(lvPath)
+    wait_for_lv_ready(lvPath, runCommand)
     for i in xrange(3):
         try:
-            run_command(['/sbin/lvremove', '-f', lvPath])
+            runCommand(['/sbin/lvremove', '-f', lvPath])
             return
         except:
             print 'remove_lv failed', i, lvPath
@@ -238,6 +238,9 @@ def get_lv_size(lvPath, runCommand=run_command):
     runCommand :: RunCommand
     return :: device size [byte].
     '''
+    verify_type(lvPath, str)
+    verify_function(runCommand)
+
     ret = runCommand(['/sbin/lvdisplay', '-C', '--noheadings',
                       '-o', 'lv_size', '--units', 'b', lvPath])
     ret.strip()

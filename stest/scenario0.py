@@ -6,8 +6,11 @@ import random
 import datetime
 from walb import *
 
+isDebug = True
+
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
+walbctlPath = binDir + 'walbctl'
 
 
 def D(name):
@@ -31,8 +34,6 @@ a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, D('a1'), L('a1'),
 a2 = Server('a2', 'localhost', 10202, K_ARCHIVE, binDir, D('a2'), L('a2'),
             'vg2')
 
-isDebug = True
-walbctlPath = binDir + 'walbctl'
 VOL = 'vol0'
 wdevSizeMb = 12
 
