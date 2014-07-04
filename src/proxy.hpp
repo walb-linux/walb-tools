@@ -928,7 +928,14 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, volId, FUNC);
-    verifyStateIn(volSt.sm.get(), pAcceptForWdiffSend, FUNC);
+    const std::string st = volSt.sm.get();
+    if (st == ptStart) {
+        // This is rare case, but possible.
+        pushOpt.isForce = false;
+        pushOpt.delaySec = 1;
+        return CONTINUE_TO_SEND;
+    }
+    verifyStateIn(st, pAcceptForWdiffSend, FUNC);
 
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 

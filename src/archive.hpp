@@ -1323,7 +1323,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         {
             const std::string st = sm.get();
             const char *msg = nullptr;
-            if (st == aStopped) {
+            if (st == aStopped || st == atStart) {
                 msg = "stopped";
             } else if (st == atWdiffRecv) {
                 msg = "wdiff-recv";

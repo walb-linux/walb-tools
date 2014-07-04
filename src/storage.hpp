@@ -838,6 +838,12 @@ inline void StorageWorker::operator()()
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
+    StorageSingleton &g = getStorageGlobal();
+    if (st == stStartSlave || st == stStartMaster) {
+        // This is rare case, but possible.
+        g.taskQueue.push(volId, 1000);
+        return;
+    }
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
     verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
@@ -852,9 +858,9 @@ inline void StorageWorker::operator()()
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
-        if (isRemaining) getStorageGlobal().taskQueue.push(volId);
+        if (isRemaining) g.taskQueue.push(volId);
     } catch (...) {
-        getStorageGlobal().taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
+        g.taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
         throw;
     }
 }
