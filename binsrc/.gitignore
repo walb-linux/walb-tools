@@ -20,7 +20,7 @@ write_random_data
 virt-full-cat
 wdev-poll
 lvm-mgr
-storage-server
-proxy-server
-archive-server
-controller
+walb-storage
+walb-proxy
+walb-archive
+walbc

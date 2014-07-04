@@ -10,7 +10,8 @@ isDebug = True
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
-walbctlPath = binDir + 'walbctl'
+wdevcPath = binDir + 'walbctl'
+walbcPath = binDir + 'walbc'
 
 
 def D(name):
@@ -40,12 +41,12 @@ wdevSizeMb = 12
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 sLayoutAll = ServerLayout([s0, s1, s2], [p0, p1, p2], [a0, a1, a2])
 
-wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  walbctlPath)
-wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', walbctlPath)
-wdev2 = Device(2, '/dev/test/log3', '/dev/test/data3', walbctlPath)
+wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  wdevcPath)
+wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', wdevcPath)
+wdev2 = Device(2, '/dev/test/log3', '/dev/test/data3', wdevcPath)
 wdevL = [wdev0, wdev1, wdev2]
 
-walbc = Controller(binDir, sLayout, isDebug)
+walbc = Controller(walbcPath, sLayout, isDebug)
 
 g_count = 0
 
@@ -151,7 +152,7 @@ def kill_all_servers():
     '''
     for scenario test.
     '''
-    for s in ["storage-server", "proxy-server", "archive-server"]:
+    for s in ['walb-storage', 'walb-proxy', 'walb-archive']:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
     time.sleep(0.3)
 

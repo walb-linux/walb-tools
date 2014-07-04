@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) try
     };
 
     ProxySingleton &g = getProxyGlobal();
-    LOGs.info() << "starting proxy-server with options:\n" << opt;
+    LOGs.info() << "starting walb proxy server with options:\n" << opt;
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ProxyRequestWorker>(opt.port, createRequestWorker);

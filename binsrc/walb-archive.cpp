@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) try
     };
 
     ArchiveSingleton &g = getArchiveGlobal();
-    LOGs.info() << "starting archive-server with options:\n" << opt;
+    LOGs.info() << "starting walb archive server with options:\n" << opt;
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);

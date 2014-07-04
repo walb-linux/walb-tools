@@ -374,14 +374,14 @@ def get_server_args(s, sLayout, isDebug=False):
 
     if s.kind == K_STORAGE:
         proxies = ",".join(map(lambda p: p.get_host_port(), sLayout.proxyL))
-        ret = [s.binDir + "storage-server",
+        ret = [s.binDir + 'walb-storage',
                "-archive", sLayout.get_primary_archive().get_host_port(),
                "-proxy", proxies]
     elif s.kind == K_PROXY:
-        ret = [s.binDir + "proxy-server"]
+        ret = [s.binDir + 'walb-proxy']
     else:
         assert s.kind == K_ARCHIVE
-        ret = [s.binDir + "archive-server", "-vg", s.vg]
+        ret = [s.binDir + 'walb-archive', '-vg', s.vg]
     if s.logPath:
         logPath = s.logPath
     else:
@@ -400,15 +400,15 @@ class Controller:
     To handle all walb servers in a backup group.
 
     '''
-    def __init__(self, binDir, sLayout, isDebug=False):
+    def __init__(self, controllerPath, sLayout, isDebug=False):
         '''
-        binDir :: str           - directory where walb controller exists.
+        controllerPath :: str   - walb controller executable path.
         sLayout :: ServerLayout - server layout.
         isDebug :: bool
         '''
-        verify_type(binDir, str)
+        verify_type(controllerPath, str)
         verify_type(isDebug, bool)
-        self.controllerPath = binDir + '/controller'
+        self.controllerPath = controllerPath
         self.isDebug = isDebug
         self.set_server_layout(sLayout)
 
