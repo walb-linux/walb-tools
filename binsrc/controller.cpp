@@ -24,6 +24,7 @@ struct Option
     size_t socketTimeout;
     Option(int argc, char *argv[]) {
         cybozu::Option opt;
+        opt.setDelimiter("---", &params);
         opt.appendMust(&addr, "a", "host name or address");
         opt.appendMust(&port, "p", "port number");
         opt.appendParam(&cmd, "command", "command name");
