@@ -28,12 +28,9 @@ s2 = Server('s2', 'localhost', 10002, K_STORAGE, binDir, D('s2'), L('s2'))
 p0 = Server('p0', 'localhost', 10100, K_PROXY,   binDir, D('p0'), L('p0'))
 p1 = Server('p1', 'localhost', 10101, K_PROXY,   binDir, D('p1'), L('p1'))
 p2 = Server('p2', 'localhost', 10102, K_PROXY,   binDir, D('p2'), L('p2'))
-a0 = Server('a0', 'localhost', 10200, K_ARCHIVE, binDir, D('a0'), L('a0'),
-            'vg0')
-a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, D('a1'), L('a1'),
-            'vg1')
-a2 = Server('a2', 'localhost', 10202, K_ARCHIVE, binDir, D('a2'), L('a2'),
-            'vg2')
+a0 = Server('a0', 'localhost', 10200, K_ARCHIVE, binDir, D('a0'), L('a0'), 'vg0')
+a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, D('a1'), L('a1'), 'vg1')
+a2 = Server('a2', 'localhost', 10202, K_ARCHIVE, binDir, D('a2'), L('a2'), 'vg2')
 
 VOL = 'vol0'
 wdevSizeMb = 12
@@ -52,14 +49,14 @@ g_count = 0
 
 
 def setup_test():
-    run_command(['/bin/rm', '-rf', workDir])
+    run_local_command(['/bin/rm', '-rf', workDir])
     for ax in sLayoutAll.archiveL:
         if ax.vg:
             vgPath = '/dev/' + ax.vg + '/'
             if os.path.isdir(vgPath):
                 for f in os.listdir(vgPath):
                     if f[0] == 'i':
-                        run_command(['/sbin/lvremove', '-f', vgPath + f])
+                        run_local_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(workDir)
     kill_all_servers()
     for wdev in wdevL:
@@ -120,7 +117,7 @@ def write_random(bdevPath, sizeLb, offset=0, fixVar=None):
             '-s', str(sizeLb), '-o', str(offset), bdevPath]
     if fixVar:
         args += ['-set', str(fixVar)]
-    return run_command(args, False)
+    return run_local_command(args, False)
 
 
 class RandomWriter():

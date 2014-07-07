@@ -35,9 +35,9 @@ def to_str(ss):
     return " ".join(ss)
 
 
-def run_command(args, putMsg=False):
+def run_local_command(args, putMsg=False):
     '''
-    run a command.
+    run a command at localhost.
     args :: [str] - command line arguments.
                     The head item must be full-path executable.
     putMsg :: bool - put debug message.
@@ -133,7 +133,7 @@ def get_sha1(bdevPath):
     return :: str  - sha1sum string.
     '''
     verify_type(bdevPath, str)
-    ret = run_command(['/usr/bin/sha1sum', bdevPath])
+    ret = run_local_command(['/usr/bin/sha1sum', bdevPath])
     return ret.split(' ')[0]
 
 
@@ -153,7 +153,7 @@ def verify_equal_sha1(msg, md0, md1):
         raise Exception('fail ' + msg, md0, md1)
 
 
-def flush_bufs(bdevPath, runCommand=run_command):
+def flush_bufs(bdevPath, runCommand=run_local_command):
     '''
     Flush buffer of a block device.
     bdevPath :: str - block device path.
@@ -164,7 +164,7 @@ def flush_bufs(bdevPath, runCommand=run_command):
     runCommand(['/sbin/blockdev', '--flushbufs', bdevPath])
 
 
-def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_command):
+def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_local_command):
     '''
     Zero-clear a block device.
     bdevPath :: str - block device path.
@@ -186,7 +186,7 @@ def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_command):
 
 
 def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear,
-              runCommand=run_command):
+              runCommand=run_local_command):
     """
     Resize a logical volume.
       This command support shrink also.
@@ -213,7 +213,7 @@ def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear,
     wait_for_lv_ready(lvPath, runCommand)
 
 
-def remove_lv(lvPath, runCommand=run_command):
+def remove_lv(lvPath, runCommand=run_local_command):
     '''
     Remove a logical volume.
     runCommand :: RunCommand
@@ -231,7 +231,7 @@ def remove_lv(lvPath, runCommand=run_command):
         raise Exception('remove_lv:timeout', lvPath)
 
 
-def get_lv_size(lvPath, runCommand=run_command):
+def get_lv_size(lvPath, runCommand=run_local_command):
     '''
     Get lv size.
     lvPath :: str - lvm lv path.
@@ -249,7 +249,7 @@ def get_lv_size(lvPath, runCommand=run_command):
     return int(ret[0:-1])
 
 
-def get_lv_size_mb(lvPath, runCommand=run_command):
+def get_lv_size_mb(lvPath, runCommand=run_local_command):
     '''
     Get lv size.
     lvPath :: str - lvm lv path.
@@ -262,7 +262,7 @@ def get_lv_size_mb(lvPath, runCommand=run_command):
     return sizeB / Mebi
 
 
-def wait_for_lv_ready(lvPath, runCommand=run_command):
+def wait_for_lv_ready(lvPath, runCommand=run_local_command):
     '''
     lvPath :: str            - lvm device path.
     runCommand :: RunCommand

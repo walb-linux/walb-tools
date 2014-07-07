@@ -102,7 +102,7 @@ class Device:
     Walb device.
 
     '''
-    def __init__(self, iD, ldev, ddev, walbctlPath, runCommand=run_command):
+    def __init__(self, iD, ldev, ddev, walbctlPath, runCommand=run_local_command):
         '''
         iD :: int          - walb device id.
         ldev :: str        - underlying log block device path.
@@ -436,7 +436,7 @@ class Controller:
                    "-p", str(s.port)]
         if self.isDebug:
             ctlArgs += ['-debug']
-        return run_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
+        return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
 
     def run_remote_command(self, s, args, putMsg=False):
         '''
@@ -453,7 +453,7 @@ class Controller:
         verify_list_type(args, str)
         return self.run_ctl(s, ['exec', '---'] + args, putMsg)
 
-    def get_remote_run_command(self, s):
+    def get_run_remote_command(self, s):
         '''
         Get run_command function for RPC.
         walbc :: Controller
@@ -1097,7 +1097,7 @@ class Controller:
 
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid)
-        runCommand = self.get_remote_run_command(ax)
+        runCommand = self.get_run_remote_command(ax)
         path = self.get_restored_path(ax, vol, gid)
         wait_for_lv_ready(path, runCommand)
 
@@ -1124,7 +1124,7 @@ class Controller:
         verify_type(vol, str)
         verify_type(gid, int)
 
-        runCommand = self.get_remote_run_command(ax)
+        runCommand = self.get_run_remote_command(ax)
         path = self._get_lv_path(ax, vol)
         wait_for_lv_ready(path, runCommand)
         retryTimes = 3
@@ -1508,7 +1508,7 @@ class Controller:
         verify_type(vol, str)
         verify_type(sizeMb, int)
         self._wait_for_no_action(ax, vol, aaResize)
-        runCommand = self.get_remote_run_command(ax)
+        runCommand = self.get_run_remote_command(ax)
         curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
         if curSizeMb != sizeMb:
             raise Exception('wait_for_resize:failed',
