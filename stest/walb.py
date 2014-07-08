@@ -630,7 +630,7 @@ class Controller:
         ret = []
         for s in self.sLayout.get_all():
             try:
-                self.get_host_type(s, False)
+                self.get_host_type(s)
                 ret.append(s.name)
             except:
                 pass
