@@ -102,12 +102,13 @@ src/%.depend: src/%.cpp
 utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
+PYLINT=pylint -E --rcfile=/dev/null -f colorized stest/util.py stest/walb.py stest/scenario0.py
 stest:
-	pylint -E --rcfile=/dev/null -f colorized stest/walb_cmd.py stest/scenario0.py
+	$(PYLINT)
 	python stest/scenario0.py
 
 stest100:
-	pylint -E --rcfile=/dev/null -f colorized stest/walb_cmd.py stest/scenario0.py
+	$(PYLINT)
 	python stest/scenario0.py 100
 
 ifneq "$(MAKECMDGOALS)" "clean"
