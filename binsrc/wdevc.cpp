@@ -6,6 +6,8 @@
 #include "cybozu/option.hpp"
 #include "walb_util.hpp"
 #include "wdev_log.hpp"
+#include "walb_logger.hpp"
+#include "walb/ioctl.h"
 
 using namespace walb;
 
@@ -104,9 +106,8 @@ struct Option
     StrVec params;
     bool isDebug;
 
-    uint32_t maxLogpackKb, maxPendingMb, minPendingMb,
-        queueStopTimeoutMs, flushIntervalMb, flushIntervalMs,
-        numPackBulk, numIoBulk;
+    struct walb_start_param sParam;
+
     uint64_t lsid0, lsid1;
     std::string name;
     bool noDiscard;
@@ -116,14 +117,15 @@ struct Option
         opt.appendParamVec(&params, "remaining", "remaining parameters");
         opt.appendBoolOpt(&isDebug, "debug", "debug option");
 
-        appendOpt(&maxLogpackKb, maxLogpackKbOpt);
-        appendOpt(&maxPendingMb, maxPendingMbOpt);
-        appendOpt(&minPendingMb, minPendingMbOpt);
-        appendOpt(&queueStopTimeoutMs, queueStopTimeoutMsOpt);
-        appendOpt(&flushIntervalMb, flushIntervalMbOpt);
-        appendOpt(&flushIntervalMs, flushIntervalMsOpt);
-        appendOpt(&numPackBulk, numPackBulkOpt);
-        appendOpt(&numIoBulk, numIoBulkOpt);
+        appendOpt(&sParam.max_logpack_kb, maxLogpackKbOpt);
+        appendOpt(&sParam.max_pending_mb, maxPendingMbOpt);
+        appendOpt(&sParam.min_pending_mb, minPendingMbOpt);
+        appendOpt(&sParam.queue_stop_timeout_ms, queueStopTimeoutMsOpt);
+        appendOpt(&sParam.log_flush_interval_mb, flushIntervalMbOpt);
+        appendOpt(&sParam.log_flush_interval_ms, flushIntervalMsOpt);
+        appendOpt(&sParam.n_pack_bulk, numPackBulkOpt);
+        appendOpt(&sParam.n_io_bulk, numIoBulkOpt);
+
         appendOpt(&lsid0, lsid0Opt);
         appendOpt(&lsid1, lsid1Opt);
         appendOpt(&name, nameOpt);
@@ -155,7 +157,48 @@ struct BdevInfo
         pbs = cybozu::util::getPhysicalBlockSize(fd);
         stat = cybozu::FileStat(fd);
     }
+    void load(const std::string &path) {
+        cybozu::util::File file(path, O_RDONLY);
+        load(file.fd());
+        file.close();
+    }
 };
+
+std::ostream &operator<<(std::ostream &os, const struct walb_start_param &sParam)
+{
+    os << "name: " << sParam.name << ", "
+       << "max_pending_mb: " << sParam.max_pending_mb << ", "
+       << "min_pending_mb: " << sParam.min_pending_mb << ", "
+       << "queue_stop_timeout_ms: " << sParam.queue_stop_timeout_ms << ", "
+       << "max_logpack_kb: " << sParam.max_logpack_kb << ", "
+       << "log_flush_interval_mb: " << sParam.log_flush_interval_mb << ", "
+       << "log_flush_interval_ms: " << sParam.log_flush_interval_ms << ", "
+       << "n_pack_bulk: " << sParam.n_pack_bulk << ", "
+       << "n_io_bulk: " << sParam.n_io_bulk;
+    return os;
+}
+
+void verifyPbs(const BdevInfo &ldevInfo, const BdevInfo &ddevInfo, const char *msg)
+{
+    if (ldevInfo.pbs != ddevInfo.pbs) {
+        throw cybozu::Exception(msg)
+            << "pbs size differ" << ldevInfo.pbs << ddevInfo.pbs;
+    }
+}
+
+void invokeWalbctlIoctl(struct walb_ctl &ctl, const char *msg)
+{
+    cybozu::util::File ctlFile(WALB_CONTROL_PATH, O_RDWR);
+    if (::ioctl(ctlFile.fd(), WALB_IOCTL_CONTROL, &ctl) < 0) {
+        throw cybozu::Exception(msg)
+            << "ioctl failed" << WALB_CONTROL_PATH << cybozu::ErrorNo();
+    }
+    assert(ctl.error == 0);
+}
+
+/******************************************************************************
+ * Handlers.
+ ******************************************************************************/
 
 void formatLdev(const Option &opt)
 {
@@ -175,43 +218,95 @@ void formatLdev(const Option &opt)
     cybozu::util::File ldevFile(ldev, O_RDWR | O_DIRECT);
     int fd = ldevFile.fd();
     ldevInfo.load(fd);
-    {
-        cybozu::util::File ddevFile(ddev, O_RDONLY | O_DIRECT);
-        ddevInfo.load(ddevFile.fd());
-        ddevFile.close();
-    }
-
-    if (ldevInfo.pbs != ddevInfo.pbs) {
-        throw cybozu::Exception(__func__)
-            << "pbs size differ" << ldevInfo.pbs << ddevInfo.pbs;
-    }
+    ddevInfo.load(ddev);
+    verifyPbs(ldevInfo, ddevInfo, __func__);
     if (!opt.noDiscard && cybozu::util::isDiscardSupported(fd)) {
         cybozu::util::issueDiscard(fd, 0, ldevInfo.sizeLb);
     }
     device::initWalbMetadata(fd, ldevInfo.pbs, ddevInfo.sizeLb, ldevInfo.sizeLb, opt.name);
     ldevFile.fdatasync();
     ldevFile.close();
+
+    LOGs.debug() << "format-ldev done";
 }
 
 void createWdev(const Option &opt)
 {
     std::string ldev, ddev;
     cybozu::util::parseStrVec(opt.params, 0, 2, {&ldev, &ddev});
-    // QQQ
+
+    struct walb_start_param u2kParam; // userland -> kernel.
+    struct walb_start_param k2uParam; // kernel -> userland.
+    struct walb_ctl ctl = {
+        .command = WALB_IOCTL_START_DEV,
+        .u2k = { .wminor = WALB_DYNAMIC_MINOR,
+                 .buf_size = sizeof(struct walb_start_param),
+                 .buf = (void *)&u2kParam, },
+        .k2u = { .buf_size = sizeof(struct walb_start_param),
+                 .buf = (void *)&k2uParam, },
+    };
+
+    // Check parameters.
+    if (!::is_walb_start_param_valid(&opt.sParam)) {
+        throw cybozu::Exception(__func__)
+            << "invalid start param."
+            << opt.sParam;
+    }
+
+    // Check underlying block devices.
+    BdevInfo ldevInfo, ddevInfo;
+    ldevInfo.load(ldev);
+    ddevInfo.load(ddev);
+    verifyPbs(ldevInfo, ddevInfo, __func__);
+
+    // Make ioctl data.
+    ::memcpy(&u2kParam, &opt.sParam, sizeof(u2kParam));
+    if (opt.name.empty()) {
+        u2kParam.name[0] = '\0';
+    } else {
+        ::snprintf(u2kParam.name, DISK_NAME_LEN, "%s", opt.name.c_str());
+    }
+    ctl.u2k.lmajor = ldevInfo.stat.majorId();
+    ctl.u2k.lminor = ldevInfo.stat.minorId();
+    ctl.u2k.dmajor = ddevInfo.stat.majorId();
+    ctl.u2k.dminor = ddevInfo.stat.minorId();
+
+    invokeWalbctlIoctl(ctl, __func__);
+    assert(::strnlen(k2uParam.name, DISK_NAME_LEN) < DISK_NAME_LEN);
+
+    ::printf("name %s\n"
+             "major %u\n"
+             "minor %u\n"
+             , k2uParam.name, ctl.k2u.wmajor, ctl.k2u.wminor);
+
+    LOGs.debug() << "create-wdev done";
 }
 
 void deleteWdev(const Option &opt)
 {
     std::string wdev;
     cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
-    // QQQ
+
+    struct walb_ctl ctl = {
+        .command = WALB_IOCTL_STOP_DEV,
+        .u2k = { .buf_size = 0, },
+        .k2u = { .buf_size = 0, },
+    };
+
+    BdevInfo wdevInfo;
+    wdevInfo.load(wdev);
+    ctl.u2k.wmajor = wdevInfo.stat.majorId();
+    ctl.u2k.wminor = wdevInfo.stat.minorId();
+    invokeWalbctlIoctl(ctl, __func__);
+
+    LOGs.debug() << "delete-wdev done";
 }
 
 void setCheckpointInterval(const Option &opt)
 {
     std::string wdev, sizeStr;
     cybozu::util::parseStrVec(opt.params, 0, 2, {&wdev, &sizeStr});
-    const uint64_t size = cybozu::atoi(sizeStr);
+    //const uint64_t size = cybozu::atoi(sizeStr);
     // QQQ
 }
 
@@ -219,7 +314,111 @@ void getCheckpointInterval(const Option &opt)
 {
     std::string wdev;
     cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+    // QQQ
+}
 
+void catWldev(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void showWldev(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void showWlog(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void redoWlog(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void redo(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void setOldestLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getOldestLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getWrittenLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getPermanentLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getCompletedLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void searchValidLsid(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getLogUsage(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getLogCapacity(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void isFlushCapable(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void resize(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void resetWal(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void isLogOverflow(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void freeze(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void melt(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void isFrozen(const Option &/*opt*/)
+{
+    // QQQ
+}
+
+void getVersion(const Option &/*opt*/)
+{
     // QQQ
 }
 
@@ -228,6 +427,10 @@ void defaultRunner(const Option &opt)
     throw cybozu::Exception(__func__)
         << "not implemented yet" << opt.cmd;
 }
+
+/******************************************************************************
+ * Data and functions for main().
+ ******************************************************************************/
 
 using Runner = void (*)(const Option &);
 
@@ -277,10 +480,12 @@ struct Command
 const std::vector<Command> commandVec_ = {
     {formatLdev, "format-ldev", {ldevParam, ddevParam},
      {nameOptS, noDiscardOptS}, ""},
+
     {createWdev, "create-wdev", {ldevParam, ddevParam},
      {nameOptS, maxLogpackKbOptS, maxPendingMbOptS, minPendingMbOptS,
       queueStopTimeoutMsOptS, flushIntervalMbOptS, flushIntervalMsOptS,
       numPackBulkOptS, numIoBulkOptS}, ""},
+
     {deleteWdev, "delete-wdev", {wdevParam}, {}, ""},
 
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
@@ -366,6 +571,7 @@ std::string generateUsage()
 int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
+    walb::util::setLogSetting("-", opt.isDebug);
     dispatch(opt);
     return 0;
 }
