@@ -28,9 +28,10 @@ class FileStat
 {
 private:
     struct stat st_;
-    const bool isLstat_;
+    bool isLstat_;
     bool isFailed_;
 public:
+    FileStat() : st_(), isLstat_(), isFailed_(true) {}
     explicit FileStat(const std::string &path, bool isLstat = false)
         : st_(), isLstat_(isLstat), isFailed_(false) {
         ::memset(&st_, 0, sizeof(st_));
@@ -84,6 +85,12 @@ public:
         if (isFailed_) return 0;
         return uint64_t(st_.st_size);
     }
+    dev_t deviceId() const {
+        if (isFailed_) throw std::runtime_error("stat failed.");
+        return st_.st_rdev;
+    }
+    int majorId() const { return ::major(deviceId()); }
+    int minorId() const { return ::minor(deviceId()); }
 };
 
 /**
