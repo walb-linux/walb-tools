@@ -20,6 +20,7 @@
 #include "walb_util.hpp"
 #include "aio_util.hpp"
 #include "bdev_util.hpp"
+#include "random.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"
 #include "walb/log_record.h"
@@ -131,6 +132,32 @@ public:
             throw RT_ERR("Ring buffer size must not be 0.");
         }
         return (lsid % s) + getRingBufferOffset();
+    }
+
+    void format(uint32_t pbs, uint64_t ddevLb, uint64_t ldevLb, const std::string &name) {
+        ::memset(data_.data(), 0, data_.size());
+        super()->sector_type = SECTOR_TYPE_SUPER;
+        super()->version = WALB_LOG_VERSION;
+        super()->logical_bs = LBS;
+        super()->physical_bs = pbs;
+        super()->metadata_size = 0; // deprecated.
+        cybozu::util::Random<uint32_t> rand;
+        cybozu::Uuid uuid;
+        rand.fill(uuid.rawData(), uuid.rawSize());
+        setUuid(uuid);
+        super()->log_checksum_salt = rand.get32();
+        super()->ring_buffer_size = ::addr_pb(pbs, ldevLb) - ::get_ring_buffer_offset(pbs);
+        super()->oldest_lsid = 0;
+        super()->written_lsid = 0;
+        super()->device_size = ddevLb;
+        if (name.empty()) {
+            super()->name[0] = '\0';
+        } else {
+            snprintf(super()->name, DISK_NAME_LEN, "%s", name.c_str());
+        }
+        if (!isValid(false)) {
+            cybozu::Exception(__func__) << "invalid super block.";
+        }
     }
 
     /**
@@ -400,17 +427,16 @@ private:
 inline void initWalbMetadata(
     int fd, uint32_t pbs, uint64_t ddevLb, uint64_t ldevLb, const std::string &name)
 {
-#if 0
     assert(fd > 0);
     assert(pbs > 0);
-#endif
+    assert(ddevLb > 0);
+    assert(ldevLb > 0);
+    // name can be empty.
 
-// QQQ
-    cybozu::disable_warning_unused_variable(fd);
-    cybozu::disable_warning_unused_variable(pbs);
-    cybozu::disable_warning_unused_variable(ddevLb);
-    cybozu::disable_warning_unused_variable(ldevLb);
-    cybozu::disable_warning_unused_variable(name);
+    SuperBlock super(pbs);
+    super.format(pbs, ddevLb, ldevLb, name);
+    super.updateChecksum();
+    super.write(fd);
 }
 
 }} //namespace walb::device

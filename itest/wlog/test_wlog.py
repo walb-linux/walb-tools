@@ -2,8 +2,6 @@ import sys, time, shutil
 sys.path.append("../")
 from run import *
 
-BIN="../../binsrc"
-
 # This script will test walb-log related functionalities.
 #
 # If you use loopback devices, set USE_LOOP_DEV=1.
@@ -30,6 +28,7 @@ WLOG_2=WLOG + ".2"
 
 CTL="../../walb/tool/walbctl"
 BIN="../../binsrc"
+CTL2 = BIN + '/wdevc'
 TMP_FILE = "tmp.txt"
 
 LOOP0="/dev/loop0"
@@ -67,7 +66,7 @@ def format_ldev():
 	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_0)
 	prepare_bdev(LOOP0, LDEV)
 	prepare_bdev(LOOP1,  DDEV_0)
-	run("%s format_ldev --ldev %s --ddev %s" % (CTL, LOOP0, LOOP1))
+	run("%s format-ldev %s %s" % (CTL2, LOOP0, LOOP1))
 	#RING_BUFFER_SIZE=$(${BIN}/wldev-info $LOOP0 |grep ringBufferSize |awk '{print $2}')
 	run("%s/wldev-info %s > %s" % (BIN, LOOP0, TMP_FILE))
 	v = getKeyValue(TMP_FILE, "ringBufferSize", 1)
