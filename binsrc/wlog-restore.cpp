@@ -83,7 +83,6 @@ private:
     int64_t lsidDiff_;
 
     using AlignedArray = walb::AlignedArray;
-    using BlockDev = cybozu::util::BlockDevice;
     using WlogHeader = walb::log::FileHeader;
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
@@ -94,7 +93,7 @@ public:
     WalbLogRestorer(const Config& config)
         : config_(config)
         , lsidDiff_(config.lsidDiff())
-        {}
+    {}
 
     /**
      * Restore the log to the device.
@@ -110,19 +109,26 @@ public:
         const uint32_t pbs = wlHead.pbs();
 
         /* Open the log device. */
-        BlockDev blkdev(config_.ldevPath(), O_RDWR);
-        if (!blkdev.isBlockDevice()) {
+        cybozu::FilePath path(config_.ldevPath());
+        if (!path.stat().isBlock()) {
             ::fprintf(
                 ::stderr,
                 "Warning: the log device does not seem to be block device.\n");
         }
+        File fileB(config_.ldevPath(), O_RDWR);
+        const uint32_t pbs2 = cybozu::util::getPhysicalBlockSize(fileB.fd());
 
         /* Load superblock. */
-        SuperBlock super(blkdev);
+        SuperBlock super(pbs2);
+        super.read(fileB.fd());
 
         /* Check physical block size. */
+        if (pbs2 != pbs) {
+            throw RT_ERR("Physical block size differs. ldev %u head %u\n", pbs2, pbs);
+        }
         if (super.getPhysicalBlockSize() != pbs) {
-            throw RT_ERR("Physical block size differs.\n");
+            throw RT_ERR("Physical block size differs. super %u head %u\n"
+                         , super.getPhysicalBlockSize(), pbs);
         }
 
         /* Set lsid range. */
@@ -138,7 +144,7 @@ public:
         /* Read and write each logpack. */
         try {
             while (readLogpackAndRestore(
-                       fileR, blkdev, super, wlHead, restoredLsid)) {}
+                       fileR, fileB, super, wlHead, restoredLsid)) {}
         } catch (cybozu::util::EofError &e) {
             ::printf("Reached input EOF.\n");
         }
@@ -148,20 +154,20 @@ public:
         super.setWrittenLsid(beginLsid); /* for redo */
         super.setUuid(wlHead.getUuid());
         super.setLogChecksumSalt(wlHead.salt());
-        super.write();
+        super.write(fileB.fd());
 
         /* Invalidate the last log block. */
         if (beginLsid < restoredLsid) {
-            invalidateLsid(blkdev, super, pbs, restoredLsid);
+            invalidateLsid(fileB, super, pbs, restoredLsid);
         }
         /* Invalidate the specified block. */
         if (config_.invalidLsid() != uint64_t(-1)) {
-            invalidateLsid(blkdev, super, pbs, config_.invalidLsid());
+            invalidateLsid(fileB, super, pbs, config_.invalidLsid());
         }
 
         /* Finalize the log device. */
-        blkdev.fdatasync();
-        blkdev.close();
+        fileB.fdatasync();
+        fileB.close();
 
         ::printf("Restored lsid range [%" PRIu64 ", %" PRIu64 "].\n",
                  beginLsid, restoredLsid);
@@ -171,11 +177,11 @@ private:
      * Invalidate a specified lsid.
      */
     void invalidateLsid(
-        BlockDev &blkdev, SuperBlock &super,
+        File &file, SuperBlock &super,
         uint32_t pbs, uint64_t lsid) {
         uint64_t off = super.getOffsetFromLsid(lsid);
         AlignedArray b(pbs);
-        blkdev.write(off * pbs, pbs, b.data());
+        file.pwrite(b.data(), pbs, off * pbs);
     }
 
     /**
@@ -206,7 +212,7 @@ private:
      * Read a logpack and restore it.
      *
      * @fileR wlog input.
-     * @blkdev log block device.
+     * @fileB log block device.
      * @super super block (with the blkdev).
      * @wlHead wlog header.
      * @restoresLsid lsid of the next logpack will be set if restored.
@@ -215,7 +221,7 @@ private:
      *   true in success, or false.
      */
     bool readLogpackAndRestore(
-        File &fileR, BlockDev &blkdev,
+        File &fileR, File &fileB,
         SuperBlock &super, WlogHeader &wlHead,
         uint64_t &restoredLsid) {
 
@@ -251,7 +257,7 @@ private:
             paddingLogh.addPadding(paddingPb - 1);
             paddingLogh.updateChecksum();
             assert(paddingLogh.isValid());
-            blkdev.write(offPb * pbs, pbs, paddingLogh.rawData());
+            fileB.pwrite(paddingLogh.rawData(), pbs, offPb * pbs);
 
             /* Update logh's lsid information. */
             lsidDiff_ += paddingPb;
@@ -302,16 +308,15 @@ private:
             ::printf("header %u records\n", logh.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
-        blkdev.write(offPb * pbs, pbs, logh.rawData());
+        fileB.pwrite(logh.rawData(), pbs, offPb * pbs);
         for (size_t i = 0; i < blocks.size(); i++) {
-            blkdev.write((offPb + 1 + i) * pbs, pbs,
-                         blocks[i].data());
+            fileB.pwrite(blocks[i].data(), pbs, (offPb + 1 + i) * pbs);
         }
 
         if (config_.isVerify()) {
             /* Currently only header block will be verified. */
             AlignedArray b2(pbs);
-            blkdev.read(offPb * pbs, pbs, b2.data());
+            fileB.pread(b2.data(), pbs, offPb * pbs);
             LogPackHeader logh2(std::move(b2), pbs, salt);
             int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
             if (ret) {

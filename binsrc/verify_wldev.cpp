@@ -67,19 +67,20 @@ private:
     using AlignedArray = walb::AlignedArray;
 
     const Config &config_;
-    cybozu::util::BlockDevice wlDev_;
-    walb::device::SuperBlock super_;
+    cybozu::util::File file_;
     const uint32_t pbs_;
+    walb::device::SuperBlock super_;
     const uint32_t salt_;
 
 public:
     WldevVerifier(const Config &config)
         : config_(config)
-        , wlDev_(config.wldevPath(), O_RDONLY | O_DIRECT)
-        , super_(wlDev_)
-        , pbs_(super_.getPhysicalBlockSize())
-        , salt_(super_.getLogChecksumSalt()) {}
-
+        , file_(config.wldevPath(), O_RDONLY | O_DIRECT)
+        , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
+        , super_(pbs_)
+        , salt_(super_.getLogChecksumSalt()) {
+        super_.read(file_.fd());
+    }
     void run() {
         /* Get IO recipe parser. */
         cybozu::util::File recipeFile;
@@ -144,8 +145,8 @@ public:
 private:
     AlignedArray readBlock(uint64_t lsid) {
         AlignedArray b(pbs_);
-        uint64_t offset = super_.getOffsetFromLsid(lsid);
-        wlDev_.read(offset * pbs_, pbs_, b.data());
+        const uint64_t offset = super_.getOffsetFromLsid(lsid);
+        file_.pread(b.data(), pbs_, offset * pbs_);
         return b;
     }
 

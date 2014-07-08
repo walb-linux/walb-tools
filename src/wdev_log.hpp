@@ -36,8 +36,6 @@ constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 class SuperBlock
 {
 private:
-    /* Log device. */
-    cybozu::util::BlockDevice& bd_;
     /* Physical block size */
     const uint32_t pbs_;
     /* Super block offset in the log device [physical block]. */
@@ -47,13 +45,10 @@ private:
     walb::AlignedArray data_;
 
 public:
-    explicit SuperBlock(cybozu::util::BlockDevice& bd)
-        : bd_(bd)
-        , pbs_(bd.getPhysicalBlockSize())
-        , offset_(get1stSuperBlockOffsetStatic(pbs_))
-        , data_(pbs_) {
-        /* Read the superblock. */
-        read();
+    explicit SuperBlock(uint32_t pbs)
+        : pbs_(pbs)
+        , offset_(get1stSuperBlockOffsetStatic(pbs))
+        , data_(pbs) {
     }
 
     uint16_t getSectorType() const { return super()->sector_type; }
@@ -139,8 +134,9 @@ public:
     /**
      * Read super block from the log device.
      */
-    void read() {
-        bd_.read(offset_ * pbs_, pbs_, data_.data());
+    void read(int fd) {
+        cybozu::util::File file(fd);
+        file.pread(data_.data(), pbs_, offset_ * pbs_);
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
         }
@@ -149,12 +145,13 @@ public:
     /**
      * Write super block to the log device.
      */
-    void write() {
+    void write(int fd) {
         updateChecksum();
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
         }
-        bd_.write(offset_ * pbs_, pbs_, data_.data());
+        cybozu::util::File file(fd);
+        file.pwrite(data_.data(), pbs_, offset_ * pbs_);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -220,7 +217,7 @@ private:
 class AsyncWldevReader
 {
 private:
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
     const uint32_t pbs_;
     const uint32_t bufferPb_; /* [physical block]. */
     const uint32_t maxIoPb_;
@@ -242,13 +239,13 @@ public:
     AsyncWldevReader(const std::string &wldevPath,
                    uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
                    uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
-        : bd_(wldevPath.c_str(), O_RDONLY | O_DIRECT)
-        , pbs_(bd_.getPhysicalBlockSize())
+        : file_(wldevPath, O_RDONLY | O_DIRECT)
+        , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
         , bufferPb_(bufferSize / pbs_)
         , maxIoPb_(maxIoSize / pbs_)
         , buffer_(bufferPb_ * pbs_)
-        , super_(bd_)
-        , aio_(bd_.getFd(), bufferPb_)
+        , super_(pbs_)
+        , aio_(file_.fd(), bufferPb_)
         , aheadLsid_(0)
         , ioQ_()
         , aheadIdx_(0)
@@ -261,6 +258,7 @@ public:
         if (maxIoPb_ == 0) {
             throw RT_ERR("maxIoSize must be more than physical block size.");
         }
+        super_.read(file_.fd());
     }
     ~AsyncWldevReader() noexcept {
         while (!ioQ_.empty()) {
@@ -396,5 +394,21 @@ private:
         plusIdx(readIdx_, 1);
     }
 };
+
+inline void initWalbMetadata(
+    int fd, uint32_t pbs, uint64_t ddevLb, uint64_t ldevLb, const std::string &name)
+{
+#if 0
+    assert(fd > 0);
+    assert(pbs > 0);
+#endif
+
+// QQQ
+    cybozu::disable_warning_unused_variable(fd);
+    cybozu::disable_warning_unused_variable(pbs);
+    cybozu::disable_warning_unused_variable(ddevLb);
+    cybozu::disable_warning_unused_variable(ldevLb);
+    cybozu::disable_warning_unused_variable(name);
+}
 
 }} //namespace walb::device

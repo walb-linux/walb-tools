@@ -47,8 +47,9 @@ private:
 int doMain(int argc, char* argv[])
 {
     Config config(argc, argv);
-    cybozu::util::BlockDevice bd(config.ldevPath().c_str(), O_RDONLY | O_DIRECT);
-    walb::device::SuperBlock super(bd);
+    cybozu::util::BlockDevice bd(config.ldevPath(), O_RDONLY | O_DIRECT);
+    walb::device::SuperBlock super(bd.getPhysicalBlockSize());
+    super.read(bd.getFd());
     super.print();
     return 0;
 }

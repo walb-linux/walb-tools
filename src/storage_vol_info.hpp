@@ -106,9 +106,10 @@ public:
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
-        device::SuperBlock super(bd);
-        const uint32_t pbs = super.getPhysicalBlockSize();
+        const uint32_t pbs = bd.getPhysicalBlockSize();
         v.push_back(fmt("pbs %" PRIu32 "", pbs));
+        device::SuperBlock super(pbs);
+        super.read(bd.getFd());
         const uint32_t salt = super.getLogChecksumSalt();
         v.push_back(fmt("salt %" PRIx32 "", salt));
 
@@ -160,7 +161,8 @@ public:
         }
         {
             cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
-            device::SuperBlock super(bd);
+            device::SuperBlock super(bd.getPhysicalBlockSize());
+            super.read(bd.getFd());
             setUuid(super.getUuid());
         }
         setState(sSyncReady);
