@@ -11,6 +11,7 @@
 #include "random.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
+#include "bdev_util.hpp"
 #include "io_recipe.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"

@@ -308,12 +308,11 @@ inline std::string getWdevNameFromWdevPath(const std::string& wdevPath)
     return wdevPath.substr(WDEV_PATH_PREFIX.size());
 }
 
-inline cybozu::util::BlockDevice getWldev(const std::string& wdevName, bool isRead = true)
+inline cybozu::util::File getWldevFile(const std::string& wdevName, bool isRead = true)
 {
-    return cybozu::util::BlockDevice(
+    return cybozu::util::File(
         getWldevPathFromWdevName(wdevName),
         (isRead ? O_RDONLY : O_RDWR) | O_DIRECT);
 }
 
 }} // namespace walb::device
-

@@ -9,6 +9,7 @@
 #include "walb_logger.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
+#include "bdev_util.hpp"
 #include "walb_log_file.hpp"
 #include "aio_util.hpp"
 #include "walb/walb.h"
@@ -564,7 +565,8 @@ class WalbLogApplyer
 {
 private:
     const Config& config_;
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
+    const uint64_t devSize_;
     const size_t pbs_;
     const size_t maxPb_;
     cybozu::aio::Aio aio_;
@@ -579,10 +581,11 @@ public:
     WalbLogApplyer(
         const Config& config, size_t bufferSize)
         : config_(config)
-        , bd_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
-        , pbs_(bd_.getPhysicalBlockSize())
+        , file_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
+        , devSize_(cybozu::util::getBlockDeviceSize(file_.fd()))
+        , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
         , maxPb_(getQueueSizeStatic(bufferSize, pbs_))
-        , aio_(bd_.getFd(), maxPb_)
+        , aio_(file_.fd(), maxPb_)
         , wh_()
         , ioQ_(maxPb_, pbs_)
         , readyQ_()
@@ -630,7 +633,7 @@ public:
         waitForAllProcessingIos();
 
         /* Sync device. */
-        bd_.fdatasync();
+        file_.fdatasync();
         isSuccess_ = true;
 
         ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, redoLsid);
@@ -667,7 +670,7 @@ private:
         uint64_t offsetAndSize[2];
         offsetAndSize[0] = rec.offset * LOGICAL_BLOCK_SIZE;
         offsetAndSize[1] = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        int ret = ::ioctl(bd_.getFd(), BLKDISCARD, &offsetAndSize);
+        int ret = ::ioctl(file_.fd(), BLKDISCARD, &offsetAndSize);
         if (ret) {
             throw RT_ERR("discard command failed.");
         }
@@ -748,7 +751,7 @@ private:
             off += size;
             remaining -= size;
             /* Clip if the IO area is out of range in the device. */
-            if (io.offset() + io.size() <= bd_.getDeviceSize()) {
+            if (io.offset() + io.size() <= devSize_) {
                 ioQ_.add(std::move(io));
                 if (rec.isDiscard()) { g_st.nDiscard++; }
             } else {

@@ -11,6 +11,7 @@
 #include "random.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
+#include "bdev_util.hpp"
 #include "walb/common.h"
 #include "walb/block_size.h"
 #include "walb_util.hpp"
@@ -149,7 +150,7 @@ class Worker
 {
 private:
     const Config &config_;
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
     RandomIoSpecGenerator ioSpecGen_;
     const char *dataPtr_;
     std::vector<bool> bmp_;
@@ -157,7 +158,7 @@ private:
 public:
     Worker(const Config &config, const char *dataPtr)
         : config_(config)
-        , bd_(config.targetPath(), O_RDWR | O_DIRECT)
+        , file_(config.targetPath(), O_RDWR | O_DIRECT)
         , ioSpecGen_(config.offsetB(), config.sizeB())
         , dataPtr_(dataPtr)
         , bmp_(config.sizeB(), false) {}
@@ -168,8 +169,8 @@ public:
         uint32_t ioBlocks;
         for (size_t i = 0; i < config_.counts(); i++) {
             ioSpecGen_.get(ioAddr, ioBlocks);
-            bd_.write(ioAddr * bs, ioBlocks * bs,
-                      &dataPtr_[(ioAddr - config_.offsetB()) * bs]);
+            file_.pwrite(&dataPtr_[(ioAddr - config_.offsetB()) * bs],
+                         ioBlocks * bs, ioAddr * bs);
             for (uint64_t i = ioAddr - config_.offsetB();
                  i < ioAddr - config_.offsetB() + ioBlocks; i++) {
                 bmp_[i] = true;
@@ -185,13 +186,12 @@ static bool writeConcurrentlyAndVerify(Config &config)
 {
     /* Prepare */
     const uint32_t bs = config.blockSize();
-    cybozu::util::BlockDevice bd(
-        config.targetPath(), O_RDWR | O_DIRECT);
+    cybozu::util::File file(config.targetPath(), O_RDWR | O_DIRECT);
     walb::AlignedArray block(bs);
 
     /* Decide target area size. */
     size_t sizeB = config.sizeB();
-    const size_t devSizeB = bd.getDeviceSize() / bs;
+    const size_t devSizeB = cybozu::util::getBlockDeviceSize(file.fd()) / bs;
     if (sizeB == 0 || devSizeB <= config.offsetB() + sizeB) {
         sizeB = devSizeB - config.offsetB();
     }
@@ -199,7 +199,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
 
     /* Write zero to the target range. */
     for (uint64_t i = 0; i < sizeB; i++) {
-        bd.write((config.offsetB() + i) * bs, bs, block.data());
+        file.pwrite(block.data(), bs, (config.offsetB() + i) * bs);
     }
 
     /* Prepare shared blocks and fill randomly. */
@@ -233,7 +233,7 @@ static bool writeConcurrentlyAndVerify(Config &config)
     for (uint64_t i = 0; i < sizeB; i++) {
         if (!bmp[i]) { continue; }
         nWritten++;
-        bd.read((config.offsetB() + i) * bs, bs, block.data());
+        file.pread(block.data(), bs, (config.offsetB() + i) * bs);
         if (::memcmp(block.data(), blocks0.data() + (i * bs), bs) == 0) {
             nVerified++;
         } else {

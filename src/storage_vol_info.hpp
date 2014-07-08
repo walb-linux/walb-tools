@@ -105,11 +105,9 @@ public:
         v.push_back(fmt("logCapacityPb %" PRIu64 "", logCapacityPb));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
-        cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
-        const uint32_t pbs = bd.getPhysicalBlockSize();
+        const uint32_t pbs = getPbs();
         v.push_back(fmt("pbs %" PRIu32 "", pbs));
-        device::SuperBlock super(pbs);
-        super.read(bd.getFd());
+        device::SuperBlock super = getSuperBlock();
         const uint32_t salt = super.getLogChecksumSalt();
         v.push_back(fmt("salt %" PRIx32 "", salt));
 
@@ -160,9 +158,7 @@ public:
             qf.sync();
         }
         {
-            cybozu::util::BlockDevice bd = device::getWldev(getWdevName());
-            device::SuperBlock super(bd.getPhysicalBlockSize());
-            super.read(bd.getFd());
+            device::SuperBlock super = getSuperBlock();
             setUuid(super.getUuid());
         }
         setState(sSyncReady);
@@ -366,8 +362,7 @@ private:
         return volDir_ + "queue";
     }
     uint64_t convertMibToPb(uint64_t mib) const {
-        const uint32_t pbs = device::getWldev(getWdevName()).getPhysicalBlockSize();
-        return mib * (MEBI / pbs);
+        return mib * (MEBI / getPbs());
     }
     uint64_t getMaxWlogSendPb(uint64_t maxWlogSendMb, const char *msg) const {
         const uint64_t maxWlogSendPb = convertMibToPb(maxWlogSendMb);
@@ -403,6 +398,17 @@ private:
         if (rec0.lsid != rec1.lsid || rec0.gid != rec1.gid) {
             cybozu::Exception(msg) << "not equal lsid or gid" << rec0 << rec1;
         }
+    }
+    uint32_t getPbs() const {
+        cybozu::util::File file = device::getWldevFile(getWdevName());
+        return cybozu::util::getPhysicalBlockSize(file.fd());
+    }
+    device::SuperBlock getSuperBlock() const {
+        cybozu::util::File file = device::getWldevFile(getWdevName());
+        uint32_t pbs = cybozu::util::getPhysicalBlockSize(file.fd());;
+        device::SuperBlock super(pbs);
+        super.read(file.fd());
+        return super;
     }
 };
 

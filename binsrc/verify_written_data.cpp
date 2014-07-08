@@ -70,7 +70,7 @@ class IoDataVerifier
 {
 private:
     const Config &config_;
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
     size_t bufSizeB_; /* buffer size [block]. */
     using AlignedArray = walb::AlignedArray;
     AlignedArray buf_;
@@ -78,7 +78,7 @@ private:
 public:
     IoDataVerifier(const Config &config)
         : config_(config)
-        , bd_(config.targetPath(), O_RDONLY | (config.isDirect() ? O_DIRECT : 0))
+        , file_(config.targetPath(), O_RDONLY | (config.isDirect() ? O_DIRECT : 0))
         , bufSizeB_(1024 * 1024 / config.blockSize()) /* 1MB */
         , buf_(config.blockSize() * bufSizeB_) {
     }
@@ -99,7 +99,7 @@ public:
         while (!recipeParser.isEnd()) {
             walb::util::IoRecipe r = recipeParser.get();
             buf_.resize(bs * r.ioSizeB());
-            bd_.read(buf_.size(), r.ioSizeB() * bs, buf_.data());
+            file_.pread(buf_.data(), r.ioSizeB() * bs, buf_.size());
             uint32_t csum = cybozu::util::calcChecksum(buf_.data(), r.ioSizeB() * bs, 0);
             ::printf("%s\t%s\t%08x\n",
                      (csum == r.csum() ? "OK" : "NG"), r.toString().c_str(), csum);

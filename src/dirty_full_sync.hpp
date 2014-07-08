@@ -19,7 +19,7 @@ inline bool dirtyFullSyncClient(
     const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
 {
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    cybozu::util::BlockDevice bd(bdevPath, O_RDONLY);
+    cybozu::util::File file(bdevPath, O_RDONLY);
     std::string encBuf;
 
     uint64_t c = 0;
@@ -30,7 +30,7 @@ inline bool dirtyFullSyncClient(
         }
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
-        bd.read(&buf[0], size);
+        file.read(&buf[0], size);
         const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
         pkt.write(encSize);
         pkt.write(&encBuf[0], encSize);
@@ -52,7 +52,7 @@ inline bool dirtyFullSyncServer(
     const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
 {
     const char *const FUNC = __func__;
-    cybozu::util::BlockDevice bd(bdevPath, O_RDWR);
+    cybozu::util::File file(bdevPath, O_RDWR);
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
     std::vector<char> encBuf;
 
@@ -83,11 +83,11 @@ inline bool dirtyFullSyncServer(
         if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
             throw cybozu::Exception(FUNC) << "RawUncompress";
         }
-        bd.write(&buf[0], size);
+        file.write(&buf[0], size);
         remainingLb -= lb;
         c++;
     }
-    bd.fdatasync();
+    file.fdatasync();
     packet::Ack(pkt.sock()).send();
     LOGs.debug() << "number of received packets" << c;
     return true;

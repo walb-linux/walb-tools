@@ -171,7 +171,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
     DiffRecIo recIo;
-    cybozu::util::BlockDevice bd(lv.path().str(), O_RDWR);
+    cybozu::util::File file(lv.path().str(), O_RDWR);
     std::vector<char> zero;
 	const uint64_t lvSnapSizeLb = lv.sizeLb();
     while (merger.getAndRemove(recIo)) {
@@ -197,10 +197,10 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
         } else {
             data = recIo.io().get();
         }
-        bd.write(ioAddrB, ioSizeB, data);
+        file.pwrite(data, ioSizeB, ioAddrB);
     }
-    bd.fdatasync();
-    bd.close();
+    file.fdatasync();
+    file.close();
     return true;
 }
 

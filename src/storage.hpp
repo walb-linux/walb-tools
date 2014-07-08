@@ -608,8 +608,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             }
         } else {
             const uint32_t hashSeed = curTime;
-            cybozu::util::BlockDevice bd(volInfo.getWdevPath(), O_RDONLY);
-            if (!dirtyHashSyncClient(aPkt, bd, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.forceQuit)) {
+            cybozu::util::File file(volInfo.getWdevPath(), O_RDONLY);
+            if (!dirtyHashSyncClient(aPkt, file, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.forceQuit)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }

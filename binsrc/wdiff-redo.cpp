@@ -7,6 +7,7 @@
  */
 #include "cybozu/option.hpp"
 #include "util.hpp"
+#include "bdev_util.hpp"
 #include "walb_diff_file.hpp"
 
 /**
@@ -61,16 +62,16 @@ using namespace walb;
 class SimpleDiffIoExecutor
 {
 private:
-    cybozu::util::BlockDevice bd_;
+    cybozu::util::File file_;
+    uint64_t devSize_;
 
 public:
     SimpleDiffIoExecutor(const std::string &name, int flags)
-        : bd_(name, flags) {
+        : file_(name, flags), devSize_(cybozu::util::getBlockDeviceSize(file_.fd())) {
         if (!(flags & O_RDWR)) {
             throw RT_ERR("The flag must have O_RDWR.");
         }
     }
-
     bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIo& io) {
         assert(!io.isCompressed());
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
@@ -78,14 +79,13 @@ public:
         assert(io.getSize() == size);
 
         /* boundary check. */
-        if (bd_.getDeviceSize() < oft + size) { return false; }
+        if (devSize_ < oft + size) return false;
 
-        bd_.write(oft, size, io.get());
+        file_.pwrite(io.get(), size, oft);
         return true;
     }
-
     void sync() {
-        bd_.fdatasync();
+        file_.fdatasync();
     }
 };
 

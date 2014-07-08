@@ -47,9 +47,10 @@ private:
 int doMain(int argc, char* argv[])
 {
     Config config(argc, argv);
-    cybozu::util::BlockDevice bd(config.ldevPath(), O_RDONLY | O_DIRECT);
-    walb::device::SuperBlock super(bd.getPhysicalBlockSize());
-    super.read(bd.getFd());
+    cybozu::util::File file(config.ldevPath(), O_RDONLY | O_DIRECT);
+    const uint32_t pbs = cybozu::util::getPhysicalBlockSize(file.fd());
+    walb::device::SuperBlock super(pbs);
+    super.read(file.fd());
     super.print();
     return 0;
 }

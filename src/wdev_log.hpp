@@ -19,10 +19,12 @@
 #include "walb_log_file.hpp"
 #include "walb_util.hpp"
 #include "aio_util.hpp"
+#include "bdev_util.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"
 #include "walb/log_record.h"
 #include "walb_log.h"
+
 
 namespace walb {
 namespace device {
