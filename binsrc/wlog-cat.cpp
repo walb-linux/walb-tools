@@ -119,10 +119,9 @@ public:
         uint64_t lsid = beginLsid;
         uint64_t totalPaddingPb = 0;
         uint64_t nPacks = 0;
-        LogPackHeader packH(nullptr, pbs, salt);
+        LogPackHeader packH(pbs, salt);
         bool isEnd = false;
         while (lsid < endLsid_ && !isEnd) {
-            readAheadLoose();
             if (!readLogpackHeader(packH, lsid)) {
                 if (isVerbose_) {
                     ::fprintf(::stderr, "Caught invalid logpack header error.\n");
@@ -151,14 +150,6 @@ public:
     }
     using AlignedArray = walb::AlignedArray;
 private:
-    void readAheadLoose() {
-        ldevReader_.readAhead(0.5);
-    }
-    AlignedArray readBlock() {
-        AlignedArray b(pbs_);
-        ldevReader_.read(b.data(), 1);
-        return b;
-    }
     /**
      * Get block list from packIo list.
      */
@@ -181,7 +172,7 @@ private:
      *   false if got invalid logpack header.
      */
     bool readLogpackHeader(LogPackHeader &packH, uint64_t lsid) {
-        packH.setBlock(readBlock());
+        packH.readFrom(ldevReader_);
         if (!packH.isValid()) return false;
         if (packH.header().logpack_lsid != lsid) {
             ::fprintf(::stderr, "logpack %" PRIu64 " is not the expected one %" PRIu64 "."
@@ -225,11 +216,7 @@ private:
     bool readLogpackIo(LogPackIo& packIo, uint32_t pbs) {
         const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return true;
-        readAheadLoose();
-        const uint32_t ioSizePb = rec.ioSizePb(pbs);
-        for (size_t i = 0; i < ioSizePb; i++) {
-            packIo.blockS.addBlock(readBlock());
-        }
+        packIo.blockS.read(ldevReader_, rec.ioSizePb(pbs));
         return packIo.isValid();
     }
 };

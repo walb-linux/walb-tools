@@ -33,6 +33,16 @@ namespace device {
 constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
 constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 
+namespace local {
+
+inline void verifySizeIsMultipleOfPbs(size_t size, uint32_t pbs, const char *msg)
+{
+    if (size % pbs == 0) return;
+    throw cybozu::Exception(msg) << "size must be multiples of pbs" << size << pbs;
+}
+
+} // namespace local
+
 /**
  * WalB super sector.
  *
@@ -244,6 +254,76 @@ private:
     }
 };
 
+class SimpleWldevReader
+{
+private:
+    cybozu::util::File file_;
+    SuperBlock super_;
+    uint32_t pbs_;
+    uint64_t lsid_;
+public:
+    explicit SimpleWldevReader(const std::string &wldevPath)
+        : file_(wldevPath, O_RDONLY | O_DIRECT)
+        , super_()
+        , pbs_()
+        , lsid_() {
+
+        super_.read(file_.fd());
+        pbs_ = super_.getPhysicalBlockSize();
+    }
+    SuperBlock &super() { return super_; }
+    uint32_t pbs() const { return pbs_; }
+    void reset(uint64_t lsid) {
+        lsid_ = lsid;
+        seek();
+    }
+    void read(void *data, size_t size) {
+        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        readPb(data, size / pbs_);
+    }
+    void skip(size_t size) {
+        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        skipPb(size / pbs_);
+    }
+private:
+    void readBlock(void *data) {
+        file_.read(data, pbs_);
+        lsid_++;
+        if (lsid_ % ringBufPb() == 0) {
+            seek();
+        }
+    }
+    void seek() {
+        file_.lseek(super_.getOffsetFromLsid(lsid_) * pbs_);
+    }
+    void verifySizePb(size_t sizePb) {
+        if (sizePb >= ringBufPb()) {
+            throw cybozu::Exception(__func__)
+                << "too large sizePb" << sizePb << ringBufPb();
+        }
+    }
+    uint64_t ringBufPb() const {
+        return super_.getRingBufferSize();
+    }
+    void readPb(void *data, size_t sizePb) {
+        if (sizePb == 0) return;
+        verifySizePb(sizePb);
+
+        char *p = (char *)data;
+        while (sizePb > 0) {
+            readBlock(p);
+            p += pbs_;
+            sizePb--;
+        }
+    }
+    void skipPb(size_t sizePb) {
+        if (sizePb == 0) return;
+        verifySizePb(sizePb);
+        lsid_ += sizePb;
+        seek();
+    }
+};
+
 /**
  * Walb log device reader using aio.
  */
@@ -261,8 +341,8 @@ private:
     std::queue<std::pair<uint32_t, uint32_t> > ioQ_; /* aioKey, ioPb */
     uint32_t aheadIdx_;
     uint32_t readIdx_;
-    uint32_t pendingPb_;
-    uint32_t remainingPb_;
+    uint32_t pendingPb_; /* submitted but not completed. */
+    uint32_t remainingPb_; /* completed but not read (and collected). */
 public:
     /**
      * @wldevPath walb log device path.
@@ -308,43 +388,6 @@ public:
     uint32_t queueSize() const { return bufferPb_; }
     SuperBlock &super() { return super_; }
     /**
-     * Read data.
-     * @data buffer pointer to fill.
-     * @pb size [physical block].
-     */
-    void read(void *data, size_t pb) {
-        char *p = (char*)data;
-        while (0 < pb) {
-            readBlock(p);
-            p += pbs_;
-            pb--;
-        }
-    }
-    /**
-     * Invoke asynchronous read IOs to fill the buffer.
-     */
-    void readAhead() {
-        size_t n = 0;
-        while (remainingPb_ + pendingPb_ < bufferPb_) {
-            prepareAheadIo();
-            n++;
-        }
-        if (0 < n) {
-            aio_.submit();
-        }
-    }
-    /**
-     * Invoke readAhead() if the buffer usage is less than a specified ratio.
-     * @ratio 0.0 <= ratio <= 1.0
-     */
-    void readAhead(float ratio) {
-        float used = remainingPb_ + pendingPb_;
-        float total = bufferPb_;
-        if (used / total < ratio) {
-            readAhead();
-        }
-    }
-    /**
      * Reset current IOs and start read from a lsid.
      */
     void reset(uint64_t lsid) {
@@ -361,6 +404,14 @@ public:
         aheadIdx_ = 0;
         pendingPb_ = 0;
         remainingPb_ = 0;
+    }
+    void read(void *data, size_t size) {
+        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        readPb(data, size / pbs_);
+    }
+    void skip(size_t size) {
+        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        skipPb(size / pbs_);
     }
 private:
     char *getBuffer(size_t idx) {
@@ -406,8 +457,21 @@ private:
         pendingPb_ += ioPb;
         plusIdx(aheadIdx_, ioPb);
     }
-    void readBlock(void *data) {
-        if (remainingPb_ == 0 && pendingPb_ == 0) {
+    /**
+     * Invoke asynchronous read IOs to fill the buffer.
+     */
+    void readAhead() {
+        size_t n = 0;
+        while (remainingPb_ + pendingPb_ < bufferPb_) {
+            prepareAheadIo();
+            n++;
+        }
+        if (0 < n) {
+            aio_.submit();
+        }
+    }
+    void prepareBlock() {
+        if (remainingPb_ + pendingPb_ <= bufferPb_ / 2) {
             readAhead();
         }
         if (remainingPb_ == 0) {
@@ -422,9 +486,36 @@ private:
             pendingPb_ -= ioPb;
         }
         assert(0 < remainingPb_);
+    }
+    void readBlock(void *data) {
+        prepareBlock();
         ::memcpy(data, getBuffer(readIdx_), pbs_);
         remainingPb_--;
         plusIdx(readIdx_, 1);
+    }
+    void trashBlock() {
+        prepareBlock();
+        remainingPb_--;
+        plusIdx(readIdx_, 1);
+    }
+    /**
+     * Read data.
+     * @data buffer pointer to fill.
+     * @pb size [physical block].
+     */
+    void readPb(void *data, size_t pb) {
+        char *p = (char*)data;
+        while (0 < pb) {
+            readBlock(p);
+            p += pbs_;
+            pb--;
+        }
+    }
+    void skipPb(size_t sizePb) {
+        while (sizePb > 0) {
+            trashBlock();
+            sizePb--;
+        }
     }
 };
 
