@@ -5,6 +5,7 @@
 #include <vector>
 #include "cybozu/option.hpp"
 #include "walb_util.hpp"
+#include "wdev_util.hpp"
 #include "wdev_log.hpp"
 #include "walb_logger.hpp"
 #include "walb/ioctl.h"
@@ -94,7 +95,10 @@ const Param ldevParam = {"LDEV", ": log device path"};
 const Param ddevParam = {"DDEV", ": data device path"};
 const Param wdevParam = {"WDEV", ": walb device path"};
 const Param wldevParam = {"WLDEV", ": walb log device path"};
-const Param sizeParam = {"SIZE", ""};
+const Param sizeLbParam = {"SIZE_LB", ": [logical block] "
+                           "suffix k,m,g,t supported. "
+                           "(default: underlying data device size)"};
+const Param timeoutSecParam = {"TIMEOUT", "[sec] 0 means no timeout. (default: 0)"};
 const Param lsidParam = {"LSID", ": log sequence id"};
 const Param intervalMsParam = {"INTERVAL", "[ms]"};
 
@@ -193,7 +197,6 @@ void invokeWalbctlIoctl(struct walb_ctl &ctl, const char *msg)
         throw cybozu::Exception(msg)
             << "ioctl failed" << WALB_CONTROL_PATH << cybozu::ErrorNo();
     }
-    assert(ctl.error == 0);
 }
 
 /******************************************************************************
@@ -304,17 +307,26 @@ void deleteWdev(const Option &opt)
 
 void setCheckpointInterval(const Option &opt)
 {
-    std::string wdev, sizeStr;
-    cybozu::util::parseStrVec(opt.params, 0, 2, {&wdev, &sizeStr});
-    //const uint64_t size = cybozu::atoi(sizeStr);
-    // QQQ
+    std::string wdev, intervalMsStr;
+    cybozu::util::parseStrVec(opt.params, 0, 2, {&wdev, &intervalMsStr});
+    const uint32_t intervalMs = cybozu::atoi(intervalMsStr);
+
+    device::setValueByIoctl<uint32_t>(
+        wdev, WALB_IOCTL_SET_CHECKPOINT_INTERVAL, intervalMs);
+
+    LOGs.debug() << "set-checkpoint-interval done";
 }
 
 void getCheckpointInterval(const Option &opt)
 {
     std::string wdev;
     cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
-    // QQQ
+
+    const uint32_t intervalMs =
+        device::getValueByIoctl<uint32_t>(wdev, WALB_IOCTL_GET_CHECKPOINT_INTERVAL);
+    std::cout << intervalMs << std::endl;
+
+    LOGs.debug() << "get-checkpoint-interval done";
 }
 
 void catWldev(const Option &/*opt*/)
@@ -342,84 +354,157 @@ void redo(const Option &/*opt*/)
     // QQQ
 }
 
-void setOldestLsid(const Option &/*opt*/)
+void setOldestLsid(const Option &opt)
 {
-    // QQQ
+    std::string wdev, lsidStr;
+    cybozu::util::parseStrVec(opt.params, 0, 2, {&wdev, &lsidStr});
+    const uint64_t lsid = cybozu::atoi(lsidStr);
+
+    device::setOldestLsid(wdev, lsid);
+
+    LOGs.debug() << "set-oldest-lsid done";
 }
 
-void getOldestLsid(const Option &/*opt*/)
+void getOldestLsid(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLsid(wdev, WALB_IOCTL_GET_OLDEST_LSID) << std::endl;
 }
 
-void getWrittenLsid(const Option &/*opt*/)
+void getWrittenLsid(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLsid(wdev, WALB_IOCTL_GET_WRITTEN_LSID) << std::endl;
 }
 
-void getPermanentLsid(const Option &/*opt*/)
+void getPermanentLsid(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLsid(wdev, WALB_IOCTL_GET_PERMANENT_LSID) << std::endl;
 }
 
-void getCompletedLsid(const Option &/*opt*/)
+void getCompletedLsid(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLsid(wdev, WALB_IOCTL_GET_COMPLETED_LSID) << std::endl;
 }
 
-void searchValidLsid(const Option &/*opt*/)
+void getLogUsage(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLogUsagePb(wdev) << std::endl;
 }
 
-void getLogUsage(const Option &/*opt*/)
+void getLogCapacity(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    std::cout << device::getLogCapacityPb(wdev) << std::endl;
 }
 
-void getLogCapacity(const Option &/*opt*/)
+void isFlushCapable(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    const int res = device::isFlushCapable(wdev) ? 1 : 0;
+    std::cout << res << std::endl;
 }
 
-void isFlushCapable(const Option &/*opt*/)
+void resize(const Option &opt)
 {
-    // QQQ
+    std::string wdev, sizeLbStr;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev, &sizeLbStr});
+
+    uint64_t sizeLb = 0;
+    if (!sizeLbStr.empty()) {
+        sizeLb = cybozu::util::fromUnitIntString(sizeLbStr);
+    }
+
+    device::resize(wdev, sizeLb);
+
+    LOGs.debug() << "resize done";
 }
 
-void resize(const Option &/*opt*/)
+void resetWal(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    device::resetWal(wdev);
+
+    LOGs.debug() << "reset-wal done";
 }
 
-void resetWal(const Option &/*opt*/)
+void isLogOverflow(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    const int res = device::isOverflow(wdev) ? 1 : 0;
+    std::cout << res << std::endl;
 }
 
-void isLogOverflow(const Option &/*opt*/)
+void freeze(const Option &opt)
 {
-    // QQQ
+    std::string wdev, timeoutSecStr;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev, &timeoutSecStr});
+
+    uint32_t timeoutSec = 0;
+    if (!timeoutSecStr.empty()) {
+        timeoutSec = cybozu::atoi(timeoutSecStr);
+    }
+
+    device::setValueByIoctl<uint32_t>(wdev, WALB_IOCTL_FREEZE, timeoutSec);
+
+    LOGs.debug() << "freeze done";
 }
 
-void freeze(const Option &/*opt*/)
+void melt(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    const int dummy = 0;
+    device::setValueByIoctl<int>(wdev, WALB_IOCTL_MELT, dummy);
+
+    LOGs.debug() << "melt done";
 }
 
-void melt(const Option &/*opt*/)
+void isFrozen(const Option &opt)
 {
-    // QQQ
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    const int res = device::getValueByIoctl<int>(wdev, WALB_IOCTL_IS_FROZEN) ? 1 : 0;
+    std::cout << res << std::endl;
 }
 
-void isFrozen(const Option &/*opt*/)
+void getVersion(const Option &)
 {
-    // QQQ
-}
+    uint32_t version;
 
-void getVersion(const Option &/*opt*/)
-{
-    // QQQ
+    cybozu::util::File file(WALB_CONTROL_PATH, O_RDONLY);
+    if (::ioctl(file.fd(), WALB_IOCTL_VERSION, &version) < 0) {
+        throw cybozu::Exception(__func__) << "ioctl failed" << cybozu::ErrorNo();
+    }
+    file.close();
+
+    ::printf("%u.%u.%u\n"
+             , (version & 0x00ff0000) >> 16
+             , (version & 0x0000ff00) >> 8
+             , (version & 0x000000ff));
 }
 
 void defaultRunner(const Option &opt)
@@ -497,28 +582,27 @@ const std::vector<Command> commandVec_ = {
     {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo", {ldevParam, ddevParam}, {}, ""},
 
-    {defaultRunner, "set-oldest-lsid", {}, {}, ""},
-    {defaultRunner, "get-oldest-lsid", {}, {}, ""},
-    {defaultRunner, "get-written-lsid", {}, {}, ""},
-    {defaultRunner, "get-permanent-lsid", {}, {}, ""},
-    {defaultRunner, "get-completed-lsid", {}, {}, ""},
+    {setOldestLsid, "set-oldest-lsid", {wdevParam, lsidParam}, {}, ""},
+    {getOldestLsid, "get-oldest-lsid", {wdevParam}, {}, ""},
+    {getWrittenLsid, "get-written-lsid", {wdevParam}, {}, ""},
+    {getPermanentLsid, "get-permanent-lsid", {wdevParam}, {}, ""},
+    {getCompletedLsid, "get-completed-lsid", {wdevParam}, {}, ""},
 
-    {defaultRunner, "get-log-usage", {}, {}, ""},
-    {defaultRunner, "get-log-capacity", {}, {}, ""},
+    {getLogUsage, "get-log-usage", {wdevParam}, {}, ""},
+    {getLogCapacity, "get-log-capacity", {wdevParam}, {}, ""},
 
-    {defaultRunner, "is-flush-capable", {}, {}, ""},
+    {isFlushCapable, "is-flush-capable", {wdevParam}, {}, ""},
 
-    {defaultRunner, "resize", {}, {}, ""},
-    {defaultRunner, "reset-wal", {}, {}, ""},
-    {defaultRunner, "is-log-overflow", {}, {}, ""},
+    {resize, "resize", {wdevParam, sizeLbParam}, {}, ""},
+    {resetWal, "reset-wal", {wdevParam}, {}, ""},
+    {isLogOverflow, "is-log-overflow", {wdevParam}, {}, ""},
 
-    {defaultRunner, "freeze", {}, {}, ""},
-    {defaultRunner, "melt", {}, {}, ""},
-    {defaultRunner, "is-flozen", {}, {}, ""},
+    {freeze, "freeze", {wdevParam, timeoutSecParam}, {}, ""},
+    {melt, "melt", {}, {}, ""},
+    {isFrozen, "is-flozen", {}, {}, ""},
 
-    {defaultRunner, "get-version", {}, {}, ""},
+    {getVersion, "get-version", {}, {}, ""},
 
-    {defaultRunner, "search-valid-lsid", {}, {}, ""},
     {defaultRunner, "help", {}, {}, "COMMAND"},
 };
 

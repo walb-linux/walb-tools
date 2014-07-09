@@ -20,16 +20,15 @@ namespace device {
 
 static const std::string WDEV_PATH_PREFIX = "/dev/walb/";
 
-namespace local {
-
-inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl, int openFlag)
+inline void invokeWdevIoctl(const std::string& wdevPath, struct walb_ctl *ctl,
+                            const char *msg = "")
 {
-    const char *const FUNC = __func__;
-    cybozu::util::File file(wdevPath, openFlag);
-    int ret = ::ioctl(file.fd(), WALB_IOCTL_WDEV, ctl);
-    if (ret < 0) {
-        throw cybozu::Exception(FUNC) << "ioctl error" << cybozu::ErrorNo();
+    if (!msg || !*msg) msg = __func__;
+    cybozu::util::File file(wdevPath, O_RDWR);
+    if (::ioctl(file.fd(), WALB_IOCTL_WDEV, ctl) < 0) {
+        throw cybozu::Exception(msg) << "ioctl error" << cybozu::ErrorNo();
     }
+    file.close();
 }
 
 /**
@@ -42,7 +41,7 @@ IntType getValueByIoctl(const std::string& wdevPath, int command)
     ::memset(&ctl, 0, sizeof(ctl));
     ctl.command = command;
 
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+    invokeWdevIoctl(wdevPath, &ctl, __func__);
 
     if (std::is_same<IntType, int>::value) {
         return ctl.val_int;
@@ -76,7 +75,7 @@ void setValueByIoctl(const std::string& wdevPath, int command, IntType value)
         throw cybozu::Exception(__func__) << "not supported type.";
     }
 
-    local::invokeWdevIoctl(wdevPath, &ctl, O_RDWR);
+    invokeWdevIoctl(wdevPath, &ctl, __func__);
 }
 
 /**
@@ -97,8 +96,10 @@ inline uint64_t getLsid(const std::string& wdevPath, int command)
 
 inline void setOldestLsid(const std::string& wdevPath, uint64_t lsid)
 {
-    local::setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_SET_OLDEST_LSID, lsid);
+    setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_SET_OLDEST_LSID, lsid);
 }
+
+namespace local {
 
 /**
  * Parse "XXX:YYY" string where XXX is major id and YYY is minor id.
@@ -182,32 +183,37 @@ inline std::string getUnderlyingDevPath(const std::string& wdevName, bool isLog)
 
 inline void resetWal(const std::string& wdevPath)
 {
-    local::setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, 0);
+    setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, 0);
 }
 
 inline uint64_t getPermanentLsid(const std::string& wdevPath)
 {
-    return local::getLsid(wdevPath, WALB_IOCTL_GET_PERMANENT_LSID);
+    return getLsid(wdevPath, WALB_IOCTL_GET_PERMANENT_LSID);
 }
 
 inline uint64_t getOldestLsid(const std::string& wdevPath)
 {
-    return local::getLsid(wdevPath, WALB_IOCTL_GET_OLDEST_LSID);
+    return getLsid(wdevPath, WALB_IOCTL_GET_OLDEST_LSID);
 }
 
 inline bool isOverflow(const std::string& wdevPath)
 {
-    return local::getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_LOG_OVERFLOW) != 0;
+    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_LOG_OVERFLOW) != 0;
 }
 
 inline uint64_t getLogCapacityPb(const std::string& wdevPath)
 {
-    return local::getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_CAPACITY);
+    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_CAPACITY);
 }
 
 inline uint64_t getLogUsagePb(const std::string& wdevPath)
 {
-    return local::getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_USAGE);
+    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_USAGE);
+}
+
+inline bool isFlushCapable(const std::string& wdevPath)
+{
+    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_FLUSH_CAPABLE) != 0;
 }
 
 /**
@@ -234,7 +240,7 @@ inline uint64_t eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LS
         throw cybozu::Exception(FUNC)
             << "invalid lsid" << oldestLsid << lsid << permanentLsid;
     }
-    local::setOldestLsid(wdevPath, lsid);
+    setOldestLsid(wdevPath, lsid);
     return permanentLsid - lsid;
 }
 
@@ -244,7 +250,7 @@ inline uint64_t eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LS
  */
 inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
 {
-    local::setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
+    setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
 }
 
 inline uint64_t getSizeLb(const std::string& bdevPath)
@@ -258,6 +264,9 @@ inline uint64_t getSizeLb(const std::string& bdevPath)
     return size / LOGICAL_BLOCK_SIZE;
 }
 
+/**
+ * QQQ: should to move to bdev_util.hpp.
+ */
 inline void flushBufferCache(const std::string& bdevPath)
 {
     cybozu::util::File file(bdevPath, O_RDONLY);
