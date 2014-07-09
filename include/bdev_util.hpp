@@ -65,13 +65,23 @@ inline uint64_t getBlockDeviceSize(int fd)
     if (isBlockDevice(fd)) {
         uint64_t size;
         if (::ioctl(fd, BLKGETSIZE64, &size) < 0) {
-            throw LibcError(errno, "ioctl failed: ");
+            throw LibcError(errno, __func__);
         }
         return size;
     } else {
         struct stat s;
         fstat(fd, s);
         return uint64_t(s.st_size);
+    }
+}
+
+/**
+ * Flush buffer cache of a block device.
+ */
+inline void flushBufferCache(int fd)
+{
+    if (::ioctl(fd, BLKFLSBUF, 0) < 0) {
+        throw LibcError(errno, __func__);
     }
 }
 

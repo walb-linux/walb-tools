@@ -14,6 +14,7 @@
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "walb_types.hpp"
+#include "bdev_util.hpp"
 
 namespace walb {
 namespace device {
@@ -256,24 +257,16 @@ inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
 inline uint64_t getSizeLb(const std::string& bdevPath)
 {
     cybozu::util::File file(bdevPath, O_RDONLY);
-    uint64_t size;
-    if (::ioctl(file.fd(), BLKGETSIZE64, &size) < 0) {
-        throw cybozu::Exception(__func__)
-            << "ioctl failed" << bdevPath << cybozu::ErrorNo();
-    }
-    return size / LOGICAL_BLOCK_SIZE;
+    const uint64_t sizeB = cybozu::util::getBlockDeviceSize(file.fd());
+    file.close();
+    return sizeB / LOGICAL_BLOCK_SIZE;
 }
 
-/**
- * QQQ: should to move to bdev_util.hpp.
- */
 inline void flushBufferCache(const std::string& bdevPath)
 {
     cybozu::util::File file(bdevPath, O_RDONLY);
-    if (::ioctl(file.fd(), BLKFLSBUF, 0) < 0) {
-        throw cybozu::Exception(__func__)
-            << "ioctl failed" << bdevPath << cybozu::ErrorNo();
-    }
+    cybozu::util::flushBufferCache(file.fd());
+    file.close();
 }
 
 /**
