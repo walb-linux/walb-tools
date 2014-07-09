@@ -385,7 +385,7 @@ private:
     void writeEof() {
         LogPackHeader h(pbs_, salt_);
         h.setEnd();
-        h.writeTo(fileW_);
+        h.updateChecksumAndWriteTo(fileW_);
     }
 };
 

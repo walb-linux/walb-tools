@@ -291,13 +291,19 @@ public:
      * Write the logpack header block.
      */
     template <typename Writer>
-    void writeTo(Writer &writer) {
+    void updateChecksumAndWriteTo(Writer &writer) {
         updateChecksum();
+        writeTo(writer);
+    }
+
+    template <typename Writer>
+    void writeTo(Writer &writer) const {
         if (!isValid(true)) {
             throw cybozu::Exception(NAME()) << "write:invalid";
         }
         writer.write(header_, pbs());
     }
+
     /**
      * Initialize logpack header block.
      */
@@ -455,8 +461,11 @@ public:
     /**
      * Shrink.
      * Delete records from rec[invalidIdx] to the last.
+     * If you specify invalidIdx = 0, then the pack header will be set end.
+     * RETURN:
+     *   next logpack lsid.
      */
-    void shrink(size_t invalidIdx) {
+    uint64_t shrink(size_t invalidIdx) {
         assert(invalidIdx < nRecords());
 
         /* Invalidate records. */
@@ -480,6 +489,8 @@ public:
 
         updateChecksum();
         assert(isValid());
+
+        return nextLogpackLsid();
     }
 protected:
     void checkIndexRange(size_t pos) const {
@@ -537,8 +548,11 @@ public:
         return data_[idx].data();
     }
     uint32_t pbs() const {
-        checkPbs();
         return pbs_;
+    }
+    void clear() {
+        pbs_ = 0;
+        data_.clear();
     }
     void resize(size_t nBlocks0) {
         if (nBlocks0 < data_.size()) {
