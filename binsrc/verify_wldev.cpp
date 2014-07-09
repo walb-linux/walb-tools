@@ -68,18 +68,20 @@ private:
 
     const Config &config_;
     cybozu::util::File file_;
-    const uint32_t pbs_;
     walb::device::SuperBlock super_;
-    const uint32_t salt_;
+    uint32_t pbs_;
+    uint32_t salt_;
 
 public:
     WldevVerifier(const Config &config)
         : config_(config)
         , file_(config.wldevPath(), O_RDONLY | O_DIRECT)
-        , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
-        , super_(pbs_)
-        , salt_(super_.getLogChecksumSalt()) {
+        , super_()
+        , pbs_()
+        , salt_() {
         super_.read(file_.fd());
+        pbs_ = super_.getPhysicalBlockSize();
+        salt_ = super_.getLogChecksumSalt();
     }
     void run() {
         /* Get IO recipe parser. */

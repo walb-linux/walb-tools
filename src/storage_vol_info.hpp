@@ -405,8 +405,7 @@ private:
     }
     device::SuperBlock getSuperBlock() const {
         cybozu::util::File file = device::getWldevFile(getWdevName());
-        uint32_t pbs = cybozu::util::getPhysicalBlockSize(file.fd());;
-        device::SuperBlock super(pbs);
+        device::SuperBlock super;
         super.read(file.fd());
         return super;
     }

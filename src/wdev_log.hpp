@@ -35,25 +35,21 @@ constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 
 /**
  * WalB super sector.
+ *
+ * You should call read() or format() at first.
  */
 class SuperBlock
 {
 private:
     /* Physical block size */
-    const uint32_t pbs_;
+    uint32_t pbs_;
     /* Super block offset in the log device [physical block]. */
-    const uint64_t offset_;
+    uint64_t offset_;
 
     /* Super block data. */
     walb::AlignedArray data_;
 
 public:
-    explicit SuperBlock(uint32_t pbs)
-        : pbs_(pbs)
-        , offset_(get1stSuperBlockOffsetStatic(pbs))
-        , data_(pbs) {
-    }
-
     uint16_t getSectorType() const { return super()->sector_type; }
     uint16_t getVersion() const { return super()->version; }
     uint32_t getChecksum() const { return super()->checksum; }
@@ -135,7 +131,7 @@ public:
     }
 
     void format(uint32_t pbs, uint64_t ddevLb, uint64_t ldevLb, const std::string &name) {
-        ::memset(data_.data(), 0, data_.size());
+        init(pbs);
         super()->sector_type = SECTOR_TYPE_SUPER;
         super()->version = WALB_LOG_VERSION;
         super()->logical_bs = LBS;
@@ -165,6 +161,7 @@ public:
      */
     void read(int fd) {
         cybozu::util::File file(fd);
+        init(cybozu::util::getPhysicalBlockSize(fd));
         file.pread(data_.data(), pbs_, offset_ * pbs_);
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
@@ -214,8 +211,15 @@ public:
                   getRingBufferOffset(),
                   getUuid().str().c_str());
     }
-
 private:
+    void init(uint32_t pbs) {
+        if (!::is_valid_pbs(pbs)) {
+            throw cybozu::Exception(__func__) << "invalid pbs";
+        }
+        pbs_ = pbs;
+        offset_ = get1stSuperBlockOffsetStatic(pbs);
+        data_.resize(pbs);
+    }
     static uint64_t get1stSuperBlockOffsetStatic(uint32_t pbs) {
         return ::get_super_sector0_offset(pbs);
     }
@@ -273,7 +277,7 @@ public:
         , bufferPb_(bufferSize / pbs_)
         , maxIoPb_(maxIoSize / pbs_)
         , buffer_(bufferPb_ * pbs_)
-        , super_(pbs_)
+        , super_()
         , aio_(file_.fd(), bufferPb_)
         , aheadLsid_(0)
         , ioQ_()
@@ -433,7 +437,7 @@ inline void initWalbMetadata(
     assert(ldevLb > 0);
     // name can be empty.
 
-    SuperBlock super(pbs);
+    SuperBlock super;
     super.format(pbs, ddevLb, ldevLb, name);
     super.updateChecksum();
     super.write(fd);

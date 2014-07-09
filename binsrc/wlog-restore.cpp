@@ -116,16 +116,12 @@ public:
                 "Warning: the log device does not seem to be block device.\n");
         }
         File fileB(config_.ldevPath(), O_RDWR);
-        const uint32_t pbs2 = cybozu::util::getPhysicalBlockSize(fileB.fd());
 
         /* Load superblock. */
-        SuperBlock super(pbs2);
+        SuperBlock super;
         super.read(fileB.fd());
 
         /* Check physical block size. */
-        if (pbs2 != pbs) {
-            throw RT_ERR("Physical block size differs. ldev %u head %u\n", pbs2, pbs);
-        }
         if (super.getPhysicalBlockSize() != pbs) {
             throw RT_ERR("Physical block size differs. super %u head %u\n"
                          , super.getPhysicalBlockSize(), pbs);
