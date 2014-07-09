@@ -120,23 +120,25 @@ public:
         uint64_t totalPaddingPb = 0;
         uint64_t nPacks = 0;
         LogPackHeader packH(nullptr, pbs, salt);
-        while (lsid < endLsid_) {
-            bool isEnd = false;
+        bool isEnd = false;
+        while (lsid < endLsid_ && !isEnd) {
             readAheadLoose();
             if (!readLogpackHeader(packH, lsid)) {
                 if (isVerbose_) {
                     ::fprintf(::stderr, "Caught invalid logpack header error.\n");
                 }
-                isEnd = true;
                 break;
             }
             std::queue<LogPackIo> q;
             isEnd = readAllLogpackIos(packH, q);
+            if (packH.nRecords() == 0) {
+                assert(isEnd); // shrinked and got empty.
+                break;
+            }
             writer.writePack(packH, toBlocks(q));
             lsid = packH.nextLogpackLsid();
             totalPaddingPb += packH.totalPaddingPb();
             nPacks++;
-            if (isEnd) break;
         }
         if (isVerbose_) {
             ::fprintf(::stderr, "endLsid: %" PRIu64 "\n"
