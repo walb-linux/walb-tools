@@ -681,28 +681,6 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
 
 namespace storage_local {
 
-template <typename Reader>
-inline void readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid, const char *msg)
-{
-    packH.readFrom(reader);
-    if (packH.header().logpack_lsid != lsid) {
-        throw cybozu::Exception(msg)
-            << "logpack lsid invalid" << packH.header().logpack_lsid << lsid;
-    }
-}
-
-template <typename Reader>
-inline void readLogIo(Reader &reader, LogPackHeader &packH, size_t recIdx, LogBlockShared &blockS)
-{
-    const LogRecord &lrec = packH.record(recIdx);
-    if (!lrec.hasData()) return;
-
-    const uint32_t pbs = packH.pbs();
-    const size_t ioSizePb = lrec.ioSizePb(pbs);
-    if (blockS.pbs() == 0) blockS.init(pbs);
-    blockS.read(reader, ioSizePb);
-}
-
 inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t logpackPb, const char *msg)
 {
     if (maxWlogSendPb < logpackPb) {
@@ -801,13 +779,17 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
             throw cybozu::Exception(FUNC) << "force stopped" << volId;
         }
         if (lsid == lsidLimit) break;
-        readLogPackHeader(reader, packH, lsid, FUNC);
+        if (!readLogPackHeader(reader, packH, lsid)) {
+            throw cybozu::Exception(FUNC) << "invalid logpack header" << volId << lsid;
+        }
         verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);
         const uint64_t nextLsid =  packH.nextLogpackLsid();
         if (lsidLimit < nextLsid) break;
         sender.pushHeader(packH);
         for (size_t i = 0; i < packH.header().n_records; i++) {
-            readLogIo(reader, packH, i, blockS);
+            if (!readLogIo(reader, packH, i, blockS)) {
+                throw cybozu::Exception(FUNC) << "invalid logpack IO" << volId << lsid << i;
+            }
             sender.pushIo(packH, i, blockS);
         }
         lsid = nextLsid;

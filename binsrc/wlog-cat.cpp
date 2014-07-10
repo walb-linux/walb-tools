@@ -13,71 +13,57 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
-/**
- * Wlcat configuration.
- */
-class Config
+using namespace walb;
+
+struct Option
 {
-private:
-    std::string ldevPath_;
-    std::string outPath_;
-    uint64_t beginLsid_;
-    uint64_t endLsid_;
-    bool isVerbose_;
-    std::vector<std::string> args_;
+    std::string ldevPath;
+    std::string outPath;
+    uint64_t beginLsid;
+    uint64_t endLsid;
+    bool isVerbose;
+    bool isDebug;
+    std::vector<std::string> args;
 
-public:
-    Config(int argc, char* argv[])
-        : ldevPath_()
-        , outPath_("-")
-        , beginLsid_(0)
-        , endLsid_(-1)
-        , isVerbose_(false)
-        , args_() {
-        parse(argc, argv);
-    }
+    Option(int argc, char* argv[])
+        : ldevPath()
+        , outPath("-")
+        , beginLsid(0)
+        , endLsid(-1)
+        , isVerbose(false)
+        , isDebug(false)
+        , args() {
 
-    const std::string& ldevPath() const { return ldevPath_; }
-    uint64_t beginLsid() const { return beginLsid_; }
-    uint64_t endLsid() const { return endLsid_; }
-    const std::string& outPath() const { return outPath_; }
-    bool isOutStdout() const { return outPath_ == "-"; }
-    bool isVerbose() const { return isVerbose_; }
+        cybozu::Option opt;
+        opt.setDescription("Wlcat: extract wlog from a log device.");
+        opt.appendOpt(&outPath, "-", "o", "PATH: output wlog path. '-' for stdout. (default: '-')");
+        opt.appendOpt(&beginLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
+        opt.appendParam(&ldevPath, "LOG_DEVICE_PATH");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
 
-    void check() const {
-        if (beginLsid() >= endLsid()) {
+        if (beginLsid >= endLsid) {
             throw RT_ERR("beginLsid must be < endLsid.");
         }
     }
-
-private:
-    void parse(int argc, char* argv[]) {
-        cybozu::Option opt;
-        opt.setDescription("Wlcat: extract wlog from a log device.");
-        opt.appendOpt(&outPath_, "-", "o", "PATH: output wlog path. '-' for stdout. (default: '-')");
-        opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
-        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-        opt.appendHelp("h", ": show this message.");
-        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH");
-        if (!opt.parse(argc, argv)) {
-            opt.usage();
-            exit(1);
-        }
-    }
+    bool isOutStdout() const { return outPath == "-"; }
 };
 
 class WlogExtractor
 {
 private:
     const uint64_t beginLsid_, endLsid_;
-    walb::device::AsyncWldevReader ldevReader_;
-    walb::device::SuperBlock &super_;
+    device::AsyncWldevReader ldevReader_;
+    device::SuperBlock &super_;
     const uint32_t pbs_;
     bool isVerbose_;
 
-    using LogPackHeader = walb::LogPackHeader;
-    using LogPackIo = walb::LogPackIo;
 public:
     WlogExtractor(const std::string &ldevPath,
                   uint64_t beginLsid, uint64_t endLsid,
@@ -85,7 +71,7 @@ public:
         : beginLsid_(beginLsid), endLsid_(endLsid)
         , ldevReader_(ldevPath)
         , super_(ldevReader_.super())
-        , pbs_(ldevReader_.pbs())
+        , pbs_(super_.pbs())
         , isVerbose_(isVerbose) {
     }
     DISABLE_COPY_AND_ASSIGN(WlogExtractor);
@@ -95,19 +81,16 @@ public:
      */
     void run(int outFd) {
         if (outFd <= 0) throw RT_ERR("outFd is not valid.");
-        walb::log::Writer writer(outFd);
+        log::Writer writer(outFd);
 
         /* Set lsids. */
-        uint64_t beginLsid = beginLsid_;
-        if (beginLsid < super_.getOldestLsid()) {
-            beginLsid = super_.getOldestLsid();
-        }
+        uint64_t beginLsid = std::max(beginLsid_, super_.getOldestLsid());
 
         const uint32_t salt = super_.getLogChecksumSalt();
         const uint32_t pbs = super_.getPhysicalBlockSize();
 
         /* Create and write walblog header. */
-        walb::log::FileHeader wh;
+        log::FileHeader wh;
         wh.init(pbs, salt, super_.getUuid(), beginLsid, endLsid_);
         writer.writeHeader(wh);
 
@@ -120,25 +103,21 @@ public:
         uint64_t totalPaddingPb = 0;
         uint64_t nPacks = 0;
         LogPackHeader packH(pbs, salt);
-        bool isEnd = false;
-        while (lsid < endLsid_ && !isEnd) {
-            if (!readLogpackHeader(packH, lsid)) {
-                if (isVerbose_) {
-                    ::fprintf(::stderr, "Caught invalid logpack header error.\n");
-                }
-                break;
-            }
-            std::queue<LogPackIo> q;
-            isEnd = readAllLogpackIos(packH, q);
-            if (packH.nRecords() == 0) {
-                assert(isEnd); // shrinked and got empty.
-                break;
-            }
-            writer.writePack(packH, toBlocks(q));
-            lsid = packH.nextLogpackLsid();
+        bool isNotShrinked = true;
+        while (lsid < endLsid_ && isNotShrinked) {
+            if (!readLogPackHeader(ldevReader_, packH, lsid)) break;
+            std::queue<LogBlockShared> ioQ;
+            isNotShrinked = readAllLogIos(ldevReader_, packH, ioQ);
+            if (!isNotShrinked && packH.nRecords() == 0) break;
+            writer.writePack(packH, std::move(ioQ));
+            assert(ioQ.empty());
+
             totalPaddingPb += packH.totalPaddingPb();
             nPacks++;
+            lsid = packH.nextLogpackLsid();
         }
+        writer.close();
+
         if (isVerbose_) {
             ::fprintf(::stderr, "endLsid: %" PRIu64 "\n"
                       "lackOfLogPb: %" PRIu64 "\n"
@@ -146,100 +125,25 @@ public:
                       "nPacks: %" PRIu64 "\n",
                       lsid, endLsid_ - lsid, totalPaddingPb, nPacks);
         }
-        writer.close();
-    }
-    using AlignedArray = walb::AlignedArray;
-private:
-    /**
-     * Get block list from packIo list.
-     */
-    static std::queue<AlignedArray> toBlocks(std::queue<LogPackIo> &src) {
-        std::queue<AlignedArray> dst;
-        while (!src.empty()) {
-            LogPackIo& packIo = src.front();
-            walb::LogBlockShared &blockS = packIo.blockS;
-            for (size_t i = 0; i < blockS.nBlocks(); i++) {
-                dst.push(std::move(blockS.getBlock(i)));
-            }
-            src.pop();
-        }
-        return dst;
-    }
-
-    /**
-     * Read a logpack header.
-     * RETURN:
-     *   false if got invalid logpack header.
-     */
-    bool readLogpackHeader(LogPackHeader &packH, uint64_t lsid) {
-        packH.readFrom(ldevReader_);
-        if (!packH.isValid()) return false;
-        if (packH.header().logpack_lsid != lsid) {
-            ::fprintf(::stderr, "logpack %" PRIu64 " is not the expected one %" PRIu64 "."
-                      , packH.header().logpack_lsid, lsid);
-            return false;
-        }
-        return true;
-    }
-    /**
-     * Read all IOs data of a logpack.
-     *
-     * RETURN:
-     *   true if logpack has shrinked and should end.
-     */
-    bool readAllLogpackIos(LogPackHeader &logh, std::queue<LogPackIo> &q) {
-        bool isEnd = false;
-        for (size_t i = 0; i < logh.nRecords(); i++) {
-            LogPackIo packIo;
-            packIo.set(logh, i);
-            if (readLogpackIo(packIo, logh.pbs())) {
-                q.push(std::move(packIo));
-            } else {
-                if (isVerbose_) { logh.print(::stderr); }
-                const uint64_t prevLsid = logh.nextLogpackLsid();
-                logh.shrink(i);
-                const uint64_t currentLsid = logh.nextLogpackLsid();
-                if (isVerbose_) { logh.print(::stderr); }
-                isEnd = true;
-                if (isVerbose_) {
-                    ::fprintf(::stderr, "Logpack shrink from %" PRIu64 " to %" PRIu64 "\n",
-                              prevLsid, currentLsid);
-                }
-                break;
-            }
-        }
-        return isEnd;
-    }
-    /**
-     * Read a logpack data.
-     */
-    bool readLogpackIo(LogPackIo& packIo, uint32_t pbs) {
-        const walb::LogRecord &rec = packIo.rec;
-        if (!rec.hasData()) return true;
-        packIo.blockS.read(ldevReader_, rec.ioSizePb(pbs));
-        return packIo.isValid();
     }
 };
 
-void setupOutputFile(cybozu::util::File &fileW, const Config &config)
+void setupOutputFile(cybozu::util::File &fileW, const Option &opt)
 {
-    if (config.isOutStdout()) {
+    if (opt.isOutStdout()) {
         fileW.setFd(1);
     } else {
-        fileW.open(config.outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        fileW.open(opt.outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
 }
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    config.check();
-
-    WlogExtractor extractor(
-        config.ldevPath(), config.beginLsid(), config.endLsid(),
-        config.isVerbose());
+    Option opt(argc, argv);
+    walb::util::setLogSetting("-", opt.isDebug);
+    WlogExtractor extractor(opt.ldevPath, opt.beginLsid, opt.endLsid, opt.isVerbose);
     cybozu::util::File fileW;
-    setupOutputFile(fileW, config);
+    setupOutputFile(fileW, opt);
     extractor.run(fileW.fd());
     fileW.close();
     return 0;

@@ -79,14 +79,13 @@ private:
         Writer writer(fd);
         Rand rand;
         uint64_t writtenPb = 0;
-        walb::log::FileHeader wlHead;
+        log::FileHeader wlHead;
         cybozu::Uuid uuid;
         rand.fill(uuid.rawData(), uuid.rawSize());
 
         const uint32_t salt = rand.get32();
         const uint32_t pbs = config_.pbs;
         uint64_t lsid = config_.lsid;
-        AlignedArray hBlock(pbs);
 
         /* Generate and write walb log header. */
         wlHead.init(pbs, salt, uuid, lsid, uint64_t(-1));
@@ -96,16 +95,16 @@ private:
         }
 
         uint64_t nPack = 0;
+        LogPackHeader packH(pbs, salt);
         while (writtenPb < config_.outLogPb) {
-            walb::LogPackHeader logh(hBlock.data(), pbs, salt);
-            generateLogpackHeader(rand, logh, lsid);
-            assert(::is_valid_logpack_header_and_records(&logh.header()));
+            generateLogpackHeader(rand, packH, lsid);
+            assert(::is_valid_logpack_header_and_records(&packH.header()));
             uint64_t tmpLsid = lsid + 1;
 
             /* Prepare blocks and calc checksum if necessary. */
-            std::queue<AlignedArray> blockQ;
-            for (uint32_t i = 0; i < logh.nRecords(); i++) {
-                LogRecord &rec = logh.record(i);
+            std::queue<LogBlockShared> blockSQ;
+            for (uint32_t i = 0; i < packH.nRecords(); i++) {
+                LogRecord &rec = packH.record(i);
                 ChecksumCalculator cc(rec.io_size, salt);
 
                 if (rec.hasData()) {
@@ -114,6 +113,7 @@ private:
                         isAllZero = rand.get32() % 100 < 10;
                     }
                     const uint32_t ioSizePb = rec.ioSizePb(pbs);
+                    LogBlockShared blockS(pbs);
                     for (uint32_t j = 0; j < ioSizePb; j++) {
                         AlignedArray b(pbs);
                         if (!isAllZero) {
@@ -121,20 +121,21 @@ private:
                         }
                         tmpLsid++;
                         cc.update(b.data(), b.size());
-                        blockQ.push(std::move(b));
+                        blockS.addBlock(std::move(b));
                     }
+                    blockSQ.push(std::move(blockS));
                 }
                 if (rec.hasDataForChecksum()) {
                     rec.checksum = cc.get();
                 }
             }
-            assert(blockQ.size() == logh.totalIoSize());
+            assert(blockSQ.size() == packH.nRecordsHavingData());
 
             /* Calculate header checksum and write. */
-            logh.updateChecksum();
-            writer.writePack(logh, std::move(blockQ));
+            packH.updateChecksum();
+            writer.writePack(packH, std::move(blockSQ));
 
-            uint64_t w = 1 + logh.totalIoSize();
+            uint64_t w = 1 + packH.totalIoSize();
             assert(tmpLsid == lsid + w);
             writtenPb += w;
             lsid += w;
@@ -163,8 +164,8 @@ private:
      * Generate logpack header randomly.
      */
     void generateLogpackHeader(
-        Rand &rand, walb::LogPackHeader &logh, uint64_t lsid) {
-        logh.init(lsid);
+        Rand &rand, LogPackHeader &packH, uint64_t lsid) {
+        packH.init(lsid);
         const uint32_t pbs = config_.pbs;
         const uint32_t maxNumRecords = ::max_n_log_record_in_sector(pbs);
         const size_t nRecords = (rand.get32() % maxNumRecords) + 1;
@@ -183,9 +184,9 @@ private:
             }
             assert(0 < ioSize);
             /* Check total_io_size limitation. */
-            if (0 < logh.totalIoSize() && 1 < nRecords &&
+            if (0 < packH.totalIoSize() && 1 < nRecords &&
                 config_.maxPackPb <
-                logh.totalIoSize() + ::capacity_pb(pbs, ioSize)) {
+                packH.totalIoSize() + ::capacity_pb(pbs, ioSize)) {
                 break;
             }
             /* Decide IO type. */
@@ -193,16 +194,16 @@ private:
             if (config_.isPadding && v < 10) {
                 uint16_t psize = capacity_lb(pbs, capacity_pb(pbs, ioSize));
                 if (v < 5) { psize = 0; } /* padding size can be 0. */
-                if (!logh.addPadding(psize)) { break; }
+                if (!packH.addPadding(psize)) { break; }
                 continue;
             }
             if (config_.isDiscard && v < 30) {
-                if (!logh.addDiscardIo(offset, ioSize)) { break; }
+                if (!packH.addDiscardIo(offset, ioSize)) { break; }
                 continue;
             }
-            if (!logh.addNormalIo(offset, ioSize)) { break; }
+            if (!packH.addNormalIo(offset, ioSize)) { break; }
         }
-        logh.isValid(false);
+        packH.isValid(false);
     }
 };
 

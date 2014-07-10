@@ -309,6 +309,9 @@ public:
         fileW_.write(&header, pbs_);
         lsid_++;
     }
+    void writePackHeader(const LogPackHeader &packH) {
+        writePackHeader(packH.header());
+    }
     /**
      * Write a pack IO.
      */
@@ -316,36 +319,16 @@ public:
         blockS.write(fileW_);
         lsid_ += blockS.nBlocks();
     }
-    /**
-     * Write a pack.
-     */
-    void writePack(const LogPackHeader &header, std::queue<AlignedArray> &&blockQ) {
-        /* Validate. */
+    void writePack(const LogPackHeader &header, std::queue<LogBlockShared> &&blockSQ) {
         checkHeader(header);
-        if (header.totalIoSize() != blockQ.size()) {
+        if (blockSQ.size() != header.nRecordsHavingData()) {
             throw cybozu::Exception(__func__)
-                << "blocks.size() differ"
-                << header.totalIoSize() << blockQ.size();
+                << "bad queue size" << blockSQ.size() << header.nRecordsHavingData();
         }
-        std::vector<LogBlockShared> v;
-        for (size_t i = 0; i < header.nRecords(); i++) {
-            const LogRecord &rec = header.record(i);
-            LogBlockShared blockS(pbs_);
-            if (rec.hasData()) {
-                const size_t ioSizePb = rec.ioSizePb(pbs_);
-                for (size_t j = 0; j < ioSizePb; j++) {
-                    blockS.addBlock(std::move(blockQ.front()));
-                    blockQ.pop();
-                }
-            }
-            verifyLogChecksum(rec, blockS, header.salt());
-            v.push_back(std::move(blockS));
-        }
-
-        /* Write */
-        writePackHeader(header.header());
-        for (const LogBlockShared &blockS : v) {
-            writePackIo(blockS);
+        writePackHeader(header);
+        while (!blockSQ.empty()) {
+            writePackIo(blockSQ.front());
+            blockSQ.pop();
         }
         assert(lsid_ == header.nextLogpackLsid());
     }

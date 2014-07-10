@@ -331,128 +331,6 @@ void getCheckpointInterval(const Option &opt)
 
 namespace local {
 
-/**
- * Simple walb log device reader.
- *
- * Pattern 1: metadata and IO data.
- * This will shrink the last logpack header.
- * <pre>
- * WldevReader reader(...);
- * // call reader.getFileHeader() and write it.
- * while (reader.readPackHeader()) {
- *     std::queue<LogBlockShared> q;
- *     LogBlockShared blockS;
- *     while (reader.readIo(blockS)) {
- *         q.push(std::move(blockS));
- *     }
- *     if (reader.getPackHeader().isEnd()) {
- *         break;
- *     }
- *     // write header and blockS in q.
- * }
- * // write end mark.
- * </pre>
- *
- * Pattern 2: metadata only.
- * This will not shrink the last logpack header.
- * <pre>
- * WldevReader reader(...);
- * while (reader.readPackHeader()) {
- *     // reader.getPackHeader() and print its records.
- * }
- * </pre>
- */
-class WldevReader
-{
-private:
-    cybozu::util::File file_;
-    device::SuperBlock super_;
-    uint64_t endLsid_;
-
-    uint32_t pbs_;
-    uint32_t salt_;
-    log::FileHeader fileH_;
-    LogPackHeader packH_;
-    uint64_t lsid_;
-    size_t idx_;
-    bool isEnd_;
-
-public:
-    WldevReader(cybozu::util::File &&file, uint64_t bgnLsid, uint64_t endLsid)
-        : file_(std::move(file)), super_()
-        , endLsid_(endLsid)
-        , pbs_(), salt_(), fileH_(), packH_()
-        , lsid_(bgnLsid), idx_(0), isEnd_(false) {
-
-        assert(bgnLsid < endLsid);
-        super_.read(file_.fd());
-        pbs_ = super_.getPhysicalBlockSize();
-        salt_ = super_.getLogChecksumSalt();
-        fileH_.init(pbs_, salt_, super_.getUuid(), bgnLsid, endLsid);
-        packH_.init(pbs_, salt_);
-    }
-    log::FileHeader& getFileHeader() { return fileH_; }
-    bool readPackHeader() {
-        if (isEnd_) return false;
-        if (lsid_ >= endLsid_) {
-            isEnd_ = true;
-            return false;
-        }
-        file_.lseek(super_.getOffsetFromLsid(lsid_) * pbs_);
-        const bool ret = packH_.readFrom(file_);
-        if (ret && !packH_.isEnd()) {
-            lsid_ = packH_.nextLogpackLsid();
-            idx_ = 0;
-            return true;
-        } else {
-            isEnd_ = true;
-            return false;
-        }
-    }
-    /**
-     * Call this after both readHeader() and readIo() return false.
-     */
-    uint64_t getEndLsid() const { return lsid_; }
-    /**
-     * You must check packH.nRecords() of retured value packH.
-     * packH_.shrink() may make it empty but it is valid behavior.
-     */
-    const LogPackHeader& getPackHeader() const { return packH_; }
-    /**
-     * RETURN:
-     *   true if succeeded.
-     *   false if
-     *     (1) IO data was read but it is invalid (and shrink occurred).
-     *     (2) There is no more IO data for the packH_.
-     */
-    bool readIo(LogBlockShared &blockS) {
-        if (isEnd_) return false;
-        if (packH_.nRecords() == 0) {
-            throw cybozu::Exception(__func__) << "bad pack header.";
-        }
-        // Skip records that do not have IO data, then check idx.
-        const size_t n = packH_.nRecords();
-        while (idx_ < n && !packH_.record(idx_).hasData()) idx_++;
-        if (idx_ >= n) return false;
-
-        // Read IO data.
-        const LogRecord &rec = packH_.record(idx_);
-        if (blockS.pbs() != pbs_) blockS.init(pbs_);
-        file_.lseek(super_.getOffsetFromLsid(rec.lsid) * pbs_);
-        blockS.read(file_, rec.ioSizePb(pbs_));
-
-        // If not valid, shrink the pack header.
-        if (rec.hasDataForChecksum() && !log::isLogChecksumValid(rec, blockS, salt_)) {
-            lsid_ = packH_.shrink(idx_);
-            isEnd_ = true;
-            return false;
-        }
-
-        idx_++;
-        return true;
-    }
-};
-
 void decideLsidRange(uint64_t &lsid0, uint64_t &lsid1, uint64_t oldestLsid, const Option &opt)
 {
     lsid0 = oldestLsid;
@@ -482,82 +360,38 @@ void catWldev(const Option &opt)
     cybozu::util::File wldevFile(wldev, O_RDONLY | O_DIRECT);
     device::SuperBlock super;
     super.read(wldevFile.fd());
+    const uint32_t pbs = super.pbs();
+    const uint32_t salt = super.salt();
     uint64_t lsid0, lsid1;
     local::decideLsidRange(lsid0, lsid1, super.getOldestLsid(), opt);
 
-    local::WldevReader reader(std::move(wldevFile), lsid0, lsid1);
+    device::SimpleWldevReader reader(std::move(wldevFile));
+    reader.reset(lsid0);
 
-    cybozu::util::File outFile(1); // stdout.
-    reader.getFileHeader().writeTo(outFile);
+    log::Writer writer(1); // stdout
+    log::FileHeader wh;
+    wh.init(pbs, salt, super.getUuid(), lsid0, lsid1);
+    writer.writeHeader(wh);
 
-    uint64_t totalPaddingPb = 0;
-    uint64_t nrPacks = 0;
-    while (reader.readPackHeader()) {
-        std::queue<LogBlockShared> ioQ;
-        LogBlockShared blockS;
-        while (reader.readIo(blockS)) {
-            ioQ.push(std::move(blockS));
-            blockS.clear();
-        }
-        const LogPackHeader &packH = reader.getPackHeader();
-        if (packH.nRecords() == 0) {
-            // shrinked and got empty.
-            break;
-        }
-        packH.writeTo(outFile);
-        while (!ioQ.empty()) {
-            ioQ.front().write(outFile);
-            ioQ.pop();
-        }
-        totalPaddingPb += packH.totalPaddingPb();
-        nrPacks++;
-    }
-    const uint64_t lsid = reader.getEndLsid();
-    LogPackHeader packH(reader.getPackHeader().pbs(), reader.getPackHeader().salt());
-    packH.setEnd();
-    packH.updateChecksumAndWriteTo(outFile);
-
-#if 0 // QQQ
-    uint64_t lsid = lsid0;
-    bool isEnd = false;
-    uint64_t totalPaddingPb = 0;
-    uint64_t nrPacks = 0;
     LogPackHeader packH(pbs, salt);
-    while (lsid < lsid1 && !isEnd) {
-        wldevFile.lseek(super.getOffsetFromLsid(lsid) * pbs);
-        if (!packH.readFrom(wldevFile)) break;
-        std::queue<LogBlockShared> ioQ;
-        for (size_t i = 0; i < packH.nRecords(); i++) {
-            const LogRecord &rec = packH.record(i);
-            LogBlockShared blockS(pbs);
-            if (rec.hasData()) {
-                wldevFile.lseek(super.getOffsetFromLsid(rec.lsid) * pbs);
-                blockS.read(wldevFile, rec.ioSizePb(pbs));
-            }
-            if (rec.hasDataForChecksum() && !log::isLogChecksumValid(rec, blockS, salt)) {
-                packH.shrink(i);
-                isEnd = true;
-                break;
-            }
-            ioQ.push(std::move(blockS));
-        }
-        if (packH.nRecords() == 0) {
-            assert(isEnd);
-            break;
-        }
-        packH.writeTo(outFile);
-        while (!ioQ.empty()) {
-            ioQ.front().write(outFile);
-            ioQ.pop();
-        }
-        lsid = packH.nextLogpackLsid();
+    LogBlockShared blockS;
+    std::queue<LogBlockShared> ioQ;
+    uint64_t totalPaddingPb = 0;
+    uint64_t nrPacks = 0;
+    uint64_t lsid = lsid0;
+    bool isNotShrinked = true;
+    while (lsid < lsid1 && isNotShrinked) {
+        if (!readLogPackHeader(reader, packH, lsid)) break;
+        isNotShrinked = readAllLogIos(reader, packH, ioQ);
+        if (!isNotShrinked && packH.nRecords() == 0) break;
+        writer.writePack(packH, std::move(ioQ));
+        assert(ioQ.empty());
+
         totalPaddingPb += packH.totalPaddingPb();
         nrPacks++;
+        lsid = packH.nextLogpackLsid();
     }
-    // Write the end mark block.
-    packH.setEnd();
-    packH.writeTo(outFile);
-#endif
+    writer.close();
 
     if (opt.isDebug) {
         ::fprintf(::stderr,

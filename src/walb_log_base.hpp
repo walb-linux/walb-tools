@@ -218,7 +218,15 @@ public:
         ::memcpy(header_, data, size);
         verify();
     }
-
+    size_t nRecordsHavingData() const {
+        size_t s = 0;
+        for (size_t i = 0; i < nRecords(); i++) {
+            if (record(i).hasData()) {
+                s++;
+            }
+        }
+        return s;
+    }
     /*
      * Print.
      */
@@ -648,6 +656,8 @@ inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& block
 
 /**
  * Logpack record and IO data.
+ *
+ * DEPRECATED.
  */
 struct LogPackIo
 {
@@ -675,5 +685,68 @@ public:
         return blockS.calcChecksum(rec.ioSizeLb(), salt);
     }
 };
+
+template <typename Reader>
+inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid)
+{
+    if (!packH.readFrom(reader)) {
+        return false; // invalid header.
+    }
+    if (packH.header().logpack_lsid != lsid) {
+        return false; // also invalid.
+    }
+    return true;
+}
+
+template <typename Reader>
+inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, LogBlockShared &blockS)
+{
+    const LogRecord &lrec = packH.record(idx);
+    if (!lrec.hasData()) return true;
+
+    const uint32_t pbs = packH.pbs();
+    const size_t ioSizePb = lrec.ioSizePb(pbs);
+    if (blockS.pbs() != pbs) blockS.init(pbs);
+    blockS.read(reader, ioSizePb);
+    return log::isLogChecksumValid(lrec, blockS, packH.salt());
+}
+
+/**
+ * Read all lob IOs corresponding to a logpack.
+ * PackH will be shrinked (and may be empty) if a read IO data is invalid.
+ * If not shrinked, packH will not be changed.
+ *
+ * RETURN:
+ *   true if not shrinked.
+ */
+template <typename Reader>
+inline bool readAllLogIos(Reader &reader, LogPackHeader &packH, std::queue<LogBlockShared> &ioQ)
+{
+    bool isNotShrinked = true;
+    for (size_t i = 0; i < packH.nRecords(); i++) {
+        const LogRecord &rec = packH.record(i);
+        if (!rec.hasData()) continue;
+
+        LogBlockShared blockS;
+        if (!readLogIo(reader, packH, i, blockS)) {
+            packH.shrink(i);
+            isNotShrinked = false;
+            break;
+        }
+        ioQ.push(std::move(blockS));
+    }
+    assert(packH.nRecordsHavingData() == ioQ.size());
+    return isNotShrinked;
+}
+
+/**
+ * Skip to read log IOs corresponding to a logpack.
+ * This does not verify the log IO data, or really seek in a walb log device.
+ */
+template <typename Reader>
+inline void skipAllLogIos(Reader &reader, const LogPackHeader &packH)
+{
+    reader.skip(packH.totalIoSize() * packH.pbs());
+}
 
 } // walb

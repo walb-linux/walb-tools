@@ -65,8 +65,10 @@ public:
     uint32_t getChecksum() const { return super()->checksum; }
     uint32_t getLogicalBlockSize() const { return super()->logical_bs; }
     uint32_t getPhysicalBlockSize() const { return super()->physical_bs; }
+    uint32_t pbs() const { return super()->physical_bs; } // alias.
     uint32_t getMetadataSize() const { return super()->metadata_size; }
     uint32_t getLogChecksumSalt() const { return super()->log_checksum_salt; }
+    uint32_t salt() const { return super()->log_checksum_salt; } // alias.
     cybozu::Uuid getUuid() const { return cybozu::Uuid(super()->uuid); }
     const char* getName() const { return super()->name; }
     uint64_t getRingBufferSize() const { return super()->ring_buffer_size; }
@@ -264,15 +266,15 @@ private:
 public:
     explicit SimpleWldevReader(const std::string &wldevPath)
         : file_(wldevPath, O_RDONLY | O_DIRECT)
-        , super_()
-        , pbs_()
-        , lsid_() {
-
-        super_.read(file_.fd());
-        pbs_ = super_.getPhysicalBlockSize();
+        , super_(), pbs_(), lsid_() {
+        init();
+    }
+    explicit SimpleWldevReader(cybozu::util::File &&file)
+        : file_(std::move(file))
+        , super_(), pbs_(), lsid_() {
+        init();
     }
     SuperBlock &super() { return super_; }
-    uint32_t pbs() const { return pbs_; }
     void reset(uint64_t lsid) {
         lsid_ = lsid;
         seek();
@@ -286,6 +288,11 @@ public:
         skipPb(size / pbs_);
     }
 private:
+    void init() {
+        super_.read(file_.fd());
+        pbs_ = super_.getPhysicalBlockSize();
+        lsid_ = 0;
+    }
     void readBlock(void *data) {
         file_.read(data, pbs_);
         lsid_++;
@@ -349,10 +356,10 @@ public:
      * @bufferSize buffer size to read ahead [byte].
      * @maxIoSize max IO size [byte].
      */
-    AsyncWldevReader(const std::string &wldevPath,
+    AsyncWldevReader(cybozu::util::File &&wldevFile,
                    uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
                    uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
-        : file_(wldevPath, O_RDONLY | O_DIRECT)
+        : file_(std::move(wldevFile))
         , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
         , bufferPb_(bufferSize / pbs_)
         , maxIoPb_(maxIoSize / pbs_)
@@ -365,13 +372,15 @@ public:
         , readIdx_(0)
         , pendingPb_(0)
         , remainingPb_(0) {
-        if (bufferPb_ == 0) {
-            throw RT_ERR("bufferSize must be more than physical block size.");
-        }
-        if (maxIoPb_ == 0) {
-            throw RT_ERR("maxIoSize must be more than physical block size.");
-        }
-        super_.read(file_.fd());
+        init();
+    }
+    AsyncWldevReader(const std::string &wldevPath,
+                     uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
+                     uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
+        : AsyncWldevReader(
+            cybozu::util::File(wldevPath, O_RDONLY | O_DIRECT),
+            bufferSize, maxIoSize) {
+        init();
     }
     ~AsyncWldevReader() noexcept {
         while (!ioQ_.empty()) {
@@ -384,7 +393,6 @@ public:
             ioQ_.pop();
         }
     }
-    uint32_t pbs() const { return pbs_; }
     uint32_t queueSize() const { return bufferPb_; }
     SuperBlock &super() { return super_; }
     /**
@@ -414,6 +422,15 @@ public:
         skipPb(size / pbs_);
     }
 private:
+    void init() {
+        if (bufferPb_ == 0) {
+            throw RT_ERR("bufferSize must be more than physical block size.");
+        }
+        if (maxIoPb_ == 0) {
+            throw RT_ERR("maxIoSize must be more than physical block size.");
+        }
+        super_.read(file_.fd());
+    }
     char *getBuffer(size_t idx) {
         return &buffer_[idx * pbs_];
     }
