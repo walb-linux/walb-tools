@@ -202,7 +202,6 @@ int main(int argc, char *argv[])
 	cybozu::Socket server;
 	server.bind(opt.recvPort);
 	std::thread cmdWorker(cmdThread, opt);
-#if 0
 	std::vector<std::unique_ptr<Repeater>> worker;
 	try {
 		for (size_t i = 0; i < opt.threadNum; i++) {
@@ -245,7 +244,6 @@ int main(int argc, char *argv[])
 	for (std::unique_ptr<Repeater>& p : worker) {
 		p->join();
 	}
-#endif
 	cmdWorker.join();
 	if (opt.verbose) puts("main end");
 }
