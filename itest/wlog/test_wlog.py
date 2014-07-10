@@ -30,6 +30,8 @@ CTL="../../walb/tool/walbctl"
 BIN="../../binsrc"
 CTL2 = BIN + '/wdevc'
 TMP_FILE = "tmp.txt"
+TMP_FILE0 = "tmp0.txt"
+TMP_FILE1 = "tmp1.txt"
 
 LOOP0="/dev/loop0"
 LOOP1="/dev/loop1"
@@ -78,9 +80,10 @@ def format_ldev():
 	finalize_bdev(LOOP1, DDEV_0)
 
 def echo_wlog_value(wlogFile, keyword):
-	# $CTL show_wlog < $wlogFile |grep $keyword |awk '{print $2}' 
+	# $CTL show_wlog < $wlogFile |grep $keyword |awk '{print $2}'
 #	run($CTL + " show_wlog < " + wlogFile + " > " + TMP_FILE)
-	run("%s show_wlog < %s > %s" % (CTL, wlogFile, TMP_FILE))
+#	run("%s show_wlog < %s > %s" % (CTL, wlogFile, TMP_FILE))
+        run("%s/wlog-show -stat %s > %s" % (BIN, wlogFile, TMP_FILE))
 	v = getKeyValue(TMP_FILE, keyword, 1)
 	return int(v)
 
@@ -95,9 +98,9 @@ def Initialization():
 	format_ldev()
 	run("%s/wlog-gen -s 32M -z 16M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
 	#${BIN}/wlog-gen -s 32M -z 16M --minIoSize 512 --maxIoSize 512 --maxPackSize 1M -o WLOG_0
-	endLsid0 = echo_wlog_value(WLOG_0, "end_lsid_really:")
-	nPacks0 = echo_wlog_value(WLOG_0, "n_packs:")
-	totalPadding0 = echo_wlog_value(WLOG_0, "total_padding_size:")
+	endLsid0 = echo_wlog_value(WLOG_0, "reallyEndLsid")
+	nPacks0 = echo_wlog_value(WLOG_0, "nrPacks")
+	totalPadding0 = echo_wlog_value(WLOG_0, "paddingPb")
 	shutil.copyfile(DDEV_0, DDEV_0z)
 	run("%s/wlog-redo %s < %s" % (BIN, DDEV_0, WLOG_0))
 	run("%s/wlog-redo %s -z < %s" % (BIN, DDEV_0z, WLOG_0))
@@ -110,6 +113,11 @@ def SimpleTest():
 	run("%s/wlog-cat %s -v -o %s" % (BIN, LDEV, WLOG_1))
 	run("%s/bdiff -b 512 %s %s" % (BIN, WLOG_0, WLOG_1))
 
+        run("%s/wlog-show -pack -stat %s > %s" % (BIN, WLOG_0, TMP_FILE0))
+        run("%s/wldev-show -pack -stat %s > %s" % (BIN, LDEV, TMP_FILE1))
+        run("/usr/bin/diff %s %s" % (TMP_FILE0, TMP_FILE1))
+
+
 def restore_test(testId, lsidDiff, invalidLsid):
 	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_1)
 	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_1z)
@@ -118,17 +126,18 @@ def restore_test(testId, lsidDiff, invalidLsid):
 	run("%s/wlog-restore %s --verify -d %d -i %d < %s" % (BIN, LDEV, lsidDiff, invalidLsid, WLOG_0))
 	run("%s/wlog-cat %s -v -o %s" % (BIN, LDEV, WLOG_1))
 	prepare_bdev(LOOP0, LDEV)
-	run("%s cat_wldev --wldev %s > %s" % (CTL, LOOP0, WLOG_2))
+	#run("%s cat_wldev --wldev %s > %s" % (CTL, LOOP0, WLOG_2))
+	run("%s/wlog-cat -noaio -v %s -o %s" % (BIN, LOOP0, WLOG_2))
 	time.sleep(1)
 	finalize_bdev(LOOP0, LDEV)
 	if invalidLsid == 0xffffffffffffffff:
 		endLsid0a = endLsid0 + lsidDiff - nPacks0 - totalPadding0
-		endLsid1 = echo_wlog_value(WLOG_1, "end_lsid_really:")
-		endLsid2 = echo_wlog_value(WLOG_2, "end_lsid_really:")
-		nPacks1 = echo_wlog_value(WLOG_1, "n_packs:")
-		nPacks2 = echo_wlog_value(WLOG_2, "n_packs:")
-		totalPadding1 = echo_wlog_value(WLOG_1, "total_padding_size:")
-		totalPadding2 = echo_wlog_value(WLOG_2, "total_padding_size:")
+		endLsid1 = echo_wlog_value(WLOG_1, "reallyEndLsid")
+		endLsid2 = echo_wlog_value(WLOG_2, "reallyEndLsid")
+		nPacks1 = echo_wlog_value(WLOG_1, "nrPacks")
+		nPacks2 = echo_wlog_value(WLOG_2, "nrPacks")
+		totalPadding1 = echo_wlog_value(WLOG_1, "paddingPb")
+		totalPadding2 = echo_wlog_value(WLOG_2, "paddingPb")
 		endLsid1a = endLsid1 - nPacks1 - totalPadding1
 		endLsid2a = endLsid2 - nPacks2 - totalPadding2
 		if endLsid0a != endLsid1a:
@@ -139,6 +148,16 @@ def restore_test(testId, lsidDiff, invalidLsid):
 			print "endLsid0a",  endLsid0a, " does not equal to endLsid2a",  endLsid2a
 			print "TEST" + str(testId) + "_FAILURE"
 			exit(1)
+		normalLb1 = echo_wlog_value(WLOG_1, 'normalLb')
+		normalLb2 = echo_wlog_value(WLOG_2, 'normalLb')
+		if normalLb1 != normalLb2:
+			print "normalLb1", normalLb1, "and", "normalLb2", normalLb2, "differ."
+			print "TEST" + str(testId) + "_FAILURE"
+		discardLb1 = echo_wlog_value(WLOG_1, 'discardLb')
+		discardLb2 = echo_wlog_value(WLOG_2, 'discardLb')
+		if discardLb1 != discardLb2:
+			print "discardLb1", discardLb1, "and", "discardLb2", discardLb2, "differ."
+			print "TEST" + str(testId) + "_FAILURE"
 	run("%s/bdiff -b 512 %s %s" % (BIN, WLOG_1, WLOG_2))
 
 	run("%s/wlog-redo %s < %s" % (BIN, DDEV_1, WLOG_1))
@@ -175,4 +194,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
