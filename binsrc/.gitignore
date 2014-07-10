@@ -7,6 +7,7 @@ wdiff-merge
 wdiff-redo
 wdiff-show
 wldev-info
+wldev-show
 wlog-analyze
 wlog-cat
 wlog-gen

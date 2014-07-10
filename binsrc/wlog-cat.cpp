@@ -1,9 +1,6 @@
 /**
  * @file
- * @brief Read walb log device and archive it.
- * @author HOSHINO Takashi
- *
- * (C) 2012 Cybozu Labs, Inc.
+ * @brief Read walb log device and save as a wlog file.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -21,29 +18,28 @@ struct Option
     std::string outPath;
     uint64_t bgnLsid;
     uint64_t endLsid;
+    bool dontUseAio;
     bool isVerbose;
     bool isDebug;
-    bool dontUseAsync;
-    std::vector<std::string> args;
 
     Option(int argc, char* argv[])
         : wldevPath()
         , outPath("-")
         , bgnLsid(0)
         , endLsid(-1)
+        , dontUseAio(false)
         , isVerbose(false)
-        , isDebug(false)
-        , dontUseAsync(false)
-        , args() {
+        , isDebug(false) {
 
         cybozu::Option opt;
         opt.setDescription("wlog-cat: extract wlog from a walb log device.");
         opt.appendOpt(&outPath, "-", "o", "PATH: output wlog path. '-' for stdout. (default: '-')");
         opt.appendOpt(&bgnLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
         opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio.");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose output to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
-        opt.appendBoolOpt(&dontUseAsync, "sync", ": do not use aio.");
+
         opt.appendParam(&wldevPath, "LOG_DEVICE_PATH");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -74,18 +70,17 @@ void catWldev(const Option& opt)
     device::SuperBlock &super = reader.super();
     const uint32_t pbs = super.pbs();
     const uint32_t salt = super.salt();
+    const uint64_t bgnLsid = std::max(opt.bgnLsid, super.getOldestLsid());
 
     cybozu::util::File fileW;
     setupOutputFile(fileW, opt);
     log::Writer writer(std::move(fileW));
 
-    const uint64_t bgnLsid = std::max(opt.bgnLsid, super.getOldestLsid());
-
     /* Create and write walblog header. */
     log::FileHeader wh;
     wh.init(pbs, salt, super.getUuid(), bgnLsid, opt.endLsid);
     writer.writeHeader(wh);
-    if (opt.isVerbose) std::cerr << wh << std::endl;
+    if (opt.isVerbose || opt.isDebug) std::cerr << wh << std::endl;
 
     /* Read and write each logpack. */
     reader.reset(bgnLsid);
@@ -114,7 +109,7 @@ int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
-    if (opt.dontUseAsync) {
+    if (opt.dontUseAio) {
         catWldev<device::SimpleWldevReader>(opt);
     } else {
         catWldev<device::AsyncWldevReader>(opt);

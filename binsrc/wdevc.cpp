@@ -353,11 +353,6 @@ void decideLsidRange(uint64_t &lsid0, uint64_t &lsid1, uint64_t oldestLsid, cons
 
 } // namespace local
 
-void showWldev(const Option &/*opt*/)
-{
-    // QQQ
-}
-
 void redoWlog(const Option &/*opt*/)
 {
     // QQQ
@@ -590,7 +585,6 @@ const std::vector<Command> commandVec_ = {
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
 
-    {defaultRunner, "show-wldev", {wldevParam}, {lsid0OptS, lsid1OptS}, ""},
     {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo", {ldevParam, ddevParam}, {}, ""},
 

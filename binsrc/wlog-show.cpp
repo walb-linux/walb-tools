@@ -24,22 +24,26 @@ struct Option
     std::string inWlogPath;
     uint64_t beginLsid;
     uint64_t endLsid;
-    bool isVerbose;
+    bool showHead, showPack, showStat;
     bool isDebug;
 
     Option(int argc, char* argv[])
         : inWlogPath("-")
         , beginLsid(0)
         , endLsid(-1)
-        , isVerbose(false)
+        , showHead(false)
+        , showPack(false)
+        , showStat(false)
         , isDebug(false) {
 
         cybozu::Option opt;
-        opt.setDescription("Wlog-show: pretty-print wlog input.");
+        opt.setDescription("wlog-show: pretty-print wlog input.");
         opt.appendOpt(&beginLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
         opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendParamOpt(&inWlogPath, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
-        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendParamOpt(&inWlogPath, "-", "WLOG_PATH", ": input wlog path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&showHead, "head", ": show file header.");
+        opt.appendBoolOpt(&showPack, "pack", ": show packs.");
+        opt.appendBoolOpt(&showStat, "stat", ": show statistics.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -49,6 +53,11 @@ struct Option
 
         if (endLsid <= beginLsid) {
             throw RT_ERR("beginLsid must be < endLsid.");
+        }
+
+        // In default, show all.
+        if (!showHead && !showPack && !showStat) {
+            showHead = showPack = showStat = true;
         }
     }
     bool isInputStdin() const { return inWlogPath == "-"; }
@@ -75,20 +84,20 @@ int doMain(int argc, char* argv[])
 
     log::FileHeader wh;
     wh.readFrom(fileR);
-    std::cout << wh.str() << std::endl;
+    if (opt.showHead) std::cout << wh.str() << std::endl;
     uint64_t lsid = wh.beginLsid();
 
     LogStatistics logStat;
     logStat.init(wh.beginLsid(), wh.endLsid());
     LogPackHeader packH(wh.pbs(), wh.salt());
     while (readLogPackHeader(fileR, packH, lsid)) {
-        std::cout << packH << std::endl;
+        if (opt.showPack) std::cout << packH << std::endl;
         skipAllLogIos(fileR, packH);
-        if (opt.isVerbose) logStat.update(packH);
+        if (opt.showStat) logStat.update(packH);
         lsid = packH.nextLogpackLsid();
     }
 
-    if (opt.isVerbose) std::cout << logStat << std::endl;
+    if (opt.showStat) std::cout << logStat << std::endl;
     return 0;
 }
 

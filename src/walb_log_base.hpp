@@ -753,8 +753,8 @@ struct LogStatistics
     uint64_t endLsid;
     uint64_t lsid;
     uint64_t normalLb;
-    uint64_t paddingLb;
     uint64_t discardLb;
+    uint64_t paddingPb;
 
     void init(uint64_t bgnLsid, uint64_t endLsid) {
         nrPacks = 0;
@@ -762,8 +762,8 @@ struct LogStatistics
         this->endLsid = endLsid;
         lsid = bgnLsid;
         normalLb = 0;
-        paddingLb = 0;
         discardLb = 0;
+        paddingPb = 0;
     }
     void update(const LogPackHeader &packH) {
         for (size_t i = 0; i < packH.nRecords(); i++) {
@@ -771,7 +771,7 @@ struct LogStatistics
             if (rec.isDiscard()) {
                 discardLb += rec.io_size;
             } else if (rec.isPadding()) {
-                paddingLb += rec.io_size;
+                paddingPb += rec.ioSizePb(packH.pbs());
             } else {
                 normalLb += rec.io_size;
             }
@@ -786,10 +786,11 @@ struct LogStatistics
             "reallyEndLsid %" PRIu64 "\n"
             "nrPacks %" PRIu64 "\n"
             "normalLb %" PRIu64 "\n"
-            "paddingLb %" PRIu64 "\n"
-            "discardLb %" PRIu64 ""
+            "discardLb %" PRIu64 "\n"
+            "paddingPb %" PRIu64 ""
             , bgnLsid, endLsid, lsid
-            , nrPacks, normalLb, paddingLb, discardLb);
+            , nrPacks, normalLb, discardLb
+            , paddingPb);
     }
     friend inline std::ostream& operator<<(std::ostream& os, const LogStatistics &logStat) {
         os << logStat.str();
