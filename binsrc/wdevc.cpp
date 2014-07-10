@@ -358,11 +358,6 @@ void showWldev(const Option &/*opt*/)
     // QQQ
 }
 
-void showWlog(const Option &/*opt*/)
-{
-    // QQQ
-}
-
 void redoWlog(const Option &/*opt*/)
 {
     // QQQ
@@ -596,7 +591,6 @@ const std::vector<Command> commandVec_ = {
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
 
     {defaultRunner, "show-wldev", {wldevParam}, {lsid0OptS, lsid1OptS}, ""},
-    {defaultRunner, "show-wlog", {}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo", {ldevParam, ddevParam}, {}, ""},
 

@@ -97,6 +97,21 @@ public:
 
     std::string str() const {
         return cybozu::util::formatString(
+            "wlog_h:"
+            " ver %3u"
+            " pbs %4u"
+            " salt %08x"
+            " uuid %s"
+            " lsid %" PRIu64 " %" PRIu64 ""
+            , header().version
+            , header().physical_bs
+            , header().log_checksum_salt
+            , getUuid().str().c_str()
+            , header().begin_lsid
+            , header().end_lsid);
+    }
+    std::string strDetail() const {
+        return cybozu::util::formatString(
             "wlog_header:\n"
             "  sector_type %d\n"
             "  version %u\n"

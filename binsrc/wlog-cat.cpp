@@ -85,14 +85,14 @@ void catWldev(const Option& opt)
     log::FileHeader wh;
     wh.init(pbs, salt, super.getUuid(), bgnLsid, opt.endLsid);
     writer.writeHeader(wh);
-    if (opt.isVerbose || opt.isDebug) std::cerr << wh << std::endl;
+    if (opt.isVerbose) std::cerr << wh << std::endl;
 
     /* Read and write each logpack. */
     reader.reset(bgnLsid);
     std::queue<LogBlockShared> ioQ;
     uint64_t lsid = bgnLsid;
-    uint64_t totalPaddingPb = 0;
-    uint64_t nPacks = 0;
+    LogStatistics logStat;
+    logStat.init(bgnLsid, opt.endLsid);
     LogPackHeader packH(pbs, salt);
     bool isNotShrinked = true;
     while (lsid < opt.endLsid && isNotShrinked) {
@@ -102,24 +102,12 @@ void catWldev(const Option& opt)
         writer.writePack(packH, std::move(ioQ));
         assert(ioQ.empty());
         if (opt.isDebug) std::cerr << packH << std::endl;
-
-        totalPaddingPb += packH.totalPaddingPb();
-        nPacks++;
+        if (opt.isVerbose) logStat.update(packH);
         lsid = packH.nextLogpackLsid();
     }
     writer.close();
 
-    if (opt.isVerbose || opt.isDebug) {
-        ::fprintf(
-            ::stderr,
-            "bgnLsid: %" PRIu64 "\n"
-            "endLsid: %" PRIu64 "\n"
-            "lackOfLogPb: %" PRIu64 "\n"
-            "totalPaddingPb: %" PRIu64 "\n"
-            "nPacks: %" PRIu64 "\n"
-            , bgnLsid, lsid, opt.endLsid - lsid
-            , totalPaddingPb, nPacks);
-    }
+    if (opt.isVerbose) std::cerr << logStat << std::endl;
 }
 
 int doMain(int argc, char* argv[])

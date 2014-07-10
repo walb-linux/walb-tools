@@ -78,13 +78,17 @@ int doMain(int argc, char* argv[])
     std::cout << wh.str() << std::endl;
     uint64_t lsid = wh.beginLsid();
 
+    LogStatistics logStat;
+    logStat.init(wh.beginLsid(), wh.endLsid());
     LogPackHeader packH(wh.pbs(), wh.salt());
     while (readLogPackHeader(fileR, packH, lsid)) {
         std::cout << packH << std::endl;
         skipAllLogIos(fileR, packH);
+        if (opt.isVerbose) logStat.update(packH);
         lsid = packH.nextLogpackLsid();
     }
 
+    if (opt.isVerbose) std::cout << logStat << std::endl;
     return 0;
 }
 

@@ -186,19 +186,6 @@ public:
             return logpackLsid();
         }
     }
-    uint64_t totalPaddingPb() const {
-        if (nPadding() == 0) {
-            return 0;
-        }
-        uint64_t t = 0;
-        for (size_t i = 0; i < nRecords(); i++) {
-            const LogRecord &rec = record(i);
-            if (rec.isPadding()) {
-                t += ::capacity_pb(pbs(), rec.io_size);
-            }
-        }
-        return t;
-    }
     bool isEnd() const {
         return nRecords() == 0 && logpackLsid() == uint64_t(-1);
     }
@@ -755,5 +742,59 @@ inline void skipAllLogIos(Reader &reader, const LogPackHeader &packH)
 {
     reader.skip(packH.totalIoSize() * packH.pbs());
 }
+
+/**
+ * Statistics.
+ */
+struct LogStatistics
+{
+    uint64_t nrPacks;
+    uint64_t bgnLsid;
+    uint64_t endLsid;
+    uint64_t lsid;
+    uint64_t normalLb;
+    uint64_t paddingLb;
+    uint64_t discardLb;
+
+    void init(uint64_t bgnLsid, uint64_t endLsid) {
+        nrPacks = 0;
+        this->bgnLsid = bgnLsid;
+        this->endLsid = endLsid;
+        lsid = bgnLsid;
+        normalLb = 0;
+        paddingLb = 0;
+        discardLb = 0;
+    }
+    void update(const LogPackHeader &packH) {
+        for (size_t i = 0; i < packH.nRecords(); i++) {
+            const LogRecord &rec = packH.record(i);
+            if (rec.isDiscard()) {
+                discardLb += rec.io_size;
+            } else if (rec.isPadding()) {
+                paddingLb += rec.io_size;
+            } else {
+                normalLb += rec.io_size;
+            }
+        }
+        nrPacks++;
+        lsid = packH.nextLogpackLsid();
+    }
+    std::string str() const {
+        return cybozu::util::formatString(
+            "bgnLsid %" PRIu64 "\n"
+            "endLsid %" PRIu64 "\n"
+            "reallyEndLsid %" PRIu64 "\n"
+            "nrPacks %" PRIu64 "\n"
+            "normalLb %" PRIu64 "\n"
+            "paddingLb %" PRIu64 "\n"
+            "discardLb %" PRIu64 ""
+            , bgnLsid, endLsid, lsid
+            , nrPacks, normalLb, paddingLb, discardLb);
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const LogStatistics &logStat) {
+        os << logStat.str();
+        return os;
+    }
+};
 
 } // walb
