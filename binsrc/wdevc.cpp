@@ -331,6 +331,7 @@ void getCheckpointInterval(const Option &opt)
 
 namespace local {
 
+// QQQ DEPRECATED???
 void decideLsidRange(uint64_t &lsid0, uint64_t &lsid1, uint64_t oldestLsid, const Option &opt)
 {
     lsid0 = oldestLsid;
@@ -351,58 +352,6 @@ void decideLsidRange(uint64_t &lsid0, uint64_t &lsid1, uint64_t oldestLsid, cons
 }
 
 } // namespace local
-
-void catWldev(const Option &opt)
-{
-    std::string wldev;
-    cybozu::util::parseStrVec(opt.params, 0, 1, {&wldev});
-
-    cybozu::util::File wldevFile(wldev, O_RDONLY | O_DIRECT);
-    device::SuperBlock super;
-    super.read(wldevFile.fd());
-    const uint32_t pbs = super.pbs();
-    const uint32_t salt = super.salt();
-    uint64_t lsid0, lsid1;
-    local::decideLsidRange(lsid0, lsid1, super.getOldestLsid(), opt);
-
-    device::SimpleWldevReader reader(std::move(wldevFile));
-    reader.reset(lsid0);
-
-    log::Writer writer(1); // stdout
-    log::FileHeader wh;
-    wh.init(pbs, salt, super.getUuid(), lsid0, lsid1);
-    writer.writeHeader(wh);
-
-    LogPackHeader packH(pbs, salt);
-    std::queue<LogBlockShared> ioQ;
-    uint64_t totalPaddingPb = 0;
-    uint64_t nrPacks = 0;
-    uint64_t lsid = lsid0;
-    bool isNotShrinked = true;
-    while (lsid < lsid1 && isNotShrinked) {
-        if (!readLogPackHeader(reader, packH, lsid)) break;
-        isNotShrinked = readAllLogIos(reader, packH, ioQ);
-        if (!isNotShrinked && packH.nRecords() == 0) break;
-        writer.writePack(packH, std::move(ioQ));
-        assert(ioQ.empty());
-
-        totalPaddingPb += packH.totalPaddingPb();
-        nrPacks++;
-        lsid = packH.nextLogpackLsid();
-    }
-    writer.close();
-
-    if (opt.isDebug) {
-        ::fprintf(::stderr,
-                  "bgnLsid: %" PRIu64 "\n"
-                  "endLsid: %" PRIu64 "\n"
-                  "lackOfLogPb: %" PRIu64 "\n"
-                  "totalPaddingPb: %" PRIu64 "\n"
-                  "nrPacks: %" PRIu64 "\n"
-                  , lsid0, lsid, lsid1 - lsid, totalPaddingPb, nrPacks);
-    }
-    LOGs.debug() << "cat-wldev done";
-}
 
 void showWldev(const Option &/*opt*/)
 {
@@ -646,7 +595,6 @@ const std::vector<Command> commandVec_ = {
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
 
-    {catWldev, "cat-wldev", {wldevParam}, {lsid0OptS, lsid1OptS}, " > WLOG"},
     {defaultRunner, "show-wldev", {wldevParam}, {lsid0OptS, lsid1OptS}, ""},
     {defaultRunner, "show-wlog", {}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
