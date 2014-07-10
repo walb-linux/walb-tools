@@ -256,6 +256,9 @@ private:
     }
 };
 
+/**
+ * Walb log device reader using synchronous read() system call.
+ */
 class SimpleWldevReader
 {
 private:
@@ -264,14 +267,13 @@ private:
     uint32_t pbs_;
     uint64_t lsid_;
 public:
-    explicit SimpleWldevReader(const std::string &wldevPath)
-        : file_(wldevPath, O_RDONLY | O_DIRECT)
-        , super_(), pbs_(), lsid_() {
-        init();
-    }
     explicit SimpleWldevReader(cybozu::util::File &&file)
         : file_(std::move(file))
         , super_(), pbs_(), lsid_() {
+        init();
+    }
+    explicit SimpleWldevReader(const std::string &wldevPath)
+        : SimpleWldevReader(cybozu::util::File(wldevPath, O_RDONLY | O_DIRECT)) {
         init();
     }
     SuperBlock &super() { return super_; }

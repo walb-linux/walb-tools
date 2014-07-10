@@ -123,7 +123,7 @@ private:
             return beginLsid;
         }
         if (config_.isVerbose()) {
-            wh.print(::stderr);
+            std::cerr << wh << std::endl;
         }
 
         /* Check uuid if required. */

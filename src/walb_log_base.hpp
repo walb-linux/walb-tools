@@ -69,51 +69,53 @@ struct LogRecord : public walb_log_record
         return ::capacity_pb(pbs, io_size);
     }
     uint32_t ioSizeLb() const { return io_size; }
+
+    std::string str() const {
+        return cybozu::util::formatString(
+            "wlog_r:"
+            " lsid %10" PRIu64 " %4u"
+            " io %10" PRIu64 " %4u"
+            " flags %c%c%c"
+            " csum %08x"
+            , lsid, lsid_local
+            , offset, io_size
+            , isExist() ? 'E' : '_'
+            , isPadding() ? 'P' : '_'
+            , isDiscard() ? 'D' : '_'
+            , checksum);
+    }
+    std::string strDetail() const {
+        return cybozu::util::formatString(
+            "wlog_record:\n"
+            "  checksum: %08x(%u)\n"
+            "  lsid: %" PRIu64 "\n"
+            "  lsid_local: %u\n"
+            "  is_exist: %u\n"
+            "  is_padding: %u\n"
+            "  is_discard: %u\n"
+            "  offset: %" PRIu64 "\n"
+            "  io_size: %u"
+            , checksum, checksum
+            , lsid, lsid_local
+            , isExist()
+            , isPadding()
+            , isDiscard()
+            , offset, io_size);
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const LogRecord& rec) {
+        os << rec.str();
+        return os;
+    }
 };
 
 namespace log {
 
+// QQQ: DEPRECATED.
 class InvalidIo : public std::exception
 {
 public:
     const char *what() const noexcept override { return "invalid logpack IO."; }
 };
-
-inline void printRecord(::FILE *fp, size_t idx, const LogRecord &rec)
-{
-    ::fprintf(fp,
-              "record %zu\n"
-              "  checksum: %08x(%u)\n"
-              "  lsid: %" PRIu64 "\n"
-              "  lsid_local: %u\n"
-              "  is_exist: %u\n"
-              "  is_padding: %u\n"
-              "  is_discard: %u\n"
-              "  offset: %" PRIu64 "\n"
-              "  io_size: %u\n"
-              , idx
-              , rec.checksum, rec.checksum
-              , rec.lsid, rec.lsid_local
-              , rec.isExist()
-              , rec.isPadding()
-              , rec.isDiscard()
-              , rec.offset, rec.io_size);
-}
-
-inline void printRecordOneline(::FILE *fp, size_t idx, const LogRecord &rec)
-{
-    ::fprintf(fp,
-              "wlog_rec %2zu:\t"
-              "lsid %" PRIu64 " %u\tio %10" PRIu64 " %4u\t"
-              "flags %u%u%u\tcsum %08x %u\n"
-              , idx
-              , rec.lsid, rec.lsid_local
-              , rec.offset, rec.io_size
-              , rec.isExist()
-              , rec.isPadding()
-              , rec.isDiscard()
-              , rec.checksum, rec.checksum);
-}
 
 } // log
 
@@ -228,50 +230,55 @@ public:
         return s;
     }
     /*
-     * Print.
+     * to string.
      */
-    void printRecord(size_t pos, ::FILE *fp = ::stdout) const {
-        log::printRecord(fp, pos, record(pos));
+    std::string strHead() const {
+        return cybozu::util::formatString(
+            "wlog_p:"
+            " lsid %10" PRIu64 ""
+            " total %4u"
+            " n_rec %2u"
+            " n_pad %2u"
+            " csum %08x"
+            , header_->logpack_lsid
+            , header_->total_io_size
+            , header_->n_records
+            , header_->n_padding
+            , header_->checksum);
     }
-    void printRecordOneline(size_t pos, ::FILE *fp = ::stdout) const {
-        log::printRecordOneline(fp, pos, record(pos));
+    std::string strHeadDetail() const {
+        return cybozu::util::formatString(
+            "wlog_pack_header:\n"
+            "  checksum: %08x(%u)\n"
+            "  n_records: %u\n"
+            "  n_padding: %u\n"
+            "  total_io_size: %u\n"
+            "  logpack_lsid: %" PRIu64 "\n",
+            header_->checksum, header_->checksum,
+            header_->n_records,
+            header_->n_padding,
+            header_->total_io_size,
+            header_->logpack_lsid);
     }
-    void printHeader(::FILE *fp = ::stdout) const {
-        ::fprintf(fp,
-                  "*****logpack header*****\n"
-                  "checksum: %08x(%u)\n"
-                  "n_records: %u\n"
-                  "n_padding: %u\n"
-                  "total_io_size: %u\n"
-                  "logpack_lsid: %" PRIu64 "\n",
-                  header_->checksum, header_->checksum,
-                  header_->n_records,
-                  header_->n_padding,
-                  header_->total_io_size,
-                  header_->logpack_lsid);
-    }
-    void print(::FILE *fp = ::stdout) const {
-        printHeader(fp);
+    std::string str() const {
+        StrVec v;
+        v.push_back(strHead());
         for (size_t i = 0; i < nRecords(); i++) {
-            printRecord(i, fp);
+            v.push_back(record(i).str());
         }
+        return cybozu::util::concat(v, "\n");
     }
-    /**
-     * Print each IO oneline.
-     * logpack_lsid, mode(W, D, or P), offset[lb], io_size[lb].
-     */
-    void printShort(::FILE *fp = ::stdout) const {
+    std::string strDetail() const {
+        StrVec v;
+        v.push_back(strHeadDetail());
         for (size_t i = 0; i < nRecords(); i++) {
-            const struct walb_log_record &rec = record(i);
-            assert(::test_bit_u32(LOG_RECORD_EXIST, &rec.flags));
-            char mode = 'W';
-            if (::test_bit_u32(LOG_RECORD_DISCARD, &rec.flags)) { mode = 'D'; }
-            if (::test_bit_u32(LOG_RECORD_PADDING, &rec.flags)) { mode = 'P'; }
-            ::fprintf(fp,
-                      "%" PRIu64 "\t%c\t%" PRIu64 "\t%u\n",
-                      header_->logpack_lsid,
-                      mode, rec.offset, rec.io_size);
+            v.push_back(record(i).strDetail());
         }
+        return cybozu::util::concat(v, "\n");
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const LogPackHeader &packH) {
+        os << packH.str();
+        return os;
     }
     /**
      * Update checksum field.
@@ -657,7 +664,7 @@ inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& block
 /**
  * Logpack record and IO data.
  *
- * DEPRECATED.
+ * QQQ: DEPRECATED.
  */
 struct LogPackIo
 {

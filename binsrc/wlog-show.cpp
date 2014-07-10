@@ -14,70 +14,77 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
-class Config
+struct Option
 {
-private:
-    std::string inWlogPath_;
-    uint64_t beginLsid_;
-    uint64_t endLsid_;
-    bool isVerbose_;
-public:
-    Config(int argc, char* argv[])
-        : inWlogPath_("-")
-        , beginLsid_(0)
-        , endLsid_(-1)
-        , isVerbose_(false) {
-        parse(argc, argv);
-    }
+    std::string inWlogPath;
+    uint64_t beginLsid;
+    uint64_t endLsid;
+    bool isVerbose;
+    bool isDebug;
 
-    const std::string& inWlogPath() const { return inWlogPath_; }
-    uint64_t beginLsid() const { return beginLsid_; }
-    uint64_t endLsid() const { return endLsid_; }
-    bool isInputStdin() const { return inWlogPath_ == "-"; }
-    bool isVerbose() const { return isVerbose_; }
+    Option(int argc, char* argv[])
+        : inWlogPath("-")
+        , beginLsid(0)
+        , endLsid(-1)
+        , isVerbose(false)
+        , isDebug(false) {
 
-    void check() const {
-        if (endLsid() <= beginLsid()) {
-            throw RT_ERR("beginLsid must be < endLsid.");
-        }
-    }
-private:
-    void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Wlog-show: pretty-print wlog input.");
-        opt.appendOpt(&beginLsid_, 0, "b", "LSID: begin lsid to restore. (default: 0)");
-        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendParamOpt(&inWlogPath_, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&beginLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendParamOpt(&inWlogPath, "-", "PATH", ": input wlog path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
-            exit(1);
+            ::exit(1);
+        }
+
+        if (endLsid <= beginLsid) {
+            throw RT_ERR("beginLsid must be < endLsid.");
         }
     }
+    bool isInputStdin() const { return inWlogPath == "-"; }
 };
 
-void setupInputFile(cybozu::util::File &fileR, const Config &config)
+void setupInputFile(LogFile &fileR, const Option &opt)
 {
-    if (config.isInputStdin()) {
+    if (opt.isInputStdin()) {
         fileR.setFd(0);
+        fileR.setSeekable(false);
     } else {
-        fileR.open(config.inWlogPath(), O_RDONLY);
+        fileR.open(opt.inWlogPath, O_RDONLY);
+        fileR.setSeekable(true);
     }
 }
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    config.check();
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
 
-    cybozu::util::File fileR;
-    setupInputFile(fileR, config);
-    walb::log::Printer printer;
-    printer(fileR.fd());
+    LogFile fileR;
+    setupInputFile(fileR, opt);
+
+    log::FileHeader wh;
+    wh.readFrom(fileR);
+    std::cout << wh.str() << std::endl;
+    uint64_t lsid = wh.beginLsid();
+
+    LogPackHeader packH(wh.pbs(), wh.salt());
+    while (readLogPackHeader(fileR, packH, lsid)) {
+        std::cout << packH << std::endl;
+        skipAllLogIos(fileR, packH);
+        lsid = packH.nextLogpackLsid();
+    }
+
     return 0;
 }
 

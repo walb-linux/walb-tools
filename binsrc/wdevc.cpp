@@ -374,7 +374,6 @@ void catWldev(const Option &opt)
     writer.writeHeader(wh);
 
     LogPackHeader packH(pbs, salt);
-    LogBlockShared blockS;
     std::queue<LogBlockShared> ioQ;
     uint64_t totalPaddingPb = 0;
     uint64_t nrPacks = 0;

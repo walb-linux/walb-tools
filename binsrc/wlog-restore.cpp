@@ -225,53 +225,55 @@ private:
         const uint32_t pbs = wlHead.pbs();
 
         /* Read logpack header. */
-        LogPackHeader logh(readBlock(fileR, pbs), pbs, salt);
-        if (logh.isEnd()) return false;
-        if (!logh.isValid()) return false;
-        if (config_.isVerbose()) logh.printShort();
-        const uint64_t originalLsid = logh.logpackLsid();
+        LogPackHeader packH(readBlock(fileR, pbs), pbs, salt);
+        if (packH.isEnd()) return false;
+        if (!packH.isValid()) return false;
+        if (config_.isVerbose()) {
+            std::cout << packH << std::endl;
+        }
+        const uint64_t originalLsid = packH.logpackLsid();
         if (config_.endLsid() <= originalLsid) return false;
         /* Update lsid if necessary. */
         if (lsidDiff_ != 0) {
-            if (!logh.updateLsid(logh.logpackLsid() + lsidDiff_)) {
+            if (!packH.updateLsid(packH.logpackLsid() + lsidDiff_)) {
                 ::fprintf(::stderr, "lsid overflow ocurred.\n");
                 return false;
             }
         }
 
         /* Padding check. */
-        uint64_t offPb = super.getOffsetFromLsid(logh.logpackLsid());
+        uint64_t offPb = super.getOffsetFromLsid(packH.logpackLsid());
         const uint64_t endOffPb = super.getRingBufferOffset() +
             super.getRingBufferSize();
-        if (endOffPb < offPb + 1 + logh.totalIoSize()) {
+        if (endOffPb < offPb + 1 + packH.totalIoSize()) {
             /* Create and write padding logpack. */
             uint32_t paddingPb = endOffPb - offPb;
             assert(0 < paddingPb);
             assert(paddingPb < (1U << 16));
-            LogPackHeader paddingLogh(pbs, wlHead.salt());
-            paddingLogh.init(logh.logpackLsid());
-            paddingLogh.addPadding(paddingPb - 1);
-            paddingLogh.updateChecksum();
-            assert(paddingLogh.isValid());
-            fileB.pwrite(paddingLogh.rawData(), pbs, offPb * pbs);
+            LogPackHeader paddingPackH(pbs, wlHead.salt());
+            paddingPackH.init(packH.logpackLsid());
+            paddingPackH.addPadding(paddingPb - 1);
+            paddingPackH.updateChecksum();
+            assert(paddingPackH.isValid());
+            fileB.pwrite(paddingPackH.rawData(), pbs, offPb * pbs);
 
             /* Update logh's lsid information. */
             lsidDiff_ += paddingPb;
-            if (!logh.updateLsid(logh.logpackLsid() + paddingPb)) {
+            if (!packH.updateLsid(packH.logpackLsid() + paddingPb)) {
                 ::fprintf(::stderr, "lsid overflow ocurred.\n");
                 return false;
             }
-            assert(super.getOffsetFromLsid(logh.logpackLsid())
+            assert(super.getOffsetFromLsid(packH.logpackLsid())
                    == super.getRingBufferOffset());
             offPb = super.getRingBufferOffset();
         }
 
         /* Read logpack data. */
         std::vector<AlignedArray> blocks;
-        blocks.reserve(logh.totalIoSize());
-        for (size_t i = 0; i < logh.nRecords(); i++) {
+        blocks.reserve(packH.totalIoSize());
+        for (size_t i = 0; i < packH.nRecords(); i++) {
             LogPackIo packIo;
-            packIo.set(logh, i);
+            packIo.set(packH, i);
             readLogpackData(packIo, fileR, pbs);
             walb::LogRecord &rec = packIo.rec;
             if (rec.hasData()) {
@@ -288,7 +290,7 @@ private:
                 rec.checksum = 0;
             }
         }
-        assert(blocks.size() == logh.totalIoSize());
+        assert(blocks.size() == packH.totalIoSize());
 
         if (originalLsid < config_.beginLsid()) {
             /* Skip to restore. */
@@ -296,15 +298,15 @@ private:
         }
 
         /* Restore. */
-        logh.updateChecksum();
-        assert(logh.isValid());
-        assert(offPb + 1 + logh.totalIoSize() <= endOffPb);
+        packH.updateChecksum();
+        assert(packH.isValid());
+        assert(offPb + 1 + packH.totalIoSize() <= endOffPb);
 
         if (config_.isVerbose()) {
-            ::printf("header %u records\n", logh.nRecords());
+            ::printf("header %u records\n", packH.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
-        fileB.pwrite(logh.rawData(), pbs, offPb * pbs);
+        fileB.pwrite(packH.rawData(), pbs, offPb * pbs);
         for (size_t i = 0; i < blocks.size(); i++) {
             fileB.pwrite(blocks[i].data(), pbs, (offPb + 1 + i) * pbs);
         }
@@ -314,7 +316,7 @@ private:
             AlignedArray b2(pbs);
             fileB.pread(b2.data(), pbs, offPb * pbs);
             LogPackHeader logh2(std::move(b2), pbs, salt);
-            int ret = ::memcmp(logh.rawData(), logh2.rawData(), pbs);
+            int ret = ::memcmp(packH.rawData(), logh2.rawData(), pbs);
             if (ret) {
                 throw RT_ERR("Logpack header verification failed: "
                              "lsid %" PRIu64 " offPb %" PRIu64 ".",
@@ -327,7 +329,7 @@ private:
             }
         }
 
-        restoredLsid = logh.logpackLsid() + 1 + logh.totalIoSize();
+        restoredLsid = packH.logpackLsid() + 1 + packH.totalIoSize();
         return true;
     }
 };

@@ -95,33 +95,32 @@ public:
         }
     }
 
-    void print(FILE *fp = ::stdout) const {
-        ::fprintf(
-            fp,
-            "sector_type %d\n"
-            "version %u\n"
-            "header_size %u\n"
-            "log_checksum_salt %" PRIu32 " (%08x)\n"
-            "logical_bs %u\n"
-            "physical_bs %u\n"
-            "uuid ",
-            header().sector_type,
-            header().version,
-            header().header_size,
-            header().log_checksum_salt,
-            header().log_checksum_salt,
-            header().logical_bs,
-            header().physical_bs);
-        for (size_t i = 0; i < UUID_SIZE; i++) {
-            ::fprintf(fp, "%02x", header().uuid[i]);
-        }
-        ::fprintf(
-            fp,
-            "\n"
-            "begin_lsid %" PRIu64 "\n"
-            "end_lsid %" PRIu64 "\n",
-            header().begin_lsid,
-            header().end_lsid);
+    std::string str() const {
+        return cybozu::util::formatString(
+            "wlog_header:\n"
+            "  sector_type %d\n"
+            "  version %u\n"
+            "  header_size %u\n"
+            "  log_checksum_salt %" PRIu32 " (%08x)\n"
+            "  logical_bs %u\n"
+            "  physical_bs %u\n"
+            "  uuid %s\n"
+            "  begin_lsid %" PRIu64 "\n"
+            "  end_lsid %" PRIu64 ""
+            , header().sector_type
+            , header().version
+            , header().header_size
+            , header().log_checksum_salt
+            , header().log_checksum_salt
+            , header().logical_bs
+            , header().physical_bs
+            , getUuid().str().c_str()
+            , header().begin_lsid
+            , header().end_lsid);
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, FileHeader& wh) {
+        os << wh.str();
+        return os;
     }
 };
 
@@ -138,21 +137,23 @@ private:
     bool isBegun_;
     bool isEnd_;
 
-    LogPackHeader pack_;
+    LogPackHeader packH_;
     uint16_t recIdx_;
     uint64_t endLsid_;
 
 public:
-    explicit Reader(int fd)
-        : fileR_(fd)
+    explicit Reader(cybozu::util::File &&fileR)
+        : fileR_(std::move(fileR))
         , isReadHeader_(false)
         , pbs_(0)
         , salt_(0)
         , isBegun_(false)
         , isEnd_(false)
-        , pack_()
+        , packH_()
         , recIdx_(0)
         , endLsid_(0) {}
+    explicit Reader(int fd)
+        : Reader(cybozu::util::File(fd)) {}
 
     /**
      * Read log file header.
@@ -165,7 +166,7 @@ public:
         pbs_ = fileH.pbs();
         salt_ = fileH.salt();
         endLsid_ = fileH.beginLsid();
-        pack_.init(pbs_, salt_);
+        packH_.init(pbs_, salt_);
     }
     /**
      * ReadLog.
@@ -175,31 +176,16 @@ public:
      */
     bool readLog(LogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr)
     {
-        if (!fetchNext()) return false;
+        if (!fetchNextPackHeader()) return false;
 
         /* Copy to the record. */
-        rec = pack_.record(recIdx_);
+        rec = packH_.record(recIdx_);
 
         /* Read to the blockS. */
-        blockS.init(pbs_);
-        if (rec.hasData()) {
-            try {
-                blockS.read(fileR_, rec.ioSizePb(pbs_));
-            } catch (cybozu::util::EofError &) {
-                throw InvalidIo();
-            }
-        } else {
-            blockS.resize(0);
+        if (!readLogIo(fileR_, packH_, recIdx_, blockS)) {
+            throw cybozu::Exception(__func__) << "invalid log IO" << packH_.record(recIdx_);
         }
 
-        /* Validate. */
-        if (rec.hasDataForChecksum()) {
-            const uint32_t csum = blockS.calcChecksum(rec.ioSizeLb(), salt_);
-            if (rec.checksum != csum) {
-                LOGs.debug() << "invalid checksum" << rec.checksum << csum;
-                throw InvalidIo();
-            }
-        }
         if (recIdxP) *recIdxP = recIdx_;
         recIdx_++;
         return true;
@@ -208,14 +194,14 @@ public:
      * Get pack header reference.
      */
     LogPackHeader &packHeader() {
-        assert(fetchNext());
-        return pack_;
+        assert(fetchNextPackHeader());
+        return packH_;
     }
     /**
      * Get the end lsid.
      */
     uint64_t endLsid() {
-        if (fetchNext()) throw RT_ERR("Must be reached to the wlog end.");
+        if (fetchNextPackHeader()) throw RT_ERR("Must be reached to the wlog end.");
         return endLsid_;
     }
 private:
@@ -223,24 +209,24 @@ private:
      * RETURN:
      *   true if there are one or more log data remaining.
      */
-    bool fetchNext() {
+    bool fetchNextPackHeader() {
         if (!isReadHeader_) {
             throw cybozu::Exception(__func__)
                 << "You have not called readHeader() yet";
         }
         if (isEnd_) return false;
         if (isBegun_) {
-            if (recIdx_ < pack_.nRecords()) return true;
+            if (recIdx_ < packH_.nRecords()) return true;
         } else {
             isBegun_ = true;
         }
 
-        if (!pack_.readFrom(fileR_) || pack_.isEnd()) {
+        if (!packH_.readFrom(fileR_) || packH_.isEnd()) {
             isEnd_ = true;
             return false;
         }
         recIdx_ = 0;
-        endLsid_ = pack_.nextLogpackLsid();
+        endLsid_ = packH_.nextLogpackLsid();
         return true;
     }
 };
@@ -261,10 +247,12 @@ private:
     uint64_t beginLsid_;
     uint64_t lsid_;
 public:
+    explicit Writer(cybozu::util::File &&fileW)
+        : fileW_(std::move(fileW))
+        , isWrittenHeader_(false), isClosed_(false)
+        , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1)  {}
     explicit Writer(int fd)
-        : fileW_(fd), isWrittenHeader_(false), isClosed_(false)
-        , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1)  {
-    }
+        : Writer(cybozu::util::File(fd)) {}
     ~Writer() noexcept {
         try {
             close();
@@ -279,6 +267,7 @@ public:
     void close() {
         if (!isClosed_) {
             writeEof();
+            fileW_.close();
             isClosed_ = true;
         }
     }
@@ -372,31 +361,33 @@ private:
     }
 };
 
+}} //namespace walb::log
+
+namespace walb {
+
 /**
- * Pretty printer of walb log.
+ * Log file reader which has skip().
  */
-class Printer
+class LogFile : public cybozu::util::File
 {
+private:
+    bool seekable_;
 public:
-    void operator()(int inFd, ::FILE *fp = ::stdout) {
-        if (inFd < 0) throw RT_ERR("inFd_ invalid.");
-        Reader reader(inFd);
-
-        FileHeader wh;
-        reader.readHeader(wh);
-        wh.print(fp);
-
-        LogRecord rec;
-        LogBlockShared blockS;
-        uint16_t idx;
-        while (reader.readLog(rec, blockS, &idx)) {
-            log::printRecordOneline(::stdout, idx, rec);
+    void setSeekable(bool seekable) {
+        seekable_ = seekable;
+    }
+    void skip(size_t size) {
+        if (seekable_) {
+            lseek(size, SEEK_CUR);
+            return;
         }
-        /*
-         * reader.readLog() may throw InvalidIo.
-         * We need not shrink the invalid packs. Wlog file must be valid.
-         */
+        std::vector<char> buf(4096);
+        while (size > 0) {
+            const size_t s = std::min(buf.size(), size);
+            read(buf.data(), s);
+            size -= s;
+        }
     }
 };
 
-}} //namespace walb::log
+} // namespace walb

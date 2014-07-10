@@ -101,7 +101,7 @@ public:
         if (!wh.isValid(true)) {
             throw RT_ERR("invalid wlog header.");
         }
-        wh.print(::stderr); /* debug */
+        std::cerr << wh << std::endl; /* debug */
 
         /* Update */
         bool updated = false;
@@ -131,7 +131,7 @@ public:
             }
             file.lseek(0, SEEK_SET);
             wh.writeTo(file);
-            wh.print(::stderr); /* debug */
+            std::cerr << wh << std::endl; /* debug */
         } else {
             ::fprintf(::stderr, "Not updated.\n");
         }

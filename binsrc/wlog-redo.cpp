@@ -614,7 +614,9 @@ public:
         const uint32_t salt = wh_.salt();
         walb::LogPackHeader packH(pbs_, salt);
         while (packH.readFrom(fileR)) {
-            if (config_.isVerbose()) packH.printShort();
+            if (config_.isVerbose()) {
+                std::cout << packH.str() << std::endl;
+            }
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 const walb::LogRecord &rec = packH.record(i);
                 walb::LogBlockShared blockS(pbs_);

@@ -91,7 +91,7 @@ private:
         wlHead.init(pbs, salt, uuid, lsid, uint64_t(-1));
         writer.writeHeader(wlHead);
         if (config_.isVerbose) {
-            wlHead.print(::stderr);
+            std::cerr << wlHead << std::endl;
         }
 
         uint64_t nPack = 0;
