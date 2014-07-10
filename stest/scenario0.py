@@ -63,13 +63,27 @@ def setup_test():
         recreate_walb_dev(wdev)
 
 
+def wait_for_server_ready(s, timeoutS=10):
+    verify_type(s, Server)
+    verify_type(timeoutS, int)
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
+        try:
+            walbc.get_host_type(s)
+            return
+        except Exception, e:
+            print 'retry, ', e
+        time.sleep(0.3)
+    raise Exception('wait_for_server_ready:timeout', s, timeoutS)
+
+
 def startup(s):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout)
     if isDebug:
         print 'cmd=', to_str(args)
     run_daemon(args)
-    wait_for_server_port(s.address, s.port)
+    wait_for_server_ready(s)
 
 
 def startup_all():
