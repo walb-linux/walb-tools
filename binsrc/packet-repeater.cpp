@@ -216,7 +216,7 @@ public:
 			s_[1].close();
 			state_ = Sleep;
 			waitMsec(100);
-			return false;
+			return true;
 		}
 	}
 	void join()
