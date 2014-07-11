@@ -103,10 +103,10 @@ void waitMsec(int msec)
 struct Repeater {
 	cybozu::Socket s_[2]; // s_[0] : client, s_[1] : server
 	enum {
-		Sleep = 0,
-		Ready = 1,
-		Open1sock = 2,
-		Open2sock = 3,
+		Sleep,
+		Ready,
+		Running,
+		Error
 	};
 	const Option& opt_;
 	std::atomic<int> state_;
@@ -129,36 +129,36 @@ struct Repeater {
 		SMAverage sma(intervalSec);
 		std::vector<char> buf(12 * 1024);
 		while (!g_quit) {
-			if (state_ >= Open1sock && from.isValid()) {
-				try {
-					while (!from.queryAccept()) {
-					}
-					if (g_quit) break;
-					const size_t readSize = from.readSome(buf.data(), buf.size());
-					if (opt_.verbose) printf("readSize %d [%d] state=%d\n", (int)readSize, dir, (int)state_);
-					if (opt_.rateMbps > 0) {
-						sma.append(readSize, getCurTimeSec());
-						while (sma.getBps(getCurTimeSec()) * 1e-6 > opt_.rateMbps) {
-							waitMsec(10);
+			if (state_ == Running || state_ == Error) {
+				if (from.isValid()) {
+					try {
+						while (!from.queryAccept()) {
 						}
-					}
-					if (readSize > 0) {
-						if (!g_stop && to.isValid()) to.write(buf.data(), readSize);
+						if (g_quit) break;
+						const size_t readSize = from.readSome(buf.data(), buf.size());
+						if (opt_.verbose) printf("readSize %d [%d] state=%d\n", (int)readSize, dir, (int)state_);
+						if (opt_.rateMbps > 0) {
+							sma.append(readSize, getCurTimeSec());
+							while (sma.getBps(getCurTimeSec()) * 1e-6 > opt_.rateMbps) {
+								waitMsec(10);
+							}
+						}
+						if (readSize > 0) {
+							if (!g_stop && to.isValid()) to.write(buf.data(), readSize);
+							continue;
+						}
+					} catch (std::exception& e) {
+						printf("ERR Repeater %s\n", e.what());
+						from.close();
+						state_ = Error;
 						continue;
 					}
-				} catch (std::exception& e) {
-					printf("ERR Repeater %s\n", e.what());
+					if (needShutdown) to.waitForClose();
 					from.close();
-					to.close();
+					if (opt_.verbose) printf("close [%d] state=%d\n", dir, (int)state_);
+				} else if (!to.isValid()) {
 					state_ = Sleep;
-					continue;
 				}
-				if (needShutdown) to.waitForClose();
-				from.close();
-				state_--;
-				assert(state_ == Ready || state_ == Open1sock);
-				if (opt_.verbose) printf("close [%d] state=%d\n", dir, (int)state_);
-				if (state_ == Ready) state_ = Sleep;
 			} else {
 				waitMsec(10);
 			}
@@ -181,10 +181,17 @@ public:
 		int expected = Sleep;
 		if (!state_.compare_exchange_strong(expected, Ready)) return false;
 		if (opt_.verbose) puts("set socket");
-		s_[0].moveFrom(client);
-		s_[1].connect(opt_.serverAddr, opt_.serverPort);
-		state_ = Open2sock;
-		return true;
+		try {
+			s_[0].moveFrom(client);
+			s_[1].connect(opt_.serverAddr, opt_.serverPort);
+			state_ = Running;
+			return true;
+		} catch (std::exception& e) {
+			printf("tryAndRun::connect err %s\n", e.what());
+			s_[0].close();
+			state_ = Sleep;
+			return false;
+		}
 	}
 	void join()
 	{
