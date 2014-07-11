@@ -9,25 +9,29 @@
 #include "walb_diff_converter.hpp"
 #include "walb_util.hpp"
 
-struct Option : public cybozu::Option
+using namespace walb;
+
+struct Option
 {
     uint32_t maxIoSize;
-    Option() {
-        setUsage("Usage: wlog-to-wdiff < [wlogs] > [wdiff]", true);
-        appendOpt(&maxIoSize, uint16_t(-1), "x", "max IO size in the output wdiff [byte].");
-        appendHelp("h");
+
+    Option(int argc, char *argv[]) {
+        cybozu::Option opt;
+        opt.setUsage("Usage: wlog-to-wdiff < [wlogs] > [wdiff]", true);
+        opt.appendOpt(&maxIoSize, 64 * KIBI, "x", "max IO size in the output wdiff [byte].");
+        opt.appendHelp("h");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
     }
 };
 
 int doMain(int argc, char *argv[])
 {
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        return 1;
-    }
-    walb::diff::Converter c;
-    c.convert(0, 1, opt.maxIoSize);
+    Option opt(argc, argv);
+    diff::Converter c;
+    c.convert(0, 1, opt.maxIoSize / LBS);
     return 0;
 }
 
