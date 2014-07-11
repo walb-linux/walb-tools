@@ -520,9 +520,9 @@ private:
             new Runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_)));
         runnerP->setCallback([this]() { numActiveThreads_--; });
         ThreadRunner runner(runnerP);
+        numActiveThreads_++;
         runner.start();
         runners_.push_back(std::move(runner));
-        numActiveThreads_++;
     }
     uint32_t addNolock(std::shared_ptr<Runner> runnerP) {
         uint32_t id = id_++;
