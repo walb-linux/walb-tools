@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 			if (opt.verbose) fprintf(stderr, "accept addr %s\n", addr.toStr().c_str());
 			while (!g_quit) {
 				for (size_t i = 0; i < opt.threadNum; i++) {
-					if (opt.verbose) fprintf(stderr, "worker[%d] state=%d", (int)i, worker[i]->getState());
+//					if (opt.verbose) fprintf(stderr, "worker[%d] state=%d", (int)i, worker[i]->getState());
 					if (worker[i]->tryAndRun(client)) {
 						if (opt.verbose) fprintf(stderr, "start %d repeater", (int)i);
 						goto RETRY;
