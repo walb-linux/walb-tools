@@ -12,63 +12,53 @@
 #include "wdev_log.hpp"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
-class Config
+struct Option
 {
-private:
-    std::string ldevPath_; /* Log device to restore wlog. */
-    uint64_t beginLsid_; /* start lsid to restore. */
-    uint64_t endLsid_; /* end lsid to restore. The range is [start, end). */
-    int64_t lsidDiff_; /* 0 means no change. */
-    uint64_t invalidLsid_; /* -1 means no invalidation. */
-    uint64_t ddevLb_; /* 0 means no clipping. */
-    bool isVerify_;
-    bool isVerbose_;
-public:
-    Config(int argc, char* argv[])
-        : ldevPath_()
-        , beginLsid_(0)
-        , endLsid_(-1)
-        , lsidDiff_(0)
-        , invalidLsid_(-1)
-        , ddevLb_(0)
-        , isVerify_(false)
-        , isVerbose_(false) {
-        parse(argc, argv);
-    }
+    std::string ldevPath; /* Log device to restore wlog. */
+    uint64_t beginLsid; /* start lsid to restore. */
+    uint64_t endLsid; /* end lsid to restore. The range is [start, end). */
+    int64_t lsidDiff; /* 0 means no change. */
+    uint64_t invalidLsid; /* -1 means no invalidation. */
+    uint64_t ddevLb; /* 0 means no clipping. */
+    bool isVerify;
+    bool isVerbose;
+    bool isDebug;
 
-    const std::string& ldevPath() const { return ldevPath_; }
-    uint64_t beginLsid() const { return beginLsid_; }
-    uint64_t endLsid() const { return endLsid_; }
-    int64_t lsidDiff() const { return lsidDiff_; }
-    uint64_t invalidLsid() const { return invalidLsid_; }
-    uint64_t ddevLb() const { return ddevLb_; }
-    bool isVerify() const { return isVerify_; }
-    bool isVerbose() const { return isVerbose_; }
+    Option(int argc, char* argv[])
+        : ldevPath()
+        , beginLsid(0)
+        , endLsid(-1)
+        , lsidDiff(0)
+        , invalidLsid(-1)
+        , ddevLb(0)
+        , isVerify(false)
+        , isVerbose(false)
+        , isDebug(false) {
 
-    void check() const {
-        if (beginLsid() >= endLsid()) {
-            throw RT_ERR("beginLsid must be < endLsid.");
-        }
-    }
-private:
-    void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Wlresotre: restore walb log to a log device.");
-        opt.appendOpt(&beginLsid_, 0, "b", "LSID:  begin lsid to restore. (default: 0)");
-        opt.appendOpt(&endLsid_, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
-        opt.appendOpt(&lsidDiff_, 0, "d", "DIFF: lsid diff. (default: 0)");
-        opt.appendOpt(&invalidLsid_, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
-        opt.appendOpt(&ddevLb_, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
-        opt.appendBoolOpt(&isVerify_, "-verify", ": verify written logpack (default: no)");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&beginLsid, 0, "b", "LSID:  begin lsid to restore. (default: 0)");
+        opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendOpt(&lsidDiff, 0, "d", "DIFF: lsid diff. (default: 0)");
+        opt.appendOpt(&invalidLsid, uint64_t(-1), "i", "LSID:invalidate lsid after restore. (default: no invalidation)");
+        opt.appendOpt(&ddevLb, 0, "s", "SIZE: data device size for clipping. (default: no clipping)");
+        opt.appendBoolOpt(&isVerify, "-verify", ": verify written logpack (default: no)");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug logs.");
         opt.appendHelp("h", ": show this message.");
-        opt.appendParam(&ldevPath_, "LOG_DEVICE_PATH < WLOG_FILE");
+        opt.appendParam(&ldevPath, "LOG_DEVICE_PATH < WLOG_FILE");
         if (!opt.parse(argc, argv)) {
             opt.usage();
-            exit(1);
+            ::exit(1);
+        }
+
+        if (beginLsid >= endLsid) {
+            throw RT_ERR("beginLsid must be < endLsid.");
         }
     }
 };
@@ -79,20 +69,13 @@ private:
 class WalbLogRestorer
 {
 private:
-    const Config& config_;
+    const Option& opt_;
     int64_t lsidDiff_;
 
-    using AlignedArray = walb::AlignedArray;
-    using WlogHeader = walb::log::FileHeader;
-    using LogPackHeader = walb::LogPackHeader;
-    using LogPackIo = walb::LogPackIo;
-    using File = cybozu::util::File;
-    using SuperBlock = walb::device::SuperBlock;
-
 public:
-    WalbLogRestorer(const Config& config)
-        : config_(config)
-        , lsidDiff_(config.lsidDiff())
+    WalbLogRestorer(const Option& opt)
+        : opt_(opt)
+        , lsidDiff_(opt.lsidDiff)
     {}
 
     /**
@@ -100,8 +83,8 @@ public:
      */
     void restore(int fdIn) {
         /* Read walb log file header from stdin. */
-        File fileR(fdIn);
-        WlogHeader wlHead;
+        cybozu::util::File fileR(fdIn);
+        log::FileHeader wlHead;
         wlHead.readFrom(fileR);
         if (!wlHead.isValid()) {
             throw RT_ERR("Walb log file header is invalid.");
@@ -109,16 +92,16 @@ public:
         const uint32_t pbs = wlHead.pbs();
 
         /* Open the log device. */
-        cybozu::FilePath path(config_.ldevPath());
+        cybozu::FilePath path(opt_.ldevPath);
         if (!path.stat().isBlock()) {
             ::fprintf(
                 ::stderr,
                 "Warning: the log device does not seem to be block device.\n");
         }
-        File fileB(config_.ldevPath(), O_RDWR);
+        cybozu::util::File fileB(opt_.ldevPath, O_RDWR);
 
         /* Load superblock. */
-        SuperBlock super;
+        device::SuperBlock super;
         super.read(fileB.fd());
 
         /* Check physical block size. */
@@ -157,8 +140,8 @@ public:
             invalidateLsid(fileB, super, pbs, restoredLsid);
         }
         /* Invalidate the specified block. */
-        if (config_.invalidLsid() != uint64_t(-1)) {
-            invalidateLsid(fileB, super, pbs, config_.invalidLsid());
+        if (opt_.invalidLsid != uint64_t(-1)) {
+            invalidateLsid(fileB, super, pbs, opt_.invalidLsid);
         }
 
         /* Finalize the log device. */
@@ -173,7 +156,7 @@ private:
      * Invalidate a specified lsid.
      */
     void invalidateLsid(
-        File &file, SuperBlock &super,
+        cybozu::util::File &file, device::SuperBlock &super,
         uint32_t pbs, uint64_t lsid) {
         uint64_t off = super.getOffsetFromLsid(lsid);
         AlignedArray b(pbs);
@@ -183,7 +166,7 @@ private:
     /**
      * Read a block data from a fd reader.
      */
-    AlignedArray readBlock(File& fileR, uint32_t pbs) {
+    AlignedArray readBlock(cybozu::util::File& fileR, uint32_t pbs) {
         AlignedArray b(pbs);
         fileR.read(b.data(), pbs);
         return b;
@@ -192,7 +175,7 @@ private:
     /**
      * Read a logpack data.
      */
-    void readLogpackData(LogPackIo &packIo, File &fileR, uint32_t pbs) {
+    void readLogpackData(LogPackIo &packIo, cybozu::util::File &fileR, uint32_t pbs) {
         const walb::LogRecord &rec = packIo.rec;
         if (!rec.hasData()) return;
         const uint32_t ioSizePb = rec.ioSizePb(pbs);
@@ -217,8 +200,8 @@ private:
      *   true in success, or false.
      */
     bool readLogpackAndRestore(
-        File &fileR, File &fileB,
-        SuperBlock &super, WlogHeader &wlHead,
+        cybozu::util::File &fileR, cybozu::util::File &fileB,
+        device::SuperBlock &super, log::FileHeader &wlHead,
         uint64_t &restoredLsid) {
 
         const uint32_t salt = wlHead.salt();
@@ -228,11 +211,11 @@ private:
         LogPackHeader packH(readBlock(fileR, pbs), pbs, salt);
         if (packH.isEnd()) return false;
         if (!packH.isValid()) return false;
-        if (config_.isVerbose()) {
+        if (opt_.isVerbose) {
             std::cout << packH << std::endl;
         }
         const uint64_t originalLsid = packH.logpackLsid();
-        if (config_.endLsid() <= originalLsid) return false;
+        if (opt_.endLsid <= originalLsid) return false;
         /* Update lsid if necessary. */
         if (lsidDiff_ != 0) {
             if (!packH.updateLsid(packH.logpackLsid() + lsidDiff_)) {
@@ -282,8 +265,8 @@ private:
                     blocks.push_back(std::move(packIo.blockS.getBlock(j)));
                 }
             }
-            if (0 < config_.ddevLb() &&
-                config_.ddevLb() < rec.offset + rec.ioSizeLb()) {
+            if (0 < opt_.ddevLb &&
+                opt_.ddevLb < rec.offset + rec.ioSizeLb()) {
                 /* This IO should be clipped. */
                 rec.setPadding();
                 rec.offset = 0;
@@ -292,7 +275,7 @@ private:
         }
         assert(blocks.size() == packH.totalIoSize());
 
-        if (originalLsid < config_.beginLsid()) {
+        if (originalLsid < opt_.beginLsid) {
             /* Skip to restore. */
             return true;
         }
@@ -302,7 +285,7 @@ private:
         assert(packH.isValid());
         assert(offPb + 1 + packH.totalIoSize() <= endOffPb);
 
-        if (config_.isVerbose()) {
+        if (opt_.isVerbose) {
             ::printf("header %u records\n", packH.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
@@ -311,7 +294,7 @@ private:
             fileB.pwrite(blocks[i].data(), pbs, (offPb + 1 + i) * pbs);
         }
 
-        if (config_.isVerify()) {
+        if (opt_.isVerify) {
             /* Currently only header block will be verified. */
             AlignedArray b2(pbs);
             fileB.pread(b2.data(), pbs, offPb * pbs);
@@ -336,9 +319,9 @@ private:
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    config.check();
-    WalbLogRestorer wlRes(config);
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
+    WalbLogRestorer wlRes(opt);
     wlRes.restore(0);
     return 0;
 }
