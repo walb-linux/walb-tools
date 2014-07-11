@@ -64,33 +64,35 @@ struct Option : cybozu::Option
     }
 };
 
-void initializeProxy(Option &opt)
+struct ProxyThreads
 {
-    util::makeDir(gp.baseDirStr, "proxyServer", false);
+    explicit ProxyThreads(Option &opt) {
+        util::makeDir(gp.baseDirStr, "proxyServer", false);
 
-    // Start each volume if necessary
-    if (!opt.isStopped) {
-        for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
-            try {
-                startProxyVol(volId);
-            } catch (std::exception &e) {
-                LOGs.error() << "initializeProxy:start failed" << volId << e.what();
+        // Start each volume if necessary
+        if (!opt.isStopped) {
+            for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
+                try {
+                    startProxyVol(volId);
+                } catch (std::exception &e) {
+                    LOGs.error() << "initializeProxy:start failed" << volId << e.what();
+                }
             }
         }
+
+        // Start a task dispatch thread.
+        ProxySingleton &g = getProxyGlobal();
+        g.dispatcher.reset(new DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
     }
-
-    // Start a task dispatch thread.
-    ProxySingleton &g = getProxyGlobal();
-    g.dispatcher.reset(new DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
-}
-
-void finalizeProxy()
-{
-    // Stop the task dispatch thread.
-    ProxySingleton &g = getProxyGlobal();
-    g.taskQueue.quit();
-    g.dispatcher.reset();
-}
+    ~ProxyThreads() try {
+        // Stop the task dispatch thread.
+        ProxySingleton &g = getProxyGlobal();
+        g.taskQueue.quit();
+        g.dispatcher.reset();
+    } catch (std::exception &e) {
+        LOGe("ProxyThreads error: %s", e.what());
+    }
+};
 
 int main(int argc, char *argv[]) try
 {
@@ -100,7 +102,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(createLogFilePath(opt.logFileStr, gp.baseDirStr), opt.isDebug);
-    initializeProxy(opt);
+    ProxyThreads threads(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
@@ -113,7 +115,6 @@ int main(int argc, char *argv[]) try
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
-    finalizeProxy();
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());
     ::fprintf(::stderr, "ProxyServer: error: %s", e.what());
