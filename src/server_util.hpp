@@ -46,7 +46,7 @@ public:
         : forceQuit_(forceQuit), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
     }
     template <typename Func>
-    void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) noexcept {
+    void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) {
         const char *const FUNC = __func__;
         forceQuit_ = false;
         cybozu::Socket ssock;
