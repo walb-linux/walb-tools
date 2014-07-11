@@ -388,6 +388,8 @@ class LogFile : public cybozu::util::File
 private:
     bool seekable_;
 public:
+    using File :: File;
+
     void setSeekable(bool seekable) {
         seekable_ = seekable;
     }

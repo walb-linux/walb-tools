@@ -106,6 +106,9 @@ struct LogRecord : public walb_log_record
         os << rec.str();
         return os;
     }
+    void clear() {
+        ::memset(this, 0, sizeof(*this));
+    }
 };
 
 namespace log {
@@ -196,8 +199,8 @@ public:
             return ::is_valid_logpack_header_and_records(header_) != 0;
         }
     }
-    void verify() const {
-        if (!isValid(true)) throw cybozu::Exception(NAME()) << "invalid";
+    void verify(bool isChecksum = true) const {
+        if (!isValid(isChecksum)) throw cybozu::Exception(NAME()) << "invalid";
     }
     void copyFrom(const void *data, size_t size)
     {
@@ -436,6 +439,7 @@ public:
     }
     /**
      * Update all lsid entries in the logpack header.
+     * Checksum will not be updated.
      *
      * @newLsid new logpack lsid.
      *   If -1, nothing will be changed.
@@ -444,21 +448,17 @@ public:
      *   true in success.
      *   false if lsid overlap ocurred.
      */
-    bool updateLsid(uint64_t newLsid) {
+    void updateLsid(uint64_t newLsid) {
         assert(isValid(false));
-        if (newLsid == uint64_t(-1)) {
-            return true;
-        }
-        if (header_->logpack_lsid == newLsid) {
-            return true;
-        }
+        assert(newLsid != uint64_t(-1));
+        if (header_->logpack_lsid == newLsid) return;
 
         header_->logpack_lsid = newLsid;
         for (size_t i = 0; i < header_->n_records; i++) {
             struct walb_log_record &rec = record(i);
             rec.lsid = newLsid + rec.lsid_local;
         }
-        return isValid(false);
+        verify(false);
     }
     /**
      * Shrink.
@@ -493,6 +493,40 @@ public:
         assert(isValid());
 
         return nextLogpackLsid();
+    }
+    /**
+     * Invalidate a record.
+     * If the record is discard, really remove it from the header.
+     * If the record is normal, make it padding.
+     * This will not change total_io_size.
+     *
+     * You must call updateChecksum() by yourself after calling this.
+     *
+     * RETURN:
+     *   index of next item.
+     */
+    size_t invalidate(size_t idx) {
+        assert(idx < nRecords());
+        LogRecord &rec = record(idx);
+
+        if (rec.isDiscard()) {
+            const size_t n = nRecords();
+            for (size_t i = idx; i < n - 1; i++) {
+                record(idx) = record(idx + 1);
+            }
+            record(n - 1).clear();
+            header_->n_records--;
+            assert(isValid(false));
+            return idx;
+        }
+        if (rec.isPadding()) {
+            // do nothing.
+            return idx + 1;
+        }
+        rec.setPadding();
+        rec.offset = 0;
+        rec.checksum = 0;
+        return idx + 1;
     }
 protected:
     void checkIndexRange(size_t pos) const {
@@ -568,6 +602,7 @@ public:
         data_.push_back(std::move(block));
     }
     AlignedArray& getBlock(size_t idx) { return data_[idx]; }
+    const AlignedArray& getBlock(size_t idx) const { return data_[idx]; }
     template <typename Reader>
     void read(Reader &reader, uint32_t nBlocks0) {
         checkPbs();
@@ -604,6 +639,22 @@ public:
             cc.update(get(i), pbs_);
         }
         return cc.get();
+    }
+    std::string str() const {
+        std::string ret = cybozu::util::formatString(
+            "block_s: pbs %u sizePb %u", pbs_, data_.size());
+#if 0
+        std::vector<std::string> v;
+        for (size_t i = 0;i < data_.size(); i++) {
+            v.push_back(cybozu::util::toUnitIntString(getBlock(i).size()));
+        }
+        ret += " [" + cybozu::util::concat(v, ", ") + "]";
+#endif
+        return ret;
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const LogBlockShared &blockS) {
+        os << blockS.str();
+        return os;
     }
 private:
     void checkPbs() const {
@@ -681,13 +732,13 @@ public:
 };
 
 template <typename Reader>
-inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid)
+inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid = uint64_t(-1))
 {
     if (!packH.readFrom(reader)) {
         return false; // invalid header.
     }
-    if (packH.header().logpack_lsid != lsid) {
-        return false; // also invalid.
+    if (lsid != uint64_t(-1) && packH.header().logpack_lsid != lsid) {
+        return false; // invalid, or an end block.
     }
     return true;
 }
