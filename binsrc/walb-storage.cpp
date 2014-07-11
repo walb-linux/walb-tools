@@ -66,42 +66,47 @@ struct Option : cybozu::Option
     }
 };
 
-void initializeStorage(Option &opt)
-{
-    util::makeDir(gs.baseDirStr, "storageServer", false);
-    StorageSingleton &g = getStorageGlobal();
-    g.archive = parseSocketAddr(opt.archiveDStr);
-    g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
-    g.proxyManager.add(g.proxyV);
+struct StorageThreads {
+    explicit StorageThreads(Option &opt)
+    {
+        util::makeDir(gs.baseDirStr, "storageServer", false);
+        StorageSingleton &g = getStorageGlobal();
+        g.archive = parseSocketAddr(opt.archiveDStr);
+        g.proxyV = parseMultiSocketAddr(opt.multiProxyDStr);
+        g.proxyManager.add(g.proxyV);
 
-    for (const std::string &volId : util::getDirNameList(gs.baseDirStr)) {
-        try {
-            startIfNecessary(volId);
-        } catch (std::exception &e) {
-            LOGs.error() << "initializeStorage:start failed" << volId << e.what();
+        for (const std::string &volId : util::getDirNameList(gs.baseDirStr)) {
+            try {
+                startIfNecessary(volId);
+            } catch (std::exception &e) {
+                LOGs.error() << "initializeStorage:start failed" << volId << e.what();
+            }
         }
+
+        g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
+        g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
+        g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
     }
 
-    g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
-    g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
-    g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
-}
+    ~StorageThreads()
+        try
+    {
+        StorageSingleton &g = getStorageGlobal();
 
-void finalizeStorage()
-{
-    StorageSingleton &g = getStorageGlobal();
+        g.quitProxyMonitor = true;
+        g.proxyMonitor->join();
+        g.proxyMonitor.reset();
 
-    g.quitProxyMonitor = true;
-    g.proxyMonitor->join();
-    g.proxyMonitor.reset();
+        g.quitWdevMonitor = true;
+        g.wdevMonitor->join();
+        g.wdevMonitor.reset();
 
-    g.quitWdevMonitor = true;
-    g.wdevMonitor->join();
-    g.wdevMonitor.reset();
-
-    g.taskQueue.quit();
-    g.dispatcher.reset();
-}
+        g.taskQueue.quit();
+        g.dispatcher.reset();
+    } catch (std::exception& e) {
+        LOGe("~StorageThreads err %s", e.what());
+    }
+};
 
 int main(int argc, char *argv[]) try
 {
@@ -111,7 +116,7 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(createLogFilePath(opt.logFileStr, gs.baseDirStr), opt.isDebug);
-    initializeStorage(opt);
+    StorageThreads threads(opt);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
         std::atomic<server::ProcessStatus> &procStat) {
@@ -124,7 +129,6 @@ int main(int argc, char *argv[]) try
     const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<StorageRequestWorker>(opt.port, createRequestWorker);
-    finalizeStorage();
 
 } catch (std::exception &e) {
     LOGe("StorageServer: error: %s\n", e.what());
