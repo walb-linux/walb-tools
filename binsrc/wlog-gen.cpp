@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief walb log generator for test.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -14,119 +11,104 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
-class Config
+struct Option
 {
-private:
-    uint32_t pbs_; /* physical block size [byte] */
-    uint64_t devSize_; /* [byte]. */
-    uint32_t minIoSize_; /* [byte]. */
-    uint32_t maxIoSize_; /* [byte]. */
-    uint32_t maxPackSize_; /* [byte]. */
-    uint64_t outLogSize_; /* Approximately output log size [byte]. */
-    uint64_t lsid_; /* start lsid [physical block]. */
-    bool isNotPadding_;
-    bool isNotDiscard_;
-    bool isNotAllZero_;
-    bool isVerbose_;
-    std::string outPath_;
+    uint32_t pbs; /* physical block size [byte] */
+    uint64_t devSize; /* [byte]. */
+    uint32_t minIoSize; /* [byte]. */
+    uint32_t maxIoSize; /* [byte]. */
+    uint32_t maxPackSize; /* [byte]. */
+    uint64_t outLogSize; /* Approximately output log size [byte]. */
+    uint64_t lsid; /* start lsid [physical block]. */
+    bool isNotPadding;
+    bool isNotDiscard;
+    bool isNotAllZero;
+    bool isVerbose;
+    std::string outPath;
 
-    bool isOpened_;
-    cybozu::util::File file_;
+    bool isOpened;
+    cybozu::util::File file;
 
-public:
-    Config(int argc, char* argv[])
-        : pbs_(LOGICAL_BLOCK_SIZE)
-        , devSize_(16 * 1024 * 1024) /* default 16MB. */
-        , minIoSize_(pbs_)
-        , maxIoSize_(32 * 1024) /* default 32KB. */
-        , maxPackSize_(16 * 1024 * 1024) /* default 16MB. */
-        , outLogSize_(1024 * 1024) /* default 1MB. */
-        , lsid_(0)
-        , isNotPadding_(false)
-        , isNotDiscard_(false)
-        , isNotAllZero_(false)
-        , isVerbose_(false)
-        , outPath_()
-        , isOpened_(false)
-        , file_() {
-        parse(argc, argv);
-    }
+    Option(int argc, char* argv[])
+        : pbs(LOGICAL_BLOCK_SIZE)
+        , devSize(16 * 1024 * 1024) /* default 16MB. */
+        , minIoSize(pbs)
+        , maxIoSize(32 * 1024) /* default 32KB. */
+        , maxPackSize(16 * 1024 * 1024) /* default 16MB. */
+        , outLogSize(1024 * 1024) /* default 1MB. */
+        , lsid(0)
+        , isNotPadding(false)
+        , isNotDiscard(false)
+        , isNotAllZero(false)
+        , isVerbose(false)
+        , outPath()
+        , isOpened(false)
+        , file() {
 
-    uint64_t devLb() const { return devSize_ / LOGICAL_BLOCK_SIZE; }
-    uint32_t minIoLb() const { return minIoSize_ / LOGICAL_BLOCK_SIZE; }
-    uint32_t maxIoLb() const { return maxIoSize_ / LOGICAL_BLOCK_SIZE; }
-    uint32_t pbs() const { return pbs_; }
-    uint32_t maxPackPb() const { return maxPackSize_ / pbs(); }
-    uint64_t outLogPb() const { return outLogSize_ / pbs(); }
-    uint64_t lsid() const { return lsid_; }
-    bool isPadding() const { return !isNotPadding_; }
-    bool isDiscard() const { return !isNotDiscard_; }
-    bool isAllZero() const { return !isNotAllZero_; }
-    bool isVerbose() const { return isVerbose_; }
-    const std::string& outPath() const { return outPath_; }
-
-    int getOutFd() {
-        if (isOpened_) return file_.fd();
-        if (outPath() == "-") return 1;
-        file_.open(outPath(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        isOpened_ = true;
-        return file_.fd();
-    }
-
-    walb::log::Generator::Config genConfig() const {
-        walb::log::Generator::Config cfg;
-        cfg.devLb = devLb();
-        cfg.minIoLb = minIoLb();
-        cfg.maxIoLb = maxIoLb();
-        cfg.pbs = pbs();
-        cfg.maxPackPb = maxPackPb();
-        cfg.outLogPb = outLogPb();
-        cfg.lsid = lsid();
-        cfg.isPadding = isPadding();
-        cfg.isDiscard = isDiscard();
-        cfg.isAllZero = isAllZero();
-        cfg.isVerbose = isVerbose();
-        return cfg;
-    }
-
-    void check() const {
-        genConfig().check();
-    }
-
-private:
-    void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Wlog-gen: generate walb log randomly.");
-        opt.appendOpt(&devSize_, 16 * 1024 * 1024, "s", "SIZE: device size [byte]. (default: 16M)");
-        opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "-minIoSize", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&maxIoSize_, 32 * 1024, "-maxIoSize", "SIZE: maximum IO size [byte]. (default: 32K)");
-        opt.appendOpt(&pbs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: physical block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&maxPackSize_, 16 * 1024 * 1024, "-maxPackSize", "SIZE: maximum logpack size [byte]. (default: 16M)");
-        opt.appendOpt(&outLogSize_, 1024 * 1024, "z", "SIZE: total log size to generate [byte]. (default: 1M)");
-        opt.appendOpt(&lsid_, 0, "-lsid", "LSID: lsid of the first log. (default: 0)");
-        opt.appendBoolOpt(&isNotPadding_, "-nopadding", "no padding. (default: randomly inserted)");
-        opt.appendBoolOpt(&isNotDiscard_, "-nodiscard", "no discard. (default: randomly inserted)");
-        opt.appendBoolOpt(&isNotAllZero_, "-noallzero", "no all-zero. (default: randomly inserted)");
-        opt.appendOpt(&outPath_, "-", "o", "PATH: output file path or '-' for stdout.");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&devSize, 16 * 1024 * 1024, "s", "SIZE: device size [byte]. (default: 16M)");
+        opt.appendOpt(&minIoSize, LOGICAL_BLOCK_SIZE, "-minIoSize", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxIoSize, 32 * 1024, "-maxIoSize", "SIZE: maximum IO size [byte]. (default: 32K)");
+        opt.appendOpt(&pbs, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: physical block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxPackSize, 16 * 1024 * 1024, "-maxPackSize", "SIZE: maximum logpack size [byte]. (default: 16M)");
+        opt.appendOpt(&outLogSize, 1024 * 1024, "z", "SIZE: total log size to generate [byte]. (default: 1M)");
+        opt.appendOpt(&lsid, 0, "-lsid", "LSID: lsid of the first log. (default: 0)");
+        opt.appendBoolOpt(&isNotPadding, "-nopadding", "no padding. (default: randomly inserted)");
+        opt.appendBoolOpt(&isNotDiscard, "-nodiscard", "no discard. (default: randomly inserted)");
+        opt.appendBoolOpt(&isNotAllZero, "-noallzero", "no all-zero. (default: randomly inserted)");
+        opt.appendOpt(&outPath, "-", "o", "PATH: output file path or '-' for stdout.");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
-            exit(1);
+            ::exit(1);
         }
+        genConfig().check();
+    }
+
+    uint64_t devLb() const { return devSize / LOGICAL_BLOCK_SIZE; }
+    uint32_t minIoLb() const { return minIoSize / LOGICAL_BLOCK_SIZE; }
+    uint32_t maxIoLb() const { return maxIoSize / LOGICAL_BLOCK_SIZE; }
+    uint32_t maxPackPb() const { return maxPackSize / pbs; }
+    uint64_t outLogPb() const { return outLogSize / pbs; }
+
+    int getOutFd() {
+        if (isOpened) return file.fd();
+        if (outPath == "-") return 1;
+        file.open(outPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        isOpened = true;
+        return file.fd();
+    }
+
+    log::Generator::Config genConfig() const {
+        log::Generator::Config cfg;
+        cfg.devLb = devLb();
+        cfg.minIoLb = minIoLb();
+        cfg.maxIoLb = maxIoLb();
+        cfg.pbs = pbs;
+        cfg.maxPackPb = maxPackPb();
+        cfg.outLogPb = outLogPb();
+        cfg.lsid = lsid;
+        cfg.isPadding = !isNotPadding;
+        cfg.isDiscard = !isNotDiscard;
+        cfg.isAllZero = !isNotAllZero;
+        cfg.isVerbose = isVerbose;
+        return cfg;
     }
 };
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    config.check();
-    walb::log::Generator::Config cfg = config.genConfig();
-    walb::log::Generator wlGen(cfg);
-    wlGen.generate(config.getOutFd());
+    Option opt(argc, argv);
+    log::Generator::Config cfg = opt.genConfig();
+    log::Generator wlGen(cfg);
+    wlGen.generate(opt.getOutFd());
     return 0;
 }
 
