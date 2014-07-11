@@ -382,16 +382,14 @@ private:
 
     mutable std::mutex mutex_;
     mutable std::condition_variable cv_;
-    std::atomic<bool> isInDstr_;
 
 public:
     explicit ThreadRunnerPool(size_t maxNumThreads = 0)
         : runners_(), numActiveThreads_(0)
         , readyQ_(), ready_(), running_(), done_()
-        , maxNumThreads_(maxNumThreads), id_(0), mutex_(), cv_(), isInDstr_(false) {
+        , maxNumThreads_(maxNumThreads), id_(0), mutex_(), cv_() {
     }
     ~ThreadRunnerPool() noexcept {
-		isInDstr_ = true;
         try {
             cancelAll();
             assert(readyQ_.empty());
@@ -409,13 +407,11 @@ public:
      */
     template <typename Func>
     uint32_t add(Func&& func) {
-        if (isInDstr_) return -1;
         std::lock_guard<std::mutex> lk(mutex_);
         return addNolock(std::make_shared<Runner>(std::forward<Func>(func)));
     }
     template <typename Func>
     uint32_t add(std::shared_ptr<Func> funcP) {
-        if (isInDstr_) return -1;
         std::lock_guard<std::mutex> lk(mutex_);
         return addNolock(std::make_shared<Runner>(funcP));
     }
