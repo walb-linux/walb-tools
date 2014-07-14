@@ -94,7 +94,6 @@ const OptS noDiscardOptS = fromOpt(noDiscardOpt);
 const Param ldevParam = {"LDEV", ": log device path"};
 const Param ddevParam = {"DDEV", ": data device path"};
 const Param wdevParam = {"WDEV", ": walb device path"};
-const Param wldevParam = {"WLDEV", ": walb log device path"};
 const Param sizeLbParam = {"SIZE_LB", ": [logical block] "
                            "suffix k,m,g,t supported. "
                            "(default: underlying data device size)"};
@@ -329,6 +328,16 @@ void getCheckpointInterval(const Option &opt)
     LOGs.debug() << "get-checkpoint-interval done";
 }
 
+void forceCheckpoint(const Option &opt)
+{
+    std::string wdev;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev});
+
+    device::takeCheckpoint(wdev);
+
+    LOGs.debug() << "force-checkpoint done";
+}
+
 namespace local {
 
 // QQQ DEPRECATED???
@@ -465,6 +474,49 @@ void isLogOverflow(const Option &opt)
     std::cout << res << std::endl;
 }
 
+void clearWal(const Option &opt)
+{
+    const size_t intervalMs = 500;
+    std::string wdev, timeoutSecStr;
+    cybozu::util::parseStrVec(opt.params, 0, 1, {&wdev, &timeoutSecStr});
+
+    size_t timeoutSec = 0; // default.
+    if (!timeoutSecStr.empty()) timeoutSec = cybozu::atoi(timeoutSecStr);
+
+    /*
+     * We want to remove all logs which lsid is < permanentLsid.
+     */
+    const uint64_t permanentLsid = device::getLsid(wdev, WALB_IOCTL_GET_PERMANENT_LSID);
+
+    /*
+     * If writtenLsid < permanentLsid, we must wait for the corresponding data IOs done,
+     */
+    uint64_t elapsedMs = 0;
+    uint64_t writtenLsid = device::getLsid(wdev, WALB_IOCTL_GET_WRITTEN_LSID);
+    bool isTimeout = true;
+    while (timeoutSec == 0 || elapsedMs / 1000 < timeoutSec) {
+        if (writtenLsid >= permanentLsid) {
+            isTimeout = false;
+            break;
+        }
+        LOGs.warn() << "wait a bit while writtenLsid < permanentLsid"
+                    << writtenLsid << permanentLsid;
+        util::sleepMs(intervalMs);
+        elapsedMs += intervalMs;
+        writtenLsid = device::getLsid(wdev, WALB_IOCTL_GET_WRITTEN_LSID);
+    }
+    if (isTimeout) throw cybozu::Exception(__func__) << "timeout";
+
+    /*
+     * Force write writtenLsid to the superblock
+     * because oldestLsid <= writtenLsid must be kept always.
+     */
+    device::takeCheckpoint(wdev);
+    device::setOldestLsid(wdev, permanentLsid);
+
+    LOGs.debug() << "clear-wal done";
+}
+
 void freeze(const Option &opt)
 {
     std::string wdev, timeoutSecStr;
@@ -584,6 +636,7 @@ const std::vector<Command> commandVec_ = {
 
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
+    {forceCheckpoint, "checkpoint", {wdevParam}, {}, ""},
 
     {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
     {defaultRunner, "redo", {ldevParam, ddevParam}, {}, ""},
@@ -602,6 +655,7 @@ const std::vector<Command> commandVec_ = {
     {resize, "resize", {wdevParam, sizeLbParam}, {}, ""},
     {resetWal, "reset-wal", {wdevParam}, {}, ""},
     {isLogOverflow, "is-log-overflow", {wdevParam}, {}, ""},
+    {clearWal, "clear-wal", {wdevParam, timeoutSecParam}, {}, ""},
 
     {freeze, "freeze", {wdevParam, timeoutSecParam}, {}, ""},
     {melt, "melt", {}, {}, ""},

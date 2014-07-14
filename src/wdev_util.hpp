@@ -184,7 +184,14 @@ inline std::string getUnderlyingDevPath(const std::string& wdevName, bool isLog)
 
 inline void resetWal(const std::string& wdevPath)
 {
-    setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, 0);
+    const int dummy = 0;
+    setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, dummy);
+}
+
+inline void takeCheckpoint(const std::string& wdevPath)
+{
+    const int dummy = 0;
+    setValueByIoctl<int>(wdevPath, WALB_IOCTL_TAKE_CHECKPOINT, dummy);
 }
 
 inline uint64_t getPermanentLsid(const std::string& wdevPath)
