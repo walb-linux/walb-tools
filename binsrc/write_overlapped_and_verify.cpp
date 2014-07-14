@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief write overlapped IOs concurrently and verify the written data.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -16,63 +13,61 @@
 #include "walb/block_size.h"
 #include "walb_util.hpp"
 
-/**
- * Command line configuration.
- */
-class Config
+using namespace walb;
+
+struct Option
 {
-private:
-    uint32_t bs_; /* block size [byte] */
-    uint64_t offset_; /* [byte]. */
-    uint64_t size_; /* [byte]. */
-    uint32_t minIoSize_; /* [byte]. */
-    uint32_t maxIoSize_; /* [byte]. */
-    uint32_t counts_; /* The number of write IOs per thread. */
-    uint32_t numThreads_; /* The number of threads. */
-    bool isVerbose_;
-    std::string targetPath_; /* device or file path. */
-public:
-    Config(int argc, char* argv[])
-        : bs_(LOGICAL_BLOCK_SIZE)
-        , offset_(0)
-        , size_(0)
-        , minIoSize_(LOGICAL_BLOCK_SIZE)
-        , maxIoSize_(64 * LOGICAL_BLOCK_SIZE)
-        , counts_(100)
-        , numThreads_(2)
-        , isVerbose_(false)
-        , targetPath_() {
-        parse(argc, argv);
+    uint32_t bs; /* block size [byte] */
+    uint64_t offset; /* [byte]. */
+    uint64_t size; /* [byte]. */
+    uint32_t minIoSize; /* [byte]. */
+    uint32_t maxIoSize; /* [byte]. */
+    uint32_t counts; /* The number of write IOs per thread. */
+    uint32_t numThreads; /* The number of threads. */
+    bool isDebug;
+    std::string targetPath; /* device or file path. */
+
+    Option(int argc, char* argv[]) {
+        cybozu::Option opt;
+        opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
+        opt.appendOpt(&bs, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&offset, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
+        opt.appendOpt(&size, 0, "s", "SIZE: target size [byte]. (default: device size)");
+        opt.appendOpt(&minIoSize, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&maxIoSize, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
+        opt.appendOpt(&counts, 100, "c", "N: number of write IOs per threads (default: 100)");
+        opt.appendOpt(&numThreads, 2, "t", "N: number of threads (default: 2)");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
+        opt.appendHelp("h", ": show this message.");
+        opt.appendParam(&targetPath, "[DEVICE|FILE]");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
+        verify();
     }
 
-    uint32_t blockSize() const { return bs_; }
-    uint64_t offsetB() const { return offset_ / bs_; }
-    uint64_t sizeB() const { return size_ / bs_; }
-    uint32_t minIoB() const { return minIoSize_ / bs_; }
-    uint32_t maxIoB() const { return maxIoSize_ / bs_; }
-    uint32_t counts() const { return counts_; }
-    uint32_t numThreads() const { return numThreads_; }
-    bool isVerbose() const { return isVerbose_; }
-    const std::string& targetPath() const { return targetPath_; }
-
-    void setSizeB(uint64_t sizeB) {
-        size_ = sizeB * blockSize();
-    }
+    uint64_t offsetB() const { return offset / bs; }
+    uint64_t sizeB() const { return size / bs; }
+    uint32_t minIoB() const { return minIoSize / bs; }
+    uint32_t maxIoB() const { return maxIoSize / bs; }
 
     bool isDirect() const {
 #if 0
         return false;
 #else
-        return blockSize() % LOGICAL_BLOCK_SIZE == 0;
+        return bs % LOGICAL_BLOCK_SIZE == 0;
 #endif
     }
 
-    void check() const {
-        if (blockSize() == 0) {
+private:
+    void verify() const {
+        if (bs == 0) {
             throw RT_ERR("blockSize must be non-zero.");
         }
-        if (blockSize() % LOGICAL_BLOCK_SIZE != 0) {
-            throw RT_ERR("blockSize must be multiples of 512.");
+        if (bs % LOGICAL_BLOCK_SIZE != 0) {
+            throw cybozu::Exception(__func__)
+                << "blockSize must be multiples of 512" << bs;
         }
         if (minIoB() == 0) {
             throw RT_ERR("minIoSize must be > 0.");
@@ -81,32 +76,14 @@ public:
             throw RT_ERR("maxIoSize must be > 0.");
         }
         if (maxIoB() < minIoB()) {
-            throw RT_ERR("minIoSize must be <= maxIoSize.");
+            throw cybozu::Exception(__func__)
+                << "minIoSize must be <= maxIoSize" << minIoB() << maxIoB();
         }
-        if (counts() == 0) {
+        if (counts == 0) {
             throw RT_ERR("counts must be > 0.");
         }
-        if (numThreads() == 0) {
+        if (numThreads == 0) {
             throw RT_ERR("numThreads must be > 0.");
-        }
-    }
-private:
-    void parse(int argc, char* argv[]) {
-        cybozu::Option opt;
-        opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
-        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&offset_, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
-        opt.appendOpt(&size_, 0, "s", "SIZE: target size [byte]. (default: device size)");
-        opt.appendOpt(&minIoSize_, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&maxIoSize_, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
-        opt.appendOpt(&counts_, 100, "c", "N: number of write IOs per threads (default: 100)");
-        opt.appendOpt(&numThreads_, 2, "t", "N: number of threads (default: 2)");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-        opt.appendHelp("h", ": show this message.");
-        opt.appendParam(&targetPath_, "[DEVICE|FILE]");
-        if (!opt.parse(argc, argv)) {
-            opt.usage();
-            exit(1);
         }
     }
 };
@@ -127,10 +104,6 @@ public:
         , sizeB_(sizeB) {
         assert(0 < sizeB);
     }
-    ~RandomIoSpecGenerator() noexcept {}
-    DISABLE_COPY_AND_ASSIGN(RandomIoSpecGenerator);
-    DISABLE_MOVE(RandomIoSpecGenerator);
-
     void get(uint64_t &ioAddr, uint32_t &ioBlocks) {
         ioAddr = rand_() % sizeB_ + offsetB_;
         uint64_t sizeB = sizeB_ - (ioAddr - offsetB_);
@@ -149,30 +122,29 @@ public:
 class Worker
 {
 private:
-    const Config &config_;
+    const Option &opt_;
     cybozu::util::File file_;
     RandomIoSpecGenerator ioSpecGen_;
-    const char *dataPtr_;
+    const char * const dataPtr_;
     std::vector<bool> bmp_;
 
 public:
-    Worker(const Config &config, const char *dataPtr)
-        : config_(config)
-        , file_(config.targetPath(), O_RDWR | O_DIRECT)
-        , ioSpecGen_(config.offsetB(), config.sizeB())
+    Worker(const Option &opt, const char *dataPtr)
+        : opt_(opt)
+        , file_(opt.targetPath, O_RDWR | O_DIRECT)
+        , ioSpecGen_(opt.offsetB(), opt.sizeB())
         , dataPtr_(dataPtr)
-        , bmp_(config.sizeB(), false) {}
+        , bmp_(opt.sizeB(), false) {}
 
     void operator()() {
-        const uint32_t bs = config_.blockSize();
+        const uint32_t bs = opt_.bs;
         uint64_t ioAddr;
         uint32_t ioBlocks;
-        for (size_t i = 0; i < config_.counts(); i++) {
+        for (size_t i = 0; i < opt_.counts; i++) {
             ioSpecGen_.get(ioAddr, ioBlocks);
-            file_.pwrite(&dataPtr_[(ioAddr - config_.offsetB()) * bs],
-                         ioBlocks * bs, ioAddr * bs);
-            for (uint64_t i = ioAddr - config_.offsetB();
-                 i < ioAddr - config_.offsetB() + ioBlocks; i++) {
+            const uint64_t offLb = (ioAddr - opt_.offsetB());
+            file_.pwrite(dataPtr_ + (offLb * bs), ioBlocks * bs, ioAddr * bs);
+            for (uint64_t i = offLb; i < offLb + ioBlocks; i++) {
                 bmp_[i] = true;
             }
         }
@@ -182,35 +154,35 @@ public:
     }
 };
 
-static bool writeConcurrentlyAndVerify(Config &config)
+void writeConcurrentlyAndVerify(Option &opt)
 {
     /* Prepare */
-    const uint32_t bs = config.blockSize();
-    cybozu::util::File file(config.targetPath(), O_RDWR | O_DIRECT);
-    walb::AlignedArray block(bs);
+    const uint32_t bs = opt.bs;
+    cybozu::util::File file(opt.targetPath, O_RDWR | O_DIRECT);
 
     /* Decide target area size. */
-    size_t sizeB = config.sizeB();
+    size_t sizeB = opt.sizeB();
     const size_t devSizeB = cybozu::util::getBlockDeviceSize(file.fd()) / bs;
-    if (sizeB == 0 || devSizeB <= config.offsetB() + sizeB) {
-        sizeB = devSizeB - config.offsetB();
+    if (sizeB == 0 || devSizeB <= opt.offsetB() + sizeB) {
+        sizeB = devSizeB - opt.offsetB();
     }
-    config.setSizeB(sizeB);
 
     /* Write zero to the target range. */
+    AlignedArray blk(bs);
+    file.lseek(opt.offsetB() * bs);
     for (uint64_t i = 0; i < sizeB; i++) {
-        file.pwrite(block.data(), bs, (config.offsetB() + i) * bs);
+        file.write(blk.data(), blk.size());
     }
 
     /* Prepare shared blocks and fill randomly. */
-    walb::AlignedArray blocks0(bs * sizeB);
     cybozu::util::Random<uint64_t> rand;
-    rand.fill(blocks0.data(), blocks0.size());
+    AlignedArray blks(sizeB * bs);
+    rand.fill(blk.data(), blk.size());
 
     /* Prepare writer threads and run concurrently. */
     std::vector<std::shared_ptr<Worker>> v;
-    for (size_t i = 0; i < config.numThreads(); i++) {
-        v.push_back(std::make_shared<Worker>(config, blocks0.data()));
+    for (size_t i = 0; i < opt.numThreads; i++) {
+        v.push_back(std::make_shared<Worker>(opt, blks.data()));
     }
     cybozu::thread::ThreadRunnerSet thSet;
     for (std::shared_ptr<Worker> &w : v) {
@@ -228,31 +200,31 @@ static bool writeConcurrentlyAndVerify(Config &config)
     }
 
     /* Verify. */
-    bool ret = true;
     uint64_t nVerified = 0, nWritten = 0;
     for (uint64_t i = 0; i < sizeB; i++) {
-        if (!bmp[i]) { continue; }
+        if (!bmp[i]) continue;
         nWritten++;
-        file.pread(block.data(), bs, (config.offsetB() + i) * bs);
-        if (::memcmp(block.data(), blocks0.data() + (i * bs), bs) == 0) {
+        file.pread(blk.data(), bs, (opt.offsetB() + i) * bs);
+        if (::memcmp(blk.data(), blks.data() + (i * bs), bs) == 0) {
             nVerified++;
         } else {
             ::printf("block %" PRIu64 " invalid.\n", i);
-            ret = false;
         }
     }
     ::printf("total/written/verified %" PRIu64 "/%" PRIu64 "/%" PRIu64 ".\n"
              , sizeB, nWritten, nVerified);
-    return ret;
+
+    if (nVerified < nWritten) {
+        throw cybozu::Exception(__func__)
+            << "invalid blocks found" << (nWritten - nVerified);
+    }
 };
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    config.check();
-    if (!writeConcurrentlyAndVerify(config)) {
-        throw std::runtime_error("The written data could not be read.");
-    }
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
+    writeConcurrentlyAndVerify(opt);
     return 0;
 }
 
