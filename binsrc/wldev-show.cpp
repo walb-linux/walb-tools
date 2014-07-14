@@ -77,6 +77,7 @@ void showWldev(const Option &opt)
     wh.updateChecksum();
     if (opt.showHead) std::cout << wh.str() << std::endl;
     uint64_t lsid = bgnLsid;
+    reader.reset(lsid);
 
     LogStatistics logStat;
     logStat.init(bgnLsid, opt.endLsid);
