@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief Verify a walb log by comparing with an IO recipe.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -18,44 +15,34 @@
 /**
  * Command line configuration.
  */
-class Config
+class Option
 {
 private:
-    bool isVerbose_;
-    std::string wlogPath_; /* walb log path or "-" for stdin. */
-    std::string recipePath_; /* recipe path or "-" for stdin. */
 
 public:
-    Config(int argc, char* argv[])
-        : isVerbose_(false)
-        , wlogPath_("-")
-        , recipePath_("-") {
-        parse(argc, argv);
-    }
+    bool isVerbose;
+    std::string wlogPath; /* walb log path or "-" for stdin. */
+    std::string recipePath; /* recipe path or "-" for stdin. */
 
-    bool isVerbose() const { return isVerbose_; }
-    const std::string& recipePath() const { return recipePath_; }
-    const std::string& wlogPath() const { return wlogPath_; }
+    Option(int argc, char* argv[])
+        : isVerbose(false)
+        , wlogPath("-")
+        , recipePath("-") {
 
-    void check() const {
-        if (recipePath_ == "-" && wlogPath_ == "-") {
-            throw RT_ERR("Specify --recipe or --wlog.");
-        }
-    }
-
-private:
-    void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("verify_wlog: verify a walb log with an IO recipe.");
-        opt.appendOpt(&recipePath_, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
-        opt.appendOpt(&wlogPath_, "-", "w", "PATH: wlog file path. '-' for stdin. (default: '-')");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&recipePath, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
+        opt.appendOpt(&wlogPath, "-", "w", "PATH: wlog file path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
-            exit(1);
+            ::exit(1);
         }
-        check();
+
+        if (recipePath == "-" && wlogPath == "-") {
+            throw RT_ERR("Specify --recipe or --wlog.");
+        }
     }
 };
 
@@ -65,18 +52,18 @@ private:
     using LogPackHeader = walb::LogPackHeader;
     using LogPackIo = walb::LogPackIo;
 
-    const Config &config_;
+    const Option &opt_;
     uint32_t pbs_;
 
 public:
-    WlogVerifier(const Config &config)
-        : config_(config), pbs_(0) {}
+    WlogVerifier(const Option &opt)
+        : opt_(opt), pbs_(0) {}
 
     void run() {
         /* Get IO recipe parser. */
         cybozu::util::File recipeFile;
-        if (config_.recipePath() != "-") {
-            recipeFile.open(config_.recipePath(), O_RDONLY);
+        if (opt_.recipePath != "-") {
+            recipeFile.open(opt_.recipePath, O_RDONLY);
         } else {
             recipeFile.setFd(0);
         }
@@ -84,8 +71,8 @@ public:
 
         /* Get wlog file descriptor. */
         cybozu::util::File wlFileR;
-        if (config_.wlogPath() != "-") {
-            wlFileR.open(config_.wlogPath(), O_RDONLY);
+        if (opt_.wlogPath != "-") {
+            wlFileR.open(opt_.wlogPath, O_RDONLY);
         } else {
             wlFileR.setFd(0);
         }
@@ -183,8 +170,8 @@ private:
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    WlogVerifier v(config);
+    Option opt(argc, argv);
+    WlogVerifier v(opt);
     v.run();
     return 0;
 }
