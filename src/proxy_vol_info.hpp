@@ -123,14 +123,6 @@ public:
     bool existsVolDir() const {
         return volDir.stat().isDirectory();
     }
-    StrVec getStatusAsStrVec() const {
-        StrVec v;
-        //auto &fmt = cybozu::util::formatString;
-
-        // QQQ
-
-        return v;
-    }
     /**
      * Get diff list to send.
      *

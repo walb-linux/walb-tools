@@ -111,17 +111,6 @@ struct LogRecord : public walb_log_record
     }
 };
 
-namespace log {
-
-// QQQ: DEPRECATED.
-class InvalidIo : public std::exception
-{
-public:
-    const char *what() const noexcept override { return "invalid logpack IO."; }
-};
-
-} // log
-
 /**
  * log pack header
  */
@@ -698,38 +687,6 @@ inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& block
 }
 
 } // walb::log
-
-/**
- * Logpack record and IO data.
- *
- * QQQ: DEPRECATED.
- */
-struct LogPackIo
-{
-private:
-    uint32_t salt;
-public:
-    LogRecord rec;
-    LogBlockShared blockS;
-
-    void set(const LogPackHeader &logh, size_t pos) {
-        rec = logh.record(pos);
-        salt = logh.salt();
-        blockS.init(logh.pbs());
-    }
-
-    bool isValid(bool isChecksum = true) const {
-        if (!rec.isValid()) return false;
-        if (!isChecksum) return true;
-        return log::isLogChecksumValid(rec, blockS, salt);
-    }
-    uint32_t calcIoChecksumWithZeroSalt() const {
-        return blockS.calcChecksum(rec.ioSizeLb(), 0);
-    }
-    uint32_t calcIoChecksum() const {
-        return blockS.calcChecksum(rec.ioSizeLb(), salt);
-    }
-};
 
 template <typename Reader>
 inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid = uint64_t(-1))
