@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief verify data written by write_random_data.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -15,103 +12,69 @@
 #include "walb/block_size.h"
 #include "walb_util.hpp"
 
-/**
- * Command line configuration.
- */
-class Config
+using namespace walb;
+
+struct Option
 {
-private:
-    uint32_t bs_; /* block size [byte] */
-    bool isVerbose_;
-    std::string recipePath_; /* recipe file path. */
-    std::string targetPath_; /* device or file path. */
+    uint32_t bs; /* block size [byte] */
+    std::string recipePath; /* recipe file path. */
+    std::string targetPath; /* device or file path. */
+    bool isDebug;
 
-public:
-    Config(int argc, char* argv[])
-        : bs_(LOGICAL_BLOCK_SIZE)
-        , isVerbose_(false)
-        , recipePath_("-")
-        , targetPath_() {
-        parse(argc, argv);
-    }
-
-    uint32_t blockSize() const { return bs_; }
-    bool isVerbose() const { return isVerbose_; }
-    const std::string& targetPath() const { return targetPath_; }
-    const std::string& recipePath() const { return recipePath_; }
-
-    bool isDirect() const {
-        return blockSize() % LOGICAL_BLOCK_SIZE == 0;
-    }
-
-    void check() const {
-        if (blockSize() == 0) {
-            throw RT_ERR("blockSize must be non-zero.");
-        }
-    }
-private:
-    void parse(int argc, char* argv[]) {
+    Option(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("verify_written_data: verify data written by write_random_data.");
-        opt.appendOpt(&bs_, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&recipePath_, "-", "i", "PATH: recipe file path. '-' for stdin. (default: '-')");
-        opt.appendParam(&targetPath_, "DEVICE|FILE");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&bs, LOGICAL_BLOCK_SIZE, "b",
+                      cybozu::format("SIZE: block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.appendOpt(&recipePath, "-", "r", "PATH: recipe file path. '-' for stdin. (default: '-')");
+        opt.appendParam(&targetPath, "DEVICE|FILE");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
-            exit(1);
+            ::exit(1);
         }
-        check();
+
+        if (bs == 0) {
+            throw cybozu::Exception(__func__) << "block size must be not zero.";
+        }
+    }
+    bool isDirect() const {
+        return bs % LOGICAL_BLOCK_SIZE == 0;
     }
 };
 
-class IoDataVerifier
+void verifyData(const Option &opt)
 {
-private:
-    const Config &config_;
-    cybozu::util::File file_;
-    size_t bufSizeB_; /* buffer size [block]. */
-    using AlignedArray = walb::AlignedArray;
-    AlignedArray buf_;
+    const size_t bufSize = 4 * MEBI;
 
-public:
-    IoDataVerifier(const Config &config)
-        : config_(config)
-        , file_(config.targetPath(), O_RDONLY | (config.isDirect() ? O_DIRECT : 0))
-        , bufSizeB_(1024 * 1024 / config.blockSize()) /* 1MB */
-        , buf_(config.blockSize() * bufSizeB_) {
+    cybozu::util::File dataFile(opt.targetPath, O_RDONLY | (opt.isDirect() ? O_DIRECT : 0));
+    AlignedArray buf(bufSize);
+
+    cybozu::util::File recipeFile;
+    if (opt.recipePath != "-") {
+        recipeFile.open(opt.recipePath, O_RDONLY);
+    } else {
+        recipeFile.setFd(0);
     }
+    util::IoRecipeParser recipeParser(recipeFile.fd());
 
-    void run() {
-        const uint32_t bs = config_.blockSize();
-
-        /* Get IO recipe parser. */
-        cybozu::util::File fileR;
-        if (config_.recipePath() != "-") {
-            fileR.open(config_.recipePath(), O_RDONLY);
-        } else {
-            fileR.setFd(0);
-        }
-        walb::util::IoRecipeParser recipeParser(fileR.fd());
-
-        /* Read and verify for each IO recipe. */
-        while (!recipeParser.isEnd()) {
-            walb::util::IoRecipe r = recipeParser.get();
-            buf_.resize(bs * r.ioSizeB());
-            file_.pread(buf_.data(), r.ioSizeB() * bs, buf_.size());
-            uint32_t csum = cybozu::util::calcChecksum(buf_.data(), r.ioSizeB() * bs, 0);
-            ::printf("%s\t%s\t%08x\n",
-                     (csum == r.csum() ? "OK" : "NG"), r.toString().c_str(), csum);
-        }
+    /* Read and verify for each IO recipe. */
+    while (!recipeParser.isEnd()) {
+        const util::IoRecipe r = recipeParser.get();
+        buf.resize(r.size * opt.bs);
+        dataFile.pread(buf.data(), buf.size(), r.offset * opt.bs);
+        const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
+        ::printf("%s %s %08x\n",
+                 (csum == r.csum ? "OK" : "NG"), r.str().c_str(), csum);
     }
-};
+}
 
 int doMain(int argc, char* argv[])
 {
-    Config config(argc, argv);
-    IoDataVerifier v(config);
-    v.run();
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
+    verifyData(opt);
     return 0;
 }
 

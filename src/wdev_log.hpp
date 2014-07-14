@@ -2,9 +2,6 @@
 /**
  * @file
  * @brief Walb log device utilities.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cassert>
 #include <memory>

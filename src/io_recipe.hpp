@@ -2,10 +2,8 @@
 /**
  * @file
  * @brief IO recipe.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
+#include "cybozu/exception.hpp"
 #include <queue>
 #include "util.hpp"
 
@@ -14,45 +12,37 @@ namespace util {
 
 struct IoRecipe
 {
-private:
-    const uint64_t offsetB_;
-    const uint32_t ioSizeB_;
-    const uint32_t csum_;
-public:
-    IoRecipe(uint64_t offsetB, uint32_t ioSizeB, uint32_t csum)
-        : offsetB_(offsetB), ioSizeB_(ioSizeB), csum_(csum) {}
-    ~IoRecipe() noexcept = default;
+    uint64_t offset;
+    uint32_t size;
+    uint32_t csum;
 
-    uint64_t offsetB() const { return offsetB_; }
-    uint32_t ioSizeB() const { return ioSizeB_; }
-    uint32_t csum() const { return csum_; }
-
-    std::string toString() const {
+    IoRecipe(uint64_t offset, uint32_t size, uint32_t csum)
+        : offset(offset), size(size), csum(csum) {}
+    std::string str() const {
         return cybozu::util::formatString(
-            "%" PRIu64 "\t%u\t%08x", offsetB(), ioSizeB(), csum());
+            "%" PRIu64 " %u %08x", offset, size, csum);
     }
-
+    friend inline std::ostream& operator<<(std::ostream& os, const IoRecipe& recipe) {
+        os << recipe.str();
+        return os;
+    }
     void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "%s\n", toString().c_str());
+        ::fprintf(fp, "%s\n", str().c_str());
     }
-
     static IoRecipe parse(const std::string& line) {
-        if (line.empty()) { throw RT_ERR("IoRecipe parse error."); }
-
-        size_t pos1 = line.find('\t');
-        if (pos1 == std::string::npos) { throw RT_ERR("IoRecipe parse error."); }
-        uint64_t offsetB = std::stoull(line.substr(0, pos1));
-
-        std::string line1(line, pos1 + 1);
-        size_t pos2 = line1.find('\t');
-        if (pos2 == std::string::npos) { throw RT_ERR("IoRecipe parse error."); }
-        uint32_t ioSizeB = std::stoul(line1.substr(0, pos2));
-
-        std::string line2(line1, pos2 + 1);
-        uint32_t csum = std::stoul(line2, nullptr, 16);
-
-        return IoRecipe(offsetB, ioSizeB, csum);
-
+        if (line.empty()) {
+            throw cybozu::Exception(__func__) << "empty input line";
+        }
+        std::vector<std::string> v = cybozu::util::splitString(line, " \t");
+        v.erase(std::remove_if(v.begin(), v.end(),
+                               [](const std::string& s) { return s.empty(); }), v.end());
+        if (v.size() != 3) {
+            throw cybozu::Exception(__func__) << "invalid number of columns" << v.size();
+        }
+        const uint64_t offset = std::stoul(v[0]);
+        const uint32_t size = std::stoul(v[1]);
+        const uint32_t csum = std::stoul(v[2], nullptr, 16);
+        return IoRecipe(offset, size, csum);
     }
 };
 
@@ -63,41 +53,39 @@ class IoRecipeParser
 {
 private:
     ::FILE *fp_;
-    std::queue<IoRecipe> queue_;
+    std::queue<IoRecipe> q_;
     bool isEnd_;
 public:
-    explicit IoRecipeParser(int fd) : fp_(::fdopen(fd, "r")), queue_(), isEnd_(false) {
+    static constexpr const char *NAME() { return "IoRecipeParser"; }
+
+    explicit IoRecipeParser(int fd)
+        : fp_(::fdopen(fd, "r")), q_(), isEnd_(false) {
         if (fp_ == nullptr) {
-            throw RT_ERR("bad file descriptor.");
+            throw cybozu::Exception(NAME()) << "bad file descriptor";
         }
     }
-
-    IoRecipeParser(const IoRecipeParser &rhs) = delete;
-
     bool isEnd() const {
-        return isEnd_ && queue_.empty();
+        return isEnd_ && q_.empty();
     }
-
     IoRecipe get() {
         readAhead();
-        if (queue_.empty()) {
-            throw RT_ERR("No more input data.");
-        }
-        IoRecipe recipe = queue_.front();
-        queue_.pop();
+        if (q_.empty()) throw cybozu::Exception(NAME()) << "no more input";
+        IoRecipe recipe = q_.front();
+        q_.pop();
         return recipe;
     }
 private:
     void readAhead() {
-        if (isEnd_) { return; }
-
-        while (queue_.size() < 16) {
-            char buf[1024];
-            if (::fgets(buf, 1024, fp_) == nullptr) {
+        if (isEnd_) return;
+        const size_t bufSize = 1024;
+        const size_t maxQueueSize = 16;
+        char buf[bufSize];
+        while (q_.size() < maxQueueSize) {
+            if (::fgets(buf, bufSize, fp_) == nullptr) {
                 isEnd_ = true;
                 return;
             }
-            queue_.push(IoRecipe::parse(buf));
+            q_.push(IoRecipe::parse(buf));
         }
     }
 };
