@@ -12,6 +12,8 @@
 #include "walb/block_size.h"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
@@ -49,9 +51,6 @@ public:
 class WlogVerifier
 {
 private:
-    using LogPackHeader = walb::LogPackHeader;
-    using LogPackIo = walb::LogPackIo;
-
     const Option &opt_;
     uint32_t pbs_;
 
@@ -67,7 +66,7 @@ public:
         } else {
             recipeFile.setFd(0);
         }
-        walb::util::IoRecipeParser recipeParser(recipeFile.fd());
+        util::IoRecipeParser recipeParser(recipeFile.fd());
 
         /* Get wlog file descriptor. */
         cybozu::util::File wlFileR;
@@ -78,7 +77,7 @@ public:
         }
 
         /* Read wlog header. */
-        walb::log::FileHeader wh;
+        log::FileHeader wh;
         wh.readFrom(wlFileR);
         if (!wh.isValid(true)) {
             throw RT_ERR("invalid wlog header.");
@@ -102,11 +101,11 @@ public:
             while (!q.empty()) {
                 LogPackIo packIo = std::move(q.front());
                 q.pop();
-                const walb::LogRecord &rec = packIo.rec;
+                const LogRecord &rec = packIo.rec;
                 if (recipeParser.isEnd()) {
                     throw RT_ERR("Recipe not found.");
                 }
-                walb::util::IoRecipe recipe = recipeParser.get();
+                util::IoRecipe recipe = recipeParser.get();
                 if (recipe.offsetB() != rec.offset) {
                     RT_ERR("offset mismatch.");
                 }
@@ -134,8 +133,6 @@ public:
     }
 
 private:
-    using AlignedArray = walb::AlignedArray;
-
     AlignedArray readBlock(
         cybozu::util::File &fileR) {
         AlignedArray b(pbs_);
@@ -155,7 +152,7 @@ private:
         for (size_t i = 0; i < logh.nRecords(); i++) {
             LogPackIo packIo;
             packIo.set(logh, i);
-            const walb::LogRecord &rec = packIo.rec;
+            const LogRecord &rec = packIo.rec;
             if (!rec.hasData()) continue;
             const uint32_t ioSizePb = rec.ioSizePb(logh.pbs());
             for (size_t j = 0; j < ioSizePb; j++) {
