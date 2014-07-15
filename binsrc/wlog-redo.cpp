@@ -49,7 +49,7 @@ struct Option
     bool isFromStdin() const { return inWlogPath == "-"; }
 };
 
-struct Statistics
+struct LogRedoStatistics
 {
     size_t normalLb;      // amount of normal-issued IOs (not including zero-discard).
     size_t discardLb;     // amount of discarded IOs (including zero-discard).
@@ -58,7 +58,7 @@ struct Statistics
     size_t clippedLb;     // amount of clipped (not issued) IOs.
     size_t paddingPb;     // amount of padding [physical block].
 
-    Statistics()
+    LogRedoStatistics()
         : normalLb(0)
         , discardLb(0)
         , overwrittenLb(0)
@@ -76,7 +76,7 @@ struct Statistics
                  , writtenLb, overwrittenLb
                  , clippedLb, paddingPb);
     }
-} g_st;
+};
 
 /**
  * Io data.
@@ -438,10 +438,8 @@ public:
         if (io.state == Io::Submitted) {
             assert(io.aioKey > 0);
             aio.waitFor(io.aioKey);
-            g_st.writtenLb += io.size() >> 9;
         } else {
             assert(io.state == Io::Overwritten);
-            g_st.overwrittenLb += io.size() >> 9;
         }
     }
     bool empty() const {
@@ -564,6 +562,7 @@ class SimpleBdevWriter
 {
 private:
     cybozu::util::File bdevFile_;
+    LogRedoStatistics &stat_;
 
     struct Io2 {
         uint64_t offsetLb; // [logical block]
@@ -574,15 +573,15 @@ private:
     std::queue<Io2> ioQ_;
 
 public:
-    explicit SimpleBdevWriter(int fd)
-        : bdevFile_(fd), ioQ_() {
+    explicit SimpleBdevWriter(int fd, LogRedoStatistics &stat)
+        : bdevFile_(fd), stat_(stat), ioQ_() {
     }
     void prepare(uint64_t offsetLb, uint32_t sizeLb, AlignedArray &&block, bool isDiscard = false) {
         ioQ_.push({offsetLb, sizeLb, std::move(block)});
         if (isDiscard) {
-            g_st.discardLb += sizeLb;
+            stat_.discardLb += sizeLb;
         } else {
-            g_st.normalLb += sizeLb;
+            stat_.normalLb += sizeLb;
         }
     }
     void submit() {
@@ -590,13 +589,13 @@ public:
             Io2 &io = ioQ_.front();
             bdevFile_.pwrite(io.block.data(), io.sizeLb << 9, io.offsetLb << 9);
             ioQ_.pop();
-            g_st.writtenLb += io.sizeLb;
+            stat_.writtenLb += io.sizeLb;
         }
     }
     void discard(uint64_t offsetLb, uint32_t sizeLb) {
         cybozu::util::issueDiscard(bdevFile_.fd(), offsetLb, sizeLb);
-        g_st.discardLb += sizeLb;
-        g_st.writtenLb += sizeLb;
+        stat_.discardLb += sizeLb;
+        stat_.writtenLb += sizeLb;
     }
     void waitForAll() {
         // do nothing.
@@ -608,6 +607,7 @@ class AsyncBdevWriter
 private:
     cybozu::util::File bdevFile_;
     const size_t bufferSize_;
+    LogRedoStatistics &stat_;
 
     cybozu::aio::Aio aio_;
     IoQueue ioQ_; /* FIFO. */
@@ -615,9 +615,10 @@ private:
     OverlappedSerializer overlapped_;
 
 public:
-    explicit AsyncBdevWriter(int fd, size_t bufferSize = 4 * MEBI)
+    explicit AsyncBdevWriter(int fd, LogRedoStatistics &stat, size_t bufferSize = 4 * MEBI)
         : bdevFile_(fd)
         , bufferSize_(bufferSize)
+        , stat_(stat)
         , aio_(bdevFile_.fd(), bufferSize >> 9)
         , ioQ_()
         , readyQ_()
@@ -629,9 +630,9 @@ public:
     void prepare(uint64_t offsetLb, uint32_t sizeLb, AlignedArray &&block, bool isDiscard = false) {
         ioQ_.add(Io(offsetLb << 9, sizeLb << 9, std::move(block)));
         if (isDiscard) {
-            g_st.discardLb += sizeLb;
+            stat_.discardLb += sizeLb;
         } else {
-            g_st.normalLb += sizeLb;
+            stat_.normalLb += sizeLb;
         }
     }
     /**
@@ -645,8 +646,8 @@ public:
         // This is not clever method.
         waitForAll();
         cybozu::util::issueDiscard(bdevFile_.fd(), offsetLb, sizeLb);
-        g_st.discardLb += sizeLb;
-        g_st.writtenLb += sizeLb;
+        stat_.discardLb += sizeLb;
+        stat_.writtenLb += sizeLb;
     }
     void waitForAll() {
         processIos(true);
@@ -663,6 +664,11 @@ private:
     void waitForAnIoCompletion() {
         Io& io = ioQ_.getFront();
         readyQ_.forceComplete(io, aio_);
+        if (io.state == Io::Submitted) {
+            stat_.writtenLb += io.size() >> 9;
+        } else {
+            stat_.overwrittenLb += io.size() >> 9;
+        }
         overlapped_.delIoAndPushReadyIos(io, readyQ_);
         ioQ_.popFront();
     }
@@ -690,6 +696,7 @@ private:
     const Option &opt_;
     cybozu::util::File ddevFile_;
     const uint64_t devSizeLb_; // [logical block]
+    LogRedoStatistics stat_;
     BdevWriter ddevWriter_;
 
 public:
@@ -697,7 +704,8 @@ public:
         : opt_(opt)
         , ddevFile_(opt_.ddevPath, O_RDWR | O_DIRECT)
         , devSizeLb_(cybozu::util::getBlockDeviceSize(ddevFile_.fd()) << 9)
-        , ddevWriter_(ddevFile_.fd()) {
+        , stat_()
+        , ddevWriter_(ddevFile_.fd(), stat_) {
     }
     void run(cybozu::util::File &wlogFile) {
         log::FileHeader wh;
@@ -725,7 +733,7 @@ public:
         ddevFile_.fdatasync();
 
         ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, lsid);
-        g_st.print();
+        stat_.print();
     }
 private:
     void redoLogIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
@@ -734,7 +742,7 @@ private:
 
         if (rec.isPadding()) {
             /* Do nothing. */
-            g_st.paddingPb += rec.ioSizePb(packH.pbs());
+            stat_.paddingPb += rec.ioSizePb(packH.pbs());
             return;
         }
         if (rec.isDiscard()) {
@@ -744,7 +752,7 @@ private:
             }
             if (!opt_.isZeroDiscard) {
                 /* Ignore discard logs. */
-                g_st.discardLb += rec.ioSizeLb();
+                stat_.discardLb += rec.ioSizeLb();
                 return;
             }
             /* zero-discard will use redoNormalIo(). */
@@ -783,7 +791,7 @@ private:
                 if (opt_.isVerbose) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
                 }
-                g_st.clippedLb += sizeLb;
+                stat_.clippedLb += sizeLb;
             }
             offLb += sizeLb;
             remainingLb -= sizeLb;
