@@ -49,7 +49,7 @@ LOCAL_LIB = src/libwalb-tools.a
 LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
 
 all: build
-build: $(BINARIES) binsrc/walbctl
+build: $(BINARIES)
 
 utest: $(TEST_BINARIES)
 utest_all: $(TEST_BINARIES)
@@ -88,9 +88,6 @@ cleandep:
 rebuild:
 	$(MAKE) clean
 	$(MAKE) all
-
-binsrc/walbctl:
-	ln -sf ../walb/tool/walbctl binsrc/walbctl
 
 install:
 	@echo not yet implemented
