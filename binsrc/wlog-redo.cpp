@@ -300,18 +300,16 @@ inline uint32_t bytesToPb(uint32_t bytes, uint32_t pbs) {
  * begin                   ---   fetchedBegin_    --- end
  * <--- submitted + ready + pending  ---><--- fetched --->
  *           processing
- *           processingPb                    fetchedPb (pb unit)
+ *         processingSize [byte]           fetchedSize [byte]
  */
 class IoQueue
 {
-    const size_t maxPb_; // the max size of each state
-    const uint32_t pbs_;
-    size_t processingPb_; // total pb of pending/ready/submitted
-    size_t fetchedPb_;
+    size_t processingSize_; // total size of pending/ready/submitted [byte].
+    size_t fetchedSize_; // [byte].
     typedef std::list<Io> List;
     List list_;
     List::iterator fetchedBegin_;
-    static const size_t maxIoSize_ = 1024 * 1024; //1MB.
+    static const size_t maxIoSize_ = MEBI; // 1 MiB.
     /**
      * Try to merge src to dst.
      */
@@ -321,19 +319,16 @@ class IoQueue
         }
         return dst.tryMerge(src);
     }
-
 public:
-    explicit IoQueue(size_t maxPb_, uint32_t pbs)
-        : maxPb_(maxPb_)
-        , pbs_(pbs)
-        , processingPb_(0)
-        , fetchedPb_(0)
+    explicit IoQueue()
+        : processingSize_(0)
+        , fetchedSize_(0)
         , fetchedBegin_(list_.end())
     {
     }
     void add(Io &&io) {
-        assert(io.size() == pbs_);
-        fetchedPb_++;
+        assert(io.size() > 0);
+        fetchedSize_ += io.size();
         if (hasFetched() && tryMerge(*fetchedBegin_, io)) {
             return;
         }
@@ -344,14 +339,12 @@ public:
     }
     bool hasFetched() const { return fetchedBegin_ != list_.end(); }
     bool hasProcessing() const { return list_.begin() != fetchedBegin_; }
-    bool isFull() const { return processingPb_ > maxPb_; }
-    bool shouldProcess() const { return fetchedPb_ > maxPb_; }
+    size_t getProcessingSize() const { return processingSize_; }
 
     Io& nextFetched() {
         Io &io = *fetchedBegin_++;
-        const size_t pb = bytesToPb(io.size(), pbs_);
-        processingPb_ += pb;
-        fetchedPb_ -= pb;
+        processingSize_ += io.size();
+        fetchedSize_ -= io.size();
         g_debug.addIoQ(io);
         return io;
     }
@@ -373,7 +366,7 @@ public:
     void popFront() {
         Io& io = list_.front();
         g_debug.delIoQ(io);
-        processingPb_ -= bytesToPb(io.size(), pbs_);
+        processingSize_ -= io.size();
         list_.pop_front();
     }
 };
@@ -395,14 +388,21 @@ class ReadyQueue
 {
 private:
     IoSet ioSet_;
+    size_t totalSize_;
 
 public:
+    ReadyQueue() : ioSet_(), totalSize_(0) {}
     void push(Io *iop) {
+        assert(iop);
         ioSet_.insert(iop);
         g_debug.addReadyQ(*iop);
+        totalSize_ += iop->size();
     }
     size_t size() const {
         return ioSet_.size();
+    }
+    size_t totalSize() const {
+        return totalSize_;
     }
     void submit(cybozu::aio::Aio &aio) {
         size_t nBulk = 0;
@@ -410,6 +410,7 @@ public:
             Io* iop = *ioSet_.begin();
             ioSet_.erase(ioSet_.begin());
             g_debug.delReadyQ(*iop);
+            totalSize_ -= iop->size();
 
             assert(iop->state != Io::Submitted);
             if (iop->state == Io::Overwritten) continue;
@@ -444,7 +445,12 @@ public:
         }
     }
     bool empty() const {
-        return ioSet_.empty();
+        const bool ret = ioSet_.empty();
+        if (ret) {
+            assert(ioSet_.size() == 0);
+            assert(totalSize_ == 0);
+        }
+        return ret;
     }
 private:
     void tryErase(Io& io) {
@@ -454,6 +460,7 @@ private:
             if (*i == &io) {
                 ioSet_.erase(i);
                 g_debug.delReadyQ(io);
+                totalSize_ -= io.size();
                 return;
             }
             ++i;
@@ -553,226 +560,6 @@ void verifyApplicablePbs(uint32_t wlogPbs, uint32_t devPbs)
         << wlogPbs << devPbs;
 }
 
-class AsyncLogApplyer
-{
-private:
-    const Option& opt_;
-    cybozu::util::File ddevFile_;
-    const uint64_t devSize_;
-    const uint32_t pbs_;
-    const size_t maxPb_;
-    cybozu::aio::Aio aio_;
-
-    IoQueue ioQ_; /* FIFO. */
-    ReadyQueue readyQ_; /* ready to submit. */
-
-    OverlappedSerializer overlapped_;
-    bool isSuccess_;
-public:
-    AsyncLogApplyer(const Option& opt, size_t bufferSize)
-        : opt_(opt)
-        , ddevFile_(opt.ddevPath, O_RDWR | O_DIRECT)
-        , devSize_(cybozu::util::getBlockDeviceSize(ddevFile_.fd()))
-        , pbs_(cybozu::util::getPhysicalBlockSize(ddevFile_.fd()))
-        , maxPb_(getQueueSizeStatic(bufferSize, pbs_))
-        , aio_(ddevFile_.fd(), maxPb_)
-        , ioQ_(maxPb_, pbs_)
-        , readyQ_()
-        , overlapped_()
-        , isSuccess_(false)
-    {}
-    ~AsyncLogApplyer() {
-        if (!isSuccess_) ioQ_.waitForAllSubmitted(aio_);
-    }
-    /**
-     * Read logs from wlogFile and apply them to the device.
-     */
-    void run(cybozu::util::File &wlogFile) {
-        log::FileHeader wh;
-        wh.readFrom(wlogFile);
-        verifyApplicablePbs(wh.pbs(), pbs_);
-
-        const uint64_t beginLsid = wh.beginLsid();
-        uint64_t lsid = beginLsid;
-
-        const uint32_t salt = wh.salt();
-        LogPackHeader packH(pbs_, salt);
-        while (packH.readFrom(wlogFile)) {
-            if (opt_.isVerbose) {
-                std::cout << packH.str() << std::endl;
-            }
-            for (size_t i = 0; i < packH.nRecords(); i++) {
-                const LogRecord &rec = packH.record(i);
-                LogBlockShared blockS(pbs_);
-                if (rec.hasData()) {
-                    blockS.read(wlogFile, rec.ioSizePb(pbs_));
-                    log::verifyLogChecksum(rec, blockS, salt);
-                } else {
-                    blockS.resize(0);
-                }
-                redoPackIo(rec, blockS);
-            }
-            lsid = packH.nextLogpackLsid();
-        }
-
-        readyQ_.submit(aio_);
-        waitForAllProcessingIos();
-
-        /* Sync device. */
-        ddevFile_.fdatasync();
-        isSuccess_ = true;
-
-        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, lsid);
-        g_st.print();
-    }
-private:
-    /**
-     * Redo a discard log by issuing discard command.
-     */
-    void redoDiscard(const LogRecord& rec) {
-        assert(opt_.isDiscard);
-        assert(rec.isDiscard());
-
-        /* Wait for all IO done. */
-        waitForAllProcessingIos();
-
-        /* Issue the corresponding discard IOs. */
-        g_st.discardLb += rec.ioSizeLb();
-        g_st.writtenLb += rec.ioSizeLb();
-        cybozu::util::issueDiscard(ddevFile_.fd(), rec.offset, rec.ioSizeLb());
-    }
-    void waitForAllProcessingIos() {
-        while (ioQ_.hasProcessing()) {
-            waitForAnIoCompletion();
-        }
-        assert(overlapped_.empty());
-    }
-    template<class T>
-    void verifyNotExist(const T& q, const Io *iop, const char *msg)
-    {
-        for (const Io* p : q) {
-            if (p == iop) {
-                ::printf("ERR found !!! %s\n", msg);
-                ::exit(1);
-            }
-        }
-    }
-    /**
-     * Wait for an IO completion.
-     * If not submitted, submit before waiting.
-     */
-    void waitForAnIoCompletion() {
-        Io& io = ioQ_.getFront();
-        readyQ_.forceComplete(io, aio_);
-        overlapped_.delIoAndPushReadyIos(io, readyQ_);
-        ioQ_.popFront();
-    }
-    void processIos() {
-        while (ioQ_.isFull()) {
-            waitForAnIoCompletion();
-        }
-
-        while (ioQ_.hasFetched()) {
-            Io& io = ioQ_.nextFetched();
-            overlapped_.add(io);
-            if (io.nOverlapped == 0) {
-                readyQ_.push(&io);
-            }
-        }
-        if (readyQ_.size() > maxPb_) {
-            readyQ_.submit(aio_);
-        }
-    }
-    /**
-     * Redo normal IO for a logpack data.
-     * Zero-discard also uses this method.
-     */
-    void redoNormalIo(const LogRecord &rec, LogBlockShared& blockS) {
-        assert(rec.isExist());
-        assert(!rec.isPadding());
-        assert(opt_.isZeroDiscard || !rec.isDiscard());
-
-        /* Create IOs. */
-        uint32_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
-        const uint32_t ioSizePb = rec.ioSizePb(pbs_);
-        for (size_t i = 0; i < ioSizePb; i++) {
-            if (ioQ_.shouldProcess()) {
-                processIos();
-            }
-            AlignedArray block;
-            if (rec.isDiscard()) {
-                block.resize(pbs_);
-            } else {
-                block = std::move(blockS.getBlock(i));
-            }
-            const size_t size = std::min(pbs_, remaining);
-
-            Io io(off, size, std::move(block));
-            off += size;
-            remaining -= size;
-            /* Clip if the IO area is out of range in the device. */
-            if (io.offset() + io.size() <= devSize_) {
-                ioQ_.add(std::move(io));
-                if (rec.isDiscard()) {
-                    g_st.discardLb += size >> 9;
-                } else {
-                    g_st.normalLb += size >> 9;
-                }
-            } else {
-                if (opt_.isVerbose) {
-                    ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
-                             io.offset(), io.size());
-                }
-                g_st.clippedLb += size >> 9;
-            }
-        }
-        assert(remaining == 0);
-        processIos();
-
-        if (opt_.isVerbose) {
-            ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
-                     rec.offset, rec.ioSizeLb());
-        }
-    }
-    /**
-     * Redo a logpack Io.
-     */
-    void redoPackIo(const LogRecord &rec, LogBlockShared& blockS) {
-        assert(rec.isExist());
-
-        if (rec.isPadding()) {
-            /* Do nothing. */
-            g_st.paddingPb += rec.ioSizePb(pbs_);
-            return;
-        }
-
-        if (rec.isDiscard()) {
-            if (opt_.isDiscard) {
-                redoDiscard(rec);
-                return;
-            }
-            if (!opt_.isZeroDiscard) {
-                /* Ignore discard logs. */
-                g_st.discardLb += rec.ioSizeLb();
-                return;
-            }
-            /* zero-discard will use redoNormalIo(). */
-        }
-        redoNormalIo(rec, blockS);
-    }
-    static size_t getQueueSizeStatic(size_t bufferSize, size_t blockSize) {
-        if (bufferSize <= blockSize) {
-            throw RT_ERR("Buffer size must be > blockSize.");
-        }
-        size_t qs = bufferSize / blockSize;
-        if (qs == 0) {
-            throw RT_ERR("Queue size is must be positive.");
-        }
-        return qs;
-    }
-};
-
 class SimpleBdevWriter
 {
 private:
@@ -813,6 +600,86 @@ public:
     }
     void waitForAll() {
         // do nothing.
+    }
+};
+
+class AsyncBdevWriter
+{
+private:
+    cybozu::util::File bdevFile_;
+    const size_t bufferSize_;
+
+    cybozu::aio::Aio aio_;
+    IoQueue ioQ_; /* FIFO. */
+    ReadyQueue readyQ_; /* ready to submit. */
+    OverlappedSerializer overlapped_;
+
+public:
+    explicit AsyncBdevWriter(int fd, size_t bufferSize = 4 * MEBI)
+        : bdevFile_(fd)
+        , bufferSize_(bufferSize)
+        , aio_(bdevFile_.fd(), bufferSize >> 9)
+        , ioQ_()
+        , readyQ_()
+        , overlapped_() {
+    }
+    ~AsyncBdevWriter() noexcept {
+        ioQ_.waitForAllSubmitted(aio_);
+    }
+    void prepare(uint64_t offsetLb, uint32_t sizeLb, AlignedArray &&block, bool isDiscard = false) {
+        ioQ_.add(Io(offsetLb << 9, sizeLb << 9, std::move(block)));
+        if (isDiscard) {
+            g_st.discardLb += sizeLb;
+        } else {
+            g_st.normalLb += sizeLb;
+        }
+    }
+    /**
+     * Causion: this may not submit IOs really.
+     * Call waitForAll() to force submit.
+     */
+    void submit() {
+        processIos(false);
+    }
+    void discard(uint64_t offsetLb, uint32_t sizeLb) {
+        // This is not clever method.
+        waitForAll();
+        cybozu::util::issueDiscard(bdevFile_.fd(), offsetLb, sizeLb);
+        g_st.discardLb += sizeLb;
+        g_st.writtenLb += sizeLb;
+    }
+    void waitForAll() {
+        processIos(true);
+        waitForAllProcessingIos();
+    }
+private:
+    void waitForAllProcessingIos() {
+        while (ioQ_.hasProcessing()) {
+            waitForAnIoCompletion();
+        }
+        assert(overlapped_.empty());
+        assert(readyQ_.empty());
+    }
+    void waitForAnIoCompletion() {
+        Io& io = ioQ_.getFront();
+        readyQ_.forceComplete(io, aio_);
+        overlapped_.delIoAndPushReadyIos(io, readyQ_);
+        ioQ_.popFront();
+    }
+    void processIos(bool force) {
+        while (ioQ_.getProcessingSize() >= bufferSize_ / 2) {
+            waitForAnIoCompletion();
+        }
+        while (ioQ_.hasFetched()) {
+            Io& io = ioQ_.nextFetched();
+            overlapped_.add(io);
+            if (io.nOverlapped == 0) {
+                readyQ_.push(&io);
+            }
+        }
+        if (force || readyQ_.totalSize() >= bufferSize_ / 2) {
+            readyQ_.submit(aio_);
+        }
     }
 };
 
@@ -942,7 +809,6 @@ void setupInputFile(cybozu::util::File &wlogFile, const Option &opt)
 
 int doMain(int argc, char* argv[])
 {
-    const size_t BUFFER_SIZE = 4 * MEBI; /* 4MB. */
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
 
@@ -952,7 +818,7 @@ int doMain(int argc, char* argv[])
         LogApplyer<SimpleBdevWriter> applyer(opt);
         applyer.run(wlogFile);
     } else {
-        AsyncLogApplyer applyer(opt, BUFFER_SIZE);
+        LogApplyer<AsyncBdevWriter> applyer(opt);
         applyer.run(wlogFile);
     }
     wlogFile.close();
