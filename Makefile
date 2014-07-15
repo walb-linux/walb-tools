@@ -15,7 +15,7 @@ else
 endif
 
 INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
-INCLUDES_WALB = -I./walb/include -I./walb/tool
+INCLUDES_WALB = -I./walb/include
 
 CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB)
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
@@ -49,7 +49,7 @@ LOCAL_LIB = src/libwalb-tools.a
 LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
 
 all: build
-build: $(BINARIES) binsrc/walbctl
+build: $(BINARIES)
 
 utest: $(TEST_BINARIES)
 utest_all: $(TEST_BINARIES)
@@ -88,9 +88,6 @@ cleandep:
 rebuild:
 	$(MAKE) clean
 	$(MAKE) all
-
-binsrc/walbctl:
-	ln -sf ../walb/tool/walbctl binsrc/walbctl
 
 install:
 	@echo not yet implemented

@@ -22,25 +22,17 @@ struct Option
     std::string wldevPath;
     uint64_t bgnLsid;
     uint64_t endLsid;
-    bool showHead, showPack, showStat;
+    bool showSuper, showHead, showPack, showStat;
     bool dontUseAio;
     bool isDebug;
 
-    Option(int argc, char* argv[])
-        : wldevPath()
-        , bgnLsid(0)
-        , endLsid(-1)
-        , showHead(false)
-        , showPack(false)
-        , showStat(false)
-        , dontUseAio(false)
-        , isDebug(false) {
-
+    Option(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("wldev-show: pretty-print walb log device.");
         opt.appendOpt(&bgnLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
         opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
         opt.appendParam(&wldevPath, "WLDEV_PATH", ": input walb log device  path.");
+        opt.appendBoolOpt(&showSuper, "super", ": show super block.");
         opt.appendBoolOpt(&showHead, "head", ": show file header.");
         opt.appendBoolOpt(&showPack, "pack", ": show packs.");
         opt.appendBoolOpt(&showStat, "stat", ": show statistics.");
@@ -56,7 +48,7 @@ struct Option
             throw RT_ERR("bgnLsid must be < endLsid.");
         }
 
-        // In default, show all.
+        // In default, show all (not including showSuper).
         if (!showHead && !showPack && !showStat) {
             showHead = showPack = showStat = true;
         }
@@ -71,6 +63,7 @@ void showWldev(const Option &opt)
     const uint32_t pbs = super.pbs();
     const uint32_t salt = super.salt();
     const uint64_t bgnLsid = std::max(opt.bgnLsid, super.getOldestLsid());
+    if (opt.showSuper) super.print();
 
     log::FileHeader wh;
     wh.init(pbs, salt, super.getUuid(), bgnLsid, opt.endLsid);

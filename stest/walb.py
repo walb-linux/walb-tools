@@ -1,14 +1,7 @@
 #!/usr/bin/env python
 
-import collections
 import os
-import threading
-import subprocess
-import sys
 import time
-import socket
-import errno
-import shutil
 
 from util import *
 
@@ -102,36 +95,36 @@ class Device:
     Walb device.
 
     '''
-    def __init__(self, iD, ldev, ddev, walbctlPath, runCommand=run_local_command):
+    def __init__(self, iD, ldev, ddev, wdevcPath, runCommand=run_local_command):
         '''
-        iD :: int          - walb device id.
-        ldev :: str        - underlying log block device path.
-        ddev :: str        - underlying data block device path.
-        walbctlPath :: str - walbctl path.
+        iD :: int               - walb device id.
+        ldev :: str             - underlying log block device path.
+        ddev :: str             - underlying data block device path.
+        wdevcPath :: str        - wdevc path.
         runCommand:: RunCommand - function that run commands.
         '''
         verify_type(iD, int)
         verify_type(ldev, str)
         verify_type(ddev, str)
-        verify_type(walbctlPath, str)
+        verify_type(wdevcPath, str)
         verify_function(runCommand)
         self.iD = iD
         self.ldev = ldev
         self.ddev = ddev
-        self.walbctlPath = walbctlPath
+        self.wdevcPath = wdevcPath
         self.runCommand = runCommand
 
     @property
     def path(self):
         return '/dev/walb/' + str(self.iD)
 
-    def run_walbctl(self, cmdArgs):
+    def run_wdevc(self, cmdArgs):
         '''
-        Run walbctl command.
+        Run wdevc command.
         cmdArgs :: [str] - command line arguments.
         '''
         verify_list_type(cmdArgs, str)
-        self.runCommand([self.walbctlPath] + cmdArgs)
+        self.runCommand([self.wdevcPath] + cmdArgs)
 
     def exists(self):
         '''
@@ -153,25 +146,21 @@ class Device:
         Format devices for a walb device.
         TODO: support format_ldev options.
         '''
-        self.run_walbctl(['format_ldev',
-                          '--ldev', self.ldev,
-                          '--ddev', self.ddev])
+        self.run_wdevc(['format-ldev', self.ldev, self.ddev])
 
     def create(self):
         '''
         Create a walb device.
         TODO: support create_wdev options.
         '''
-        self.run_walbctl(['create_wdev',
-                          '--ldev', self.ldev,
-                          '--ddev', self.ddev,
-                          '--name', str(self.iD)])
+        self.run_wdevc(['create-wdev', self.ldev, self.ddev,
+                        '-n', str(self.iD)])
 
     def delete(self):
         '''
         Delete a walb device.
         '''
-        self.run_walbctl(['delete_wdev', '--wdev', self.path])
+        self.run_wdevc(['delete-wdev', self.path])
 
     def resize(self, newSizeMb):
         '''
@@ -180,8 +169,7 @@ class Device:
         newSizeMb :: int - new size [MiB].
         '''
         newSizeLb = newSizeMb * Mebi / Lbs
-        self.run_walbctl(['resize', '--wdev', self.path,
-                          '--size', str(newSizeLb)])
+        self.run_wdevc(['resize', self.path, str(newSizeLb)])
 
     def reset(self):
         '''
@@ -190,7 +178,7 @@ class Device:
         You should call this to recover from log overflow.
 
         '''
-        self.run_walbctl(['reset_wal', '--wdev', self.path])
+        self.run_wdevc(['reset-wal', self.path])
 
     def get_size_lb(self):
         '''
