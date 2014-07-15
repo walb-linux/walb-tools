@@ -182,6 +182,8 @@ public:
         return nRecords() == 0 && logpackLsid() == uint64_t(-1);
     }
     bool isValid(bool isChecksum = true) const {
+        if (!header_) return false;
+        if (pbs() == 0) return false;
         if (isChecksum) {
             return ::is_valid_logpack_header_and_records_with_checksum(header_, pbs(), salt()) != 0;
         } else {
@@ -189,15 +191,20 @@ public:
         }
     }
     void verify(bool isChecksum = true) const {
-        if (!isValid(isChecksum)) throw cybozu::Exception(NAME()) << "invalid";
+        if (!isValid(isChecksum)) throw cybozu::Exception(NAME()) << "invalid" << *this;
     }
-    void copyFrom(const void *data, size_t size)
-    {
+    void copyFrom(const void *data, size_t size) {
         if (pbs_ != size) {
             throw cybozu::Exception(NAME()) << "invalid size" << size << pbs_;
         }
         ::memcpy(header_, data, size);
         verify();
+    }
+    void copyFrom(const LogPackHeader &rhs) {
+        if (pbs_ != rhs.pbs() || salt_ != rhs.salt()) {
+            init(rhs.pbs(), rhs.salt());
+        }
+        copyFrom(rhs.rawData(), rhs.pbs());
     }
     size_t nRecordsHavingData() const {
         size_t s = 0;
@@ -212,6 +219,7 @@ public:
      * to string.
      */
     std::string strHead() const {
+        if (!header_) throw cybozu::Exception(__func__) << "header_ is not set";
         return cybozu::util::formatString(
             "wlog_p:"
             " lsid %10" PRIu64 ""
@@ -226,6 +234,7 @@ public:
             , header_->checksum);
     }
     std::string strHeadDetail() const {
+        if (!header_) throw cybozu::Exception(__func__) << "header_ is not set";
         return cybozu::util::formatString(
             "wlog_pack_header:\n"
             "  checksum: %08x(%u)\n"
@@ -452,7 +461,7 @@ public:
     /**
      * Shrink.
      * Delete records from rec[invalidIdx] to the last.
-     * If you specify invalidIdx = 0, then the pack header will be set end.
+     * If you specify invalidIdx = 0, then the pack will be empty.
      * RETURN:
      *   next logpack lsid.
      */

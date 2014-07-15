@@ -2,9 +2,6 @@
 /**
  * @file
  * @brief Walb log file utilities.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include <queue>
 #include "walb_log_base.hpp"
