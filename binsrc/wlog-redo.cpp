@@ -22,6 +22,7 @@ struct Option
     std::string inWlogPath;
     bool isDiscard;
     bool isZeroDiscard;
+    bool dontUseAio;
     bool isVerbose;
     bool isDebug;
 
@@ -31,6 +32,7 @@ struct Option
         opt.appendOpt(&inWlogPath, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
         opt.appendBoolOpt(&isDiscard, "d", "issue discard for discard logs.");
         opt.appendBoolOpt(&isZeroDiscard, "z", "zero-clear for discard logs.");
+        opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio");
         opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendParam(&ddevPath, "DEVICE_PATH");
@@ -49,25 +51,30 @@ struct Option
 
 struct Statistics
 {
-    size_t nClipped;
-    size_t nDiscard;
-    size_t nPadding;
-    size_t nWritten;
-    size_t nOverwritten;
+    size_t normalLb;      // amount of normal-issued IOs (not including zero-discard).
+    size_t discardLb;     // amount of discarded IOs (including zero-discard).
+    size_t writtenLb;     // amount of written (issued, including zero-discard) IOs.
+    size_t overwrittenLb; // amount of overwritten (not issued) IOs.
+    size_t clippedLb;     // amount of clipped (not issued) IOs.
+    size_t paddingPb;     // amount of padding [physical block].
+
     Statistics()
-        : nClipped(0)
-        , nDiscard(0)
-        , nPadding(0)
-        , nWritten(0)
-        , nOverwritten(0) {}
+        : normalLb(0)
+        , discardLb(0)
+        , overwrittenLb(0)
+        , clippedLb(0)
+        , paddingPb(0) {
+    }
     void print() const {
-        ::printf("nClipped: %zu\n"
-                 "nDiscard: %zu\n"
-                 "nPadding: %zu\n",
-                 nClipped, nDiscard, nPadding);
-        ::printf("nWritten: %zu\n"
-                 "nOverwritten: %zu\n",
-                 nWritten, nOverwritten);
+        ::printf("normalLb:      %10zu\n"
+                 "discardLb:     %10zu\n"
+                 "writtenLb:     %10zu\n"
+                 "overwrittenLb: %10zu\n"
+                 "clippedLb:     %10zu\n"
+                 "paddingPb:     %10zu\n"
+                 , normalLb, discardLb
+                 , writtenLb, overwrittenLb
+                 , clippedLb, paddingPb);
     }
 } g_st;
 
@@ -430,10 +437,10 @@ public:
         if (io.state == Io::Submitted) {
             assert(io.aioKey > 0);
             aio.waitFor(io.aioKey);
-            g_st.nWritten++;
+            g_st.writtenLb += io.size() >> 9;
         } else {
             assert(io.state == Io::Overwritten);
-            g_st.nOverwritten++;
+            g_st.overwrittenLb += io.size() >> 9;
         }
     }
     bool empty() const {
@@ -536,19 +543,25 @@ private:
     }
 };
 
-/**
- * To apply walb log.
- */
-class WalbLogApplyer
+void verifyApplicablePbs(uint32_t wlogPbs, uint32_t devPbs)
+{
+    if (devPbs <= wlogPbs && wlogPbs % devPbs == 0) {
+        return;
+    }
+    throw cybozu::Exception(__func__)
+        << "Physical block size does not match"
+        << wlogPbs << devPbs;
+}
+
+class AsyncLogApplyer
 {
 private:
     const Option& opt_;
-    cybozu::util::File file_;
+    cybozu::util::File ddevFile_;
     const uint64_t devSize_;
-    const size_t pbs_;
+    const uint32_t pbs_;
     const size_t maxPb_;
     cybozu::aio::Aio aio_;
-    log::FileHeader wh_;
 
     IoQueue ioQ_; /* FIFO. */
     ReadyQueue readyQ_; /* ready to submit. */
@@ -556,42 +569,35 @@ private:
     OverlappedSerializer overlapped_;
     bool isSuccess_;
 public:
-    WalbLogApplyer(
-        const Option& opt, size_t bufferSize)
+    AsyncLogApplyer(const Option& opt, size_t bufferSize)
         : opt_(opt)
-        , file_(opt.ddevPath.c_str(), O_RDWR | O_DIRECT)
-        , devSize_(cybozu::util::getBlockDeviceSize(file_.fd()))
-        , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
+        , ddevFile_(opt.ddevPath, O_RDWR | O_DIRECT)
+        , devSize_(cybozu::util::getBlockDeviceSize(ddevFile_.fd()))
+        , pbs_(cybozu::util::getPhysicalBlockSize(ddevFile_.fd()))
         , maxPb_(getQueueSizeStatic(bufferSize, pbs_))
-        , aio_(file_.fd(), maxPb_)
-        , wh_()
+        , aio_(ddevFile_.fd(), maxPb_)
         , ioQ_(maxPb_, pbs_)
         , readyQ_()
         , overlapped_()
         , isSuccess_(false)
     {}
-
-    ~WalbLogApplyer() {
+    ~AsyncLogApplyer() {
         if (!isSuccess_) ioQ_.waitForAllSubmitted(aio_);
     }
-
     /**
-     * Read logs from inFd and apply them to the device.
+     * Read logs from wlogFile and apply them to the device.
      */
-    void readAndApply(int inFd) {
-        /* Read walblog header. */
-        cybozu::util::File fileR(inFd);
-        wh_.readFrom(fileR);
-        if (!canApply()) {
-            throw RT_ERR("This walblog can not be applied to the device.");
-        }
+    void run(cybozu::util::File &wlogFile) {
+        log::FileHeader wh;
+        wh.readFrom(wlogFile);
+        verifyApplicablePbs(wh.pbs(), pbs_);
 
-        uint64_t beginLsid = wh_.beginLsid();
-        uint64_t redoLsid = beginLsid;
+        const uint64_t beginLsid = wh.beginLsid();
+        uint64_t lsid = beginLsid;
 
-        const uint32_t salt = wh_.salt();
+        const uint32_t salt = wh.salt();
         LogPackHeader packH(pbs_, salt);
-        while (packH.readFrom(fileR)) {
+        while (packH.readFrom(wlogFile)) {
             if (opt_.isVerbose) {
                 std::cout << packH.str() << std::endl;
             }
@@ -599,43 +605,27 @@ public:
                 const LogRecord &rec = packH.record(i);
                 LogBlockShared blockS(pbs_);
                 if (rec.hasData()) {
-                    blockS.read(fileR, rec.ioSizePb(pbs_));
+                    blockS.read(wlogFile, rec.ioSizePb(pbs_));
                     log::verifyLogChecksum(rec, blockS, salt);
                 } else {
                     blockS.resize(0);
                 }
                 redoPackIo(rec, blockS);
             }
-            redoLsid = packH.nextLogpackLsid();
+            lsid = packH.nextLogpackLsid();
         }
 
         readyQ_.submit(aio_);
         waitForAllProcessingIos();
 
         /* Sync device. */
-        file_.fdatasync();
+        ddevFile_.fdatasync();
         isSuccess_ = true;
 
-        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, redoLsid);
+        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, lsid);
         g_st.print();
     }
-
 private:
-    bool canApply() const {
-        const struct walblog_header &h = wh_.header();
-        bool ret = pbs_ <= h.physical_bs &&
-            h.physical_bs % pbs_ == 0;
-        if (!ret) {
-            LOGe("Physical block size does not match %u %zu.\n",
-                 h.physical_bs, pbs_);
-        }
-        return ret;
-    }
-
-    u32 salt() const {
-        return wh_.header().log_checksum_salt;
-    }
-
     /**
      * Redo a discard log by issuing discard command.
      */
@@ -647,30 +637,23 @@ private:
         waitForAllProcessingIos();
 
         /* Issue the corresponding discard IOs. */
-        uint64_t offsetAndSize[2];
-        offsetAndSize[0] = rec.offset * LOGICAL_BLOCK_SIZE;
-        offsetAndSize[1] = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-        int ret = ::ioctl(file_.fd(), BLKDISCARD, &offsetAndSize);
-        if (ret) {
-            throw RT_ERR("discard command failed.");
-        }
-        g_st.nDiscard += rec.ioSizePb(pbs_);
+        g_st.discardLb += rec.ioSizeLb();
+        g_st.writtenLb += rec.ioSizeLb();
+        cybozu::util::issueDiscard(ddevFile_.fd(), rec.offset, rec.ioSizeLb());
     }
-
     void waitForAllProcessingIos() {
         while (ioQ_.hasProcessing()) {
             waitForAnIoCompletion();
         }
         assert(overlapped_.empty());
     }
-
     template<class T>
     void verifyNotExist(const T& q, const Io *iop, const char *msg)
     {
         for (const Io* p : q) {
             if (p == iop) {
-                printf("ERR found !!! %s\n", msg);
-                exit(1);
+                ::printf("ERR found !!! %s\n", msg);
+                ::exit(1);
             }
         }
     }
@@ -684,7 +667,6 @@ private:
         overlapped_.delIoAndPushReadyIos(io, readyQ_);
         ioQ_.popFront();
     }
-
     void processIos() {
         while (ioQ_.isFull()) {
             waitForAnIoCompletion();
@@ -701,7 +683,6 @@ private:
             readyQ_.submit(aio_);
         }
     }
-
     /**
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
@@ -712,7 +693,7 @@ private:
         assert(opt_.isZeroDiscard || !rec.isDiscard());
 
         /* Create IOs. */
-        size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+        uint32_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
         uint64_t off = rec.offset * LOGICAL_BLOCK_SIZE;
         const uint32_t ioSizePb = rec.ioSizePb(pbs_);
         for (size_t i = 0; i < ioSizePb; i++) {
@@ -733,13 +714,17 @@ private:
             /* Clip if the IO area is out of range in the device. */
             if (io.offset() + io.size() <= devSize_) {
                 ioQ_.add(std::move(io));
-                if (rec.isDiscard()) { g_st.nDiscard++; }
+                if (rec.isDiscard()) {
+                    g_st.discardLb += size >> 9;
+                } else {
+                    g_st.normalLb += size >> 9;
+                }
             } else {
                 if (opt_.isVerbose) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
                              io.offset(), io.size());
                 }
-                g_st.nClipped++;
+                g_st.clippedLb += size >> 9;
             }
         }
         assert(remaining == 0);
@@ -750,17 +735,15 @@ private:
                      rec.offset, rec.ioSizeLb());
         }
     }
-
     /**
      * Redo a logpack Io.
      */
     void redoPackIo(const LogRecord &rec, LogBlockShared& blockS) {
         assert(rec.isExist());
-        const uint32_t ioSizePb = rec.ioSizePb(pbs_);
 
         if (rec.isPadding()) {
             /* Do nothing. */
-            g_st.nPadding += ioSizePb;
+            g_st.paddingPb += rec.ioSizePb(pbs_);
             return;
         }
 
@@ -771,14 +754,13 @@ private:
             }
             if (!opt_.isZeroDiscard) {
                 /* Ignore discard logs. */
-                g_st.nDiscard += ioSizePb;
+                g_st.discardLb += rec.ioSizeLb();
                 return;
             }
             /* zero-discard will use redoNormalIo(). */
         }
         redoNormalIo(rec, blockS);
     }
-
     static size_t getQueueSizeStatic(size_t bufferSize, size_t blockSize) {
         if (bufferSize <= blockSize) {
             throw RT_ERR("Buffer size must be > blockSize.");
@@ -791,12 +773,170 @@ private:
     }
 };
 
-void setupInputFile(cybozu::util::File &fileR, const Option &opt)
+class SimpleBdevWriter
+{
+private:
+    cybozu::util::File bdevFile_;
+
+    struct Io2 {
+        uint64_t offsetLb; // [logical block]
+        uint32_t sizeLb; // [logical block]
+        AlignedArray block;
+    };
+
+    std::queue<Io2> ioQ_;
+
+public:
+    explicit SimpleBdevWriter(int fd)
+        : bdevFile_(fd), ioQ_() {
+    }
+    void prepare(uint64_t offsetLb, uint32_t sizeLb, AlignedArray &&block, bool isDiscard = false) {
+        ioQ_.push({offsetLb, sizeLb, std::move(block)});
+        if (isDiscard) {
+            g_st.discardLb += sizeLb;
+        } else {
+            g_st.normalLb += sizeLb;
+        }
+    }
+    void submit() {
+        while (!ioQ_.empty()) {
+            Io2 &io = ioQ_.front();
+            bdevFile_.pwrite(io.block.data(), io.sizeLb << 9, io.offsetLb << 9);
+            ioQ_.pop();
+            g_st.writtenLb += io.sizeLb;
+        }
+    }
+    void discard(uint64_t offsetLb, uint32_t sizeLb) {
+        cybozu::util::issueDiscard(bdevFile_.fd(), offsetLb, sizeLb);
+        g_st.discardLb += sizeLb;
+        g_st.writtenLb += sizeLb;
+    }
+    void waitForAll() {
+        // do nothing.
+    }
+};
+
+template <typename BdevWriter>
+class LogApplyer
+{
+private:
+    const Option &opt_;
+    cybozu::util::File ddevFile_;
+    const uint64_t devSizeLb_; // [logical block]
+    BdevWriter ddevWriter_;
+
+public:
+    explicit LogApplyer(const Option &opt)
+        : opt_(opt)
+        , ddevFile_(opt_.ddevPath, O_RDWR | O_DIRECT)
+        , devSizeLb_(cybozu::util::getBlockDeviceSize(ddevFile_.fd()) << 9)
+        , ddevWriter_(ddevFile_.fd()) {
+    }
+    void run(cybozu::util::File &wlogFile) {
+        log::FileHeader wh;
+        wh.readFrom(wlogFile);
+        const uint32_t pbs = wh.pbs();
+        const uint32_t salt = wh.salt();
+        verifyApplicablePbs(pbs, cybozu::util::getPhysicalBlockSize(ddevFile_.fd()));
+
+        const uint64_t beginLsid = wh.beginLsid();
+        uint64_t lsid = beginLsid;
+        LogPackHeader packH(pbs, salt);
+        while (readLogPackHeader(wlogFile, packH, lsid)) {
+            if (opt_.isVerbose) std::cout << packH.str() << std::endl;
+            LogBlockShared blockS;
+            for (size_t i = 0; i < packH.nRecords(); i++) {
+                if (!readLogIo(wlogFile, packH, i, blockS)) {
+                    throw cybozu::Exception(__func__) << "invalid log IO" << i << packH;
+                }
+                redoLogIo(packH, i, std::move(blockS));
+                blockS.clear();
+            }
+            lsid = packH.nextLogpackLsid();
+        }
+        ddevWriter_.waitForAll();
+        ddevFile_.fdatasync();
+
+        ::printf("Applied lsid range [%" PRIu64 ", %" PRIu64 ")\n", beginLsid, lsid);
+        g_st.print();
+    }
+private:
+    void redoLogIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
+        const LogRecord &rec = packH.record(idx);
+        assert(rec.isExist());
+
+        if (rec.isPadding()) {
+            /* Do nothing. */
+            g_st.paddingPb += rec.ioSizePb(packH.pbs());
+            return;
+        }
+        if (rec.isDiscard()) {
+            if (opt_.isDiscard) {
+                redoDiscard(rec);
+                return;
+            }
+            if (!opt_.isZeroDiscard) {
+                /* Ignore discard logs. */
+                g_st.discardLb += rec.ioSizeLb();
+                return;
+            }
+            /* zero-discard will use redoNormalIo(). */
+        }
+        redoNormalIo(packH, idx, std::move(blockS));
+    }
+    void redoDiscard(const LogRecord &rec) {
+        assert(opt_.isDiscard);
+        assert(rec.isDiscard());
+
+        ddevWriter_.discard(rec.offset, rec.ioSizeLb());
+    }
+    void redoNormalIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
+        const LogRecord &rec = packH.record(idx);
+        const uint32_t pbs = packH.pbs();
+        assert(!rec.isPadding());
+        assert(opt_.isZeroDiscard || !rec.isDiscard());
+
+        const uint32_t ioSizePb = rec.ioSizePb(pbs);
+        const uint32_t pbsLb = ::n_lb_in_pb(pbs);
+        uint64_t offLb = rec.offset;
+        uint32_t remainingLb = rec.ioSizeLb();
+        for (size_t i = 0; i < ioSizePb; i++) {
+            AlignedArray block;
+            if (rec.isDiscard()) {
+                block.resize(pbs); // zero-cleared.
+            } else {
+                block = std::move(blockS.getBlock(i));
+            }
+            const uint32_t sizeLb = std::min(pbsLb, remainingLb);
+
+            /* Clip if the IO area is out of range in the device. */
+            if (offLb + sizeLb <= devSizeLb_) {
+                ddevWriter_.prepare(offLb, sizeLb, std::move(block), rec.isDiscard());
+            } else {
+                if (opt_.isVerbose) {
+                    ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
+                }
+                g_st.clippedLb += sizeLb;
+            }
+            offLb += sizeLb;
+            remainingLb -= sizeLb;
+        }
+        assert(remainingLb == 0);
+        ddevWriter_.submit();
+
+        if (opt_.isVerbose) {
+            ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
+                     rec.offset, rec.ioSizeLb());
+        }
+    }
+};
+
+void setupInputFile(cybozu::util::File &wlogFile, const Option &opt)
 {
     if (opt.isFromStdin()) {
-        fileR.setFd(0);
+        wlogFile.setFd(0);
     } else {
-        fileR.open(opt.inWlogPath, O_RDONLY);
+        wlogFile.open(opt.inWlogPath, O_RDONLY);
     }
 }
 
@@ -806,11 +946,16 @@ int doMain(int argc, char* argv[])
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
 
-    WalbLogApplyer wlApp(opt, BUFFER_SIZE);
-    cybozu::util::File fileR;
-    setupInputFile(fileR, opt);
-    wlApp.readAndApply(fileR.fd());
-    fileR.close();
+    cybozu::util::File wlogFile;
+    setupInputFile(wlogFile, opt);
+    if (opt.dontUseAio) {
+        LogApplyer<SimpleBdevWriter> applyer(opt);
+        applyer.run(wlogFile);
+    } else {
+        AsyncLogApplyer applyer(opt, BUFFER_SIZE);
+        applyer.run(wlogFile);
+    }
+    wlogFile.close();
     return 0;
 }
 
