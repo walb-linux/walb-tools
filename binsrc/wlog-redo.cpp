@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief Redo walb log.
- * @author HOSHINO Takashi
- *
- * (C) 2012 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_logger.hpp"
@@ -16,55 +13,38 @@
 #include "walb_util.hpp"
 
 //#define USE_DEBUG_TRACE
-/**
- * Command line configuration.
- */
-class Config
+
+using namespace walb;
+
+struct Option
 {
-private:
-    std::string ddevPath_;
-    std::string inWlogPath_;
-    bool isDiscard_;
-    bool isZeroDiscard_;
-    bool isVerbose_;
+    std::string ddevPath;
+    std::string inWlogPath;
+    bool isDiscard;
+    bool isZeroDiscard;
+    bool isVerbose;
+    bool isDebug;
 
-public:
-    Config(int argc, char* argv[])
-        : ddevPath_()
-        , inWlogPath_("-")
-        , isDiscard_(false)
-        , isZeroDiscard_(false)
-        , isVerbose_(false) {
-        parse(argc, argv);
-    }
+    Option(int argc, char* argv[]) {
+        cybozu::Option opt;
+        opt.setDescription("wlog-redo: redo wlog on a block device.");
+        opt.appendOpt(&inWlogPath, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
+        opt.appendBoolOpt(&isDiscard, "d", "issue discard for discard logs.");
+        opt.appendBoolOpt(&isZeroDiscard, "z", "zero-clear for discard logs.");
+        opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
+        opt.appendParam(&ddevPath, "DEVICE_PATH");
+        opt.appendHelp("h", ": show this message.");
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
 
-    const std::string& ddevPath() const { return ddevPath_; }
-    const std::string& inWlogPath() const { return inWlogPath_; }
-    bool isFromStdin() const { return inWlogPath_ == "-"; }
-    bool isDiscard() const { return isDiscard_; }
-    bool isZeroDiscard() const { return isZeroDiscard_; }
-    bool isVerbose() const { return isVerbose_; }
-
-    void check() const {
-        if (isDiscard() && isZeroDiscard()) {
+        if (isDiscard && isZeroDiscard) {
             throw RT_ERR("Do not specify both -d and -z together.");
         }
     }
-private:
-    void parse(int argc, char* argv[]) {
-        cybozu::Option opt;
-        opt.setDescription("Wlredo: redo wlog on a block device.");
-        opt.appendOpt(&inWlogPath_, "-", "i", "PATH: input wlog path. '-' for stdin. (default: '-')");
-        opt.appendBoolOpt(&isDiscard_, "d", "issue discard for discard logs.");
-        opt.appendBoolOpt(&isZeroDiscard_, "z", "zero-clear for discard logs.");
-        opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
-        opt.appendHelp("h", ": show this message.");
-        opt.appendParam(&ddevPath_, "DEVICE_PATH");
-        if (!opt.parse(argc, argv)) {
-            opt.usage();
-            exit(1);
-        }
-    }
+    bool isFromStdin() const { return inWlogPath == "-"; }
 };
 
 struct Statistics
@@ -90,8 +70,6 @@ struct Statistics
                  nWritten, nOverwritten);
     }
 } g_st;
-
-using AlignedArray = walb::AlignedArray;
 
 /**
  * Io data.
@@ -564,13 +542,13 @@ private:
 class WalbLogApplyer
 {
 private:
-    const Config& config_;
+    const Option& opt_;
     cybozu::util::File file_;
     const uint64_t devSize_;
     const size_t pbs_;
     const size_t maxPb_;
     cybozu::aio::Aio aio_;
-    walb::log::FileHeader wh_;
+    log::FileHeader wh_;
 
     IoQueue ioQ_; /* FIFO. */
     ReadyQueue readyQ_; /* ready to submit. */
@@ -579,9 +557,9 @@ private:
     bool isSuccess_;
 public:
     WalbLogApplyer(
-        const Config& config, size_t bufferSize)
-        : config_(config)
-        , file_(config.ddevPath().c_str(), O_RDWR | O_DIRECT)
+        const Option& opt, size_t bufferSize)
+        : opt_(opt)
+        , file_(opt.ddevPath.c_str(), O_RDWR | O_DIRECT)
         , devSize_(cybozu::util::getBlockDeviceSize(file_.fd()))
         , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
         , maxPb_(getQueueSizeStatic(bufferSize, pbs_))
@@ -612,17 +590,17 @@ public:
         uint64_t redoLsid = beginLsid;
 
         const uint32_t salt = wh_.salt();
-        walb::LogPackHeader packH(pbs_, salt);
+        LogPackHeader packH(pbs_, salt);
         while (packH.readFrom(fileR)) {
-            if (config_.isVerbose()) {
+            if (opt_.isVerbose) {
                 std::cout << packH.str() << std::endl;
             }
             for (size_t i = 0; i < packH.nRecords(); i++) {
-                const walb::LogRecord &rec = packH.record(i);
-                walb::LogBlockShared blockS(pbs_);
+                const LogRecord &rec = packH.record(i);
+                LogBlockShared blockS(pbs_);
                 if (rec.hasData()) {
                     blockS.read(fileR, rec.ioSizePb(pbs_));
-                    walb::log::verifyLogChecksum(rec, blockS, salt);
+                    log::verifyLogChecksum(rec, blockS, salt);
                 } else {
                     blockS.resize(0);
                 }
@@ -661,8 +639,8 @@ private:
     /**
      * Redo a discard log by issuing discard command.
      */
-    void redoDiscard(const walb::LogRecord& rec) {
-        assert(config_.isDiscard());
+    void redoDiscard(const LogRecord& rec) {
+        assert(opt_.isDiscard);
         assert(rec.isDiscard());
 
         /* Wait for all IO done. */
@@ -728,10 +706,10 @@ private:
      * Redo normal IO for a logpack data.
      * Zero-discard also uses this method.
      */
-    void redoNormalIo(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
+    void redoNormalIo(const LogRecord &rec, LogBlockShared& blockS) {
         assert(rec.isExist());
         assert(!rec.isPadding());
-        assert(config_.isZeroDiscard() || !rec.isDiscard());
+        assert(opt_.isZeroDiscard || !rec.isDiscard());
 
         /* Create IOs. */
         size_t remaining = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
@@ -757,7 +735,7 @@ private:
                 ioQ_.add(std::move(io));
                 if (rec.isDiscard()) { g_st.nDiscard++; }
             } else {
-                if (config_.isVerbose()) {
+                if (opt_.isVerbose) {
                     ::printf("CLIPPED\t\t%" PRIu64 "\t%zu\n",
                              io.offset(), io.size());
                 }
@@ -767,7 +745,7 @@ private:
         assert(remaining == 0);
         processIos();
 
-        if (config_.isVerbose()) {
+        if (opt_.isVerbose) {
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
                      rec.offset, rec.ioSizeLb());
         }
@@ -776,7 +754,7 @@ private:
     /**
      * Redo a logpack Io.
      */
-    void redoPackIo(const walb::LogRecord &rec, walb::LogBlockShared& blockS) {
+    void redoPackIo(const LogRecord &rec, LogBlockShared& blockS) {
         assert(rec.isExist());
         const uint32_t ioSizePb = rec.ioSizePb(pbs_);
 
@@ -787,11 +765,11 @@ private:
         }
 
         if (rec.isDiscard()) {
-            if (config_.isDiscard()) {
+            if (opt_.isDiscard) {
                 redoDiscard(rec);
                 return;
             }
-            if (!config_.isZeroDiscard()) {
+            if (!opt_.isZeroDiscard) {
                 /* Ignore discard logs. */
                 g_st.nDiscard += ioSizePb;
                 return;
@@ -813,24 +791,24 @@ private:
     }
 };
 
-void setupInputFile(cybozu::util::File &fileR, const Config &config)
+void setupInputFile(cybozu::util::File &fileR, const Option &opt)
 {
-    if (config.isFromStdin()) {
+    if (opt.isFromStdin()) {
         fileR.setFd(0);
     } else {
-        fileR.open(config.inWlogPath(), O_RDONLY);
+        fileR.open(opt.inWlogPath, O_RDONLY);
     }
 }
 
 int doMain(int argc, char* argv[])
 {
-    const size_t BUFFER_SIZE = 4 * 1024 * 1024; /* 4MB. */
-    Config config(argc, argv);
-    config.check();
+    const size_t BUFFER_SIZE = 4 * MEBI; /* 4MB. */
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
 
-    WalbLogApplyer wlApp(config, BUFFER_SIZE);
+    WalbLogApplyer wlApp(opt, BUFFER_SIZE);
     cybozu::util::File fileR;
-    setupInputFile(fileR, config);
+    setupInputFile(fileR, opt);
     wlApp.readAndApply(fileR.fd());
     fileR.close();
     return 0;
