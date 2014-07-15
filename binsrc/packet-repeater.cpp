@@ -4,11 +4,11 @@
 #include <cybozu/option.hpp>
 #include <cybozu/socket.hpp>
 #include <cybozu/log.hpp>
+#include <cybozu/time.hpp>
 #include <thread>
 #include <atomic>
 #include <chrono>
 #include <memory>
-#include <time.h>
 #include "sma.hpp"
 
 std::atomic<int> g_quit;
@@ -31,7 +31,9 @@ struct Option {
 		, threadNum(0)
 		, verbose(false)
 	{
+		cybozu::SetLogPriority(cybozu::LogInfo);
 		cybozu::Option opt;
+		bool vv = false;
 		opt.appendParam(&serverAddr, "server", ": server address");
 		opt.appendParam(&serverPort, "port", ": server port");
 		opt.appendParam(&recvPort, "recvPort", ": port to receive");
@@ -40,11 +42,13 @@ struct Option {
 		opt.appendOpt(&rateMbps, 0, "r", ": data rate(mega bit per second)");
 		opt.appendOpt(&threadNum, 5, "t", ": num of thread");
 		opt.appendBoolOpt(&verbose, "v", ": verbose message");
+		opt.appendBoolOpt(&vv, "vv", ": more verbose message");
 		opt.appendHelp("h");
 		if (!opt.parse(argc, argv)) {
 			opt.usage();
 			exit(1);
 		}
+		if (vv) cybozu::SetLogPriority(cybozu::LogDebug);
 		opt.put();
 	}
 };
@@ -114,10 +118,6 @@ class Repeater {
 	std::thread c2s_;
 	std::thread s2c_;
 	std::exception_ptr ep_;
-	uint64_t getCurTimeSec() const
-	{
-		return (uint64_t)::time(0);
-	}
 	void loop(int dir)
 		try
 	{
@@ -128,7 +128,7 @@ class Repeater {
 		const bool needShutdown = dir == 1;
 		const int intervalSec = 3;
 		SMAverage sma(intervalSec);
-		std::vector<char> buf(12 * 1024);
+		std::vector<char> buf(1024);
 		while (!g_quit) {
 			switch ((int)state_) {
 			case Sleep:
@@ -156,11 +156,12 @@ class Repeater {
 					}
 					if (g_quit) break;
 					const size_t readSize = from.readSome(buf.data(), buf.size());
-					if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d readSize %d", dir, (int)state_, (int)readSize);
+					if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d readSize %d", dir, (int)state_, (int)readSize);
 					if (opt_.rateMbps > 0) {
-						sma.append(readSize, getCurTimeSec());
-						while (sma.getBps(getCurTimeSec()) * 1e-6 > opt_.rateMbps) {
-							waitMsec(10);
+						sma.append(readSize, cybozu::GetCurrentTimeSec());
+						while (const double rate = sma.getBps(cybozu::GetCurrentTimeSec()) > opt_.rateMbps * 1e6) {
+							if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d rate %f", dir, (int)state_, rate);
+							waitMsec(1);
 						}
 					}
 					if (readSize > 0) {
