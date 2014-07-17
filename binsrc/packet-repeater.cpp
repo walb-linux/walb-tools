@@ -165,7 +165,12 @@ class Repeater {
 						}
 					}
 					if (readSize > 0) {
-						if (!g_stop && to.isValid()) to.write(buf.data(), readSize);
+						if (!g_stop && to.isValid()) {
+							if (opt_.delaySec) {
+								waitMsec(opt_.delaySec * 1000);
+							}
+							to.write(buf.data(), readSize);
+						}
 						continue;
 					}
 				} catch (std::exception& e) {
