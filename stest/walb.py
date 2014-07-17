@@ -350,15 +350,17 @@ class ServerLayout:
         return ServerLayout(sL, pL, aL)
 
 
-def get_server_args(s, sLayout, isDebug=False):
+def get_server_args(s, sLayout, isDebug=False, repeaterIp=[]):
     '''
     Get walb-tools server arguments.
     s :: Server     - server.
+    repeaterIp :: [int] - a set of ip for packet-repeater(for stest)
     return :: [str] - argument list.
     '''
     verify_type(s, Server)
     verify_type(sLayout, ServerLayout)
     verify_type(isDebug, bool)
+    verify_type(repeaterIp, list, int)
 
     if s.kind == K_STORAGE:
         proxies = ",".join(map(lambda p: p.get_host_port(), sLayout.proxyL))
@@ -374,6 +376,9 @@ def get_server_args(s, sLayout, isDebug=False):
         logPath = s.logPath
     else:
         logPath = s.dataDir + '/' + s.name + '.log'
+    port = s.port
+    if port in repeaterIp:
+        port += 10000
     ret += ["-p", str(s.port),
             "-b", s.dataDir,
             "-l", logPath,
