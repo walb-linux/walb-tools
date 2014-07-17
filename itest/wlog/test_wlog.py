@@ -26,7 +26,6 @@ WLOG_0=WLOG + ".0"
 WLOG_1=WLOG + ".1"
 WLOG_2=WLOG + ".2"
 
-CTL="../../walb/tool/walbctl"
 BIN="../../binsrc"
 CTL2 = BIN + '/wdevc'
 TMP_FILE = "tmp.txt"
@@ -82,7 +81,6 @@ def format_ldev():
 def echo_wlog_value(wlogFile, keyword):
 	# $CTL show_wlog < $wlogFile |grep $keyword |awk '{print $2}'
 #	run($CTL + " show_wlog < " + wlogFile + " > " + TMP_FILE)
-#	run("%s show_wlog < %s > %s" % (CTL, wlogFile, TMP_FILE))
         run("%s/wlog-show -stat %s > %s" % (BIN, wlogFile, TMP_FILE))
 	v = getKeyValue(TMP_FILE, keyword, 1)
 	return int(v)
@@ -126,7 +124,6 @@ def restore_test(testId, lsidDiff, invalidLsid):
 	run("%s/wlog-restore %s --verify -d %d -i %d < %s" % (BIN, LDEV, lsidDiff, invalidLsid, WLOG_0))
 	run("%s/wlog-cat %s -v -o %s" % (BIN, LDEV, WLOG_1))
 	prepare_bdev(LOOP0, LDEV)
-	#run("%s cat_wldev --wldev %s > %s" % (CTL, LOOP0, WLOG_2))
 	run("%s/wlog-cat -noaio -v %s -o %s" % (BIN, LOOP0, WLOG_2))
 	time.sleep(1)
 	finalize_bdev(LOOP0, LDEV)
@@ -163,13 +160,13 @@ def restore_test(testId, lsidDiff, invalidLsid):
 	run("%s/wlog-redo %s < %s" % (BIN, DDEV_1, WLOG_1))
 	run("%s/wlog-redo %s -z < %s" % (BIN, DDEV_1z, WLOG_1))
 	prepare_bdev(LOOP1, DDEV_2)
-	run("%s redo_wlog --ddev %s < %s" % (CTL, LOOP1, WLOG_1))
+	run("%s/wlog-redo -noaio %s < %s" % (BIN, LOOP1, WLOG_1))
 	time.sleep(1)
 	finalize_bdev(LOOP1, DDEV_2)
 	time.sleep(1)
 	prepare_bdev(LOOP0, LDEV)
 	prepare_bdev(LOOP1, DDEV_3)
-	run("%s redo --ldev %s --ddev %s" % (CTL, LOOP0, LOOP1))
+	run("%s/wdev-redo %s %s" % (BIN, LOOP0, LOOP1))
 	time.sleep(1)
 	finalize_bdev(LOOP0, LDEV)
 	finalize_bdev(LOOP1, DDEV_3)

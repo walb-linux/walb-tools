@@ -20,6 +20,7 @@ write_overlapped_and_verify
 write_random_data
 virt-full-cat
 wdev-poll
+wdev-redo
 lvm-mgr
 walb-storage
 walb-proxy

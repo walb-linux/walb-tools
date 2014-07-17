@@ -10,7 +10,7 @@ isDebug = True
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
-wdevcPath = binDir + 'walbctl'
+wdevcPath = binDir + 'wdevc'
 walbcPath = binDir + 'walbc'
 
 

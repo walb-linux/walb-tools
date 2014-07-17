@@ -1,4 +1,4 @@
-import subprocess, shlex, sys
+import subprocess, shlex, sys, time
 
 def run(args):
     print "args:", args
@@ -14,8 +14,11 @@ def run(args):
         outFile = open(cmd[pos + 1], "w")
         cmd[pos:pos+2] = []
 
+    t0 = time.time()
     p = subprocess.Popen(cmd, stdin=inFile, stdout=outFile, stderr=sys.stdout)
     ret = p.wait()
+    t1 = time.time()
+    print 'exectime: ', t1 - t0
     if inFile:
         inFile.close()
     if outFile:

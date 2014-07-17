@@ -98,17 +98,14 @@ inline bool isDiscardSupported(int fd)
 
 /**
  * @fd file descriptor.
- * @bgnLb begin offset [logical block].
- * @endLb end offset [logical block].
+ * @offsetLb begin offset [logical block].
+ * @sizeLb size [logical block].
  */
-inline void issueDiscard(int fd, uint64_t bgnLb, uint64_t endLb)
+inline void issueDiscard(int fd, uint64_t offsetLb, uint64_t sizeLb)
 {
     assert(fd > 0);
-    if (bgnLb >= endLb) {
-        throw RT_ERR("bgnLb must be < endLb %" PRIu64 " %" PRIu64 ".", bgnLb, endLb);
-    }
-    uint64_t range[2] = {bgnLb << 9, endLb << 9};
-    if (::ioctl(fd, BLKDISCARD, &range)) {
+    uint64_t range[2] = {offsetLb << 9, sizeLb << 9};
+    if (::ioctl(fd, BLKDISCARD, &range) < 0) {
         throw LibcError(errno, __func__);
     }
 }

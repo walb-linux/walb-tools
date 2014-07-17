@@ -43,7 +43,7 @@ inline void verifySizeIsMultipleOfPbs(size_t size, uint32_t pbs, const char *msg
 /**
  * WalB super sector.
  *
- * You should call read() or format() at first.
+ * You should call read(), copyFrom(), or format() at first.
  */
 class SuperBlock
 {
@@ -164,7 +164,10 @@ public:
             cybozu::Exception(__func__) << "invalid super block.";
         }
     }
-
+    void copyFrom(const SuperBlock &rhs) {
+        init(rhs.pbs());
+        data_ = rhs.data_;
+    }
     /**
      * Read super block from the log device.
      */
@@ -197,28 +200,28 @@ public:
                   "lbs: %u\n"
                   "pbs: %u\n"
                   "metadataSize: %u\n"
-                  "logChecksumSalt: %u\n"
+                  "salt: %u\n"
                   "name: %s\n"
                   "ringBufferSize: %" PRIu64 "\n"
                   "oldestLsid: %" PRIu64 "\n"
                   "writtenLsid: %" PRIu64 "\n"
                   "deviceSize: %" PRIu64 "\n"
                   "ringBufferOffset: %" PRIu64 "\n"
-                  "uuid: %s\n",
-                  getSectorType(),
-                  getVersion(),
-                  getChecksum(),
-                  getLogicalBlockSize(),
-                  getPhysicalBlockSize(),
-                  getMetadataSize(),
-                  getLogChecksumSalt(),
-                  getName(),
-                  getRingBufferSize(),
-                  getOldestLsid(),
-                  getWrittenLsid(),
-                  getDeviceSize(),
-                  getRingBufferOffset(),
-                  getUuid().str().c_str());
+                  "uuid: %s\n"
+                  , getSectorType()
+                  , getVersion()
+                  , getChecksum()
+                  , getLogicalBlockSize()
+                  , pbs()
+                  , getMetadataSize()
+                  , salt()
+                  , getName()
+                  , getRingBufferSize()
+                  , getOldestLsid()
+                  , getWrittenLsid()
+                  , getDeviceSize()
+                  , getRingBufferOffset()
+                  , getUuid().str().c_str());
     }
 private:
     void init(uint32_t pbs) {

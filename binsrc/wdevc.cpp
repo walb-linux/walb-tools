@@ -70,10 +70,6 @@ const Opt<uint32_t> numPackBulkOpt = {
     DEFAULT_NUM_PACK_BULK, "bp", "SIZE : number of packs in bulk", true};
 const Opt<uint32_t> numIoBulkOpt = {
     DEFAULT_NUM_IO_BULK, "bi", "SIZE : numer of IOs in bulk", true};
-const Opt<uint64_t> lsid0Opt = {
-    uint64_t(-1), "lb", "LSID : begin log sequence id (default: oldest_lsid)", false};
-const Opt<uint64_t> lsid1Opt = {
-    uint64_t(-1), "le", "LSID : end log sequence id (default: permanent_lsid)", false};
 const Opt<std::string> nameOpt = {
     "", "n", "NAME : walb device name (default: decided automatically)", false};
 const Opt<bool> noDiscardOpt = {false, "nd", ": disable discard IOs", false};
@@ -86,8 +82,6 @@ const OptS flushIntervalMbOptS = fromOpt(flushIntervalMbOpt);
 const OptS flushIntervalMsOptS = fromOpt(flushIntervalMsOpt);
 const OptS numPackBulkOptS = fromOpt(numPackBulkOpt);
 const OptS numIoBulkOptS = fromOpt(numIoBulkOpt);
-const OptS lsid0OptS = fromOpt(lsid0Opt);
-const OptS lsid1OptS = fromOpt(lsid1Opt);
 const OptS nameOptS = fromOpt(nameOpt);
 const OptS noDiscardOptS = fromOpt(noDiscardOpt);
 
@@ -111,7 +105,6 @@ struct Option
 
     struct walb_start_param sParam;
 
-    uint64_t lsid0, lsid1;
     std::string name;
     bool noDiscard;
 
@@ -129,8 +122,6 @@ struct Option
         appendOpt(&sParam.n_pack_bulk, numPackBulkOpt);
         appendOpt(&sParam.n_io_bulk, numIoBulkOpt);
 
-        appendOpt(&lsid0, lsid0Opt);
-        appendOpt(&lsid1, lsid1Opt);
         appendOpt(&name, nameOpt);
         appendOpt(&noDiscard, noDiscardOpt);
 
@@ -336,40 +327,6 @@ void forceCheckpoint(const Option &opt)
     device::takeCheckpoint(wdev);
 
     LOGs.debug() << "force-checkpoint done";
-}
-
-namespace local {
-
-// QQQ DEPRECATED???
-void decideLsidRange(uint64_t &lsid0, uint64_t &lsid1, uint64_t oldestLsid, const Option &opt)
-{
-    lsid0 = oldestLsid;
-    lsid1 = uint64_t(-1);
-
-    if (opt.lsid0 != uint64_t(-1)) {
-        lsid0 = std::max(lsid0, opt.lsid0);
-    }
-    if (opt.lsid1 != uint64_t(-1)) {
-        lsid1 = opt.lsid1;
-    }
-    if (lsid0 >= lsid1) {
-        throw cybozu::Exception(__func__) << "bad lsid range" << lsid0 << lsid1;
-    }
-
-    // We could not get permanent lsid here.
-    LOGs.debug() << "lsid range are set" << lsid0 << lsid1;
-}
-
-} // namespace local
-
-void redoWlog(const Option &/*opt*/)
-{
-    // QQQ
-}
-
-void redo(const Option &/*opt*/)
-{
-    // QQQ
 }
 
 void setOldestLsid(const Option &opt)
@@ -636,10 +593,7 @@ const std::vector<Command> commandVec_ = {
 
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
-    {forceCheckpoint, "checkpoint", {wdevParam}, {}, ""},
-
-    {defaultRunner, "redo-wlog", {ddevParam}, {lsid0OptS, lsid1OptS}, " < WLOG"},
-    {defaultRunner, "redo", {ldevParam, ddevParam}, {}, ""},
+    {forceCheckpoint, "force-checkpoint", {wdevParam}, {}, ""},
 
     {setOldestLsid, "set-oldest-lsid", {wdevParam, lsidParam}, {}, ""},
     {getOldestLsid, "get-oldest-lsid", {wdevParam}, {}, ""},
