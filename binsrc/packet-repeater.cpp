@@ -40,7 +40,7 @@ struct Option {
 		opt.appendParam(&cmdPort, "cmdPort", ": port for command");
 		opt.appendOpt(&delaySec, 0, "d", ": delay second");
 		opt.appendOpt(&rateMbps, 0, "r", ": data rate(mega bit per second)");
-		opt.appendOpt(&threadNum, 5, "t", ": num of thread");
+		opt.appendOpt(&threadNum, 10, "t", ": num of thread");
 		opt.appendBoolOpt(&verbose, "v", ": verbose message");
 		opt.appendBoolOpt(&vv, "vv", ": more verbose message");
 		opt.appendHelp("h");
