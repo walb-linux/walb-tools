@@ -34,17 +34,3 @@ class Repeater:
 
     def quit(self):
         send_cmd_to_repeater(self.cmdIp, 'quit')
-
-"""
-r = Repeater('vm4', '80', 40000, 40001, isDebug=True)
-print 'wait 5sec'
-time.sleep(5)
-print 'stop wait 5sec'
-r.stop()
-time.sleep(5)
-print 'start wait 5sec'
-r.start()
-time.sleep(5)
-print 'quit wait 5sec'
-r.quit()
-"""
