@@ -246,9 +246,9 @@ int main(int argc, char *argv[])
         for (size_t i = 0; i < opt.threadNum; i++) {
             worker.emplace_back(new Repeater(opt));
         }
-        while (!g_quit) {
+        for (;;) {
     RETRY:
-            while (!server.queryAccept()) {
+            while (!g_quit && !server.queryAccept()) {
 #if 0
                 if (opt.verbose) {
                     printf("worker state ");
