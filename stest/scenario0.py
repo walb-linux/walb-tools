@@ -5,8 +5,10 @@ import itertools
 import random
 import datetime
 from walb import *
+from repeater import *
 
 isDebug = True
+repeaterIp = []
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
@@ -79,14 +81,19 @@ def wait_for_server_ready(s, timeoutS=10):
 
 def startup(s):
     make_dir(workDir + s.name)
-    args = get_server_args(s, sLayout)
+    args = get_server_args(s, sLayout, repeaterIp=repeaterIp)
     if isDebug:
         print 'cmd=', to_str(args)
     run_daemon(args)
     wait_for_server_ready(s)
 
 
+def run_repeater(ip):
+	return Repeater('localhost', ip, ip + 30000, ip + 40000)
+
 def startup_all():
+    for ip in repeaterIp:
+        run_repeater(ip)
     for s in sLayout.get_all():
         startup(s)
 
@@ -1016,7 +1023,8 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
-        'r1', 'r2', 'r3', 'r4']
+        'r1', 'r2', 'r3', 'r4',
+       ]
 
 
 def main():
@@ -1026,6 +1034,11 @@ def main():
     except:
         count = 1
         pos = 1
+
+	if sys.argv[pos] == 'p':
+		global repeaterIp
+		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
+		pos += 1
 
     testL = sys.argv[pos:]
     if not testL:
