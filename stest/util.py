@@ -275,7 +275,7 @@ def wait_for_lv_ready(lvPath, runCommand=run_local_command):
 ########################################
 
 
-def verify_type(obj, typeValue):
+def verify_type(obj, typeValue,elemType=None):
     '''
     obj - object.
     typeValue - type like int, str, list.
@@ -283,6 +283,9 @@ def verify_type(obj, typeValue):
     '''
     if not isinstance(obj, typeValue):
         raise Exception('invalid type', type(obj), typeValue)
+    if isinstance(obj, list) and elemType:
+        if not all(isinstance(e, elemType) for e in obj):
+            raise Exception('invalid list type', type(obj), typeValue, elemType)
 
 
 def verify_function(obj):
