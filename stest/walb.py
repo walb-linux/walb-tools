@@ -379,7 +379,7 @@ def get_server_args(s, sLayout, isDebug=False, repeaterIp=[]):
     port = s.port
     if port in repeaterIp:
         port += 10000
-    ret += ["-p", str(s.port),
+    ret += ["-p", str(port),
             "-b", s.dataDir,
             "-l", logPath,
             "-id", s.name]

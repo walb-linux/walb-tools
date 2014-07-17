@@ -89,9 +89,15 @@ def startup(s):
 
 
 def run_repeater(ip):
-	return Repeater('localhost', ip, ip + 30000, ip + 40000)
+	return Repeater('localhost', ip + 10000, ip, ip + 20000, rateMbps=1)
+
+
+def kill_all_repeaters():
+    subprocess.Popen(['/usr/bin/pkill', '-9', 'packet-repeater'])
+    time.sleep(0.3)
 
 def startup_all():
+    kill_all_repeaters()
     for ip in repeaterIp:
         run_repeater(ip)
     for s in sLayout.get_all():
@@ -1037,7 +1043,8 @@ def main():
 
 	if sys.argv[pos] == 'p':
 		global repeaterIp
-		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
+#		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
+		repeaterIp = [10000]
 		pos += 1
 
     testL = sys.argv[pos:]
