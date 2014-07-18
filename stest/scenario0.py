@@ -89,7 +89,7 @@ def startup(s):
 
 
 def run_repeater(ip):
-	return Repeater('localhost', ip + 10000, ip, ip + 20000, rateMbps=1)
+	return Repeater('localhost', ip + 10000, ip, ip + 20000, rateMbps=10)
 
 
 def kill_all_repeaters():
@@ -1043,8 +1043,8 @@ def main():
 
 	if sys.argv[pos] == 'p':
 		global repeaterIp
-#		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
-		repeaterIp = [10000]
+		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
+#		repeaterIp = [10200]
 		pos += 1
 
     testL = sys.argv[pos:]
