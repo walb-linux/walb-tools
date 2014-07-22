@@ -882,13 +882,9 @@ def test_e9():
     gid0 = walbc.snapshot_async(s0, VOL)
     walbc.wait_for_restorable(a0, VOL, gid0)
     # stop repeater
-    print "shutdown s0"
     walbc.shutdown(s0, 'force')
-    print "wait 0.3sec"
-    time.sleep(0.3)
-    print "quit r0"
     r0.quit()
-    print "start s0"
+    time.sleep(0.5)
     startup(s0)
     print 'test_e9:succeeded'
 
