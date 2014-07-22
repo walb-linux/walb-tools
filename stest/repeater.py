@@ -1,14 +1,30 @@
 #!/usr/bin/env python
-import os, socket
-from util import *
+import os, socket, time
+from walb import *
 from contextlib import closing
 
+
 def send_cmd_to_repeater(ip, cmd):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    for i in xrange(3):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            break
+        except:
+            time.sleep(0.3)
+    else:
+        raise Exception('send_cmd_to_repeater:retry over', ip, cmd)
     with closing(s):
         s.connect(('localhost', ip))
         s.send(cmd)
         s.close()
+
+
+def quit_repeater(ip):
+    try:
+        send_cmd_to_repeater(ip, 'quit')
+    except:
+        pass
+
 
 class Repeater:
     '''

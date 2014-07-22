@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
 import os
-import itertools
+import itertools, shutil, threading
 import random
 import datetime
 from walb import *
 from repeater import *
 
 isDebug = True
-repeaterIp = []
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
@@ -79,27 +78,37 @@ def wait_for_server_ready(s, timeoutS=10):
     raise Exception('wait_for_server_ready:timeout', s, timeoutS)
 
 
-def startup(s):
+def run_repeater(port, rateMbps=10):
+    """
+        run repeater
+        port         ; ip to receive packets
+        port + 10000 ; ip to send packets (original server)
+        port + 20000 ; ip to recieve command
+    """
+    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps)
+
+
+def startup(s, useRepeater=False):
     make_dir(workDir + s.name)
-    args = get_server_args(s, sLayout, repeaterIp=repeaterIp)
+    args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
         print 'cmd=', to_str(args)
+    r = None
+    if useRepeater:
+        quit_repeater(s.port)
+        r = run_repeater(s.port)
     run_daemon(args)
     wait_for_server_ready(s)
-
-
-def run_repeater(ip):
-	return Repeater('localhost', ip + 10000, ip, ip + 20000, rateMbps=10)
+    return r
 
 
 def kill_all_repeaters():
     subprocess.Popen(['/usr/bin/pkill', '-9', 'packet-repeater'])
     time.sleep(0.3)
 
+
 def startup_all():
     kill_all_repeaters()
-    for ip in repeaterIp:
-        run_repeater(ip)
     for s in sLayout.get_all():
         startup(s)
 
@@ -853,6 +862,37 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
+def test_e9():
+    """
+        down network between s0 and p0 -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e9:network down and recover', g_count
+    walbc.shutdown(s0, 'force')
+    r0 = startup(s0, useRepeater=True)
+    r0.stop()
+    write_random(wdev0.path, 1)
+    try:
+        gid0 = walbc.snapshot_async(s0, VOL)
+        raise Exception('test_e9:expect timeout')
+    except:
+        print 'test_e9:timeout ok'
+        pass
+    r0.start()
+    gid0 = walbc.snapshot_async(s0, VOL)
+    walbc.wait_for_restorable(a0, VOL, gid0)
+    # stop repeater
+    print "shutdown s0"
+    walbc.shutdown(s0, 'force')
+    print "wait 0.3sec"
+    time.sleep(0.3)
+    print "quit r0"
+    r0.quit()
+    print "start s0"
+    startup(s0)
+    print 'test_e9:succeeded'
+
+
 ###############################################################################
 # Replacement scenario tests.
 ###############################################################################
@@ -1029,6 +1069,7 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
+        'e9',
         'r1', 'r2', 'r3', 'r4',
        ]
 
@@ -1040,12 +1081,6 @@ def main():
     except:
         count = 1
         pos = 1
-
-	if sys.argv[pos] == 'p':
-		global repeaterIp
-		repeaterIp = [10000, 10001, 10002, 10100, 10101, 10102, 10200, 10201, 10202]
-#		repeaterIp = [10200]
-		pos += 1
 
     testL = sys.argv[pos:]
     if not testL:
