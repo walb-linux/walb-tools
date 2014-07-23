@@ -955,6 +955,8 @@ def test_e12():
     r0 = startup(a0, useRepeater=True, rateMbps=1)
     walbc.clear_vol(s0, VOL)
     walbc.init_storage(s0, VOL, wdev0.path)
+    walbc.stop(a0, VOL)
+    walbc.reset_vol(a0, VOL)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     print 'test_e12:full_backup'
