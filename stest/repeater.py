@@ -30,13 +30,15 @@ class Repeater:
     '''
     packet repeater
     '''
-    def __init__(self, server, serverIp, recvIp, cmdIp, rateMbps=0, isDebug=False):
+    def __init__(self, server, serverIp, recvIp, cmdIp, rateMbps=0, delayMsec=0, isDebug=False):
         args = [
             os.getcwd() + '/binsrc/packet-repeater',
             server, str(serverIp), str(recvIp), str(cmdIp)
         ]
         if rateMbps:
             args += ['-r', str(rateMbps)]
+        if delayMsec:
+            args += ['-d', str(delayMsec)]
         if isDebug:
             args += ['-v']
         run_daemon(args)
