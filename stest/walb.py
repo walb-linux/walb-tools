@@ -1365,7 +1365,7 @@ class Controller:
             time.sleep(0.3)
         raise Exception('full_backup:timeout', sx, vol, gids)
 
-    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC):
+    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, sync=True):
         '''
         Run hash backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1376,11 +1376,13 @@ class Controller:
         vol :: str      - volume name.
         timeoutS :: int - timeout [sec].
                           Counter will start after dirty hash backup done.
+        sync :: bool    - sync if True
         return :: int   - generation id of a clean snapshot.
         '''
         verify_type(sx, Server)
         verify_type(vol, str)
         verify_type(timeoutS, int)
+        verify_type(sync, bool)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
@@ -1390,6 +1392,8 @@ class Controller:
         else:
             max_gid = -1
         self.run_ctl(sx, ["hash-bkp", vol])
+        if not sync:
+            return
         self._wait_for_state_change(sx, vol, sDuringHashSync,
                                     [sMaster], timeoutS)
         st = self.get_state(a0, vol)
