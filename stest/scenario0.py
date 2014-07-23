@@ -944,6 +944,43 @@ def test_e11():
     startup(a0)
     print 'test_e11:succeeded'
 
+
+def test_e12():
+    """
+        down network between p0 and a0 in full-backup -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e12:network down and recover', g_count
+    walbc.shutdown(a0, 'force')
+    print 'A'*10
+    r0 = startup(a0, useRepeater=True, delayMsec=0)
+    walbc.clear_vol(s0, VOL)
+    print 'B'*10
+    walbc.init_storage(s0, VOL, wdev0.path)
+    print 'C'*10
+    write_random(wdev0.path, 1)
+    print 'D'*10
+    md0 = get_sha1(wdev0.path)
+    print 'test_e12:full_backup'
+    gid = walbc.full_backup(s0, VOL, sync=False)
+    print 'test_e12:wait 2.5sec'
+    time.sleep(2.5)
+    r0.stop()
+    print 'test_e12:wait 10sec'
+    r0.start()
+    time.sleep(10)
+    st = walbc.get_state(a0, VOL)
+    if st != 'SyncReady':
+        raise Exception('test_n12:bad state', st)
+    gid = walbc.full_backup(s0, VOL)
+    restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
+    # stop repeater
+    walbc.shutdown(a0, 'force')
+    r0.quit()
+    time.sleep(1)
+    startup(a0)
+    print 'test_e12:succeeded'
+
 ###############################################################################
 # Replacement scenario tests.
 ###############################################################################
@@ -1120,7 +1157,7 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
-        'e9', 'e10', 'e11',
+        'e9', 'e10', 'e11', 'e12',
         'r1', 'r2', 'r3', 'r4',
        ]
 
