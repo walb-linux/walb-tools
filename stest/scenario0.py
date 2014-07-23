@@ -889,6 +889,34 @@ def test_e9():
     print 'test_e9:succeeded'
 
 
+def test_e10():
+    """
+        down network between s0 and p0 -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e10:network down and recover', g_count
+    walbc.shutdown(s0, 'force')
+    r0 = startup(s0, useRepeater=True)
+    r0.stop()
+    write_over_wldev(wdev0, overflow=True)
+    try:
+        gid0 = walbc.snapshot_async(s0, VOL)
+        raise Exception('test_e10:expect timeout')
+    except:
+        print 'AAAAAAAAAAAAAAAAAAAAAtest_e10:timeout ok'
+        pass
+    r0.start()
+    gid = walbc.hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e10', md0, md1)
+    # stop repeater
+    walbc.shutdown(s0, 'force')
+    r0.quit()
+    time.sleep(0.5)
+    startup(s0)
+    print 'test_e10:succeeded'
+
 ###############################################################################
 # Replacement scenario tests.
 ###############################################################################
@@ -1065,7 +1093,7 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
-        'e9',
+        'e9', 'e10',
         'r1', 'r2', 'r3', 'r4',
        ]
 
