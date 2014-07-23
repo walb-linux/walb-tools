@@ -2,9 +2,6 @@
 /**
  * @file
  * @brief walb diff utiltities for files.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "walb_diff_pack.hpp"
 #include "uuid.hpp"
@@ -46,15 +43,21 @@ struct DiffFileHeader : walb_diff_file_header
         uuid.copyTo(this->uuid);
     }
 
-    void print(::FILE *fp) const {
-        ::fprintf(fp, "-----walb_file_header-----\n"
-                  "checksum: %08x\n"
-                  "maxIoBlocks: %u\n"
-                  "uuid: %s\n",
-                  checksum, max_io_blocks, getUuid().str().c_str());
+    std::string str() const {
+        return cybozu::util::formatString(
+            "wdiff_h:\n"
+            "  checksum: %08x\n"
+            "  maxIoBlocks: %u\n"
+            "  uuid: %s\n"
+            , checksum, max_io_blocks, getUuid().str().c_str());
     }
-
-    void print() const { print(::stdout); }
+    friend inline std::ostream& operator<<(std::ostream &os, const DiffFileHeader &fileH) {
+        os << fileH.str();
+        return os;
+    }
+    void print(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "%s", str().c_str());
+    }
 
     void init() {
         ::memset(this, 0, getSize());
@@ -262,6 +265,13 @@ private:
     uint32_t totalSize_;
 
 public:
+    Reader()
+        : fileR_()
+        , isReadHeader_(false)
+        , pack_()
+        , recIdx_(0)
+        , totalSize_(0) {
+    }
     explicit Reader(int fd)
         : fileR_(fd)
         , isReadHeader_(false)
@@ -269,14 +279,20 @@ public:
         , recIdx_(0)
         , totalSize_(0) {
     }
-    explicit Reader(const std::string &diffPath, int flags)
+    Reader(const std::string &diffPath, int flags)
         : fileR_(diffPath, flags)
         , isReadHeader_(false)
         , pack_()
         , recIdx_(0)
         , totalSize_(0) {
     }
-
+    explicit Reader(cybozu::util::File &&fileR)
+        : fileR_(std::move(fileR))
+        , isReadHeader_(false)
+        , pack_()
+        , recIdx_(0)
+        , totalSize_(0) {
+    }
     ~Reader() noexcept try {
         close();
     } catch (...) {
@@ -285,18 +301,26 @@ public:
     void close() {
         fileR_.close();
     }
+    void open(const std::string &diffPath) {
+        init();
+        fileR_.open(diffPath, O_RDONLY);
+    }
+    void setFd(int fd) {
+        init();
+        fileR_.setFd(fd);
+    }
 
     /**
      * Read header data.
      * You must call this at first.
      */
-    void readHeader(DiffFileHeader &head, bool doReadHeader = true) {
+    void readHeader(DiffFileHeader &head, bool doReadPackHeader = true) {
         if (isReadHeader_) {
             throw RT_ERR("Do not call readHeader() more than once.");
         }
         head.readFrom(fileR_);
         isReadHeader_ = true;
-        if (doReadHeader) readPackHeader();
+        if (doReadPackHeader) readPackHeader();
     }
     /**
      * Read header data with another interface.
@@ -388,6 +412,12 @@ private:
      */
     bool readPackHeader() {
         return readPackHeader(pack_);
+    }
+    void init() {
+        pack_.reset();
+        isReadHeader_ = false;
+        recIdx_ = 0;
+        totalSize_ = 0;
     }
 };
 

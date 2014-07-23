@@ -6,6 +6,7 @@ wdiff-full
 wdiff-merge
 wdiff-redo
 wdiff-show
+wdiff-send
 wldev-info
 wldev-show
 wlog-analyze

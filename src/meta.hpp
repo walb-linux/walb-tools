@@ -2,9 +2,6 @@
 /**
  * @file
  * @brief Meta snapshot and diff.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cstdio>
 #include <cassert>

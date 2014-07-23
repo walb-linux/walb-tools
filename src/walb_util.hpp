@@ -129,7 +129,7 @@ inline void sleepMs(size_t ms)
 }
 
 /**
- * Hex string.
+ * Convert binary data to hex string.
  */
 inline std::string binaryToStr(const void *data, size_t size)
 {
@@ -140,6 +140,20 @@ inline std::string binaryToStr(const void *data, size_t size)
         cybozu::itohex(&s[i * 2], 2, p[i], false);
     }
     return s;
+}
+
+/**
+ * Convert a hex string to binary data.
+ */
+template <typename CharT>
+inline void strToBinary(const std::string &s, CharT *p, size_t size)
+{
+    if (size * 2 != s.size()) {
+        throw cybozu::Exception(__func__) << "bad size" << s << size * 2;
+    }
+    for (size_t i = 0; i < size; i++) {
+        p[i] = cybozu::hextoi(&s[i * 2], 2);
+    }
 }
 
 inline std::string timeToPrintable(uint64_t ts)
@@ -226,4 +240,3 @@ inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], c
     int main(int argc, char *argv[]) {                 \
         return errorSafeMain(doMain, argc, argv, msg); \
     }
-

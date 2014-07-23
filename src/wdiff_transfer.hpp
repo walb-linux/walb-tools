@@ -5,6 +5,7 @@
 #include "walb_diff_compressor.hpp"
 #include "walb_diff_pack.hpp"
 #include "protocol.hpp"
+#include "host_info.hpp"
 
 namespace walb {
 

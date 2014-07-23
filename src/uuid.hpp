@@ -33,6 +33,9 @@ public:
     std::string str() const {
         return walb::util::binaryToStr(&data_[0], UUID_SIZE);
     }
+    void set(const std::string &uuidStr) {
+        walb::util::strToBinary(uuidStr, data_, UUID_SIZE);
+    }
     void set(const void *data) {
         ::memcpy(data_, data, UUID_SIZE);
     }

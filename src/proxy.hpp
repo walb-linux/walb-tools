@@ -954,8 +954,6 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     ul.unlock();
     util::connectWithTimeout(sock, hi.addrPort.getSocketAddr(), gp.socketTimeout);
     const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
-    packet::Packet aPack(sock);
-
     ProtocolLogger logger(gp.nodeId, serverId);
 
     const DiffFileHeader& fileH = merger.header();
