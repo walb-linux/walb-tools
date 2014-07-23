@@ -85,7 +85,7 @@ def run_repeater(port, rateMbps=10, delayMsec=0):
         port + 10000 ; ip to send packets (original server)
         port + 20000 ; ip to recieve command
     """
-    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps, delayMsec=delayMsec, isDebug=isDebug)
+    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
 
 
 def startup(s, useRepeater=False, delayMsec=0, rateMbps=0):
@@ -950,7 +950,7 @@ def test_e12():
         down network between p0 and a0 in full-backup -> recover -> synchronizing
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e12:network down and recover', g_count
+        'test_e12:network down and recover full-backup', g_count
     walbc.shutdown(a0, 'force')
     r0 = startup(a0, useRepeater=True, rateMbps=10)
     walbc.clear_vol(s0, VOL)
@@ -984,6 +984,50 @@ def test_e12():
     time.sleep(1)
     startup(a0)
     print 'test_e12:succeeded'
+
+
+def test_e13():
+    """
+        down network between p0 and a0 in hash-backup -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e13:network down and recover hash-backup', g_count
+    walbc.shutdown(a0, 'force')
+    r0 = startup(a0, useRepeater=True, rateMbps=10)
+    for i in xrange(3):
+        write_random(wdev0.path, 1)
+        walbc.snapshot_sync(s0, VOL, [a0])
+    md0 = get_sha1(wdev0.path)
+    list0 = walbc.list_restorable(a0, VOL)
+    print 'test_e13:list0', list0
+    print 'test_e13:hash_backup'
+    gid = walbc.hash_backup(s0, VOL, sync=False)
+    print 'test_e13:wait 1sec'
+    time.sleep(0.5)
+    r0.stop()
+    print 'test_e13:wait 10sec to force timeout'
+    time.sleep(10)
+    r0.start()
+    for i in xrange(20):
+        st = walbc.get_state(a0, VOL)
+        if st == 'Archived':
+            print 'test_e13:ok state'
+            break
+        print 'test_e13:wait 1sec retry', i, st
+        time.sleep(1)
+    else:
+        raise Exception('test_e13:timeout', st)
+    gid = walbc.hash_backup(s0, VOL)
+    list1 = walbc.list_restorable(a0, VOL)
+    print 'test_e13:gid', gid
+    print 'test_e13:list0', list0
+    print 'test_e13:list1', list1
+    # stop repeater
+    walbc.shutdown(a0, 'force')
+    r0.quit()
+    time.sleep(1)
+    startup(a0)
+    print 'test_e13:succeeded'
 
 ###############################################################################
 # Replacement scenario tests.
@@ -1161,7 +1205,7 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'n10', 'n11a', 'n11b', 'n12',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
-        'e9', 'e10', 'e11', 'e12',
+        'e9', 'e10', 'e11', 'e12', 'e13',
         'r1', 'r2', 'r3', 'r4',
        ]
 
