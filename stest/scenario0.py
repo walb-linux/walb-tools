@@ -903,7 +903,7 @@ def test_e10():
         gid0 = walbc.snapshot_async(s0, VOL)
         raise Exception('test_e10:expect timeout')
     except:
-        print 'AAAAAAAAAAAAAAAAAAAAAtest_e10:timeout ok'
+        print 'test_e10:timeout ok'
         pass
     r0.start()
     gid = walbc.hash_backup(s0, VOL)
