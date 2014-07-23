@@ -952,25 +952,30 @@ def test_e12():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e12:network down and recover', g_count
     walbc.shutdown(a0, 'force')
-    r0 = startup(a0, useRepeater=True, rateMbps=1)
+    r0 = startup(a0, useRepeater=True, rateMbps=10)
     walbc.clear_vol(s0, VOL)
     walbc.init_storage(s0, VOL, wdev0.path)
     walbc.stop(a0, VOL)
     walbc.reset_vol(a0, VOL)
-    write_random(wdev0.path, 1)
+    write_random(wdev0.path, 2)
     md0 = get_sha1(wdev0.path)
     print 'test_e12:full_backup'
     gid = walbc.full_backup(s0, VOL, sync=False)
-    print 'test_e12:wait 2.5sec'
-    time.sleep(2.5)
+    print 'test_e12:wait 1sec'
+    time.sleep(0.5)
     r0.stop()
-    print 'test_e12:wait 10sec'
-    r0.start()
+    print 'test_e12:wait 10sec to force timeout'
     time.sleep(10)
-    if st == 'SyncReady':
-        print 'test_n12:ok state'
+    r0.start()
+    for i in xrange(20):
+        st = walbc.get_state(a0, VOL)
+        if st == 'SyncReady':
+            print 'test_n12:ok state'
+            break
+        print 'test_e12:wait 1sec retry', i, st
+        time.sleep(1)
     else:
-        raise Exception('test_n12:bad state', st)
+        raise Exception('test_n12:timeout', st)
     gid = walbc.full_backup(s0, VOL)
     restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
     # stop repeater

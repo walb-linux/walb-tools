@@ -41,6 +41,7 @@ class Repeater:
             args += ['-d', str(delayMsec)]
         if isDebug:
             args += ['-v']
+            print "Repeater:args", args
         run_daemon(args)
         self.cmdIp = cmdIp
 
