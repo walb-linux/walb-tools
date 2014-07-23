@@ -78,17 +78,17 @@ def wait_for_server_ready(s, timeoutS=10):
     raise Exception('wait_for_server_ready:timeout', s, timeoutS)
 
 
-def run_repeater(port, rateMbps=10):
+def run_repeater(port, rateMbps=10, delayMsec=0):
     """
         run repeater
         port         ; ip to receive packets
         port + 10000 ; ip to send packets (original server)
         port + 20000 ; ip to recieve command
     """
-    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps)
+    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps, delayMsec=delayMsec, isDebug=isDebug)
 
 
-def startup(s, useRepeater=False):
+def startup(s, useRepeater=False, delayMsec=0):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
@@ -96,7 +96,7 @@ def startup(s, useRepeater=False):
     r = None
     if useRepeater:
         quit_repeater(s.port)
-        r = run_repeater(s.port)
+        r = run_repeater(s.port, delayMsec=delayMsec)
     run_daemon(args)
     wait_for_server_ready(s)
     return r

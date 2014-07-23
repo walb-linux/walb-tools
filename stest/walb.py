@@ -1329,7 +1329,7 @@ class Controller:
             self.start(px, vol)
         self.kick_all_storage()
 
-    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC):
+    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, sync=True):
         '''
         Run full backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1338,15 +1338,19 @@ class Controller:
         vol :: str      - volume name.
         timeoutS :: int - timeout [sec].
                           Counter will start after dirty full backup done.
+        sync :: Bool    - sync if True
         return :: int   - generation id of a clean snapshot.
         '''
         verify_type(sx, Server)
         verify_type(vol, str)
         verify_type(timeoutS, int)
+        verify_type(sync, bool)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
         self.run_ctl(sx, ["full-bkp", vol])
+        if not sync:
+            return
         self._wait_for_state_change(sx, vol, sDuringFullSync,
                                     [sMaster], timeoutS)
         st = self.get_state(a0, vol)
