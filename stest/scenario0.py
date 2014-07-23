@@ -88,7 +88,7 @@ def run_repeater(port, rateMbps=10, delayMsec=0):
     return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps, delayMsec=delayMsec, isDebug=isDebug)
 
 
-def startup(s, useRepeater=False, delayMsec=0):
+def startup(s, useRepeater=False, delayMsec=0, rateMbps=0):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
@@ -96,7 +96,7 @@ def startup(s, useRepeater=False, delayMsec=0):
     r = None
     if useRepeater:
         quit_repeater(s.port)
-        r = run_repeater(s.port, delayMsec=delayMsec)
+        r = run_repeater(s.port, rateMbps=rateMbps, delayMsec=delayMsec)
     run_daemon(args)
     wait_for_server_ready(s)
     return r
@@ -952,14 +952,10 @@ def test_e12():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e12:network down and recover', g_count
     walbc.shutdown(a0, 'force')
-    print 'A'*10
-    r0 = startup(a0, useRepeater=True, delayMsec=0)
+    r0 = startup(a0, useRepeater=True, rateMbps=1)
     walbc.clear_vol(s0, VOL)
-    print 'B'*10
     walbc.init_storage(s0, VOL, wdev0.path)
-    print 'C'*10
     write_random(wdev0.path, 1)
-    print 'D'*10
     md0 = get_sha1(wdev0.path)
     print 'test_e12:full_backup'
     gid = walbc.full_backup(s0, VOL, sync=False)
@@ -969,8 +965,9 @@ def test_e12():
     print 'test_e12:wait 10sec'
     r0.start()
     time.sleep(10)
-    st = walbc.get_state(a0, VOL)
-    if st != 'SyncReady':
+    if st == 'SyncReady':
+        print 'test_n12:ok state'
+    else:
         raise Exception('test_n12:bad state', st)
     gid = walbc.full_backup(s0, VOL)
     restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
