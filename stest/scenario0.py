@@ -38,6 +38,7 @@ wdevSizeMb = 12
 
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 sLayoutAll = ServerLayout([s0, s1, s2], [p0, p1, p2], [a0, a1, a2])
+sLayoutRepeater = ServerLayout([s0], [p0], [a0])
 
 wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  wdevcPath)
 wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', wdevcPath)
@@ -78,6 +79,9 @@ def wait_for_server_ready(s, timeoutS=10):
     raise Exception('wait_for_server_ready:timeout', s, timeoutS)
 
 
+def get_cmd_port(port):
+    return port + 20000
+
 def run_repeater(port, rateMbps=10, delayMsec=0):
     """
         run repeater
@@ -85,7 +89,26 @@ def run_repeater(port, rateMbps=10, delayMsec=0):
         port + 10000 ; ip to send packets (original server)
         port + 20000 ; ip to recieve command
     """
-    return Repeater('localhost', port + 10000, port, port + 20000, rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
+    startup_repeater('localhost', port + 10000, port, get_cmd_port(port), rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
+
+
+def quit_repeater(s, doSleep=True):
+    send_cmd_to_repeater(get_cmd_port(s.port), 'quit')
+    time.sleep(1)
+
+
+def quit_repeaters(sL):
+    for s in sL:
+        quit_repeater(s, doSleep=False)
+    time.sleep(1)
+
+
+def start_repeater(s):
+    send_cmd_to_repeater(get_cmd_port(s.port), 'start')
+
+
+def stop_repeater(s):
+    send_cmd_to_repeater(get_cmd_port(s.port), 'stop')
 
 
 def startup(s, useRepeater=False, delayMsec=0, rateMbps=0):
@@ -93,13 +116,10 @@ def startup(s, useRepeater=False, delayMsec=0, rateMbps=0):
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
         print 'cmd=', to_str(args)
-    r = None
     if useRepeater:
-        quit_repeater(s.port)
-        r = run_repeater(s.port, rateMbps=rateMbps, delayMsec=delayMsec)
+        run_repeater(s.port, rateMbps, delayMsec)
     run_daemon(args)
     wait_for_server_ready(s)
-    return r
 
 
 def kill_all_repeaters():
@@ -107,10 +127,14 @@ def kill_all_repeaters():
     time.sleep(0.3)
 
 
+def startup_list(sL):
+    for s in sL:
+        startup(s)
+
+
 def startup_all():
     kill_all_repeaters()
-    for s in sLayout.get_all():
-        startup(s)
+    startup_list(sLayout.get_all())
 
 
 def resize_storage_if_necessary(sx, vol, wdev, sizeMb):
@@ -862,175 +886,44 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
+def init_repeater_test(rL=[], delayMsec=0, rateMbps=0):
+    walbc.shutdown_all('force')
+    target = sLayoutRepeater
+    walbc.set_server_layout(target)
+    for s in target.get_all():
+        startup(s, s in rL, delayMsec, rateMbps)
+
+
+def exit_repeater_test(rL):
+    walbc.shutdown_all('force')
+    quit_repeaters(rL)
+    target = sLayout
+    walbc.set_server_layout(target)
+    for s in target.get_all():
+        startup(s)
+
+
 def test_e9():
     """
         down network between s0 and p0 -> recover -> synchronizing
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e9:network down and recover', g_count
-    walbc.shutdown(p0, 'force')
-    r0 = startup(p0, useRepeater=True)
-    r0.stop()
+    rL = [p0]
+    init_repeater_test(rL)
+    stop_repeater(p0)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     gid = walbc.snapshot_async(s0, VOL)
-    isOK = True
-    try:
-        walbc.wait_for_restorable(a0, VOL, gid, timeoutS=10)
-        isOK = False
-    except:
-        print 'test_e9:timeout ok'
-    if not isOK:
-        raise Exception('test_e9:not timeout')
-    r0.start()
+    walbc.verify_not_restorable(a0, VOL, gid, 10, 'test_e9')
+    start_repeater(p0)
     gid = walbc.snapshot_sync(s0, VOL, [a0])
     restore_and_verify_sha1('test_e9', md0, a0, VOL, gid)
-    # stop repeater
-    walbc.shutdown(p0, 'force')
-    r0.quit()
-    startup(p0)
+    # recover default layout
+    exit_repeater_test(rL)
     print 'test_e9:succeeded'
 
 
-def test_e10():
-    """
-        down network between s0 and p0 -> write overflow -> hash-backup -> synchronizing
-    """
-    print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e10:network down and overflow', g_count
-    walbc.shutdown(s0, 'force')
-    r0 = startup(s0, useRepeater=True)
-    r0.stop()
-    write_over_wldev(wdev0, overflow=True)
-    try:
-        gid0 = walbc.snapshot_async(s0, VOL)
-        raise Exception('test_e10:expect timeout')
-    except:
-        print 'test_e10:timeout ok'
-        pass
-    r0.start()
-    gid = walbc.hash_backup(s0, VOL)
-    md0 = get_sha1(wdev0.path)
-    md1 = get_sha1_of_restorable(a0, VOL, gid)
-    verify_equal_sha1('test_e10', md0, md1)
-    # stop repeater
-    walbc.shutdown(s0, 'force')
-    r0.quit()
-    time.sleep(0.5)
-    startup(s0)
-    print 'test_e10:succeeded'
-
-
-def test_e11():
-    """
-        down network between p0 and a0 -> recover -> synchronizing
-    """
-    print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e11:network down and recover', g_count
-    walbc.shutdown(a0, 'force')
-    r0 = startup(a0, useRepeater=True)
-    r0.stop()
-    write_random(wdev0.path, 1)
-    try:
-        gid0 = walbc.snapshot_async(s0, VOL)
-        raise Exception('test_e11:expect timeout')
-    except:
-        print 'test_e11:timeout ok'
-        pass
-    r0.start()
-    gid0 = walbc.snapshot_async(s0, VOL)
-    walbc.wait_for_restorable(a0, VOL, gid0)
-    # stop repeater
-    walbc.shutdown(a0, 'force')
-    r0.quit()
-    time.sleep(1)
-    startup(a0)
-    print 'test_e11:succeeded'
-
-
-def test_e12():
-    """
-        down network between p0 and a0 in full-backup -> recover -> synchronizing
-    """
-    print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e12:network down and recover full-backup', g_count
-    walbc.shutdown(a0, 'force')
-    r0 = startup(a0, useRepeater=True, rateMbps=10)
-    walbc.clear_vol(s0, VOL)
-    walbc.init_storage(s0, VOL, wdev0.path)
-    walbc.stop(a0, VOL)
-    walbc.reset_vol(a0, VOL)
-    write_random(wdev0.path, 2)
-    md0 = get_sha1(wdev0.path)
-    print 'test_e12:full_backup'
-    gid = walbc.full_backup(s0, VOL, sync=False)
-    print 'test_e12:wait 1sec'
-    time.sleep(0.5)
-    r0.stop()
-    print 'test_e12:wait 10sec to force timeout'
-    time.sleep(10)
-    r0.start()
-    for i in xrange(20):
-        st = walbc.get_state(a0, VOL)
-        if st == 'SyncReady':
-            print 'test_n12:ok state'
-            break
-        print 'test_e12:wait 1sec retry', i, st
-        time.sleep(1)
-    else:
-        raise Exception('test_n12:timeout', st)
-    gid = walbc.full_backup(s0, VOL)
-    restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
-    # stop repeater
-    walbc.shutdown(a0, 'force')
-    r0.quit()
-    time.sleep(1)
-    startup(a0)
-    print 'test_e12:succeeded'
-
-
-def test_e13():
-    """
-        down network between p0 and a0 in hash-backup -> recover -> synchronizing
-    """
-    print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e13:network down and recover hash-backup', g_count
-    walbc.shutdown(a0, 'force')
-    r0 = startup(a0, useRepeater=True, rateMbps=10)
-    for i in xrange(3):
-        write_random(wdev0.path, 1)
-        walbc.snapshot_sync(s0, VOL, [a0])
-    md0 = get_sha1(wdev0.path)
-    list0 = walbc.list_restorable(a0, VOL)
-    print 'test_e13:list0', list0
-    print 'test_e13:hash_backup'
-    gid = walbc.hash_backup(s0, VOL, sync=False)
-    print 'test_e13:wait 1sec'
-    time.sleep(0.5)
-    r0.stop()
-    print 'test_e13:wait 10sec to force timeout'
-    time.sleep(10)
-    r0.start()
-    for i in xrange(20):
-        st = walbc.get_state(a0, VOL)
-        if st == 'Archived':
-            print 'test_e13:ok state'
-            break
-        print 'test_e13:wait 1sec retry', i, st
-        time.sleep(1)
-    else:
-        raise Exception('test_e13:timeout', st)
-    gid = walbc.hash_backup(s0, VOL)
-    list1 = walbc.list_restorable(a0, VOL)
-    print 'test_e13:gid', gid
-    print 'test_e13:list0', list0
-    print 'test_e13:list1', list1
-    # stop repeater
-    walbc.shutdown(a0, 'force')
-    r0.quit()
-    time.sleep(1)
-    startup(a0)
-    print 'test_e13:succeeded'
 
 ###############################################################################
 # Replacement scenario tests.

@@ -929,14 +929,21 @@ class Controller:
         self.run_ctl(s, ["shutdown", mode])
         time.sleep(1)  # shutdown is asynchronous command.
 
+    def shutdown_list(self, sL, mode='graceful'):
+        '''
+        Shutdown listed servers.
+        '''
+        verify_type(sL, list, Server)
+        self._verify_shutdown_mode(mode, 'shutdown_list')
+        for s in sL:
+            self.run_ctl(s, ["shutdown", mode])
+        time.sleep(1)  # shutdown is asynchronous command.
+
     def shutdown_all(self, mode='graceful'):
         '''
         Shutdown all servers.
         '''
-        self._verify_shutdown_mode(mode, 'shutdown_all')
-        for s in self.sLayout.get_all():
-            self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)  # shutdown is asynchronous command.
+        self.shutdown_list(self.sLayout.get_all())
 
     def get_alive_server(self):
         '''
