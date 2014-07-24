@@ -868,24 +868,27 @@ def test_e9():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e9:network down and recover', g_count
-    walbc.shutdown(s0, 'force')
-    r0 = startup(s0, useRepeater=True)
+    walbc.shutdown(p0, 'force')
+    r0 = startup(p0, useRepeater=True)
     r0.stop()
     write_random(wdev0.path, 1)
+    md0 = get_sha1(wdev0.path)
+    gid = walbc.snapshot_async(s0, VOL)
+    isOK = True
     try:
-        gid0 = walbc.snapshot_async(s0, VOL)
-        raise Exception('test_e9:expect timeout')
+        walbc.wait_for_restorable(a0, VOL, gid, timeoutS=10)
+        isOK = False
     except:
         print 'test_e9:timeout ok'
-        pass
+    if not isOK:
+        raise Exception('test_e9:not timeout')
     r0.start()
-    gid0 = walbc.snapshot_async(s0, VOL)
-    walbc.wait_for_restorable(a0, VOL, gid0)
+    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    restore_and_verify_sha1('test_e9', md0, a0, VOL, gid)
     # stop repeater
-    walbc.shutdown(s0, 'force')
+    walbc.shutdown(p0, 'force')
     r0.quit()
-    time.sleep(0.5)
-    startup(s0)
+    startup(p0)
     print 'test_e9:succeeded'
 
 

@@ -53,3 +53,4 @@ class Repeater:
 
     def quit(self):
         send_cmd_to_repeater(self.cmdIp, 'quit')
+        time.sleep(1)
