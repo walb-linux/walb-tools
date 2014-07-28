@@ -50,26 +50,6 @@ public:
             throw cybozu::Exception("blockSize_ must be positive integer.");
         }
     }
-
-private:
-    void parse(int argc, char* argv[]) {
-        cybozu::Option opt;
-        opt.appendOpt(&blockSize_, 512, "b", "blockSize");
-        opt.appendOpt(&isVerbose_, false, "v", "verbose");
-        opt.appendHelp("h");
-        opt.appendParam(&file1_, "FILE1");
-        opt.appendParam(&file2_, "FILE2");
-        opt.parse(argc, argv, true);
-    }
-    static std::string generateHelpString() {
-        return cybozu::util::formatString(
-            "bdiff: Show block diff.\n"
-            "Usage: bdiff [options] FILE1 FILE2\n"
-            "Options:\n"
-            "  -b, --blockSize \n"
-            "  -v, --verbose:         \n"
-            "  -h, --help:            \n");
-    }
 };
 
 /**
