@@ -866,8 +866,9 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
                     , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str()));
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-    StrVec v1 = volInfo.getStatusAsStrVec();
-    std::move(v1.begin(), v1.end(), std::back_inserter(v));
+	for (std::string& s : volInfo.getStatusAsStrVec()) {
+		v.push_back(std::move(s));
+	}
     return v;
 }
 

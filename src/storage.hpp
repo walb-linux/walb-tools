@@ -328,7 +328,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
 {
     const char *const FUNC = __func__;
     auto fmt = cybozu::util::formatString;
-    StrVec v0, v1;
+    StrVec v;
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
 
@@ -337,16 +337,16 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
         throw cybozu::Exception(FUNC) << "not found" << volId;
     }
 
-    v0.push_back(fmt("volId %s", volId.c_str()));
-    v0.push_back(fmt("state %s", state.c_str()));
-    v0.push_back(formatActions("action", volSt.ac, allActionVec));
-    v0.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
+    v.push_back(fmt("volId %s", volId.c_str()));
+    v.push_back(fmt("state %s", state.c_str()));
+    v.push_back(formatActions("action", volSt.ac, allActionVec));
+    v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
-    v1 = volInfo.getStatusAsStrVec(isVerbose);
-
-    std::move(v1.begin(), v1.end(), std::back_inserter(v0));
-    return v0;
+    for (std::string& s : volInfo.getStatusAsStrVec(isVerbose)) {
+		v.push_back(std::move(s));
+	}
+    return v;
 }
 
 } // namespace storage_local
