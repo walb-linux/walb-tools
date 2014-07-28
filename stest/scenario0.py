@@ -924,6 +924,31 @@ def test_e9():
     print 'test_e9:succeeded'
 
 
+def test_e10():
+    """
+        down network between s0 and p0 -> write overflow -> hash-backup -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e10:network down and overflow', g_count
+    rL = [p0]
+    init_repeater_test(rL)
+    stop_repeater(p0)
+    write_over_wldev(wdev0, overflow=True)
+    try:
+        walbc.snapshot_async(s0, VOL)
+        raise Exception('test_e10:expect wlog overflow')
+    except:
+        print 'test_e10:wlog overflow ok'
+        pass
+    start_repeater(p0)
+    gid = walbc.hash_backup(s0, VOL)
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e10', md0, md1)
+    # stop repeater
+    exit_repeater_test(rL)
+    print 'test_e10:succeeded'
+
 
 ###############################################################################
 # Replacement scenario tests.
