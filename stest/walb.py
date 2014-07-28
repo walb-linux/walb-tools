@@ -1154,21 +1154,21 @@ class Controller:
         if st == pStopped and doStart:
             self.start(px, vol)
 
-    def get_server(self, name, L):
+    def get_server(self, name, sL):
         '''
         Get only one element from L having name
         name :: str   - server name.
-        L :: [Server] - server list.
+        sL :: [Server] - server list.
         return :: Server
         '''
         verify_type(name, str)
-        verify_type(L, list, Server)
+        verify_type(sL, list, Server)
         ret = []
-        for x in L:
+        for x in sL:
             if x.name == name:
                 ret.append(x)
         if len(ret) != 1:
-            raise Exception('get_server:not one', ret, name, L)
+            raise Exception('get_server:not one', ret, name, sL)
         return ret[0]
 
     def copy_archive_info(self, pSrc, vol, pDst):
