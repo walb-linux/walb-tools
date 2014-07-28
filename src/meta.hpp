@@ -435,17 +435,6 @@ enum class Relation
 {
     TOO_OLD_DIFF, TOO_NEW_DIFF, APPLICABLE_DIFF, NOT_APPLICABLE_DIFF,
 };
-const char *getRelationStr(Relation rel)
-{
-    switch (rel) {
-    case Relation::TOO_OLD_DIFF: return "too-old-diff";
-    case Relation::TOO_NEW_DIFF: return "too-new-diff";
-    case Relation::APPLICABLE_DIFF: return "applicable-diff";
-    case Relation::NOT_APPLICABLE_DIFF: return "not-applicable-diff";
-    default:
-        throw cybozu::Exception("getRelationStr:bad relation") << (int)rel;
-    }
-}
 
 inline Relation getRelation(const MetaSnap &snap, const MetaDiff &diff)
 {

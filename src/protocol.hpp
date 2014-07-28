@@ -25,6 +25,15 @@ namespace walb {
 const char *const msgOk = "ok"; // used for synchronous protocol.
 const char *const msgAccept = "accept"; // used for asynchronous protocol.
 
+const char *const msgTooNewDiff = "too-new-diff";
+const char *const msgTooOldDiff = "too-old-diff";
+const char *const msgDifferentUuid = "different-uuid";
+const char *const msgStopped = "stopped";
+const char *const msgWdiffRecv = "wdiff-recv";
+const char *const msgSyncing = "syncing";
+const char *const msgArchiveNotFound = "archive-not-found";
+const char *const msgSmallerLvSize = "smaller-lv-size";
+
 /**
  * Host type.
  */

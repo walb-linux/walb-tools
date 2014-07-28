@@ -1325,11 +1325,11 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             const std::string st = sm.get();
             const char *msg = nullptr;
             if (st == aStopped || st == atStart) {
-                msg = "stopped";
+                msg = msgStopped;
             } else if (st == atFullSync || st == atHashSync) {
-                msg = "syncing";
+                msg = msgSyncing;
             } else if (st == atWdiffRecv) {
-                msg = "wdiff-recv";
+                msg = msgWdiffRecv;
             }
             if (msg) {
                 logger.info() << msg << volId;
@@ -1344,20 +1344,20 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
 
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
         if (!volInfo.existsVolDir()) {
-            const char *msg = "archive-not-found";
+            const char *msg = msgArchiveNotFound;
             logger.info() << msg << volId;
             pkt.writeFin(msg);
             return;
         }
         if (hostType == proxyHT && volInfo.getUuid() != uuid) {
-            const char *msg = "different-uuid";
+            const char *msg = msgDifferentUuid;
             logger.info() << msg << volId;
             pkt.writeFin(msg);
             return;
         }
         const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
         if (selfSizeLb < sizeLb) {
-            const char *msg = "smaller-lv-size";
+            const char *msg = msgSmallerLvSize;
             logger.error() << msg << volId << sizeLb << selfSizeLb;
             pkt.writeFin(msg);
             return;
@@ -1371,7 +1371,19 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         const Relation rel = getRelation(latestSnap, diff);
 
         if (rel != Relation::APPLICABLE_DIFF) {
-            const char *msg = getRelationStr(rel);
+            const char *msg;
+            switch (rel) {
+            case Relation::TOO_OLD_DIFF:
+                msg = msgTooOldDiff;
+                break;
+            case Relation::TOO_NEW_DIFF:
+                msg = msgTooNewDiff;
+                break;
+            default:
+                throw cybozu::Exception(FUNC)
+                    << "bad meta diff relation" << (int)rel
+                    << latestSnap << diff;
+            }
             logger.info() << msg << volId;
             pkt.writeFin(msg);
             return;
