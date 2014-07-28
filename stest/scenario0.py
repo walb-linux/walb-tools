@@ -82,7 +82,7 @@ def wait_for_server_ready(s, timeoutS=10):
 def get_cmd_port(port):
     return port + 20000
 
-def run_repeater(port, rateMbps=10, delayMsec=0):
+def run_repeater(port, rateMbps=0, delayMsec=0):
     """
         run repeater
         port         ; ip to receive packets
@@ -111,7 +111,7 @@ def stop_repeater(s):
     send_cmd_to_repeater(get_cmd_port(s.port), 'stop')
 
 
-def startup(s, useRepeater=False, delayMsec=0, rateMbps=0):
+def startup(s, useRepeater=False, rateMbps=0, delayMsec=0):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
@@ -886,12 +886,12 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
-def init_repeater_test(rL=[], delayMsec=0, rateMbps=0):
+def init_repeater_test(rL=[], rateMbps=0, delayMsec=0):
     walbc.shutdown_all('force')
     target = sLayoutRepeater
     walbc.set_server_layout(target)
     for s in target.get_all():
-        startup(s, s in rL, delayMsec, rateMbps)
+        startup(s, s in rL, rateMbps, delayMsec)
 
 
 def exit_repeater_test(rL):
@@ -949,6 +949,36 @@ def test_e10():
     exit_repeater_test(rL)
     print 'test_e10:succeeded'
 
+
+def get_original_server(s):
+	return Server(s.name, s.address, s.port + 10000, s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
+
+def test_e11():
+    """
+        down network between p0 and a0 -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e11:network down and recover', g_count
+    rL = [a0]
+    init_repeater_test(rL)
+    with RandomWriter(wdev0.path):
+        time.sleep(0.5)
+        stop_repeater(a0)
+        time.sleep(0.5)
+
+    gid = walbc.snapshot_async(s0, VOL)
+    walbc.verify_not_restorable(get_original_server(a0), VOL, gid, 10, 'test_e11')
+    start_repeater(a0)
+
+    walbc.kick_all([p0]) # to decrese retry interval
+    walbc.wait_for_restorable(a0, VOL, gid)
+
+    md0 = get_sha1(wdev0.path)
+    md1 = get_sha1_of_restorable(a0, VOL, gid)
+    verify_equal_sha1('test_e11', md0, md1)
+    # stop repeater
+    exit_repeater_test(rL)
+    print 'test_e11:succeeded'
 
 ###############################################################################
 # Replacement scenario tests.
