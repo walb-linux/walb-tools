@@ -732,7 +732,7 @@ class Controller:
         putMsg :: bool   - put debug message if True.
         return :: str    - stdout of the control command.
         '''
-        verify_type(s, list, Server)
+        verify_type(s, Server)
         verify_type(cmdArgs, list, str)
         verify_type(putMsg, bool)
         ctlArgs = [self.controllerPath,
@@ -828,7 +828,7 @@ class Controller:
         vol :: str   - volume name.
         '''
         verify_type(sx, Server)
-        verify_type(vol, list, str)
+        verify_type(vol, str)
         state = self.get_state(sx, vol)
         if state == sSlave:
             return
@@ -885,7 +885,7 @@ class Controller:
         '''
         verify_type(px, Server)
         verify_type(vol, str)
-        verify_type(ax, list, Server)
+        verify_type(ax, Server)
         args = ['get', 'is-wdiff-send-error', vol, ax.name]
         ret = self.run_ctl(px, args)
         return int(ret) != 0
@@ -1161,7 +1161,7 @@ class Controller:
         L :: [Server] - server list.
         return :: Server
         '''
-        verify_type(name, list, str)
+        verify_type(name, str)
         verify_type(L, list, Server)
         ret = []
         for x in L:
@@ -1210,7 +1210,7 @@ class Controller:
             self.add_archive_to_proxy(px, vol, ax)
         self.kick_all_storage()
 
-    def list_restorable(self, ax, vol, opt=''):
+    def get_restorable(self, ax, vol, opt=''):
         '''
         Get restorable gid list.
         ax :: Server - archive server.
@@ -1225,10 +1225,10 @@ class Controller:
             if opt == 'all':
                 optL.append(opt)
             else:
-                raise Exception('list_restorable:bad opt', opt)
+                raise Exception('get_restorable:bad opt', opt)
         return self._get_gid_list(ax, vol, 'restorable', optL)
 
-    def list_restored(self, ax, vol):
+    def get_restored(self, ax, vol):
         '''
         Get restored gid list.
         ax :: Server - archive server.
@@ -1256,7 +1256,7 @@ class Controller:
         '''
         verify_type(gid, int)
         self._wait_for_no_action(ax, vol, 'Restore', timeoutS)
-        gids = self.list_restored(ax, vol)
+        gids = self.get_restored(ax, vol)
         if gid in gids:
             return
         raise Exception('wait_for_restored:failed', ax.name, vol, gid, gids)
@@ -1289,7 +1289,7 @@ class Controller:
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
         '''
-        gidL = self.list_restorable(aSrc, vol)
+        gidL = self.get_restorable(aSrc, vol)
         gid = gidL[-1]
         self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
                             aDst.get_host_port()])
@@ -1355,7 +1355,7 @@ class Controller:
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self.list_restorable(a0, vol)
+            gids = self.get_restorable(a0, vol)
             if gids:
                 return gids[-1]
             time.sleep(0.3)
@@ -1382,7 +1382,7 @@ class Controller:
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
-        prev_gids = self.list_restorable(a0, vol)
+        prev_gids = self.get_restorable(a0, vol)
         if prev_gids:
             max_gid = prev_gids[-1]
         else:
@@ -1398,7 +1398,7 @@ class Controller:
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self.list_restorable(a0, vol)
+            gids = self.get_restorable(a0, vol)
             if gids and gids[-1] > max_gid:
                 return gids[-1]
             time.sleep(0.3)
@@ -1467,7 +1467,7 @@ class Controller:
         return :: int - gid of the taken snapshot.
         '''
         verify_type(sx, Server)
-        verify_type(vol, list, str)
+        verify_type(vol, str)
         gid = self.run_ctl(sx, ['snapshot', vol])
         return int(gid)
 
@@ -1540,7 +1540,7 @@ class Controller:
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
-        xL = self.list_restorable(ax, vol)
+        xL = self.get_restorable(ax, vol)
         if xL:
             return xL[-1]
         else:
@@ -1646,9 +1646,9 @@ class Controller:
         return :: [int] - gid list.
         '''
         verify_type(ax, Server)
-        verify_type(vol, list, str)
+        verify_type(vol, str)
         if not cmd in ['restorable', 'restored']:
-            raise Exception('get_list_gid : bad cmd', cmd)
+            raise Exception('get_gid_list : bad cmd', cmd)
         verify_type(optL, list, str)
         ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
         return map(int, ret.split())
@@ -1713,7 +1713,7 @@ class Controller:
         '''
         verify_type(gid, int)
         self._wait_for_no_action(ax, vol, aaApply, timeoutS)
-        gidL = self.list_restorable(ax, vol)
+        gidL = self.get_restorable(ax, vol)
         if gidL and gid <= gidL[0]:
             return
         raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
@@ -1729,7 +1729,7 @@ class Controller:
         '''
         verify_gid_range(gidB, gidE, 'wait_for_merged')
         self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
-        gidL = self.list_restorable(ax, vol, 'all')
+        gidL = self.get_restorable(ax, vol, 'all')
         pos = gidL.index(gidB)
         if gidL[pos + 1] == gidE:
             return
@@ -1746,7 +1746,7 @@ class Controller:
         '''
         verify_type(gid, int)
         self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.list_restorable(ax, vol, 'all')
+        gidL = self.get_restorable(ax, vol, 'all')
         if gidL and gid <= gidL[-1]:
             return
         raise Exception("wait_for_replicated:replicate failed",

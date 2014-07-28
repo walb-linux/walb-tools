@@ -301,7 +301,7 @@ def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     verify_equal_sha1(msg, md0, md1)
 
 
-def verify_equal_list_restorable(msg, ax, ay, vol):
+def verify_equal_restorable_list(msg, ax, ay, vol):
     '''
     Verify two restorable lists are the same.
     msg :: str   - message for error.
@@ -314,13 +314,13 @@ def verify_equal_list_restorable(msg, ax, ay, vol):
     verify_type(ay, Server)
     verify_type(vol, str)
 
-    xL = walbc.list_restorable(ax, vol)
-    yL = walbc.list_restorable(ay, vol)
+    xL = walbc.get_restorable(ax, vol)
+    yL = walbc.get_restorable(ay, vol)
     if isDebug:
         print 'list0', xL
         print 'list1', yL
     if xL != yL:
-        raise Exception(msg, 'list_restorable differ', xL, yL)
+        raise Exception(msg, 'restorable lists differ', xL, yL)
 
 
 ###############################################################################
@@ -351,7 +351,7 @@ def test_n2():
     md0 = get_sha1(wdev0.path)
     gid = walbc.snapshot_sync(s0, VOL, [a0])
     print "gid=", gid
-    print walbc.list_restorable(a0, VOL)
+    print walbc.get_restorable(a0, VOL)
     restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
     print 'test_n2:succeeded'
 
@@ -459,7 +459,7 @@ def test_n6():
         walbc.start(p0, VOL)
         time.sleep(1)
         gidE = walbc.snapshot_sync(s0, VOL, [a0])
-        gidL = walbc.list_restorable(a0, VOL, 'all')
+        gidL = walbc.get_restorable(a0, VOL, 'all')
         posB = gidL.index(gidB)
         posE = gidL.index(gidE)
         print "gidB", gidB, "gidE", gidE, "gidL", gidL
@@ -470,7 +470,7 @@ def test_n6():
 
     md0 = get_sha1_of_restorable(a0, VOL, gidE)
     walbc.merge_diff(a0, VOL, gidB, gidE)
-    print "merged gidL", walbc.list_restorable(a0, VOL, 'all')
+    print "merged gidL", walbc.get_restorable(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
     print 'test_n6:succeeded'
 
@@ -482,7 +482,7 @@ def test_n7():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_n7:replicate-full', g_count
     walbc.replicate(a0, VOL, a1, False)
-    verify_equal_list_restorable('test_n7', a0, a1, VOL)
+    verify_equal_restorable_list('test_n7', a0, a1, VOL)
     gid = walbc.get_latest_clean_snapshot(a0, VOL)
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     md1 = get_sha1_of_restorable(a1, VOL, gid)
@@ -505,7 +505,7 @@ def test_n8():
     if gidA0 <= gidA1:
         raise Exception('test_n8:no progress', gidA0, gidA1)
     walbc.replicate(a0, VOL, a1, False)
-    verify_equal_list_restorable('test_n8', a0, a1, VOL)
+    verify_equal_restorable_list('test_n8', a0, a1, VOL)
     gid1 = walbc.get_latest_clean_snapshot(a0, VOL)
     md0 = get_sha1_of_restorable(a0, VOL, gid1)
     md1 = get_sha1_of_restorable(a1, VOL, gid1)
@@ -522,7 +522,7 @@ def test_n9():
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot_sync(s0, VOL, [a0])
     walbc.apply_diff(a0, VOL, gid0)
-    list0 = walbc.list_restorable(a0, VOL)
+    list0 = walbc.get_restorable(a0, VOL)
     if len(list0) != 1:
         raise Exception('test_n9: list size must be 1', list0)
     write_random(wdev0.path, 1)
@@ -1027,14 +1027,14 @@ def test_e13():
     sizeLb = wdev0.get_size_lb()
     print "sizeLb", sizeLb
     write_random(wdev0.path, sizeLb / 2)
-    list0 = walbc.list_restorable(a0, VOL, opt='all')
+    list0 = walbc.get_restorable(a0, VOL, opt='all')
 
     md0 = get_sha1(wdev0.path)
     print 'test_e13:hash_backup'
     gid = walbc.hash_backup(s0, VOL, sync=False)
     print 'test_e13:wait 1sec'
     time.sleep(1)
-    list1 = walbc.list_restorable(a0, VOL, opt='all')
+    list1 = walbc.get_restorable(a0, VOL, opt='all')
     if list0 != list1:
         raise Exception('test_e13: not equal list', list0, list1)
     stop_repeater(a0)
