@@ -1325,6 +1325,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             const char *msg = nullptr;
             if (st == aStopped || st == atStart) {
                 msg = "stopped";
+            } else if (st == atFullSync || st == atHashSync) {
+                msg = "syncing";
             } else if (st == atWdiffRecv) {
                 msg = "wdiff-recv";
             }
