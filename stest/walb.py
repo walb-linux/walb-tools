@@ -1625,7 +1625,7 @@ class Controller:
             if pred(st):
                 return
             time.sleep(0.3)
-        raise Exception("wait_for_state_cond", s, vol, msg)
+        raise Exception("wait_for_state_cond", s, vol, msg, st)
 
     def _wait_for_state(self, s, vol, stateL, timeoutS=10):
         def pred(st):

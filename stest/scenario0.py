@@ -919,7 +919,7 @@ def test_e9():
     start_repeater(p0)
     gid = walbc.snapshot_sync(s0, VOL, [a0])
     restore_and_verify_sha1('test_e9', md0, a0, VOL, gid)
-    # recover default layout
+
     exit_repeater_test(rL)
     print 'test_e9:succeeded'
 
@@ -945,13 +945,14 @@ def test_e10():
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_e10', md0, md1)
-    # stop repeater
+
     exit_repeater_test(rL)
     print 'test_e10:succeeded'
 
 
 def get_original_server(s):
 	return Server(s.name, s.address, s.port + 10000, s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
+
 
 def test_e11():
     """
@@ -976,9 +977,75 @@ def test_e11():
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_e11', md0, md1)
-    # stop repeater
+
     exit_repeater_test(rL)
     print 'test_e11:succeeded'
+
+
+def test_e12():
+    """
+        down network between p0 and a0 in full-backup -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e12:network down and recover full-backup', g_count
+    rL = [a0]
+    init_repeater_test(rL, rateMbps=10)
+    walbc.stop(s0, VOL)
+    walbc.reset_vol(s0, VOL)
+
+    walbc.stop(a0, VOL)
+    walbc.reset_vol(a0, VOL)
+
+    write_random(wdev0.path, 1)
+    md0 = get_sha1(wdev0.path)
+    print 'test_e12:full_backup'
+    gid = walbc.full_backup(s0, VOL, sync=False)
+    print 'test_e12:wait 3sec'
+    time.sleep(3)
+    stop_repeater(a0)
+    # try to full sync, it must fail, then state will be sSyncReady
+    walbc._wait_for_state_change(s0, VOL, sDuringFullSync, sSyncReady)
+    start_repeater(a0)
+    gid = walbc.full_backup(s0, VOL)
+    restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
+
+    exit_repeater_test(rL)
+    print 'test_e12:succeeded'
+
+
+def test_e13():
+    """
+        down network between s0 and a0 in hash-backup -> recover -> synchronizing
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e13:network down and recover hash-backup', g_count
+    rL = [a0]
+    init_repeater_test(rL, rateMbps=10)
+    walbc.stop(s0, VOL)
+    walbc.reset_vol(s0, VOL)
+
+    sizeLb = wdev0.get_size_lb()
+    print "sizeLb", sizeLb
+    write_random(wdev0.path, sizeLb / 2)
+    list0 = walbc.list_restorable(a0, VOL, opt='all')
+
+    md0 = get_sha1(wdev0.path)
+    print 'test_e13:hash_backup'
+    gid = walbc.hash_backup(s0, VOL, sync=False)
+    print 'test_e13:wait 1sec'
+    time.sleep(1)
+    list1 = walbc.list_restorable(a0, VOL, opt='all')
+    if list0 != list1:
+        raise Exception('test_e13: not equal list', list0, list1)
+    stop_repeater(a0)
+    # try to hash sync, it must fail, then state will be sSyncReady
+    walbc._wait_for_state_change(s0, VOL, sDuringHashSync, sSyncReady)
+    start_repeater(a0)
+    gid = walbc.hash_backup(s0, VOL)
+    restore_and_verify_sha1('test_e13', md0, a0, VOL, gid)
+
+    exit_repeater_test(rL)
+    print 'test_e13:succeeded'
 
 ###############################################################################
 # Replacement scenario tests.
