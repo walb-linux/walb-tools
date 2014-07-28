@@ -217,6 +217,11 @@ void formatLdev(const Option &opt)
         cybozu::util::issueDiscard(fd, 0, ldevInfo.sizeLb);
     }
     device::initWalbMetadata(fd, ldevInfo.pbs, ddevInfo.sizeLb, ldevInfo.sizeLb, opt.name);
+    {
+        device::SuperBlock super;
+        super.read(fd);
+        std::cout << super << std::endl;
+    }
     ldevFile.fdatasync();
     ldevFile.close();
 
