@@ -191,37 +191,43 @@ public:
         cybozu::util::File file(fd);
         file.pwrite(data_.data(), pbs_, offset_ * pbs_);
     }
-
+    std::string str() const {
+        return cybozu::util::formatString(
+            "sectorType: %u\n"
+            "version: %u\n"
+            "checksum: %u\n"
+            "lbs: %u\n"
+            "pbs: %u\n"
+            "metadataSize: %u\n"
+            "salt: %u\n"
+            "name: %s\n"
+            "ringBufferSize: %" PRIu64 "\n"
+            "oldestLsid: %" PRIu64 "\n"
+            "writtenLsid: %" PRIu64 "\n"
+            "deviceSize: %" PRIu64 "\n"
+            "ringBufferOffset: %" PRIu64 "\n"
+            "uuid: %s\n"
+            , getSectorType()
+            , getVersion()
+            , getChecksum()
+            , getLogicalBlockSize()
+            , pbs()
+            , getMetadataSize()
+            , salt()
+            , getName()
+            , getRingBufferSize()
+            , getOldestLsid()
+            , getWrittenLsid()
+            , getDeviceSize()
+            , getRingBufferOffset()
+            , getUuid().str().c_str());
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const SuperBlock& super) {
+        os << super.str();
+        return os;
+    }
     void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp,
-                  "sectorType: %u\n"
-                  "version: %u\n"
-                  "checksum: %u\n"
-                  "lbs: %u\n"
-                  "pbs: %u\n"
-                  "metadataSize: %u\n"
-                  "salt: %u\n"
-                  "name: %s\n"
-                  "ringBufferSize: %" PRIu64 "\n"
-                  "oldestLsid: %" PRIu64 "\n"
-                  "writtenLsid: %" PRIu64 "\n"
-                  "deviceSize: %" PRIu64 "\n"
-                  "ringBufferOffset: %" PRIu64 "\n"
-                  "uuid: %s\n"
-                  , getSectorType()
-                  , getVersion()
-                  , getChecksum()
-                  , getLogicalBlockSize()
-                  , pbs()
-                  , getMetadataSize()
-                  , salt()
-                  , getName()
-                  , getRingBufferSize()
-                  , getOldestLsid()
-                  , getWrittenLsid()
-                  , getDeviceSize()
-                  , getRingBufferOffset()
-                  , getUuid().str().c_str());
+        ::fprintf(fp, "%s", str().c_str());
     }
 private:
     void init(uint32_t pbs) {
