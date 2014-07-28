@@ -1,4 +1,4 @@
-.PHONY: all test test_all echo_binaries build clean rebuild install stest
+.PHONY: all test test_all echo_binaries build clean rebuild install stest pylint
 
 CXX = clang++
 CC = clang
@@ -99,13 +99,16 @@ src/%.depend: src/%.cpp
 utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
-PYLINT=pylint -E --rcfile=/dev/null -f colorized stest/walb.py stest/repeater.py stest/scenario0.py
-stest:
-	$(PYLINT)
+
+PYTHON_SOURCES = stest/walb.py stest/repeater.py stest/scenario0.py
+
+pylint:
+	pylint -E --rcfile=/dev/null -f colorized $(PYTHON_SOURCES)
+
+stest: pylint
 	python stest/scenario0.py
 
-stest100:
-	$(PYLINT)
+stest100: pylint
 	python stest/scenario0.py 100
 
 ifneq "$(MAKECMDGOALS)" "clean"
