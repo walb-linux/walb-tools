@@ -257,7 +257,7 @@ def cleanup(vol, wdevL):
     wdevL :: [walb.Device] - list of walb devices.
     '''
     verify_type(vol, str)
-    verify_list_type(wdevL, Device)
+    verify_type(wdevL, list, Device)
     for s in sLayout.get_all():
         walbc.clear_vol(s, vol)
     for wdev in wdevL:

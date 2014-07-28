@@ -47,7 +47,7 @@ def run_local_command(args, putMsg=False):
     putMsg :: bool - put debug message.
     return :: str  - standard output of the command.
     '''
-    verify_list_type(args, str)
+    verify_type(args, list, str)
     verify_type(putMsg, bool)
 
     if putMsg:
@@ -277,10 +277,11 @@ def wait_for_lv_ready(lvPath, runCommand=run_local_command):
 # Verification functions.
 ########################################
 
-def verify_type(obj, typeValue,elemType=None):
+def verify_type(obj, typeValue, elemType=None):
     '''
-    obj - object.
+    obj       - object.
     typeValue - type like int, str, list.
+    elemType  - specify type of elements if typeValue is sequence.
 
     '''
     if not isinstance(obj, typeValue):
@@ -299,18 +300,6 @@ def verify_function(obj):
         pass
     if type(obj) != type(f):
         raise Exception('not function type', type(obj))
-
-
-def verify_list_type(obj, typeValue):
-    '''
-    obj - list object.
-    typeValue - type like int, str.
-    '''
-    if not isinstance(obj, list):
-        raise Exception('invalid type', type(obj), list)
-    for x in obj:
-        if not isinstance(x, typeValue):
-            raise Exception('invalid type', type(x), typeValue)
 
 
 def verify_gid_range(gidB, gidE, msg):
@@ -446,7 +435,7 @@ class Device:
         Run wdevc command.
         cmdArgs :: [str] - command line arguments.
         '''
-        verify_list_type(cmdArgs, str)
+        verify_type(cmdArgs, list, str)
         self.runCommand([self.wdevcPath] + cmdArgs)
 
     def exists(self):
@@ -626,9 +615,9 @@ class ServerLayout:
                                Before items have high priority.
         archiveL :: [Server] - archive server list. The head is primary server.
         '''
-        verify_list_type(storageL, Server)
-        verify_list_type(proxyL, Server)
-        verify_list_type(archiveL, Server)
+        verify_type(storageL, list, Server)
+        verify_type(proxyL, list, Server)
+        verify_type(archiveL, list, Server)
 
         if len(storageL) == 0:
             raise Exception('server_layout: no storage server')
@@ -743,8 +732,8 @@ class Controller:
         putMsg :: bool   - put debug message if True.
         return :: str    - stdout of the control command.
         '''
-        verify_type(s, Server)
-        verify_list_type(cmdArgs, str)
+        verify_type(s, list, Server)
+        verify_type(cmdArgs, list, str)
         verify_type(putMsg, bool)
         ctlArgs = [self.controllerPath,
                    "-id", "ctl",
@@ -766,7 +755,7 @@ class Controller:
         return :: str  - stdout of the command if the command returned 0.
         '''
         verify_type(s, Server)
-        verify_list_type(args, str)
+        verify_type(args, list, str)
         return self.run_ctl(s, ['exec', '---'] + args, putMsg)
 
     def get_run_remote_command(self, s):
@@ -839,7 +828,7 @@ class Controller:
         vol :: str   - volume name.
         '''
         verify_type(sx, Server)
-        verify_type(vol, str)
+        verify_type(vol, list, str)
         state = self.get_state(sx, vol)
         if state == sSlave:
             return
@@ -860,7 +849,7 @@ class Controller:
         sL :: [Server] - list of servers each of which
                          must be storage or proxy.
         '''
-        verify_list_type(sL, Server)
+        verify_type(sL, list, Server)
         for s in sL:
             self.run_ctl(s, ["kick"])
 
@@ -896,7 +885,7 @@ class Controller:
         '''
         verify_type(px, Server)
         verify_type(vol, str)
-        verify_type(ax, Server)
+        verify_type(ax, list, Server)
         args = ['get', 'is-wdiff-send-error', vol, ax.name]
         ret = self.run_ctl(px, args)
         return int(ret) != 0
@@ -907,7 +896,7 @@ class Controller:
         sL :: [Server] - server list.
         vol :: str or None - volume name. None means all.
         '''
-        verify_list_type(sL, Server)
+        verify_type(sL, list, Server)
         if not sL:
             sL = self.sLayout.get_all()
         for s in sL:
@@ -1172,8 +1161,8 @@ class Controller:
         L :: [Server] - server list.
         return :: Server
         '''
-        verify_type(name, str)
-        verify_list_type(L, Server)
+        verify_type(name, list, str)
+        verify_type(L, list, Server)
         ret = []
         for x in L:
             if x.name == name:
@@ -1478,7 +1467,7 @@ class Controller:
         return :: int - gid of the taken snapshot.
         '''
         verify_type(sx, Server)
-        verify_type(vol, str)
+        verify_type(vol, list, str)
         gid = self.run_ctl(sx, ['snapshot', vol])
         return int(gid)
 
@@ -1490,7 +1479,7 @@ class Controller:
         axL :: [Server] - archive server list.
         return :: int   - gid of the taken snapshot.
         '''
-        verify_list_type(axL, Server)
+        verify_type(axL, list, Server)
         gid = self.snapshot_async(sx, vol)
         for ax in axL:
             self.wait_for_restorable(ax, vol, gid)
@@ -1657,10 +1646,10 @@ class Controller:
         return :: [int] - gid list.
         '''
         verify_type(ax, Server)
-        verify_type(vol, str)
+        verify_type(vol, list, str)
         if not cmd in ['restorable', 'restored']:
             raise Exception('get_list_gid : bad cmd', cmd)
-        verify_list_type(optL, str)
+        verify_type(optL, list, str)
         ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
         return map(int, ret.split())
 
