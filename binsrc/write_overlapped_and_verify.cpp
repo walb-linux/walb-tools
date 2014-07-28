@@ -23,22 +23,39 @@ struct Option
     uint64_t size; /* [byte]. */
     uint32_t minIoSize; /* [byte]. */
     uint32_t maxIoSize; /* [byte]. */
-    uint32_t periodS; /* running period [sec]. */
+    uint32_t periodMs; /* running period [ms]. */
     uint32_t numThreads; /* The number of threads. */
+    uint32_t salt;
+    size_t numVerify;
+    size_t verifyIntervalMs;
     bool isVerbose;
     bool isDebug;
     std::string targetPath; /* device or file path. */
 
     Option(int argc, char* argv[]) {
+
+        const uint32_t DEFAULT_MIN_IO_SIZE = LOGICAL_BLOCK_SIZE;
+        const uint32_t DEFAULT_MAX_IO_SIZE = LOGICAL_BLOCK_SIZE * 64;
+
         cybozu::Option opt;
-        opt.setDescription("write_overlapped_and_verify: issud overlapped write IOs and verify the written data.");
-        opt.appendOpt(&bs, LOGICAL_BLOCK_SIZE, "b", cybozu::format("SIZE:  block size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
+        opt.setDescription("write_overlapped_and_verify: "
+                           "issud overlapped write IOs and verify the written data.");
+        opt.appendOpt(&bs, LOGICAL_BLOCK_SIZE, "b",
+                      cybozu::format("SIZE:  block size [byte]. (default: %u)",
+                                     LOGICAL_BLOCK_SIZE));
         opt.appendOpt(&offset, 0, "o", "OFFSET: start offset [byte]. (default: 0)");
         opt.appendOpt(&size, MEBI, "s", "SIZE: target size [byte]. (default: 1M)");
-        opt.appendOpt(&minIoSize, LOGICAL_BLOCK_SIZE, "n", cybozu::format("SIZE: minimum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE));
-        opt.appendOpt(&maxIoSize, LOGICAL_BLOCK_SIZE * 64, "x", cybozu::format("SIZE: maximum IO size [byte]. (default: %u)", LOGICAL_BLOCK_SIZE * 64));
-        opt.appendOpt(&periodS, 1, "p", "N: running period [sec] (default: 1)");
+        opt.appendOpt(&minIoSize, DEFAULT_MIN_IO_SIZE, "n",
+                      cybozu::format("SIZE: minimum IO size [byte]. (default: %u)",
+                                     DEFAULT_MIN_IO_SIZE));
+        opt.appendOpt(&maxIoSize, DEFAULT_MAX_IO_SIZE, "x",
+                      cybozu::format("SIZE: maximum IO size [byte]. (default: %u)",
+                                     DEFAULT_MAX_IO_SIZE));
+        opt.appendOpt(&periodMs, 100, "p", "N: running period [ms] (default: 100)");
         opt.appendOpt(&numThreads, 2, "t", "N: number of threads (default: 2)");
+        opt.appendOpt(&salt, 0, "salt", "VAL: checksum salt (default: 0)");
+        opt.appendOpt(&numVerify, 1, "vn", "N: number of verification (default: 1)");
+        opt.appendOpt(&verifyIntervalMs, 100, "vi", "N: verification interval [ms] (default: 100)");
         opt.appendBoolOpt(&isVerbose, "v", ": put verbose messages to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
@@ -47,6 +64,12 @@ struct Option
             opt.usage();
             ::exit(1);
         }
+
+        if (isDebug) std::cout << opt << std::endl;
+
+        if (minIoSize < bs) minIoSize = bs;
+        if (maxIoSize < minIoSize) maxIoSize = minIoSize;
+
         verify();
     }
 
@@ -56,11 +79,7 @@ struct Option
     uint32_t maxIoB() const { return maxIoSize / bs; }
 
     bool isDirect() const {
-#if 0
-        return false;
-#else
         return bs % LOGICAL_BLOCK_SIZE == 0;
-#endif
     }
 
 private:
@@ -85,8 +104,8 @@ private:
         if (size == 0) {
             throw RT_ERR("size must be > 0.");
         }
-        if (periodS == 0) {
-            throw RT_ERR("periodS must be > 0.");
+        if (periodMs == 0) {
+            throw RT_ERR("periodMs must be > 0.");
         }
         if (numThreads == 0) {
             throw RT_ERR("numThreads must be > 0.");
@@ -103,25 +122,34 @@ private:
     cybozu::util::Random<uint64_t> rand_;
     const uint64_t offsetB_;
     const uint64_t sizeB_;
+    const uint32_t minIoB_;
+    const uint32_t maxIoB_;
 public:
-    RandomIoSpecGenerator(uint64_t offsetB, uint32_t sizeB)
+    RandomIoSpecGenerator(uint64_t offsetB, uint32_t sizeB, uint32_t minIoB, uint32_t maxIoB)
         : rand_()
         , offsetB_(offsetB)
-        , sizeB_(sizeB) {
+        , sizeB_(sizeB)
+        , minIoB_(minIoB)
+        , maxIoB_(maxIoB) {
         assert(0 < sizeB);
+        assert(0 < minIoB);
+        assert(0 < maxIoB);
+        assert(minIoB <= maxIoB);
     }
     void get(uint64_t &ioAddr, uint32_t &ioBlocks) {
-        ioAddr = rand_() % sizeB_ + offsetB_;
-        uint64_t sizeB = sizeB_ - (ioAddr - offsetB_);
-        assert(0 < sizeB);
-        ioBlocks = 1;
-        if (sizeB == 1) {
-            ioBlocks = 1;
+        if (minIoB_ == maxIoB_) {
+            ioBlocks = minIoB_;
         } else {
-            ioBlocks = rand_() % (sizeB - 1) + 1;
+            ioBlocks = rand_() % (maxIoB_ - minIoB_ + 1) + minIoB_;
+        }
+        if (sizeB_ == ioBlocks) {
+            ioAddr =  offsetB_;
+        } else {
+            ioAddr = rand_() % (sizeB_ - ioBlocks + 1) + offsetB_;
         }
         assert(offsetB_ <= ioAddr);
         assert(ioAddr + ioBlocks <= offsetB_ + sizeB_);
+        LOGs.debug() << "addr" << ioAddr << "size" << ioBlocks;
     }
 };
 
@@ -226,7 +254,7 @@ public:
            std::atomic<bool> &shouldStop)
         : opt_(opt)
         , file_(opt.targetPath, O_RDWR | O_DIRECT)
-        , ioSpecGen_(opt.offsetB(), opt.sizeB())
+        , ioSpecGen_(opt.offsetB(), opt.sizeB(), opt_.minIoB(), opt_.maxIoB())
         , dataPtr_(dataPtr)
         , ioIdV_(opt.sizeB(), 0)
         , mu_(mu)
@@ -237,6 +265,7 @@ public:
         const uint32_t bs = opt_.bs;
         uint64_t ioAddr;
         uint32_t ioBlocks;
+        size_t writtenLb = 0;
         while (!shouldStop_) {
             ioSpecGen_.get(ioAddr, ioBlocks);
 
@@ -245,7 +274,9 @@ public:
             const uint64_t offLb = (ioAddr - opt_.offsetB());
             file_.pwrite(dataPtr_ + (offLb * bs), ioBlocks * bs, ioAddr * bs);
             fillIoIdV(offLb, ioBlocks, ioId);
+            writtenLb += ioBlocks;
         }
+        std::cout << "thread done: " << writtenLb << std::endl;
     }
     const std::vector<uint64_t> &getIoIdV() const {
         return ioIdV_;
@@ -259,7 +290,48 @@ private:
     }
 };
 
-void writeConcurrentlyAndVerify(Option &opt)
+
+void verify(
+    const Option &opt, size_t sizeB, const std::vector<size_t> &threadIdV,
+    cybozu::util::File &file, const std::vector<AlignedArray> &blksV)
+{
+    const uint32_t bs = opt.bs;
+    AlignedArray blk(bs);
+    uint64_t nVerified = 0, nWritten = 0;
+    if (opt.isVerbose) {
+        ::printf("thId written read\n");
+    }
+    for (uint64_t i = 0; i < sizeB; i++) {
+        const size_t thId = threadIdV[i];
+        if (thId == uint64_t(-1)) continue;
+        nWritten++;
+        file.pread(blk.data(), bs, (opt.offsetB() + i) * bs);
+        const char *data = blksV[thId].data() + (i * bs);
+        if (::memcmp(blk.data(), data, bs) == 0) {
+            nVerified++;
+        } else {
+            //::printf("block %" PRIu64 " invalid.\n", i);
+        }
+        if (opt.isVerbose) {
+            const uint32_t csum0 = cybozu::util::calcChecksum(data, bs, opt.salt);
+            const uint32_t csum1 = cybozu::util::calcChecksum(blk.data(), blk.size(), opt.salt);
+            ::printf("%zu %08x %08x\n", thId, csum0, csum1);
+        }
+    }
+    ::printf("total/written/verified %" PRIu64 "/%" PRIu64 "/%" PRIu64 ".\n"
+             , sizeB, nWritten, nVerified);
+
+    if (nVerified < nWritten) {
+#if 1
+        throw cybozu::Exception(__func__)
+            << "invalid blocks found" << (nWritten - nVerified);
+#else
+        ::printf("!!!invalid blocks found %" PRIu64 "!!!\n", nWritten - nVerified);
+#endif
+    }
+}
+
+void writeConcurrentlyAndVerify(const Option &opt)
 {
     /* Prepare */
     const uint32_t bs = opt.bs;
@@ -274,14 +346,22 @@ void writeConcurrentlyAndVerify(Option &opt)
     }
 
     /* Write zero to the target range. */
+    std::cout << "zero-clear" << std::endl;
     AlignedArray blk(bs);
     file.lseek(opt.offsetB() * bs);
     for (uint64_t i = 0; i < sizeB; i++) {
         file.write(blk.data(), blk.size());
+        if (i % 16 == 0) {
+            ::printf(".");
+            ::fflush(::stdout);
+            if (i % 1024 == 0) {
+                ::printf("%" PRIu64 "\n", i);
+            }
+        }
     }
 
-
     /* Prepare resources shared by all threads. */
+    std::cout << "prepare resources" << std::endl;
     std::atomic<uint64_t> ioIdGen(1); // 0 means invalid.
     RangeMutex mu(sizeB);
     std::atomic<bool> shouldStop(false);
@@ -293,7 +373,16 @@ void writeConcurrentlyAndVerify(Option &opt)
     std::vector<std::shared_ptr<Worker> > thV;
     for (size_t i = 0; i < opt.numThreads; i++) {
         blksV.emplace_back(opt.size);
+#if 0 // fill randomly.
         rand.fill(blksV.back().data(), opt.size);
+#else // fill fixed value per thread.
+        const uint32_t x = i + 1;
+        assert(sizeof(x) <= opt.size);
+        const size_t n = opt.size / sizeof(x);
+        for (size_t j = 0; j < n; j++) {
+            ::memcpy(blksV.back().data() + (sizeof(x) * j), &x, sizeof(x));
+        }
+#endif
         thV.push_back(std::make_shared<Worker>(
                           opt, blksV.back().data(), mu, ioIdGen, shouldStop));
     }
@@ -302,7 +391,7 @@ void writeConcurrentlyAndVerify(Option &opt)
             ::printf("%zu", thId);
             for (size_t i = 0; i < sizeB; i++) {
                 const char *data = blksV[thId].data() + (i * bs);
-                ::printf(" %08x", cybozu::util::calcChecksum(data, bs, 0));
+                ::printf(" %08x", cybozu::util::calcChecksum(data, bs, opt.salt));
             }
             ::printf("\n");
         }
@@ -311,10 +400,13 @@ void writeConcurrentlyAndVerify(Option &opt)
     for (std::shared_ptr<Worker> &w : thV) {
         thSet.add(w);
     }
+    std::cout << "start" << std::endl;
     thSet.start();
-    util::sleepMs(opt.periodS * 1000);
+    util::sleepMs(opt.periodMs);
     shouldStop = true;
+    std::cout << "stop" << std::endl;
     thSet.join();
+    std::cout << "done" << std::endl;
 
     /* Determine who writes each block finally. */
     std::vector<size_t> threadIdV(sizeB, -1); // -1 means no one writes.
@@ -333,29 +425,12 @@ void writeConcurrentlyAndVerify(Option &opt)
         }
     }
 
-    /* Verify. */
-    uint64_t nVerified = 0, nWritten = 0;
-    for (uint64_t i = 0; i < sizeB; i++) {
-        const size_t thId = threadIdV[i];
-        if (thId == uint64_t(-1)) continue;
-        nWritten++;
-        file.pread(blk.data(), bs, (opt.offsetB() + i) * bs);
-        if (opt.isVerbose) {
-            const uint32_t csum = cybozu::util::calcChecksum(blk.data(), blk.size(), 0);
-            ::printf("%zu %08x\n", thId, csum);
+    for (size_t i = 0; i < opt.numVerify; i++) {
+        std::cout << "verify " << i << std::endl;
+        verify(opt, sizeB, threadIdV, file, blksV);
+        if (i < opt.numVerify - 1 && opt.verifyIntervalMs > 0) {
+            util::sleepMs(opt.verifyIntervalMs);
         }
-        if (::memcmp(blk.data(), blksV[thId].data() + (i * bs), bs) == 0) {
-            nVerified++;
-        } else {
-            ::printf("block %" PRIu64 " invalid.\n", i);
-        }
-    }
-    ::printf("total/written/verified %" PRIu64 "/%" PRIu64 "/%" PRIu64 ".\n"
-             , sizeB, nWritten, nVerified);
-
-    if (nVerified < nWritten) {
-        throw cybozu::Exception(__func__)
-            << "invalid blocks found" << (nWritten - nVerified);
     }
 };
 
@@ -363,6 +438,11 @@ int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
+
+    LOGs.debug() << "minIoSize" << opt.minIoSize;
+    LOGs.debug() << "maxIoSize" << opt.maxIoSize;
+    LOGs.debug() << "blockSize" << opt.bs;
+
     writeConcurrentlyAndVerify(opt);
     return 0;
 }
