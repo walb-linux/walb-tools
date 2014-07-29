@@ -1074,6 +1074,7 @@ inline void isOverflow(protocol::GetCommandParams &p)
     std::string volId;
     cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
     StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
     if (st == sClear) {
         throw cybozu::Exception(FUNC) << "bad state" << st;
@@ -1081,7 +1082,28 @@ inline void isOverflow(protocol::GetCommandParams &p)
     const StorageVolInfo volInfo(gs.baseDirStr, volId);
     const std::string wdevPath = volInfo.getWdevPath();
     const bool isOverflow = walb::device::isOverflow(wdevPath);
+    ul.unlock();
     protocol::sendValueAndFin(p, size_t(isOverflow));
+    p.logger.debug() << "get overflow succeeded" << volId << isOverflow;
+}
+
+inline void getUuid(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    if (st == sClear) {
+        throw cybozu::Exception(FUNC) << "bad state" << st;
+    }
+    const StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    ul.unlock();
+    const std::string uuidStr = uuid.str();
+    protocol::sendValueAndFin(p, uuidStr);
+    p.logger.debug() << "get uuid succeeded" << volId << uuidStr;
 }
 
 } // namespace storage_local
@@ -1091,6 +1113,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { hostTypeTN, storage_local::getHostType },
     { volTN, storage_local::getVolList },
     { isOverflowTN, storage_local::isOverflow },
+    { uuidTN, storage_local::getUuid },
 };
 
 inline void c2sGetServer(protocol::ServerParams &p)

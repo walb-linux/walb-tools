@@ -282,6 +282,7 @@ inline void c2xGetClient(protocol::ClientParams &p)
         { diffTN, protocol::StringVecType },
         { restoredTN, protocol::StringVecType },
         { restorableTN, protocol::StringVecType },
+        { uuidTN, protocol::StringType },
     };
     const protocol::ValueType valType = protocol::getValueType(targetName, typeM, FUNC);
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
