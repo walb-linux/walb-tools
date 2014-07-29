@@ -595,13 +595,13 @@ class Server:
         return self.address + ":" + str(self.port)
 
 
-def verify_server_kind(s, kind):
+def verify_server_kind(s, kindL):
     '''
     s :: Server
-    kind :: int
+    kindL :: [int]
     '''
-    if s.kind != kind:
-        raise Exception('invalid server type', s.kind, kind)
+    if s.kind not in kindL:
+        raise Exception('invalid server type', s.kind, kindL)
 
 
 class ServerLayout:
@@ -812,13 +812,14 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_type(vol, str)
-        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
+        verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
         if s.kind == K_STORAGE:
-            self.verify_state(s, vol, sSyncReady)
-        elif s.kind == K_ARCHIVE:
-            self.verify_state(s, vol, aSyncReady)
+            state = sSyncReady
         else:
-            raise Exception('reset_vol:bad server', s)
+            assert s.kind == K_ARCHIVE
+            state = aSyncReady
+        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
+        self.verify_state(s, vol, state)
 
     def set_slave_storage(self, sx, vol):
         '''
@@ -956,7 +957,7 @@ class Controller:
         wdevPath :: str
         '''
         verify_type(sx, Server)
-        verify_server_kind(sx, K_STORAGE)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(wdevPath, str)
         self.run_ctl(sx, ["init-vol", vol, wdevPath])
