@@ -239,7 +239,7 @@ def write_over_wldev(wdev, overflow=False):
     writeMaxLb = min(wldevSizeLb, wdevSizeLb) / 2
     while remainLb > 0:
         writeLb = min(remainLb, writeMaxLb)
-        print 'writing %d MiB' % (writeLb * 512 / 1024 / 1024)
+        print 'writing %d MiB' % (writeLb * Lbs / Mebi)
         write_random(wdev.path, writeLb)
         if not overflow:
             wdev.wait_for_log_empty()
@@ -592,7 +592,7 @@ def test_n11(doZeroClear):
         curSize = wdev0.get_size_mb()
         if curSize != prevSize + 4:
             raise Exception('test_n11:bad size', prevSize, curSize)
-    write_random(wdev0.path, 1, prevSize * 1024 * 1024 / 512)
+    write_random(wdev0.path, 1, prevSize * Mebi / Lbs)
     if doZeroClear:
         gid = walbc.snapshot_sync(s0, VOL, [a0])
     else:
@@ -709,7 +709,7 @@ def test_m3():
     resize_lv(wdev1.ddev, prevSizeMb, newSizeMb, True)
     walbc.resize_storage(s0, VOL, newSizeMb)
     walbc.resize_storage(s1, VOL, newSizeMb)
-    write_random(wdev0.path, 1, prevSizeMb * 1024 * 1024 / 512)
+    write_random(wdev0.path, 1, prevSizeMb * Mebi / Lbs)
     curSizeMb = wdev0.get_size_mb()
     if curSizeMb != newSizeMb:
         raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
