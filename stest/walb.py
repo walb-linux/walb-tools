@@ -891,6 +891,17 @@ class Controller:
         ret = self.run_ctl(px, args)
         return int(ret) != 0
 
+    def get_uuid(self, s, vol):
+        '''
+        Get uuid string.
+        s :: Server   - storage or archive.
+        return :: str - uuid string that regex pattern [0-9a-f]{32}.
+        '''
+        verify_type(s, Server)
+        verify_type(vol, str)
+        verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
+        return self.run_ctl(s, ['get', 'uuid', vol])
+
     def status(self, sL=[], vol=None):
         '''
         print server status.
