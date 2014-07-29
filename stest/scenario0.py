@@ -60,6 +60,7 @@ def setup_test():
                     if f[0] == 'i':
                         run_local_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(workDir)
+    kill_all_repeaters()
     kill_all_servers()
     for wdev in wdevL:
         recreate_walb_dev(wdev)
@@ -79,8 +80,13 @@ def wait_for_server_ready(s, timeoutS=10):
     raise Exception('wait_for_server_ready:timeout', s, timeoutS)
 
 
+def get_orig_port(port):
+    return port + 10000
+
+
 def get_cmd_port(port):
     return port + 20000
+
 
 def run_repeater(port, rateMbps=0, delayMsec=0):
     """
@@ -89,7 +95,8 @@ def run_repeater(port, rateMbps=0, delayMsec=0):
         port + 10000 ; ip to send packets (original server)
         port + 20000 ; ip to recieve command
     """
-    startup_repeater('localhost', port + 10000, port, get_cmd_port(port), rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
+    startup_repeater('localhost', get_orig_port(port), port, get_cmd_port(port),
+                     rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
 
 
 def quit_repeater(s, doSleep=True):
@@ -111,7 +118,7 @@ def stop_repeater(s):
     send_cmd_to_repeater(get_cmd_port(s.port), 'stop')
 
 
-def startup(s, useRepeater=False, rateMbps=0, delayMsec=0):
+def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
@@ -119,7 +126,8 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0):
     if useRepeater:
         run_repeater(s.port, rateMbps, delayMsec)
     run_daemon(args)
-    wait_for_server_ready(s)
+    if wait:
+        wait_for_server_ready(s)
 
 
 def kill_all_repeaters():
@@ -129,11 +137,12 @@ def kill_all_repeaters():
 
 def startup_list(sL):
     for s in sL:
-        startup(s)
+        startup(s, wait=False)
+    for s in sL:
+        wait_for_server_ready(s)
 
 
 def startup_all():
-    kill_all_repeaters()
     startup_list(sLayout.get_all())
 
 
@@ -951,7 +960,8 @@ def test_e10():
 
 
 def get_original_server(s):
-	return Server(s.name, s.address, s.port + 10000, s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
+	return Server(s.name, s.address, get_orig_port(s.port),
+                      s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
 
 
 def test_e11():
