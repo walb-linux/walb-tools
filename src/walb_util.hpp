@@ -9,6 +9,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <fstream>
 #include "util.hpp"
 #include "file_path.hpp"
 #include "tmp_file.hpp"
@@ -36,6 +37,19 @@
 
 namespace walb {
 namespace util {
+
+inline void saveMap(const std::string& file)
+{
+    const int pid = getpid();
+    char name[256];
+    snprintf(name, sizeof(name), "/proc/%d/maps", pid);
+    std::ifstream ifs(name, std::ios::binary);
+    std::ofstream ofs(file.c_str(), std::ios::binary);
+    std::string line;
+    while (std::getline(ifs, line)) {
+        ofs << line << std::endl;
+    }
+}
 
 /**
  * Make a directory.
