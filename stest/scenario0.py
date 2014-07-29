@@ -4,6 +4,7 @@ import os
 import itertools, shutil, threading
 import random
 import datetime
+import tempfile
 from walb import *
 from repeater import *
 
@@ -1056,6 +1057,118 @@ def test_e13():
 
     exit_repeater_test(rL)
     print 'test_e13:succeeded'
+
+
+def test_e14():
+    """
+        down network between a0 and a1 during full-repl -> recover -> full-repl.
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e14: network down and recover full-repl', g_count
+    raise Exception('test_e14: not yet implemented')
+
+
+def test_e15():
+    """
+        down network between a0 and a1 during hash-repl -> recover -> hash-repl.
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e15: network down and recover hash-repl', g_count
+    raise Exception('test_e15: not yet implemented')
+
+
+def test_e16():
+    """
+        down network between a0 and a1 during diff-repl -> recover -> diff-repl.
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e16: network down and recover diff-repl', g_count
+    raise Exception('test_e16: not yet implemented')
+
+
+def create_dummy_diff(devSizeB, logSizeB):
+    '''
+    devSizeB :: int          - device size [byte]
+    logSizeB :: int          - log size [byte]
+    return :: TemporaryFile  - written diff file.
+
+    '''
+    verify_type(devSizeB, int)
+    verify_type(logSizeB, int)
+    wlog = tempfile.NamedTemporaryFile(dir=workDir)
+    wdiff = tempfile.NamedTemporaryFile(dir=workDir)
+    run_local_command([binDir + 'wlog-gen',
+                       '-s', str(devSizeB),
+                       '-z', str(logSizeB),
+                       '-o', wlog.name], putMsg=True)
+    run_local_command([binDir + 'wlog-to-wdiff',
+                       '-i', wlog.name,
+                       '-o', wdiff.name], putMsg=True)
+    wlog.close()
+    wdiff.flush()
+    return wdiff
+
+
+def try_to_send_dummy_diff_and_verify(
+        ax, vol, sizeB, wdiffPath, gid0, gid1, uuid, verifyMsg):
+    '''
+    ax        - archive server
+    vol       - volume identifier
+    sizeB     - volume size [byte]
+    wdiffPath - walb diff path to send.
+    gid0      - begin gid
+    gid1      - end gid
+    uuid      - uuid of the volume.
+    verifyMsg - message to verify.
+
+    '''
+    verify_type(ax, Server)
+    verify_server_kind(ax, [K_ARCHIVE])
+    verify_type(vol, str)
+    verify_type(sizeB, int)
+    verify_type(wdiffPath, str)
+    verify_type(gid0, int)
+    verify_type(gid1, int)
+    verify_type(uuid, str)
+    verify_type(verifyMsg, str)
+
+    args = [binDir + 'wdiff-send',
+            ax.address, str(ax.port), vol, str(sizeB), wdiffPath,
+            '-g0', str(gid0),
+            '-g1', str(gid1),
+            '-uuid', uuid,
+            '-time', datetime.datetime.today().strftime('%Y%m%d%H%M%S'),
+            '-merge', '0',
+            '-msg', verifyMsg]
+    run_local_command(args, putMsg=True)
+
+
+def test_e17():
+    """
+        execute wdiff-transfer twice for a wdiff file and
+        confirm ot be rejected with 'too-old-diff' message.
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_e17:wdiff-transfer twice', g_count
+
+    gid0 = walbc.get_latest_clean_snapshot(a0, VOL)
+    gid1 = gid0 + 1
+    devSizeB = wdev0.get_size_lb() * Lbs
+    logSizeB = Mebi
+    uuid = walbc.get_uuid(a0, VOL)
+    uuidx = walbc.get_uuid(s0, VOL)
+    if uuid != uuidx:
+        raise Exception('test_e17: uuid differ', uuid, uuidx)
+
+    wdiff = create_dummy_diff(devSizeB, logSizeB)
+    try_to_send_dummy_diff_and_verify(
+        a0, VOL, devSizeB, wdiff.name, gid0, gid1, uuid, 'accept')
+    try_to_send_dummy_diff_and_verify(
+        a0, VOL, devSizeB, wdiff.name, gid0, gid1, uuid, 'too-old-diff')
+    gid1x = walbc.get_latest_clean_snapshot(a0, VOL)
+    if gid1 != gid1x:
+        raise Exception('test_e17: bad latest gid', gid1x, gid1)
+
 
 ###############################################################################
 # Replacement scenario tests.
