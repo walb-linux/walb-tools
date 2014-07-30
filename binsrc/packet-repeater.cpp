@@ -34,6 +34,7 @@ struct Option {
         cybozu::SetLogPriority(cybozu::LogInfo);
         cybozu::Option opt;
         bool vv = false;
+        std::string logPath;
         opt.appendParam(&serverAddr, "server", ": server address");
         opt.appendParam(&serverPort, "port", ": server port");
         opt.appendParam(&recvPort, "recvPort", ": port to receive");
@@ -41,6 +42,7 @@ struct Option {
         opt.appendOpt(&delaySec, 0, "d", ": delay second");
         opt.appendOpt(&rateMbps, 0, "r", ": data rate(mega bit per second)");
         opt.appendOpt(&threadNum, 10, "t", ": num of thread");
+        opt.appendOpt(&logPath, "-", "l", ": log path (default stderr)");
         opt.appendBoolOpt(&verbose, "v", ": verbose message");
         opt.appendBoolOpt(&vv, "vv", ": more verbose message");
         opt.appendHelp("h");
@@ -49,6 +51,11 @@ struct Option {
             exit(1);
         }
         if (vv) cybozu::SetLogPriority(cybozu::LogDebug);
+        if (logPath == "-") {
+            cybozu::SetLogFILE(::stderr);
+        } else {
+            cybozu::OpenLogFile(logPath);
+        }
         opt.put();
     }
 };
@@ -111,7 +118,12 @@ class Repeater {
         Sleep,
         Ready,
         Running,
-        Error
+        Error0,
+        Error1,
+        Closing0,
+        Closing1,
+        Close0,
+        Close1,
     };
     const Option& opt_;
     std::atomic<int> state_;
@@ -125,7 +137,6 @@ class Repeater {
         assert(dir == 0 || dir == 1);
         cybozu::Socket &from = s_[dir];
         cybozu::Socket &to = s_[1 - dir];
-        const bool needShutdown = dir == 1;
         const int intervalSec = 3;
         SMAverage sma(intervalSec);
         std::vector<char> buf(1024);
@@ -137,57 +148,49 @@ class Repeater {
             case Ready:
                 waitMsec(1);
                 continue;
-            case Error:
-                if (!to.isValid()) {
-                    if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d toSleep", dir, (int)state_);
-                    state_ = Sleep;
-                } else {
-                    waitMsec(1);
-                }
-                break;
+            case Error0:
+                handleError(dir == 0, dir, from);
+                continue;
+            case Error1:
+                handleError(dir == 1, dir, from);
+                continue;
+            case Closing0:
+                handleClosing(dir == 0, dir, from, to, buf, sma);
+                continue;
+            case Closing1:
+                handleClosing(dir == 1, dir, from, to, buf, sma);
+                continue;
+            case Close0:
+                handleClose(dir == 0, dir, from);
+                continue;
+            case Close1:
+                handleClose(dir == 1, dir, from);
+                continue;
             case Running:
                 if (!from.isValid()) {
                     cybozu::PutLog(cybozu::LogInfo, "loop %d %d from is not valid", dir, (int)state_);
-                    state_ = Error;
+                    state_ = dir == 0 ? Error0 : Error1;
                     continue;
                 }
                 try {
                     while (!from.queryAccept()) {
                     }
-                    if (g_quit) break;
-                    const size_t readSize = from.readSome(buf.data(), buf.size());
-                    if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d readSize %d", dir, (int)state_, (int)readSize);
-                    if (opt_.rateMbps > 0) {
-                        sma.append(readSize, cybozu::GetCurrentTimeSec());
-                        while (const double rate = sma.getBps(cybozu::GetCurrentTimeSec()) > opt_.rateMbps * 1e6) {
-                            if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d rate %f", dir, (int)state_, rate);
-                            waitMsec(1);
-                        }
-                    }
-                    if (readSize > 0) {
-                        if (!g_stop && to.isValid()) {
-                            if (opt_.delaySec) {
-                                waitMsec(opt_.delaySec * 1000);
-                            }
-                            to.write(buf.data(), readSize);
-                        }
-                        continue;
-                    }
+                    if (g_quit) continue;
+                    if (readAndWrite(dir, from, to, buf, sma) > 0) continue;
                 } catch (std::exception& e) {
                     cybozu::PutLog(cybozu::LogInfo, "loop %d %d ERR %s", dir, (int)state_, e.what());
-                    state_ = Error;
                     from.close();
+                    state_ = dir == 0 ? Error0 : Error1;
                     continue;
                 }
-                if (needShutdown) {
-                    if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo,"loop %d %d shutdown", dir, (int)state_);
-                    const bool dontThrow = true;
-                    to.shutdown(1, dontThrow); // write disallow
-                }
-                if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d close", dir, (int)state_);
-                from.close();
-                if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d isValid %d", dir, (int)state_, from.isValid());
-                break;
+                if (errorIfStopped(dir, from)) continue;
+                int expected = Running;
+                const int after = dir == 0 ? Closing0 : Closing1;
+                if (!state_.compare_exchange_strong(expected, after)) continue;
+                if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "Closing %d %d", dir, (int)state_);
+                const bool dontThrow = true;
+                to.shutdown(1, dontThrow); // write disallow
+                continue;
             }
         }
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d end", dir);
@@ -196,6 +199,62 @@ class Repeater {
         s_[0].close();
         s_[1].close();
         state_ = Sleep;
+    }
+    bool errorIfStopped(int dir, cybozu::Socket& from) {
+        if (!g_stop) return false;
+        from.close();
+        state_ = dir == 0 ? Error0 : Error1;
+        return true;
+    }
+    void handleError(bool doesSetError, int dir, cybozu::Socket& from) {
+        if (doesSetError) {
+            assert(!from.isValid());
+            waitMsec(1);
+        } else {
+            from.close();
+            if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d toSleep", dir, (int)state_);
+            state_ = Sleep;
+        }
+    }
+    void handleClosing(bool doesSetClose, int dir, cybozu::Socket& from, cybozu::Socket& to, std::vector<char>& buf, SMAverage& sma) {
+        if (doesSetClose) {
+            waitMsec(1);
+            return;
+        }
+        if (errorIfStopped(dir, from)) return;
+        if (readAndWrite(dir, from, to, buf, sma) > 0) return;
+        if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "handleClosing %d %d", dir, (int)state_);
+        from.close();
+        state_ = dir == 1 ? Close0 : Close1;
+    }
+    void handleClose(bool doesSetClose, int dir, cybozu::Socket& from) {
+        if (!doesSetClose) {
+            waitMsec(1);
+            return;
+        }
+        if (errorIfStopped(dir, from)) return;
+        if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "handleClose %d %d", dir, (int)state_);
+        from.close();
+        state_ = Sleep;
+    }
+    size_t readAndWrite(int dir, cybozu::Socket& from, cybozu::Socket& to, std::vector<char>& buf, SMAverage& sma) {
+        const size_t readSize = from.readSome(buf.data(), buf.size());
+        if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d readSize %d", dir, (int)state_, (int)readSize);
+        if (opt_.rateMbps > 0) {
+            sma.append(readSize, cybozu::GetCurrentTimeSec());
+            while (const double rate = sma.getBps(cybozu::GetCurrentTimeSec()) > opt_.rateMbps * 1e6) {
+                if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "loop %d %d rate %f", dir, (int)state_, rate);
+                waitMsec(1);
+            }
+        }
+        if (readSize == 0) return 0;
+        if (!g_stop && to.isValid()) {
+            if (opt_.delaySec) {
+                waitMsec(opt_.delaySec * 1000);
+            }
+            to.write(buf.data(), readSize);
+        }
+        return readSize;
     }
 public:
     int getState() const { return state_; }
@@ -221,7 +280,6 @@ public:
             s_[0].close();
             s_[1].close();
             state_ = Sleep;
-            waitMsec(100);
             return true;
         }
     }
@@ -235,7 +293,7 @@ public:
     }
 };
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) try
 {
     const Option opt(argc, argv);
     cybozu::Socket server;
@@ -285,4 +343,7 @@ int main(int argc, char *argv[])
     }
     cmdWorker.join();
     if (opt.verbose) puts("main end");
+} catch (std::exception& e) {
+    cybozu::PutLog(cybozu::LogError, "error: %s", e.what());
+    return 1;
 }
