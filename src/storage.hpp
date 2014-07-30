@@ -671,7 +671,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.writeFin(gid);
-        getStorageGlobal().taskQueue.push(volId);
+        getStorageGlobal().taskQueue.pushForce(volId, 0);
         logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << e.what();
