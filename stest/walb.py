@@ -396,6 +396,8 @@ aAcceptForResize = aActive + [aStopped]
 aAcceptForClearVol = [aStopped, aSyncReady]
 aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
+aDuringFullSync = [atFullSync]
+aDuringHashSync = [atHashSync]
 
 
 ########################################
@@ -1267,7 +1269,7 @@ class Controller:
         timeoutS :: int - timeout [sec].
         '''
         verify_type(gid, int)
-        self._wait_for_no_action(ax, vol, 'Restore', timeoutS)
+        self._wait_for_no_action(ax, vol, aaRestore, timeoutS)
         gids = self.get_restored(ax, vol)
         if gid in gids:
             return
@@ -1294,26 +1296,58 @@ class Controller:
         if e:
             raise Exception(msg, 'gid must not be restorable', gid)
 
-    def replicate_sync(self, aSrc, vol, aDst):
+    def replicate_async(self, aSrc, vol, aDst):
         '''
         Copy current (aSrc, vol) to aDst.
+        This does not wait for the replication done.
+        Use wait_for_replicated() or replicate_sync() to wait for it.
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
+        return :: int  - latest gid to replicate
         '''
-        gidL = self.get_restorable(aSrc, vol)
-        gid = gidL[-1]
+        gid = self.get_restorable(aSrc, vol)[-1]
         self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
                             aDst.get_host_port()])
-        self._wait_for_replicated(aDst, vol, gid)
+        return gid
 
-    def synchronize(self, aSrc, vol, aDst):
+    def wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for a snapshot is restorable at an archive server.
+        ax :: Server    - archive server as a replication server (not client).
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(gid, int)
+        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
+        gidL = self.get_restorable(ax, vol, 'all')
+        if gidL and gid <= gidL[-1]:
+            return
+        raise Exception("wait_for_replicated:replicate failed",
+                        ax.name, vol, gid, gidL)
+
+    def replicate_sync(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
+        '''
+        Copy current (aSrc, vol) to aDst.
+        This will wait for the replicated done.
+        aSrc :: Server - source archive (as a client).
+        vol :: str     - volume name.
+        aDst :: Server - destination archive (as a server).
+        return :: int  - replicated gid.
+        '''
+        gid = self.replicate_async(aSrc, vol, aDst)
+        self.wait_for_replicated(aDst, vol, gid, timeoutS)
+        return gid
+
+    def synchronize(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
         '''
         Synchronize aDst with (aSrc, vol).
         To reduce proxies stopped period, replicate nosync before calling this.
-        aSrc :: Server - source archive (as a client).
-        vol :: str     - volume name.
-        aDst :: Server - destination archive (as a server).
+        aSrc :: Server  - source archive (as a client).
+        vol :: str      - volume name.
+        aDst :: Server  - destination archive (as a server).
+        timeoutS :: int - timeout [sec].
         '''
         verify_type(aSrc, Server)
         verify_type(vol, str)
@@ -1331,7 +1365,7 @@ class Controller:
                 self.run_ctl(px, ["archive-info", "add", vol,
                                   aDst.name, aDst.get_host_port()])
 
-        self.replicate_sync(aSrc, vol, aDst)
+        self.replicate_sync(aSrc, vol, aDst, timeoutS)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
@@ -1524,13 +1558,14 @@ class Controller:
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE)
 
-    def replicate(self, aSrc, vol, aDst, synchronizing):
+    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC):
         '''
         Replicate archive data by copying a volume from one archive to another.
         aSrc :: Server        - source archive server (as client).
         vol :: str            - volume name.
         aDst :: Server        - destination archive server (as server).
         synchronizing :: bool - True if you want to make aDst synchronizing.
+        timeoutS :: int       - timeout [sec].
         '''
         verify_type(aSrc, Server)
         verify_type(vol, str)
@@ -1541,7 +1576,7 @@ class Controller:
         if st == aClear:
             self.run_ctl(aDst, ["init-vol", vol])
 
-        self.replicate_sync(aSrc, vol, aDst)
+        self.replicate_sync(aSrc, vol, aDst, timeoutS)
         if synchronizing:
             self.synchronize(aSrc, vol, aDst)
 
@@ -1747,22 +1782,6 @@ class Controller:
             return
         raise Exception("wait_for_merged:failed",
                         ax.name, vol, gidB, gidE, pos, gidL)
-
-    def _wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a snapshot is restorable at an archive server.
-        ax :: Server    - archive server as a replication server (not client).
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(gid, int)
-        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.get_restorable(ax, vol, 'all')
-        if gidL and gid <= gidL[-1]:
-            return
-        raise Exception("wait_for_replicated:replicate failed",
-                        ax.name, vol, gid, gidL)
 
     def _prepare_backup(self, sx, vol):
         '''

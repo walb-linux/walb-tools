@@ -39,7 +39,8 @@ wdevSizeMb = 12
 
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 sLayoutAll = ServerLayout([s0, s1, s2], [p0, p1, p2], [a0, a1, a2])
-sLayoutRepeater = ServerLayout([s0], [p0], [a0])
+sLayoutRepeater1 = ServerLayout([s0], [p0], [a0])
+sLayoutRepeater2 = ServerLayout([s0], [p0], [a0, a1])
 
 wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  wdevcPath)
 wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', wdevcPath)
@@ -52,6 +53,8 @@ g_count = 0
 
 
 def setup_test():
+    kill_all_repeaters()
+    kill_all_servers()
     run_local_command(['/bin/rm', '-rf', workDir])
     for ax in sLayoutAll.archiveL:
         if ax.vg:
@@ -61,8 +64,6 @@ def setup_test():
                     if f[0] == 'i':
                         run_local_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(workDir)
-    kill_all_repeaters()
-    kill_all_servers()
     for wdev in wdevL:
         recreate_walb_dev(wdev)
 
@@ -97,7 +98,8 @@ def run_repeater(port, rateMbps=0, delayMsec=0):
         port + 20000 ; ip to recieve command
     """
     startup_repeater('localhost', get_orig_port(port), port, get_cmd_port(port),
-                     rateMbps=rateMbps, delayMsec=delayMsec, isDebug=False)
+                     rateMbps=rateMbps, delayMsec=delayMsec,
+                     logPath=workDir + 'repeater.log', isDebug=True)
 
 
 def quit_repeater(s, doSleep=True):
@@ -131,14 +133,16 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
         wait_for_server_ready(s)
 
 
-def kill_all_repeaters():
-    subprocess.Popen(['/usr/bin/pkill', '-9', 'packet-repeater'])
-    time.sleep(0.3)
+def startup_list(sL, rL=[], rateMbps=0, delayMsec=0):
+    '''
+    sL :: [Server] - server list to start up.
+    rL :: [Server] - server list to run repeater with.
+    rateMbps :: int
+    delayMsec :: int
 
-
-def startup_list(sL):
+    '''
     for s in sL:
-        startup(s, wait=False)
+        startup(s, s in rL, rateMbps, delayMsec, wait=False)
     for s in sL:
         wait_for_server_ready(s)
 
@@ -216,11 +220,13 @@ class RandomWriter():
 
 
 def kill_all_servers():
-    '''
-    for scenario test.
-    '''
     for s in ['walb-storage', 'walb-proxy', 'walb-archive']:
         subprocess.Popen(["/usr/bin/killall", "-9"] + [s]).wait()
+    time.sleep(0.3)
+
+
+def kill_all_repeaters():
+    subprocess.Popen(['/usr/bin/killall', '-9', 'packet-repeater']).wait()
     time.sleep(0.3)
 
 
@@ -896,21 +902,17 @@ def test_e8():
     print 'test_e8:succeeded'
 
 
-def init_repeater_test(rL=[], rateMbps=0, delayMsec=0):
+def init_repeater_test(sLayoutRepeater, rL=[], rateMbps=0, delayMsec=0):
     walbc.shutdown_all('force')
-    target = sLayoutRepeater
-    walbc.set_server_layout(target)
-    for s in target.get_all():
-        startup(s, s in rL, rateMbps, delayMsec)
+    walbc.set_server_layout(sLayoutRepeater)
+    startup_list(sLayoutRepeater.get_all(), rL, rateMbps, delayMsec)
 
 
 def exit_repeater_test(rL):
     walbc.shutdown_all('force')
     quit_repeaters(rL)
-    target = sLayout
-    walbc.set_server_layout(target)
-    for s in target.get_all():
-        startup(s)
+    walbc.set_server_layout(sLayout)
+    startup_list(sLayout.get_all())
 
 
 def test_e9():
@@ -920,12 +922,12 @@ def test_e9():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e9:network down and recover', g_count
     rL = [p0]
-    init_repeater_test(rL)
+    init_repeater_test(sLayoutRepeater1, rL)
     stop_repeater(p0)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     gid = walbc.snapshot_async(s0, VOL)
-    walbc.verify_not_restorable(a0, VOL, gid, 10, 'test_e9')
+    walbc.verify_not_restorable(a0, VOL, gid, 20, 'test_e9')
     start_repeater(p0)
     gid = walbc.snapshot_sync(s0, VOL, [a0])
     restore_and_verify_sha1('test_e9', md0, a0, VOL, gid)
@@ -941,7 +943,7 @@ def test_e10():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e10:network down and overflow', g_count
     rL = [p0]
-    init_repeater_test(rL)
+    init_repeater_test(sLayoutRepeater1, rL)
     stop_repeater(p0)
     write_over_wldev(wdev0, overflow=True)
     try:
@@ -972,14 +974,15 @@ def test_e11():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e11:network down and recover', g_count
     rL = [a0]
-    init_repeater_test(rL)
+    init_repeater_test(sLayoutRepeater1, rL)
     with RandomWriter(wdev0.path):
         time.sleep(0.5)
         stop_repeater(a0)
         time.sleep(0.5)
 
     gid = walbc.snapshot_async(s0, VOL)
-    walbc.verify_not_restorable(get_original_server(a0), VOL, gid, 10, 'test_e11')
+    a0x = get_original_server(a0)
+    walbc.verify_not_restorable(a0x, VOL, gid, 10, 'test_e11')
     start_repeater(a0)
 
     walbc.kick_all([p0]) # to decrese retry interval
@@ -1000,7 +1003,7 @@ def test_e12():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e12:network down and recover full-backup', g_count
     rL = [a0]
-    init_repeater_test(rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater1, rL, rateMbps=10)
     walbc.stop(s0, VOL)
     walbc.reset_vol(s0, VOL)
 
@@ -1014,8 +1017,11 @@ def test_e12():
     print 'test_e12:wait 3sec'
     time.sleep(3)
     stop_repeater(a0)
-    # try to full sync, it must fail, then state will be sSyncReady
-    walbc._wait_for_state_change(s0, VOL, sDuringFullSync, sSyncReady)
+    # try to full sync, it must fail.
+    timeoutS = 20
+    walbc._wait_for_state_change(s0, VOL, sDuringFullSync, sSyncReady, timeoutS)
+    a0x = get_original_server(a0)
+    walbc._wait_for_state_change(a0x, VOL, aDuringFullSync, aSyncReady, timeoutS)
     start_repeater(a0)
     gid = walbc.full_backup(s0, VOL)
     restore_and_verify_sha1('test_e12', md0, a0, VOL, gid)
@@ -1031,7 +1037,7 @@ def test_e13():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e13:network down and recover hash-backup', g_count
     rL = [a0]
-    init_repeater_test(rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater1, rL, rateMbps=10)
     walbc.stop(s0, VOL)
     walbc.reset_vol(s0, VOL)
 
@@ -1049,8 +1055,11 @@ def test_e13():
     if list0 != list1:
         raise Exception('test_e13: not equal list', list0, list1)
     stop_repeater(a0)
-    # try to hash sync, it must fail, then state will be sSyncReady
-    walbc._wait_for_state_change(s0, VOL, sDuringHashSync, sSyncReady)
+    # try to hash sync, it must fail.
+    timeoutS = 20
+    walbc._wait_for_state_change(s0, VOL, sDuringHashSync, sSyncReady, timeoutS)
+    a0x = get_original_server(a0)
+    walbc._wait_for_state_change(a0x, VOL, aDuringHashSync, aArchived, timeoutS)
     start_repeater(a0)
     gid = walbc.hash_backup(s0, VOL)
     restore_and_verify_sha1('test_e13', md0, a0, VOL, gid)
@@ -1065,7 +1074,32 @@ def test_e14():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e14: network down and recover full-repl', g_count
-    raise Exception('test_e14: not yet implemented')
+    rL = [a1]
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    st = walbc.get_state(a1, VOL)
+    if st in aActive:
+        walbc.stop(a1, VOL)
+        walbc.reset_vol(a1, VOL)
+    elif st == aClear:
+        walbc.run_ctl(a1, ['init-vol', VOL])
+
+    gid = walbc.replicate_async(a0, VOL, a1)
+    print 'test_e14:wait 3sec'
+    time.sleep(3)
+    stop_repeater(a1)
+    timeoutS = 20
+    walbc._wait_for_no_action(a0, VOL, aaReplSync, timeoutS)
+    a1x = get_original_server(a1)
+    walbc._wait_for_state_change(a1x, VOL, aDuringReplicate, aSyncReady, timeoutS)
+    start_repeater(a1)
+    gid = walbc.replicate_sync(a0, VOL, a1)
+
+    md0 = get_sha1_of_restorable(a0, VOL, gid)
+    md1 = get_sha1_of_restorable(a1, VOL, gid)
+    verify_equal_sha1('test_e14', md0, md1)
+
+    exit_repeater_test(rL)
+    print 'test_e14:succeeded'
 
 
 def test_e15():
@@ -1074,7 +1108,35 @@ def test_e15():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e15: network down and recover hash-repl', g_count
-    raise Exception('test_e15: not yet implemented')
+    # prepare for hash-repl.
+    walbc.replicate_sync(a0, VOL, a1)
+    write_random(wdev0.path, 1)
+    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+    walbc.apply_diff(a0, VOL, gid0)
+    write_random(wdev0.path, wdev0.get_size_lb() / 2)
+    gid1 = walbc.snapshot_sync(s0, VOL, [a0])
+
+    rL = [a1]
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    walbc.replicate_async(a0, VOL, a1)
+    print 'test_e15:wait 3sec'
+    time.sleep(3)
+    stop_repeater(a1)
+    timeoutS = 20
+    walbc._wait_for_no_action(a0, VOL, aaReplSync, timeoutS)
+    a1x = get_original_server(a1)
+    walbc._wait_for_state_change(a1x, VOL, aDuringReplicate, aArchived, timeoutS)
+    start_repeater(a1)
+    gid2 = walbc.replicate_sync(a0, VOL, a1)
+    if gid1 != gid2:
+        raise Exception('test_e15: gid1 differs gid2', gid1, gid2)
+
+    md0 = get_sha1_of_restorable(a0, VOL, gid1)
+    md1 = get_sha1_of_restorable(a1, VOL, gid1)
+    verify_equal_sha1('test_e15', md0, md1)
+
+    exit_repeater_test(rL)
+    print 'test_e15:succeeded'
 
 
 def test_e16():
@@ -1083,7 +1145,34 @@ def test_e16():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e16: network down and recover diff-repl', g_count
-    raise Exception('test_e16: not yet implemented')
+
+    write_random(wdev0.path, wdev0.get_size_lb() / 2)
+    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+
+    rL = [a1]
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    walbc.replicate_async(a0, VOL, a1)
+    print 'test_e16:wait 3sec'
+    time.sleep(3)
+    stop_repeater(a1)
+    timeoutS = 20
+    walbc._wait_for_no_action(a0, VOL, aaReplSync, timeoutS)
+    a1x = get_original_server(a1)
+    walbc._wait_for_state_change(a1x, VOL, aDuringReplicate, aArchived, timeoutS)
+    gid1 = walbc.get_latest_clean_snapshot(a1x, VOL)
+    if gid0 == gid1:
+        raise Exception('test_e16: must not be equal', gid0, gid1)
+    start_repeater(a1)
+    gid2 = walbc.replicate_sync(a0, VOL, a1)
+    if gid0 != gid2:
+        raise Exception('test_e16: must be equal', gid0, gid2)
+
+    md0 = get_sha1_of_restorable(a0, VOL, gid2)
+    md1 = get_sha1_of_restorable(a1, VOL, gid2)
+    verify_equal_sha1('test_e16', md0, md1)
+
+    exit_repeater_test(rL)
+    print 'test_e16:succeeded'
 
 
 def create_dummy_diff(devSizeB, logSizeB):
@@ -1168,6 +1257,7 @@ def test_e17():
     gid1x = walbc.get_latest_clean_snapshot(a0, VOL)
     if gid1 != gid1x:
         raise Exception('test_e17: bad latest gid', gid1x, gid1)
+    print 'test_e17:succeeded'
 
 
 ###############################################################################
@@ -1347,6 +1437,7 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
         'e9', 'e10', 'e11', 'e12', 'e13',
+        'e14', 'e15', 'e16', 'e17',
         'r1', 'r2', 'r3', 'r4',
        ]
 
