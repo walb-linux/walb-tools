@@ -46,19 +46,19 @@ struct Option : cybozu::Option
         appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max concurrent background tasks.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
         appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
         ProxySingleton &p = getProxyGlobal();
-        appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foreground tasks.");
-        appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "maxWdiffSendMb", "max size of wdiff files to send [MB].");
+        appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
+        appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "max size of wdiff files to send [MiB].");
         appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "retryTimeout", "Retry timeout (total period) [sec].");
+        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "Retry timeout (total period) [sec].");
         appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
-        appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "maxConversionMb", "max memory size of wlog-wdiff conversion [MB].");
+        appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "max memory size of wlog-wdiff conversion [MiB].");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&p.nodeId, hostName, "id", "node identifier");
-        appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
+        appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
         appendHelp("h");
     }

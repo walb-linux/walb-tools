@@ -51,16 +51,16 @@ struct Option : cybozu::Option
         appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
         appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
         appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "maxBgTasks", "num of max concurrent background tasks.");
+        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
 
         StorageSingleton &s = getStorageGlobal();
-        appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foregroud tasks.");
+        appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foregroud tasks.");
         appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&s.nodeId, hostName, "id", "node identifier");
-        appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "maxWlogSendMb", "max wlog size to send at once.");
+        appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
         appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
+        appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
         appendHelp("h");
     }

@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief WalB controller tool.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/socket.hpp"
 #include "cybozu/option.hpp"
@@ -30,7 +27,7 @@ struct Option
         opt.appendParam(&cmd, "command", "command name");
         opt.appendParamVec(&params, "parameters", "command parameters");
         opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
-        opt.appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
+        opt.appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&ctrlId, hostName, "id", "controller identfier");
