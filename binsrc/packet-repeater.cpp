@@ -177,20 +177,12 @@ class Repeater {
                     }
                     if (g_quit) continue;
                     if (readAndWrite(dir, from, to, buf, sma) > 0) continue;
+                    closing(dir, to);
                 } catch (std::exception& e) {
                     cybozu::PutLog(cybozu::LogInfo, "loop %d %d ERR %s", dir, (int)state_, e.what());
                     from.close();
                     state_ = dir == 0 ? Error0 : Error1;
-                    continue;
                 }
-                if (errorIfStopped(dir, from)) continue;
-                int expected = Running;
-                const int after = dir == 0 ? Closing0 : Closing1;
-                if (!state_.compare_exchange_strong(expected, after)) continue;
-                if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "Closing %d %d", dir, (int)state_);
-                const bool dontThrow = true;
-                to.shutdown(1, dontThrow); // write disallow
-                continue;
             }
         }
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d end", dir);
@@ -199,6 +191,14 @@ class Repeater {
         s_[0].close();
         s_[1].close();
         state_ = Sleep;
+    }
+    void closing(int dir, cybozu::Socket& to) {
+        int expected = Running;
+        const int after = dir == 0 ? Closing0 : Closing1;
+        if (!state_.compare_exchange_strong(expected, after)) return;
+        if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "Closing %d %d", dir, (int)state_);
+        const bool dontThrow = true;
+        to.shutdown(1, dontThrow); // write disallow
     }
     bool errorIfStopped(int dir, cybozu::Socket& from) {
         if (!g_stop) return false;
@@ -345,5 +345,8 @@ int main(int argc, char *argv[]) try
     if (opt.verbose) puts("main end");
 } catch (std::exception& e) {
     cybozu::PutLog(cybozu::LogError, "error: %s", e.what());
+    return 1;
+} catch (...) {
+    cybozu::PutLog(cybozu::LogError, "unknown error");
     return 1;
 }
