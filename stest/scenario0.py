@@ -1043,7 +1043,7 @@ def test_e13():
 
     sizeLb = wdev0.get_size_lb()
     print "sizeLb", sizeLb
-    write_random(wdev0.path, sizeLb / 2)
+    write_random(wdev0.path, sizeLb / 3)
     list0 = walbc.get_restorable(a0, VOL, opt='all')
 
     md0 = get_sha1(wdev0.path)
@@ -1113,7 +1113,7 @@ def test_e15():
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot_sync(s0, VOL, [a0])
     walbc.apply_diff(a0, VOL, gid0)
-    write_random(wdev0.path, wdev0.get_size_lb() / 2)
+    write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid1 = walbc.snapshot_sync(s0, VOL, [a0])
 
     rL = [a1]
@@ -1146,7 +1146,7 @@ def test_e16():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e16: network down and recover diff-repl', g_count
 
-    write_random(wdev0.path, wdev0.get_size_lb() / 2)
+    write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid0 = walbc.snapshot_sync(s0, VOL, [a0])
 
     rL = [a1]
