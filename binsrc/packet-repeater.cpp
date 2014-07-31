@@ -169,7 +169,7 @@ class Repeater {
             case Running:
                 if (!from.isValid()) {
                     cybozu::PutLog(cybozu::LogInfo, "loop %d %d from is not valid", dir, (int)state_);
-                    state_ = dir == 0 ? Error0 : Error1;
+                    changeStateToError(dir);
                     continue;
                 }
                 try {
@@ -177,11 +177,11 @@ class Repeater {
                     }
                     if (g_quit) continue;
                     if (readAndWrite(dir, from, to, buf, sma) > 0) continue;
-                    closing(dir, to);
+                    if (changeStateToClosing(dir)) shutdown(dir, to);
                 } catch (std::exception& e) {
                     cybozu::PutLog(cybozu::LogInfo, "loop %d %d ERR %s", dir, (int)state_, e.what());
                     from.close();
-                    state_ = dir == 0 ? Error0 : Error1;
+                    changeStateToError(dir);
                 }
             }
         }
@@ -192,27 +192,36 @@ class Repeater {
         s_[1].close();
         state_ = Sleep;
     }
-    void closing(int dir, cybozu::Socket& to) {
+    bool changeStateToClosing(int dir) {
         int expected = Running;
         const int after = dir == 0 ? Closing0 : Closing1;
-        if (!state_.compare_exchange_strong(expected, after)) return;
-        if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "Closing %d %d", dir, (int)state_);
+        const bool ret = state_.compare_exchange_strong(expected, after);
+        if (!ret && opt_.verbose) {
+            cybozu::PutLog(cybozu::LogInfo, "changeStateToClosing failed %d %d", dir, expected);
+        }
+        return ret;
+    }
+    void shutdown(int dir, cybozu::Socket& to) {
+        if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "shutdown %d", dir);
         const bool dontThrow = true;
         to.shutdown(1, dontThrow); // write disallow
     }
-    bool errorIfStopped(int dir, cybozu::Socket& from) {
-        if (!g_stop) return false;
-        from.close();
-        state_ = dir == 0 ? Error0 : Error1;
-        return true;
+    bool changeStateToError(int dir) {
+        int expected = Running;
+        const int after = dir == 0 ? Error0 : Error1;
+        const bool ret = state_.compare_exchange_strong(expected, after);
+        if (!ret && opt_.verbose) {
+            cybozu::PutLog(cybozu::LogInfo, "changeStateToError failed %d %d", dir, expected);
+        }
+        return ret;
     }
     void handleError(bool doesSetError, int dir, cybozu::Socket& from) {
         if (doesSetError) {
             assert(!from.isValid());
             waitMsec(1);
         } else {
+            if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "handleError %d %d", dir, (int)state_);
             from.close();
-            if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d %d toSleep", dir, (int)state_);
             state_ = Sleep;
         }
     }
@@ -221,7 +230,6 @@ class Repeater {
             waitMsec(1);
             return;
         }
-        if (errorIfStopped(dir, from)) return;
         if (readAndWrite(dir, from, to, buf, sma) > 0) return;
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "handleClosing %d %d", dir, (int)state_);
         from.close();
@@ -232,7 +240,6 @@ class Repeater {
             waitMsec(1);
             return;
         }
-        if (errorIfStopped(dir, from)) return;
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "handleClose %d %d", dir, (int)state_);
         from.close();
         state_ = Sleep;
