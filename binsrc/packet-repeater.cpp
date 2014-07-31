@@ -328,12 +328,12 @@ int main(int argc, char *argv[]) try
             cybozu::SocketAddr addr;
             cybozu::Socket client;
             server.accept(client, &addr);
-            if (opt.verbose) fprintf(stderr, "accept addr %s\n", addr.toStr().c_str());
+            if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "accept addr %s", addr.toStr().c_str());
             while (!g_quit) {
                 for (size_t i = 0; i < opt.threadNum; i++) {
 //                    if (opt.verbose) fprintf(stderr, "worker[%d] state=%d", (int)i, worker[i]->getState());
                     if (worker[i]->tryAndRun(client)) {
-                        if (opt.verbose) fprintf(stderr, "start %d repeater", (int)i);
+                        if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "start %d repeater", (int)i);
                         goto RETRY;
                     }
                 }
@@ -342,7 +342,7 @@ int main(int argc, char *argv[]) try
             waitMsec(100);
         }
     } catch (std::exception& e) {
-        fprintf(stderr, "ERR %s\n", e.what());
+        cybozu::PutLog(cybozu::LogError, "ERR %s", e.what());
     }
     g_quit = true;
     for (std::unique_ptr<Repeater>& p : worker) {
