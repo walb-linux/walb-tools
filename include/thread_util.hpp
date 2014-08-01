@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cassert>
 #include <functional>
+#include <sstream>
 #include <type_traits>
 
 /**
@@ -587,6 +588,158 @@ private:
             }
         }
     }
+};
+
+class ThreadRunnerFixedPool
+{
+    class Err : public std::exception {
+        std::string s_;
+    public:
+        explicit Err(const std::string& s = "") : std::exception(), s_(s) {
+        }
+        template <typename T>
+        Err& operator<<(const T& t) {
+            std::stringstream ss;
+            ss << ":" << t;
+            s_ += ss.str();
+            return *this;
+        }
+        const char *what() const noexcept override {
+            return s_.c_str();
+        }
+    };
+    using AutoLock = std::lock_guard<std::mutex>;
+    using UniqueLock = std::unique_lock<std::mutex>;
+    struct Worker {
+        std::unique_ptr<Runner> runner;
+        std::thread th;
+        std::mutex mu;
+        std::condition_variable cv;
+        bool quit;
+        Worker() : runner(), th(), mu(), cv(), quit(false) {}
+        ~Worker() noexcept {
+            assert(!th.joinable());
+            assert(!runner);
+            assert(quit);
+        }
+    };
+    void threadWorker(Worker& w) noexcept {
+        for (;;) {
+            UniqueLock lk(w.mu);
+            while (!w.quit && !w.runner) w.cv.wait(lk);
+            if (w.quit) {
+                if (w.runner) {
+                    nrRunning_--;
+                    w.runner.reset();
+                }
+                break;
+            }
+            (*w.runner)();
+            std::exception_ptr ep = w.runner->getNoThrow();
+            if (ep) {
+                AutoLock lk2(mu_);
+                epV_.push_back(ep);
+            }
+            nrRunning_--;
+            w.runner.reset();
+        }
+    }
+    bool addDetail(std::unique_ptr<Runner>&& runner) {
+        if (workerV_.empty()) throw Err(NAME()) << "stopped";
+        const size_t s = workerV_.size();
+        for (size_t i = 0; i < s; i++) {
+            Worker& w = *workerV_[id_++ % s];
+            UniqueLock lk(w.mu, std::defer_lock);
+            if (!lk.try_lock()) continue;
+            if (w.runner) continue;
+            assert(!w.quit);
+            w.runner = std::move(runner);
+            nrRunning_++;
+            w.cv.notify_one();
+            return true;
+        }
+        return false;
+    }
+    std::vector<std::unique_ptr<Worker> > workerV_;
+    std::vector<std::exception_ptr> epV_;
+    std::mutex mu_; // for epV_.
+    std::atomic<size_t> id_;
+    std::atomic<size_t> nrRunning_;
+public:
+    static constexpr const char *NAME() { return "ThreadRunnerFixedPool"; }
+    ThreadRunnerFixedPool()
+        : workerV_(), epV_(), mu_(), id_(0), nrRunning_(0) {
+    }
+    ~ThreadRunnerFixedPool() noexcept {
+        stop();
+    }
+    void start(size_t nrThreads) {
+        if (nrThreads == 0) throw Err(NAME()) << "nrThreads must be > 0";
+        if (!workerV_.empty()) throw Err(NAME()) << "started";
+        for (size_t i = 0; i < nrThreads; i++) {
+            workerV_.emplace_back(new Worker());
+            Worker& w = *workerV_.back();
+            w.th = std::thread(&ThreadRunnerFixedPool::threadWorker, this, std::ref(w));
+        }
+    }
+    /**
+     * You can call this mutliple times safely.
+     */
+    void stop() noexcept {
+        for (size_t i = 0; i < workerV_.size(); i++) {
+            try {
+                Worker& w = *workerV_[i];
+                {
+                    AutoLock lk(w.mu);
+                    if (w.quit && !w.th.joinable()) continue;
+                    w.quit = true;
+                    w.cv.notify_one();
+                }
+                w.th.join();
+                assert(!w.runner);
+            } catch (...) {
+            }
+        }
+#if 0
+        for (size_t i = 0; i < workerV_.size(); i++) {
+            Worker& w = *workerV_[i];
+            ::printf("worker %zu "
+                     "quit %d "
+                     "joinable %d "
+                     "runner %p\n"
+                     , i, w.quit, w.th.joinable()
+                     , w.runner.get());
+        }
+#endif
+        workerV_.clear();
+    }
+    /**
+     * RETURN:
+     *   true if successfully added.
+     *   false if there is no free thread.
+     */
+    template <typename Func>
+    bool add(Func&& func) {
+        return addDetail(std::unique_ptr<Runner>(new Runner(std::forward<Func>(func))));
+    }
+    template <typename Func>
+    bool add(std::shared_ptr<Func> funcP) {
+        return addDetail(std::unique_ptr<Runner>(new Runner(funcP)));
+    }
+    std::vector<std::exception_ptr> gc() {
+        std::vector<std::exception_ptr> ret;
+        {
+            AutoLock lk(mu_);
+            ret = std::move(epV_);
+            epV_.clear();
+        }
+        return ret;
+    }
+    /**
+     * add() may not succeed even if this number is less than nrThreads
+     * unless add() called by one thread only.
+     */
+    size_t nrRunning() const { return nrRunning_; }
 };
 
 /**
