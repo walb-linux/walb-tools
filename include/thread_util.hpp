@@ -161,16 +161,18 @@ class ThreadRunner /* final */
 {
 private:
     std::shared_ptr<Runner> runnerP_;
-    std::shared_ptr<std::thread> threadP_;
+    std::unique_ptr<std::thread> threadP_;
 
 public:
     ThreadRunner() {}
     template <typename Func>
     explicit ThreadRunner(Func&& func)
-        : runnerP_(new Runner(std::forward<Func>(func))) {
+        : runnerP_(new Runner(std::forward<Func>(func)))
+        , threadP_() {
     }
     explicit ThreadRunner(std::shared_ptr<Runner> runnerP)
-        : runnerP_(runnerP) {
+        : runnerP_(runnerP)
+        , threadP_() {
     }
     ThreadRunner(const ThreadRunner &) = delete;
     ThreadRunner(ThreadRunner &&rhs)
@@ -178,11 +180,12 @@ public:
         , threadP_(std::move(rhs.threadP_)) {
     }
     ~ThreadRunner() noexcept {
-        try {
-            join();
-        } catch (...) {}
+        joinNoThrow();
     }
     ThreadRunner &operator=(const ThreadRunner &) = delete;
+    /**
+     * Do not call this before *this
+     */
     ThreadRunner &operator=(ThreadRunner &&rhs) {
         runnerP_ = std::move(rhs.runnerP_);
         threadP_ = std::move(rhs.threadP_);
@@ -200,6 +203,10 @@ public:
         if (threadP_) throw std::runtime_error("threadP must be null");
         runnerP_ = runnerP;
     }
+    void setCallback(const std::function<void()>& f) {
+        if (!runnerP_) throw std::runtime_error("runnerP must be not null");
+        runnerP_->setCallback(f);
+    }
     /**
      * Start a thread.
      */
@@ -213,10 +220,12 @@ public:
      */
     void join() {
         if (!threadP_) return;
-        threadP_->join();
+        std::unique_ptr<std::thread> tp = std::move(threadP_);
         threadP_.reset();
-        runnerP_->get();
+        tp->join();
+        std::shared_ptr<Runner> rp = std::move(runnerP_);
         runnerP_.reset();
+        rp->get(); // may throw an exception.
     }
     /**
      * Wait for the thread done.
