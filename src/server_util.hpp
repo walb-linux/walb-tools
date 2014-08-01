@@ -51,7 +51,8 @@ public:
         forceQuit_ = false;
         cybozu::Socket ssock;
         ssock.bind(port);
-        cybozu::thread::ThreadRunnerPool pool(maxNumThreads_);
+        cybozu::thread::ThreadRunnerFixedPool pool;
+        pool.start(maxNumThreads_);
         std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
         while (st == ProcessStatus::RUNNING) {
             while (!ssock.queryAccept() && st == ProcessStatus::RUNNING) {}
@@ -61,21 +62,15 @@ public:
             sock.setSendTimeout(socketTimeout_ * 1000);
             sock.setReceiveTimeout(socketTimeout_ * 1000);
             logErrors(pool.gc());
-            if (maxNumThreads_ > 0 && pool.getNumActiveThreads() > maxNumThreads_) {
+            if (!pool.add(gen(std::move(sock), st))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
-                sock.close();
-                continue;
+                // The socket will be closed.
             }
-            pool.add(gen(std::move(sock), st));
         }
-        if (st == ProcessStatus::FORCE_SHUTDOWN) {
-            size_t nCanceled = pool.cancelAll();
-            forceQuit_ = true;
-            LOGs.info() << FUNC << "Canceled tasks" << nCanceled;
-        }
+        if (st == ProcessStatus::FORCE_SHUTDOWN) forceQuit_ = true;
+        LOGs.info() << FUNC << "Waiting for remaining tasks";
+        pool.stop();
         logErrors(pool.gc());
-        LOGs.info() << FUNC << "Waiting for remaining tasks" << pool.size();
-        logErrors(pool.waitForAll());
     }
 private:
     void logErrors(std::vector<std::exception_ptr> &&v) {
@@ -110,6 +105,7 @@ public:
         throw;
     }
     virtual void run() = 0;
+    cybozu::Socket& socket() { return sock_; }
 };
 
 } //namespace server
@@ -226,28 +222,30 @@ public:
     }
     void operator()() noexcept try {
         LOGs.info() << "dispatchTask begin";
-        cybozu::thread::ThreadRunnerPool pool(maxBackgroundTasks);
-        LOGs.debug() << "numActiveThreads" << pool.getNumActiveThreads();
-        Task task;
+        cybozu::thread::ThreadRunnerFixedPool pool;
+        pool.start(maxBackgroundTasks);
+        std::queue<Task> taskQ;
         while (!shouldStop) {
+            LOGs.debug() << "dispatchTask nrRunning" << pool.nrRunning();
             logErrors(pool.gc());
-            bool doWait = false;
-            if (pool.getNumActiveThreads() >= maxBackgroundTasks) {
-                LOGs.debug() << "numActiveThreads" << pool.getNumActiveThreads()
-                             << maxBackgroundTasks;
-                doWait = true;
+            if (taskQ.empty()) {
+                Task task;
+                if (!tq.pop(task)) {
+                    util::sleepMs(1000);
+                    continue;
+                }
+                taskQ.push(task);
             }
-            if (!doWait) {
-                doWait = !tq.pop(task);
-            }
-            if (doWait) {
+            Task &task = taskQ.front();
+            if (!pool.add(Worker(task))) {
                 util::sleepMs(1000);
                 continue;
             }
             LOGs.debug() << "dispatchTask dispatch task" << task;
-            pool.add(Worker(task));
+            taskQ.pop();
         }
-        logErrors(pool.waitForAll());
+        pool.stop();
+        logErrors(pool.gc());
         LOGs.info() << "dispatchTask end";
     } catch (std::exception &e) {
         LOGs.error() << "dispatchTask" << e.what();
