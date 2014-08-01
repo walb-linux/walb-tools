@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) try
 
     StorageSingleton &g = getStorageGlobal();
     LOGs.info() << "starting walb storage server with options:\n" << opt;
-    const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
+    const size_t concurrency = g.maxForegroundTasks + 5;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<StorageRequestWorker>(opt.port, createRequestWorker);
 
