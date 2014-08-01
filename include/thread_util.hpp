@@ -87,11 +87,11 @@ private:
     std::function<void()> callback_;
 
     void throwErrorLater(std::exception_ptr p) noexcept {
-        if (isEnd_) return;
         assert(p);
+        bool expected = false;
+        if (!isEnd_.compare_exchange_strong(expected, true)) return;
         promise_.set_exception(p);
-        isEnd_ = true;
-        if (callback_) callback_();
+        runCallback();
     }
     /**
      * Call this in a catch clause.
@@ -99,11 +99,19 @@ private:
     void throwErrorLater() noexcept {
         throwErrorLater(std::current_exception());
     }
-    void done() {
-        if (isEnd_) return;
+    /**
+     * You can call this multiple times.
+     * This function is thread-safe.
+     */
+    void done() noexcept {
+        bool expected = false;
+        if (!isEnd_.compare_exchange_strong(expected, true)) return;
         promise_.set_value();
-        isEnd_ = true;
+        runCallback();
+    }
+    void runCallback() noexcept try {
         if (callback_) callback_();
+    } catch (...) {
     }
 public:
     template <typename Func>
@@ -122,9 +130,8 @@ public:
         , isEnd_(false)
         , callback_() {
     }
-    ~Runner() noexcept try {
-        if (!isEnd_) done();
-    } catch (...) {
+    ~Runner() noexcept {
+        done();
     }
     void operator()() noexcept try {
         holderP_->run();
@@ -133,7 +140,16 @@ public:
         throwErrorLater();
     }
     void get() { future_.get(); }
+    std::exception_ptr getNoThrow() noexcept try {
+        future_.get();
+        return std::exception_ptr();
+    } catch (...) {
+        return std::current_exception();
+    }
     bool isEnd() const { return isEnd_; }
+    /**
+     * Callback's throwing exception will be ignored.
+     */
     void setCallback(const std::function<void()>& f) { callback_ = f; }
 };
 
