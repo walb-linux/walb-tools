@@ -22,6 +22,7 @@ struct Option {
     uint32_t delaySec;
     double rateMbps;
     size_t threadNum;
+    size_t socketTimeoutS;
     bool verbose;
     Option(int argc, char *argv[])
         : serverPort(0)
@@ -43,6 +44,7 @@ struct Option {
         opt.appendOpt(&rateMbps, 0, "r", ": data rate(mega bit per second)");
         opt.appendOpt(&threadNum, 10, "t", ": num of thread");
         opt.appendOpt(&logPath, "-", "l", ": log path (default stderr)");
+        opt.appendOpt(&socketTimeoutS, 0, "to", ": socket timeout [sec] (default no)");
         opt.appendBoolOpt(&verbose, "v", ": verbose message");
         opt.appendBoolOpt(&vv, "vv", ": more verbose message");
         opt.appendHelp("h");
@@ -59,6 +61,13 @@ struct Option {
         opt.put();
     }
 };
+
+void setSocketTimeout(cybozu::Socket& socket, size_t timeoutS)
+{
+    if (timeoutS == 0) return;
+    socket.setSendTimeout(timeoutS * 1000);
+    socket.setReceiveTimeout(timeoutS * 1000);
+}
 
 class ThreadRunner
 {
@@ -305,7 +314,8 @@ public:
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "tryAndRun:in");
         try {
             s_[0].moveFrom(client);
-            s_[1].connect(opt_.serverAddr, opt_.serverPort);
+            s_[1].connect(opt_.serverAddr, opt_.serverPort, opt_.socketTimeoutS * 1000);
+            setSocketTimeout(s_[1], opt_.socketTimeoutS);
             state_ = Running;
             return true;
         } catch (std::exception& e) {
@@ -359,6 +369,7 @@ int main(int argc, char *argv[]) try
             cybozu::SocketAddr addr;
             cybozu::Socket client;
             server.accept(client, &addr);
+            setSocketTimeout(client, opt.socketTimeoutS);
             if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "accept addr %s", addr.toStr().c_str());
             while (!g_quit) {
                 for (size_t i = 0; i < opt.threadNum; i++) {
