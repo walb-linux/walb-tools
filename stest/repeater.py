@@ -18,6 +18,9 @@ def send_cmd_to_repeater(port, cmd):
         else:
             raise Exception('send_cmd_to_repeater:retry over', port, cmd)
         s.send(cmd)
+        ack = s.recv(1)
+        if ack != 'a':
+            raise Exception('send_cmd_to_repeater:ack invalid', ack)
 
 
 def startup_repeater(server, serverPort, recvPort, cmdPort, rateMbps=0, delayMsec=0,

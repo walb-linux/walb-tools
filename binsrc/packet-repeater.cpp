@@ -118,6 +118,8 @@ void cmdThread(const Option& opt)
                     if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "bad command `%s'", cmd.c_str());
                 }
             }
+            const char ack = 'a';
+            client.write(&ack, 1);
         } catch (std::exception& e) {
             cybozu::PutLog(cybozu::LogInfo, "cmdThread ERR %s (continue)", e.what());
         }
