@@ -60,6 +60,26 @@ struct Option {
     }
 };
 
+class ThreadRunner
+{
+    std::thread thread_;
+public:
+    void set(std::thread&& thread) {
+        thread_ = std::move(thread);
+    }
+    ~ThreadRunner() noexcept try {
+        join();
+    } catch (std::exception& e) {
+        cybozu::PutLog(cybozu::LogError, "ThreadRunner: error: %s", e.what());
+    } catch (...) {
+        cybozu::PutLog(cybozu::LogError, "ThreadRunner: unknown error");
+    }
+    void join() {
+        g_quit = true;
+        if (thread_.joinable()) thread_.join();
+    }
+};
+
 void cmdThread(const Option& opt)
     try
 {
@@ -127,9 +147,8 @@ class Repeater {
     };
     const Option& opt_;
     std::atomic<int> state_;
-    std::thread c2s_;
-    std::thread s2c_;
-    std::exception_ptr ep_;
+    ThreadRunner threadRunner_[2];
+    std::exception_ptr ep_[2];
     void loop(int dir)
         try
     {
@@ -187,7 +206,7 @@ class Repeater {
         }
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "loop %d end", dir);
     } catch (...) {
-        ep_ = std::current_exception();
+        ep_[dir] = std::current_exception();
         s_[0].close();
         s_[1].close();
         state_ = Sleep;
@@ -268,9 +287,14 @@ public:
     Repeater(const Option& opt)
         : opt_(opt)
         , state_(Sleep)
-        , c2s_(&Repeater::loop, this, 0)
-        , s2c_(&Repeater::loop, this, 1)
+        , threadRunner_()
     {
+        for (size_t i = 0; i < 2; i++) {
+            threadRunner_[i].set(std::thread(&Repeater::loop, this, i));
+        }
+    }
+    ~Repeater() noexcept {
+        join();
     }
     bool tryAndRun(cybozu::Socket& client)
     {
@@ -290,12 +314,16 @@ public:
             return true;
         }
     }
-    void join()
-    {
-        c2s_.join();
-        s2c_.join();
-        if (ep_) {
-            std::rethrow_exception(ep_);
+    void join() noexcept {
+        for (size_t i = 0; i < 2; i++) {
+            try {
+                threadRunner_[i].join();
+                if (ep_[i]) std::rethrow_exception(ep_[i]);
+            } catch (std::exception& e) {
+                cybozu::PutLog(cybozu::LogError, "Repeater::join:error: %s", e.what());
+            } catch (...) {
+                cybozu::PutLog(cybozu::LogError, "Repeater::join:unknow error");
+            }
         }
     }
 };
@@ -305,7 +333,8 @@ int main(int argc, char *argv[]) try
     const Option opt(argc, argv);
     cybozu::Socket server;
     server.bind(opt.recvPort);
-    std::thread cmdWorker(cmdThread, opt);
+    ThreadRunner cmdRunner;
+    cmdRunner.set(std::thread(cmdThread, opt));
     std::vector<std::unique_ptr<Repeater>> worker;
     try {
         for (size_t i = 0; i < opt.threadNum; i++) {
@@ -344,11 +373,6 @@ int main(int argc, char *argv[]) try
     } catch (std::exception& e) {
         cybozu::PutLog(cybozu::LogError, "ERR %s", e.what());
     }
-    g_quit = true;
-    for (std::unique_ptr<Repeater>& p : worker) {
-        p->join();
-    }
-    cmdWorker.join();
     if (opt.verbose) puts("main end");
 } catch (std::exception& e) {
     cybozu::PutLog(cybozu::LogError, "error: %s", e.what());
