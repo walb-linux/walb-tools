@@ -541,11 +541,9 @@ private:
         return (maxNumThreads_ == 0 ? running_.size() : maxNumThreads_) * 2 <= runners_.size();
     }
     void makeThread() {
-        std::shared_ptr<Runner> runnerP(
-            new Runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_)));
-        runnerP->setCallback([this]() { numActiveThreads_--; });
-        ThreadRunner runner(runnerP);
+        ThreadRunner runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_));
         numActiveThreads_++;
+        runner.setCallback([this]() { numActiveThreads_--; });
         runner.start();
         runners_.push_back(std::move(runner));
     }
