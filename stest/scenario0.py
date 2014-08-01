@@ -1002,8 +1002,11 @@ def test_e12():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e12:network down and recover full-backup', g_count
+    sizeMb = wdev0.get_size_mb()
+    rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
+    print 'test_e12:rateMbps', rateMbps
     rL = [a0]
-    init_repeater_test(sLayoutRepeater1, rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater1, rL, rateMbps=rateMbps)
     walbc.stop(s0, VOL)
     walbc.reset_vol(s0, VOL)
 
@@ -1036,8 +1039,11 @@ def test_e13():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e13:network down and recover hash-backup', g_count
+    sizeMb = wdev0.get_size_mb()
+    rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
+    print 'test_e13:rateMbps', rateMbps
     rL = [a0]
-    init_repeater_test(sLayoutRepeater1, rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater1, rL, rateMbps=rateMbps)
     walbc.stop(s0, VOL)
     walbc.reset_vol(s0, VOL)
 
@@ -1074,8 +1080,11 @@ def test_e14():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e14: network down and recover full-repl', g_count
+    sizeMb = wdev0.get_size_mb()
+    rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
+    print 'test_e14:rateMbps', rateMbps
     rL = [a1]
-    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=rateMbps)
     st = walbc.get_state(a1, VOL)
     if st in aActive:
         walbc.stop(a1, VOL)
@@ -1116,8 +1125,11 @@ def test_e15():
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid1 = walbc.snapshot_sync(s0, VOL, [a0])
 
+    sizeMb = wdev0.get_size_mb()
+    rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
+    print 'test_e15:rateMbps', rateMbps
     rL = [a1]
-    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=rateMbps)
     walbc.replicate_async(a0, VOL, a1)
     print 'test_e15:wait 3sec'
     time.sleep(3)
@@ -1149,8 +1161,11 @@ def test_e16():
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid0 = walbc.snapshot_sync(s0, VOL, [a0])
 
+    sizeMb = wdev0.get_size_mb()
+    rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
+    print 'test_e16:rateMbps', rateMbps
     rL = [a1]
-    init_repeater_test(sLayoutRepeater2, rL, rateMbps=10)
+    init_repeater_test(sLayoutRepeater2, rL, rateMbps=rateMbps)
     walbc.replicate_async(a0, VOL, a1)
     print 'test_e16:wait 3sec'
     time.sleep(3)
