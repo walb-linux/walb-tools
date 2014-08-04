@@ -663,8 +663,9 @@ class ThreadRunnerFixedPool /* final */
     bool addDetail(std::unique_ptr<Runner>&& runner) {
         if (workerV_.empty()) throw Err(NAME()) << "stopped";
         const size_t s = workerV_.size();
+        size_t id = id_;
         for (size_t i = 0; i < s; i++) {
-            Worker& w = *workerV_[id_++ % s];
+            Worker& w = *workerV_[id++ % s];
             UniqueLock lk(w.mu, std::defer_lock);
             if (!lk.try_lock()) continue;
             if (w.runner) continue;
@@ -672,6 +673,7 @@ class ThreadRunnerFixedPool /* final */
             w.runner = std::move(runner);
             nrRunning_++;
             w.cv.notify_one();
+            id_ = id;
             return true;
         }
         return false;
