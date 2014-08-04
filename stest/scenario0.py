@@ -104,16 +104,17 @@ def run_repeater(port, rateMbps=0, delayMsec=0):
                      logPath=workDir + 'repeater.log', isDebug=True)
 
 
-def quit_repeater(s, doSleep=True):
+def quit_repeater(s, doWait=True):
     send_cmd_to_repeater(get_cmd_port(s.port), 'quit')
-    if doSleep:
-        time.sleep(1)
+    if doWait:
+        wait_for_process_killed_on_port(s.port)
 
 
 def quit_repeaters(sL):
     for s in sL:
-        quit_repeater(s, doSleep=False)
-    time.sleep(2)
+        quit_repeater(s, doWait=False)
+    for s in sL:
+        wait_for_process_killed_on_port(s.port)
 
 
 def start_repeater(s):
@@ -125,12 +126,14 @@ def stop_repeater(s):
 
 
 def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
+    wait_for_process_killed_on_port(s.port)
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, useRepeater=useRepeater)
     if isDebug:
         print 'cmd=', to_str(args)
     if useRepeater:
         run_repeater(s.port, rateMbps, delayMsec)
+        wait_for_process_killed_on_port(get_orig_port(s.port))
     run_daemon(args)
     if wait:
         wait_for_server_ready(s)
@@ -344,6 +347,20 @@ def verify_equal_restorable_list(msg, ax, ay, vol):
         print 'list1', yL
     if xL != yL:
         raise Exception(msg, 'restorable lists differ', xL, yL)
+
+
+def wait_for_process_killed_on_port(port, timeoutS=10):
+    verify_type(port, int)
+    verify_type(timeoutS, int)
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
+        try:
+            s = run_local_command(['/usr/bin/lsof', '-i', 'TCP:%d' % port], putMsg=True)
+            assert len(s.splitlines()) >= 2
+        except:
+            return
+        time.sleep(1)
+    raise Exception('wait_for_process_killed_on_port: timeout', port, timeoutS)
 
 
 ###############################################################################
