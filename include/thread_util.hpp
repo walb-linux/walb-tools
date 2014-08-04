@@ -185,7 +185,8 @@ public:
     }
     ThreadRunner &operator=(const ThreadRunner &) = delete;
     /**
-     * Do not call this before *this
+     * Do not call this function when you are running a thread on *this.
+     * Calling of std::thread dstr running a thread will cause std::terminate().
      */
     ThreadRunner &operator=(ThreadRunner &&rhs) {
         runnerP_ = std::move(rhs.runnerP_);
@@ -241,6 +242,13 @@ public:
             ep = std::current_exception();
         }
         return ep;
+    }
+    /**
+     * Check a thread is alive or not.
+     * Call canJoin() if the thread is done or not.
+     */
+    bool isAlive() const {
+        return bool(threadP_);
     }
     /**
      * Check whether you can join the thread just now.
@@ -590,7 +598,10 @@ private:
     }
 };
 
-class ThreadRunnerFixedPool
+/**
+ * Thread pool with a fixed number of threads.
+ */
+class ThreadRunnerFixedPool /* final */
 {
     class Err : public std::exception {
         std::string s_;
@@ -612,15 +623,20 @@ class ThreadRunnerFixedPool
     using UniqueLock = std::unique_lock<std::mutex>;
     struct Worker {
         std::unique_ptr<Runner> runner;
-        std::thread th;
+        ThreadRunner th;
         std::mutex mu;
         std::condition_variable cv;
         bool quit;
         Worker() : runner(), th(), mu(), cv(), quit(false) {}
         ~Worker() noexcept {
-            assert(!th.joinable());
+            {
+                AutoLock lk(mu);
+                if (quit && !th.isAlive()) return;
+                quit = true;
+                cv.notify_one();
+            }
+            th.joinNoThrow();
             assert(!runner);
-            assert(quit);
         }
     };
     void threadWorker(Worker& w) noexcept {
@@ -673,50 +689,47 @@ public:
     ~ThreadRunnerFixedPool() noexcept {
         stop();
     }
+    /**
+     * Start threads.
+     * You can call add() for started pools.
+     * This is not thread-safe.
+     */
     void start(size_t nrThreads) {
         if (nrThreads == 0) throw Err(NAME()) << "nrThreads must be > 0";
         if (!workerV_.empty()) throw Err(NAME()) << "started";
+        assert(nrRunning_ == 0);
         for (size_t i = 0; i < nrThreads; i++) {
             workerV_.emplace_back(new Worker());
             Worker& w = *workerV_.back();
-            w.th = std::thread(&ThreadRunnerFixedPool::threadWorker, this, std::ref(w));
+            w.th.set([this, &w]() noexcept { threadWorker(w); });
+            w.th.start();
         }
     }
     /**
+     * Stop all threads. All running tasks will finish.
      * You can call this mutliple times safely.
+     * This is not thread-safe.
      */
     void stop() noexcept {
-        for (size_t i = 0; i < workerV_.size(); i++) {
-            try {
-                Worker& w = *workerV_[i];
-                {
-                    AutoLock lk(w.mu);
-                    if (w.quit && !w.th.joinable()) continue;
-                    w.quit = true;
-                    w.cv.notify_one();
-                }
-                w.th.join();
-                assert(!w.runner);
-            } catch (...) {
-            }
-        }
-#if 0
-        for (size_t i = 0; i < workerV_.size(); i++) {
-            Worker& w = *workerV_[i];
-            ::printf("worker %zu "
-                     "quit %d "
-                     "joinable %d "
-                     "runner %p\n"
-                     , i, w.quit, w.th.joinable()
-                     , w.runner.get());
-        }
-#endif
         workerV_.clear();
     }
     /**
+     * Add a task as a function which type is void (*)().
+     *
      * RETURN:
      *   true if successfully added.
      *   false if there is no free thread.
+     *
+     * This is thread-safe.
+     *
+     * The task function can throw an exception.
+     * Thrown exceptions will be saved to the queue
+     * and you can get them later using gc().
+     *
+     * If add() failed and func is rvalue, func will be moved to a Runner instance
+     * allocated in heap memory, and will be deallocated in the end of add().
+     * You can use shared pointer version of add() in order to
+     * access to the function you create after calling add().
      */
     template <typename Func>
     bool add(Func&& func) {
@@ -726,6 +739,10 @@ public:
     bool add(std::shared_ptr<Func> funcP) {
         return addDetail(std::unique_ptr<Runner>(new Runner(funcP)));
     }
+    /**
+     * Get errors of finished tasks.
+     * This is thread-safe.
+     */
     std::vector<std::exception_ptr> gc() {
         std::vector<std::exception_ptr> ret;
         {
@@ -738,6 +755,7 @@ public:
     /**
      * add() may not succeed even if this number is less than nrThreads
      * unless add() called by one thread only.
+     * This is thread-safe.
      */
     size_t nrRunning() const { return nrRunning_; }
 };
