@@ -184,6 +184,21 @@ def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_local_command):
                 'conv=fdatasync'])
 
 
+def exists_file(path, runCommand=run_local_command):
+    '''
+    Get file existance using shell.
+    path :: str              - file path
+    runCommand :: RunCommand
+    return :: bool           - true if the file exists, or false.
+    '''
+    verify_type(path, str)
+    cmd = 'if [ -b "%s" ]; ' \
+        'then echo 1;' \
+        'else echo 0; fi' % path
+    res = runCommand(['/bin/sh', '-c', cmd])
+    return int(res) != 0
+
+
 ########################################
 # Lvm utility functions.
 ########################################
@@ -223,8 +238,11 @@ def remove_lv(lvPath, runCommand=run_local_command):
     lvPath :: str - lvm lv path.
     '''
     wait_for_lv_ready(lvPath, runCommand)
-    for i in xrange(3):
+    retryTimes = 3
+    for i in xrange(retryTimes):
         try:
+            if i != 0 and not exists_file(lvPath, runCommand):
+                return
             runCommand(['/sbin/lvremove', '-f', lvPath])
             return
         except:
@@ -449,11 +467,7 @@ class Device:
             # This is local only.
             return os.path.exists(self.path)
         else:
-            cmd = 'if [ -b "%s" ]; ' \
-                  'then echo 1;' \
-                  'else echo 0; fi' % self.path
-            res = self.runCommand(['/bin/sh', '-c', cmd])
-            return int(res) != 0
+            return exists_file(self.path, self.runCommand)
 
     def format_ldev(self):
         '''
@@ -1496,6 +1510,8 @@ class Controller:
         retryTimes = 3
         for i in xrange(retryTimes):
             try:
+                if i != 0 and gid not in self._get_gid_list(ax, vol, 'restored'):
+                    break
                 self.run_ctl(ax, ['del-restored', vol, str(gid)])
                 break
             except Exception, e:
