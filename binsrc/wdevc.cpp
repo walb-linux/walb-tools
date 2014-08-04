@@ -617,8 +617,8 @@ const std::vector<Command> commandVec_ = {
     {clearWal, "clear-wal", {wdevParam, timeoutSecParam}, {}, ""},
 
     {freeze, "freeze", {wdevParam, timeoutSecParam}, {}, ""},
-    {melt, "melt", {}, {}, ""},
-    {isFrozen, "is-flozen", {}, {}, ""},
+    {melt, "melt", {wdevParam}, {}, ""},
+    {isFrozen, "is-flozen", {wdevParam}, {}, ""},
 
     {getVersion, "get-version", {}, {}, ""},
 
