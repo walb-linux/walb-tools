@@ -5,6 +5,8 @@ import itertools, shutil, threading
 import random
 import datetime
 import tempfile
+import socket
+from contextlib import closing
 from walb import *
 from repeater import *
 
@@ -104,13 +106,14 @@ def run_repeater(port, rateMbps=0, delayMsec=0):
 
 def quit_repeater(s, doSleep=True):
     send_cmd_to_repeater(get_cmd_port(s.port), 'quit')
-    time.sleep(1)
+    if doSleep:
+        time.sleep(1)
 
 
 def quit_repeaters(sL):
     for s in sL:
         quit_repeater(s, doSleep=False)
-    time.sleep(1)
+    time.sleep(2)
 
 
 def start_repeater(s):
@@ -141,6 +144,10 @@ def startup_list(sL, rL=[], rateMbps=0, delayMsec=0):
     delayMsec :: int
 
     '''
+    archiveL = [x for x in sL if x.kind == K_ARCHIVE]
+    proxyL = [x for x in sL if x.kind == K_PROXY]
+    storageL = [x for x in sL if x.kind == K_STORAGE]
+    sL = archiveL + proxyL + storageL  # the order is important.
     for s in sL:
         startup(s, s in rL, rateMbps, delayMsec, wait=False)
     for s in sL:
@@ -1079,7 +1086,7 @@ def test_e14():
         down network between a0 and a1 during full-repl -> recover -> full-repl.
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e14: network down and recover full-repl', g_count
+        'test_e14:network down and recover full-repl', g_count
     sizeMb = wdev0.get_size_mb()
     rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
     print 'test_e14:rateMbps', rateMbps
@@ -1116,7 +1123,7 @@ def test_e15():
         down network between a0 and a1 during hash-repl -> recover -> hash-repl.
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e15: network down and recover hash-repl', g_count
+        'test_e15:network down and recover hash-repl', g_count
     # prepare for hash-repl.
     walbc.replicate_sync(a0, VOL, a1)
     write_random(wdev0.path, 1)
@@ -1156,7 +1163,7 @@ def test_e16():
         down network between a0 and a1 during diff-repl -> recover -> diff-repl.
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
-        'test_e16: network down and recover diff-repl', g_count
+        'test_e16:network down and recover diff-repl', g_count
 
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid0 = walbc.snapshot_sync(s0, VOL, [a0])

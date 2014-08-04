@@ -5,6 +5,7 @@ import time
 import subprocess
 import sys
 import socket
+from contextlib import closing
 import errno
 
 ########################################
@@ -116,16 +117,17 @@ def wait_for_server_port(address, port, timeoutS=10):
     while time.time() < t0 + timeoutS:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1.0)
-        try:
-            sock.connect((address, port))
-            sock.close()
-            return
-        except socket.error, e:
-            if e.errno not in [errno.ECONNREFUSED,
-                               errno.ECONNABORTED, errno.ECONNRESET]:
-                raise
-            print 'wait_for_server_port:ignored', \
-                address, port, e.errno, os.strerror(e.errno)
+        with closing(sock):
+            try:
+                sock.connect((address, port))
+                sock.close()
+                return
+            except socket.error, e:
+                if e.errno not in [errno.ECONNREFUSED,
+                                   errno.ECONNABORTED, errno.ECONNRESET]:
+                    raise
+                print 'wait_for_server_port:ignored', \
+                    address, port, e.errno, os.strerror(e.errno)
         time.sleep(0.3)
     raise Exception('wait_for_server_port:timeout', address, port, timeoutS)
 
