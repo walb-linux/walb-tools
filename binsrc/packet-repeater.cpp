@@ -261,7 +261,13 @@ class Repeater {
             waitMsec(1);
             return;
         }
-        if (readAndWrite(dir, from, to, buf, sma) > 0) return;
+        try {
+            if (readAndWrite(dir, from, to, buf, sma) > 0) return;
+        } catch (std::exception& e) {
+            if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "[%d] handleClosing readAndWrite err %d %d %s", id_, dir, (int)state_, e.what());
+            changeStateToError(dir);
+            return;
+        }
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "[%d] handleClosing %d %d", id_, dir, (int)state_);
         from.close();
         state_ = dir == 1 ? Close0 : Close1;
