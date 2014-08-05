@@ -37,5 +37,5 @@ def startup_repeater(server, serverPort, recvPort, cmdPort, rateMbps=0, delayMse
         args += ['-l', logPath]
     if isDebug:
         args += ['-v']
-        print "startup_repeater:args", args
+    print "startup_repeater:args", args
     run_daemon(args)
