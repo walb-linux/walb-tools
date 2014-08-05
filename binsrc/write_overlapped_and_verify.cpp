@@ -92,17 +92,22 @@ private:
                 << "blockSize must be multiples of 512" << bs;
         }
         if (minIoB() == 0) {
-            throw RT_ERR("minIoSize must be > 0.");
+            throw RT_ERR("minIoSize [block] must be > 0.");
         }
         if (maxIoB() == 0) {
-            throw RT_ERR("maxIoSize must be > 0.");
+            throw RT_ERR("maxIoSize [block] must be > 0.");
         }
         if (maxIoB() < minIoB()) {
             throw cybozu::Exception(__func__)
                 << "minIoSize must be <= maxIoSize" << minIoB() << maxIoB();
         }
-        if (size == 0) {
-            throw RT_ERR("size must be > 0.");
+        if (sizeB() == 0) {
+            throw RT_ERR("target size [block] must be > 0.");
+        }
+        if (sizeB() < minIoB()) {
+            throw cybozu::Exception(__func__)
+                << "target size [block] must be >= minIoSize [block]"
+                << sizeB() << minIoB();
         }
         if (periodMs == 0) {
             throw RT_ERR("periodMs must be > 0.");
