@@ -156,7 +156,7 @@ public:
 class RangeMutex
 {
 private:
-    const size_t size_;
+    UNUSED const size_t size_;
     std::mutex mutex_;
     std::condition_variable cv_;
 

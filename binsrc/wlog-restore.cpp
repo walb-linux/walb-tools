@@ -183,7 +183,7 @@ private:
     void clipIfNecessary(LogPackHeader &packH) {
         if (opt_.ddevLb == 0) return;
         size_t i = 0;
-        const uint16_t totalIoSize0 = packH.totalIoSize();
+        UNUSED const uint16_t totalIoSize0 = packH.totalIoSize();
         while (i < packH.nRecords()) {
             LogRecord &rec = packH.record(i);
             if (rec.offset + rec.ioSizeLb() <= opt_.ddevLb) {
@@ -194,7 +194,7 @@ private:
             }
         }
         assert(packH.isValid(false));
-        assert(totalIoSize0 == packH.totalIoSize());
+        assert(totalIoSize0 == packH.totalIoSize()); // unchanged.
     }
     /**
      * RETURN:
