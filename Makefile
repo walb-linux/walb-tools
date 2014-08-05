@@ -5,7 +5,7 @@ CC = clang
 
 OPT_FLAGS =-DCYBOZU_EXCEPTION_WITH_STACKTRACE -g
 ifeq ($(DEBUG),1)
-OPT_FLAGS += -DDEBUG -DWALB_DEBUG -DCYBOZU_STACKTRACE_WITH_BFD_GPL
+OPT_FLAGS += -DDEBUG -DWALB_DEBUG #-DCYBOZU_STACKTRACE_WITH_BFD_GPL
 else
 OPT_FLAGS += -O2 -DNDEBUG
 endif
@@ -29,7 +29,7 @@ LDLIBS = -lpthread -lrt
 endif
 ifeq ($(DEBUG),1)
 LDFLAGS += -rdynamic
-LDLIBS += -lbfd
+#LDLIBS += -lbfd
 endif
 
 LDLIBS_LOCAL = -lwalb-tools
