@@ -233,15 +233,15 @@ void createWdev(const Option &opt)
     std::string ldev, ddev;
     cybozu::util::parseStrVec(opt.params, 0, 2, {&ldev, &ddev});
 
-    struct walb_start_param u2kParam; // userland -> kernel.
-    struct walb_start_param k2uParam; // kernel -> userland.
+    struct walb_start_param u2k; // userland -> kernel.
+    struct walb_start_param k2u; // kernel -> userland.
     struct walb_ctl ctl = {
         .command = WALB_IOCTL_START_DEV,
         .u2k = { .wminor = WALB_DYNAMIC_MINOR,
                  .buf_size = sizeof(struct walb_start_param),
-                 .buf = (void *)&u2kParam, },
+                 .buf = (void *)&u2k, },
         .k2u = { .buf_size = sizeof(struct walb_start_param),
-                 .buf = (void *)&k2uParam, },
+                 .buf = (void *)&k2u, },
     };
 
     // Check parameters.
@@ -258,11 +258,11 @@ void createWdev(const Option &opt)
     verifyPbs(ldevInfo, ddevInfo, __func__);
 
     // Make ioctl data.
-    ::memcpy(&u2kParam, &opt.sParam, sizeof(u2kParam));
+    ::memcpy(&u2k, &opt.sParam, sizeof(u2k));
     if (opt.name.empty()) {
-        u2kParam.name[0] = '\0';
+        u2k.name[0] = '\0';
     } else {
-        ::snprintf(u2kParam.name, DISK_NAME_LEN, "%s", opt.name.c_str());
+        ::snprintf(u2k.name, DISK_NAME_LEN, "%s", opt.name.c_str());
     }
     ctl.u2k.lmajor = ldevInfo.stat.majorId();
     ctl.u2k.lminor = ldevInfo.stat.minorId();
@@ -270,12 +270,12 @@ void createWdev(const Option &opt)
     ctl.u2k.dminor = ddevInfo.stat.minorId();
 
     invokeWalbctlIoctl(ctl, __func__);
-    assert(::strnlen(k2uParam.name, DISK_NAME_LEN) < DISK_NAME_LEN);
+    assert(::strnlen(k2u.name, DISK_NAME_LEN) < DISK_NAME_LEN);
 
     ::printf("name %s\n"
              "major %u\n"
              "minor %u\n"
-             , k2uParam.name, ctl.k2u.wmajor, ctl.k2u.wminor);
+             , k2u.name, ctl.k2u.wmajor, ctl.k2u.wminor);
 
     LOGs.debug() << "create-wdev done";
 }
@@ -298,6 +298,32 @@ void deleteWdev(const Option &opt)
     invokeWalbctlIoctl(ctl, __func__);
 
     LOGs.debug() << "delete-wdev done";
+}
+
+void listWdev(const Option &)
+{
+    uint minor[2] = {0, uint(-1)};
+    struct walb_disk_data ddata[32];
+    struct walb_ctl ctl = {
+        .command = WALB_IOCTL_LIST_DEV,
+        .u2k = { .wminor = WALB_DYNAMIC_MINOR,
+                 .buf_size = sizeof(minor),
+                 .buf = (void *)&minor[0], },
+        .k2u = { .buf_size = sizeof(ddata),
+                 .buf = (void *)&ddata[0], },
+    };
+    for (;;) {
+        invokeWalbctlIoctl(ctl, __func__);
+        const size_t nr = ctl.val_int;
+        if (nr == 0) break;
+        for (size_t i = 0; i < nr; i++) {
+            struct walb_disk_data &d = ddata[i];
+            d.name[DISK_NAME_LEN - 1] = '\0';
+            ::printf("%u %u %s\n", d.major, d.minor, d.name);
+            minor[0] = d.minor + 1;
+        }
+    }
+    LOGs.debug() << "list done";
 }
 
 void setCheckpointInterval(const Option &opt)
@@ -595,6 +621,7 @@ const std::vector<Command> commandVec_ = {
       numPackBulkOptS, numIoBulkOptS}, ""},
 
     {deleteWdev, "delete-wdev", {wdevParam}, {}, ""},
+    {listWdev, "list", {}, {}, ""},
 
     {setCheckpointInterval, "set-checkpoint-interval", {wdevParam, intervalMsParam}, {}, ""},
     {getCheckpointInterval, "get-checkpoint-interval", {wdevParam}, {}, ""},
