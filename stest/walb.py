@@ -618,6 +618,8 @@ def verify_server_kind(s, kindL):
     s :: Server
     kindL :: [int]
     '''
+    verify_type(s, Server)
+    verify_type(kindL, list, int)
     if s.kind not in kindL:
         raise Exception('invalid server type', s.kind, kindL)
 
