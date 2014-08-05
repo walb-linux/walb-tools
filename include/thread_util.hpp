@@ -19,6 +19,7 @@
 #include <atomic>
 #include <cassert>
 #include <functional>
+#include <sstream>
 #include <type_traits>
 
 /**
@@ -87,11 +88,11 @@ private:
     std::function<void()> callback_;
 
     void throwErrorLater(std::exception_ptr p) noexcept {
-        if (isEnd_) return;
         assert(p);
+        bool expected = false;
+        if (!isEnd_.compare_exchange_strong(expected, true)) return;
         promise_.set_exception(p);
-        isEnd_ = true;
-        if (callback_) callback_();
+        runCallback();
     }
     /**
      * Call this in a catch clause.
@@ -99,11 +100,19 @@ private:
     void throwErrorLater() noexcept {
         throwErrorLater(std::current_exception());
     }
-    void done() {
-        if (isEnd_) return;
+    /**
+     * You can call this multiple times.
+     * This function is thread-safe.
+     */
+    void done() noexcept {
+        bool expected = false;
+        if (!isEnd_.compare_exchange_strong(expected, true)) return;
         promise_.set_value();
-        isEnd_ = true;
+        runCallback();
+    }
+    void runCallback() noexcept try {
         if (callback_) callback_();
+    } catch (...) {
     }
 public:
     template <typename Func>
@@ -122,9 +131,8 @@ public:
         , isEnd_(false)
         , callback_() {
     }
-    ~Runner() noexcept try {
-        if (!isEnd_) done();
-    } catch (...) {
+    ~Runner() noexcept {
+        done();
     }
     void operator()() noexcept try {
         holderP_->run();
@@ -133,7 +141,16 @@ public:
         throwErrorLater();
     }
     void get() { future_.get(); }
+    std::exception_ptr getNoThrow() noexcept try {
+        future_.get();
+        return std::exception_ptr();
+    } catch (...) {
+        return std::current_exception();
+    }
     bool isEnd() const { return isEnd_; }
+    /**
+     * Callback's throwing exception will be ignored.
+     */
     void setCallback(const std::function<void()>& f) { callback_ = f; }
 };
 
@@ -145,16 +162,18 @@ class ThreadRunner /* final */
 {
 private:
     std::shared_ptr<Runner> runnerP_;
-    std::shared_ptr<std::thread> threadP_;
+    std::unique_ptr<std::thread> threadP_;
 
 public:
     ThreadRunner() {}
     template <typename Func>
     explicit ThreadRunner(Func&& func)
-        : runnerP_(new Runner(std::forward<Func>(func))) {
+        : runnerP_(new Runner(std::forward<Func>(func)))
+        , threadP_() {
     }
     explicit ThreadRunner(std::shared_ptr<Runner> runnerP)
-        : runnerP_(runnerP) {
+        : runnerP_(runnerP)
+        , threadP_() {
     }
     ThreadRunner(const ThreadRunner &) = delete;
     ThreadRunner(ThreadRunner &&rhs)
@@ -162,11 +181,13 @@ public:
         , threadP_(std::move(rhs.threadP_)) {
     }
     ~ThreadRunner() noexcept {
-        try {
-            join();
-        } catch (...) {}
+        joinNoThrow();
     }
     ThreadRunner &operator=(const ThreadRunner &) = delete;
+    /**
+     * Do not call this function when you are running a thread on *this.
+     * Calling of std::thread dstr running a thread will cause std::terminate().
+     */
     ThreadRunner &operator=(ThreadRunner &&rhs) {
         runnerP_ = std::move(rhs.runnerP_);
         threadP_ = std::move(rhs.threadP_);
@@ -184,6 +205,10 @@ public:
         if (threadP_) throw std::runtime_error("threadP must be null");
         runnerP_ = runnerP;
     }
+    void setCallback(const std::function<void()>& f) {
+        if (!runnerP_) throw std::runtime_error("runnerP must be not null");
+        runnerP_->setCallback(f);
+    }
     /**
      * Start a thread.
      */
@@ -197,10 +222,12 @@ public:
      */
     void join() {
         if (!threadP_) return;
-        threadP_->join();
+        std::unique_ptr<std::thread> tp = std::move(threadP_);
         threadP_.reset();
-        runnerP_->get();
+        tp->join();
+        std::shared_ptr<Runner> rp = std::move(runnerP_);
         runnerP_.reset();
+        rp->get(); // may throw an exception.
     }
     /**
      * Wait for the thread done.
@@ -215,6 +242,13 @@ public:
             ep = std::current_exception();
         }
         return ep;
+    }
+    /**
+     * Check a thread is alive or not.
+     * Call canJoin() if the thread is done or not.
+     */
+    bool isAlive() const {
+        return bool(threadP_);
     }
     /**
      * Check whether you can join the thread just now.
@@ -516,11 +550,9 @@ private:
         return (maxNumThreads_ == 0 ? running_.size() : maxNumThreads_) * 2 <= runners_.size();
     }
     void makeThread() {
-        std::shared_ptr<Runner> runnerP(
-            new Runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_)));
-        runnerP->setCallback([this]() { numActiveThreads_--; });
-        ThreadRunner runner(runnerP);
+        ThreadRunner runner(TaskWorker(readyQ_, ready_, running_, done_, mutex_, cv_));
         numActiveThreads_++;
+        runner.setCallback([this]() { numActiveThreads_--; });
         runner.start();
         runners_.push_back(std::move(runner));
     }
@@ -564,6 +596,170 @@ private:
             }
         }
     }
+};
+
+/**
+ * Thread pool with a fixed number of threads.
+ */
+class ThreadRunnerFixedPool /* final */
+{
+    class Err : public std::exception {
+        std::string s_;
+    public:
+        explicit Err(const std::string& s = "") : std::exception(), s_(s) {
+        }
+        template <typename T>
+        Err& operator<<(const T& t) {
+            std::stringstream ss;
+            ss << ":" << t;
+            s_ += ss.str();
+            return *this;
+        }
+        const char *what() const noexcept override {
+            return s_.c_str();
+        }
+    };
+    using AutoLock = std::lock_guard<std::mutex>;
+    using UniqueLock = std::unique_lock<std::mutex>;
+    struct Worker {
+        std::unique_ptr<Runner> runner;
+        ThreadRunner th;
+        std::mutex mu;
+        std::condition_variable cv;
+        bool quit;
+        Worker() : runner(), th(), mu(), cv(), quit(false) {}
+        ~Worker() noexcept {
+            {
+                AutoLock lk(mu);
+                if (quit && !th.isAlive()) return;
+                quit = true;
+                cv.notify_one();
+            }
+            th.joinNoThrow();
+            assert(!runner);
+        }
+    };
+    void threadWorker(Worker& w) noexcept {
+        for (;;) {
+            UniqueLock lk(w.mu);
+            while (!w.quit && !w.runner) w.cv.wait(lk);
+            if (w.quit) {
+                if (w.runner) {
+                    nrRunning_--;
+                    w.runner.reset();
+                }
+                break;
+            }
+            (*w.runner)();
+            std::exception_ptr ep = w.runner->getNoThrow();
+            if (ep) {
+                AutoLock lk2(mu_);
+                epV_.push_back(ep);
+            }
+            nrRunning_--;
+            w.runner.reset();
+        }
+    }
+    bool addDetail(std::unique_ptr<Runner>&& runner) {
+        if (workerV_.empty()) throw Err(NAME()) << "stopped";
+        const size_t s = workerV_.size();
+        size_t id = id_;
+        for (size_t i = 0; i < s; i++) {
+            Worker& w = *workerV_[id++ % s];
+            UniqueLock lk(w.mu, std::defer_lock);
+            if (!lk.try_lock()) continue;
+            if (w.runner) continue;
+            assert(!w.quit);
+            w.runner = std::move(runner);
+            nrRunning_++;
+            w.cv.notify_one();
+            id_ = id;
+            return true;
+        }
+        return false;
+    }
+    std::vector<std::unique_ptr<Worker> > workerV_;
+    std::vector<std::exception_ptr> epV_;
+    std::mutex mu_; // for epV_.
+    std::atomic<size_t> id_;
+    std::atomic<size_t> nrRunning_;
+public:
+    static constexpr const char *NAME() { return "ThreadRunnerFixedPool"; }
+    ThreadRunnerFixedPool()
+        : workerV_(), epV_(), mu_(), id_(0), nrRunning_(0) {
+    }
+    ~ThreadRunnerFixedPool() noexcept {
+        stop();
+    }
+    /**
+     * Start threads.
+     * You can call add() for started pools.
+     * This is not thread-safe.
+     */
+    void start(size_t nrThreads) {
+        if (nrThreads == 0) throw Err(NAME()) << "nrThreads must be > 0";
+        if (!workerV_.empty()) throw Err(NAME()) << "started";
+        assert(nrRunning_ == 0);
+        for (size_t i = 0; i < nrThreads; i++) {
+            workerV_.emplace_back(new Worker());
+            Worker& w = *workerV_.back();
+            w.th.set([this, &w]() noexcept { threadWorker(w); });
+            w.th.start();
+        }
+    }
+    /**
+     * Stop all threads. All running tasks will finish.
+     * You can call this mutliple times safely.
+     * This is not thread-safe.
+     */
+    void stop() noexcept {
+        workerV_.clear();
+    }
+    /**
+     * Add a task as a function which type is void (*)().
+     *
+     * RETURN:
+     *   true if successfully added.
+     *   false if there is no free thread.
+     *
+     * This is thread-safe.
+     *
+     * The task function can throw an exception.
+     * Thrown exceptions will be saved to the queue
+     * and you can get them later using gc().
+     *
+     * If add() failed and func is rvalue, func will be moved to a Runner instance
+     * allocated in heap memory, and will be deallocated in the end of add().
+     * You can use shared pointer version of add() in order to
+     * access to the function you create after calling add().
+     */
+    template <typename Func>
+    bool add(Func&& func) {
+        return addDetail(std::unique_ptr<Runner>(new Runner(std::forward<Func>(func))));
+    }
+    template <typename Func>
+    bool add(std::shared_ptr<Func> funcP) {
+        return addDetail(std::unique_ptr<Runner>(new Runner(funcP)));
+    }
+    /**
+     * Get errors of finished tasks.
+     * This is thread-safe.
+     */
+    std::vector<std::exception_ptr> gc() {
+        std::vector<std::exception_ptr> ret;
+        {
+            AutoLock lk(mu_);
+            ret = std::move(epV_);
+            epV_.clear();
+        }
+        return ret;
+    }
+    /**
+     * add() may not succeed even if this number is less than nrThreads
+     * unless add() called by one thread only.
+     * This is thread-safe.
+     */
+    size_t nrRunning() const { return nrRunning_; }
 };
 
 /**

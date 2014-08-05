@@ -1,9 +1,6 @@
 /**
  * @file
  * @brief Convert walb logs to a walb diff.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
  */
 #include "cybozu/option.hpp"
 #include "walb_diff_converter.hpp"
@@ -15,10 +12,13 @@ struct Option
 {
     uint32_t maxIoSize;
     bool isDebug;
+    std::string input, output;
 
     Option(int argc, char *argv[]) {
         cybozu::Option opt;
         opt.setUsage("Usage: wlog-to-wdiff < [wlog] > [wdiff]", true);
+        opt.appendOpt(&input, "-", "i", ": input wlog file (default: stdin)");
+        opt.appendOpt(&output, "-", "o", ": output wdiff file (default: stdout)");
         opt.appendOpt(&maxIoSize, 64 * KIBI, "x", ": max IO size in the output wdiff [byte].");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
         opt.appendHelp("h");
@@ -29,12 +29,28 @@ struct Option
     }
 };
 
+void setupFile(cybozu::util::File &file, const std::string &path, bool isRead)
+{
+    if (path == "-") {
+        file.setFd(isRead ? 0 : 1);
+    } else if (isRead) {
+        file.open(path, O_RDONLY);
+    } else {
+        file.open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+}
+
 int doMain(int argc, char *argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
     diff::Converter c;
-    c.convert(0, 1, opt.maxIoSize / LBS);
+    cybozu::util::File inputFile, outputFile;
+    setupFile(inputFile, opt.input, true);
+    setupFile(outputFile, opt.output, false);
+    c.convert(inputFile.fd(), outputFile.fd(), opt.maxIoSize / LBS);
+    outputFile.fdatasync();
+    outputFile.close();
     return 0;
 }
 

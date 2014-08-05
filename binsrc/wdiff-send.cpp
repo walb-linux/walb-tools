@@ -145,6 +145,7 @@ void runDummyProxy(const Option &opt)
     if (!wdiffTransferClient(pkt, merger, cmpr, stopState, forceQuit)) {
         throw cybozu::Exception(__func__) << "wdiffTransferClient failed";
     }
+    packet::Ack(sock).recv();
 }
 
 int doMain(int argc, char *argv[])

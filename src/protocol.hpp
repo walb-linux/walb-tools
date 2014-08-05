@@ -79,6 +79,7 @@ const char *const volTN = "vol";
 const char *const diffTN = "diff";
 const char *const restoredTN = "restored";
 const char *const restorableTN = "restorable";
+const char *const uuidTN = "uuid";
 
 /**
  * Internal protocol name.

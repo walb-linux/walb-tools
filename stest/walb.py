@@ -5,6 +5,7 @@ import time
 import subprocess
 import sys
 import socket
+from contextlib import closing
 import errno
 
 ########################################
@@ -116,16 +117,17 @@ def wait_for_server_port(address, port, timeoutS=10):
     while time.time() < t0 + timeoutS:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1.0)
-        try:
-            sock.connect((address, port))
-            sock.close()
-            return
-        except socket.error, e:
-            if e.errno not in [errno.ECONNREFUSED,
-                               errno.ECONNABORTED, errno.ECONNRESET]:
-                raise
-            print 'wait_for_server_port:ignored', \
-                address, port, e.errno, os.strerror(e.errno)
+        with closing(sock):
+            try:
+                sock.connect((address, port))
+                sock.close()
+                return
+            except socket.error, e:
+                if e.errno not in [errno.ECONNREFUSED,
+                                   errno.ECONNABORTED, errno.ECONNRESET]:
+                    raise
+                print 'wait_for_server_port:ignored', \
+                    address, port, e.errno, os.strerror(e.errno)
         time.sleep(0.3)
     raise Exception('wait_for_server_port:timeout', address, port, timeoutS)
 
@@ -184,6 +186,21 @@ def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_local_command):
                 'conv=fdatasync'])
 
 
+def exists_file(path, runCommand=run_local_command):
+    '''
+    Get file existance using shell.
+    path :: str              - file path
+    runCommand :: RunCommand
+    return :: bool           - true if the file exists, or false.
+    '''
+    verify_type(path, str)
+    cmd = 'if [ -b "%s" ]; ' \
+        'then echo 1;' \
+        'else echo 0; fi' % path
+    res = runCommand(['/bin/sh', '-c', cmd])
+    return int(res) != 0
+
+
 ########################################
 # Lvm utility functions.
 ########################################
@@ -223,8 +240,11 @@ def remove_lv(lvPath, runCommand=run_local_command):
     lvPath :: str - lvm lv path.
     '''
     wait_for_lv_ready(lvPath, runCommand)
-    for i in xrange(3):
+    retryTimes = 3
+    for i in xrange(retryTimes):
         try:
+            if i != 0 and not exists_file(lvPath, runCommand):
+                return
             runCommand(['/sbin/lvremove', '-f', lvPath])
             return
         except:
@@ -396,6 +416,8 @@ aAcceptForResize = aActive + [aStopped]
 aAcceptForClearVol = [aStopped, aSyncReady]
 aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
+aDuringFullSync = [atFullSync]
+aDuringHashSync = [atHashSync]
 
 
 ########################################
@@ -447,11 +469,7 @@ class Device:
             # This is local only.
             return os.path.exists(self.path)
         else:
-            cmd = 'if [ -b "%s" ]; ' \
-                  'then echo 1;' \
-                  'else echo 0; fi' % self.path
-            res = self.runCommand(['/bin/sh', '-c', cmd])
-            return int(res) != 0
+            return exists_file(self.path, self.runCommand)
 
     def format_ldev(self):
         '''
@@ -595,13 +613,13 @@ class Server:
         return self.address + ":" + str(self.port)
 
 
-def verify_server_kind(s, kind):
+def verify_server_kind(s, kindL):
     '''
     s :: Server
-    kind :: int
+    kindL :: [int]
     '''
-    if s.kind != kind:
-        raise Exception('invalid server type', s.kind, kind)
+    if s.kind not in kindL:
+        raise Exception('invalid server type', s.kind, kindL)
 
 
 class ServerLayout:
@@ -812,13 +830,14 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_type(vol, str)
-        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
+        verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
         if s.kind == K_STORAGE:
-            self.verify_state(s, vol, sSyncReady)
-        elif s.kind == K_ARCHIVE:
-            self.verify_state(s, vol, aSyncReady)
+            state = sSyncReady
         else:
-            raise Exception('reset_vol:bad server', s)
+            assert s.kind == K_ARCHIVE
+            state = aSyncReady
+        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
+        self.verify_state(s, vol, state)
 
     def set_slave_storage(self, sx, vol):
         '''
@@ -890,6 +909,17 @@ class Controller:
         ret = self.run_ctl(px, args)
         return int(ret) != 0
 
+    def get_uuid(self, s, vol):
+        '''
+        Get uuid string.
+        s :: Server   - storage or archive.
+        return :: str - uuid string that regex pattern [0-9a-f]{32}.
+        '''
+        verify_type(s, Server)
+        verify_type(vol, str)
+        verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
+        return self.run_ctl(s, ['get', 'uuid', vol])
+
     def status(self, sL=[], vol=None):
         '''
         print server status.
@@ -956,7 +986,7 @@ class Controller:
         wdevPath :: str
         '''
         verify_type(sx, Server)
-        verify_server_kind(sx, K_STORAGE)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(wdevPath, str)
         self.run_ctl(sx, ["init-vol", vol, wdevPath])
@@ -1255,7 +1285,7 @@ class Controller:
         timeoutS :: int - timeout [sec].
         '''
         verify_type(gid, int)
-        self._wait_for_no_action(ax, vol, 'Restore', timeoutS)
+        self._wait_for_no_action(ax, vol, aaRestore, timeoutS)
         gids = self.get_restored(ax, vol)
         if gid in gids:
             return
@@ -1282,26 +1312,58 @@ class Controller:
         if e:
             raise Exception(msg, 'gid must not be restorable', gid)
 
-    def replicate_sync(self, aSrc, vol, aDst):
+    def replicate_async(self, aSrc, vol, aDst):
         '''
         Copy current (aSrc, vol) to aDst.
+        This does not wait for the replication done.
+        Use wait_for_replicated() or replicate_sync() to wait for it.
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
+        return :: int  - latest gid to replicate
         '''
-        gidL = self.get_restorable(aSrc, vol)
-        gid = gidL[-1]
+        gid = self.get_restorable(aSrc, vol)[-1]
         self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
                             aDst.get_host_port()])
-        self._wait_for_replicated(aDst, vol, gid)
+        return gid
 
-    def synchronize(self, aSrc, vol, aDst):
+    def wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+        '''
+        Wait for a snapshot is restorable at an archive server.
+        ax :: Server    - archive server as a replication server (not client).
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_type(gid, int)
+        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
+        gidL = self.get_restorable(ax, vol, 'all')
+        if gidL and gid <= gidL[-1]:
+            return
+        raise Exception("wait_for_replicated:replicate failed",
+                        ax.name, vol, gid, gidL)
+
+    def replicate_sync(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
+        '''
+        Copy current (aSrc, vol) to aDst.
+        This will wait for the replicated done.
+        aSrc :: Server - source archive (as a client).
+        vol :: str     - volume name.
+        aDst :: Server - destination archive (as a server).
+        return :: int  - replicated gid.
+        '''
+        gid = self.replicate_async(aSrc, vol, aDst)
+        self.wait_for_replicated(aDst, vol, gid, timeoutS)
+        return gid
+
+    def synchronize(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
         '''
         Synchronize aDst with (aSrc, vol).
         To reduce proxies stopped period, replicate nosync before calling this.
-        aSrc :: Server - source archive (as a client).
-        vol :: str     - volume name.
-        aDst :: Server - destination archive (as a server).
+        aSrc :: Server  - source archive (as a client).
+        vol :: str      - volume name.
+        aDst :: Server  - destination archive (as a server).
+        timeoutS :: int - timeout [sec].
         '''
         verify_type(aSrc, Server)
         verify_type(vol, str)
@@ -1319,7 +1381,7 @@ class Controller:
                 self.run_ctl(px, ["archive-info", "add", vol,
                                   aDst.name, aDst.get_host_port()])
 
-        self.replicate_sync(aSrc, vol, aDst)
+        self.replicate_sync(aSrc, vol, aDst, timeoutS)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
@@ -1450,6 +1512,8 @@ class Controller:
         retryTimes = 3
         for i in xrange(retryTimes):
             try:
+                if i != 0 and gid not in self._get_gid_list(ax, vol, 'restored'):
+                    break
                 self.run_ctl(ax, ['del-restored', vol, str(gid)])
                 break
             except Exception, e:
@@ -1512,13 +1576,14 @@ class Controller:
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE)
 
-    def replicate(self, aSrc, vol, aDst, synchronizing):
+    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC):
         '''
         Replicate archive data by copying a volume from one archive to another.
         aSrc :: Server        - source archive server (as client).
         vol :: str            - volume name.
         aDst :: Server        - destination archive server (as server).
         synchronizing :: bool - True if you want to make aDst synchronizing.
+        timeoutS :: int       - timeout [sec].
         '''
         verify_type(aSrc, Server)
         verify_type(vol, str)
@@ -1529,7 +1594,7 @@ class Controller:
         if st == aClear:
             self.run_ctl(aDst, ["init-vol", vol])
 
-        self.replicate_sync(aSrc, vol, aDst)
+        self.replicate_sync(aSrc, vol, aDst, timeoutS)
         if synchronizing:
             self.synchronize(aSrc, vol, aDst)
 
@@ -1735,22 +1800,6 @@ class Controller:
             return
         raise Exception("wait_for_merged:failed",
                         ax.name, vol, gidB, gidE, pos, gidL)
-
-    def _wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a snapshot is restorable at an archive server.
-        ax :: Server    - archive server as a replication server (not client).
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_type(gid, int)
-        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.get_restorable(ax, vol, 'all')
-        if gidL and gid <= gidL[-1]:
-            return
-        raise Exception("wait_for_replicated:replicate failed",
-                        ax.name, vol, gid, gidL)
 
     def _prepare_backup(self, sx, vol):
         '''

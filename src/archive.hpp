@@ -984,6 +984,25 @@ inline void getRestorable(protocol::GetCommandParams &p)
     p.logger.debug() << "get restorable succeeded" << volId;
 }
 
+inline void getUuid(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    if (!isStateIn(st, aActive)) {
+        throw cybozu::Exception(FUNC) << "bad state" << volId << st;
+    }
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    ul.unlock();
+    const std::string uuidStr = uuid.str();
+    protocol::sendValueAndFin(p, uuidStr);
+    p.logger.debug() << "get uuid succeeded" << volId << uuidStr;
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -1695,6 +1714,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },
     { restorableTN, archive_local::getRestorable },
+    { uuidTN, archive_local::getUuid },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

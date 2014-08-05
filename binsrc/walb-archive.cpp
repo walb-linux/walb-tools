@@ -49,10 +49,10 @@ struct Option : cybozu::Option
         ArchiveSingleton &a = getArchiveGlobal();
         appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
-        appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "maxFgTasks", "num of max concurrent foreground tasks.");
+        appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
-        appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "sockTimeout", "Socket timeout [sec].");
+        appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
         appendHelp("h");
     }
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) try
 
     ArchiveSingleton &g = getArchiveGlobal();
     LOGs.info() << "starting walb archive server with options:\n" << opt;
-    const size_t concurrency = g.maxForegroundTasks > 0 ? g.maxForegroundTasks + 5 : 0;
+    const size_t concurrency = g.maxForegroundTasks + 5;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
 } catch (std::exception &e) {
