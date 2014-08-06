@@ -698,11 +698,81 @@ std::string generateUsage()
     return ss.str();
 }
 
+struct CommandBase {
+    std::string name;
+    virtual void setup(cybozu::Option&) {}
+    virtual void run() {}
+};
+
+CommandBase g_cmdTbl[] = {
+};
+
+class Option2 {
+    cybozu::Option opt1;
+    cybozu::Option opt2;
+    int cmdPos;
+    bool parse1(int argc, char *argv[])
+    {
+        opt1.appendBoolOpt(&verbose, "v", " :verbose");
+        opt1.appendBoolOpt(&isDebug, "d", " :debug option");
+        for (const CommandBase& c : g_cmdTbl) {
+            opt1.appendDelimiter(c.name);
+        }
+        opt1.appendHelp("h");
+        opt1.setUsage("wdevc [opt] cmd", true);
+        if (!opt1.parse(argc, argv)) return false;
+        cmdPos = opt1.getNextPositionOfDelimiter();
+        if (cmdPos == 0) return false;
+        const std::string cmd = argv[cmdPos - 1];
+        for (CommandBase& c : g_cmdTbl) {
+            if (c.name == cmd) {
+                c.setup(opt2);
+                opt2.appendHelp("h");
+                return true;
+            }
+        }
+        return false;
+    }
+public:
+    // common options
+    bool verbose;
+    bool isDebug;
+
+    // other options
+
+    Option2(int argc, char *argv[])
+    {
+        if (!parse1(argc, argv)) {
+            opt1.usage();
+            return;
+        }
+        if (!opt2.parse(argc, argv, cmdPos)) {
+            opt2.usage();
+            return;
+        }
+        if (verbose) {
+            puts("common options");
+            opt1.put();
+            printf("options for %s\n", argv[cmdPos - 1]);
+            opt2.put();
+        }
+    }
+    void run()
+    {
+    }
+};
+
 int doMain(int argc, char* argv[])
 {
+#if 1
+    Option2 opt(argc, argv);
+    walb::util::setLogSetting("-", opt.isDebug);
+    opt.run();
+#else
     Option opt(argc, argv);
     walb::util::setLogSetting("-", opt.isDebug);
     dispatch(opt);
+#endif
     return 0;
 }
 
