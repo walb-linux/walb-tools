@@ -200,7 +200,7 @@ class Repeater {
             case Running:
                 if (!from.isValid()) {
                     cybozu::PutLog(cybozu::LogInfo, "[%d] loop %d %d from is not valid", id_, dir, (int)state_);
-                    changeStateToError(dir);
+                    changeStateToError(dir, Running);
                     continue;
                 }
                 try {
@@ -212,7 +212,7 @@ class Repeater {
                 } catch (std::exception& e) {
                     cybozu::PutLog(cybozu::LogInfo, "[%d] loop %d %d ERR %s", id_, dir, (int)state_, e.what());
                     from.close();
-                    changeStateToError(dir);
+                    changeStateToError(dir, Running);
                 }
             }
         }
@@ -237,8 +237,7 @@ class Repeater {
         const bool dontThrow = true;
         to.shutdown(1, dontThrow); // write disallow
     }
-    bool changeStateToError(int dir) {
-        int expected = Running;
+    bool changeStateToError(int dir, int expected) {
         const int after = dir == 0 ? Error0 : Error1;
         const bool ret = state_.compare_exchange_strong(expected, after);
         if (!ret && opt_.verbose) {
@@ -265,7 +264,7 @@ class Repeater {
             if (readAndWrite(dir, from, to, buf, sma) > 0) return;
         } catch (std::exception& e) {
             if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "[%d] handleClosing readAndWrite err %d %d %s", id_, dir, (int)state_, e.what());
-            changeStateToError(dir);
+            changeStateToError(dir, dir == 0 ? Closing0 : Closing1);
             return;
         }
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "[%d] handleClosing %d %d", id_, dir, (int)state_);
