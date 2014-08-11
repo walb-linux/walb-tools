@@ -5,8 +5,6 @@ import itertools, shutil, threading
 import random
 import datetime
 import tempfile
-import socket
-from contextlib import closing
 from walb import *
 from repeater import *
 
