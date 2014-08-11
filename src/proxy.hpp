@@ -985,25 +985,21 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         pushOpt.delaySec = 0;
         return CONTINUE_TO_SEND;
     }
-    cybozu::Exception e("ProxyWorker");
     if (res == msgStopped || res == msgWdiffRecv || res == msgTooNewDiff || res == msgSyncing) {
         const uint64_t curTs = ::time(0);
         ul.lock();
         if (volSt.lastWlogReceivedTime != 0 &&
             curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
-            e << "reached retryTimeout" << gp.retryTimeout;
-            logger.error() << e.what();
+            logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout;
             return SEND_ERROR;
         }
-        e << res << "delay time" << gp.delaySecForRetry;
-        logger.info() << e.what();
+        logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry;
         pushOpt.isForce = true;
         pushOpt.delaySec = gp.delaySecForRetry;
         return CONTINUE_TO_SEND;
     }
     if (res == msgDifferentUuid || res == msgTooOldDiff) {
-        e << res;
-        logger.info() << e.what();
+        logger.info() << FUNC << res;
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = true;
         pushOpt.delaySec = 0;
@@ -1015,8 +1011,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
      * The background task will stop, and change to stop state.
      * You must start by hand.
      */
-    e << res;
-    logger.error() << e.what();
+    logger.error() << FUNC << res;
     return SEND_ERROR;
 }
 
