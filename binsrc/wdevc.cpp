@@ -35,6 +35,23 @@ struct CommandBase {
     virtual int run() { return 0; }
 };
 
+void appendOptName(cybozu::Option& opt, std::string& name)
+{
+    opt.appendOpt(&name, "", "n", "NAME : walb device name (default: decided automatically)");
+}
+void appendParamLdev(cybozu::Option& opt, std::string& ldev)
+{
+    opt.appendParam(&ldev, "LDEV", ": log device path");
+}
+void appendParamDdev(cybozu::Option& opt, std::string& ddev)
+{
+    opt.appendParam(&ddev, "DDEV", ": data device path");
+}
+void appendParamWdev(cybozu::Option& opt, std::string& wdev)
+{
+    opt.appendParam(&wdev, "WDEV", ": walb device path");
+}
+/////////////////////////////////////////////
 template <typename T>
 struct Opt
 {
@@ -710,17 +727,72 @@ std::string generateUsage()
     return ss.str();
 }
 
-CommandBase g_cmdTbl[] = {
+struct FormatLdevCmd : CommandBase {
+    std::string ldev;
+    std::string ddev;
+    std::string name;
+    bool noDiscard;
+    void setup(cybozu::Option& opt) override {
+        appendParamLdev(opt, ldev);
+        appendParamDdev(opt, ddev);
+        appendOptName(opt, name);
+        opt.appendBoolOpt(&noDiscard, "nd", ": disable discard IOs");
+    }
+    int run() override {
+        cybozu::FilePath ldevPath(ldev);
+        cybozu::FilePath ddevPath(ldev);
+        if (!ldevPath.stat().isBlock()) {
+            throw cybozu::Exception(__func__) << "ldev is not block device" << ldev;
+        }
+        if (!ddevPath.stat().isBlock()) {
+            throw cybozu::Exception(__func__) << "ddev is not block device" << ddev;
+        }
+        BdevInfo ldevInfo, ddevInfo;
+        cybozu::util::File ldevFile(ldev, O_RDWR | O_DIRECT);
+        int fd = ldevFile.fd();
+        ldevInfo.load(fd);
+        ddevInfo.load(ddev);
+        verifyPbs(ldevInfo, ddevInfo, __func__);
+        if (!noDiscard && cybozu::util::isDiscardSupported(fd)) {
+            cybozu::util::issueDiscard(fd, 0, ldevInfo.sizeLb);
+        }
+        device::initWalbMetadata(fd, ldevInfo.pbs, ddevInfo.sizeLb, ldevInfo.sizeLb, name);
+        {
+            device::SuperBlock super;
+            super.read(fd);
+            std::cout << super << std::endl;
+        }
+        ldevFile.fdatasync();
+        ldevFile.close();
+        LOGs.debug() << "format-ldev done";
+        return 0;
+    }
+} g_formatLdev;
+
+std::map<std::string, CommandBase*> g_cmdTbl = {
+    { "format-ldev", &g_formatLdev },
 };
+
+CommandBase* getCommand2(const std::string& cmd)
+{
+    auto i = g_cmdTbl.find(cmd);
+    if (i == g_cmdTbl.end()) return nullptr;
+    return i->second;
+}
 
 class Dispatcher {
     cybozu::Option opt1;
     cybozu::Option opt2;
-    int cmdPos;
-    bool parse1(int argc, char *argv[])
+    CommandBase *pcmd;
+    int parse1(int argc, char *argv[])
     {
-        for (const CommandBase& c : g_cmdTbl) {
-            opt1.appendDelimiter(c.name);
+        std::string cmdList =
+            "wdevc [opt] cmd-name\n"
+            "cmd-name:";
+        for (const auto& c : g_cmdTbl) {
+            opt1.appendDelimiter(c.first);
+            cmdList += c.first;
+            cmdList += ' ';
         }
 /*
 	// to createWdev
@@ -745,21 +817,18 @@ class Dispatcher {
 */
 
         opt1.setDescription("walb device controller.");
-        opt1.setUsage("wdevc [opt] cmd", true); // generateUsage()
+        opt1.setUsage(cmdList);
         opt1.appendBoolOpt(&g_cp.isDebug, "debug", "debug option");
         opt1.appendHelp("h");
-        if (!opt1.parse(argc, argv)) return false;
-        cmdPos = opt1.getNextPositionOfDelimiter();
-        if (cmdPos == 0) return false;
-        const std::string cmd = argv[cmdPos - 1];
-        for (CommandBase& c : g_cmdTbl) {
-            if (c.name == cmd) {
-                c.setup(opt2);
-                opt2.appendHelp("h");
-                return true;
-            }
-        }
-        return false;
+        if (!opt1.parse(argc, argv)) return 0;
+        const int cmdPos = opt1.getNextPositionOfDelimiter();
+        if (cmdPos == 0) return 0;
+        const std::string cmdName = argv[cmdPos - 1];
+        pcmd = getCommand2(cmdName);
+        if (pcmd == nullptr) return 0;
+        pcmd->setup(opt2);
+        opt2.appendHelp("h");
+        return cmdPos;
     }
 public:
     int run(int argc, char *argv[])
@@ -769,25 +838,25 @@ public:
             opt1.usage();
             return 1;
         }
+        const char *cmdName = argv[cmdPos - 1];
         if (!opt2.parse(argc, argv, cmdPos)) {
             opt2.usage();
             return 1;
         }
-        CommandBase& c = g_cmdTbl[cmdPos];
         if (g_cp.isDebug) {
 			std::cerr << "common options" << std::endl;
             std::cerr << opt1 << std::endl;
-            std::cerr << "options for " << c.name << std::endl;
+            std::cerr << "options for " << cmdName << std::endl;
             std::cerr << opt2;
         }
         walb::util::setLogSetting("-", g_cp.isDebug);
-        return c.run();
+        return pcmd->run();
     }
 };
 
 int doMain(int argc, char* argv[])
 {
-#if 1
+#if 0
     Dispatcher disp;
     return disp.run(argc, argv);
 #else
