@@ -833,7 +833,7 @@ class Controller:
             self.stop(sx, vol)
         else:
             raise Exception('set_slave_storage:bad state', state)
-        self.stop_sync(self.sLayout.get_primary_archive(), vol)
+        self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
         self.reset_vol(sx, vol)
         self.start(sx, vol)
 
@@ -1191,7 +1191,7 @@ class Controller:
             self.add_archive_to_proxy(pDst, vol, ax, doStart=False)
         self.start(pDst, vol)
 
-    def stop_sync(self, ax, vol):
+    def stop_synchronizing(self, ax, vol):
         '''
         Stop synchronization of a volume with an archive.
         ax :: Server - archive server.
@@ -1203,7 +1203,7 @@ class Controller:
             self.del_archive_from_proxy(px, vol, ax)
         self.kick_all_storage()
 
-    def start_sync(self, ax, vol):
+    def start_synchronizing(self, ax, vol):
         '''
         Start synchronization of a volume with an archive.
         ax :: Server - archive server.
@@ -1801,7 +1801,7 @@ class Controller:
 
         for ax in self.sLayout.archiveL:
             if self.is_synchronizing(ax, vol):
-                self.stop_sync(ax, vol)
+                self.stop_synchronizing(ax, vol)
 
         # Initialize the volume at the primary archive if necessary.
         a0 = self.sLayout.get_primary_archive()
@@ -1809,7 +1809,7 @@ class Controller:
         if st == aClear:
             self.run_ctl(a0, ["init-vol", vol])
 
-        self.start_sync(a0, vol)
+        self.start_synchronizing(a0, vol)
 
     def _get_lv_path(self, ax, vol):
         '''

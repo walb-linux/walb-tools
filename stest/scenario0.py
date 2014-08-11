@@ -619,7 +619,7 @@ def test_n10():
         md0 = get_sha1_of_restorable(a0, VOL, gid0)
         md1 = get_sha1_of_restorable(a1, VOL, gid0)
         verify_equal_sha1('test_n10', md0, md1)
-        walbc.stop_sync(a1, VOL)
+        walbc.stop_synchronizing(a1, VOL)
         time.sleep(0.5)
     gid1 = walbc.snapshot_sync(s0, VOL, [a0])
     gid1a1 = walbc.get_latest_clean_snapshot(a1, VOL)
@@ -720,12 +720,12 @@ def test_m1():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_m1:full-bkp-after-full-bkp-fails', g_count
     write_random(wdev0.path, 1)
-    walbc.stop_sync(a0, VOL)
+    walbc.stop_synchronizing(a0, VOL)
     try:
         walbc.full_backup(s0, VOL, 10)
     except:
         # expect to catch an exception.
-        walbc.start_sync(a0, VOL)
+        walbc.start_synchronizing(a0, VOL)
         print 'test_m1:succeeded'
         return
     raise Exception('test_m1:full_backup did not fail')
@@ -737,7 +737,7 @@ def test_m2():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_m2:hash-bkp-fails.', g_count
-    walbc.stop_sync(a0, VOL)
+    walbc.stop_synchronizing(a0, VOL)
     walbc.stop(a0, VOL)
     walbc.reset_vol(a0, VOL)
     write_random(wdev0.path, 1)
@@ -874,7 +874,7 @@ def test_e5():
     remove_persistent_data(p0)
     walbc.start(a0, VOL)
     startup(p0)
-    walbc.start_sync(a0, VOL)
+    walbc.start_synchronizing(a0, VOL)
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot_async(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid0, 10, 'test_e5')
@@ -927,7 +927,7 @@ def test_e7():
     md2 = get_sha1_of_restorable(a1, VOL, gid1)
     verify_equal_sha1('test_e7:1', md0, md1)
     verify_equal_sha1('test_e7:2', md1, md2)
-    walbc.stop_sync(a1, VOL)
+    walbc.stop_synchronizing(a1, VOL)
     print 'test_e7:succeeded'
 
 
@@ -1416,7 +1416,7 @@ def replace_archive(aDel, aAdd, volL, newServerLayout):
     for vol, isSync in zip(volL, isSyncL):
         walbc.replicate(aDel, vol, aAdd, isSync)
         if isSync:
-            walbc.stop_sync(aDel, vol)
+            walbc.stop_synchronizing(aDel, vol)
         walbc.clear_vol(aDel, vol)
     walbc.shutdown(aDel)
 
