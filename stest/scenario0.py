@@ -414,7 +414,7 @@ def test_n2():
     print "++++++++++++++++++++++++++++++++++++++ test_n2:snapshot", g_count
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     print "gid=", gid
     print walbc.get_restorable(a0, VOL)
     restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
@@ -459,7 +459,7 @@ def test_stop(stopL, startL):
             time.sleep(0.1)
 
     md0 = get_sha1(wdev0.path)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     restore_and_verify_sha1('test_stop', md0, a0, VOL, gid)
 
 
@@ -500,7 +500,7 @@ def test_n5():
     print "++++++++++++++++++++++++++++++++++++++ test_n5:apply", g_count
     with RandomWriter(wdev0.path):
         time.sleep(0.5)
-        gid = walbc.snapshot_sync(s0, VOL, [a0])
+        gid = walbc.snapshot(s0, VOL, [a0])
         time.sleep(0.5)
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     walbc.apply_diff(a0, VOL, gid)
@@ -515,7 +515,7 @@ def test_n6():
     print "++++++++++++++++++++++++++++++++++++++ test_n6:merge", g_count
     with RandomWriter(wdev0.path):
         time.sleep(0.5)
-        gidB = walbc.snapshot_sync(s0, VOL, [a0])
+        gidB = walbc.snapshot(s0, VOL, [a0])
         time.sleep(1)
         # create more than two diff files
         walbc.stop(s0, VOL)
@@ -523,7 +523,7 @@ def test_n6():
         walbc.start(s0, VOL)
         walbc.start(p0, VOL)
         time.sleep(1)
-        gidE = walbc.snapshot_sync(s0, VOL, [a0])
+        gidE = walbc.snapshot(s0, VOL, [a0])
         gidL = walbc.get_restorable(a0, VOL, 'all')
         posB = gidL.index(gidB)
         posE = gidL.index(gidE)
@@ -562,7 +562,7 @@ def test_n8():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_n8:replicate-diff', g_count
     write_random(wdev0.path, 1)
-    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid0 = walbc.snapshot(s0, VOL, [a0])
     gidA0 = walbc.get_latest_clean_snapshot(a0, VOL)
     if gidA0 != gid0:
         raise Exception('test_n8:wrong gid', gidA0, gid0)
@@ -585,7 +585,7 @@ def test_n9():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_n9:replicate-hash', g_count
     write_random(wdev0.path, 1)
-    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid0 = walbc.snapshot(s0, VOL, [a0])
     walbc.apply_diff(a0, VOL, gid0)
     list0 = walbc.get_restorable(a0, VOL)
     if len(list0) != 1:
@@ -612,8 +612,8 @@ def test_n10():
         time.sleep(0.5)
         walbc.replicate(a0, VOL, a1, True)
         time.sleep(0.5)
-        #gid0 = snapshot_sync(s0, VOL, [a0, a1])
-        gid0 = walbc.snapshot_async(s0, VOL)
+        #gid0 = snapshot(s0, VOL, [a0, a1])
+        gid0 = walbc.snapshot_nbk(s0, VOL)
         walbc.wait_for_restorable(a0, VOL, gid0)
         walbc.wait_for_restorable(a1, VOL, gid0)
         md0 = get_sha1_of_restorable(a0, VOL, gid0)
@@ -621,7 +621,7 @@ def test_n10():
         verify_equal_sha1('test_n10', md0, md1)
         walbc.stop_synchronizing(a1, VOL)
         time.sleep(0.5)
-    gid1 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid1 = walbc.snapshot(s0, VOL, [a0])
     gid1a1 = walbc.get_latest_clean_snapshot(a1, VOL)
     if gid1 <= gid1a1:
         raise Exception('test_n10: not stopped synchronizing', gid1, gid1a1)
@@ -640,7 +640,7 @@ def test_n11(doZeroClear):
         'test_n11:resize', doZeroClear, g_count
     with RandomWriter(wdev0.path):
         prevSize = wdev0.get_size_mb()
-        walbc.snapshot_sync(s0, VOL, [a0])
+        walbc.snapshot(s0, VOL, [a0])
         # lvm extent size is 4MiB
         resize_lv(wdev0.ddev, prevSize, prevSize + 4, doZeroClear)
         resize_lv(wdev1.ddev, prevSize, prevSize + 4, doZeroClear)
@@ -650,7 +650,7 @@ def test_n11(doZeroClear):
             raise Exception('test_n11:bad size', prevSize, curSize)
     write_random(wdev0.path, 1, prevSize * Mebi / Lbs)
     if doZeroClear:
-        gid = walbc.snapshot_sync(s0, VOL, [a0])
+        gid = walbc.snapshot(s0, VOL, [a0])
     else:
         walbc.set_slave_storage(s0, VOL)
         gid = walbc.hash_backup(s0, VOL)
@@ -759,7 +759,7 @@ def test_m3():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_m3:resize-fails', g_count
     prevSizeMb = wdev0.get_size_mb()
-    walbc.snapshot_sync(s0, VOL, [a0])
+    walbc.snapshot(s0, VOL, [a0])
     newSizeMb = prevSizeMb + 4  # lvm extent size is 4MiB
     resize_lv(wdev0.ddev, prevSizeMb, newSizeMb, True)
     resize_lv(wdev1.ddev, prevSizeMb, newSizeMb, True)
@@ -769,7 +769,7 @@ def test_m3():
     curSizeMb = wdev0.get_size_mb()
     if curSizeMb != newSizeMb:
         raise Exception('test_m3:bad size', newSizeMb, curSizeMb)
-    gid1 = walbc.snapshot_async(s0, VOL)
+    gid1 = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid1, 10, 'test_m3')
     if not walbc.is_wdiff_send_error(p0, VOL, a0):
         raise Exception('test_m3:must occur wdiff-send-error')
@@ -801,7 +801,7 @@ def test_e1():
     walbc.verify_not_overflow(s0, VOL)
     startup(p0)
     walbc.kick_all_storage()
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_e1', md0, md1)
@@ -817,10 +817,10 @@ def test_e2():
     walbc.shutdown(a0, 'force')
     write_over_wldev(wdev0)
     walbc.verify_not_overflow(s0, VOL)
-    gid = walbc.snapshot_async(s0, VOL)
+    gid = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid, 10, 'test_e2')
     startup(a0)
-    walbc.snapshot_sync(s0, VOL, [a0])
+    walbc.snapshot(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_e2', md0, md1)
@@ -836,7 +836,7 @@ def test_e3():
     walbc.shutdown(s0, 'force')
     write_random(wdev0.path, 1)
     startup(s0)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_e3', md0, md1)
@@ -876,7 +876,7 @@ def test_e5():
     startup(p0)
     walbc.start_synchronizing(a0, VOL)
     write_random(wdev0.path, 1)
-    gid0 = walbc.snapshot_async(s0, VOL)
+    gid0 = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid0, 10, 'test_e5')
     gid1 = walbc.hash_backup(s0, VOL)
     md0 = get_sha1(wdev0.path)
@@ -895,7 +895,7 @@ def test_e6():
     remove_persistent_data(a0)
     startup(a0)
     walbc.run_ctl(a0, ['init-vol', VOL])
-    gid0 = walbc.snapshot_async(s0, VOL)
+    gid0 = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid0, 10, 'test_e6')
     gid1 = walbc.full_backup(s0, VOL)
     md0 = get_sha1(wdev0.path)
@@ -916,12 +916,12 @@ def test_e7():
     remove_persistent_data(a1)
     startup(a1)
     write_random(wdev0.path, 1)
-    gid0 = walbc.snapshot_async(s0, VOL)
+    gid0 = walbc.snapshot_nbk(s0, VOL)
     walbc.wait_for_restorable(a0, VOL, gid0)
     walbc.verify_not_restorable(a1, VOL, gid0, 10, 'test_e7')
     walbc.replicate(a0, VOL, a1, True)
     write_random(wdev0.path, 1)
-    gid1 = walbc.snapshot_sync(s0, VOL, [a0, a1])
+    gid1 = walbc.snapshot(s0, VOL, [a0, a1])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid1)
     md2 = get_sha1_of_restorable(a1, VOL, gid1)
@@ -975,10 +975,10 @@ def test_e9():
     stop_repeater(p0)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
-    gid = walbc.snapshot_async(s0, VOL)
+    gid = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid, 20, 'test_e9')
     start_repeater(p0)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     restore_and_verify_sha1('test_e9', md0, a0, VOL, gid)
 
     exit_repeater_test(rL)
@@ -996,7 +996,7 @@ def test_e10():
     stop_repeater(p0)
     write_over_wldev(wdev0, overflow=True)
     try:
-        walbc.snapshot_async(s0, VOL)
+        walbc.snapshot_nbk(s0, VOL)
         raise Exception('test_e10:expect wlog overflow')
     except:
         print 'test_e10:wlog overflow ok'
@@ -1029,7 +1029,7 @@ def test_e11():
         stop_repeater(a0)
         time.sleep(0.5)
 
-    gid = walbc.snapshot_async(s0, VOL)
+    gid = walbc.snapshot_nbk(s0, VOL)
     a0x = get_original_server(a0)
     walbc.verify_not_restorable(a0x, VOL, gid, 10, 'test_e11')
     start_repeater(a0)
@@ -1065,7 +1065,7 @@ def test_e12():
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     print 'test_e12:full_backup'
-    gid = walbc.full_backup(s0, VOL, sync=False)
+    gid = walbc.full_backup(s0, VOL, block=False)
     print 'test_e12:wait 3sec'
     time.sleep(3)
     stop_repeater(a0)
@@ -1103,7 +1103,7 @@ def test_e13():
 
     md0 = get_sha1(wdev0.path)
     print 'test_e13:hash_backup'
-    gid = walbc.hash_backup(s0, VOL, sync=False)
+    gid = walbc.hash_backup(s0, VOL, block=False)
     print 'test_e13:wait 1sec'
     time.sleep(1)
     list1 = walbc.get_restorable(a0, VOL, opt='all')
@@ -1141,7 +1141,7 @@ def test_e14():
     elif st == aClear:
         walbc.run_ctl(a1, ['init-vol', VOL])
 
-    gid = walbc.replicate_async(a0, VOL, a1)
+    gid = walbc.replicate_once_nbk(a0, VOL, a1)
     print 'test_e14:wait 3sec'
     time.sleep(3)
     stop_repeater(a1)
@@ -1150,7 +1150,7 @@ def test_e14():
     a1x = get_original_server(a1)
     walbc._wait_for_state_change(a1x, VOL, aDuringReplicate, aSyncReady, timeoutS)
     start_repeater(a1)
-    gid = walbc.replicate_sync(a0, VOL, a1)
+    gid = walbc.replicate_once(a0, VOL, a1)
 
     md0 = get_sha1_of_restorable(a0, VOL, gid)
     md1 = get_sha1_of_restorable(a1, VOL, gid)
@@ -1167,19 +1167,19 @@ def test_e15():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e15:network down and recover hash-repl', g_count
     # prepare for hash-repl.
-    walbc.replicate_sync(a0, VOL, a1)
+    walbc.replicate_once(a0, VOL, a1)
     write_random(wdev0.path, 1)
-    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid0 = walbc.snapshot(s0, VOL, [a0])
     walbc.apply_diff(a0, VOL, gid0)
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
-    gid1 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid1 = walbc.snapshot(s0, VOL, [a0])
 
     sizeMb = wdev0.get_size_mb()
     rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
     print 'test_e15:rateMbps', rateMbps
     rL = [a1]
     init_repeater_test(sLayoutRepeater2, rL, rateMbps=rateMbps)
-    walbc.replicate_async(a0, VOL, a1)
+    walbc.replicate_once_nbk(a0, VOL, a1)
     print 'test_e15:wait 3sec'
     time.sleep(3)
     stop_repeater(a1)
@@ -1188,7 +1188,7 @@ def test_e15():
     a1x = get_original_server(a1)
     walbc._wait_for_state_change(a1x, VOL, aDuringReplicate, aArchived, timeoutS)
     start_repeater(a1)
-    gid2 = walbc.replicate_sync(a0, VOL, a1)
+    gid2 = walbc.replicate_once(a0, VOL, a1)
     if gid1 != gid2:
         raise Exception('test_e15: gid1 differs gid2', gid1, gid2)
 
@@ -1208,14 +1208,14 @@ def test_e16():
         'test_e16:network down and recover diff-repl', g_count
 
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
-    gid0 = walbc.snapshot_sync(s0, VOL, [a0])
+    gid0 = walbc.snapshot(s0, VOL, [a0])
 
     sizeMb = wdev0.get_size_mb()
     rateMbps = sizeMb * 8 / 10  # to complete full transfer in 10 sec.
     print 'test_e16:rateMbps', rateMbps
     rL = [a1]
     init_repeater_test(sLayoutRepeater2, rL, rateMbps=rateMbps)
-    walbc.replicate_async(a0, VOL, a1)
+    walbc.replicate_once_nbk(a0, VOL, a1)
     print 'test_e16:wait 3sec'
     time.sleep(3)
     stop_repeater(a1)
@@ -1227,7 +1227,7 @@ def test_e16():
     if gid0 == gid1:
         raise Exception('test_e16: must not be equal', gid0, gid1)
     start_repeater(a1)
-    gid2 = walbc.replicate_sync(a0, VOL, a1)
+    gid2 = walbc.replicate_once(a0, VOL, a1)
     if gid0 != gid2:
         raise Exception('test_e16: must be equal', gid0, gid2)
 
@@ -1372,7 +1372,7 @@ def replace_proxy(pDel, pAdd, volL, newServerLayout):
     startup(pAdd)
     for vol in volL:
         walbc.copy_archive_info(pDel, vol, pAdd)
-        walbc.stop_async(pDel, vol, 'empty')
+        walbc.stop_nbk(pDel, vol, 'empty')
     for vol in volL:
         walbc.wait_for_stopped(pDel, vol)
         walbc.clear_vol(pDel, vol)
@@ -1393,7 +1393,7 @@ def test_r2():
     sLayout2 = sLayout.replace(proxyL=[p2, p1])
     replace_proxy(p0, p2, [VOL], sLayout2)
     write_random(wdev0.path, 1)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r2:0', md0, md1)
@@ -1401,7 +1401,7 @@ def test_r2():
     # turn back to the beginning state.
     replace_proxy(p2, p0, [VOL], sLayout)
     write_random(wdev0.path, 1)
-    gid = walbc.snapshot_sync(s0, VOL, [a0])
+    gid = walbc.snapshot(s0, VOL, [a0])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r2:1', md0, md1)
@@ -1426,7 +1426,7 @@ def replace_archive(aDel, aAdd, volL, newServerLayout):
         startup(sx)
 
 
-def test_replace_archive_sync(ax, ay, newServerLayout):
+def test_replace_archive_synchronizing(ax, ay, newServerLayout):
     '''
     Replace ax by ay.
     ax :: Server        - must be synchronizing.
@@ -1434,31 +1434,31 @@ def test_replace_archive_sync(ax, ay, newServerLayout):
     newServerLayout :: ServerLayout
     '''
     if not walbc.is_synchronizing(ax, VOL):
-        raise Exception('test_replace_archive_sync: not synchronizing', ax, ay)
+        raise Exception('test_replace_archive_synchronizing: not synchronizing', ax, ay)
     replace_archive(ax, ay, [VOL], newServerLayout)
     write_random(wdev0.path, 1)
-    gid = walbc.snapshot_sync(s0, VOL, [ay])
+    gid = walbc.snapshot(s0, VOL, [ay])
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(ay, VOL, gid)
-    print 'test_replace_archive_sync', ax, ay
-    verify_equal_sha1('test_replace_archive_sync:', md0, md1)
+    print 'test_replace_archive_synchronizing', ax, ay
+    verify_equal_sha1('test_replace_archive_synchronizing:', md0, md1)
 
 
-def test_replace_archive_nosync(ax, ay, newServerLayout):
+def test_replace_archive_nosynchronizing(ax, ay, newServerLayout):
     '''
     replace ax by ay.
     ax must not be synchronizing.
     ay must not be started.
     '''
     if walbc.is_synchronizing(ax, VOL):
-        raise Exception('test_replace_archive_nosync: synchronizing', ax, ay)
+        raise Exception('test_replace_archive_nosynchronizing: synchronizing', ax, ay)
     md0 = get_sha1_of_restorable(
         ax, VOL, walbc.get_latest_clean_snapshot(ax, VOL))
     replace_archive(ax, ay, [VOL], newServerLayout)
     write_random(wdev0.path, 1)
     gid = walbc.get_latest_clean_snapshot(ay, VOL)
     md1 = get_sha1_of_restorable(ay, VOL, gid)
-    verify_equal_sha1('test_replace_archive_nosync', md0, md1)
+    verify_equal_sha1('test_replace_archive_nosynchronizing', md0, md1)
 
 
 def test_r3():
@@ -1468,8 +1468,8 @@ def test_r3():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_r3:replace-primary-archive', g_count
     sLayout2 = sLayout.replace(archiveL=[a2, a1])
-    test_replace_archive_sync(a0, a2, sLayout2)
-    test_replace_archive_sync(a2, a0, sLayout)
+    test_replace_archive_synchronizing(a0, a2, sLayout2)
+    test_replace_archive_synchronizing(a2, a0, sLayout)
     print 'test_r3:succeeded'
 
 
@@ -1486,8 +1486,8 @@ def test_r4():
     walbc.replicate(a0, VOL, a1, False)  # preparation
 
     sLayout2 = sLayout.replace(archiveL=[a0, a2])
-    test_replace_archive_nosync(a1, a2, sLayout2)
-    test_replace_archive_nosync(a2, a1, sLayout)
+    test_replace_archive_nosynchronizing(a1, a2, sLayout2)
+    test_replace_archive_nosynchronizing(a2, a1, sLayout)
     print 'test_r4:succeeded'
 
 

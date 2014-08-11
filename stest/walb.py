@@ -921,7 +921,7 @@ class Controller:
         verify_type(mode, str)
         self._verify_shutdown_mode(mode, 'shutdown')
         self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)  # shutdown is asynchronous command.
+        time.sleep(1)  # shutdown is nonblocking command.
 
     def shutdown_list(self, sL, mode='graceful'):
         '''
@@ -931,7 +931,7 @@ class Controller:
         self._verify_shutdown_mode(mode, 'shutdown_list')
         for s in sL:
             self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)  # shutdown is asynchronous command.
+        time.sleep(1)  # shutdown is nonblocking command.
 
     def shutdown_all(self, mode='graceful'):
         '''
@@ -1066,10 +1066,10 @@ class Controller:
             goalSt = aStopped
         self._wait_for_state_change(s, vol, tmpStL, [goalSt], TIMEOUT_SEC)
 
-    def stop_async(self, s, vol, mode='graceful'):
+    def stop_nbk(self, s, vol, mode='graceful'):
         '''
         Stop a volume at a server.
-        This is asynchrnous command. See stop().
+        This is nonblocking command. See stop().
         s :: Server
         vol :: str
         mode :: str - 'graceful' or 'force' or 'empty'.
@@ -1088,7 +1088,7 @@ class Controller:
         '''
         Stop a volume at a server and wait for it stopped.
         '''
-        prevSt = self.stop_async(s, vol, mode)
+        prevSt = self.stop_nbk(s, vol, mode)
         self.wait_for_stopped(s, vol, prevSt)
 
     def start(self, s, vol):
@@ -1287,11 +1287,11 @@ class Controller:
         if e:
             raise Exception(msg, 'gid must not be restorable', gid)
 
-    def replicate_async(self, aSrc, vol, aDst):
+    def replicate_once_nbk(self, aSrc, vol, aDst):
         '''
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
-        Use wait_for_replicated() or replicate_sync() to wait for it.
+        Use wait_for_replicated() or replicate_once() to wait for it.
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
@@ -1318,7 +1318,7 @@ class Controller:
         raise Exception("wait_for_replicated:replicate failed",
                         ax.name, vol, gid, gidL)
 
-    def replicate_sync(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
+    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
@@ -1327,7 +1327,7 @@ class Controller:
         aDst :: Server - destination archive (as a server).
         return :: int  - replicated gid.
         '''
-        gid = self.replicate_async(aSrc, vol, aDst)
+        gid = self.replicate_once_nbk(aSrc, vol, aDst)
         self.wait_for_replicated(aDst, vol, gid, timeoutS)
         return gid
 
@@ -1356,13 +1356,13 @@ class Controller:
                 self.run_ctl(px, ["archive-info", "add", vol,
                                   aDst.name, aDst.get_host_port()])
 
-        self.replicate_sync(aSrc, vol, aDst, timeoutS)
+        self.replicate_once(aSrc, vol, aDst, timeoutS)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
         self.kick_all_storage()
 
-    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, sync=True):
+    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
         '''
         Run full backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1371,18 +1371,18 @@ class Controller:
         vol :: str      - volume name.
         timeoutS :: int - timeout [sec].
                           Counter will start after dirty full backup done.
-        sync :: Bool    - sync if True
+        block :: Bool   - blocking behavior.
         return :: int   - generation id of a clean snapshot.
         '''
         verify_type(sx, Server)
         verify_type(vol, str)
         verify_type(timeoutS, int)
-        verify_type(sync, bool)
+        verify_type(block, bool)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
         self.run_ctl(sx, ["full-bkp", vol])
-        if not sync:
+        if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringFullSync,
                                     [sMaster], timeoutS)
@@ -1398,7 +1398,7 @@ class Controller:
             time.sleep(0.3)
         raise Exception('full_backup:timeout', sx, vol, gids)
 
-    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, sync=True):
+    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
         '''
         Run hash backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1409,13 +1409,13 @@ class Controller:
         vol :: str      - volume name.
         timeoutS :: int - timeout [sec].
                           Counter will start after dirty hash backup done.
-        sync :: bool    - sync if True
+        block :: bool   - blocking behavior.
         return :: int   - generation id of a clean snapshot.
         '''
         verify_type(sx, Server)
         verify_type(vol, str)
         verify_type(timeoutS, int)
-        verify_type(sync, bool)
+        verify_type(block, bool)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
@@ -1425,7 +1425,7 @@ class Controller:
         else:
             max_gid = -1
         self.run_ctl(sx, ["hash-bkp", vol])
-        if not sync:
+        if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringHashSync,
                                     [sMaster], timeoutS)
@@ -1498,9 +1498,9 @@ class Controller:
             raise Exception('del-restored: exceeds max retry times')
         self._wait_for_not_restored(ax, vol, gid)
 
-    def snapshot_async(self, sx, vol):
+    def snapshot_nbk(self, sx, vol):
         '''
-        Take a snaphsot.
+        Take a snaphsot. This is nonblocking.
         sx :: Server  - storage server.
         vol :: str    - volume name.
         return :: int - gid of the taken snapshot.
@@ -1510,16 +1510,16 @@ class Controller:
         gid = self.run_ctl(sx, ['snapshot', vol])
         return int(gid)
 
-    def snapshot_sync(self, sx, vol, axL):
+    def snapshot(self, sx, vol, axL):
         '''
-        Take a snaphsot and wait for it to be restorable in archive servers.
+        Take a snapshot and wait for it to be restorable in archive servers.
         sx :: Server    - storage server.
         vol :: str      - volume name.
         axL :: [Server] - archive server list.
         return :: int   - gid of the taken snapshot.
         '''
         verify_type(axL, list, Server)
-        gid = self.snapshot_async(sx, vol)
+        gid = self.snapshot_nbk(sx, vol)
         for ax in axL:
             self.wait_for_restorable(ax, vol, gid)
         return gid
@@ -1569,7 +1569,7 @@ class Controller:
         if st == aClear:
             self.run_ctl(aDst, ["init-vol", vol])
 
-        self.replicate_sync(aSrc, vol, aDst, timeoutS)
+        self.replicate_once(aSrc, vol, aDst, timeoutS)
         if synchronizing:
             self.synchronize(aSrc, vol, aDst)
 
