@@ -290,6 +290,33 @@ def cleanup(vol, wdevL):
         recreate_walb_dev(wdev)
 
 
+def get_sha1(bdevPath):
+    '''
+    Get sha1sum of a block device by full scan.
+    bdevPath :: str - block device path.
+    return :: str  - sha1sum string.
+    '''
+    verify_type(bdevPath, str)
+    ret = run_local_command(['/usr/bin/sha1sum', bdevPath])
+    return ret.split(' ')[0]
+
+
+def verify_equal_sha1(msg, md0, md1):
+    '''
+    Verify two sha1sum equals.
+    msg :: str - message for error.
+    md0 :: str - sha1sum
+    md1 :: str - sha1sum
+    '''
+    verify_type(msg, str)
+    verify_type(md0, str)
+    verify_type(md1, str)
+    if md0 == md1:
+        print msg + ' ok :', md0
+    else:
+        raise Exception('fail ' + msg, md0, md1)
+
+
 def get_sha1_of_restorable(ax, vol, gid):
     '''
     Get sha1sum of restorable snapshot.
