@@ -23,6 +23,18 @@ const uint32_t DEFAULT_NUM_IO_BULK = 1024;
 
 std::string generateUsage();
 
+struct CommonParam {
+    bool verbose;
+    bool isDebug;
+    struct walb_start_param sParam;
+} g_cp;
+
+struct CommandBase {
+    std::string name;
+    virtual void setup(cybozu::Option&) {}
+    virtual int run() { return 0; }
+};
+
 template <typename T>
 struct Opt
 {
@@ -698,28 +710,44 @@ std::string generateUsage()
     return ss.str();
 }
 
-struct CommandBase {
-    std::string name;
-    virtual void setup(cybozu::Option&) {}
-    virtual void run() {}
-};
-
 CommandBase g_cmdTbl[] = {
 };
 
-class Option2 {
+class Dispatcher {
     cybozu::Option opt1;
     cybozu::Option opt2;
     int cmdPos;
     bool parse1(int argc, char *argv[])
     {
-        opt1.appendBoolOpt(&verbose, "v", " :verbose");
-        opt1.appendBoolOpt(&isDebug, "d", " :debug option");
         for (const CommandBase& c : g_cmdTbl) {
             opt1.appendDelimiter(c.name);
         }
+/*
+	// to createWdev
+        const struct Uint32Opt {
+            uint32_t *ptr;
+            uint32_t defaultVal;
+            const char *opt;
+            const char *doc;
+        } uint32OptTbl[] = {
+            { &g_cp.sParam.max_logpack_kb, DEFAULT_MAX_LOGPACK_KB, "maxl", "SIZE : max logpack size [KiB]" },
+            { &g_cp.sParam.max_pending_mb, DEFAULT_MAX_PENDING_MB, "maxp", "SIZE : max pending size [MiB]" },
+            { &g_cp.sParam.min_pending_mb, DEFAULT_MIN_PENDING_MB, "minp", "SIZE : min pending size [MiB]" },
+            { &g_cp.sParam.queue_stop_timeout_ms, DEFAULT_QUEUE_STOP_TIMEOUT_MS, "qp", "PERIOD : queue stopping period [ms]" },
+            { &g_cp.sParam.log_flush_interval_mb, DEFAULT_FLUSH_INTERVAL_MB, "fs", "SIZE : flush interval size [MiB]" },
+            { &g_cp.sParam.log_flush_interval_ms, DEFAULT_FLUSH_INTERVAL_MS, "fp", "PERIOD : flush interval period [ms]" },
+            { &g_cp.sParam.n_pack_bulk, DEFAULT_NUM_PACK_BULK, "bp", "SIZE : number of packs in bulk" },
+            { &g_cp.sParam.n_io_bulk, DEFAULT_NUM_IO_BULK, "bi", "SIZE : numer of IOs in bulk" },
+        };
+        for (const Uint32Opt& p : uint32OptTbl) {
+            opt1.appendOpt(p.ptr, p.defaultVal, p.opt, p.doc);
+        }
+*/
+
+        opt1.setDescription("walb device controller.");
+        opt1.setUsage("wdevc [opt] cmd", true); // generateUsage()
+        opt1.appendBoolOpt(&g_cp.isDebug, "debug", "debug option");
         opt1.appendHelp("h");
-        opt1.setUsage("wdevc [opt] cmd", true);
         if (!opt1.parse(argc, argv)) return false;
         cmdPos = opt1.getNextPositionOfDelimiter();
         if (cmdPos == 0) return false;
@@ -734,46 +762,40 @@ class Option2 {
         return false;
     }
 public:
-    // common options
-    bool verbose;
-    bool isDebug;
-
-    // other options
-
-    Option2(int argc, char *argv[])
+    int run(int argc, char *argv[])
     {
-        if (!parse1(argc, argv)) {
+        const int cmdPos = parse1(argc, argv);
+        if (cmdPos == 0) {
             opt1.usage();
-            return;
+            return 1;
         }
         if (!opt2.parse(argc, argv, cmdPos)) {
             opt2.usage();
-            return;
+            return 1;
         }
-        if (verbose) {
-            puts("common options");
-            opt1.put();
-            printf("options for %s\n", argv[cmdPos - 1]);
-            opt2.put();
+        CommandBase& c = g_cmdTbl[cmdPos];
+        if (g_cp.isDebug) {
+			std::cerr << "common options" << std::endl;
+            std::cerr << opt1 << std::endl;
+            std::cerr << "options for " << c.name << std::endl;
+            std::cerr << opt2;
         }
-    }
-    void run()
-    {
+        walb::util::setLogSetting("-", g_cp.isDebug);
+        return c.run();
     }
 };
 
 int doMain(int argc, char* argv[])
 {
 #if 1
-    Option2 opt(argc, argv);
-    walb::util::setLogSetting("-", opt.isDebug);
-    opt.run();
+    Dispatcher disp;
+    return disp.run(argc, argv);
 #else
     Option opt(argc, argv);
     walb::util::setLogSetting("-", opt.isDebug);
     dispatch(opt);
-#endif
     return 0;
+#endif
 }
 
 DEFINE_ERROR_SAFE_MAIN("wdevc")
