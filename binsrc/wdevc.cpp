@@ -487,28 +487,28 @@ struct CommandInfo {
     CommandBase *cmd;
     const char *help;
 } g_cmdTbl[] = {
-    { "format-ldev", &g_formatLdev, "" },
-    { "create-wdev", &g_createWdev, "" },
-    { "delete-wdev", &g_deleteWdev, "" },
-    { "list", &g_listWdev, "" },
-    { "set-checkpoint-interval", &g_setCheckpointInterval, "" },
-    { "get-checkpoint-interval", &g_getCheckpointInterval, "" },
-    { "force-checkpoint", &g_forceCheckpoint, "" },
-    { "set-oldest-lsid", &g_setOldestLsid, "" },
-    { "get-written-lsid", &g_getWrittenLsid, "" },
-    { "get-permanent-lsid", &g_getPermanentLsid, "" },
-    { "get-completed-lsid", &g_getCompletedLsid, "" },
-    { "get-log-usage", &g_getLogUsage, "" },
-    { "get-log-capacity", &g_getLogCapacity, "" },
-    { "is-flush-capable", &g_isFlushCapable, "" },
-    { "resize", &g_resize, "" },
-    { "is-log-overflow", &g_isLogOverflow, "" },
-    { "reset-wal", &g_resetWal, "" },
-    { "clear-wal", &g_clearWal, "" },
-    { "freeze", &g_freeze, "" },
-    { "is-flozen", &g_isFrozen, "" },
-    { "melt", &g_melt, "" },
-    { "get-version", &g_getVersion, "" },
+    { "format-ldev", &g_formatLdev, "Format a log device." },
+    { "create-wdev", &g_createWdev, "Create a walb device." },
+    { "delete-wdev", &g_deleteWdev, "Delete a walb device." },
+    { "list", &g_listWdev, "List all walb device in the system." },
+    { "set-checkpoint-interval", &g_setCheckpointInterval, "Set checkpoint interval." },
+    { "get-checkpoint-interval", &g_getCheckpointInterval, "Get checkpoint interval." },
+    { "force-checkpoint", &g_forceCheckpoint, "Execute checkpointing immediately." },
+    { "set-oldest-lsid", &g_setOldestLsid, "Set oldest lsid (to clear wlogs)" },
+    { "get-written-lsid", &g_getWrittenLsid, "Get written lsid." },
+    { "get-permanent-lsid", &g_getPermanentLsid, "Get permanent lsid." },
+    { "get-completed-lsid", &g_getCompletedLsid, "Get complete lsid." },
+    { "get-log-usage", &g_getLogUsage, "Get log usage [physical block]." },
+    { "get-log-capacity", &g_getLogCapacity, "Get log capacity [physical block]." },
+    { "is-flush-capable", &g_isFlushCapable, "Check flush request capability." },
+    { "resize", &g_resize, "Resize a walb device (only growing is supported)." },
+    { "is-log-overflow", &g_isLogOverflow, "Check log overflow." },
+    { "reset-wal", &g_resetWal, "Reset log device to recover from wlog overflow." },
+    { "clear-wal", &g_clearWal, "Clear all wlogs." },
+    { "freeze", &g_freeze, "Freeze temporarily a walb device." },
+    { "is-flozen", &g_isFrozen, "Check a walb device is frozen or not." },
+    { "melt", &g_melt, "Melt a freezed walb device." },
+    { "get-version", &g_getVersion, "Get version of the walb kernel device driver." },
 };
 
 CommandInfo* getCommand(const std::string& cmd)
@@ -519,28 +519,43 @@ CommandInfo* getCommand(const std::string& cmd)
     return nullptr;
 }
 
+void addSpaces(std::string& s, size_t n)
+{
+    s.resize(s.size() + n, ' ');
+}
+
 class Dispatcher {
     cybozu::Option opt1;
     cybozu::Option opt2;
     bool isDebug;
     CommandInfo *ci;
-    int parse1(int argc, char *argv[])
-    {
-        std::string cmdList =
-            "wdevc [opt] cmd-name\n"
-            "cmd-name\n";
+    void setup1stOption() {
+        opt1.setDescription("walb device controller.\n");
+        std::string usage =
+            "usage: wdevc [<opt>] <command> [<args>] [<opt>]\n\n"
+            "Command list:\n";
+        size_t maxLen = 0;
+        for (const CommandInfo& ci : g_cmdTbl) {
+            maxLen = std::max(maxLen, ::strlen(ci.cmdName));
+        }
         for (const CommandInfo& ci : g_cmdTbl) {
             opt1.appendDelimiter(ci.cmdName);
-            cmdList += "   ";
-            cmdList += ci.cmdName;
-            cmdList += " : ";
-            cmdList += ci.help;
-            cmdList += "\n";
+            usage += "  ";
+            usage += ci.cmdName;
+            addSpaces(usage, maxLen - ::strlen(ci.cmdName) + 1);
+            usage += ci.help;
+            usage += "\n";
         }
-        opt1.setDescription("walb device controller.");
-        opt1.setUsage(cmdList);
-        opt1.appendBoolOpt(&isDebug, "debug", "debug option");
+        opt1.appendBoolOpt(&isDebug, "debug");
         opt1.appendHelp("h");
+        usage += "\n""Option list:\n";
+        usage += "  -debug  show debug messages to stderr.\n";
+        usage += "  -h      show this help.\n\n";
+        usage += "See wdevc <command> -h for more information on a specific command.";
+        opt1.setUsage(usage);
+    }
+    int parse1(int argc, char *argv[]) {
+        setup1stOption();
         if (!opt1.parse(argc, argv)) return 0;
         const int cmdPos = opt1.getNextPositionOfDelimiter();
         if (cmdPos == 0) return 0;
