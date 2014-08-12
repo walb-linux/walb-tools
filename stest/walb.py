@@ -95,11 +95,16 @@ def run_daemon(args):
         os._exit(1)
 
     # grandchild
-    sys.stdin = open('/dev/null', 'r')
-    sys.stdout = open('/dev/null', 'w')
-    sys.stderr = open('/dev/null', 'w')
+    sys.stdout.flush()
+    sys.stderr.flush()
+    stdin = open('/dev/null', 'r')
+    stdout = open('/dev/null', 'a+')
+    stderr = open('/dev/null', 'a+')
+    os.dup2(stdin.fileno(), sys.stdin.fileno())
+    os.dup2(stdout.fileno(), sys.stdout.fileno())
+    os.dup2(stderr.fileno(), sys.stderr.fileno())
 
-    subprocess.Popen(args, close_fds=True).wait()
+    subprocess.Popen(args, close_fds=True)  # no need to wait for the subprocess.
     os._exit(0)
 
 
