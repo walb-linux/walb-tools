@@ -111,6 +111,9 @@ stest: pylint
 stest100: pylint
 	python stest/scenario0.py 100
 
+archive:
+	git archive --format=tar HEAD > walb-tools.tgz
+
 ifneq "$(MAKECMDGOALS)" "clean"
 -include $(DEPENDS)
 endif
