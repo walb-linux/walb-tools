@@ -337,10 +337,10 @@ struct GetLsid : CommandBase {
   g_getCompletedLsid(WALB_IOCTL_GET_COMPLETED_LSID);
 
 template<class R>
-struct GetWdev : CommandBase {
+struct GetWdevVal : CommandBase {
     std::string wdev;
     R (*f_)(const std::string&);
-    explicit GetWdev(R (*f)(const std::string&)) : f_(f) {}
+    explicit GetWdevVal(R (*f)(const std::string&)) : f_(f) {}
     void setup(cybozu::Option& opt) override {
         appendParamWdev(opt, wdev);
     }
@@ -350,17 +350,17 @@ struct GetWdev : CommandBase {
     }
 };
 
-GetWdev<uint64_t> g_getLogUsage(&device::getLogUsagePb);
-GetWdev<uint64_t> g_getLogCapacity(&device::getLogCapacityPb);
-GetWdev<bool> g_isFlushCapable(&device::isFlushCapable);
-GetWdev<bool> g_isLogOverflow(&device::isOverflow);
+GetWdevVal<uint64_t> g_getLogUsage(&device::getLogUsagePb);
+GetWdevVal<uint64_t> g_getLogCapacity(&device::getLogCapacityPb);
+GetWdevVal<bool> g_isFlushCapable(&device::isFlushCapable);
+GetWdevVal<bool> g_isLogOverflow(&device::isOverflow);
 
 bool isFrozenByIoctl(const std::string& wdev)
 {
     return device::getValueByIoctl<int>(wdev, WALB_IOCTL_IS_FROZEN);
 }
 
-GetWdev<bool> g_isFrozen(&isFrozenByIoctl);
+GetWdevVal<bool> g_isFrozen(&isFrozenByIoctl);
 
 struct Resize : CommandBase {
     std::string wdev;
