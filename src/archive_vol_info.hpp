@@ -197,7 +197,7 @@ public:
         }
 
         const uint64_t sizeLb = getLv().sizeLb();
-        v.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+        v.push_back(fmt("sizeLb %" PRIu64, sizeLb));
         const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         v.push_back(fmt("size %s", sizeS.c_str()));
         const cybozu::Uuid uuid = getUuid();

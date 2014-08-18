@@ -320,7 +320,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
 
     ret.push_back(fmt("volume %s", volId.c_str()));
     ret.push_back(fmt("state %s", state.c_str()));
-    ret.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+    ret.push_back(fmt("sizeLb %" PRIu64, sizeLb));
     ret.push_back(fmt("size %s", sizeS.c_str()));
     ret.push_back(fmt("numDiff %zu", numDiff));
     ret.push_back(fmt("totalSize %s", totalSizeStr.c_str()));
@@ -357,7 +357,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
         ret.push_back(fmt("  totalSize %s", totalSizeStr.c_str()));
         uint64_t sendDelay = 0;
         if (!diffV.empty()) sendDelay = ::time(0) - minTs;
-        ret.push_back(fmt("  wdiffSendDelayMeasured %" PRIu64 "", sendDelay));
+        ret.push_back(fmt("  wdiffSendDelayMeasured %" PRIu64, sendDelay));
         for (std::string &s : wdiffStrV) ret.push_back(std::move(s));
 
         i++;

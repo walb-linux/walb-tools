@@ -96,20 +96,20 @@ public:
         auto &fmt = cybozu::util::formatString;
         v.push_back(fmt("wdevPath %s", wdevPathStr.c_str()));
         const uint64_t sizeLb = device::getSizeLb(wdevPathStr);
-        v.push_back(fmt("sizeLb %" PRIu64 "", sizeLb));
+        v.push_back(fmt("sizeLb %" PRIu64, sizeLb));
         const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         v.push_back(fmt("size %s", sizeS.c_str()));
         uint64_t logUsagePb = device::getLogUsagePb(wdevPathStr);
-        v.push_back(fmt("logUsagePb %" PRIu64 "", logUsagePb));
+        v.push_back(fmt("logUsagePb %" PRIu64, logUsagePb));
         uint64_t logCapacityPb = device::getLogCapacityPb(wdevPathStr);
-        v.push_back(fmt("logCapacityPb %" PRIu64 "", logCapacityPb));
+        v.push_back(fmt("logCapacityPb %" PRIu64, logCapacityPb));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
         const uint32_t pbs = getPbs();
-        v.push_back(fmt("pbs %" PRIu32 "", pbs));
+        v.push_back(fmt("pbs %" PRIu32, pbs));
         device::SuperBlock super = getSuperBlock();
         const uint32_t salt = super.getLogChecksumSalt();
-        v.push_back(fmt("salt %" PRIx32 "", salt));
+        v.push_back(fmt("salt %" PRIx32, salt));
 
         if (!isVerbose) return v;
 
