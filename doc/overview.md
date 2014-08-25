@@ -6,7 +6,7 @@ Backup and replication software for walb devices.
 WalB kernel device driver is available here:
 [walb repository on GitHub](https://github.com/starpos/walb/)
 
-Walb-tools mainly consists of three daemons storage/proxy/archive and
+Walb-tools mainly consists of three servers storage/proxy/archive and
 their controller walbc, and walb device controller wdevc.
 
 ## Executables
@@ -19,23 +19,24 @@ their controller walbc, and walb device controller wdevc.
   - **walb-archive**: manage backup data and replicate them to another archive host.
 
 There are also many undocumented executables in `binsrc/`.
-They are mainly for test and debug.
+They are used mainly for test and debug.
 
 ## Functionalities
 
 - Backup and asynchronous replication of walb devices.
-- Proxies are available that stores wlogs temporarily
-  so that each walb storage need not allocate a large log space.
-- Archive data are managed by lvm volumes and snapshots.
+- Utilization of log spaces of walb devices using proxies.
+- Archive data management with lvm volumes and snapshots.
 - Diff data consolidation and compression.
   - automatically remove the logical overlapped IOs.
   - automatically compress/uncompress the diff data.
 
-## Archivectre
+## Architecture
 
-- Flexible settings
-  - Backup/replication only or both.
-  - Single backup host for simplicity or multiple hosts for availability.
+Several server layouts are available for several purposes for:
+
+- data availability.
+- system availability.
+- operations of both backup and remote repication together.
 
 ## Protocols
 

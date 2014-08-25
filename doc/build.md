@@ -12,12 +12,12 @@ Walb-tools may work in another posix architecture,
 but we do not confirm it.
 In addition, walb kernel device driver and walb-tools
 assume the same integer endian.
-Do not use heterogeneous environment.
+Do not use heterogeneous environments.
 
 ## Required tools and libraries
 
 - C++11 compiler and linker.
-  - g++-4.8, 4.9 or clang++ 3.4 with `-std=c++11` option.
+  - g++-4.8, 4.9 and clang++ 3.4 are available.
 - binutils and make.
 - Libraries
   - libaio
@@ -53,6 +53,8 @@ You can specify make options.
 | STATIC=1    | static build |
 
 You can specify make target like `build`/`clean`/`rebuild`.
+
+See `Makefile` for details.
 
 ## Install
 
