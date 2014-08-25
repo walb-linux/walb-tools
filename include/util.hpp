@@ -182,7 +182,7 @@ inline std::string toUnitIntString(uint64_t val)
     if (0 < i && i < sizeof(units)) {
         return formatString("%" PRIu64 "%c", val, units[i]);
     } else {
-        return formatString("%" PRIu64 "", val);
+        return formatString("%" PRIu64, val);
     }
 }
 
