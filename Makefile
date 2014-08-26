@@ -100,7 +100,7 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 
-PYTHON_SOURCES = stest/walb.py stest/repeater.py stest/scenario0.py
+PYTHON_SOURCES = python/walb/walb.py stest/repeater.py stest/scenario0.py
 
 pylint:
 	pylint -E --rcfile=/dev/null -f colorized $(PYTHON_SOURCES)

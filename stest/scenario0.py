@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
+import load_walb
 import os
 import itertools, shutil, threading
 import random
 import datetime
 import tempfile
-from walb import *
+from walb.walb import *
 from repeater import *
 
 isDebug = True

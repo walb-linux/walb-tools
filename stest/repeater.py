@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import os, socket, time
-from walb import *
+from walb.walb import *
 from contextlib import closing
 
 
