@@ -63,4 +63,11 @@ Install executables to a directory as you like.
 > sudo cp -a `make echo_binaries` /usr/local/bin/
 ```
 
+Install python package if necessary:
+```
+> cd walb-tools.git/python
+> sudo python setup.py install
+```
+You can use `walb-tools.git/python/walb/walb.py` directly.
+
 -----
