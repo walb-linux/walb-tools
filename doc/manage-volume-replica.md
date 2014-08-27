@@ -1,8 +1,8 @@
 # Manage volume replicas using walb devices
 
-You may want to manage volume replicas to provide duplicated virtual volume,
+You may want to manage volume replicas to provide a virtual volume with redundancy
 using software RAID1 or so.
-Walt-tools support such situations.
+Walt-tools work well in such situations.
 
 Walb-tools does not provide virtual volume management functionality,
 but provides backup target switching functionality.
@@ -28,12 +28,18 @@ Assume the following server layout:
           +-------+
 ```
 
+In python:
+```python
+sLayout = ServerLayout([s0, s1], [p0], [a0])
+
+```
+
 Assume the following walb devices:
 ```python
 wdev0 = Device(iD0, '/dev/ldev0', '/dev/ddev0', wdevcPath, walbc.get_run_remote_command(s0))
 wdev1 = Device(iD1, '/dev/ldev1', '/dev/ddev1', wdevcPath, walbc.get_run_remote_command(s1))
 ```
-`wdev0` is managed by the host of `s0` and `wdev1` is managed by the host of `s1` respectively.
+`wdev0` and `wdev1` exist in the hosts where `s0` and `s1` running respectively.
 Assume both `wdev0` and `wdev1` are the replicas of a virtual volume.
 Their block device images must be almost the same (except for header blocks or so).
 
@@ -62,14 +68,13 @@ while that of `wdev1` will be discarded.
 
 
 When you want to change the backup target from `s0` to `s1`,
-You can make the replica volume at `s1` primary volume as follows:
-
+You can make the replica of `s0` slave and the one of `s1` master as follows:
 ```
 python> walbc.set_slave_storage(s0, 'vol0')
 python> walbc.hash_backup(s1, 'vol0', timeoutS)
 ```
 Use `walbc.clear_vol()` instead of `walbc.set_slave_storage()`
-when the corresponding walb device is no more available due to failure or so.
+when the corresponding walb device is no more available due to its failure or so.
 
 Confirm the volume state at each storage server:
 ```
@@ -78,7 +83,7 @@ python> walbc.get_state(s0, 'vol0')
 python> walbc.get_state(s1, 'vol0')
 'Master'
 ```
-Now the primary backup target for volume 'vol0' is `s1`.
+Now the backup target for volume 'vol0' is `s1`.
 
 You can use also full backup instead of hash backup,
 while full backup is less efficient than hash backup.

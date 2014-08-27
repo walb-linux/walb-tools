@@ -5,7 +5,7 @@ You can replace a host of a walb backup group.
 
 ## Replace storage host
 
-Assume the following stuffs:
+Assume the following things:
 
 - There are two storage servers `s0` and `s1` at distinct hosts.
 - All the volumes have replicas at both `s0` and `s1`.
@@ -39,7 +39,7 @@ python> for vol in targetVolumes:
 
 ## Replace proxy host
 
-Assume the following stuffs:
+Assume the following things:
 
 - There are two proxy servers `p0` and `p1` at distinct hosts.
 - You want to replace `p0` with `p2`.
@@ -57,7 +57,7 @@ python> for vol in allVolumes:
 python> for vol in allVolumes:
 ...         walbc.stop_nbk(p0, vol, 'empty')
 python> for vol in allVolumes:
-...         walbc.wait_For_stoped(p0, vol)
+...         walbc.wait_for_stoped(p0, vol)
 ...         walbc.clear_vol(p0, vol)
 ```
 - Set new server layout:
@@ -72,7 +72,7 @@ python> walbc.set_server_layout(newServerLayout)
 
 ## Replace archive host (primary archive server)
 
-Assume the following stuffs:
+Assume the following things:
 
 - There are one archive server `a0`.
 - You want to replace `a0` with `a2`.
@@ -105,7 +105,7 @@ python> walbc.set_server_layout(newServerLayout)
 
 ## Replace archive host (secondary archive server)
 
-Assume the following stuffs:
+Assume the following things:
 
 - There are two archive servers `a0`, and `a1`.
 - The primary archive server is `a0`.

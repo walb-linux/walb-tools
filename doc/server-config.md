@@ -1,20 +1,22 @@
 # Server processes configuration
 
-Each server process need a port (`PORT`) to listen TCP/IP connections,
+Each server process requires a port (`PORT`) to listen TCP/IP connections,
 and a directory (`BASE_DIR`) to store metadata and temporary/persistent data.
 Identifier `ID` is optional but useful to identify servers.
 Log output path `LOG_PATH` is also useful.
 
-For storage servers,
-the primary archive server information must be specified.
+Storage servers requires information of the primary archive server.
 Proxy list must be also specified.
-Let `HOST_INFO` be IP address and port concatinated by colon `:` like '192.168.1.1:10000'.
-Let `PRIMARY_ARCHIVE_INFO` be a `HOST_INFO` for the primary archive server.
-Let `PROXY_INFO_LIST` be `HOST_INFO` list separated by comma `,` to specify proxy servers.
+Let `HOST_INFO` formatted string be IP address and port concatinated by colon `:` like `192.168.1.1:10000`.
+Let `PRIMARY_ARCHIVE_INFO` be a `HOST_INFO` string for the primary archive server.
+Let `PROXY_INFO_LIST` be a list of `HOST_INFO` strings separated by comma `,` to specify proxy servers
+like `192.168.1.2:10000,192.168.1.3:10000`.
 
-For archive servers, LVM volume group `VG` is required for each archive.
-The volume group must exists, and servers will create
-logical volumes and snapshots in the volume group.
+Each archive server requires a LVM volume group (`VG`).
+The volume group must exists. Archive servers will create
+logical volumes and snapshots in their volume group.
+
+**TODO**: support dm-thinp.
 
 The following is typical command-line options for each kind of servers:
 ```
@@ -24,20 +26,21 @@ The following is typical command-line options for each kind of servers:
 ```
 
 For detail options, use `-h` option of server executables,
-or see `get_server_args()` function of `stest/walb.py`.
+or see `get_server_args()` function of `python/walb/walb.py`.
 
-You should start server process in order of archives, proxies, and storages.
+You should start server processes in order of archives, proxies, and storages.
 Since proxy servers will connect archive servers in the background,
 storage servers will connect proxy servers in the background.
 
 
 ## Server process configuration example
 
+Assume the minimal layout.
 Let `hostS0`, `hostP0`, `hostA0` be hosts for your backup group,
-all ports of servers be `10000`,
+port number be `10000` for all the servers,
 base directory of servers be `/var/walb/ID`,
 log path of each servers be `/var/walb/ID.log`,
-and LVM volume group for the archive serer be `vg0`.
+and LVM volume group for the primary archive server be `vg0`.
 
 Specify the following commands to start server processes:
 ```
@@ -57,7 +60,7 @@ Each server executables are not daemon.
 If you want to daemonize them, use daemontools, upstart, or so.
 
 
-## Server layout configuration in python
+## Server process configuration in python
 
 This is example setting of a simple backup group with
 a simple server layout and two volumes
@@ -65,6 +68,8 @@ Modify and save it as `walb-config.py`.
 This will be used to control your backup group also.
 
 ```python
+#!/usr/bin/env python
+
 from walb.walb import *
 
 binDir = '/usr/local/bin/'
@@ -103,11 +108,12 @@ python> print ' '.join(get_server_args(a0, sLayout))
 ...
 ```
 
-If you want use more detailed server layout, define additional servers and create a server layout
+If you want to use more detailed server layout, define additional servers and create a server layout.
+For example:
 ```python
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 ```
 Again, former items have high priority in the proxy list (2nd argument), and
-the first item of the archive list (3rd argument) will be primary archive server.
+the first item of the archive list (3rd argument) is primary archive server.
 
 -----

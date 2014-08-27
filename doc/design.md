@@ -17,19 +17,19 @@ in some hosts.
 - A `walb-storage` server process requires walb devices in the same host,
   and a directory to manage metadata.
 - A `walb-proxy` server process requires a directory to store
-  metadata and wdiff files temporarily.
+  metadata and temporary wdiff files.
 - A `walb-archive` server process requires a LVM volume group where
   it manages LVM logical volumes as full archive images of volumes.
   It also requires a directory to store metadata and
-  wdiff files permanently. Of course older snapshots must be useless for you
-  and you can save storage by applying and removing corresponding wdiff files.
+  permanent wdiff files. Of course older snapshots must be useless for you
+  and you can save disk usage by applying and removing their corresponding wdiff files.
 
-You need to determine running what server processes in which hosts.
+You need to determine a server layout, which server process should running at which host.
 We call a set of walb-tools servers with a certain layout **backup group**.
 
 We recommend you to keep number of servers in backup groups as small as possible.
 If you have many hosts/servers and many volumes, you should separate them to
-many backup groups of small number of hosts/servers.
+backup groups each of which has small number of hosts/servers.
 
 
 ## How to control server processes
@@ -39,14 +39,14 @@ and they communicate each other automatically.
 
 It is often required that many commands execution with `walbc` to achieve
 operations that system administrators usually want to do.
-We recommend to use the `walb.py` which is python library/script to
-controll a whole walb system using more conventional APIs.
+We recommend to use `walb.py` that is python library/script to
+controll a backup group using more conventional APIs.
 
 In this document, we do not use `walbc` directly but
-python APIs to control walb systems.
+python APIs to control backup groups.
 
 
-## Duplicates for several purpuses
+## Multiple servers in a backup group
 
 You may require more hosts/servers to achieve the following functionalities:
 - Two storage servers for software RAID1 system using walb devices.
@@ -78,7 +78,7 @@ You may require more hosts/servers to achieve the following functionalities:
 +-----------------+
 ```
 
-This is a minimal layout for walb-tools.
+This is the minimal layout for a backup group.
 `s0` manages storage volumes, `p0` converts wlog data to wdiff data,
 and `a0` manages archive data.
 The host of `s0` and that of `a0` usually differs, while
@@ -116,26 +116,30 @@ The host of `p0` and the host of `a0` may be the same for simple systems.
 
 A backup group must have one primary archive server.
 Assume `a0` is primary archive here.
-All storage servers will connect to primary archive server `a0` and
+All storage servers will connect to the primary archive server `a0`.
 `a0` deals with full/hash backup protocols.
 You can change primary archive server dynamically.
 
-Storages have priorities of proxies.
+Storages have priorities of proxy servers.
 All storage servers will prefer `p0` to `p1` here.
 While `p0` is down, storage servers use `p1` alternatively.
-Two or more proxies reduces overflow risks of log spaces of each walb device.
+After `p0` recovered, they will use `p0` again while `p0` is still available.
+Using two or more proxy servers reduces risk that walb log devices overflow.
 
 A volume can be duplicated in `s0` and `s1`,
-which belong to software RAID1 block devices.
+where its replicas belong to software RAID1 block devices.
 This achieves availability of volumes even if walb-kernel-driver fails.
-It is also useful for replacing storage hosts.
-A volume is managed as master mode in one storage server and as slave mode in another.
+It is also useful to replace storage hosts online.
+A replica is managed as master mode at one storage server and
+another replica as slave mode at another storage server.
 In master mode, generated wlogs will be transferred to archive servers
-through proxy servers. In slave mode, generated wlogs will be just removed.
-Hash backup will be used to switch primary storage for volumes.
+through proxy servers.
+In slave mode, generated wlogs will be just removed.
+We call volume replicas in master mode **backup targets**.
+Hash backup will be used to switch backup target from one replica to another.
 
 Archive data can be also duplicated in `a0` and `a1` using replicate command.
-You can periodically replicate archive data from `a0` to `a1` to track the latest changes.
+You can periodically replicate archive data from `a0` to `a1` to track the latest images of walb devices
 You can also automatically replicate archive data by making `a1` synchronizing mode.
 
 

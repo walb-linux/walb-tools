@@ -1,7 +1,7 @@
 # States and Actions
 
-Each volume has a state.
-Each volume may run several actions concurrently.
+Each volume has a state at each server.
+Each server may run several actions concurrently for a volume.
 
 There are several kinds of tasks to run on a volume.
 Tasks are classified to foreground or background.
@@ -11,22 +11,38 @@ During running a background task on a volume, the corresponding action counter i
 to notify users the task has done or not yet.
 
 There are two kinds of states: static and dynamic.
-A volume is in a dynamic state when a foreground task is running on the volume.
+A volume is in a dynamic state when a foreground task is running on the volume and
+the state indicates type of the task.
 
 
 You can get the state of a volume.
 ```
 > walbc -a HOST -p PORT get state VOLUME
 ```
+
 Specify volume name at `VOLUME`.
 You will get a string from stdout of the command.
+
+In python code:
+```
+python> walbc.get_state(s, 'VOLUME')
+```
+This returns a string.
+
 
 You can get number of actions running on a volume.
 ```
 > walbc -a HOST -p PORT get num-action VOLUME ACTION
 ```
+
 Specify action name at `ACTION`.
 You will get an integer from stdout of the command.
+
+In python code:
+```
+python> num = walbc.get_num_action(s, 'VOLUME', 'ACTION')
+```
+This returns a non-negative integer.
 
 Almost python code will check states/actions using the above command internally,
 so you need not call `walbc` command directly.

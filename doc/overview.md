@@ -1,12 +1,12 @@
-# Walb-tools Overview
+# Overview
 
 ## What are walb-tools?
 
-Backup and replication software for walb devices.
+Walb-tools are backup and replication software for walb devices.
 WalB kernel device driver is available here:
 [walb repository on GitHub](https://github.com/starpos/walb/)
 
-Walb-tools mainly consists of three servers storage/proxy/archive and
+Walb-tools mainly consists of three servers storage/proxy/archive,
 their controller walbc, and walb device controller wdevc.
 
 ## Executables
@@ -27,8 +27,8 @@ They are used mainly for test and debug.
 - Utilization of log spaces of walb devices using proxies.
 - Archive data management with lvm volumes and snapshots.
 - Diff data consolidation and compression.
-  - automatically remove the logical overlapped IOs.
-  - automatically compress/uncompress the diff data.
+  - It automatically removes overlapped IOs.
+  - It automatically compresss/uncompresses diff data.
 
 ## Architecture
 

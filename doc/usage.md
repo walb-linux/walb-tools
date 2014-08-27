@@ -10,7 +10,7 @@ Essential documents to use walb-tools:
 
 Advanced documents:
 
-- [Manage multiple archive server](manage-multiple-archive.md)
+- [Manage multiple archive servers](manage-multiple-archive.md)
 - [Manage volume replicas using walb devices](manage-volume-replica.md)
 - [Recover from errors or failures](recover.md)
 - [Replace hosts](replace.md)

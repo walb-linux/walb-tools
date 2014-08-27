@@ -25,6 +25,8 @@ Command lists:
 - src/proxy.hpp: see proxyHandlerMap and proxyGetHandlerMap.
 - src/archive.hpp: see archiveHandlerMap and archiveGetHandlerMap.
 
+**TODO**: make option parsing and help of walbc better.
+
 ## Protocols
 
 Object serializer.

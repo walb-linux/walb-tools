@@ -2,7 +2,7 @@
 
 Walb-tools supports various recovery functionalities from errors and failures.
 
-Here we assume two servers for storage/proxy/archive respectively.
+Assume we have two servers for storage/proxy/archive respectively.
 ```python
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 ```
@@ -11,8 +11,7 @@ sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 ## Storage server/host down
 
 When a storage host shuts down, just restart the host and new storage server process.
-When a storage server process is killed suddenly,
-first of all, restart new storage server process.
+When a storage server process is killed suddenly, restart new storage server process.
 
 If a storage server process is down for a long time,
 wlogs of its managing walb devices will be accumulated and finally their log devices will overflow.
@@ -31,6 +30,10 @@ If the volume overflows, run hash backup as follows:
 python> walbc.hash_backup(s0, vol, timeoutS)
 ```
 
+After hash backup finished, the volume will be in synchronizing mode automatically
+as with full backup.
+
+
 
 ## Proxy server/host down
 
@@ -44,6 +47,7 @@ This is not necessary but recommended for faster invoking wlog-transfer tasks.
 After all proxy servers are down, wlogs of each walb device can not be discarded
 and free spaces to store wlogs decrease.
 Finally, log devices will overflow.
+
 
 
 ## Archive server/host down
@@ -66,19 +70,21 @@ disk space for proxy serers will be exhaustive.
 Such a situation will cause walb devices overflow.
 
 
+
 ## Data lost at storage server
 
 If data in walb devices have lost, walb-tools can do nothing.
 
-If metadata managed in the volume have lost,
+If metadata for a volume managed by a storage server have lost,
 you can recover the system as follows:
 ```
 python> walbc.init_storage(sx, vol, wdev.path)
 python> walbc.hash_backup(sx, vol)
 ```
-You must execute the above commands for all all the pairs of `vol, `wdev`.
-If replica volumes exists at another storage server,
-hash backup is not required. just call `init_storage()` command.
+You must execute the above commands for all the pairs of `vol`, `wdev`.
+If the volume is not backup target, hash backup is not required and
+just call `init_storage()` command.
+
 
 
 ## Data lost at proxy server
@@ -97,46 +103,52 @@ You must run hash backup for `sx`, `vol` pairs of all the backup targets.
 
 If you are sure that no wdiff has lost for a volume at the proxy server,
 you need not run hash backup for the volume.
-If there exist lost wdiffs, archive servers can not get the wdiffs and
+If there exist lost wdiffs, archive servers can not get the wdiffs forever and
 proxy servers accumulate newly generated wdiffs.
+Hash backup is the only solution to recover from such a situation.
+
+
 
 ## Data lost at archive server
 
-If persistent data like metadata, base lv, or wdiff files have lost
-at an archive server, there are three different cases to recover:
+If persistent data such as metadata, base lv, or wdiff files have lost
+at an archive server, there are three different cases for each volume to recover:
 
 - **case 1**: The archive server is not primary.
-- **case 2**: The archive server is primary and there is sedondary archive server and all the volumes
+- **case 2**: The archive server is primary.
+  In addition, there is sedondary archive server and the volume
   at the secondary server are in synchronizing mode (condition X).
 - **case 3**: The archive server is primary and condition X is not satisfied.
 
+
 ### Case 1
 
-You need do nothing unless you want to replicate volumes again.
+You need do nothing unless you want to replicate the volume again.
+
 
 ### Case 2
 
 Assume the primary archive server is `a0` and the secondary is `a1`.
-Now `a1` has (or will have) all the archive data of `a0`.
-You need to prepare new primary archive server.
-You can make `a1` the new primary archive server as follows:
+In this case, `a1` has (or will have) all the archive data of `a0` without using data of `a0`.
+The recovery procedure is the following:
 
+- You need to prepare new primary archive server.
+- Remove all the archive info of `a0` from all the proxy servers:
 ```
-python> for vol in allVolumes:
-...         walbc.stop_synchronizing(a0, vol)
+python> walbc.stop_synchronizing(a0, vol)
 ```
-Then restart all storage servers
-changing `-archive` command line argument from host info of `a0` to one of `a1`.
+- You can make `a1` the new primary archive server.
+  by restarting all storage servers
+  changing `-archive` command line argument from host info of `a0` to one of `a1`.
 
 
 ### Case 3
 
-Your archive data has lost from the world.
-You need to re-run full backup for all volumes.
-
+Your archive data for the volume has lost from the world.
+You need to setup new `a0` and re-run full backup of the volume:
 ```
-python> for sx, vol in allPairsOfStorageServerAndVolume:
-...         walbc.full_backup(sx, vol, timeoutS)
+python>  walbc.full_backup(sx, vol, timeoutS)
 ```
+You must determine `sx` as backup target for the volume.
 
 -----

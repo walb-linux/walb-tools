@@ -36,7 +36,7 @@ Build walb-tools before.
 See `stest/scenario0.py`.
 
 Prepare to run scenario test.
-- load walb module.
+- load walb kernel driver.
 - build walb-tools.
 - prepare lvm volume groups `vg0`, `vg1`, `vg2`.
 - prepare lvm volumes

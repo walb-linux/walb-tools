@@ -8,16 +8,15 @@
   - Linux kernel version: 3.X (or later). It depends on walb device drivers.
   - lvm2 is required to manage archive data.
 
-Walb-tools may work in another posix architecture,
-but we do not confirm it.
-In addition, walb kernel device driver and walb-tools
-assume the same integer endian.
+Walb-tools must not work in another posix architecture.
+Walb kernel device driver and walb-tools assume the same integer endian.
 Do not use heterogeneous environments.
+
 
 ## Required tools and libraries
 
 - C++11 compiler and linker.
-  - g++-4.8, 4.9 and clang++ 3.4 are available.
+  - g++-4.8, 4.9 and clang++ 3.4 are confirmed.
 - binutils and make.
 - Libraries
   - libaio
@@ -27,6 +26,7 @@ Do not use heterogeneous environments.
 - cybozulib. [Github repository](https://github.com/herumi/cybozulib/)
 - walb headers. [Github repository](https://github.com/starpos/walb/)
 
+
 ## Prepare to build
 
 Create symlinks for make find the cybozulib and walb headers.
@@ -35,6 +35,7 @@ Create symlinks for make find the cybozulib and walb headers.
 > ln -s /path/to/cybozulib cybozulib
 > ln -s /path/to/walb walb
 ```
+
 
 ## Build
 
@@ -56,9 +57,10 @@ You can specify make target like `build`/`clean`/`rebuild`.
 
 See `Makefile` for details.
 
+
 ## Install
 
-Install executables to a directory as you like.
+Install executable binaries to a directory you like:
 ```
 > sudo cp -a `make echo_binaries` /usr/local/bin/
 ```

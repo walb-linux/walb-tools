@@ -7,7 +7,7 @@ The following sections assume that appropriate server processes are running at e
 ## Device configuration
 
 Assume you want to manage two walb devices at `s0` host.
-Add the following code to `walb-config1.py`:
+Add the following code to `walb-config.py`:
 
 ```python
 runCommand = walbc.get_run_remote_command(s0)
