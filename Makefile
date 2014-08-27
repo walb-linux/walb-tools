@@ -103,7 +103,7 @@ utest/%.depend: utest/%.cpp
 PYTHON_SOURCES = python/walb/walb.py stest/repeater.py stest/scenario0.py
 
 pylint:
-	pylint -E --rcfile=/dev/null -f colorized $(PYTHON_SOURCES)
+	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python')" $(PYTHON_SOURCES)
 
 stest: pylint
 	python stest/scenario0.py
