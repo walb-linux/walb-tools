@@ -1446,19 +1446,20 @@ class Controller:
             time.sleep(0.3)
         raise Exception('hash_backup:timeout', sx, vol, max_gid, gids)
 
-    def restore(self, ax, vol, gid):
+    def restore(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Restore a volume.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid :: int    - generation id.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid :: int      - generation id.
+        timeoutS :: int - timeout [sec]
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
         verify_type(gid, int)
 
         self.run_ctl(ax, ['restore', vol, str(gid)])
-        self.wait_for_restored(ax, vol, gid)
+        self.wait_for_restored(ax, vol, gid, timeoutS)
         runCommand = self.get_run_remote_command(ax)
         path = self.get_restored_path(ax, vol, gid)
         wait_for_lv_ready(path, runCommand)
