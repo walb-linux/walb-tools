@@ -73,7 +73,7 @@ there is no write IOs issued to the underlying `ldev`/`ddev`.
 - **archive**: walb-archive server processes or hosts where they run.
 - **walbc**: an executable to control walb server processes.
 - **wdevc**: an executable to contorl walb devices.
-- **synchronizing**: **QQQ**
+- **synchronizing**: a volume at an archive server is in synchronizing mode when update wdiffs of the corresponding update of the walb device will be transferred to the archive server automatically.
 - **state**: each volume in each server has a state. Some commands will change the state and each command may be rejected due to the state is not acceptable to run the command.
 - **action**: back ground tasks in a server process that is required from the outside using `walbc` tool. If some actions are running, an action may be rejected to run before finishing the running actions due to action dependencies.
 

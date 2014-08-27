@@ -1,7 +1,5 @@
 # Python library
 
-## Introduction
-
 You can manage backup groups using python library `walb.py`
 much easier than using `walbc` and `wdevc` directly.
 
