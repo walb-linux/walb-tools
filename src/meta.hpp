@@ -238,7 +238,7 @@ struct MetaDiff
         auto s = b + "-->" + e;
         if (verbose) {
             s += cybozu::util::formatString(
-                " (%d %s)", isMergeable ? 1 : 0, cybozu::unixTimeToStr(timestamp).c_str());
+                " (%d %s)", isMergeable ? 1 : 0, cybozu::unixTimeToPrettyStr(timestamp).c_str());
         }
         return s;
     }

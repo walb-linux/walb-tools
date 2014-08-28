@@ -175,7 +175,7 @@ inline std::string timeToPrintable(uint64_t ts)
     if (ts == 0) {
         return "---";
     } else {
-        return cybozu::unixTimeToStr(ts);
+        return cybozu::unixTimeToPrettyStr(ts);
     }
 }
 
