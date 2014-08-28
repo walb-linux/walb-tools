@@ -823,6 +823,18 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', st, state)
 
+    def get_diff_list(self, ax, vol):
+        '''
+        Get wdiff list.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        return :: [str] - wdiff information list managed by the archive server.
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        ret = self.run_ctl(ax, ['get', 'diff', vol])
+        return ret.split('\n')
+
     def reset_vol(self, s, vol):
         '''
         Reset a volume.
