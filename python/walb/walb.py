@@ -430,6 +430,9 @@ class Device:
     def path(self):
         return '/dev/walb/' + str(self.iD)
 
+    def __str__(self):
+        return ', '.join([str(self.iD), self.ldev, self.ddev, self.wdevcPath])
+
     def run_wdevc(self, cmdArgs):
         '''
         Run wdevc command.
@@ -583,6 +586,17 @@ class Server:
         self.logPath = logPath
         self.vg = vg
 
+    def __str__(self):
+        def kindToStr(kind):
+            m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
+            return m[kind]
+        l = [self.name, self.address, str(self.port),
+             kindToStr(self.kind), self.binDir, self.dataDir,
+             self.logPath]
+        if self.vg:
+            l.append(self.vg)
+        return ', '.join(l)
+
     def get_host_port(self):
         '''
         Get 'address:port' string.
@@ -627,6 +641,9 @@ class ServerLayout:
         self.storageL = storageL
         self.proxyL = proxyL
         self.archiveL = archiveL
+
+    def __str__(self):
+        return ', '.join(map(lambda s: s.name, self.get_all()))
 
     def get_primary_archive(self):
         '''
@@ -714,6 +731,10 @@ class Controller:
         self.controllerPath = controllerPath
         self.isDebug = isDebug
         self.set_server_layout(sLayout)
+
+    def __str__(self):
+        return ', '.join([self.controllerPath,
+                          '[' + str(self.sLayout) + ']', str(self.isDebug)])
 
     def set_server_layout(self, sLayout):
         '''
