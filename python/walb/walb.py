@@ -835,6 +835,21 @@ class Controller:
         ret = self.run_ctl(ax, ['get', 'diff', vol])
         return ret.split('\n')
 
+    def get_num_action(self, s, vol, action):
+        '''
+        Get number of an action running for a volume.
+        s :: Server    - server.
+        vol :: str     - volume name.
+        action :: str  - action name.
+        return :: int  - the number of running
+                         the specified action on the volume.
+        '''
+        verify_type(s, Server)
+        verify_type(vol, str)
+        verify_type(action, str)
+        num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
+        return num
+
     def reset_vol(self, s, vol):
         '''
         Reset a volume.
@@ -1874,8 +1889,7 @@ class Controller:
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
-            if num == 0:
+            if self.get_num_action(s, vol, action) == 0:
                 return
             time.sleep(0.3)
         raise Exception("wait_for_no_action", s, vol, action)
