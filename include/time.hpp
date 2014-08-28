@@ -43,20 +43,43 @@ inline int32_t localTimeDiff()
 }
 
 /**
- * Convert time_t value to time string as UTC.
+ * Format unix time to string.
+ * fmt is of strftime().
  */
-inline std::string unixTimeToStr(time_t ts)
+inline std::string formatUnixTime(time_t ts, const char *fmt)
 {
     struct tm tm;
     if (::gmtime_r(&ts, &tm) == nullptr) {
         throw std::runtime_error("gmtime_r failed.");
     }
-    std::string s("YYYYmmddHHMMSS ");
-    if (::strftime(&s[0], s.size(), "%Y%m%d%H%M%S", &tm) == 0) {
+    const size_t BUF_SIZE = 1024;
+    char buf[BUF_SIZE];
+    const size_t size = ::strftime(buf, BUF_SIZE, fmt, &tm);
+    if (size == 0) {
         throw std::runtime_error("strftime failed.");
     }
-    s.resize(s.size() - 1);
+    std::string s(buf);
+    assert(s.size() == size);
+    return s;
+}
+
+/**
+ * Convert time_t value to time string as UTC.
+ */
+inline std::string unixTimeToStr(time_t ts)
+{
+    std::string s = formatUnixTime(ts, "%Y%m%d%H%M%S");
     assert(s.size() == 14);
+    return s;
+}
+
+/**
+ * Convert time_t value to pretty time string as UTC.
+ */
+inline std::string unixTimeToPrettyStr(time_t ts)
+{
+    std::string s = formatUnixTime(ts, "%Y-%m-%dT%H:%M:%S");
+    assert(s.size() == 19);
     return s;
 }
 
