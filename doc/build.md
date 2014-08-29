@@ -28,6 +28,10 @@ Do not use heterogeneous environments.
 ```
 - cybozulib. [Github repository](https://github.com/herumi/cybozulib/)
 - walb headers. [Github repository](https://github.com/starpos/walb/)
+```
+> git clone git@github.com:herumi/cybozulib.git
+> git clone git@github.com:starpos/walb.git
+```
 
 
 ## Prepare to build
