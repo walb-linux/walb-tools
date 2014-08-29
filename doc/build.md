@@ -23,6 +23,9 @@ Do not use heterogeneous environments.
   - libsnappy
   - liblzma
   - libz
+```
+> sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
+```
 - cybozulib. [Github repository](https://github.com/herumi/cybozulib/)
 - walb headers. [Github repository](https://github.com/starpos/walb/)
 
