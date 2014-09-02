@@ -70,23 +70,20 @@ void setSocketTimeout(cybozu::Socket& socket, size_t timeoutS)
     socket.setReceiveTimeout(timeoutS * 1000);
 }
 
-class ThreadRunner
-{
+class ThreadRunner {
     std::thread thread_;
 public:
-    void set(std::thread&& thread) {
+    void set(std::thread&& thread)
+    {
         thread_ = std::move(thread);
     }
-    ~ThreadRunner() noexcept try {
-        join();
-    } catch (std::exception& e) {
-        cybozu::PutLog(cybozu::LogError, "ThreadRunner: error: %s", e.what());
-    } catch (...) {
-        cybozu::PutLog(cybozu::LogError, "ThreadRunner: unknown error");
-    }
-    void join() {
+    ~ThreadRunner() noexcept
+        try
+    {
         g_quit = true;
         if (thread_.joinable()) thread_.join();
+    } catch (std::exception& e) {
+        cybozu::PutLog(cybozu::LogError, "ThreadRunner: error: %s", e.what());
     }
 };
 
@@ -137,6 +134,7 @@ void cmdThread(const Option& opt)
     if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "cmdThread stop");
 } catch (std::exception& e) {
     cybozu::PutLog(cybozu::LogInfo, "cmdThread ERR %s", e.what());
+    exit(1);
 }
 
 void waitMsec(int msec)
@@ -147,21 +145,27 @@ void waitMsec(int msec)
 class Repeater {
     cybozu::Socket s_[2]; // s_[0] : client, s_[1] : server
     enum {
-        Sleep,
-        Ready,
-        Running,
-        Error0,
-        Error1,
-        Closing0,
-        Closing1,
-        Close0,
-        Close1,
+#if 1
+    Sleep,
+    Ready,
+    Running,
+    Error0,
+    Error1,
+    Closing0,
+    Closing1,
+    Close0,
+    Close1,
+#else
+        Sleep = -2,
+        Ready = -1,
+        Running = 2,
+        Closing = 0
+#endif
     };
     const int id_;
     const Option& opt_;
     std::atomic<int> state_;
     ThreadRunner threadRunner_[2];
-    std::exception_ptr ep_[2];
     void loop(int dir)
         try
     {
@@ -220,10 +224,7 @@ class Repeater {
         if (opt_.verbose) cybozu::PutLog(cybozu::LogInfo, "[%d] loop %d end", id_, dir);
     } catch (std::exception& e) {
         cybozu::PutLog(cybozu::LogError, "[%d] caught an error and terminate: %s", id_, e.what());
-        ::exit(1);
-    } catch (...) {
-        cybozu::PutLog(cybozu::LogError, "[%d] caught an unknown error and terminate", id_);
-        ::exit(1);
+        exit(1);
     }
     bool changeStateToClosing(int dir) {
         int expected = Running;
@@ -324,9 +325,6 @@ public:
             threadRunner_[i].set(std::thread(&Repeater::loop, this, i));
         }
     }
-    ~Repeater() noexcept {
-        join();
-    }
     bool tryAndRun(cybozu::Socket& client)
     {
         int expected = Sleep;
@@ -348,21 +346,10 @@ public:
             return true;
         }
     }
-    void join() noexcept {
-        for (size_t i = 0; i < 2; i++) {
-            try {
-                threadRunner_[i].join();
-                if (ep_[i]) std::rethrow_exception(ep_[i]);
-            } catch (std::exception& e) {
-                cybozu::PutLog(cybozu::LogError, "Repeater::join:error: %s", e.what());
-            } catch (...) {
-                cybozu::PutLog(cybozu::LogError, "Repeater::join:unknow error");
-            }
-        }
-    }
 };
 
-int main(int argc, char *argv[]) try
+int main(int argc, char *argv[])
+    try
 {
     const Option opt(argc, argv);
     cybozu::Socket server;
@@ -370,47 +357,31 @@ int main(int argc, char *argv[]) try
     ThreadRunner cmdRunner;
     cmdRunner.set(std::thread(cmdThread, opt));
     std::vector<std::unique_ptr<Repeater>> worker;
-    try {
-        for (size_t i = 0; i < opt.threadNum; i++) {
-            worker.emplace_back(new Repeater(opt, (int)i));
+    for (size_t i = 0; i < opt.threadNum; i++) {
+        worker.emplace_back(new Repeater(opt, (int)i));
+    }
+    for (;;) {
+RETRY:
+        while (!g_quit && !server.queryAccept()) {
         }
-        for (;;) {
-    RETRY:
-            while (!g_quit && !server.queryAccept()) {
-#if 0
-                if (opt.verbose) {
-                    printf("worker state ");
-                    for (size_t i = 0; i < opt.threadNum; i++) {
-                        printf("%d ", worker[i]->getState());
-                    }
-                    printf("\n");
+        if (g_quit) break;
+        cybozu::SocketAddr addr;
+        cybozu::Socket client;
+        server.accept(client, &addr);
+        setSocketTimeout(client, opt.socketTimeoutS);
+        if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "accept addr %s", addr.toStr().c_str());
+        while (!g_quit) {
+            for (size_t i = 0; i < opt.threadNum; i++) {
+                if (worker[i]->tryAndRun(client)) {
+                    goto RETRY;
                 }
-#endif
-            }
-            if (g_quit) break;
-            cybozu::SocketAddr addr;
-            cybozu::Socket client;
-            server.accept(client, &addr);
-            setSocketTimeout(client, opt.socketTimeoutS);
-            if (opt.verbose) cybozu::PutLog(cybozu::LogInfo, "accept addr %s", addr.toStr().c_str());
-            while (!g_quit) {
-                for (size_t i = 0; i < opt.threadNum; i++) {
-                    if (worker[i]->tryAndRun(client)) {
-                        goto RETRY;
-                    }
-                }
-                waitMsec(100);
             }
             waitMsec(100);
         }
-    } catch (std::exception& e) {
-        cybozu::PutLog(cybozu::LogError, "ERR %s", e.what());
+        waitMsec(100);
     }
     if (opt.verbose) puts("main end");
 } catch (std::exception& e) {
     cybozu::PutLog(cybozu::LogError, "error: %s", e.what());
-    return 1;
-} catch (...) {
-    cybozu::PutLog(cybozu::LogError, "unknown error");
     return 1;
 }
