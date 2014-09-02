@@ -66,7 +66,6 @@ sudo losetup /dev/loop0 disk0
 sudo losetup /dev/loop1 disk1
 sudo losetup /dev/loop2 disk2
 sudo losetup /dev/loop3 disk3
-```
 
 sudo pvcreate test /dev/loop0
 sudo pvcreate vg0 /dev/loop1
