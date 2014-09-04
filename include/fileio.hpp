@@ -168,4 +168,35 @@ inline void createEmptyFile(const std::string &path, mode_t mode = 0644)
     writer.close();
 }
 
+/**
+ * Read all contents from a file.
+ * Do not specify streams.
+ * Do not use this for large files.
+ *
+ * String: it must have size(), resize(), and operator[].
+ *   such as std::string and std::vector<char>.
+ */
+template <typename String>
+inline void readAllFromFile(File &file, String &buf)
+{
+    constexpr const size_t usize = 4096; // unit size.
+    size_t rsize = buf.size(); // read data will be appended to buf.
+
+    for (;;) {
+        if (buf.size() < rsize + usize) buf.resize(rsize + usize);
+        const size_t r = file.readsome(&buf[rsize], usize);
+        if (r == 0) break;
+        rsize += r;
+    }
+    buf.resize(rsize);
+}
+
+template <typename String>
+inline void readAllFromFile(const std::string &path, String &buf)
+{
+    File file(path, O_RDONLY);
+    readAllFromFile(file, buf);
+    file.close();
+}
+
 }} //namespace cybozu::util
