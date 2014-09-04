@@ -251,7 +251,7 @@ struct ListWdev : CommandBase {
                 struct walb_disk_data &d = ddata[i];
                 d.name[DISK_NAME_LEN - 1] = '\0';
                 ::printf("%u %u %s\n", d.major, d.minor, d.name);
-                minor[0] = d.minor + 1;
+                minor[0] = d.minor + 2;
             }
         }
         LOGs.debug() << "list done";
