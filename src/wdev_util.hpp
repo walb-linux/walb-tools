@@ -199,6 +199,11 @@ inline uint64_t getPermanentLsid(const std::string& wdevPath)
     return getLsid(wdevPath, WALB_IOCTL_GET_PERMANENT_LSID);
 }
 
+inline uint64_t getWrittenLsid(const std::string& wdevPath)
+{
+    return getLsid(wdevPath, WALB_IOCTL_GET_WRITTEN_LSID);
+}
+
 inline uint64_t getOldestLsid(const std::string& wdevPath)
 {
     return getLsid(wdevPath, WALB_IOCTL_GET_OLDEST_LSID);
@@ -322,6 +327,74 @@ inline cybozu::util::File getWldevFile(const std::string& wdevName, bool isRead 
     return cybozu::util::File(
         getWldevPathFromWdevName(wdevName),
         (isRead ? O_RDONLY : O_RDWR) | O_DIRECT);
+}
+
+struct LsidSet
+{
+    static constexpr const uint64_t invalid = uint64_t(-1);
+    union {
+        uint64_t array[7];
+        struct {
+            uint64_t latest;
+            uint64_t flush;
+            uint64_t completed;
+            uint64_t permanent;
+            uint64_t written;
+            uint64_t prevWritten;
+            uint64_t oldest;
+        };
+    };
+    LsidSet() {
+        init();
+    }
+    void init() {
+        for (uint64_t &v : array) v = invalid;
+    }
+    bool isValid() const {
+        for (const uint64_t &v : array) {
+            if (v == invalid) return false;
+        }
+        return true;
+    }
+};
+
+inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
+{
+    const char *const FUNC = __func__;
+
+    struct Pair {
+        const char *name;
+        std::function<void(uint64_t)> set;
+    } tbl[] = {
+        {"latest", [&](uint64_t lsid) { lsidSet.latest = lsid; } },
+        {"flush", [&](uint64_t lsid) { lsidSet.flush = lsid; } },
+        {"completed", [&](uint64_t lsid) { lsidSet.completed = lsid; } },
+        {"permanent", [&](uint64_t lsid) { lsidSet.permanent = lsid; } },
+        {"written", [&](uint64_t lsid) { lsidSet.written = lsid; } },
+        {"prev_written", [&](uint64_t lsid) { lsidSet.prevWritten = lsid; } },
+        {"oldest", [&](uint64_t lsid) { lsidSet.oldest = lsid; } },
+    };
+
+    lsidSet.init();
+    const std::string lsidPath = getPollingPath(wdevName);
+    std::string readStr;
+    cybozu::util::readAllFromFile(lsidPath, readStr);
+    for (const std::string &line : cybozu::util::splitString(readStr, "\r\n")) {
+        StrVec v = cybozu::util::splitString(line, " \t");
+        if (v.size() != 2) throw cybozu::Exception(FUNC) << "bad data" << line;
+        bool found = false;
+        for (Pair &pair : tbl) {
+            if (v[0] == pair.name) {
+                pair.set(cybozu::atoi(v[1]));
+                found = true;
+                break;
+            }
+        }
+        if (!found) throw cybozu::Exception(FUNC) << "bad data" << line;
+    }
+    if (!lsidSet.isValid()) {
+        throw cybozu::Exception(FUNC) << "invalid data" << readStr;
+    }
 }
 
 }} // namespace walb::device

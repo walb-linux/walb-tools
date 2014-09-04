@@ -690,6 +690,42 @@ inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t lo
 }
 
 /**
+ * Wait for all IOs that is less than a lsid to be permanent in
+ * the corresponding data device.
+ */
+inline void waitForWritten(const std::string &volId, uint64_t lsid)
+{
+    const char *const FUNC = __func__;
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevName = volInfo.getWdevName();
+    const std::string wdevPath = volInfo.getWdevPath();
+
+    for (;;) {
+        device::LsidSet lsidSet;
+        device::getLsidSet(wdevName, lsidSet);
+        if (lsidSet.written < lsid) {
+            util::sleepMs(1000);
+            LOGs.warn()
+                << FUNC << "wait 1000ms" << volId << wdevName
+                << lsidSet.written << lsid;
+            continue;
+        }
+        if (lsidSet.prevWritten < lsid) {
+            device::takeCheckpoint(wdevPath);
+        }
+#ifdef DEBUG
+        device::getLsidSet(wdevName, lsidSet);
+        if (lsidSet.prevWritten < lsid) {
+            throw cybozu::Exception(FUNC)
+                << "BUG" << volId << wdevName
+                << lsidSet.prevWritten << lsid;
+        }
+#endif
+        break;
+    }
+}
+
+/**
  * Delete all wlogs which lsid is less than a specifeid lsid.
  * Given INVALID_LSID, all existing wlogs will be deleted.
  *
@@ -802,7 +838,10 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     const bool isRemaining = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
 
     bool isEmpty = true;
-    if (lsidB < lsidE) isEmpty = storage_local::deleteWlogs(volId, lsidE);
+    if (lsidB < lsidE) {
+        storage_local::waitForWritten(volId, lsidE);
+        isEmpty = storage_local::deleteWlogs(volId, lsidE);
+    }
 
     return !isEmpty || isRemaining;
 }
@@ -838,7 +877,7 @@ inline void StorageWorker::operator()()
     ActionCounterTransaction tran(volSt.ac, saWlogSend);
     ul.unlock();
     try {
-        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
+        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId); // QQQ
         if (isRemaining) g.taskQueue.push(volId);
     } catch (...) {
         g.taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
