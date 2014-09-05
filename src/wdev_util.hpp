@@ -380,8 +380,12 @@ inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
     std::string readStr;
     cybozu::util::readAllFromFile(lsidPath, readStr);
     for (const std::string &line : cybozu::util::splitString(readStr, "\r\n")) {
+        if (line.empty()) continue;
         StrVec v = cybozu::util::splitString(line, " \t");
-        if (v.size() != 2) throw cybozu::Exception(FUNC) << "bad data" << line;
+        cybozu::util::removeEmptyItemFromVec(v);
+        if (v.size() != 2) {
+            throw cybozu::Exception(FUNC) << "bad data" << v.size() << line;
+        }
         bool found = false;
         for (Pair &pair : tbl) {
             if (v[0] == pair.name) {
