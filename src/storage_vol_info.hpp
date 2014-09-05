@@ -225,7 +225,10 @@ public:
         MetaLsidGid recB = getDoneRecord();
         const std::string wdevPath = getWdevPath();
         const uint64_t lsid0 = device::getOldestLsid(wdevPath);
-        if (lsid0 < recB.lsid) device::eraseWal(wdevPath, recB.lsid);
+        if (lsid0 < recB.lsid) {
+            waitForWrittenAndFlushed(recB.lsid);
+            device::eraseWal(wdevPath, recB.lsid);
+        }
         MetaLsidGid recE;
         for (;;) {
             if (qf.empty()) break;
@@ -328,6 +331,36 @@ public:
             throw cybozu::Exception(__func__) << "shrink is not supported" << curSizeLb << sizeLb;
         }
         device::resize(path, sizeLb);
+    }
+    void waitForWrittenAndFlushed(uint64_t lsid) {
+        const char *const FUNC = __func__;
+        const std::string wdevName = getWdevName();
+        const std::string wdevPath = getWdevPath();
+        for (;;) {
+            device::LsidSet lsidSet;
+            device::getLsidSet(wdevName, lsidSet);
+            if (lsidSet.written < lsid) {
+                LOGs.warn()
+                    << FUNC
+                    << "wait 1000ms for the wlogs written and flushed to data device"
+                    << volId_ << wdevName << lsidSet.written << lsid;
+                util::sleepMs(1000);
+                continue;
+            }
+            if (lsidSet.prevWritten < lsid) {
+                LOGs.info() << FUNC << "take checkpoint" << volId_;
+                device::takeCheckpoint(wdevPath);
+            }
+#ifdef DEBUG
+            device::getLsidSet(wdevName, lsidSet);
+            if (lsidSet.prevWritten < lsid) {
+                throw cybozu::Exception(FUNC)
+                    << "BUG" << volId_ << wdevName
+                    << lsidSet.prevWritten << lsid;
+            }
+#endif
+            break;
+        }
     }
 private:
     void loadWdevPath() {
