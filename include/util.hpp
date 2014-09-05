@@ -319,6 +319,19 @@ inline std::vector<std::string> splitString(
     return v;
 }
 
+/**
+ * Remove empty items from a vector.
+ * Type T must have empty() member function.
+ */
+template <typename T>
+inline void removeEmptyItemFromVec(std::vector<T> &v)
+{
+    v.erase(std::remove_if(
+                v.begin(), v.end(),
+                [](const T& t) { return t.empty(); }),
+            v.end());
+}
+
 inline bool hasPrefix(const std::string &name, const std::string &prefix)
 {
     return name.substr(0, prefix.size()) == prefix;

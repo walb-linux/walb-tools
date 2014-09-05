@@ -104,6 +104,26 @@ CYBOZU_TEST_AUTO(trim)
     CYBOZU_TEST_EQUAL(cybozu::util::trimSpace("abc   "), "abc");
 }
 
+CYBOZU_TEST_AUTO(removeEmptyItem)
+{
+    std::string s = "0  1   2 ";
+    walb::StrVec v = cybozu::util::splitString(s, " ");
+    CYBOZU_TEST_EQUAL(v.size(), 7);
+    CYBOZU_TEST_EQUAL(v[0], "0");
+    CYBOZU_TEST_EQUAL(v[1], "");
+    CYBOZU_TEST_EQUAL(v[2], "1");
+    CYBOZU_TEST_EQUAL(v[3], "");
+    CYBOZU_TEST_EQUAL(v[4], "");
+    CYBOZU_TEST_EQUAL(v[5], "2");
+    CYBOZU_TEST_EQUAL(v[6], "");
+
+    cybozu::util::removeEmptyItemFromVec(v);
+    CYBOZU_TEST_EQUAL(v.size(), 3);
+    CYBOZU_TEST_EQUAL(v[0], "0");
+    CYBOZU_TEST_EQUAL(v[1], "1");
+    CYBOZU_TEST_EQUAL(v[2], "2");
+}
+
 CYBOZU_TEST_AUTO(UnitIntString)
 {
     using namespace cybozu::util;
