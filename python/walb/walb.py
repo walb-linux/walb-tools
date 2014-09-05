@@ -59,7 +59,7 @@ def run_local_command(args, putMsg=False):
     s = f.read().strip()
     ret = p.wait()
     if ret != 0:
-        raise Exception("command error %d\n" % ret)
+        raise Exception("command error %s %d\n" % (args, ret))
     if putMsg:
         print "run_command_result:", s
     return s
