@@ -523,9 +523,7 @@ inline void runExecServer(ServerParams &p, const std::string &nodeId)
         const StrVec v = recvStrVec(p.sock, 0, FUNC);
         const std::string res = cybozu::process::call(v);
         StrVec ret = cybozu::util::splitString(res, "\r\n");
-        if (!ret.empty() && ret.back().empty()) {
-            ret.resize(ret.size() - 1); // Remove last empty string.
-        }
+        cybozu::util::removeEmptyItemFromVec(ret);
         sendValueAndFin(pkt, sendErr, ret);
         logger.info() << "exec done" << ret.size() << cybozu::util::concat(v, " ");
     } catch (std::exception &e) {

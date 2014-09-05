@@ -34,8 +34,7 @@ struct IoRecipe
             throw cybozu::Exception(__func__) << "empty input line";
         }
         std::vector<std::string> v = cybozu::util::splitString(line, " \t");
-        v.erase(std::remove_if(v.begin(), v.end(),
-                               [](const std::string& s) { return s.empty(); }), v.end());
+        cybozu::util::removeEmptyItemFromVec(v);
         if (v.size() != 3) {
             throw cybozu::Exception(__func__) << "invalid number of columns" << v.size();
         }
