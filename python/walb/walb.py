@@ -451,14 +451,6 @@ class Device:
         else:
             return exists_file(self.path, self.runCommand)
 
-    def verify_underlying_devices_exist(self):
-        '''
-        Verify that ldev and ddev exist.
-        '''
-        for path in [self.ldev, self.ddev]:
-            if not os.path.exists(path):
-                raise Exception('verify_device_exists: not exists %s' % path)
-
     def format_ldev(self):
         '''
         Format devices for a walb device.
