@@ -41,17 +41,24 @@ class File
 private:
     int fd_;
     bool autoClose_;
+
+    void throwOpenError(const std::string& filePath) const {
+        const int err = errno;
+        std::string s("open failed: ");
+        s += filePath;
+        throw LibcError(err, s);
+    }
 public:
     File()
         : fd_(-1), autoClose_(false) {
     }
     File(const std::string& filePath, int flags)
         : File() {
-        if (!open(filePath, flags)) throw LibcError(errno, "open failed: ");
+        if (!open(filePath, flags)) throwOpenError(filePath);
     }
     File(const std::string& filePath, int flags, mode_t mode)
         : File() {
-        if (!open(filePath, flags, mode)) throw LibcError(errno, "open failed: ");
+        if (!open(filePath, flags, mode)) throwOpenError(filePath);
     }
     explicit File(int fd, bool autoClose = false)
         : fd_(fd), autoClose_(autoClose) {
