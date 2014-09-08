@@ -972,7 +972,6 @@ class Controller:
         verify_type(mode, str)
         self._verify_shutdown_mode(mode, 'shutdown')
         self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)  # shutdown is nonblocking command.
 
     def shutdown_list(self, sL, mode='graceful'):
         '''
@@ -982,7 +981,6 @@ class Controller:
         self._verify_shutdown_mode(mode, 'shutdown_list')
         for s in sL:
             self.run_ctl(s, ["shutdown", mode])
-        time.sleep(1)  # shutdown is nonblocking command.
 
     def shutdown_all(self, mode='graceful'):
         '''

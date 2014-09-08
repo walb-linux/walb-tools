@@ -160,6 +160,46 @@ def startup_all():
     startup_list(sLayout.get_all())
 
 
+def get_pid(s):
+    verify_type(s, Server)
+    return int(walbc.run_ctl(s, ['get', 'pid']))
+
+
+def wait_for_process_done(pid, timeoutS=10):
+    verify_type(pid, int)
+    verify_type(timeoutS, int)
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
+        try:
+            s = run_local_command(['/bin/ps', '--no-headers', '-p', str(pid)])
+            assert len(s) > 0
+        except Exception, e:
+            # not found the process
+            print 'wait_for_process_done: ', e
+            return
+        time.sleep(1)
+    raise Exception('wait_for_process_done: timeout', pid, timeoutS)
+
+
+def shutdown(s, mode='graceful'):
+    pid = get_pid(s)
+    walbc.shutdown(s, mode)
+    wait_for_process_done(pid)
+
+
+def shutdown_list(sL, mode='graceful'):
+    pidL = []
+    for s in sL:
+        pidL.append(get_pid(s))
+    walbc.shutdown_list(sL, mode)
+    for pid in pidL:
+        wait_for_process_done(pid)
+
+
+def shutdown_all(mode='graceful'):
+    shutdown_list(walbc.sLayout.get_all(), mode)
+
+
 def resize_storage_if_necessary(sx, vol, wdev, sizeMb):
     """
     assume init_storage() has been called before this.
@@ -802,7 +842,7 @@ def test_e1():
 
     """
     print '++++++++++++++++++++++++++++++++++++++ test_e1:proxy-down', g_count
-    walbc.shutdown(p0, 'force')
+    shutdown(p0, 'force')
     write_over_wldev(wdev0)
     walbc.verify_not_overflow(s0, VOL)
     startup(p0)
@@ -820,7 +860,7 @@ def test_e2():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e2:archive-down', g_count
-    walbc.shutdown(a0, 'force')
+    shutdown(a0, 'force')
     write_over_wldev(wdev0)
     walbc.verify_not_overflow(s0, VOL)
     gid = walbc.snapshot_nbk(s0, VOL)
@@ -839,7 +879,7 @@ def test_e3():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e3:storage-down', g_count
-    walbc.shutdown(s0, 'force')
+    shutdown(s0, 'force')
     write_random(wdev0.path, 1)
     startup(s0)
     gid = walbc.snapshot(s0, VOL, [a0])
@@ -855,7 +895,7 @@ def test_e4():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e4:storage-down-overflow', g_count
-    walbc.shutdown(s0, 'force')
+    shutdown(s0, 'force')
     write_over_wldev(wdev0, overflow=True)
     startup(s0)
     if not walbc.is_overflow(s0, VOL):
@@ -876,7 +916,7 @@ def test_e5():
     walbc.stop(a0, VOL, 'force')
     write_random(wdev0.path, 1)
     time.sleep(3)  # wait for the log is sent to p0.
-    walbc.shutdown(p0, 'force')
+    shutdown(p0, 'force')
     remove_persistent_data(p0)
     walbc.start(a0, VOL)
     startup(p0)
@@ -897,7 +937,7 @@ def test_e6():
     """
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e6:primary-archive-data-lost', g_count
-    walbc.shutdown(a0, 'force')
+    shutdown(a0, 'force')
     remove_persistent_data(a0)
     startup(a0)
     walbc.run_ctl(a0, ['init-vol', VOL])
@@ -918,7 +958,7 @@ def test_e7():
         'test_e7:secondary-archive-data-lost', g_count
     write_random(wdev0.path, 1)
     walbc.replicate(a0, VOL, a1, True)
-    walbc.shutdown(a1, 'force')
+    shutdown(a1, 'force')
     remove_persistent_data(a1)
     startup(a1)
     write_random(wdev0.path, 1)
@@ -944,7 +984,7 @@ def test_e8():
     print '++++++++++++++++++++++++++++++++++++++ ' \
         'test_e8:storage-data-lost', g_count
     write_random(wdev0.path, 1)
-    walbc.shutdown(s0, 'force')
+    shutdown(s0, 'force')
     remove_persistent_data(s0)
     startup(s0)
     write_random(wdev0.path, 1)
@@ -958,13 +998,13 @@ def test_e8():
 
 
 def init_repeater_test(sLayoutRepeater, rL=[], rateMbps=0, delayMsec=0):
-    walbc.shutdown_all('force')
+    shutdown_all('force')
     walbc.set_server_layout(sLayoutRepeater)
     startup_list(sLayoutRepeater.get_all(), rL, rateMbps, delayMsec)
 
 
 def exit_repeater_test(rL):
-    walbc.shutdown_all('force')
+    shutdown_all('force')
     quit_repeaters(rL)
     walbc.set_server_layout(sLayout)
     startup_list(sLayout.get_all())
@@ -1363,7 +1403,7 @@ def test_r1():
     verify_equal_sha1('test_r1:1', md0, md1)
 
     walbc.clear_vol(s2, VOL)
-    walbc.shutdown(s2)
+    shutdown(s2)
     print 'test_r1:succeeded'
 
 
@@ -1382,11 +1422,11 @@ def replace_proxy(pDel, pAdd, volL, newServerLayout):
     for vol in volL:
         walbc.wait_for_stopped(pDel, vol)
         walbc.clear_vol(pDel, vol)
-    walbc.shutdown(pDel)
+    shutdown(pDel)
 
     walbc.set_server_layout(newServerLayout)
     for sx in newServerLayout.storageL:
-        walbc.shutdown(sx)
+        shutdown(sx)
         startup(sx)
 
 
@@ -1424,11 +1464,11 @@ def replace_archive(aDel, aAdd, volL, newServerLayout):
         if isSync:
             walbc.stop_synchronizing(aDel, vol)
         walbc.clear_vol(aDel, vol)
-    walbc.shutdown(aDel)
+    shutdown(aDel)
 
     walbc.set_server_layout(newServerLayout)
     for sx in newServerLayout.storageL:
-        walbc.shutdown(sx)
+        shutdown(sx)
         startup(sx)
 
 
