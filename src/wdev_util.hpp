@@ -182,117 +182,6 @@ inline std::string getUnderlyingDevPath(const std::string& wdevName, bool isLog)
 
 } // namespace local
 
-inline void resetWal(const std::string& wdevPath)
-{
-    const int dummy = 0;
-    setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, dummy);
-}
-
-inline void takeCheckpoint(const std::string& wdevPath)
-{
-    const int dummy = 0;
-    setValueByIoctl<int>(wdevPath, WALB_IOCTL_TAKE_CHECKPOINT, dummy);
-}
-
-inline uint64_t getPermanentLsid(const std::string& wdevPath)
-{
-    return getLsid(wdevPath, WALB_IOCTL_GET_PERMANENT_LSID);
-}
-
-inline uint64_t getWrittenLsid(const std::string& wdevPath)
-{
-    return getLsid(wdevPath, WALB_IOCTL_GET_WRITTEN_LSID);
-}
-
-inline uint64_t getOldestLsid(const std::string& wdevPath)
-{
-    return getLsid(wdevPath, WALB_IOCTL_GET_OLDEST_LSID);
-}
-
-inline bool isOverflow(const std::string& wdevPath)
-{
-    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_LOG_OVERFLOW) != 0;
-}
-
-inline uint64_t getLogCapacityPb(const std::string& wdevPath)
-{
-    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_CAPACITY);
-}
-
-inline uint64_t getLogUsagePb(const std::string& wdevPath)
-{
-    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_USAGE);
-}
-
-inline bool isFlushCapable(const std::string& wdevPath)
-{
-    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_FLUSH_CAPABLE) != 0;
-}
-
-/**
- * @lsid this must satisfy oldestLsid < lsid <= permanentLsid,
- *   or INVALID_LSID to erase all existing wlogs.
- *
- * RETURN:
- *   remaining amount of wlogs after deletion [physical block]
- */
-inline uint64_t eraseWal(const std::string& wdevPath, uint64_t lsid = INVALID_LSID)
-{
-    const char *const FUNC = __func__;
-    if (isOverflow(wdevPath)) {
-        throw cybozu::Exception(FUNC) << "overflow" << wdevPath;
-    }
-    const uint64_t permanentLsid = getPermanentLsid(wdevPath);
-    const uint64_t oldestLsid = getOldestLsid(wdevPath);
-    if (lsid == INVALID_LSID) lsid = permanentLsid;
-    if (oldestLsid == lsid) {
-        /* There is no wlogs. */
-        return 0;
-    }
-    if (!(oldestLsid < lsid && lsid <= permanentLsid)) {
-        throw cybozu::Exception(FUNC)
-            << "invalid lsid" << oldestLsid << lsid << permanentLsid;
-    }
-    setOldestLsid(wdevPath, lsid);
-    return permanentLsid - lsid;
-}
-
-/**
- * @sizeLb
- *   0 can be specified (auto-detect).
- */
-inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
-{
-    setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
-}
-
-inline uint64_t getSizeLb(const std::string& bdevPath)
-{
-    cybozu::util::File file(bdevPath, O_RDONLY);
-    const uint64_t sizeB = cybozu::util::getBlockDeviceSize(file.fd());
-    file.close();
-    return sizeB / LOGICAL_BLOCK_SIZE;
-}
-
-inline void flushBufferCache(const std::string& bdevPath)
-{
-    cybozu::util::File file(bdevPath, O_RDONLY);
-    cybozu::util::flushBufferCache(file.fd());
-    file.close();
-}
-
-/**
- * Get polling path.
- *
- * @wdevName walb device name.
- * RETURN:
- *   full path of polling target.
- */
-inline std::string getPollingPath(const std::string &wdevName)
-{
-    return (local::getSysfsPath(wdevName) + "walb" + "lsids").str();
-}
-
 inline std::string getUnderlyingLogDevPath(const std::string& wdevName)
 {
     return local::getUnderlyingDevPath(wdevName, true);
@@ -327,6 +216,18 @@ inline cybozu::util::File getWldevFile(const std::string& wdevName, bool isRead 
     return cybozu::util::File(
         getWldevPathFromWdevName(wdevName),
         (isRead ? O_RDONLY : O_RDWR) | O_DIRECT);
+}
+
+/**
+ * Get polling path.
+ *
+ * @wdevName walb device name.
+ * RETURN:
+ *   full path of polling target.
+ */
+inline std::string getPollingPath(const std::string &wdevName)
+{
+    return (local::getSysfsPath(wdevName) + "walb" + "lsids").str();
 }
 
 struct LsidSet
@@ -399,6 +300,106 @@ inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
     if (!lsidSet.isValid()) {
         throw cybozu::Exception(FUNC) << "invalid data" << readStr;
     }
+}
+
+inline void resetWal(const std::string& wdevPath)
+{
+    const int dummy = 0;
+    setValueByIoctl<int>(wdevPath, WALB_IOCTL_CLEAR_LOG, dummy);
+}
+
+inline void takeCheckpoint(const std::string& wdevPath)
+{
+    const int dummy = 0;
+    setValueByIoctl<int>(wdevPath, WALB_IOCTL_TAKE_CHECKPOINT, dummy);
+}
+
+inline uint64_t getPermanentLsid(const std::string& wdevPath)
+{
+    return getLsid(wdevPath, WALB_IOCTL_GET_PERMANENT_LSID);
+}
+
+inline uint64_t getWrittenLsid(const std::string& wdevPath)
+{
+    return getLsid(wdevPath, WALB_IOCTL_GET_WRITTEN_LSID);
+}
+
+inline uint64_t getOldestLsid(const std::string& wdevPath)
+{
+    return getLsid(wdevPath, WALB_IOCTL_GET_OLDEST_LSID);
+}
+
+inline bool isOverflow(const std::string& wdevPath)
+{
+    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_LOG_OVERFLOW) != 0;
+}
+
+inline uint64_t getLogCapacityPb(const std::string& wdevPath)
+{
+    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_CAPACITY);
+}
+
+inline uint64_t getLogUsagePb(const std::string& wdevPath)
+{
+    return getValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_GET_LOG_USAGE);
+}
+
+inline bool isFlushCapable(const std::string& wdevPath)
+{
+    return getValueByIoctl<int>(wdevPath, WALB_IOCTL_IS_FLUSH_CAPABLE) != 0;
+}
+
+/**
+ * @lsid this must satisfy oldestLsid < lsid <= permanentLsid,
+ *   or INVALID_LSID to erase all existing wlogs.
+ *
+ * RETURN:
+ *   remaining amount of wlogs after deletion [physical block]
+ */
+inline uint64_t eraseWal(const std::string& wdevName, uint64_t lsid = INVALID_LSID)
+{
+    const char *const FUNC = __func__;
+    const std::string wdevPath = getWdevPathFromWdevName(wdevName);
+    if (isOverflow(wdevPath)) {
+        throw cybozu::Exception(FUNC) << "overflow" << wdevPath;
+    }
+    LsidSet lsidSet;
+    getLsidSet(wdevName, lsidSet);
+    if (lsid == INVALID_LSID) lsid = lsidSet.prevWritten;
+    if (lsidSet.oldest == lsid) {
+        /* There is no wlogs. */
+        return 0;
+    }
+    if (!(lsidSet.oldest < lsid && lsid <= lsidSet.prevWritten)) {
+        throw cybozu::Exception(FUNC)
+            << "invalid lsid" << lsidSet.oldest << lsid << lsidSet.prevWritten;
+    }
+    setOldestLsid(wdevPath, lsid);
+    return lsidSet.permanent - lsid;
+}
+
+/**
+ * @sizeLb
+ *   0 can be specified (auto-detect).
+ */
+inline void resize(const std::string& wdevPath, uint64_t sizeLb = 0)
+{
+    setValueByIoctl<uint64_t>(wdevPath, WALB_IOCTL_RESIZE, sizeLb);
+}
+
+inline uint64_t getSizeLb(const std::string& bdevPath)
+{
+    cybozu::util::File file(bdevPath, O_RDONLY);
+    const uint64_t sizeB = cybozu::util::getBlockDeviceSize(file.fd());
+    file.close();
+    return sizeB / LOGICAL_BLOCK_SIZE;
+}
+
+inline void flushBufferCache(const std::string& bdevPath)
+{
+    cybozu::util::File file(bdevPath, O_RDONLY);
+    cybozu::util::flushBufferCache(file.fd());
+    file.close();
 }
 
 }} // namespace walb::device
