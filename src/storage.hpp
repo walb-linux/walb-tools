@@ -699,8 +699,8 @@ inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t lo
 inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
 {
     StorageVolInfo volInfo(gs.baseDirStr, volId);
-    const std::string wdevPath = volInfo.getWdevPath();
-    const uint64_t remainingPb = device::eraseWal(wdevPath, lsid);
+    const std::string wdevName = volInfo.getWdevName();
+    const uint64_t remainingPb = device::eraseWal(wdevName, lsid);
     return remainingPb == 0;
 }
 

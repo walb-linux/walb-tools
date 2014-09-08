@@ -224,10 +224,11 @@ public:
         QFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid recB = getDoneRecord();
         const std::string wdevPath = getWdevPath();
+        const std::string wdevName = getWdevName();
         const uint64_t lsid0 = device::getOldestLsid(wdevPath);
         if (lsid0 < recB.lsid) {
             waitForWrittenAndFlushed(recB.lsid);
-            device::eraseWal(wdevPath, recB.lsid);
+            device::eraseWal(wdevName, recB.lsid);
         }
         MetaLsidGid recE;
         for (;;) {
