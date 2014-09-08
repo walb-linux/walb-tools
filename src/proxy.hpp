@@ -1153,6 +1153,11 @@ inline void getVolList(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
+inline void getPid(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
+}
+
 inline void isWdiffSendError(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -1178,6 +1183,7 @@ const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
     { stateTN, proxy_local::getState },
     { hostTypeTN, proxy_local::getHostType },
     { volTN, proxy_local::getVolList },
+    { pidTN, proxy_local::getPid },
     { isWdiffSendErrorTN, proxy_local::isWdiffSendError },
 };
 

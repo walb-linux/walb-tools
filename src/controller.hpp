@@ -279,6 +279,7 @@ inline void c2xGetClient(protocol::ClientParams &p)
         { stateTN, protocol::StringType },
         { hostTypeTN, protocol::StringType },
         { volTN, protocol::StringVecType },
+        { pidTN, protocol::SizeType },
         { diffTN, protocol::StringVecType },
         { restoredTN, protocol::StringVecType },
         { restorableTN, protocol::StringVecType },

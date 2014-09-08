@@ -888,6 +888,11 @@ inline void getVolList(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
+inline void getPid(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
+}
+
 inline void getDiffList(protocol::GetCommandParams &p)
 {
     std::string volId;
@@ -1710,6 +1715,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { stateTN, archive_local::getState },
     { hostTypeTN, archive_local::getHostType },
     { volTN, archive_local::getVolList },
+    { pidTN, archive_local::getPid },
     { diffTN, archive_local::getDiffList },
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },

@@ -76,6 +76,7 @@ const char *const numActionTN = "num-action";
 const char *const stateTN = "state";
 const char *const hostTypeTN = "host-type";
 const char *const volTN = "vol";
+const char *const pidTN = "pid";
 const char *const diffTN = "diff";
 const char *const restoredTN = "restored";
 const char *const restorableTN = "restorable";

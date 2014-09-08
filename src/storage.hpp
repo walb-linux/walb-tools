@@ -1089,6 +1089,11 @@ inline void getVolList(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
+inline void getPid(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
+}
+
 inline void isOverflow(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -1133,6 +1138,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { stateTN, storage_local::getState },
     { hostTypeTN, storage_local::getHostType },
     { volTN, storage_local::getVolList },
+    { pidTN, storage_local::getPid },
     { isOverflowTN, storage_local::isOverflow },
     { uuidTN, storage_local::getUuid },
 };
