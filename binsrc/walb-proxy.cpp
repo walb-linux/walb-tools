@@ -102,19 +102,24 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(createLogFilePath(opt.logFileStr, gp.baseDirStr), opt.isDebug);
-    ProxyThreads threads(opt);
-    auto createRequestWorker = [&](
-        cybozu::Socket &&sock,
-        std::atomic<server::ProcessStatus> &procStat) {
-        return std::make_shared<ProxyRequestWorker>(
-            std::move(sock), gp.nodeId, procStat);
-    };
+    LOGs.info() << "starting walb proxy server";
+    LOGs.info() << opt;
+    {
+        ProxyThreads threads(opt);
+        auto createRequestWorker = [&](
+            cybozu::Socket &&sock,
+            std::atomic<server::ProcessStatus> &procStat) {
+            return std::make_shared<ProxyRequestWorker>(
+                std::move(sock), gp.nodeId, procStat);
+        };
 
-    ProxySingleton &g = getProxyGlobal();
-    LOGs.info() << "starting walb proxy server with options:\n" << opt;
-    const size_t concurrency = g.maxForegroundTasks + 5;
-    server::MultiThreadedServer server(g.forceQuit, concurrency);
-    server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
+        ProxySingleton &g = getProxyGlobal();
+        const size_t concurrency = g.maxForegroundTasks + 5;
+        server::MultiThreadedServer server(g.forceQuit, concurrency);
+        server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
+    }
+    LOGs.info() << "shutdown walb proxy server";
+
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());
     ::fprintf(::stderr, "ProxyServer: error: %s", e.what());

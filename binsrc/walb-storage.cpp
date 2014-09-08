@@ -116,19 +116,23 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(createLogFilePath(opt.logFileStr, gs.baseDirStr), opt.isDebug);
-    StorageThreads threads(opt);
-    auto createRequestWorker = [&](
-        cybozu::Socket &&sock,
-        std::atomic<server::ProcessStatus> &procStat) {
-        return std::make_shared<StorageRequestWorker>(
-            std::move(sock), gs.nodeId, procStat);
-    };
+    LOGs.info() << "starting walb storage server";
+    LOGs.info() << opt;
+    {
+        StorageThreads threads(opt);
+        auto createRequestWorker = [&](
+            cybozu::Socket &&sock,
+            std::atomic<server::ProcessStatus> &procStat) {
+            return std::make_shared<StorageRequestWorker>(
+                std::move(sock), gs.nodeId, procStat);
+        };
 
-    StorageSingleton &g = getStorageGlobal();
-    LOGs.info() << "starting walb storage server with options:\n" << opt;
-    const size_t concurrency = g.maxForegroundTasks + 5;
-    server::MultiThreadedServer server(g.forceQuit, concurrency);
-    server.run<StorageRequestWorker>(opt.port, createRequestWorker);
+        StorageSingleton &g = getStorageGlobal();
+        const size_t concurrency = g.maxForegroundTasks + 5;
+        server::MultiThreadedServer server(g.forceQuit, concurrency);
+        server.run<StorageRequestWorker>(opt.port, createRequestWorker);
+    }
+    LOGs.info() << "shutdown walb storage server";
 
 } catch (std::exception &e) {
     LOGe("StorageServer: error: %s\n", e.what());

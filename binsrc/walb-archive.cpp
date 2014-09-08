@@ -66,6 +66,8 @@ int main(int argc, char *argv[]) try
         return 1;
     }
     util::setLogSetting(createLogFilePath(opt.logFileStr, ga.baseDirStr), opt.isDebug);
+    LOGs.info() << "starting walb archive server";
+    LOGs.info() << opt;
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
@@ -75,10 +77,11 @@ int main(int argc, char *argv[]) try
     };
 
     ArchiveSingleton &g = getArchiveGlobal();
-    LOGs.info() << "starting walb archive server with options:\n" << opt;
     const size_t concurrency = g.maxForegroundTasks + 5;
     server::MultiThreadedServer server(g.forceQuit, concurrency);
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
+    LOGs.info() << "shutdown walb archive server";
+
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());
     ::fprintf(::stderr, "ArchiveServer: error: %s", e.what());
