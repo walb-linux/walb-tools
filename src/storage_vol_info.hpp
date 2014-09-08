@@ -226,6 +226,9 @@ public:
         const std::string wdevPath = getWdevPath();
         const std::string wdevName = getWdevName();
         const uint64_t lsid0 = device::getOldestLsid(wdevPath);
+        if (recB.lsid == INVALID_LSID) {
+            throw cybozu::Exception(FUNC) << "recB.lsid is invalid";
+        }
         if (lsid0 < recB.lsid) {
             waitForWrittenAndFlushed(recB.lsid);
             device::eraseWal(wdevName, recB.lsid);
@@ -334,6 +337,7 @@ public:
         device::resize(path, sizeLb);
     }
     void waitForWrittenAndFlushed(uint64_t lsid) {
+        assert(lsid != INVALID_LSID);
         const char *const FUNC = __func__;
         const std::string wdevName = getWdevName();
         const std::string wdevPath = getWdevPath();
@@ -341,7 +345,7 @@ public:
             device::LsidSet lsidSet;
             device::getLsidSet(wdevName, lsidSet);
             if (lsidSet.written < lsid) {
-                LOGs.warn()
+                LOGs.info()
                     << FUNC
                     << "wait 1000ms for the wlogs written and flushed to data device"
                     << volId_ << wdevName << lsidSet.written << lsid;
@@ -349,7 +353,7 @@ public:
                 continue;
             }
             if (lsidSet.prevWritten < lsid) {
-                LOGs.info() << FUNC << "take checkpoint" << volId_;
+                LOGs.info() << FUNC << "take checkpoint" << volId_ << lsidSet.prevWritten << lsid;
                 device::takeCheckpoint(wdevPath);
             }
 #ifdef DEBUG
