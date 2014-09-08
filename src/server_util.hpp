@@ -234,6 +234,7 @@ public:
                     util::sleepMs(1000);
                     continue;
                 }
+                LOGs.debug() << "dispatchTask pop" << task;
                 taskQ.push(task);
             }
             Task &task = taskQ.front();
@@ -251,7 +252,7 @@ public:
         LOGs.error() << "dispatchTask" << e.what();
         ::exit(1);
     } catch (...) {
-        LOGe("dispatchTask:other error");
+        LOGe("dispatchTask:unknown error");
         ::exit(1);
     }
 };
