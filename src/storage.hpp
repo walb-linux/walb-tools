@@ -195,6 +195,18 @@ inline StorageSingleton& getStorageGlobal()
     return StorageSingleton::getInstance();
 }
 
+inline void pushTask(const std::string &volId, size_t delayMs=0)
+{
+    LOGs.debug() << __func__ << volId << delayMs;
+    getStorageGlobal().taskQueue.push(volId, delayMs);
+}
+
+inline void pushTaskForce(const std::string &volId, size_t delayMs)
+{
+    LOGs.debug() << __func__ << volId << delayMs;
+    getStorageGlobal().taskQueue.pushForce(volId, delayMs);
+}
+
 namespace storage_local {
 
 inline void startMonitoring(const std::string& wdevPath, const std::string& volId)
@@ -206,7 +218,7 @@ inline void startMonitoring(const std::string& wdevPath, const std::string& volI
     if (!g.logDevMonitor.add(wdevName)) {
         throw cybozu::Exception(FUNC) << "failed to add" << volId << wdevName;
     }
-    g.taskQueue.push(volId);
+    pushTask(volId);
 }
 
 inline void stopMonitoring(const std::string& wdevPath, const std::string& volId)
@@ -618,7 +630,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
         // (8), (9) in storage-daemon.txt
         {
             const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
-            getStorageGlobal().taskQueue.push(volId);
+            pushTask(volId);
             aPkt.write(MetaSnap(gidB, gidE));
         }
         packet::Ack(aSock).recv();
@@ -671,7 +683,7 @@ inline void c2sSnapshotServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.writeFin(gid);
-        getStorageGlobal().taskQueue.pushForce(volId, 0);
+        pushTaskForce(volId, 0);
         logger.info() << "snapshot succeeded" << volId << gid;
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -822,10 +834,9 @@ inline void StorageWorker::operator()()
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
-    StorageSingleton &g = getStorageGlobal();
     if (st == stStartSlave || st == stStartMaster) {
         // This is rare case, but possible.
-        g.taskQueue.push(volId, 1000);
+        pushTask(volId, 1000);
         return;
     }
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
@@ -842,9 +853,9 @@ inline void StorageWorker::operator()()
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId); // QQQ
-        if (isRemaining) g.taskQueue.push(volId);
+        if (isRemaining) pushTask(volId);
     } catch (...) {
-        g.taskQueue.pushForce(volId, gs.delaySecForRetry * 1000);
+        pushTaskForce(volId, gs.delaySecForRetry * 1000);
         throw;
     }
 }
@@ -908,7 +919,7 @@ inline void wdevMonitorWorker() noexcept
                 LOGs.debug() << FUNC << wdevName;
                 const std::string volId = g.getVolIdFromWdevName(wdevName);
                 // There is an delay to transfer wlogs in bulk.
-                g.taskQueue.push(volId, delayMs);
+                pushTask(volId, delayMs);
             }
         } catch (std::exception& e) {
             LOGs.error() << FUNC << e.what();
@@ -1039,7 +1050,7 @@ inline void c2sKickServer(protocol::ServerParams &p)
             const std::string &volId = pair.first;
             const int64_t delay = pair.second;
             if (delay > 0) {
-                g.taskQueue.pushForce(volId, 0); // run immediately
+                pushTaskForce(volId, 0); // run immediately
                 ss << volId << ",";
                 num++;
             }
