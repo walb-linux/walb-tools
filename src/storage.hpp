@@ -270,6 +270,7 @@ inline void StorageVolState::initInner(const std::string& volId)
     } else {
         sm.set(sClear);
     }
+    LOGs.debug() << "StorageVolState::initInner" << sm.get();
 }
 
 inline StorageVolState &getStorageVolState(const std::string &volId)
@@ -554,7 +555,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     const std::string& volId = v[0];
     const uint64_t bulkLb = util::parseBulkLb(v[1], FUNC);
     const uint64_t curTime = ::time(0);
-    logger.debug() << volId << bulkLb << curTime;
+    logger.debug() << FUNC << volId << bulkLb << curTime;
     std::string archiveId;
 
     ForegroundCounterTransaction foregroundTasksTran;
@@ -642,7 +643,11 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     tran1.commit(sMaster);
     monitorMgr.dontStop();
 
-    logger.info() << "full-bkp succeeded" << volId << archiveId;
+    if (isFull) {
+        logger.info() << "full-bkp succeeded" << volId << archiveId;
+    } else {
+        logger.info() << "hash-bkp succeeded" << volId << archiveId;
+    }
 }
 
 } // storage_local
@@ -829,11 +834,13 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
  */
 inline void StorageWorker::operator()()
 {
+    LOGs.debug() << "StorageWorker::operator() start";
     const char *const FUNC = __func__;
     StorageVolState& volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
+    LOGs.debug() << "StorageWorker::operator()" << volId << st;
     if (st == stStartSlave || st == stStartMaster) {
         // This is rare case, but possible.
         pushTask(volId, 1000);
@@ -852,7 +859,7 @@ inline void StorageWorker::operator()()
     ActionCounterTransaction tran(volSt.ac, saWlogSend);
     ul.unlock();
     try {
-        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId); // QQQ
+        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
         if (isRemaining) pushTask(volId);
     } catch (...) {
         pushTaskForce(volId, gs.delaySecForRetry * 1000);
