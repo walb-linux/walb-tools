@@ -314,7 +314,6 @@ def recreate_walb_dev(wdev):
         if not os.path.exists(path):
             print '%s does not exist.' % path
             exit(1)
-    wdev.verify_underlying_devices_exist()
     resize_lv(wdev.ddev, get_lv_size_mb(wdev.ddev), wdevSizeMb, False)
     wdev.format_ldev()
     wdev.create()
