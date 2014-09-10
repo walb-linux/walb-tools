@@ -32,6 +32,7 @@ For example, you can format and create `wdev0` as follows:
 python> wdev0.format_ldev()
 python> wdev0.create()
 ```
+Verify the existence of `/dev/walb/0`.
 
 **TODO**: support more detailed options for `format_ldev()` and `create()`.
 
