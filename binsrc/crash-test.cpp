@@ -319,16 +319,14 @@ int doMain(int argc, char* argv[])
         showHelpAndExit(opt0);
     }
     const std::string cmdName = argv[cmdPos - 1];
-    bool found = false;
     Command *cmd = nullptr;
     for (auto& c : cmdTbl_) {
         if (c.name == cmdName) {
             cmd = c.cmd;
-            found = true;
             break;
         }
     }
-    if (!found) {
+    if (!cmd) {
         showHelpAndExit(opt0);
     }
     cmd->setupOption(opt1);
