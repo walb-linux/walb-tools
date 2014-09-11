@@ -14,6 +14,7 @@
 #include "walb_util.hpp"
 #include "walb_types.hpp"
 #include "fileio.hpp"
+#include "random.hpp"
 #include "cybozu/option.hpp"
 
 using namespace walb;
@@ -111,6 +112,9 @@ private:
     void flushWork() {
         cybozu::util::File file(bdevPath, O_RDWR | O_DIRECT);
 
+        const int range = flushIntervalMs / 2;
+        cybozu::util::Random<int> rand(-range, range);
+
         while (!quit_) {
             fcnt_++;
             try {
@@ -119,11 +123,14 @@ private:
                 quit_ = true;
                 return;
             }
-            util::sleepMs(flushIntervalMs);
+            util::sleepMs(flushIntervalMs + rand());
         }
     }
     void writeWork(size_t id) {
         cybozu::util::File file(bdevPath, O_RDWR | O_DIRECT);
+
+        const int range = ioIntervalMs / 2;
+        cybozu::util::Random<int> rand(-range, range);
 
         size_t fcntPrev = fcnt_;
         size_t wcntFlush = 0;
@@ -149,7 +156,7 @@ private:
                 quit_ = true;
                 break;
             }
-            util::sleepMs(ioIntervalMs);
+            util::sleepMs(ioIntervalMs + rand());
         }
         wcntV_[id].wcntFlush = wcntFlush;
         wcntV_[id].wcntLatest = wcntLatest;
