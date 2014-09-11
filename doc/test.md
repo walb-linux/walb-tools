@@ -31,6 +31,34 @@ Build walb-tools before.
 > make
 ```
 
+### crash test
+
+This test will check error handling code and crash recoery code are valid.
+
+You need **crashblk** to run this test, which is available 
+at [crashblk repository](https://github.com/starpos/crashblk/).
+
+Before running the test, load `crashclk-mod.ko` and `walb-mod.ko` modules.
+
+Then create two crashblk devices. The size 100MB is enough.
+
+```
+> sudo crashblkc create 100M
+0
+> sudo crashblkc create 100M
+1
+> cat /proc/partitions |grep crashblk
+251        0     102400 crashblk0
+251        1     102400 crashblk1
+```
+
+Before you run the test, check variables `crash-test.sh` script.
+
+Finally, run the test:
+```
+> sh crash-test.sh
+```
+
 ## Scenario tests (stest)
 
 See `stest/scenario0.py`.
