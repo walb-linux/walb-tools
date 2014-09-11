@@ -636,6 +636,11 @@ class ServerLayout:
         if len(archiveL) == 0:
             raise Exception('server_layout: no archive server')
 
+        for kind, sL in [(K_STORAGE, storageL), (K_PROXY, proxyL), (K_ARCHIVE, archiveL)]:
+            for s in sL:
+                if s.kind != kind:
+                    raise Exception('server_layout: invalid server kind:', kind, s)
+
         self.storageL = storageL
         self.proxyL = proxyL
         self.archiveL = archiveL
