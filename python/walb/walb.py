@@ -543,6 +543,10 @@ class Device:
     def _get_sys_path(self):
         return '/sys/block/walb!%d/' % self.iD
 
+def kindToStr(kind):
+    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
+    return m[kind]
+
 
 class Server:
     '''
@@ -585,9 +589,6 @@ class Server:
         self.vg = vg
 
     def __str__(self):
-        def kindToStr(kind):
-            m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
-            return m[kind]
         l = [self.name, self.address, str(self.port),
              kindToStr(self.kind), self.binDir, self.dataDir,
              self.logPath]
@@ -639,7 +640,7 @@ class ServerLayout:
         for kind, sL in [(K_STORAGE, storageL), (K_PROXY, proxyL), (K_ARCHIVE, archiveL)]:
             for s in sL:
                 if s.kind != kind:
-                    raise Exception('server_layout: invalid server kind:', kind, s)
+                    raise Exception('server_layout: invalid server kind:', kindToStr(kind), str(s))
 
         self.storageL = storageL
         self.proxyL = proxyL
