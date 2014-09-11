@@ -36,19 +36,15 @@ do_expr()
   if [ "$mode" = "crash" ]; then
      sudo $CRASHBLKC make-crash $CRASH_DEV
   elif [ "$mode" = "write-error" ]; then
-    sudo $CRASHBLKC make-error $CRASH_DEV w
+    sudo $CRASHBLKC io-error $CRASH_DEV w
   else
-    sudo $CRASHBLKC make-error $CRASH_DEV rw
+    sudo $CRASHBLKC io-error $CRASH_DEV rw
   fi
   wait
 
   sudo $WDEVC delete-wdev $WDEV
   sleep 1
-  if [ "$mode" = "crash" ]; then
-    sudo $CRASHBLKC recover-crash $CRASH_DEV
-  else
-    sudo $CRASHBLKC recover-error $CRASH_DEV
-  fi
+  sudo $CRASHBLKC recover $CRASH_DEV
 
   sudo $WDEVC create-wdev $LDEV $DDEV > /dev/null
 
