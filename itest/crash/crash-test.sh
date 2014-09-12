@@ -23,7 +23,7 @@ NR_THREADS=8
 
 WDEV=/dev/walb/$WDEV_NAME
 
-do_expr()
+do_write_expr()
 {
   local CRASH_DEV=$1
   local mode=$2
@@ -34,7 +34,7 @@ do_expr()
   (sudo $CRASH_TEST write -th $NR_THREADS -to 10 $WDEV > write.log) &
   sleep 3
   if [ "$mode" = "crash" ]; then
-     sudo $CRASHBLKC make-crash $CRASH_DEV
+     sudo $CRASHBLKC crash $CRASH_DEV
   elif [ "$mode" = "write-error" ]; then
     sudo $CRASHBLKC io-error $CRASH_DEV w
   else
@@ -43,26 +43,68 @@ do_expr()
   wait
 
   sudo $WDEVC delete-wdev $WDEV
-  sleep 1
   sudo $CRASHBLKC recover $CRASH_DEV
 
   sudo $WDEVC create-wdev $LDEV $DDEV > /dev/null
 
   sudo $CRASH_TEST read -th $NR_THREADS $WDEV > read.log
 
-  sleep 1
   sudo $WDEVC delete-wdev $WDEV
 
   sudo $CRASH_TEST verify write.log read.log
   if [ $? -ne 0 ]; then
-    echo test $CRASH_DEV $mode failed.
+    echo TEST_FAILURE write_test $CRASH_DEV $mode
     exit 1
   fi
+  echo TEST_SUCCESS write_test $CRASH_DEV $mode
 }
 
+do_read_expr()
+{
+  local CRASH_DEV=$1
+  local CAN_READ=$2 # 0 or 1
+  local err
+
+  sudo $WDEVC format-ldev $LDEV $DDEV > /dev/null
+  sudo $WDEVC create-wdev $LDEV $DDEV -n $WDEV_NAME > /dev/null
+
+  sudo dd if=$WDEV of=/dev/null iflag=direct bs=4096 count=1
+  if [ $? -ne 0 ]; then
+    echo TEST_FAILURE read_test read must success
+    exit 1
+  fi
+
+  sudo $CRASHBLKC io-error $CRASH_DEV r
+
+  sudo dd if=$WDEV of=/dev/null iflag=direct bs=4096 count=1
+  err=$?
+  echo err $err
+  if [ $err -eq $CAN_READ ]; then
+    echo TEST_FAILURE read_test read must fail
+    exit 1
+  fi
+
+  sudo $CRASHBLKC recover $CRASH_DEV
+
+  sudo dd if=$WDEV of=/dev/null iflag=direct bs=4096 count=1
+  if [ $? -ne 0 ]; then
+    echo TEST_FAILURE read_test read must success
+    exit 1
+  fi
+
+  sudo $WDEVC delete-wdev $WDEV
+  echo TEST_SUCCESS read_test $CRASH_DEV $CAN_READ}
+}
+
+
+### main
+
 for mode in crash write-error rw-error; do
-  echo test $LDEV $mode
-  do_expr $LDEV $mode
-  echo test $DDEV $mode
-  do_expr $DDEV $mode
+  echo write_test $LDEV $mode
+  do_write_expr $LDEV $mode
+  echo write_test $DDEV $mode
+  do_write_expr $DDEV $mode
 done
+
+do_read_expr $LDEV 1
+do_read_expr $DDEV 0
