@@ -9,15 +9,20 @@
 #    and set WDEVC, CRASHBLKC, and CRASH_TEST variable.
 # 4. run this script.
 #
+# Parameters.
+#
+# WDEV_NAME: walb device name.
+# NR_THREADS: number of threads.
+#
 
-WDEVC=./wdevc
 CRASHBLKC=./crashblkc
-CRASH_TEST=./crash-test
-
 LDEV=/dev/crashblk0
 DDEV=/dev/crashblk1
 WDEV_NAME=0
 NR_THREADS=8
+
+WDEVC=../binsrc/wdevc
+CRASH_TEST=../binsrc/crash-test
 
 #set -x
 
