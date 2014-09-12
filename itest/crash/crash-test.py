@@ -28,18 +28,23 @@ NR_THREADS = 8
 BIN = 'sudo ../../binsrc/'
 WDEV = '/dev/walb/%s' % WDEV_NAME
 
-def do_write_expr(crashDev, mode):
+def do_write_expr(crashDev, mode, isOverlap):
     '''
-    crashDev :: str - crash device.
-    mode :: str     - 'crash' or 'write-error' or 'rw-error'.
+    crashDev :: str   - crash device.
+    mode :: str       - 'crash' or 'write-error' or 'rw-error'.
+    isOverlap :: bool - True to run overlap test.
 
     '''
     run(BIN + 'wdevc format-ldev %s %s > /dev/null' % (LDEV, DDEV))
     run(BIN + 'wdevc create-wdev %s %s -n %d > /dev/null' % (LDEV, DDEV, WDEV_NAME))
 
     timeoutS = 10
-    proc = run_async(BIN + 'crash-test write -th %d -to %d %s > %s'
-                     % (NR_THREADS, timeoutS, WDEV, 'write.log'))
+    if isOverlap:
+        opt = '-ol'
+    else:
+        opt = '-nr %d' % NR_THREADS
+    proc = run_async(BIN + 'crash-test write %s -to %d %s > %s'
+                     % (opt, timeoutS, WDEV, 'write.log'))
     time.sleep(3)
     if mode == 'crash':
         run(BIN + 'crashblkc crash %s' % crashDev)
@@ -52,11 +57,16 @@ def do_write_expr(crashDev, mode):
     run(BIN + 'wdevc delete-wdev %s' % WDEV)
     run(BIN + 'crashblkc recover %s' % crashDev)
     run(BIN + 'wdevc create-wdev %s %s > /dev/null' % (LDEV, DDEV))
-    run(BIN + 'crash-test read -th %d %s > read.log' % (NR_THREADS, WDEV))
+    run(BIN + 'crash-test read %s %s > read.log' % (opt, WDEV))
     run(BIN + 'wdevc delete-wdev %s' % WDEV)
-    proc = run_async(BIN + 'crash-test verify %s %s' % ('write.log', 'read.log'))
+    if isOverlap:
+        opt = '-ol'
+    else:
+        opt = ''
+    proc = run_async(BIN + 'crash-test verify %s %s %s'
+                     % (opt, 'write.log', 'read.log'))
     if not proc.wait():
-        raise Exception('TEST_FAILURE write_test', crashDev, mode)
+        raise Exception('TEST_FAILURE write_test', crashDev, mode, isOverlap)
     print 'TEST_SUCCESS write_test', crashDev, mode
 
 
@@ -103,11 +113,12 @@ def do_read_expr(crashDev, canRead):
 
 if __name__ == '__main__':
 
-    for mode in ['crash', 'write-error', 'rw-error']:
-        print 'write_test', LDEV, mode
-        do_write_expr(LDEV, mode)
-        print 'write_test', DDEV, mode
-        do_write_expr(DDEV, mode)
+    for isOverlap in [False, True]:
+        for mode in ['crash', 'write-error', 'rw-error']:
+            print 'write_test', LDEV, mode, isOverlap
+            do_write_expr(LDEV, mode, isOverlap)
+            print 'write_test', DDEV, mode, isOverlap
+            do_write_expr(DDEV, mode, isOverlap)
 
     do_read_expr(LDEV, True)
     do_read_expr(DDEV, False)

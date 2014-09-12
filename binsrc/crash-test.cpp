@@ -37,10 +37,10 @@ size_t getIntFromBuffer(const AlignedArray& buf)
     return value;
 }
 
-void setIntToBuffer(AlignedArray& buf, size_t value)
+void setIntToBuffer(AlignedArray& buf, size_t value, size_t offset = 0)
 {
-    assert(buf.size() >= sizeof(size_t));
-    ::memcpy(buf.data(), &value, sizeof(value));
+    assert(buf.size() >= offset + sizeof(size_t));
+    ::memcpy(buf.data() + offset, &value, sizeof(value));
 }
 
 struct Command
@@ -56,15 +56,18 @@ struct WriteCommand : Command
     size_t flushIntervalMs;
     size_t ioIntervalMs;
     size_t blockSize;
-    size_t nrThreads;
+    size_t nr_;
     size_t timeoutSec;
+    bool isOverlap_;
 
     void setupOption(cybozu::Option& opt) override {
         opt.appendOpt(&flushIntervalMs, 100, "fi", "flush interval [ms]");
         opt.appendOpt(&ioIntervalMs, 5, "ii", "write IO interval [ms]");
         opt.appendOpt(&blockSize, 512, "bs", "block size [byte]");
-        opt.appendOpt(&nrThreads, 1, "th", "number of threads");
+        opt.appendOpt(&nr_, 1, "nr", "number of blocks(threads)");
         opt.appendOpt(&timeoutSec, 10, "to", "timeout [sec]");
+        opt.appendBoolOpt(&isOverlap_, "ol",
+                          "overlap test (-nr option ignored. 7blocks/6threads will be used.)");
 
         opt.appendParam(&bdevPath, "BDEV_PATH", "block device path");
     }
@@ -72,9 +75,16 @@ struct WriteCommand : Command
         bool timeout = false;
         cybozu::thread::ThreadRunnerSet thSet;
 
-        wcntV_.resize(nrThreads);
+        if (isOverlap_) {
+            LOGi("overlap test");
+            nr_ = 6;
+        } else {
+            LOGi("normal test");
+        }
+
+        wcntV_.resize(nr_);
         thSet.add([this]() { flushWork(); });
-        for (size_t i = 0; i < nrThreads; i++) {
+        for (size_t i = 0; i < nr_; i++) {
             thSet.add([i,this]() { writeWork(i); });
         }
 
@@ -126,6 +136,63 @@ private:
             util::sleepMs(flushIntervalMs + rand());
         }
     }
+    void setupNormalTest(size_t id, off_t& off, size_t& size) {
+        off = id * blockSize;
+        size = blockSize;
+    }
+    void setupOverlapTest(size_t id, off_t& off, size_t& size) {
+        switch (id) {
+            /*
+             * block   0
+             * case 0: x
+             * case 1: x
+             */
+        case 0:
+        case 1:
+            off = 0;
+            size = 1;
+            break;
+
+            /*
+             * block   123
+             * case 2: xx
+             * case 3:  xx
+             */
+        case 2:
+            off = 1;
+            size = 2;
+            break;
+        case 3:
+            off = 2;
+            size = 2;
+            break;
+
+            /*
+             * block   456
+             * case 4: xxx
+             * case 5:  x
+             */
+        case 4:
+            off = 4;
+            size = 3;
+            break;
+        case 5:
+            off = 5;
+            size = 1;
+            break;
+        default:
+            throw cybozu::Exception(__func__) << "bad id" << id;
+        }
+        off *= blockSize;
+        size *= blockSize;
+    }
+    void setIntToBlocks(AlignedArray& buf, size_t value) {
+        assert(buf.size() % blockSize == 0);
+        const size_t n = buf.size() / blockSize;
+        for (size_t off = 0; off < n; off++) {
+            setIntToBuffer(buf, value, off * blockSize);
+        }
+    }
     void writeWork(size_t id) {
         cybozu::util::File file(bdevPath, O_RDWR | O_DIRECT);
 
@@ -133,13 +200,18 @@ private:
         cybozu::util::Random<int> rand(-range, range);
 
         size_t fcntPrev = fcnt_;
-        size_t wcntFlush = 0;
         size_t wcntLatest = 0;
+        if (isOverlap_) wcntLatest = id;
+        size_t wcntFlush = wcntLatest;
 
-        const off_t off = id * blockSize;
-        const size_t size = blockSize;
+        off_t off;
+        size_t size;
+        if (isOverlap_) {
+            setupOverlapTest(id, off, size);
+        } else {
+            setupNormalTest(id, off, size);
+        }
         AlignedArray buf(size);
-
         assert(size >= sizeof(size_t));
 
         while (!quit_) {
@@ -148,8 +220,12 @@ private:
                 wcntFlush = wcntLatest;
                 fcntPrev = fcntLatest;
             }
-            wcntLatest++;
-            setIntToBuffer(buf, wcntLatest);
+            if (isOverlap_) {
+                wcntLatest += 6;
+            } else {
+                wcntLatest++;
+            }
+            setIntToBlocks(buf, wcntLatest);
             try {
                 file.pwrite(buf.data(), size, off);
             } catch (...) {
@@ -167,11 +243,14 @@ struct ReadCommand : Command
 {
     std::string bdevPath;
     size_t blockSize;
-    size_t nrThreads;
+    size_t nr_;
+    bool isOverlap_;
 
     void setupOption(cybozu::Option& opt) override {
         opt.appendOpt(&blockSize, 512, "bs", "block size [byte]");
-        opt.appendOpt(&nrThreads, 1, "th", "number of threads");
+        opt.appendOpt(&nr_, 1, "nr", "number of blocks");
+        opt.appendBoolOpt(&isOverlap_, "ol",
+                          "overlap test (-nr option ignored. 7blocks/6threads will be used.)");
 
         opt.appendParam(&bdevPath, "BDEV_PATH", "block device path");
     }
@@ -180,7 +259,9 @@ struct ReadCommand : Command
         AlignedArray buf(size);
         cybozu::util::File file(bdevPath, O_RDONLY | O_DIRECT);
 
-        for (size_t i = 0; i < nrThreads; i++) {
+        if (isOverlap_) nr_ = 7;
+
+        for (size_t i = 0; i < nr_; i++) {
             const off_t off = i * size;
             file.pread(buf.data(), size, off);
             const size_t wcnt = getIntFromBuffer(buf);
@@ -191,71 +272,91 @@ struct ReadCommand : Command
 
 struct VerifyCommand : Command
 {
+    bool isOverlap_;
     std::string writeOut;
     std::string readOut;
 
     void setupOption(cybozu::Option& opt) override {
+        opt.appendBoolOpt(&isOverlap_, "ol", "overlap test");
+
         opt.appendParam(&writeOut, "WRITE_OUT", "output file of write command");
         opt.appendParam(&readOut, "READ_OUT", "output file of read command");
     }
-    using Records = std::vector<StrVec>;
-    Records readRecords(const std::string &path) {
+
+    using Tuple = std::vector<size_t>;
+    using TupleVec = std::vector<Tuple>;
+
+    static Tuple parseTuple(const StrVec &rec, size_t nr) {
+        if (rec.size() != nr) {
+            throw cybozu::Exception("invalid number of columns") << rec.size() << nr;
+        }
+        std::vector<size_t> ret;
+        for (const std::string& s : rec) {
+            ret.push_back(static_cast<size_t>(cybozu::atoi(s)));
+        }
+        return ret;
+    }
+    static TupleVec readTupleVec(const std::string &path, size_t nr) {
         std::string buf;
         cybozu::util::readAllFromFile(path, buf);
 
         StrVec v0 = cybozu::util::splitString(buf, "\r\n");
         cybozu::util::removeEmptyItemFromVec(v0);
 
-        Records ret;
+        TupleVec ret;
         for (const std::string& s : v0) {
             StrVec v1 = cybozu::util::splitString(s, " \t");
             cybozu::util::removeEmptyItemFromVec(v1);
-            ret.push_back(std::move(v1));
+            ret.push_back(parseTuple(v1, nr));
         }
         return ret;
     }
     struct Record {
-        size_t id;
+        size_t tid;
         size_t wcntFlush;
         size_t rcnt;
         size_t wcntLatest;
 
-        void set(StrVec &writeRec, StrVec& readRec) {
-            if (writeRec.size() != 3) {
-                throw cybozu::Exception("invalid write record") << writeRec.size();
-            }
-            if (readRec.size() != 2) {
-                throw cybozu::Exception("invalid write record") << writeRec.size();
-            }
-            if (writeRec[0] != readRec[0]) {
-                throw cybozu::Exception("invalid thread id") << writeRec[0] << readRec[0];
-            }
-            id = cybozu::atoi(writeRec[0]);
-            wcntFlush = cybozu::atoi(writeRec[1]);
-            rcnt = cybozu::atoi(readRec[1]);
-            wcntLatest = cybozu::atoi(writeRec[2]);
+        void set(Tuple &wTpl, Tuple& rTpl) {
+            assert(wTpl.size() == 3);
+            assert(rTpl.size() == 2);
+            tid = wTpl[0];
+            wcntFlush = wTpl[1];
+            rcnt = rTpl[1];
+            wcntLatest = wTpl[2];
         }
         bool isValid() const {
-            if (wcntFlush > rcnt) return false;
-            if (rcnt > wcntLatest) return false;
-            return true;
+            return wcntFlush <= rcnt && rcnt <= wcntLatest;
         }
         void print() const {
             ::printf("%2s %2zu %10zu %10zu %10zu\n"
                      , (isValid() ? "OK" : "NG")
-                     , id, wcntFlush, rcnt, wcntLatest);
+                     , tid, wcntFlush, rcnt, wcntLatest);
         }
     };
     void run() override {
-        Records w = readRecords(writeOut);
-        Records r = readRecords(readOut);
-        if (w.size() != r.size()) {
+        /*
+         * write tuple: (thread id, wcntFlush, wcntLatest)
+         * read tuple:  (block id, rcnt)
+         */
+        TupleVec w = readTupleVec(writeOut, 3);
+        TupleVec r = readTupleVec(readOut, 2);
+        if (!isOverlap_ && w.size() != r.size()) {
             throw cybozu::Exception("nr of records differ") << w.size() << r.size();
         }
         size_t nrInvalid = 0;
-        for (size_t i = 0; i < w.size(); i++) {
+        for (size_t i = 0; i < r.size(); i++) {
             Record rec;
-            rec.set(w[i], r[i]);
+            if (isOverlap_) {
+                const size_t tid = r[i][1] % 6;
+                rec.set(w[tid], r[i]);
+            } else {
+                if (w[i][0] != r[i][0]) {
+                    throw cybozu::Exception("thread id and block id must be the same")
+                        << w[i][0] << r[i][0];
+                }
+                rec.set(w[i], r[i]);
+            }
             rec.print();
             if (!rec.isValid()) nrInvalid++;
         }
