@@ -955,9 +955,11 @@ class Controller:
     def status(self, sL=[], vol=None):
         '''
         print server status.
-        sL :: [Server] - server list.
+        sL :: Server|[Server] - server or server list.
         vol :: str or None - volume name. None means all.
         '''
+        if isinstance(sL, Server):
+            sL = [sL]
         verify_type(sL, list, Server)
         if not sL:
             sL = self.sLayout.get_all()
