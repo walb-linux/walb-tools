@@ -28,7 +28,7 @@ NR_THREADS = 8
 BIN = 'sudo ../../binsrc/'
 WDEV = '/dev/walb/%s' % WDEV_NAME
 
-def do_write_expr(crashDev, mode, isOverlap):
+def do_write_expr(crashDev, mode, isOverlap, lostPct):
     '''
     This test will check checkpointing and redo functionalities
     of walb devices will work well.
@@ -36,8 +36,10 @@ def do_write_expr(crashDev, mode, isOverlap):
     crashDev :: str   - crash device.
     mode :: str       - 'crash' or 'write-error' or 'rw-error'.
     isOverlap :: bool - True to run overlap test.
+    lostPct :: int    - lost percentage in crash. [0,100].
 
     '''
+    run(BIN + 'crashblkc set-lost-pct %s %d' % (crashDev, lostPct))
     run(BIN + 'wdevc format-ldev %s %s > /dev/null' % (LDEV, DDEV))
     run(BIN + 'wdevc create-wdev %s %s -n %d > /dev/null' % (LDEV, DDEV, WDEV_NAME))
 
@@ -69,8 +71,8 @@ def do_write_expr(crashDev, mode, isOverlap):
     proc = run_async(BIN + 'crash-test verify %s %s %s'
                      % (opt, 'write.log', 'read.log'))
     if not proc.wait():
-        raise Exception('TEST_FAILURE write_test', crashDev, mode, isOverlap)
-    print 'TEST_SUCCESS write_test', crashDev, mode
+        raise Exception('TEST_FAILURE write_test', crashDev, mode, isOverlap, lostPct)
+    print 'TEST_SUCCESS write_test', crashDev, mode, lostPct
 
 
 def read_first_block(devPath):
@@ -185,12 +187,13 @@ def do_write_read_expr():
 
 if __name__ == '__main__':
 
-    for isOverlap in [False, True]:
-        for mode in ['crash', 'write-error', 'rw-error']:
-            print 'write_test', LDEV, mode, isOverlap
-            do_write_expr(LDEV, mode, isOverlap)
-            print 'write_test', DDEV, mode, isOverlap
-            do_write_expr(DDEV, mode, isOverlap)
+    for lostPct in [100, 90, 50]:
+        for isOverlap in [False, True]:
+            for mode in ['crash', 'write-error', 'rw-error']:
+                print 'write_test', LDEV, mode, isOverlap, lostPct
+                do_write_expr(LDEV, mode, isOverlap, lostPct)
+                print 'write_test', DDEV, mode, isOverlap, lostPct
+                do_write_expr(DDEV, mode, isOverlap, lostPct)
 
     do_read_expr(LDEV, True)
     do_read_expr(DDEV, False)
