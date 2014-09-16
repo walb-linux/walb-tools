@@ -14,17 +14,26 @@ What to do:
    and set WDEVC, CRASHBLKC, and CRASH_TEST variable.
 5. run this script.
 
-Parameters:
 
-WDEV_NAME: walb device name.
-NR_THREADS: number of threads.
+LDEV size requirements:
+  size > (BLOCK_SIZE * NR_THREADS * (1000 / IO_INTERVAL_MS)) * 2
+  size > (BLOCK_SIZE * NR_THREADS_REORDER * (1000 / IO_INTERVAL_MS)) * 2
+
+DDEV size requirements:
+  size > BLOCK_SIZE * NR_THREADS
+  size > BLOCK_SIZE * NR_THREADS_REORDER
+
 '''
 
 LDEV = '/dev/crashblk0'
 DDEV = '/dev/crashblk1'
-WDEV_NAME = 0
-NR_THREADS = 8
-NR_THREADS_REORDER = 128
+WDEV_NAME = 0  # walb device name.
+NR_THREADS = 8  # number of threads when reorder flag is off.
+NR_THREADS_REORDER = 128  # number of threads when reorder flag is on.
+
+BLOCK_SIZE = '512' # can be '4K' or so.
+FLUSH_INTERVAL_MS = 5  # flush interval [ms]
+IO_INTERVAL_MS = 1  # write interval [ms]
 
 BIN = 'sudo ../../binsrc/'
 WDEV = '/dev/walb/%s' % WDEV_NAME
@@ -47,14 +56,14 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct, reorder):
     run(BIN + 'wdevc format-ldev %s %s > /dev/null' % (LDEV, DDEV))
     run(BIN + 'wdevc create-wdev %s %s -n %d > /dev/null' % (LDEV, DDEV, WDEV_NAME))
 
-    timeoutS = 10
+    timeoutS = 5
     if isOverlap:
         opt = '-ol'
     else:
         opt = '-nr %d' % (NR_THREADS_REORDER if reorder else NR_THREADS)
-    proc = run_async(BIN + 'crash-test write %s -to %d %s > %s'
-                     % (opt, timeoutS, WDEV, 'write.log'))
-    time.sleep(3)
+    proc = run_async(BIN + 'crash-test write %s -to %d -bs %s -ii %d -fi %d %s > %s'
+                     % (opt, timeoutS, BLOCK_SIZE, IO_INTERVAL_MS, FLUSH_INTERVAL_MS, WDEV, 'write.log'))
+    time.sleep(2)
     if mode == 'crash':
         run(BIN + 'crashblkc crash %s' % crashDev)
     else:
@@ -66,7 +75,7 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct, reorder):
     run(BIN + 'wdevc delete-wdev %s' % WDEV)
     run(BIN + 'crashblkc recover %s' % crashDev)
     run(BIN + 'wdevc create-wdev %s %s > /dev/null' % (LDEV, DDEV))
-    run(BIN + 'crash-test read %s %s > read.log' % (opt, WDEV))
+    run(BIN + 'crash-test read %s -bs %s %s > read.log' % (opt, BLOCK_SIZE, WDEV))
     run(BIN + 'wdevc delete-wdev %s' % WDEV)
     if isOverlap:
         opt = '-ol'
