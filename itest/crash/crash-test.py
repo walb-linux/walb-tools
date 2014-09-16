@@ -24,11 +24,12 @@ LDEV = '/dev/crashblk0'
 DDEV = '/dev/crashblk1'
 WDEV_NAME = 0
 NR_THREADS = 8
+NR_THREADS_REORDER = 128
 
 BIN = 'sudo ../../binsrc/'
 WDEV = '/dev/walb/%s' % WDEV_NAME
 
-def do_write_expr(crashDev, mode, isOverlap, lostPct):
+def do_write_expr(crashDev, mode, isOverlap, lostPct, reorder):
     '''
     This test will check checkpointing and redo functionalities
     of walb devices will work well.
@@ -37,8 +38,11 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct):
     mode :: str       - 'crash' or 'write-error' or 'rw-error'.
     isOverlap :: bool - True to run overlap test.
     lostPct :: int    - lost percentage in crash. [0,100].
+    reorder :: bool   - True if you want to reorder IOs.
 
     '''
+    for bdev in [LDEV, DDEV]:
+        run(BIN + 'crashblkc set-reorder %s %d' % (bdev, 1 if reorder else 0))
     run(BIN + 'crashblkc set-lost-pct %s %d' % (crashDev, lostPct))
     run(BIN + 'wdevc format-ldev %s %s > /dev/null' % (LDEV, DDEV))
     run(BIN + 'wdevc create-wdev %s %s -n %d > /dev/null' % (LDEV, DDEV, WDEV_NAME))
@@ -47,7 +51,7 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct):
     if isOverlap:
         opt = '-ol'
     else:
-        opt = '-nr %d' % NR_THREADS
+        opt = '-nr %d' % (NR_THREADS_REORDER if reorder else NR_THREADS)
     proc = run_async(BIN + 'crash-test write %s -to %d %s > %s'
                      % (opt, timeoutS, WDEV, 'write.log'))
     time.sleep(3)
@@ -72,7 +76,7 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct):
                      % (opt, 'write.log', 'read.log'))
     if not proc.wait():
         raise Exception('TEST_FAILURE write_test', crashDev, mode, isOverlap, lostPct)
-    print 'TEST_SUCCESS write_test', crashDev, mode, lostPct
+    print 'TEST_SUCCESS write_test', crashDev, mode, isOverlap, lostPct
 
 
 def read_first_block(devPath):
@@ -187,13 +191,14 @@ def do_write_read_expr():
 
 if __name__ == '__main__':
 
-    for lostPct in [100, 90, 50]:
-        for isOverlap in [False, True]:
-            for mode in ['crash', 'write-error', 'rw-error']:
-                print 'write_test', LDEV, mode, isOverlap, lostPct
-                do_write_expr(LDEV, mode, isOverlap, lostPct)
-                print 'write_test', DDEV, mode, isOverlap, lostPct
-                do_write_expr(DDEV, mode, isOverlap, lostPct)
+    for reorder in [False, True]:
+        for lostPct in [100, 90, 50]:
+            for isOverlap in [False, True]:
+                for mode in ['crash', 'write-error', 'rw-error']:
+                    print 'write_test', LDEV, mode, isOverlap, lostPct, reorder
+                    do_write_expr(LDEV, mode, isOverlap, lostPct, reorder)
+                    print 'write_test', DDEV, mode, isOverlap, lostPct, reorder
+                    do_write_expr(DDEV, mode, isOverlap, lostPct, reorder)
 
     do_read_expr(LDEV, True)
     do_read_expr(DDEV, False)
