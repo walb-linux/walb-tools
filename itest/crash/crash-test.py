@@ -30,6 +30,9 @@ WDEV = '/dev/walb/%s' % WDEV_NAME
 
 def do_write_expr(crashDev, mode, isOverlap):
     '''
+    This test will check checkpointing and redo functionalities
+    of walb devices will work well.
+
     crashDev :: str   - crash device.
     mode :: str       - 'crash' or 'write-error' or 'rw-error'.
     isOverlap :: bool - True to run overlap test.
@@ -82,8 +85,22 @@ def read_first_block(devPath):
         return False
 
 
+def write_first_block(devPath):
+    '''
+    devPath :: str
+    return :: bool
+    '''
+    try:
+        run('sudo dd if=/dev/zero of=%s oflag=direct bs=4096 count=1' % devPath)
+        return True
+    except:
+        return False
+
+
 def do_read_expr(crashDev, canRead):
     '''
+    Assemble -> crash log or data device -> try to read.
+
     crashDev :: str - crash device.
     canRead :: bool - True if read must success, or False.
     '''
@@ -111,6 +128,61 @@ def do_read_expr(crashDev, canRead):
     print 'TEST_SUCCESS read_test', crashDev, canRead
 
 
+def wait_for_written(wdevName, timeoutS=10, intervalS=0.5):
+    '''
+    wdevName :: str  - walb device name.
+    timeoutS :: int  - timeout [sec]
+    intervalS :: int - interval [sec]
+
+    '''
+    def get_lsids(wdevName):
+        m = {}
+        with open('/sys/block/walb!%s/walb/lsids' % wdevName, 'r') as f:
+            for line in f.read().split('\n'):
+                if len(line) == 0:
+                    continue
+                name, lsid = line.split()
+                m[name] = int(lsid)
+        return m
+
+    m = get_lsids(wdevName)
+    lsid0 = m['latest']
+    lsid1 = m['written']
+    t0 = time.time()
+    while time.time() < t0 + timeoutS:
+        if lsid1 >= lsid0:
+            return
+        print 'wait_for_written: latest %d written %d' % (lsid0, lsid1)
+        time.sleep(intervalS)
+        lsid1 = get_lsids(wdevName)['written']
+    raise Exception('wait_for_written: timeout', wdevName, timeoutS)
+
+
+def do_write_read_expr():
+    '''
+    (1) Make the data device read-error state.
+    (2) Write a block.
+    (3) Wait for the block data will be evicted from its pending data.
+    (4) Try to read the block and verify its failure.
+
+    '''
+    run(BIN + 'wdevc format-ldev %s %s > /dev/null' % (LDEV, DDEV))
+    run(BIN + 'wdevc create-wdev %s %s -n %s > /dev/null'
+        % (LDEV, DDEV, WDEV_NAME))
+
+    run(BIN + 'crashblkc io-error %s r' % DDEV)
+    write_first_block(WDEV)
+    wait_for_written(WDEV_NAME)
+
+    ret = read_first_block(WDEV)
+    if ret:
+        raise Exception('TEST_FAILURE write_read_test read must fail')
+
+    run(BIN + 'crashblkc recover %s' % DDEV)
+    run(BIN + 'wdevc delete-wdev %s' % WDEV)
+    print 'TEST_SUCCESS write_read_test'
+
+
 if __name__ == '__main__':
 
     for isOverlap in [False, True]:
@@ -122,3 +194,4 @@ if __name__ == '__main__':
 
     do_read_expr(LDEV, True)
     do_read_expr(DDEV, False)
+    do_write_read_expr()
