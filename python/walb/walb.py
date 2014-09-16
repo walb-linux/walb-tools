@@ -19,6 +19,47 @@ Lbs = (1 << 9)  # logical block size
 
 
 ########################################
+# Verification functions.
+########################################
+
+def verify_type(obj, typeValue, elemType=None):
+    '''
+    obj       - object.
+    typeValue - type like int, str, list.
+    elemType  - specify type of elements if typeValue is sequence.
+
+    '''
+    if not isinstance(obj, typeValue):
+        raise Exception('invalid type', type(obj), typeValue)
+    if isinstance(obj, list) and elemType:
+        if not all(isinstance(e, elemType) for e in obj):
+            raise Exception('invalid list type', type(obj), typeValue, elemType)
+
+
+def verify_function(obj):
+    '''
+    obj - function object.
+
+    '''
+    def f():
+        pass
+    if type(obj) != type(f):
+        raise Exception('not function type', type(obj))
+
+
+def verify_gid_range(gidB, gidE, msg):
+    '''
+    gidB - begin gid.
+    gidE - end gid.
+    msg :: str - message for error.
+    '''
+    verify_type(gidB, int)
+    verify_type(gidE, int)
+    if gidB > gidE:
+        raise Exception(msg, 'bad gid range', gidB, gidE)
+
+
+########################################
 # Utility functions.
 ########################################
 
@@ -268,47 +309,6 @@ def wait_for_lv_ready(lvPath, runCommand=run_local_command):
     runCommand :: RunCommand
     '''
     flush_bufs(lvPath, runCommand)
-
-
-########################################
-# Verification functions.
-########################################
-
-def verify_type(obj, typeValue, elemType=None):
-    '''
-    obj       - object.
-    typeValue - type like int, str, list.
-    elemType  - specify type of elements if typeValue is sequence.
-
-    '''
-    if not isinstance(obj, typeValue):
-        raise Exception('invalid type', type(obj), typeValue)
-    if isinstance(obj, list) and elemType:
-        if not all(isinstance(e, elemType) for e in obj):
-            raise Exception('invalid list type', type(obj), typeValue, elemType)
-
-
-def verify_function(obj):
-    '''
-    obj - function object.
-
-    '''
-    def f():
-        pass
-    if type(obj) != type(f):
-        raise Exception('not function type', type(obj))
-
-
-def verify_gid_range(gidB, gidE, msg):
-    '''
-    gidB - begin gid.
-    gidE - end gid.
-    msg :: str - message for error.
-    '''
-    verify_type(gidB, int)
-    verify_type(gidE, int)
-    if gidB > gidE:
-        raise Exception(msg, 'bad gid range', gidB, gidE)
 
 
 ########################################
