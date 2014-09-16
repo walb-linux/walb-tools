@@ -19,15 +19,18 @@
 
 using namespace walb;
 
+const size_t CACHE_LINE_SIZE = 64;
+
 struct Counter
 {
-    size_t wcntFlush;
-    size_t wcntLatest;
+    alignas(CACHE_LINE_SIZE) std::atomic<size_t> cnt;
+    Counter() : cnt(0) {}
+    Counter(const Counter& rhs) : cnt(rhs.cnt.load()) {}
 };
 
-std::vector<Counter> wcntV_;
-std::atomic<size_t> fcnt_(0);
-std::atomic<bool> quit_(false);
+alignas(CACHE_LINE_SIZE) std::vector<size_t> wcntFlushV_;
+alignas(CACHE_LINE_SIZE) std::vector<Counter> wcntV_;
+alignas(CACHE_LINE_SIZE) std::atomic<bool> quit_(false);
 
 size_t getIntFromBuffer(const AlignedArray& buf)
 {
@@ -83,6 +86,14 @@ struct WriteCommand : Command
         }
 
         wcntV_.resize(nr_);
+        for (size_t i = 0; i < nr_; i++) {
+            if (isOverlap_) {
+                wcntV_[i].cnt = i;
+            } else {
+                wcntV_[i].cnt = 0;
+            }
+        }
+        wcntFlushV_.resize(nr_, 0);
         thSet.add([this]() { flushWork(); });
         for (size_t i = 0; i < nr_; i++) {
             thSet.add([i,this]() { writeWork(i); });
@@ -114,24 +125,30 @@ struct WriteCommand : Command
         if (timeout) throw cybozu::Exception("timeout");
         if (error) throw cybozu::Exception("error");
 
-        for (size_t i = 0; i < wcntV_.size(); i++) {
-            ::printf("%2zu %10zu %10zu\n", i, wcntV_[i].wcntFlush, wcntV_[i].wcntLatest);
+        for (size_t i = 0; i < nr_; i++) {
+            ::printf("%2zu %10zu %10zu\n", i, wcntFlushV_[i], wcntV_[i].cnt.load());
         }
     }
 private:
     void flushWork() {
         cybozu::util::File file(bdevPath, O_RDWR | O_DIRECT);
+        std::vector<size_t> v(nr_);
 
         const int range = flushIntervalMs / 2;
         cybozu::util::Random<int> rand(-range, range);
 
         while (!quit_) {
-            fcnt_++;
+            for (size_t i = 0; i < nr_; i++) {
+                v[i] = wcntV_[i].cnt;
+            }
             try {
                 file.fdatasync();
             } catch (...) {
                 quit_ = true;
                 return;
+            }
+            for (size_t i = 0; i < nr_; i++) {
+                wcntFlushV_[i] = v[i];
             }
             util::sleepMs(flushIntervalMs + rand());
         }
@@ -199,43 +216,33 @@ private:
         const int range = ioIntervalMs / 2;
         cybozu::util::Random<int> rand(-range, range);
 
-        size_t fcntPrev = fcnt_;
-        size_t wcntLatest = 0;
-        if (isOverlap_) wcntLatest = id;
-        size_t wcntFlush = wcntLatest;
-
+        std::atomic<size_t> &wcnt = wcntV_[id].cnt;
         off_t off;
         size_t size;
+        size_t diff;
         if (isOverlap_) {
+            assert(wcnt == id);
             setupOverlapTest(id, off, size);
+            diff = 6;
         } else {
+            assert(wcnt == 0);
             setupNormalTest(id, off, size);
+            diff = 1;
         }
         AlignedArray buf(size);
         assert(size >= sizeof(size_t));
 
         while (!quit_) {
-            const size_t fcntLatest = fcnt_;
-            if (fcntLatest != fcntPrev) {
-                wcntFlush = wcntLatest;
-                fcntPrev = fcntLatest;
-            }
-            if (isOverlap_) {
-                wcntLatest += 6;
-            } else {
-                wcntLatest++;
-            }
-            setIntToBlocks(buf, wcntLatest);
+            setIntToBlocks(buf, wcnt + diff);
             try {
                 file.pwrite(buf.data(), size, off);
             } catch (...) {
                 quit_ = true;
                 break;
             }
+            wcnt += diff;
             util::sleepMs(ioIntervalMs + rand());
         }
-        wcntV_[id].wcntFlush = wcntFlush;
-        wcntV_[id].wcntLatest = wcntLatest;
     }
 } writeCommand_;
 
