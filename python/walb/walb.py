@@ -815,6 +815,20 @@ class Controller:
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol])
 
+    def get_all_state(self, vol):
+        '''
+        Get all state fo a volume.
+        vol :: str - volume name
+        '''
+        verify_type(vol, str)
+        for s in self.sLayout.get_all():
+            msg = "%s %s:%d %s" % (s.name, s.address, s.port, kindToStr(s.kind))
+            try:
+                st= self.get_state(s, vol)
+            except:
+                st= "err"
+            print msg, st
+
     def verify_state(self, s, vol, state):
         '''
         s :: Server
