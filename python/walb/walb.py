@@ -19,6 +19,47 @@ Lbs = (1 << 9)  # logical block size
 
 
 ########################################
+# Verification functions.
+########################################
+
+def verify_type(obj, typeValue, elemType=None):
+    '''
+    obj       - object.
+    typeValue - type like int, str, list.
+    elemType  - specify type of elements if typeValue is sequence.
+
+    '''
+    if not isinstance(obj, typeValue):
+        raise Exception('invalid type', type(obj), typeValue)
+    if isinstance(obj, list) and elemType:
+        if not all(isinstance(e, elemType) for e in obj):
+            raise Exception('invalid list type', type(obj), typeValue, elemType)
+
+
+def verify_function(obj):
+    '''
+    obj - function object.
+
+    '''
+    def f():
+        pass
+    if type(obj) != type(f):
+        raise Exception('not function type', type(obj))
+
+
+def verify_gid_range(gidB, gidE, msg):
+    '''
+    gidB - begin gid.
+    gidE - end gid.
+    msg :: str - message for error.
+    '''
+    verify_type(gidB, int)
+    verify_type(gidE, int)
+    if gidB > gidE:
+        raise Exception(msg, 'bad gid range', gidB, gidE)
+
+
+########################################
 # Utility functions.
 ########################################
 
@@ -271,47 +312,6 @@ def wait_for_lv_ready(lvPath, runCommand=run_local_command):
 
 
 ########################################
-# Verification functions.
-########################################
-
-def verify_type(obj, typeValue, elemType=None):
-    '''
-    obj       - object.
-    typeValue - type like int, str, list.
-    elemType  - specify type of elements if typeValue is sequence.
-
-    '''
-    if not isinstance(obj, typeValue):
-        raise Exception('invalid type', type(obj), typeValue)
-    if isinstance(obj, list) and elemType:
-        if not all(isinstance(e, elemType) for e in obj):
-            raise Exception('invalid list type', type(obj), typeValue, elemType)
-
-
-def verify_function(obj):
-    '''
-    obj - function object.
-
-    '''
-    def f():
-        pass
-    if type(obj) != type(f):
-        raise Exception('not function type', type(obj))
-
-
-def verify_gid_range(gidB, gidE, msg):
-    '''
-    gidB - begin gid.
-    gidE - end gid.
-    msg :: str - message for error.
-    '''
-    verify_type(gidB, int)
-    verify_type(gidE, int)
-    if gidB > gidE:
-        raise Exception(msg, 'bad gid range', gidB, gidE)
-
-
-########################################
 # Constants for walb.
 ########################################
 
@@ -321,6 +321,9 @@ K_ARCHIVE = 2
 
 serverKinds = [K_STORAGE, K_PROXY, K_ARCHIVE]
 
+def kindToStr(kind):
+    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
+    return m[kind]
 
 # storage steady states
 sClear = "Clear"
@@ -542,10 +545,6 @@ class Device:
     '''
     def _get_sys_path(self):
         return '/sys/block/walb!%d/' % self.iD
-
-def kindToStr(kind):
-    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
-    return m[kind]
 
 
 class Server:
@@ -815,6 +814,20 @@ class Controller:
         verify_type(s, Server)
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol])
+
+    def get_all_state(self, vol):
+        '''
+        Get all state fo a volume.
+        vol :: str - volume name
+        '''
+        verify_type(vol, str)
+        for s in self.sLayout.get_all():
+            msg = "%s %s:%d %s" % (s.name, s.address, s.port, kindToStr(s.kind))
+            try:
+                st= self.get_state(s, vol)
+            except:
+                st= "err"
+            print msg, st
 
     def verify_state(self, s, vol, state):
         '''
