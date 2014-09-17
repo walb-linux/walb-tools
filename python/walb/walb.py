@@ -321,6 +321,9 @@ K_ARCHIVE = 2
 
 serverKinds = [K_STORAGE, K_PROXY, K_ARCHIVE]
 
+def kindToStr(kind):
+    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
+    return m[kind]
 
 # storage steady states
 sClear = "Clear"
@@ -542,10 +545,6 @@ class Device:
     '''
     def _get_sys_path(self):
         return '/sys/block/walb!%d/' % self.iD
-
-def kindToStr(kind):
-    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
-    return m[kind]
 
 
 class Server:
