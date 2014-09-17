@@ -336,9 +336,11 @@ struct VerifyCommand : Command
             return wcntFlush <= rcnt && rcnt <= wcntLatest;
         }
         void print() const {
-            ::printf("%2s %2zu %10zu %10zu %10zu\n"
+            const size_t diff0 = rcnt - wcntFlush;
+            const size_t diff1 = wcntLatest - rcnt;
+            ::printf("%2s %2zu %10zu %10zu %10zu +%04zu +%04zu\n"
                      , (isValid() ? "OK" : "NG")
-                     , tid, wcntFlush, rcnt, wcntLatest);
+                     , tid, wcntFlush, rcnt, wcntLatest, diff0, diff1);
         }
     };
     void run() override {
