@@ -35,6 +35,9 @@ BLOCK_SIZE = '512' # can be '4K' or so.
 FLUSH_INTERVAL_MS = 5  # flush interval [ms]
 IO_INTERVAL_MS = 1  # write interval [ms]
 
+CRASHTEST_TIMEOUT_S = 5  # crash-test timeout [sec]
+CRASHTEST_RUNNING_S = 2  # crash-test running period [sec]
+
 BIN = 'sudo ../../binsrc/'
 WDEV = '/dev/walb/%s' % WDEV_NAME
 
@@ -88,16 +91,14 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct, reorder):
     run(BIN + 'wdevc create-wdev %s %s -n %d > /dev/null' % (LDEV, DDEV, WDEV_NAME))
     #run(BIN + 'wdevc set-checkpoint-interval %s %d' % (WDEV, 1000))
 
-    timeoutS = 5
     if isOverlap:
         opt = '-ol'
     else:
         opt = '-nr %d' % (NR_THREADS_REORDER if reorder else NR_THREADS)
     proc = run_async(BIN + 'crash-test write %s -to %d -bs %s -ii %d -fi %d %s > %s'
-                     % (opt, timeoutS, BLOCK_SIZE, IO_INTERVAL_MS, FLUSH_INTERVAL_MS, WDEV, 'write.log'))
-    sleepS = 2
-    print 'sleep %d sec...' % sleepS
-    time.sleep(sleepS)
+                     % (opt, CRASHTEST_TIMEOUT_S, BLOCK_SIZE, IO_INTERVAL_MS, FLUSH_INTERVAL_MS, WDEV, 'write.log'))
+    print 'sleep %d sec...' % CRASHTEST_RUNNING_S
+    time.sleep(CRASHTEST_RUNNING_S)
     if mode == 'crash':
         run(BIN + 'crashblkc crash %s' % crashDev)
     else:
@@ -106,11 +107,11 @@ def do_write_expr(crashDev, mode, isOverlap, lostPct, reorder):
     if not proc.wait():
         raise EnvironmentError(proc.args)
 
-    run(BIN + 'wdevc delete-wdev %s' % WDEV)
+    run(BIN + 'wdevc delete-wdev -f %s' % WDEV)
     run(BIN + 'crashblkc recover %s' % crashDev)
     run(BIN + 'wdevc create-wdev %s %s > /dev/null' % (LDEV, DDEV))
     run(BIN + 'crash-test read %s -bs %s %s > read.log' % (opt, BLOCK_SIZE, WDEV))
-    run(BIN + 'wdevc delete-wdev %s' % WDEV)
+    run(BIN + 'wdevc delete-wdev -f %s' % WDEV)
     if isOverlap:
         opt = '-ol'
     else:
@@ -176,7 +177,7 @@ def do_read_expr(crashDev, canRead):
     if not ret:
         raise Exception('TEST_FAILURE read_test read must success')
 
-    run(BIN + 'wdevc delete-wdev %s' % WDEV)
+    run(BIN + 'wdevc delete-wdev -f %s' % WDEV)
     print 'TEST_SUCCESS read_test', crashDev, canRead
     print_line()
 
@@ -234,7 +235,7 @@ def do_write_read_expr():
         raise Exception('TEST_FAILURE write_read_test read must fail')
 
     run(BIN + 'crashblkc recover %s' % DDEV)
-    run(BIN + 'wdevc delete-wdev %s' % WDEV)
+    run(BIN + 'wdevc delete-wdev -f %s' % WDEV)
     print 'TEST_SUCCESS write_read_test'
     print_line()
 
@@ -243,7 +244,8 @@ if __name__ == '__main__':
 
     create_crashblk_devices()
 
-    for _ in xrange(NR_LOOP):
+    for i in xrange(NR_LOOP):
+        print 'LOOP', i
         for reorder in [False, True]:
             for lostPct in [100, 90, 50]:
                 for isOverlap in [False, True]:
