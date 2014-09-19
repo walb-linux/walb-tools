@@ -238,6 +238,7 @@ private:
                 file.pwrite(buf.data(), size, off);
             } catch (...) {
                 quit_ = true;
+                wcnt += diff; // the last IO may have succeeded.
                 break;
             }
             wcnt += diff;
