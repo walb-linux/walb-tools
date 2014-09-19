@@ -208,13 +208,16 @@ struct CreateWdev : CommandBase {
 
 struct DeleteWdev : CommandBase {
     std::string wdev;
+    bool force;
 
     void setup(cybozu::Option& opt) override {
         appendParamWdev(opt, wdev);
+        opt.appendBoolOpt(&force, "f", "force to delete.");
     }
     int run() override {
         struct walb_ctl ctl = {
             .command = WALB_IOCTL_STOP_DEV,
+            .val_int = (force ? 1 : 0),
             .u2k = { .buf_size = 0, },
             .k2u = { .buf_size = 0, },
         };
