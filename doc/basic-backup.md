@@ -16,6 +16,9 @@ You can initialize volumes in your backup group as follows:
 python> walbc.init_storage(s0, 'vol0', wdev0.path)
 ```
 
+REMARK : All states of servers must be `Clear` to run the above command.
+check it with `walb.get_all_state('vol0')`.
+
 Storage servers know just the relationship of volume name and walb device path.
 You must manage relationship of volumes and walb devices by yourself.
 
