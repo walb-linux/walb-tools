@@ -37,7 +37,7 @@ block device b のアドレス a の block を b[a] と書く．
 
 ### 定義: clean/dirty snapshot
 
-block device の各 block のある時刻のデータを集めたものを snapshot と呼ぶ．
+block device の各 block のある時刻の block data を集めたものを snapshot と呼ぶ．
 
 全ての block のデータの時刻が同じであるとき，その snapshot を
 clean snapshot と呼ぶ．
@@ -210,10 +210,14 @@ T_a := { t | a in A_t }
 `write_io_set(t0, t1)` から以下の条件で構成された diff `d` を，
 `log_diff(write_io_set(t0, t1))` を書き，log diff と呼ぶ．
 
+
 ```
 for all a,
   d[a] = b[a][max(T_a)] if T_a is not empty
+         null           otherwise
 ```
+
+`T_a is not empty <==> a in |d|` であることに注意。
 
 `t0` および `t1` 時点での snapshot `s0` と `s1` があったとき，
 `d0 = log_diff(write_io_set(t0, t1))` を用いることで，
@@ -281,9 +285,9 @@ apply の定義により，
 
 ### 定義
 
-- ある block device b の snapshot 列 s0, s1, s2, ... と
-  diff 列 d0, d1, ... が存在するものとする．
-- s 列と d 列は以下の関係を満たす．
+- ある block device b の snapshot s0 と、
+  diff 列 d0, d1, ... が与えられたとき、
+- snapshot s1, s2, ... を、apply を用いて以下のように構成する。
 
 ```
 s0 << d0 = s1
@@ -343,17 +347,17 @@ s' = s_{i+1}
 s_i << d_{i:i+1} = s_{i+1}
 ```
 
-
 #### canMerge predicate
 
 merged diff もしくは compared diff が 2 つ (`d0` と `d1`) あったとき，
 以下の条件を満たす述語 canMerge を定義し，`canMerge(d0, d1)` とか `d0 +? d1` と書く．
+ただし、`d0` と `d1` の diff の種類によって 4 通りに分けられる。
 
 ```
 (1) canMerge(d_{i0,j0}, d_{i1,j1}) := i1 <= j0 and i0 <= j1
-(2) canMerge(d_{i0:j0}, d_{i1,j1}) := i1 <= j0 and i0 <= j1 and i0 + 1 = j0
-(3) canMerge(d_{i0,j0}, d_{i1:j1}) := i1 <= j0 and i0 <= j1 and i1 + 1 = j1
-(4) canMerge(d_{i0:j0}, d_{i1:j1}) := i0 + 1 = j0 and i1 + 1 = j1
+(2) canMerge(d_{i0:j0}, d_{i1,j1}) := i1 <= j0 and i0 <= j1 and i0 + 1 == j0
+(3) canMerge(d_{i0,j0}, d_{i1:j1}) := i1 <= j0 and i0 <= j1 and i1 + 1 == j1
+(4) canMerge(d_{i0:j0}, d_{i1:j1}) := i0 + 1 == j0 and i1 + 1 == j1
 ```
 
 (1) は merge 後の diff が diff 列の連続部分列となる条件であることを意味する．
@@ -363,15 +367,14 @@ merged diff もしくは compared diff が 2 つ (`d0` と `d1`) あったとき
 #### applying snapshot
 
 以下の条件を満たす applying snapshot `s_{i,j}` および `s_{i:j}` を定義する．
+ただし、`i <= j` である。
 
 ```
 for all a,
   s_{i,j}[a] = s_i[a], s_{i+1}[a], ..., s_j[a] のうちのいずれか(不定)
-(i <= j)
 
 for all a,
   s_{i:j}[a] = s_i[a] か s_j[a] のいずれか(不定)
-(i <= j)
 ```
 
 上記の定義から，以下が成り立つ．
@@ -380,6 +383,7 @@ s_{i,i} = s_{i:i} = s_i
 ```
 
 また，
+```
 a not in |d_{i,j}| ==> s_i[a] = s_{i+1}[a] = ... = a_j[a]
 a not in |d_{i:j}| ==> s_i[a] = s_j[a]
 ```
