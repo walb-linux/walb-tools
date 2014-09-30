@@ -210,10 +210,10 @@ class Repeater {
                 }
                 break;
             case Running0:
-				{
+                {
                     int expected = Running0;
                     state_.compare_exchange_strong(expected, Sleep);
-				}
+                }
                 break;
             }
         }
@@ -224,7 +224,7 @@ class Repeater {
     }
 public:
     Repeater(const Option& opt, int id)
-		: id_(id)
+        : id_(id)
         , opt_(opt)
         , state_(Sleep)
         , threadRunner_()
