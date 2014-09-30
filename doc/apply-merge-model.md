@@ -397,14 +397,16 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 以下のように述語 canApply を定義し，`canApply(s, d)` とか，`s <? d` と書く．
 
 ```
-(1) canApply(s_i, d_{j,k}) := j <= i <= k
-(2) canApply(s_i, d_{j:k}) := j = i <= k
-(3) canApply(s_{i,j}, d_{k,l}) := i >= k and j <= l (i < j)
-(4) canApply(s_{i:j}, d_{k:l}) := i = k and j = l   (i < j)
+(1) canApply(s_i, d_{k,l) := k <= i <= l
+(2) canApply(s_i, d_{k:l}) := j = i <= l
+(3) canApply(s_{i,j}, d_{k,l}) := i >= k and j <= l if i < j
+(4) canApply(s_{i,j}, d_{k:l}) := i == k and j == l if i < j
+(5) canApply(s_{i:j}, d_{k,l}) := i >= k and j <= l if i < j
+(6) canApply(s_{i:j}, d_{k:l}) := i == k and j == l if i < j
 ```
 
-`s_{i,i}` を考えたとき，(1) と (3) は等価だが，
-`s_{i:i}` を考えたとき，(2) より (4) は制約が多い．
+(3)(5) において、i = j としたとき、(1) と等価。
+(4)(6) において i = j としたとき、(2) と必ずしも等しくない。
 
 
 #### 重複のない diff 列
