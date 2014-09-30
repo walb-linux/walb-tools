@@ -395,18 +395,16 @@ a not in |d_{i:j}| ==> s_i[a] = s_j[a]
 
 snapshot もしくは applying snapshot `s` と merged diff もしくは compared diff `d` があったとき，
 以下のように述語 canApply を定義し，`canApply(s, d)` とか，`s <? d` と書く．
+`s_(i,j)` は、`s_{i,j}` か `s_{i:j}` のどちらかを指すものとする。
 
 ```
-(1) canApply(s_i, d_{k,l) := k <= i <= l
-(2) canApply(s_i, d_{k:l}) := j = i <= l
-(3) canApply(s_{i,j}, d_{k,l}) := i >= k and j <= l if i < j
-(4) canApply(s_{i,j}, d_{k:l}) := i == k and j == l if i < j
-(5) canApply(s_{i:j}, d_{k,l}) := i >= k and j <= l if i < j
-(6) canApply(s_{i:j}, d_{k:l}) := i == k and j == l if i < j
+(1) canApply(s_(i,j), d_{k,l}) := i >= k and j <= l
+(2) canApply(s_(i,j), d_{k:l}) :=
+  if i == j のとき
+    i == j <= l
+  otherwise
+    i >= k and j <= l
 ```
-
-(3)(5) において、i = j としたとき、(1) と等価。
-(4)(6) において i = j としたとき、(2) と必ずしも等しくない。
 
 
 #### 重複のない diff 列
