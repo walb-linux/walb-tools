@@ -401,10 +401,12 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 (1) canApply(s_(i,j), d_{k,l}) := i >= k and j <= l
 (2) canApply(s_(i,j), d_{k:l}) :=
   if i == j のとき
-    i == j <= l
+    i <= l
   otherwise
-    i >= k and j <= l
+    i == k and j == l
 ```
+
+(2) に関して、`i == j` の時の方が、apply の適用範囲が広い。
 
 
 #### 重複のない diff 列
@@ -424,20 +426,27 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 
 - Lemma m1: `a in |d_{i,j}| ==> d_{i,j}[a] = s_j[a]`
 - Lemma m2: `a in |d_{i:j}| ==> d_{i:j}[a] = s_j[a]`
+
+- Lemma m12: `d = d_(i,j) のとき a in |d| ==> d[a] = s_j[a]`
+
 - Lemma m3: `s_i << d_{j,i} = s_i`
 - Lemma m4: `s_{i,j} << d_{k,i} = s_{i,j}`
 - Lemma m5: `a not in |d_{i,j}| ==> a not in |d_{i:j}|`
 - Lemma m6: `a not in |d_{i,j}| ==> a not in |d_{i',j'}| (i <= i', j' <= j)`
 - Lemma m7: `s = s_{i:j} ==> s = s_{i,j}`
 
-- Theorem  m8: `s_i <? d_{j,k} ==> s_i << d_{j,k} = s_k`
-- Theorem  m9: `s_i <? d_{j:k} ==> s_i << d_{j:k} = s_k`
-- Theorem m10: `s_i <? d_{j,k} ==> s_i <: d_{j,k} = s_{i:k}`
-- Theorem m11: `s_i <? d_{j:k} ==> s_i <: d_{j:k} = s_{i:k}`
+- Theorem  m8: `s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l`
+- Theorem  m9: `s_i <? d_{k:l} ==> s_i << d_{k:l} = s_l`
+- Theorem m10: `s_i <? d_{k,l} ==> s_i <: d_{k,l} = s_{i:l}`
+- Theorem m11: `s_i <? d_{k:l} ==> s_i <: d_{k:l} = s_{i:l}`
 - Theorem m12: `s_{i,j} <? d_{k,l} ==> s_{i,j} << d_{k,l} = s_l`
 - Theorem m13: `s_{i:j} <? d_{k:l} ==> s_{i:j} << d_{k:l} = s_l`
 - Theorem m14: `s_{i,j} <? d_{k,l} ==> s_{i,j} <: d_{k,l} = s_{i,l}`
 - Theorem m15: `s_{i:j} <? d_{k:l} ==> s_{i:j} <: d_{k:l} = s_{i:l}`
+- Theorem m  : 
+
+s = s_(i,j) <? d_(k,l) ==> 
+
 - Theorem m16: apply 可能 diff の存在
 - Theorem m17: 重複のない diff 列において，s_{i,j} か s_{i:j} のどちらかしか存在しない
 
@@ -980,7 +989,7 @@ diff に progress rule があるのは，`s_i.B` から `s_{i+1}.B` に
 canMergeR (演算子 `++?`) を次のように定義する．
 
 ```
-d0 ++? d1 := d0.E.B == d1.B.B
+d0 ++? d1 := d0.B.B <= d1.E.B and d1.B.B <= d0.E.B
              and not d0.is_compared
              and not d1.is_compared
 ```
@@ -1020,7 +1029,8 @@ s <<? d := d.B.B <= s.B and S.B < d.E.B
 as <<? d := d.B.B <= as.B.B and as.B.B < d.E.B and as.E.B <= d.E.B
 ```
 
-as == s のとき，上記 2 つの述語は等しい．
+as == s のとき，3 番目の条件は、2 番目の条件に含まれるため、
+上記 2 つの述語は等しい．
 
 
 #### applyR
@@ -1059,13 +1069,12 @@ diff 列 d0, d1, ... を以下のルールに従って生成するものとす�
 ただし，`s0 = |0, x|` とする．`x` は自然数．
 
 ```
-| #   |  s_i  |     d_i         | s_{i+1}  |   condition      |
-| (1) | |B,E| | |B,E|-->|B',E'| | |B',E'|  | B <= E, B' <= E' |
-| (2) | |B,E| | |B|-->|B'|      | |B',E|   | B < E, B' < E    |
-| (3) | |B,E| | |B|-->|B'|      | |B'|     | B < E, B' >= E   |
+| #   |  s_i  |     d_i         | s_{i+1}        | condition |
+| (1) | |B,E| | |B,E|-->|B',E'| | |B',E'|        | ---       |
+| (2) | |B,E| | |B|-->|B'|      | |B',max(B',E)| | B < E     |
 ```
 
-(1)(2)(3) のいずれかが選ばれるものとする．
+(1)(2) のいずれかが選ばれるものとする．
 
 上記のルールおよび diff の progress rule により，
 任意の `i >= 0` において，以下が成り立つ．
