@@ -45,11 +45,20 @@ block device b の時刻 t0 における clean snapshot s は次の関係式を�
 ```
 s[a] = b[a][t0] for all a = 0, 1, ..., n-1.
 ```
+`s` を `clean_snapshot(b, t0)` とも書く．
+
 全ての block のデータの時刻が時刻 t0 から時刻 t1 の間のどれかの時刻であるとき，
 その snapshot を dirty snapshot と呼ぶ．
 block device b の時刻 t0 .. t1 における dirty snapshot s は次の関係式を満たす．
 ```
 s[a] = b[a][t_a] for all a = 0, ..., n-1, t0 <= t_a <= t1.
+```
+`s` を `dirty_snapshot(b, t0, t1)` とも書く．
+
+以下は自明である．
+```
+for all t,
+dirty_snapshot(b, t, t) = clean_snapshot(b, t)
 ```
 
 通常の block device を用いた場合，
@@ -209,7 +218,7 @@ T_a := { t | a in A_t }
 
 `write_io_set(t0, t1)` から以下の条件で構成された diff `d` を，
 `log_diff(write_io_set(t0, t1))` を書き，log diff と呼ぶ．
-
+`log_diff(t0, t1)` と略すこともある．
 
 ```
 for all a,
@@ -220,7 +229,7 @@ for all a,
 `T_a is not empty <==> a in |d|` であることに注意。
 
 `t0` および `t1` 時点での snapshot `s0` と `s1` があったとき，
-`d0 = log_diff(write_io_set(t0, t1))` を用いることで，
+`d0 = log_diff(t0, t1)` を用いることで，
 `s0 << d0 = s1` が成立する．
 
 
@@ -242,44 +251,79 @@ for all a,
  hash 値を用いることで compared diff 構成の際に発生する転送データを減らす．)
 
 
-### 定理 b3: dirty snapshot に diff を適用することで clean snapshot を生成可能
+### 定理 b3: dirty_snapshot(tx0,tx1) << log_diff(ty0,ty1) = dirty_snapshot(ty1,max(ty1,tx1))
 
-```
-block device b の時刻 t0, t1 のときの clean snapshot をそれぞれ s0, s1 とする．
-区間 [t0, t1] における dirty snapshot を s01 とする．
-log_diff(write_io_set(t0, t1)) を d0 とする．
-
-このとき，s01 << d0 = s1 となることを示す．
+ただし，ty0 <= tx0 and tx0 < ty1 を満たすものとする．
 
 証明
 
-dirty snapshot の定義により，任意の a に対して，
-s01[a] = b[a][t] (t は t0 <= t <= t1 を満たすいつか)
+```
+s = dirty_snapshot(tx0, tx1)，
+d = log_diff(ty0, ty1)
+s' = s << d
+と置く．
+
+任意の a に対して，
+s[a] = b[a][t] (tx0 <= t <= tx1)
 
 T_a is empty のとき，
-write IO は [t0, t1] 区間で発生しなかったので，
-s01[a] = b[a][t0] = b[a][t1]．
+write IO は [ty0, ty1] 区間で発生しなかったので，
+b[a][t] s.t. ty0 <= t <= ty1 は全て等しい．
+これと，ty0 <= tx0 and tx0 < ty1 から，
+ty1 >= tx1 のとき
+  s[a] = b[a][ty1]
+ty1 < tx1 のとき
+  s[a] = b[a][t] s.t. ty1 <= t <= tx1
 
 T_a is not empty のとき，
 log diff の定義より，
 
-T_a is not empty <==> a in |d0|
-d0[a] = b[a][max(T_a)] = b[a][t1]
+d[a] = b[a][max(T_a)] = b[a][ty1]
 
 apply の定義により，
 
-(s01 << d0)[a]
-  = d0[a]  if a in |d0|
-    s01[a] otherwise
+s'[a] = d[a] if a in |d|
+        s[a] otherwise
 
-  = b[a][t1] if a in |d0|
-    b[a][t1] otherwise
+ty1 >= tx1 のとき，
+s'[a] = b[a][ty1] if a in |d|
+        b[a][ty1] otherwise
+      = b[a][ty1]
 
-  = b[a][t1]
+ty1 < tx1 のとき，
+s'[a] = b[a][ty1]                    if a in |d|
+        b[a][t] s.t. ty1 <= t <= tx1 otherwise
+      = b[a][t] s.t. ty1 <= t <= tx1
 
-故に，s01 << d0 = s1 であることが示された．
+よって，
+s' = dirty_snapshot(ty1, max(ty1, tx1))
+故に，示された．
 ```
 
+より単純なケースでは，以下が成立する．
+```
+t0 <= t1 <= t2 <= t3 のとき，
+dirty_snapshot(t1,t2) << log_diff(t0,t3) = clean_snapshot(t3)
+```
+
+
+### 定理 b4: s << compared_diff(s, s') = s'
+
+証明
+
+```
+d = compared_diff(s, s') と置く．
+
+compared_diff の定義により，任意の a について，
+d[a] = s'[a] if s[a] != s'[a]
+       null  otherwise
+
+(s << d)[a] = s'[a] if s[a] != s'[a]
+              s[a]  if s[a] == s'[a]
+            = s'[a]
+
+よって，示された．
+```
 
 ## 単純メタデータモデル
 
@@ -443,9 +487,9 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 - Theorem m13: `s_{i:j} <? d_{k:l} ==> s_{i:j} << d_{k:l} = s_l`
 - Theorem m14: `s_{i,j} <? d_{k,l} ==> s_{i,j} <: d_{k,l} = s_{i,l}`
 - Theorem m15: `s_{i:j} <? d_{k:l} ==> s_{i:j} <: d_{k:l} = s_{i:l}`
-- Theorem m  : 
+- Theorem m  :
 
-s = s_(i,j) <? d_(k,l) ==> 
+s = s_(i,j) <? d_(k,l) ==>
 
 - Theorem m16: apply 可能 diff の存在
 - Theorem m17: 重複のない diff 列において，s_{i,j} か s_{i:j} のどちらかしか存在しない
@@ -913,16 +957,18 @@ canApply が False となるため，適用可能な diff が存在しないこ�
 - dirty snapshot に必要な分の log diff を apply すると
   clean snapshot になるロジックの表現
 - 一度に生成する log diff のサイズを制限したいため，
-  (次の clean snapshot id を +1 ではなく，+X として生成したい)
-
+  (次の clean snapshot id を +1 ではなく，+x として生成したい)
 
 ### 定義
 
-
 #### snapshot
 
-snapshot `s` を `|B,E|` と書く．ただし，`B`, `E` は 0 以上の整数で，`B <= E` とする．
+meta snapshot `s` を `|B,E|` と書く．ただし，`B`, `E` は 0 以上の整数で，`B <= E` とする．
 また，`B = E` のとき，`|B|` と略記する．
+
+`B` および `E` は時刻に相当する値であり，
+`B < E` であれば `B` より `E` は後の時刻あることを意味し，
+`B = E` であれば，同時刻であることを意味する．
 
 いくつかの表記を定義する．
 ```
@@ -938,8 +984,8 @@ s.is_clean := (B == E)
 
 #### diff
 
-diff `d` を `s0-->s1` とか `|B,E|-->|B',E'|` と書く．
-ただし，`s0` や `s1` は snapshot であり，`s0 = |B,E|`，`s1 = |B',E'|` とする．
+meta diff `d` を `s0-->s1` とか `|B,E|-->|B',E'|` と書く．
+ただし，`s0` や `s1` は meta snapshot であり，`s0 = |B,E|`，`s1 = |B',E'|` とする．
 また，`B < B'` とし，これを progress rule と呼ぶ．
 
 いくつかの表記を定義する．
@@ -960,39 +1006,20 @@ hash-repl 由来の diff d は，`d.is_compared = True` とする．
 `False` のとき，dirty diff と呼ぶ．
 
 
-#### snapshot や diff のメタ表現に範囲を使う意味
-
-snapshto `|B,E|` における
-`B` や `E` の大小関係は，時刻の前後を表現しており，
-`t0 < t1` としたとき，block device の
-`t0` での clean snapshot を `|B|`
-`t1` での clean snapshot を `|E|` とし，
-`[t0,t1]` での dirty snapshot を，`|B,E|` で表す．
-
-walb を用いると，任意の時刻間 `[t0, t1] (t0 < t1)` の
-`write_io_set(t0, t1)` を記録して，再利用できる．
-このため，これを，diff に変換することによって，
-|B|-->|E| の clean diff を生成できる．
-
-範囲メタデータモデルを使うことにより，
-clean snapshot や dirty snapshot の自然な表現，
-dirty snapshot に clean diff を apply することで clean snapshot を生成できることや，
-単純メタデータモデルで示された性質を利用できる．
-
-diff に progress rule があるのは，`s_i.B` から `s_{i+1}.B` に
-必ず単調増加することで，diff の merge 条件や snapshot への apply 条件
-の計算できるようにするためである．
-
-
 #### canMergeR
 
 canMergeR (演算子 `++?`) を次のように定義する．
 
 ```
-d0 ++? d1 := d0.B.B <= d1.E.B and d1.B.B <= d0.E.B
+d0 ++? d1 := d0.B.B <= d1.B.B and d0.E.B < d1.E.B and d1.B.B <= d0.E.B
              and not d0.is_compared
              and not d1.is_compared
 ```
+
+それぞれの条件は以下を意味する．
+- `d0.B.B <= d1.B.B` d0 の方がより古い snapshot に適用できること
+- `d0.B.B < d1.B.B` d1 の方がより新しい snapshot を生成すること
+- `d1.B.B <= d0.E.B` d0 と d1 は重複もしくは連続していること
 
 
 #### mergeR
@@ -1018,14 +1045,13 @@ as.B := s0
 as.E := s1
 ```
 
-
 #### canApplyR
 
 述語 canApplyR (演算子 `<<?`) を snapshot s，applying snapshot as，
 および diff d に対して次のように定義する．
 
 ```
-s <<? d := d.B.B <= s.B and S.B < d.E.B
+s <<? d := d.B.B <= s.B and s.B < d.E.B
 as <<? d := d.B.B <= as.B.B and as.B.B < d.E.B and as.E.B <= d.E.B
 ```
 
@@ -1042,10 +1068,7 @@ applyR (演算子 `<<<`) を snapshot s，applying snapshot as，
 s <<< d := |d.E.B, max(d.E.B, s.E)| if d.is_clean
            d.E                      otherwise
 
-QQQQQ
-as <<< d := |d.E.B, max(d.E.E, as.E.E)|
-
-as <<< d :=
+as <<< d := as.B <<< d
 ```
 
 `as == s` のとき，上記 2 つの述語は等しい．
@@ -1062,171 +1085,98 @@ as <<: d := <as.B, as.B <<< d>
 ```
 
 
-#### diff 列の生成ルール
+#### snapshot/diff の生成ルール
 
-単純メタデータモデルにおける，snapshot 列 s0, s1, ... と，
-diff 列 d0, d1, ... を以下のルールに従って生成するものとする．
-ただし，`s0 = |0, x|` とする．`x` は自然数．
+meta snapshot `ms0 = |0, x|` とする．ただし，`x` は自然数とする．
+また，snapshot `s0 := dirty_snapshot(0, x)` とする．
+
+`ms_i` (`s_i`) が与えられているとき，
+`md_i` (`d_i`) および `ms_{i+1}` (`s_{i+1}`) を
+以下のルールに従って構成することにより，
+meta snapshot 列 `MS := {ms0, ms1, ...}`，
+snapshot 列 `S := {s0, s1, ...}`，
+meta diff 列 `MD := {md0, md1, ...}`，
+diff 列 `D := {d0, d1, ...}` を構成する．
 
 ```
-| #   |  s_i  |     d_i         | s_{i+1}        | condition |
-| (1) | |B,E| | |B,E|-->|B',E'| | |B',E'|        | ---       |
-| (2) | |B,E| | |B|-->|B'|      | |B',max(B',E)| | B < E     |
+ルール(1) か (2) のいずれかを選ぶ．
+
+ルール(1)
+
+  ms_i に対して，md_i := |B|-->|B'| とする．
+  ただし，B = ms_i.B < B' とする．
+  その後，ms_{i+1} := ms_i <<< md_i とする．
+
+  同様に，d_i := log_diff(B, B')，
+  s_{i+1} := s_i << d_i とする．
+
+ルール(2)
+
+  ms_i に対して，ms_{i+1} := |B',E'| とする．
+  ただし，ms_i.B < B' とする．
+  その後，md_i := ms_i-->ms_{i+1} とする．
+
+  同様に，s_{i+1} := dirty_snapshot(B',E')，
+  d_i := compared_diff(s_i, s_{i+1}) とする．
+
 ```
 
-(1)(2) のいずれかが選ばれるものとする．
+上記から任意の `i` について `s_i.B = d_i.B.B < d_i.E.B = s_{i+1}.B` が成り立つ．
 
-上記のルールおよび diff の progress rule により，
-任意の `i >= 0` において，以下が成り立つ．
+以下のように変換 M2B を定義する．
 ```
-s_i.B = d_i.B.B < d_i.E.B = s_{i+1}.B = d_{i+1}.B.B
+M2B(ms_i) := {dirty_snapshot(ms_i.B, ms_i.E)}
+
+M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i.is_clean
+             compared_diff(s_i, s_{i+1})  otherwise
 ```
-
-このことから，`s_i.B < s_{i+1}.B` が任意の `i` について成り立つため，
-範囲メタデータモデルにおける snapshot 表現は，
-単純メタデータモデルにおける `s_i` 表現と一対一対応する．
-
-同様に，diff 表現も，`d_i.B.B < d_{i+1}.B.B` であることから，
-単純データデータモデルにおける `d_i` と一対一対応する．
-
-また，上記ルールにて生成された任意の 2 つの snapshot
-`|B,E|` と `|B',E'|` (ただし，`B < B'` を満たす) から，
-compared diff が生成できるものとする．
-その compared diff d は `|B,E|-->|B',E'|` と書き，
-hash-bkp 由来の場合は `d.is_compared = False`，
-hash-repl 由来の場合は，`d.is_compared = True` とする．
-
-`s_i = |B,E|`, `s_j = |B',E'|` とすると，`d_{i:j}` と対応する．
-`B < B'` であるため `i < j` となり，矛盾しない．
-
-hash-bkp で生成された diff は，上記ルール(1) により生成されるため，
-単純メタデータモデルにおける `d_{i:i+1}` 相当である．
-hash-repl で生成された diff はそうとは限らない．
 
 
 ### 補題＆定理
 
 まとめ
 
-- Theorem: `s_i <<< d_i = s_{i+1}`
-- Theorem: `+?` と `++?` は等価である．
-- Theorem: `<?` と `<<?` は等価である．
-- Theorem: `++` と `+++` は等価である．
-- Theorem: `<<` と `<<<` は等価である．
-- Theorem: `<:` と `<<:` は等価である．
-- Theorem: ---
+- Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
+- Theorem: `for all i M2B(md_i) = d_i, M2S(ms_i) = s_i
 
 
-#### Theorem: `s_i <<< d_i = s_{i+1}`
-
-範囲メタデータレベルで満たすことを示す．
+#### Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
 
 証明
 
 ```
-```
-| #   |  s_i  |     d_i         | s_{i+1}  |   condition      |
-| (1) | |B,E| | |B,E|-->|B',E'| | |B',E'|  | B <= E, B' <= E' |
-| (2) | |B,E| | |B|-->|B'|      | |B',E|   | B < E, B' < E    |
-| (3) | |B,E| | |B|-->|B'|      | |B'|     | B < E, B' >= E   |
-```
+B_i = s_i.B と置く．
 
-s' = s_i <<< d_i と置く．
+progress rule より B_i < B_j <==> i < j
 
-rule (1) のとき
+pred = ms_i <<? md_j と置く．
 
-s_i = |B,E|
-d_i = |B,E|-->|B',E'|
-B <= E
-B' <= E'
+i == j のとき
 
-B < B' (progres rule) より，E < E'．
-E < E' なんて言えない．どっちになるべきかというと，E' になるべき．
+pred = B_i <= B_i and B_i < B_{i+1}
+     = True
 
-QQQ
+i < j のとき
 
-applyR の定義から，
-```
-s <<< d := |d.E.B, max(d.E.E, s.E)|
-as <<< d := |d.E.B, max(d.E.E, as.E.E)|
-```
+pred = B_j <= B_i and B_i < B_{j+1}
+     = False and True
+     = False
 
-s_i <<< d_i
-  = |d_i.E.B, max(d_i.E.E, s.E)|
-  = |B', max(E', E)|
-  = |B', E'|
-  = s_{i+1}
+i > j のとき
+
+pred = B_j <= B_i and B_i < B_{j+1}
+     = True and False
+     = False
 
 
-rule (2) のとき
-
-s_i = |B,E|
-d_i = |B|-->|B'|
-B < E
-B' < E
-
-s_i <<< d_i
-  = |d_i.E.B, max(d_i.E.E, s.E)|
-  = |B', max(B', E)|
-  = |B', E|
-  = s_{i+1}
-
-
-rule (3) のとき
-
-s_i = |B,E|
-d_i = |B|-->|B'|
-B < E
-
-
-
-
-
-
-
+以上から，全ての i,j について ms_i << ? md_j <==> i == j が示された．
 ```
 
 
-QQQ
-
-
-#### Theorem: `+?` と `++?` は等価である．
-
-証明
-
-```
-範囲メタデータモデルにおける生成ルールにより，
-s_i.B < s_{i+1}.B が成立する．
-
-
-
-
-```
-
-
-
-
-QQQQQ
-
-
+#### Theorem: `for all i M2B(md_i) = d_i, M2S(ms_i) = s_i
 
 QQQ
 
-#### Theorem: `<?` と `<<?` は等価である．
-
-QQQ
-
-#### Theorem: `++` と `+++` は等価である．
-
-QQQ
-
-#### Theorem: `<<` と `<<<` は等価である．
-
-QQQ
-
-#### Theorem: `<:` と `<<:` は等価である．
-
-QQQ
 
 
 -----
@@ -1237,120 +1187,32 @@ QQQ
 
 ## snapshot と diff の定義
 
-- ボリュームをブロック単位に分け，先頭から 0, 1, とつけたアドレスを addr と書く．
-- ブロックが保持するデータを bdata と書く．
-- ブロックサイズは固定であるものとする(一般に 512B か 4KiB)．
-- write IO により各ブロックの bdata は変更される．
+log diff と hash diff には性質に違いがある．
+ある addr における bdata について考える．
+時刻 t0 のときは A で，t1 のときは B だったとする．
 
-- snapshot は 全 addr における bdata を保持し，
-  diff は一部の addr 対して bdata を保持するデータである．
-  s[addr] は snapshot s における当該 addr の bdata とする．
-  d[addr] は diff d における当該 addr の bdata が存在する場合はそれを，
-  存在しない場合は null とする．
-  diff のデータは同一アドレスのデータは高々 1 つしかなく(重複がない)，
-  addr 順にソートされているものとする．
+(1) 当該ブロックに対して write IO が発生しなかった場合:
+  A == B であり，log/hash diff 共に当該ブロックのデータは含まない．
 
-- ある瞬間におけるボリュームのイメージを clean snapshot と呼ぶ．
-  厳密には，ある瞬間における実行中の write IO の結果が clean snapshot に
-  含まれるか含まれないかという問題がある．
-  walb を使った場合は全 write IO を直列化し，
-  ある時点までの write IO が全て完了しており，
-  それ以降の write IO が全く実行されていない状態を，clean snapshot と呼ぶ．
+(2) 当該ブロックに対して write IO が発生し，A != B の場合:
+  log/hash diff 共に当該ブロックのデータとして B を含む．
 
-- ボリュームがオンライン状態で，フルコピー中に write IO が発生するなどして，
-  ブロック毎にコピーされた時刻の異なるイメージを dirty snapshot と呼ぶ．
+(3) 当該ブロックに対して write IO が発生し，A == B の場合:
+  log diff の場合 B(==A) を含むが，hash diff の場合 B(==A) を含まない．
 
-- ボリュームがオンライン状態でも，
-  lvm の snapshot volume などを使えば，clean snapshot を手に入れることが出来る．
+log diff は，t0 < t < t1 の間に発生した write IO を集約したものだが，
+hash diff は t0 と t1 の地点の snapshot を比較することで得たものなので，
+(3) のケースに差が出る．
 
-- walb は lvm snapshot volume よりコストの低い方法で，
-  write IO 実行時にその書き込みデータを walb log (wlog) として記録することにより，
-  dirty snapshot と wlog から，clean snapshot を合成することが出来る．
-
-- wlog は diff 相当のデータだが，addr が重複するデータが含まれており，
-  また，addr 順にソートされておらず扱いづらいため，diff に変換して扱う．
-
-- snapshot への diff の適用
-  s0 に d0 を適用して，s1 になるものとする．
-  s2 は以下で表現される．
-  for all addresses:
-    if d[addr] is not null:
-        s1[addr] = d[addr]
-    else:
-        s1[addr] = s0[addr]
-
-- diff のマージ
-  d0 と d1 の重複を取り除いて合成し，dx を生成する．dx は以下で表現される．
-  for all addresses:
-    if d1[addr] is not null:
-      dx[addr] = d1[addr]
-    elif d0[addr] is not null:
-      dx[addr] = d0[addr]
-    else:
-      dx[addr] = null
-
-- dirty snapshot に wlog 由来の diff を適用することで，clean snapshot を合成
-  オンライン状態のボリュームにおいて，時刻 t0 にフルコピーを開始し，
-  t1 に完了したものとする．このデータは dirty snapshot であり，s01 とする．
-  時刻 t0, t1 の clean snapshot をそれぞれ s0，s1 とする．
-  t0 < t < t1 の間の write IO を取り零しなく記録した wlog から生成した diff を d0 とする．
-
-  全てのアドレスについて以下同様のことがいえるので，あるアドレスについてだけ議論する．
-
-  s01[addr] は t0 < t < t1 において当該 addr に対する write IO がなかった場合は
-  s0[addr] かつ s1[addr] である．
-  write IO があった場合，s01[addr] は t0 < t < t1 におけるいずれかの IO の結果となり，
-  今ある情報だけでは一意に定めることが出来ない．
-
-  d0[addr] は t0 < t < t1 において当該 addr に対する write IO がなかった場合は null，
-  あった場合は 最後の write IO の値が記録されているすなわちそれは s1[addr] である．
-
-  if write IOs exist in t0 < t < t1:
-    s01[addr] = unknown
-    d0[addr] = s1[addr]
-  else:
-    s01[addr] = s1[addr]
-    d0[addr] = null
-
-  以上の性質と，snapshot への diff の適用ルールにより，
-  s01 << d0 = s1 となることが示される．
-
-- walb は場合によってはブロックの hash 値を比較することで
-  オンラインボリュームやアーカイブボリューム同士の diff を生成することがある．
-  これを hash diff と呼ぶ．wlog 由来の diff は log diff と呼ぶ．
-  snapshot s0 と s1 の hash diff hd は以下で表現される．
-  for all adresses:
-    if s0[addr] == s1[addr]:
-      hd[addr] = s0[addr]
-    else:
-      hd[addr] = null
-
-- log diff と hash diff には性質に違いがある．
-  ある addr における bdata について考える．
-  時刻 t0 のときは A で，t1 のときは B だったとする．
-
-  (1) 当該ブロックに対して write IO が発生しなかった場合:
-    A == B であり，log/hash diff 共に当該ブロックのデータは含まない．
-
-  (2) 当該ブロックに対して write IO が発生し，A != B の場合:
-    log/hash diff 共に当該ブロックのデータとして B を含む．
-
-  (3) 当該ブロックに対して write IO が発生し，A == B の場合:
-    log diff の場合 B(==A) を含むが，hash diff の場合 B(==A) を含まない．
-
-  log diff は，t0 < t < t1 の間に発生した write IO を集約したものだが，
-  hash diff は t0 と t1 の地点の snapshot を比較することで得たものなので，
-  (3) のケースに差が出る．
-
-  次のようなケースを考える．
-  時刻 t0, t1, t2 における clean snapshot をそれぞれ s0, s1, s2 とする．
-  s0[addr] = A だったが，t0 < t < t1 における write IO により B になり (s1[addr] = B)
-  t1 < t < t2 における write IO により再び A になった (s2[addr] = A)．
-  結果，s0 と s2 から得られた hash diff は，A を含まないが，t0 < t < t2 の間の wlog から
-  生成された log diff は A を含む．
-  この hash diff は s0 に適用すると s2 が得られるが，s1 に適用しても
-  B への変更を取り零してしまい，s2 にはならない．
-  しかし，log diff は s0 にも s1 にも適用することが出来，s2 が得られる．
+次のようなケースを考える．
+時刻 t0, t1, t2 における clean snapshot をそれぞれ s0, s1, s2 とする．
+s0[addr] = A だったが，t0 < t < t1 における write IO により B になり (s1[addr] = B)
+t1 < t < t2 における write IO により再び A になった (s2[addr] = A)．
+結果，s0 と s2 から得られた hash diff は，A を含まないが，t0 < t < t2 の間の wlog から
+生成された log diff は A を含む．
+この hash diff は s0 に適用すると s2 が得られるが，s1 に適用しても
+B への変更を取り零してしまい，s2 にはならない．
+しかし，log diff は s0 にも s1 にも適用することが出来，s2 が得られる．
 
 
 ## walb-tools が前提とする snapshot と diff の制約
@@ -1385,122 +1247,5 @@ QQQ
   {as} の集合は {a} の集合を含むものとする．as_i = s_i とする．
 
 - これらの制約を満たせば merge/apply 結果のデータがおかしくならないことを証明する必要はある．
-
-
-## walb-tools における snapshot/diff の表現と生成ルール(20140922現在)
-
-- walb-tools の実装では，s や d を連番で管理することが難しい．
-  (一度に storage から proxy に送れる log サイズ制限が原因)
-  すなわち，diff 同士が隣り合うかどうか，どの diff がどの snaphsot に適用できるか，
-  適用した結果がどうなるかも自明ではない．
-  また，ユーザの都合でマージを許可したくないケースを区別する必要がある．
-
-- walb-tools では，snapshot と diff を以下のように表現する．
-  snapshot: |B,E|
-    B や E は 0 以上の整数．B <= E．B == E のとき |B| と書け，clean snapshot と呼ぶ．
-    B < E のとき，dirty snapshot と呼ぶ．
-  diff: |B,E|-->|B',E'|
-    |B,E| や |B',E'| は snapshot に相当し，その条件を満たす．
-    B < B' を満たす(プログレス制約)．
-    |B|-->|B'| のような clean snapshot 2 つで出来た diff を clean diff，それ以外を dirty diff と呼ぶ．
-
-- walb-tools の backup において生成される diff 列は，以下のルールで決められる．
-  s_0 は |0,x| となる．(0 < x)
-
-```
-| #   |  s_i  |     d_i        | s_{i+1}  |   condition      | hash/log? |
-| (1) | |B,E| | |B,E|-->|B'E'| | |B',E'|  | B <= E, B' <= E' | both      |
-| (2) | |B,E| | |B|-->|B'|     | |B',E'|  | B < E, B' < E    | log       |
-| (3) | |B,E| | |B|-->|B'|     | |B|      | B < E, B' >= E   | log       |
-```
-
-  snapshot |B,E| は各ブロックの状態が B と E に対応する時刻幅のどこかの瞬間であることを表す
-  dirty snapshot と考えることができる．
-  また，#(2) や #(3) については，対応する log diff を用いて dirty snapshot から clean snapshot を合成
-  できることを表している．log diff は clean diff しか存在しない．
-
-  backup においては，(*1) の問題は発生しない．これより粒度の小さい snapshot が存在しないからである．
-  hash-repl を考えるときは，(*1) の問題を考慮する必要がある．
-
-  s = |B,E| とすると，s.B = B, s.E = E．
-  d = |B,E|-->|B',E'| とすると，d.B = |B,E|, d.E = |B',E'|．
-
-- このルールを as や md に無理矢理拡張しようとして，問題が起きているのではないか．
-
-- apply/merge の定義
-
-```
-  def canApply(s, d):
-    if d.B.isClean():
-      return d.B.B <= s.B and s.B < d.E.B
-    else:
-      return s == d.B
-
-  def apply(s, d):
-    if d.isClean():
-      return |d.E.B, max(d.E.B, s.E)|
-    else:
-      return d.E
-
-  canMerge(d0, d1):
-    return canApply(d0.E, d1)
-
-  merge(d0, d1):
-    return |d0.B, apply(d0.E, d1)|
-```
-
-- as の定義
-  表記 `<|B,E|> or <|B,E|-->|B',E'|>`
-  前者は snapshot 相当，後者は diff 相当(ただし，range を表現している)．
-  as.isApplying が False だと前者，True だと後者を表現
-  `as.B = |B,E|`
-  `as.E = |B',E'|` (isApplying == True のときのみ有効)
-
-- md の定義
-  d と同じ．
-
-- apply の as/md への拡張
-
-```
-  def canApply(as, md):
-    r = canApply(as.B, md)
-    if not as.isApplying or not r:
-      return r
-    else:
-      return s.E.B <= md.E.B
-
-  def applying(as, md):
-    return <as.B-->apply(as.B, md)>
-
-  def apply(as, md):
-    return <apply(as.B, md)>
-```
-
-## 要件
-
-- apply と merge は上記の制約を満たす．
-- merge 可能な diff は出来る限り merge できるようにしたい．
-  ただし，他の要件を満たすのに複雑すぎるルールや情報が必要になる場合はこの条件を緩めて良い．
-
-
-## 必要なもの
-
-- s/d/as/md の walb-tools 実装での表現方法
-- canApply(as, md) --> bool
-- applying(as, md) --> as  (apply 中の中途半端な状態のこと)
-- apply(as, md) --> as (実質は s)
-- canMerge(md0, md1) --> bool
-- merge(md0, md1) --> md
-
-
-## 論点
-
-- |B,E|-->|B',E'| 表現だけで，diff 列内で隣り合うことを判定できるか？
-- そもそも diff や snapshot の表現は |B,E| とか |B,E|-->|B',E'| で良いのか？
-- 2段階の range を使えば，1 段目はシーケンスにすることが可能？？？
-  --> シーケンスにすると，2 段階目は range というよりは list 表現になってしまい，
-      終端が来るまで終わりが分からなくなる．これは merge で扱いにくいし，
-      実装の大幅な変更が必要になる．
-
 
 -----
