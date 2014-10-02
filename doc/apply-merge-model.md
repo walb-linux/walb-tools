@@ -1,4 +1,4 @@
-# walb-tools apply/merge 再再考 (r20140930a)
+# walb-tools apply/merge 再再考
 
 ## 3 つのモデル
 
@@ -125,76 +125,6 @@ for all a,
 また，`s <: (d0 ++ d1)` を `s <: d0 ++ d1` と略記する(`++` は `<:` より優先)．
 
 
-### 定理 b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
-
-merge 操作は結合法則が成り立つ．
-
-証明
-
-```
-d01 = d0 ++ d1 と置く．
-
-d01[a] = d1[a] if a in |d1|
-         d0[a] if a in |d0|-|d1|
-
-(d01 ++ d2)[a] =  d2[a] if a in |d2|
-                 d01[a] if a in |d01|-|d2|
-               = d2[a] if a in |d2|
-                 d1[a] if a in |d1|-|d2|
-                 d0[a] if a in |d0|-|d1|-|d2|
-
-d12 = d1 ++ d2 と置く．
-
-d12[a] = d2[a] if a in |d2|
-         d1[a] if a in |d1|-|d2|
-
-(d0 ++ d12)[a] = d12[a] if a in |d12|
-                  d0[a] if a in |d0|-|d12|
-               = d2[a] if a in |d2|
-                 d1[a] if a in |d1|-|d2|
-                 d0[a] if a in |d0|-|d1|-|d2|
-
-故に (d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)
-```
-
-### 定理 b2: `s << d0 << d1 = s << d0 ++ d1`
-
-d0 と d1 を 順に apply する操作と，d0 と d1 を merge 後に apply する操作は結果が等しい．
-
-証明
-
-```
-左辺を s0，右辺を s1 と置く．
-
-s00 = s << d0 と置く．
-
-s00[a] = d0[a] if a in |d0|
-          s[a] if a not in |d0|
-
-s0[a] =  d1[a] if a in |d1|
-        s00[a] otherwise
-      = d1[a]  if a in |d1|
-        d0[a]  if a in |d0|-|d1|
-         s[a]  otherwise
-
-dx = d0 ++ d1 と置く．
-
-dx[a] = d1[a] if a in |d1|
-        d0[a] if a in |d0|-|d1|
-
-s1[a] = dx[a] if a in |dx|
-         s[a] otherwise
-      = d1[a] if a in |d1|
-        d0[a] if a in |d0|-|d1|
-         s[a] otherwise
-
-以上から s0 = s1．よって s << d0 << d1 = s << d0 ++ d1 が示された．
-```
-
-`s << d0 << d1 << ... < d_{n-1} = s << d0 ++ d1 ++ ... ++ d_{n-1}`
-も成立する．
-
-
 ### 定義: log diff
 
 block device `b` に対してある期間 `[t0, t1]` に発生した write IO 集合を
@@ -244,6 +174,8 @@ for all a,
          null  otherwise
 ```
 
+`|d| = {a | s0[a] != s1[a]}` となることに注意．
+
 `compared_diff(s0, s1) = compared_diff(s1, s0)` は `s0 = s1` のときのみ成り立つのは明らかで，
 このとき empty diff となる．
 
@@ -251,52 +183,134 @@ for all a,
  hash 値を用いることで compared diff 構成の際に発生する転送データを減らす．)
 
 
-### 定理 b3: dirty_snapshot(tx0,tx1) << log_diff(ty0,ty1) = dirty_snapshot(ty1,max(ty1,tx1))
+### 定理
 
-ただし，ty0 <= tx0 and tx0 < ty1 を満たすものとする．
+まとめ
+
+- 定理 b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
+- 定理 b2: `s << d0 << d1 = s << d0 ++ d1`
+- 定理 b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
+- 定理 b4: `s << compared_diff(s, s') = s'`
+- 定理 b5: `d ++ d = d`
+
+
+#### 定理 b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
+
+merge 操作は結合法則が成り立つ．
 
 証明
 
 ```
-s = dirty_snapshot(tx0, tx1)，
-d = log_diff(ty0, ty1)
+d01 = d0 ++ d1 と置く．
+
+d01[a] = d1[a] if a in |d1|
+         d0[a] if a in |d0|-|d1|
+
+(d01 ++ d2)[a] =  d2[a] if a in |d2|
+                 d01[a] if a in |d01|-|d2|
+               = d2[a] if a in |d2|
+                 d1[a] if a in |d1|-|d2|
+                 d0[a] if a in |d0|-|d1|-|d2|
+
+d12 = d1 ++ d2 と置く．
+
+d12[a] = d2[a] if a in |d2|
+         d1[a] if a in |d1|-|d2|
+
+(d0 ++ d12)[a] = d12[a] if a in |d12|
+                  d0[a] if a in |d0|-|d12|
+               = d2[a] if a in |d2|
+                 d1[a] if a in |d1|-|d2|
+                 d0[a] if a in |d0|-|d1|-|d2|
+
+故に (d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)
+```
+
+
+#### 定理 b2: `s << d0 << d1 = s << d0 ++ d1`
+
+d0 と d1 を 順に apply する操作と，d0 と d1 を merge 後に apply する操作は結果が等しい．
+
+証明
+
+```
+左辺を s0，右辺を s1 と置く．
+
+s00 = s << d0 と置く．
+
+s00[a] = d0[a] if a in |d0|
+          s[a] if a not in |d0|
+
+s0[a] =  d1[a] if a in |d1|
+        s00[a] otherwise
+      = d1[a]  if a in |d1|
+        d0[a]  if a in |d0|-|d1|
+         s[a]  otherwise
+
+dx = d0 ++ d1 と置く．
+
+dx[a] = d1[a] if a in |d1|
+        d0[a] if a in |d0|-|d1|
+
+s1[a] = dx[a] if a in |dx|
+         s[a] otherwise
+      = d1[a] if a in |d1|
+        d0[a] if a in |d0|-|d1|
+         s[a] otherwise
+
+以上から s0 = s1．よって s << d0 << d1 = s << d0 ++ d1 が示された．
+```
+
+`s << d0 << d1 << ... < d_{n-1} = s << d0 ++ d1 ++ ... ++ d_{n-1}`
+も成立する．
+
+
+#### 定理 b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
+
+ただし，z <= x and x < w を満たすものとする．
+
+証明
+
+```
+s = dirty_snapshot(x, y)，
+d = log_diff(z, w)
 s' = s << d
 と置く．
 
 任意の a に対して，
-s[a] = b[a][t] (tx0 <= t <= tx1)
+s[a] = b[a][t] (x <= t <= y)
 
 T_a is empty のとき，
-write IO は [ty0, ty1] 区間で発生しなかったので，
-b[a][t] s.t. ty0 <= t <= ty1 は全て等しい．
-これと，ty0 <= tx0 and tx0 < ty1 から，
-ty1 >= tx1 のとき
-  s[a] = b[a][ty1]
-ty1 < tx1 のとき
-  s[a] = b[a][t] s.t. ty1 <= t <= tx1
+write IO は [z, w] 区間で発生しなかったので，
+b[a][t] s.t. z <= t <= w は全て等しい．
+これと，z <= x and x < w から，
+w >= y のとき
+  s[a] = b[a][w]
+w < y のとき
+  s[a] = b[a][t] s.t. w <= t <= y
 
 T_a is not empty のとき，
 log diff の定義より，
 
-d[a] = b[a][max(T_a)] = b[a][ty1]
+d[a] = b[a][max(T_a)] = b[a][w]
 
 apply の定義により，
 
 s'[a] = d[a] if a in |d|
         s[a] otherwise
 
-ty1 >= tx1 のとき，
-s'[a] = b[a][ty1] if a in |d|
-        b[a][ty1] otherwise
-      = b[a][ty1]
+w >= y のとき，
+s'[a] = b[a][w] if a in |d|
+        b[a][w] otherwise
+      = b[a][w]
 
-ty1 < tx1 のとき，
-s'[a] = b[a][ty1]                    if a in |d|
-        b[a][t] s.t. ty1 <= t <= tx1 otherwise
-      = b[a][t] s.t. ty1 <= t <= tx1
+w < y のとき，
+s'[a] = b[a][w]                    if a in |d|
+        b[a][t] s.t. w <= t <= y otherwise
+      = b[a][t] s.t. w <= t <= y
 
 よって，
-s' = dirty_snapshot(ty1, max(ty1, tx1))
+s' = dirty_snapshot(w, max(w, y))
 故に，示された．
 ```
 
@@ -307,7 +321,7 @@ dirty_snapshot(t1,t2) << log_diff(t0,t3) = clean_snapshot(t3)
 ```
 
 
-### 定理 b4: s << compared_diff(s, s') = s'
+#### 定理 b4: `s << compared_diff(s, s') = s'`
 
 証明
 
@@ -325,19 +339,51 @@ d[a] = s'[a] if s[a] != s'[a]
 よって，示された．
 ```
 
+
+#### 定理 b5: `d ++ d = d`
+
+証明
+
+```
+merge の定義により，任意の a について，
+
+(d ++ d)[a]
+  = d[a] if a in |d|
+    d[a] if a in |d|-|d|
+    null otherwise
+  = d[a] if a in |d|
+    null otherwise
+  = d[a]
+
+よって示された．
+```
+
+
 ## 単純メタデータモデル
 
 ### 定義
 
-- ある block device b の snapshot s0 と、
-  diff 列 d0, d1, ... が与えられたとき、
-- snapshot s1, s2, ... を、apply を用いて以下のように構成する。
+- ある block device b の適当な snapshot を選び，s0 とする．
+- 以下のルールを用いて，`D = {d0, d1, ...}` `S = {s0, s1, ...}` を構成する．
 
 ```
-s0 << d0 = s1
-s1 << d1 = s2
-...
-s_i << d_i = s_{i+1}
+ルール(1) か (2) のいずれかを選ぶ．
+
+ルール(1)
+
+  s_i に対して，適当な diff を選び，d_i とする．
+  s_{i+1} := s_i << d_i を定義する．
+
+ルール(2)
+
+  s_i に対して，適当な snapshot を選び s_{i+1} とする．
+  d_i := compared_diff(s_i, s_{i+1}) と定義する．
+```
+
+ルール(1) の場合は定義から，ルール(2) の場合は定理 b4 より，
+以下が導かれる．
+```
+for all i, s_i << d_i = s_{i+1}
 ```
 
 #### merged diff `d_{i,j}`
@@ -398,10 +444,10 @@ merged diff もしくは compared diff が 2 つ (`d0` と `d1`) あったとき
 ただし、`d0` と `d1` の diff の種類によって 4 通りに分けられる。
 
 ```
-(1) canMerge(d_{i0,j0}, d_{i1,j1}) := i1 <= j0 and i0 <= j1
-(2) canMerge(d_{i0:j0}, d_{i1,j1}) := i1 <= j0 and i0 <= j1 and i0 + 1 == j0
-(3) canMerge(d_{i0,j0}, d_{i1:j1}) := i1 <= j0 and i0 <= j1 and i1 + 1 == j1
-(4) canMerge(d_{i0:j0}, d_{i1:j1}) := i0 + 1 == j0 and i1 + 1 == j1
+(1) d_{i,j} +? d_{k,l} := i <= k <= j < l
+(2) d_{i:j} +? d_{k,l} := i <= k <= j < l and i + 1 == j
+(3) d_{i,j} +? d_{k:l} := i <= k <= j < l and k + 1 == l
+(4) d_{i:j} +? d_{k:l} := i + 1 == j and k + 1 == l
 ```
 
 (1) は merge 後の diff が diff 列の連続部分列となる条件であることを意味する．
@@ -442,16 +488,19 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 `s_(i,j)` は、`s_{i,j}` か `s_{i:j}` のどちらかを指すものとする。
 
 ```
-(1) canApply(s_(i,j), d_{k,l}) := i >= k and j <= l
-(2) canApply(s_(i,j), d_{k:l}) :=
-  if i == j のとき
-    i <= l
-  otherwise
-    i == k and j == l
+(1) s_(i,j) <? d_{k,l} :=
+      k <= i < l        if i == j
+      k <= i and j <= l otherwise
+
+(2) s_{i,j} <? d_{k:l} :=
+      i == k < l      if i == j
+      i == k == l - 1 if i + 1 == j
+      False           otherwise
+
+(3) s_{i:j} <? d_{k:l} :=
+      i == k < l        if i == j
+      i == k and j == l otherwise
 ```
-
-(2) に関して、`i == j` の時の方が、apply の適用範囲が広い。
-
 
 #### 重複のない diff 列
 
@@ -478,6 +527,9 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 - Lemma m5: `a not in |d_{i,j}| ==> a not in |d_{i:j}|`
 - Lemma m6: `a not in |d_{i,j}| ==> a not in |d_{i',j'}| (i <= i', j' <= j)`
 - Lemma m7: `s = s_{i:j} ==> s = s_{i,j}`
+
+- Theorem mx1: `d +? d' ==> d ++ d' = d_{i,l} s.t. d = d_{i,j}, d' = d_{k,l}`
+- Theorem mx2: `d +? d' ==> d ++ d' = d_{i,l} s.t. d = d_(i,j), d' = d_(k,l)`
 
 - Theorem  m8: `s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l`
 - Theorem  m9: `s_i <? d_{k:l} ==> s_i << d_{k:l} = s_l`
@@ -610,18 +662,42 @@ for all a,
 ```
 
 
-#### Theorem  m8: `s_i <? d_{j,k} ==> s_i << d_{j,k} = s_k`
+#### Theorem mx1: `d +? d' ==> d ++ d' = d_{i,l} s.t. d = d_{i,j}, d' = d_{k,l}`
 
 証明
 
 ```
-canApply の定義により，j <= i <= k．
+canMerge の定義により，
 
-s_i << d_{j,k} = s_i << d_{j,i} ++ d_{i,k}
-               = s_i << d_{j,i} << d_{i,k}
+i <= k <= j < l
+
+d_{i,j} ++ d_{k,l}
+  = d_{i,k} ++ d_{k,j} ++ d_{k,j} ++ d_{j,l}
+(定理 b5 により)
+  = d_{i,k} ++ d_{k,j} ++ d_{j,l}
+  = d_{i,l}
+
+よって，示された．
+```
+
+
+#### Theorem mx2: `d +? d' ==> d ++ d' = d_{i,l} s.t. d = d_(i,j), d' = d_(k,l)`
+
+QQQ
+
+
+#### Theorem  m8: `s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l`
+
+証明
+
+```
+s_i <? d_{k,l} = k <= i < l
+
+s_i << d_{k,l} = s_i << d_{k,i} ++ d_{i,l}
+               = s_i << d_{k,i} << d_{i,l}
 Lemma m3 より
-               = s_i << d_{i,k}
-               = s_k
+               = s_i << d_{i,l}
+               = s_l
 ```
 
 
@@ -1011,15 +1087,15 @@ hash-repl 由来の diff d は，`d.is_compared = True` とする．
 canMergeR (演算子 `++?`) を次のように定義する．
 
 ```
-d0 ++? d1 := d0.B.B <= d1.B.B and d0.E.B < d1.E.B and d1.B.B <= d0.E.B
+d0 ++? d1 := d0.B.B <= d1.B.B <= d0.E.B < d1.E.B
              and not d0.is_compared
              and not d1.is_compared
 ```
 
 それぞれの条件は以下を意味する．
 - `d0.B.B <= d1.B.B` d0 の方がより古い snapshot に適用できること
-- `d0.B.B < d1.B.B` d1 の方がより新しい snapshot を生成すること
 - `d1.B.B <= d0.E.B` d0 と d1 は重複もしくは連続していること
+- `d0.B.B < d1.B.B` d1 の方がより新しい snapshot を生成すること
 
 
 #### mergeR
@@ -1051,8 +1127,8 @@ as.E := s1
 および diff d に対して次のように定義する．
 
 ```
-s <<? d := d.B.B <= s.B and s.B < d.E.B
-as <<? d := d.B.B <= as.B.B and as.B.B < d.E.B and as.E.B <= d.E.B
+s <<? d := d.B.B <= s.B < d.E.B
+as <<? d := d.B.B <= as.B.B < d.E.B and as.E.B <= d.E.B
 ```
 
 as == s のとき，3 番目の条件は、2 番目の条件に含まれるため、
@@ -1103,31 +1179,55 @@ diff 列 `D := {d0, d1, ...}` を構成する．
 
 ルール(1)
 
-  ms_i に対して，md_i := |B|-->|B'| とする．
-  ただし，B = ms_i.B < B' とする．
-  その後，ms_{i+1} := ms_i <<< md_i とする．
+  ms_i に対して，B = ms_i.B と置き，B' を B < B' として取る．
 
-  同様に，d_i := log_diff(B, B')，
-  s_{i+1} := s_i << d_i とする．
+  md_i := |B|-->|B'| と
+  ms_{i+1} := ms_i <<< md_i を定義する．
+
+  d_i := log_diff(B, B')，
+  s_{i+1} := s_i << d_i も定義する．
 
 ルール(2)
 
-  ms_i に対して，ms_{i+1} := |B',E'| とする．
-  ただし，ms_i.B < B' とする．
-  その後，md_i := ms_i-->ms_{i+1} とする．
+  ms_i に対して，B' を ms_i.B < B' として取り，B' < E' を満たす E' を取る．
 
-  同様に，s_{i+1} := dirty_snapshot(B',E')，
-  d_i := compared_diff(s_i, s_{i+1}) とする．
+  ms_{i+1} := |B',E'|，
+  md_i := ms_i-->ms_{i+1} と定義する．
 
+  s_{i+1} := dirty_snapshot(B', E')，
+  d_i := compared_diff(s_i, s_{i+1}) と定義する．
+```
+
+ルール(1)は wlog から diff および snapshot を生成するときで，
+ルール(2)は hash-bkp のときに dirty snapshot から diff を生成するので，
+生成順が違うことに注意．
+
+`ms_{i+1}` は `<<<` の定義により、以下のようになる。
+```
+ルール(1) のとき
+  md_i is clean
+  md_i = |B|-->|B'|
+  ms_{i+1} = |B', max(B', ms_i.E)|
+  B = ms_i.B = md_i.B.B
+  B' = md_i.E.B = m_{i+1}.B
+
+ルール(2) のとき
+  md_i is dirty
+  md_i = ms_i-->|B',E'|
+  ms_{i+1} = |B',E'|
+  B' = d_i.E.B
+  E' = d_i.E.E
 ```
 
 上記から任意の `i` について `s_i.B = d_i.B.B < d_i.E.B = s_{i+1}.B` が成り立つ．
 
+ここで `S` と `D` の構成法は，単純メタデータモデルでの構成法と一致する．
+
 以下のように変換 M2B を定義する．
 ```
-M2B(ms_i) := {dirty_snapshot(ms_i.B, ms_i.E)}
+M2B(ms_i) := dirty_snapshot(ms_i.B, ms_i.E)
 
-M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i.is_clean
+M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i is clean
              compared_diff(s_i, s_{i+1})  otherwise
 ```
 
@@ -1137,7 +1237,7 @@ M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i.is_clean
 まとめ
 
 - Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
-- Theorem: `for all i M2B(md_i) = d_i, M2S(ms_i) = s_i
+- Theorem: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
 
 
 #### Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
@@ -1173,11 +1273,42 @@ pred = B_j <= B_i and B_i < B_{j+1}
 ```
 
 
-#### Theorem: `for all i M2B(md_i) = d_i, M2S(ms_i) = s_i
+#### Theorem: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
 
-QQQ
+証明
 
+```
+M2B(ms0)
+  = dirty_snapshot(ms0.B, ms0.E)
+  = dirty_snapshot(0, x)
+  = s0
 
+ルール(1) のとき
+  ms_{i+1} = |d_i.E.B, max(d_i.E.B, ms_i.E)|
+  M2B(ms_{i+1})
+    = dirty_snapshot(d_i.E.B, max(d_i.E.B, ms_i.E))
+    = dirty_snapshot(ms_{i+1}.B, ms_{i+1}.E)
+    = s_{i+1}
+  md_i = ms_i.B-->ms_{i+1}.B
+  M2B(md_i)
+    = log_diff(ms_i.B, ms_{i+1}.B)
+    = d_i
+
+ルール(2) のとき
+  ms_{i+1} = |d_i.E.B, d_i.E.E|
+  M2B(ms_{i+1})
+    = dirty_snapshot(d_i.E.B, d_i.E.E)
+    = dirty_snapshot(ms_{i+1}.B, ms_{i+1}.E)
+    = s_{i+1}
+  M2B(md_i)
+    = compared_diff(s_i, s_{i+1}
+    = d_i
+
+よって、示された。
+```
+
+`B2M(d_i) := md_i`、
+`B2M(s_i) := ms_i` とする。
 
 -----
 
@@ -1247,5 +1378,161 @@ B への変更を取り零してしまい，s2 にはならない．
   {as} の集合は {a} の集合を含むものとする．as_i = s_i とする．
 
 - これらの制約を満たせば merge/apply 結果のデータがおかしくならないことを証明する必要はある．
+
+-----
+
+```
+20141012a
+
+単純メタデータモデル(apply, merge のみ)
+
+d_{i,j} := d_i ++ d_{i+1} ++ ... ++ d_{j-1}
+d_{i,j} +? d_{k,l} := i <= k <= j < l
+s_i <? d_{k,l} := k <= i < l
+
+Thorem m8: s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l
+Theorem mx1: d_{i,j} +? d_{k,l} ==> d_{i,j} ++ d_{k,l} = d_{i,l}
+
+
+範囲メタデータモデル(apply, merge のみ)
+
+md ++? md' := md.B.B <= md'.B.B <= md.E.B < md'.E.B
+md +++ md'
+  := md.B-->|md'.E.B, max(md'.E.B, md.E.E)| if md.E is dirty and md' is clean
+     md.B-->md'.E                           otherwise
+ms <<? md := md.B.B <= ms.B < md.E.B
+ms <<< md := |md.E.B, max(md.E.B, ms.E)| if md is clean
+             md.E                        otherwise
+md_{i,j} := md_i +++ md_{i+1} +++ ... +++ md_{j-1}
+
+Theorem rx1: md_i ++? md_j <==> d_i +? d_j
+Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
+
+Theorem rx3: md_{i,j} ++? md_{k,l} <==> d_{i,j} +? d_{k,l}
+Theorem rx4: ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
+Theorem rx5: M2B(md_{i,i+2}) = M2B(md_i) ++ M2B(md_{i+1})
+Theorem rx6: ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l}) QQQ
+```
+
+
+#### Theorem rx1: `md_i ++? md_j <==> d_i +? d_j`
+
+証明
+
+```
+d_i +? d_j
+  = i <= j <= i + 1 <= j + 1
+  = i + 1 == j
+
+md_i ++? md_j
+  = md_i.B.B <= md_j.B.B <= md_i.E.B < md_j.E.B
+
+i + 1 == j のとき，
+
+md_i ++? md_j
+  = md_i.B.B <= md_{i+1}.B.B <= md_i.E.B < md_{i+1}.E.B
+  = True and True and True
+  = True
+
+i + 1 < j のとき
+
+md_i ++? md_j
+  = True and False and True
+  = False
+
+i == j のとき
+
+md_i ++? md_j
+  = True and True and False
+  = False
+
+i > j のとき
+
+md_i ++? md_j
+  = False and True and False
+  = False
+
+よって，示された．
+```
+
+
+#### Theorem rx2: `ms_i <<? md_j <==> s_i <? d_j`
+
+証明
+
+```
+s_i <? d_j
+  = j <= i < j+1
+  = i == j
+
+ms_i <<? md_j
+  = md_j.B.B <= ms_i.B < md_j.E.B
+
+i == j のとき
+
+ms_i <<? md_j
+  = True and True
+  = True
+
+i < j のとき
+
+ms_i <<? md_j
+  = False and True
+  = False
+
+i > j のとき
+
+ms_i <<? md_j
+  = True and False
+  = False
+
+よって，示された．
+```
+
+
+#### Theorem rx3: `md_{i,j} ++? md_{k,l} <==> d_{i,j} +? d_{k,l}`
+
+証明
+
+```
+d_{i,j} +? d_{k,l}
+  = i <= k <= j < l
+
+md_{i,j} ++? md_{k,l}
+  = md_{i,j}.B.B <= md_{k,l}.B.B <= md_{i,j}.E.B < md_{k,l}.E.B
+  = ms_i.B <= ms_k.B <= ms_j.B < ms_l.B
+
+ms_i.B は i が増えるにつれて単調増加するため，
+(i <= k <= j < l) = (ms_i.B <= ms_k.B <= ms_j.B < ms_l.B)
+
+よって，示された．
+```
+
+
+#### Theorem rx4: `ms_i <<? md_{k,l} <==> s_i <? d_{k,l}`
+
+証明
+```
+s_i <? d_{k,l}
+  = k <= i < l
+
+ms_i <<? md_{k,l}
+  = md_{k,l}.B.B <= ms_i.B < d_{k,l}.E.B
+  = ms_k.B <= ms_i.B < ms_l.B
+
+ms_i.B は i が増えるに従って単調増加するため，
+(k <= i < l) = (ms_k.B <= ms_i.B < ms_l.B)
+
+よって，示された．
+```
+
+
+#### Theorem rx5: `M2B(md_{i,i+2}) = M2B(md_i) ++ M2B(md_{i+1})`
+
+証明
+
+```
+QQQQQ
+```
 
 -----
