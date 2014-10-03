@@ -277,17 +277,17 @@ d = log_diff(z, w)
 s' = s << d
 とおく．
 
-任意の a に対して，
-s[a] = b[a][t] (x <= t <= y)
+任意の a に対して，ある t_a in [x, y] があって
+s[a] = b[a][t_a].
 
 T_a is empty のとき，
 write IO は [z, w] 区間で発生しなかったので，
-b[a][t] s.t. z <= t <= w は全て等しい．
+全ての t in [z, w] について b[a][t] = b[a][z]．
 これと，z <= x and x < w から，
 w >= y のとき
   s[a] = b[a][w]
 w < y のとき
-  s[a] = b[a][t] s.t. w <= t <= y
+  ある t in [w, y] にたいして s[a] = b[a][t].
 
 T_a is not empty のとき，
 log diff の定義より，
@@ -305,7 +305,7 @@ s'[a] = b[a][w] if a in |d|
       = b[a][w]
 
 w < y のとき，
-s'[a] = b[a][w]                    if a in |d|
+s'[a] = b[a][w]                  if a in |d|
         b[a][t] s.t. w <= t <= y otherwise
       = b[a][t] s.t. w <= t <= y
 
@@ -1219,7 +1219,7 @@ diff 列 `D := {d0, d1, ...}` を構成する．
   E' = d_i.E.E
 ```
 
-上記から任意の `i` について `s_i.B = d_i.B.B < d_i.E.B = s_{i+1}.B` が成り立つ．
+上記から任意の `i` について `ms_i.B = md_i.B.B < md_i.E.B = ms_{i+1}.B` が成り立つ．
 
 TODO: `MD` の定義
 
@@ -1425,6 +1425,11 @@ ms <<< md := |md.E.B, max(md.E.B, ms.E)| if md is clean
              md.E                        otherwise
 md_{i,j} := md_i +++ md_{i+1} +++ ... +++ md_{j-1}
 
+このとき
+md_{i,j}.B = md_i.B = ms_i.B
+md_{i,j}.E.B = md_{j-1}.E.B = ms_j.B
+が成り立つ.
+
 Theorem rx1: md_i ++? md_j <==> d_i +? d_j
 Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
 
@@ -1485,12 +1490,12 @@ md_i ++? md_j
 証明
 
 ```
-s_i <? d_j
-  = j <= i < j+1
-  = i == j
+s_i <? d_j が true
+  <=> j <= i < j+1
+  <=> i = j
 
-ms_i <<? md_j
-  = md_j.B.B <= ms_i.B < md_j.E.B
+ms_i <<? md_j が true
+  <=> md_j.B.B <= ms_i.B < md_j.E.B
 
 i == j のとき
 
@@ -1519,15 +1524,15 @@ ms_i <<? md_j
 証明
 
 ```
-d_{i,j} +? d_{k,l}
-  = i <= k <= j < l
+d_{i,j} +? d_{k,l} が true
+  <=> i <= k <= j < l
 
-md_{i,j} ++? md_{k,l}
-  = md_{i,j}.B.B <= md_{k,l}.B.B <= md_{i,j}.E.B < md_{k,l}.E.B
-  = ms_i.B <= ms_k.B <= ms_j.B < ms_l.B
+md_{i,j} ++? md_{k,l} が true
+  <=> md_{i,j}.B.B <= md_{k,l}.B.B <= md_{i,j}.E.B < md_{k,l}.E.B
+  <=> ms_i.B <= ms_k.B <= ms_j.B < ms_l.B
 
 ms_i.B は i が増えるにつれて単調増加するため，
-(i <= k <= j < l) = (ms_i.B <= ms_k.B <= ms_j.B < ms_l.B)
+(i <= k <= j < l) <=> (ms_i.B <= ms_k.B <= ms_j.B < ms_l.B)
 
 よって，示された．
 ```
@@ -1537,15 +1542,15 @@ ms_i.B は i が増えるにつれて単調増加するため，
 
 証明
 ```
-s_i <? d_{k,l}
-  = k <= i < l
+s_i <? d_{k,l} が true
+  <=> k <= i < l
 
-ms_i <<? md_{k,l}
-  = md_{k,l}.B.B <= ms_i.B < d_{k,l}.E.B
-  = ms_k.B <= ms_i.B < ms_l.B
+ms_i <<? md_{k,l} が true
+  <=> md_{k,l}.B.B <= ms_i.B < md_{k,l}.E.B
+  <=> ms_k.B <= ms_i.B < ms_l.B
 
-ms_i.B は i が増えるに従って単調増加するため，
-(k <= i < l) = (ms_k.B <= ms_i.B < ms_l.B)
+ms_i.B は i が増えるにつれて単調増加するため，
+(k <= i < l) <=> (ms_k.B <= ms_i.B < ms_l.B)
 
 よって，示された．
 ```
