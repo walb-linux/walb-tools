@@ -201,7 +201,7 @@ merge 操作は結合法則が成り立つ．
 証明
 
 ```
-d01 = d0 ++ d1 と置く．
+d01 = d0 ++ d1 とおく．
 
 d01[a] = d1[a] if a in |d1|
          d0[a] if a in |d0|-|d1|
@@ -212,7 +212,7 @@ d01[a] = d1[a] if a in |d1|
                  d1[a] if a in |d1|-|d2|
                  d0[a] if a in |d0|-|d1|-|d2|
 
-d12 = d1 ++ d2 と置く．
+d12 = d1 ++ d2 とおく．
 
 d12[a] = d2[a] if a in |d2|
          d1[a] if a in |d1|-|d2|
@@ -234,9 +234,9 @@ d0 と d1 を 順に apply する操作と，d0 と d1 を merge 後に apply �
 証明
 
 ```
-左辺を s0，右辺を s1 と置く．
+左辺を s0，右辺を s1 とおく．
 
-s00 = s << d0 と置く．
+s00 = s << d0 とおく．
 
 s00[a] = d0[a] if a in |d0|
           s[a] if a not in |d0|
@@ -247,7 +247,7 @@ s0[a] =  d1[a] if a in |d1|
         d0[a]  if a in |d0|-|d1|
          s[a]  otherwise
 
-dx = d0 ++ d1 と置く．
+dx = d0 ++ d1 とおく．
 
 dx[a] = d1[a] if a in |d1|
         d0[a] if a in |d0|-|d1|
@@ -275,7 +275,7 @@ s1[a] = dx[a] if a in |dx|
 s = dirty_snapshot(x, y)，
 d = log_diff(z, w)
 s' = s << d
-と置く．
+とおく．
 
 任意の a に対して，
 s[a] = b[a][t] (x <= t <= y)
@@ -326,7 +326,7 @@ dirty_snapshot(t1,t2) << log_diff(t0,t3) = clean_snapshot(t3)
 証明
 
 ```
-d = compared_diff(s, s') と置く．
+d = compared_diff(s, s') とおく．
 
 compared_diff の定義により，任意の a について，
 d[a] = s'[a] if s[a] != s'[a]
@@ -413,7 +413,7 @@ d_{i:i+1} = d_i
 証明
 
 ```
-dx = d_{i:i+1} と置く．
+dx = d_{i:i+1} とおく．
 
 dx = compared_diff(s_i, s_{i+1}) より，任意の a について，
 
@@ -421,7 +421,7 @@ dx = compared_diff(s_i, s_{i+1}) より，任意の a について，
 dx[a] = s_{i+1}[a] if a in |dx|
 a not in |dx| ==> s_i[a] = s_{i+1}[a]
 
-s' = s_i << d_{i:i+1} と置く．
+s' = s_i << d_{i:i+1} とおく．
 
 apply の定義により，
 
@@ -731,7 +731,7 @@ s_i << d_{j:k} = s_i << d_{i:k} = s_k
 ```
 canApply の定義により，j <= i <= k．
 
-sx = s_i <: d_{j,k} と置く．
+sx = s_i <: d_{j,k} とおく．
 
 applying の定義により，任意の a について，
 
@@ -764,7 +764,7 @@ sx[a] = s_i[a]           if a not in |d_{j,k}|
 ```
 canApply の定義により，i = j <= k．
 
-sx = s_i <: d_{i:k} と置く．
+sx = s_i <: d_{i:k} とおく．
 
 applying の定義により，任意の a について，
 
@@ -785,7 +785,7 @@ sx[a] = s_i[a] or d_{i:k}[a] (= s_k[a]) if a in |d_{i:k}|
 ```
 canApply の定義により，i >= k, j <= l
 
-sx = s_{i,j} << d_{k,l} と置く．
+sx = s_{i,j} << d_{k,l} とおく．
 
 sx = s_{i,j} << d_{k,l}
    = s_{i,j} << d_{k,i} ++ d_{i,l}
@@ -835,7 +835,7 @@ sx[a] = s_l[a]     if a in |d_{i,l}|
 ```
 canApply の定義により，i = k, j = l.
 
-sx = s_{i:j} << d_{i:j} と置く．
+sx = s_{i:j} << d_{i:j} とおく．
 
 s_{i:j} の定義より，
 
@@ -865,7 +865,7 @@ a in |d_{i:j}| ==> d_{i:j}[a] = s_j[a] であることから，
 ```
 canApply の定義により，i >= k, j <= l．
 
-sx = s_{i,j} <: d_{k,l} と置く．
+sx = s_{i,j} <: d_{k,l} とおく．
 
 また，su_i_j[a] を s_i[a], s_{i+1}[a], ..., s_j[a] のいずれかを表すものとする．
 
@@ -895,7 +895,7 @@ sx[a]
 ```
 canApply の定義より，i = k, j = l．
 
-sx = s_{i:j} <: d_{i:j} と置く．
+sx = s_{i:j} <: d_{i:j} とおく．
 
 s_{i:j} の定義より，
 
@@ -1252,11 +1252,11 @@ M2B(md_{i,j}) := M2B(md_i) ++ M2B(md_{i+1}) ++ ... ++ M2B(md_{j-1})
 証明
 
 ```
-B_i = s_i.B と置く．
+B_i = s_i.B とおく．
 
 progress rule より B_i < B_j <==> i < j
 
-pred = ms_i <<? md_j と置く．
+pred = ms_i <<? md_j とおく．
 
 i == j のとき
 
