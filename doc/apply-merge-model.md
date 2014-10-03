@@ -1444,12 +1444,12 @@ Theorem rx8: ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_
 証明
 
 ```
-d_i +? d_j
-  = i <= j <= i + 1 <= j + 1
-  = i + 1 == j
+d_i +? d_j が true
+  <=> i <= j <= i + 1 < j + 1
+  <=> j = i + 1
 
-md_i ++? md_j
-  = md_i.B.B <= md_j.B.B <= md_i.E.B < md_j.E.B
+md_i ++? md_j が true
+  <=> md_i.B.B <= md_j.B.B <= md_i.E.B < md_j.E.B
 
 i + 1 == j のとき，
 
