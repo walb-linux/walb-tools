@@ -1221,6 +1221,11 @@ diff 列 `D := {d0, d1, ...}` を構成する．
 
 上記から任意の `i` について `s_i.B = d_i.B.B < d_i.E.B = s_{i+1}.B` が成り立つ．
 
+TODO: `MD` の定義
+
+QQQ
+
+
 ここで `S` と `D` の構成法は，単純メタデータモデルでの構成法と一致する．
 
 以下のように変換 M2B を定義する．
@@ -1229,6 +1234,8 @@ M2B(ms_i) := dirty_snapshot(ms_i.B, ms_i.E)
 
 M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i is clean
              compared_diff(s_i, s_{i+1})  otherwise
+
+M2B(md_{i,j}) := M2B(md_i) ++ M2B(md_{i+1}) ++ ... ++ M2B(md_{j-1})
 ```
 
 
@@ -1236,11 +1243,11 @@ M2B(md_i) := log_diff(md_i.B.B, md_i.E.B) if md_i is clean
 
 まとめ
 
-- Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
-- Theorem: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
+- Theorem ry1: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
+- Theorem ry2: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
 
 
-#### Theorem: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
+#### Theorem ry1: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
 
 証明
 
@@ -1273,7 +1280,7 @@ pred = B_j <= B_i and B_i < B_{j+1}
 ```
 
 
-#### Theorem: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
+#### Theorem ry2: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
 
 証明
 
@@ -1283,25 +1290,38 @@ M2B(ms0)
   = dirty_snapshot(0, x)
   = s0
 
+0 から i まで M2B(ms_i) = s_i が，
+0 から i-1 まで M2B(md_i) = d_i が成り立っていると仮定する．
+このとき，
+M2B(ms_{i+1}) = s_{i+1}
+M2B(md_i) = d_i
+を示す．
+
 ルール(1) のとき
-  ms_{i+1} = |d_i.E.B, max(d_i.E.B, ms_i.E)|
+  B' = d_i.E.B = ms_{i+1}.B とする．
+  ms_{i+1} = |B', max(B', ms_i.E)|
   M2B(ms_{i+1})
-    = dirty_snapshot(d_i.E.B, max(d_i.E.B, ms_i.E))
     = dirty_snapshot(ms_{i+1}.B, ms_{i+1}.E)
-    = s_{i+1}
-  md_i = ms_i.B-->ms_{i+1}.B
+  s_{i+1}
+    = s_i << d_i
+    = M2B(md_i) << d_i
+    = dirty_snapshot(ms_i.B, ms_i.E) << log_diff(ms_i.B, B')
+ms_i.B <= ms_i.B, ms_i.B < B' を満たすので，Theorem b3 より
+    = dirty_snapshot(B', max(B', ms_i.E))
+    = dirty_snapshot(ms_{i+1}.B, ms_{i+1}.E)
+  よって，M2B(ms_{i+1}) = s_{i+1}
+
   M2B(md_i)
-    = log_diff(ms_i.B, ms_{i+1}.B)
+    = log_diff(md_i.B.B, md_i.E.B)
     = d_i
 
 ルール(2) のとき
-  ms_{i+1} = |d_i.E.B, d_i.E.E|
   M2B(ms_{i+1})
-    = dirty_snapshot(d_i.E.B, d_i.E.E)
     = dirty_snapshot(ms_{i+1}.B, ms_{i+1}.E)
     = s_{i+1}
+
   M2B(md_i)
-    = compared_diff(s_i, s_{i+1}
+    = compared_diff(s_i, s_{i+1})
     = d_i
 
 よって、示された。
@@ -1398,7 +1418,7 @@ Theorem mx1: d_{i,j} +? d_{k,l} ==> d_{i,j} ++ d_{k,l} = d_{i,l}
 
 md ++? md' := md.B.B <= md'.B.B <= md.E.B < md'.E.B
 md +++ md'
-  := md.B-->|md'.E.B, max(md'.E.B, md.E.E)| if md.E is dirty and md' is clean
+  := md.B-->|md'.E.B, max(md'.E.B, md.E.E)| if md' is clean
      md.B-->md'.E                           otherwise
 ms <<? md := md.B.B <= ms.B < md.E.B
 ms <<< md := |md.E.B, max(md.E.B, ms.E)| if md is clean
@@ -1410,8 +1430,12 @@ Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
 
 Theorem rx3: md_{i,j} ++? md_{k,l} <==> d_{i,j} +? d_{k,l}
 Theorem rx4: ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
-Theorem rx5: M2B(md_{i,i+2}) = M2B(md_i) ++ M2B(md_{i+1})
-Theorem rx6: ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l}) QQQ
+
+Theorem rx5: ms_i <<? md_{k,l} ==> ms_i <<< md_{k,l} = ms_l
+
+Theorem rx6: M2B(md_i) = d_i, M2B(ms_i) = s_i
+Theorem rx7: M2B(md_{i,j}) = d_{i,j}
+Theorem rx8: ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l}) QQQ
 ```
 
 
@@ -1526,13 +1550,62 @@ ms_i.B は i が増えるに従って単調増加するため，
 よって，示された．
 ```
 
-
-#### Theorem rx5: `M2B(md_{i,i+2}) = M2B(md_i) ++ M2B(md_{i+1})`
+#### Theorem rx5: `ms_i <<? md_{k,l} ==> ms_i <<< md_{k,l} = ms_l`
 
 証明
 
 ```
 QQQQQ
+
+
+```
+
+
+#### Theorem rx6: `M2B(md_i) = d_i, M2B(ms_i) = s_i`
+
+Theorem ry2 で証明済み．
+
+
+#### Theorem rx7: `M2B(md_{i,j}) = d_{i,j}`
+
+証明
+
+```
+Theorem rx6 より，
+M2B(md_i) = d_i for all i
+
+M2B(md_{i,j})
+  = M2B(md_i) ++ M2B(md_{i+1}) ++ ... ++ M2B(md_{j-1})
+  = d_i ++ d_{i+1} ++ ... ++ md_{j-1}
+  = d_{i,j}
+
+よって示された．
+```
+
+#### Theorem rx8: `ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l})`
+
+証明
+
+```
+Theorem rx5 より，
+ms_i <<< md_{k,l} = ms_l
+
+Theorem rx4 より，
+ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
+
+Theorem rx6 より，
+M2B(ms_l) = s_l
+M2B(ms_i) = s_i
+
+Theorem rx7 より，
+M2B(md_{k,l}) = d_{k,l}
+
+M2B(ms_i) << M2B(md_{k,l})
+  = s_i << d_{k,l}
+Theorem m8 より，
+  = s_l
+
+故に，示された．
 ```
 
 -----
