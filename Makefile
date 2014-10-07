@@ -114,6 +114,6 @@ stest100: pylint
 archive:
 	git archive --format=tar master > walb-tools.tgz
 
-ifneq "$(MAKECMDGOALS)" "clean"
+ifeq "$(findstring $(MAKECMDGOALS), clean archive)" ""
 -include $(DEPENDS)
 endif
