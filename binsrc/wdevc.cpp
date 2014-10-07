@@ -164,14 +164,14 @@ struct CreateWdev : CommandBase {
     int run() override {
         struct walb_start_param u2k; // userland -> kernel.
         struct walb_start_param k2u; // kernel -> userland.
-        struct walb_ctl ctl = {
-            .command = WALB_IOCTL_START_DEV,
-            .u2k = { .wminor = WALB_DYNAMIC_MINOR,
-                     .buf_size = sizeof(struct walb_start_param),
-                     .buf = (void *)&u2k, },
-            .k2u = { .buf_size = sizeof(struct walb_start_param),
-                     .buf = (void *)&k2u, },
-        };
+        struct walb_ctl ctl;
+        memset(&ctl, 0, sizeof(ctl));
+        ctl.command = WALB_IOCTL_START_DEV,
+        ctl.u2k.wminor = WALB_DYNAMIC_MINOR;
+        ctl.u2k.buf_size = sizeof(struct walb_start_param);
+        ctl.u2k.buf = (void *)&u2k;
+        ctl.k2u.buf_size = sizeof(struct walb_start_param);
+        ctl.k2u.buf = (void *)&k2u;
         // Check parameters.
         if (!::is_walb_start_param_valid(&sParam)) {
             LOGs.error() << "invalid start param." << sParam;
@@ -215,12 +215,10 @@ struct DeleteWdev : CommandBase {
         opt.appendBoolOpt(&force, "f", "force to delete.");
     }
     int run() override {
-        struct walb_ctl ctl = {
-            .command = WALB_IOCTL_STOP_DEV,
-            .val_int = (force ? 1 : 0),
-            .u2k = { .buf_size = 0, },
-            .k2u = { .buf_size = 0, },
-        };
+        struct walb_ctl ctl;
+        memset(&ctl, 0, sizeof(ctl));
+        ctl.command = WALB_IOCTL_STOP_DEV;
+        ctl.val_int = (force ? 1 : 0);
 
         BdevInfo wdevInfo;
         wdevInfo.load(wdev);
@@ -238,14 +236,14 @@ struct ListWdev : CommandBase {
     int run() override {
         uint minor[2] = {0, uint(-1)};
         struct walb_disk_data ddata[32];
-        struct walb_ctl ctl = {
-            .command = WALB_IOCTL_LIST_DEV,
-            .u2k = { .wminor = WALB_DYNAMIC_MINOR,
-                     .buf_size = sizeof(minor),
-                     .buf = (void *)&minor[0], },
-            .k2u = { .buf_size = sizeof(ddata),
-                     .buf = (void *)&ddata[0], },
-        };
+        struct walb_ctl ctl;
+        memset(&ctl, 0, sizeof(ctl));
+        ctl.command = WALB_IOCTL_LIST_DEV;
+        ctl.u2k.wminor = WALB_DYNAMIC_MINOR;
+        ctl.u2k.buf_size = sizeof(minor);
+        ctl.u2k.buf = (void *)&minor[0];
+        ctl.k2u.buf_size = sizeof(ddata);
+        ctl.k2u.buf = (void *)&ddata[0];
         for (;;) {
             invokeWalbctlIoctl(ctl, __func__);
             const size_t nr = ctl.val_int;
