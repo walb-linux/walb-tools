@@ -187,14 +187,14 @@ for all a,
 
 まとめ
 
-- 定理 b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
-- 定理 b2: `s << d0 << d1 = s << d0 ++ d1`
-- 定理 b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
-- 定理 b4: `s << compared_diff(s, s') = s'`
-- 定理 b5: `d ++ d = d`
+- Theorem b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
+- Theorem b2: `s << d0 << d1 = s << d0 ++ d1`
+- Theorem b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
+- Theorem b4: `s << compared_diff(s, s') = s'`
+- Theorem b5: `d ++ d = d`
 
 
-#### 定理 b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
+#### Theorem b1: `(d0 ++ d1) ++ d2 = d0 ++ (d1 ++ d2)`
 
 merge 操作は結合法則が成り立つ．
 
@@ -227,7 +227,7 @@ d12[a] = d2[a] if a in |d2|
 ```
 
 
-#### 定理 b2: `s << d0 << d1 = s << d0 ++ d1`
+#### Theorem b2: `s << d0 << d1 = s << d0 ++ d1`
 
 d0 と d1 を 順に apply する操作と，d0 と d1 を merge 後に apply する操作は結果が等しい．
 
@@ -265,7 +265,7 @@ s1[a] = dx[a] if a in |dx|
 も成立する．
 
 
-#### 定理 b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
+#### Theorem b3: `dirty_snapshot(x,y) << log_diff(z,w) = dirty_snapshot(w,max(w,y))`
 
 ただし，z <= x and x < w を満たすものとする．
 
@@ -321,7 +321,7 @@ dirty_snapshot(t1,t2) << log_diff(t0,t3) = clean_snapshot(t3)
 ```
 
 
-#### 定理 b4: `s << compared_diff(s, s') = s'`
+#### Theorem b4: `s << compared_diff(s, s') = s'`
 
 証明
 
@@ -340,7 +340,7 @@ d[a] = s'[a] if s[a] != s'[a]
 ```
 
 
-#### 定理 b5: `d ++ d = d`
+#### Theorem b5: `d ++ d = d`
 
 証明
 
@@ -380,7 +380,7 @@ merge の定義により，任意の a について，
   d_i := compared_diff(s_i, s_{i+1}) と定義する．
 ```
 
-ルール(1) の場合は定義から，ルール(2) の場合は定理 b4 より，
+ルール(1) の場合は定義から，ルール(2) の場合は Theorem b4 より，
 以下が導かれる．
 ```
 for all i, s_i << d_i = s_{i+1}
@@ -391,51 +391,20 @@ for all i, s_i << d_i = s_{i+1}
 diff 列の連続する部分列を merge したものを `d_{i,j}` と書く．
 
 ```
-d_{i,j} := d_i ++ d_{i+1} ++ ... ++ d_{j-1}  (i < j)
-           empty diff                        (i = j)
+d_{i,j} := d_i ++ d_{i+1} ++ ... ++ d_{j-1}  if i < j
+           empty diff                        if i = j
 ```
+
 
 #### compared diff `d_{i:j}`
 
 `s_i` と `s_j` から作られた compared diff を，`d_{i:j}` と書く．
 
 ```
-d_{i:j} := compared_diff(s_i, s_j)  (i < j)
-           empty diff               (i = j)
+d_{i:j} := compared_diff(s_i, s_j)  if i < j
+           empty diff               if i = j
 ```
 
-ただし，
-```
-d_{i:i+1} = d_i
-```
-として問題ないことに注意．
-
-証明
-
-```
-dx = d_{i:i+1} とおく．
-
-dx = compared_diff(s_i, s_{i+1}) より，任意の a について，
-
-|dx| = {a | s_i[a] != s_{i+1}[a]}
-dx[a] = s_{i+1}[a] if a in |dx|
-a not in |dx| ==> s_i[a] = s_{i+1}[a]
-
-s' = s_i << d_{i:i+1} とおく．
-
-apply の定義により，
-
-s'[a] = dx[a]  if a in |dx|
-        s_i[a] otherwise
-      = s_{i+1}[a] if a in |dx|
-        s_{i+1}[a] otherwise
-      = s_{i+1}[a]
-
-s' = s_{i+1}
-すなわち，
-
-s_i << d_{i:i+1} = s_{i+1}
-```
 
 #### canMerge predicate
 
@@ -493,24 +462,38 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
       k <= i and j <= l otherwise
 
 (2) s_{i,j} <? d_{k:l} :=
-      i == k < l      if i == j
-      i == k == l - 1 if i + 1 == j
-      False           otherwise
+      i == k < l        if i == j
+      False             otherwise
 
 (3) s_{i:j} <? d_{k:l} :=
       i == k < l        if i == j
       i == k and j == l otherwise
 ```
 
+
 #### 重複のない diff 列
 
-重複のない diff 列を，以下のルールで生成された diff 列とする．
+以下のルールで生成された diff 列を，重複のない diff 列か，`mcdl` と書く．
 
 - diff 列が空の場合は，`d0, d_{0,i}, d_{0:i}` のいずれかを加える `(i > 0)`．
 - diff 列が空でない場合は，その最後の diff `d_{j-1}, d_{i,j}, d_{i:j}` のいずれかに対して，
   `d_j, d_{j,k}, d_{j:k}` のいずれかを diff 列の最後に追加する `(j < k)`．
 
 例: `d0, d1, d_{2:5}, d5, d_{6,8}, d_{8:10}, d10, d11`
+
+このような構成法で生成された diff 列の集合を `MCDL` とする．
+定義から d_{i,j} と d_{i:j} が同時に mcdl に含まれないことが導かれる．
+
+ある mcdl in MCDL が与えられたとき，
+mcdl[0] = mcdl とする．
+mcdl[i+1] を，mcdl[i] の merge 可能な部分集合を merge したもので置き換えた集合とする．
+
+ある `mcdl in MCDL` が与えられたとき，
+`s0` から 0 回以上 `<< mcd` (ただし `mcd in mcdl`) 演算によって
+到達できる snapshot の集合を supp mcdl とする．
+
+また，supp2 mcdl = supp mcdl or { s <: d | s in supp mcdl, d in mcdl, s <? d}
+とする．
 
 
 ### 補題＆定理
@@ -541,8 +524,8 @@ snapshot もしくは applying snapshot `s` と merged diff もしくは compare
 - Theorem m14: `s_{i,j} <? d_{k,l} ==> s_{i,j} <: d_{k,l} = s_{i,l}`
 - Theorem m15: `s_{i:j} <? d_{k:l} ==> s_{i:j} <: d_{k:l} = s_{i:l}`
 
-- Theorem m16: apply 可能 diff の存在
-- Theorem m17: 重複のない diff 列において，s_{i,j} か s_{i:j} のどちらかしか存在しない
+- Theorem m16: `for all mcdl in MCDL, for all s in supp mcdl[i], exists d in mcdl[j] s.t. s <? d, i <= j`
+- Theorem m17: `for all mcdl in MCDL, for all as in supp2 mcdl[i], exists d in mcdl[j] s.t. s <? d, i <= j`
 
 
 #### Lemma m1: `a in |d_{i,j}| ==> d_{i,j}[a] = s_j[a]`
@@ -962,73 +945,114 @@ sx[a] = s_{i:j}[a] or d_{i:j}[a] if a in |d_{i:j}|
 ```
 
 
-#### Theorem m16: apply 可能 diff の存在
-
-重複のない diff 列が与えられたものとする．
-(例: `d0, d_{1:3}, d3, d_{4:8}, d8, d9, ...`)
-
-この diff 列は，時間経過と共に，canMerge によって許されている任意の diff の組の部分集合を
-merge し，merge 前の diff を置き換えるものとする．
-(例: `d8` と `d9` を merge して `d_{8,10}` で置き換える)
-
-時刻 `t0` において，`s_i` に対して，apply 可能な `d_{j,k}` または `d_{j:k}` を適用しようとし，
-applying 操作によって，`s_{i,k}` または `s_{i:k} が得られたものとする．
-その後，どのように merge が実行され diff 列内の diff が置き換えられたとしても，
-時刻 `t1 (t0 < t1)` において，`s_{i,k}` や `s_{i:k}` に対して apply 可能な diff が必ず存在することを示す．
+#### Lemma m16a: `supp mcdl = {s0} or {s_j | d_(i,j) in mcdl}`
 
 証明
 
 ```
-case 1: d_{j,k} の場合
+定義から s0 は明らかに supp mcdl に含まれる．
 
-canApply の定義により，j <= i <= k (1)
+構築中の mcdl の最後の diff を s_j とする(diff 列が空の場合は j = 0)．
+s_j に対して，j < k なる d_j もしくは d_{j,k} もしくは，d_{j:k} のいずれかが追加される．
+ただし，d_j = d_{j,j+1} であるので，d_{j,k} もしくは d_{j:k} のいずれかとなる．
+このとき，s_j << d_{j,k} = s_k, s_j << d_{j:k} = s_k となり，
+いずれの場合も s_k となり，これは supp mcdl に含まれる．
 
-canMerge の定義により，列に存在する compared diff は merge 出来ないため，
-[t0,t1] の間にどのように merge が実行されようとも，
-d_{j,k} を含む diff d_{j',k'} s.t. (j' <= j, k <= k') が t1 において存在する．(2)
+すなわち
+d_{j,k} もしくは d_{j:k} が mcdl に含まれている
+<==> s_k が supp mcdl に含まれる．
 
-canApply の定義により，
-s_{i,k} <? d_{j',k'} = i >= j' and k <= k' (3)
-
-(1) と (2) より j' <= j <= i であるから i >= j'
-(2) より k <= k'
-よって，(3) は True となる．
-
-故に s_{i,k} に apply 可能な diff が t1 において存在する．
-
-
-case 2: d_{j:k} の場合
-
-canApply の定義により，i = j (4)
-
-前提により，列に存在する d_{j:k} は j + 1 < k であるため，
-canMerge の定義から，他の diff と merge 出来ない．
-故に，[t0, t1] の間にどのような merge が実行されようとも，
-t0 の時点で列に存在した d_{j:k} は t1 においても存在する．
-
-よって，
-
-s_{i,k} <? d_{j:k} = i == j and k == k (5)
-
-(4) により (5) は True となる．
-よって s_{i:k} に apply 可能な diff が t1 において存在する．
-
-以上，全ての場合において成立することが示された．
+よって，示された．
 ```
 
 
-#### Theorem m17: 重複のない diff 列において，s_{i,j} か s_{i:j} のどちらかしか存在しない
+#### Theorem m16: `for all mcdl in MCDL, for all s in supp mcdl[i], exists d in mcdl[j] s.t. s <? d, i <= j`
 
-Theorem m16 と同様に，重複のない diff 列が与えられ，
-時間経過と共に canMerge(dx, dy) が許される diff dx, dy がそれらを merge した diff で
-置き換えられていく状況を考える．
+apply 可能 diff の存在．
 
 
+証明
 
-QQQ
+```
+i = j のとき，成立するのは明らか．
+
+mcdl の定義より，
+d_{i,j} に対して，d_{j,k}, d_{k,l}, ... d_{y,z} が mcdl に含まれる場合に限り，
+merge 可能である．
+mcdl[i] において，そのような diff 部分集合を merge したもので置き換えたとき，
+d_{i,j} ++ d_{k,l} ++ ... ++ d_{y,z} = d_{i,z} であるので，
+mcdl[i+1] = mcdl[i] - {d_{i,j}, d_{k,l}, ..., d_{y,z}} or {d_{i,z}} となる．
+このとき，
+Lemma m16a により，
+supp mcdl[i+1] = supp mcdl[i] - {s_j, s_l, ..., s_z} or {s_z} となる．
+{s_j, s_l, ..., s_z} - {s_z} に含まれる任意の s に対して，
+s <? d_{i,z} が成立し，s << d_{i,z} = s_z となる．
+
+すなわち，for all s in supp mcdl[i], exists d in mcdl[i+1] s.t. s <? d
+が成立する．
+
+i <= j まで成立していると仮定する．
+
+mcdl[j] に含まれる merge 可能な diff の部分集合に，mcdl[j-1] で置き換えた s_z が含まれない場合
+
+j = i + 1 のときと同様に，成立する．
+
+mcdl[j] に含まれる merge 可能な diff の部分集合に，mcdl[j-1] で置き換えた d_{i,z} が含まれる場合
+
+d_{i,z} を含む merge 可能な部分集合を merge したものは，
+p <= i, q <= z である p, q を用いて d_{p,q} となる．
+
+canApply の定義により，d_{i,z} が適用可能な任意の snapshot に，d_{p,q} は適用可能．
+よって，i <= j + 1 においても成立する．
+
+以上から，数学的帰納法により，
+for all mcdl in MCDL, for all s in supp mcdl[i], exists d in mcdl[j] s.t. s <? d, i <= j
+示された．
+```
 
 
-### log diff と hash diff 違いが apply に及ぼす影響の考察
+#### Theorem m17: `for all mcdl in MCDL, for all as in supp2 mcdl[i], exists d in mcdl[j] s.t. as <? d, i <= j`
+
+証明
+
+```
+d = d_{m:n} の場合
+
+d は他のどの diff とも merge 不可能なので，mcdl に存在するならば，
+必ず mcdl[i] for all i に含まれる．
+また，d_{m:n} が mcdl に含まれる場合，m < p < n なる s_p は supp mcdl に含まれない．
+
+d = d_{m:n} が apply 可能な任意の as = s_(k,l) について，
+Theorem m13 と m15 により，
+as <? d_{m:n} ==> (as <: d_{m:n}) <? d_{m:n}
+が成立．
+
+
+d = d_{m,n} の場合
+
+Theorem m16 と同様に，i <= j であるとき，
+d_{m,n} in mcdl[i] に対して，p <= m, n <= q であるような
+d_{p,q} in mcdl[j] が必ず存在する．
+
+d = d_{m,n} が apply 可能な任意の as = s_(k,l) の条件は，
+
+s_(k,l) <? d_{m,n} =
+  m <= k < n        if k == l
+  m <= k and l <= n otherwise
+
+すなわち，
+p <= k < q        if k == l
+p <= k and l <= q otherwise
+は成立するため，
+Theorem m12 と m14 により，
+as <? d_{m,n} ==> (as <: d_{m,n}) <? d_{p,q}
+が成立．
+
+よって，示された．
+```
+
+
+### log diff と compared diff 違いが apply に及ぼす影響の考察
 
 compared diff でも d_{i:i+1} は d_i と同等に扱っても差し支えないが，
 d_{i:j} (i + 1 < j) の場合は，merge してしまうと apply 対象 snapshot によっては
@@ -1119,17 +1143,14 @@ meta diff `d` を `s0-->s1` とか `|B,E|-->|B',E'|` と書く．
 d.B := s0
 d.E := s1
 
-d.is_compared := True または False
+d.may_skip := True または False
 d.is_dirty := (d.B.is_clean and d.E.is_clean)
 d.is_clean := not d.is_dirty
 ```
 
-log 由来の diff d は `d.is_compared = False`，
-hash-bkp 由来の diff d は `d.is_compared = False`，
-hash-repl 由来の diff d は，`d.is_compared = True` とする．
-
 `d.is_clean` が `True` のとき，clean diff と呼び，
 `False` のとき，dirty diff と呼ぶ．
+`may_skip` については後述．
 
 
 #### canMergeR
@@ -1138,8 +1159,8 @@ canMergeR (演算子 `++?`) を次のように定義する．
 
 ```
 d0 ++? d1 := d0.B.B <= d1.B.B <= d0.E.B < d1.E.B
-             and not d0.is_compared
-             and not d1.is_compared
+             and not d0.may_skip
+             and not d1.may_skip
 ```
 
 それぞれの条件は以下を意味する．
@@ -1153,7 +1174,7 @@ d0 ++? d1 := d0.B.B <= d1.B.B <= d0.E.B < d1.E.B
 mergeR (演算子 `+++`) を次のように定義する．
 
 ```
-d0 +++ d1 := d0.B-->|d1.E.B,max(d0.E.E,d1.E.B)| if d0.E.is_dirty and d1.is_clean
+d0 +++ d1 := d0.B-->|d1.E.B,max(d1.E.B,d0.E.E)| if d1.is_clean
              d0.B-->d1.E                        otherwise
 ```
 
@@ -1170,6 +1191,7 @@ as.is_applying := (as.s0 == as.s1)
 as.B := s0
 as.E := s1
 ```
+
 
 #### canApplyR
 
@@ -1248,7 +1270,7 @@ diff 列 `D := {d0, d1, ...}` を構成する．
   d_i := compared_diff(s_i, s_{i+1}) と定義する．
 ```
 
-注意20141006:
+注意:
   ms_i.B < B' < E' ではなく ms_i.E < B' < E' にしないと
   Theorem rx5 が言えない．
 
@@ -1276,12 +1298,14 @@ diff 列 `D := {d0, d1, ...}` を構成する．
 上記から任意の `i` について `ms_i.B = md_i.B.B < md_i.E.B = ms_{i+1}.B` が成り立つ．
 また，`i < j ==> ms_i.E <= ms_j.E` が成り立つ．
 
-TODO: `MD` の定義
-
-QQQ
-
+md_i.may_skip = False とする．
 
 ここで `S` と `D` の構成法は，単純メタデータモデルでの構成法と一致する．
+
+`i < j` であるような `s_i, s_j in S` において，
+`md_{i:j} := ms_i-->ms_j` と定義する．
+また，md_{i:j}.may_skip = True とする．
+
 
 以下のように変換 M2B を定義する．
 ```
@@ -1297,10 +1321,38 @@ M2B(md_{i:j}) := compared_diff(M2B(ms_i), M2B(ms_j))
 
 ### 補題＆定理
 
-まとめ
+後述．
 
-- Theorem ry1: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
-- Theorem ry2: `for all i M2B(md_i) = d_i, M2B(ms_i) = s_i`
+-----
+
+## インクリメンタルにモデルを拡張する．
+
+- level1: apply only
+- level2: apply, merge
+- level3: apply, merge, compared_diff
+- level4: apply, merge, compared_diff, applying
+
+
+### Level1: apply only
+
+
+```
+単純メタデータモデル(level1: apply only)
+
+s_i <? d_j := i == j
+
+s_i << d_i = s_{i+1}
+
+
+範囲メタデータモデル(level1: apply only)
+
+ms <<? md := md.B.B <= ms.B < md.E.B
+ms <<< md := |md.E.B, max(md.E.B, ms.E)| if md is clean
+             md.E                        otherwise
+
+Theorem ry1: for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)
+Theorem ry2: for all i M2B(md_i) = d_i, M2B(ms_i) = s_i
+```
 
 
 #### Theorem ry1: `for all i, j ms_i <<? md_j <==> i == j (<==> s_i <? d_j)`
@@ -1383,102 +1435,10 @@ ms_i.B <= ms_i.B, ms_i.B < B' を満たすので，Theorem b3 より
 よって、示された。
 ```
 
-`B2M(d_i) := md_i`、
-`B2M(s_i) := ms_i` とする。
-
------
 
 
-以下は，未整理のメモ．
-
-
-## snapshot と diff の定義
-
-log diff と hash diff には性質に違いがある．
-ある addr における bdata について考える．
-時刻 t0 のときは A で，t1 のときは B だったとする．
-
-(1) 当該ブロックに対して write IO が発生しなかった場合:
-  A == B であり，log/hash diff 共に当該ブロックのデータは含まない．
-
-(2) 当該ブロックに対して write IO が発生し，A != B の場合:
-  log/hash diff 共に当該ブロックのデータとして B を含む．
-
-(3) 当該ブロックに対して write IO が発生し，A == B の場合:
-  log diff の場合 B(==A) を含むが，hash diff の場合 B(==A) を含まない．
-
-log diff は，t0 < t < t1 の間に発生した write IO を集約したものだが，
-hash diff は t0 と t1 の地点の snapshot を比較することで得たものなので，
-(3) のケースに差が出る．
-
-次のようなケースを考える．
-時刻 t0, t1, t2 における clean snapshot をそれぞれ s0, s1, s2 とする．
-s0[addr] = A だったが，t0 < t < t1 における write IO により B になり (s1[addr] = B)
-t1 < t < t2 における write IO により再び A になった (s2[addr] = A)．
-結果，s0 と s2 から得られた hash diff は，A を含まないが，t0 < t < t2 の間の wlog から
-生成された log diff は A を含む．
-この hash diff は s0 に適用すると s2 が得られるが，s1 に適用しても
-B への変更を取り零してしまい，s2 にはならない．
-しかし，log diff は s0 にも s1 にも適用することが出来，s2 が得られる．
-
-
-## walb-tools が前提とする snapshot と diff の制約
-
-- フルバックアップによって作られたボリュームの snapshot イメージを s0 とする．
-  それに対して，差分データ diff の列 d0, d1, d2, ... がハッシュバックアップ/やログ変換により生成される．
-  diff は archive server に保存完了したときに確定し，それが列になることは実装によって保証される．
-
-- s0 に d0 を適用することができ，その結果は s1 となる．これを s0 << d0 = s1 と書く．
-  同様に，s_i << d_i = s_{i+1} となる．
-
-- diff 列の中で隣り合う diff はマージすることができる．
-  それを，merged diff と呼び，d_i ++ d_{i+1} ++ ... ++ d_{j-1} = md_i_j と書く (i < j)．
-  演算子 (++) は交換法則が成り立たないことに注意．
-  md_i_j ++ md_j_k = md_i_k も成り立つ．
-  一度マージされた diff は元に戻せない．
-  {md} の集合は {d} の集合を含むものとする．md_i_{i+1} = md_i = d_i とする．
-
-- マージされた diff は，次の条件下でのみ snapshot に適用できる．
-  s_k << md_i_j = s_j  (i <= k <= j)
-  ただし，md_i_j が hash-repl によって作られた s_x と s_y (x + 1 < y) の hash diff を含む場合 (*1) は，
-  条件 (k = i) が必要となる．
-  (s_x と s_{x+1} の hash diff については，間に snapshot を含まないため，
-   差分を取り零す問題が発生しないため，hash-bkp により生成された diff は，追加条件を満たす必要はない)
-
-- s_k << md_i_j を実行中にアーカイブイメージが中途半端な状態でプロセスが死ぬことがある．
-  この中途半端な状態を applying snapshot と呼び，as_i_j と書く．
-  次に再開したときは，そのイメージには以下の条件を満たす diff しか適用できない．
-  as_i_j << md_i'_j' = s_j'  (i' <= i, j <= j')
-  ただし，md_i_j が (*1) を満たす場合，条件は，(i' = i = k, j <= j') となる．
-  この適用操作は as_i'_j' 状態を経由して，s_j' となることに注意．
-  {as} の集合は {a} の集合を含むものとする．as_i = s_i とする．
-
-- これらの制約を満たせば merge/apply 結果のデータがおかしくならないことを証明する必要はある．
-
------
-
-インクリメンタルにモデルを拡張する．
-
-- level1: apply only
-- level2: apply, merge
-- level3: apply, merge, compared_diff
-- level4: apply, merge, compared_diff, applying
-
+### Level2: apply, merge
 ```
-単純メタデータモデル(level1: apply only)
-
-範囲メタデータモデル(level1: apply only)
-
-QQQQQ
-
-```
-
-
------
-
-
-```
-20141002a
 
 単純メタデータモデル(level2: apply, merge)
 
@@ -1656,821 +1616,6 @@ ms_{i+1} = md_i.E = E' > B' > ms_i.E
 
 よって示された．
 ```
-
-
-#### Theorem rx5: `ms_i <<? md_{k,l} ==> ms_i <<< md_{k,l} = ms_l`
-
-証明
-
-```
-ms_i <<? md_{k,l} <=> k <= i < l
-
-Lemma rx5b より，
-
-md_{k,l} に含まれる全 md_i k <= i < l がルール(1) のみで構成される場合，
-
-md_{k,l} = |md_k.B.B|-->|md_{l-1}.E.B|
-
-ms_i <<< md_{k,l}
-  = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_i.E)|
-
-ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_k.E)|
-
-md_{l-1}.E.B < ms_k.E のとき，
-Lemma rx5b2 より、ms_i = |md_{i-1}.E.B, ms_k.E|
-よって、ms_i.E = ms_k.E
-
-md_{l-1}.E.B >= ms_k.E のとき，
-  ms_i.B < ms_k.E のとき
-    ms_i.E = ms_k.E
-  ms_i.B >= ms_k.E のとき
-    ms_i.E = ms_i.B <= md_{l-1}.E.B
-    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
-
-よって，ms_i <<< md_{k,l} = ms_l
-
-
-md_{k,l} に含まれる md_i k <= i < l において，ルール(2) で構成されるものが含まれる場合，
-そのような最後の md を md_{m-1} とする．k < m <= l．
-
-md_{k,l} = md_{k,l}.B-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
-
-ms_i <<< md_{k,l}
-  if md_{k,l} is clean (then md_{l-1}.E.B >= ms_m.E)
-    = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_i.E)|
-  else
-    = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
-
-ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
-
-
-md_{k,l} is clean のとき，
-  i <= m の場合，
-    ms_i.E <= ms_m.E <= md_{l-1}.E.B なので，
-    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
-  m < i の場合，
-    ms_i.B < ms_m.E の場合
-      ms_i.E = ms_m.E
-      よって，ms_i <<< md_{k,l} = ms_l
-    ms_i.B >= ms_m.E の場合
-      ms_i.E = ms_i.B <= ms_l.B = md_{l-1}.E.B
-      よって，ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
-else
-  明らかに ms_i << md_{k,l} = ms_l
-
-以上，全ての場合において ms_i <<< md_{k,l} = ms_l が示された．
-```
-
-
-#### Theorem rx6: `M2B(md_i) = d_i, M2B(ms_i) = s_i`
-
-Theorem ry2 で証明済み．
-
-
-#### Theorem rx7: `M2B(md_{i,j}) = d_{i,j}`
-
-証明
-
-```
-Theorem rx6 より，
-M2B(md_i) = d_i for all i
-
-M2B(md_{i,j})
-  = M2B(md_i) ++ M2B(md_{i+1}) ++ ... ++ M2B(md_{j-1})
-  = d_i ++ d_{i+1} ++ ... ++ md_{j-1}
-  = d_{i,j}
-
-よって示された．
-```
-
-#### Theorem rx8: `ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l})`
-
-証明
-
-```
-Theorem rx5 より，
-ms_i <<< md_{k,l} = ms_l
-
-Theorem rx4 より，
-ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
-
-Theorem rx6 より，
-M2B(ms_l) = s_l
-M2B(ms_i) = s_i
-
-Theorem rx7 より，
-M2B(md_{k,l}) = d_{k,l}
-
-M2B(ms_i) << M2B(md_{k,l})
-  = s_i << d_{k,l}
-Theorem m8 より，
-  = s_l
-
-故に，示された．
-```
-
------
-
-20141004a
-
-```
-単純メタデータモデル(level3: apply, merge, compared_diff)
-
-追加の定義
-
-i < j について
-d_{i:j} := compared_diff(s_i, s_j)
-d_{i:j} +? d_{k,l} := False
-d_{i,j} +? d_{k:l} := False
-d_{i:j} +? d_{k:l} := False
-d_{i:j} について ++ は定義しない．
-s_i <? d_{k:l} := k == i
-d_{i~j} を d_{i,j} もしくは d_{i:j} とする．
-
-追加の証明
-
-Theorem m8: s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l
-を拡張して，
-Theorem mx8a: d = d_{k~l} のとき s_i <? d ==> s_i << d = s_l
-を示す．
-
-Theorem mx1: d_{i,j} +? d_{k,l} ==> d_{i,j} ++ d_{k,l} = d_{i,l}
-は Theorem mx2 として拡張．ただし，d_{i:j} や d_{k:l} は
-merge 不可なので，ほとんど同じ．
-
-
-範囲メタデータモデル(level3: apply, merge, compared_diff)
-
-追加の定義
-
-i < j として，md_{i:j} := ms_i-->md_j
-md_{i:j} ++? md_{k,l} := False
-md_{i,j} ++? md_{k:l} := False
-md_{i:j} ++? md_{k:l} := False
-md_{i:j} について ++ は定義しない．
-ms <<? md_{i:j} := ms == md_{i:j}.B
-ms <<< md_{i:j} := これまでの ms <<< md をそのまま使う
-md_{i~j} を md_{i,j} もしくは md_{i:j} とする．
-M2B(md_{i:j}) := compared_diff(s_i, s_j)
-
-
-追加の証明
-
-Theorem rx1: md_i ++? md_j <==> d_i +? d_j
-変更の必要なし
-
-Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
-変更の必要なし
-
-Theorem rz3: mdx ++? mdy <==> dx +? dy
-ただし
-mdx, dx = md_{i,j}, d_{i,j} または md_{i:j}, d_{i:j}
-mdy, dy = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
-とする．
-
-Theorem rz4a: ms_i <<? md_{k:l} <==> s_i <? d_{k:l}
-を示せば，Theorem rx4 と合わせて
-Theorem rz4: ms_i <<? md <==> s_i <? d
-ただし md, d = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
-が示される．
-
-Theorem rz5a: ms_i <<? md_{k:l} ==> ms_i <<< md_{k:l} = ms_l
-を示せば，Theorem rx5 と合わせて
-Theorem rz5: ms_i <<? md ==> ms_i <<< md = ms_l
-ただし，md = md_{k,l} または md_{k:l}
-が示される．
-
-Theorem rx5c: md_{i,j} ++? md_{k,l} ==> md_{i,j} +++ md_{k,l} = md_{i,l}
-Theorem rx5d: ms_i <<? md_{k,l} and md_{k,l} ++? md_{m,n} ==> ms_i <<< md_{k,l} <<< md_{m,n} = ms_i <<< md_{k,l} +++ md_{m,n}
-は変更の必要なし．md_{i:j} は merge できないから．
-
-Theorem rx6: M2B(md_i) = d_i, M2B(ms_i) = s_i
-変更の必要なし．
-
-Theorem rz7a: M2B(md_{i:j}) = d_{i:j}
-を示せば，Theorem rx7 と合わせて
-Theorem rz7: M2B() = d_{i,j}
-ただし md, d = md_{i,j}, d_{i,j} または md_{k:l}, d_{k:l}
-が示される．
-
-Theorem rz8a: ms_i <<? md_{k:l} ==> M2B(ms_i <<< md_{k:l}) = M2B(ms_i) << M2B(md_{k:l})
-を示せば，Theorem rx8 と合わせて
-Theorem rz8: ms <<? md ==> M2B(ms <<< md) = M2B(ms) << M2B(md)
-が示される．
-
-```
-
-#### Theorem rz3: `dx ++? mdy <==> dx +? dy`
-
-ただし
-```
-mdx, dx = md_{i,j}, d_{i,j} または md_{i:j}, d_{i:j}
-mdy, dy = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
-```
-とする．
-
-証明
-
-```
-mdx, dx = md_{i,j}, d_{i,j},
-mdy, dy = md_{i,j}, d_{i,j} のとき
-
-Theorem rx3 にて示した．
-
-その他のとき，
-
-mdx ++? mdy = False
-dx +? dy = False
-
-よって，示された．
-```
-
-
-#### Theorem rz4a: `ms_i <<? md_{k:l} <==> s_i <? d_{k:l}`
-
-証明
-
-```
-s_i <? d_{k:l}
-  <=> k == i
-
-ms_i <<? md_{k:l}
-  <=> ms_i == md_{k:l}.B
-  <=> ms_i == md_k
-  <=> k == i
-
-よって示された．
-```
-
-
-#### Theorem rz5a: `ms_i <<? md_{k:l} ==> ms_i <<< md_{k:l} = ms_l`
-
-証明
-
-```
-Theorem rz4a より，
-ms_i <<? md_{k:l} <==> k == i
-
-ms_i <<< md_{k:l}
-  = ms_i <<< md_{i:l}
-  = ms_l
-
-よって示された．
-```
-
-
-#### Theorem rz7a: `M2B(md_{i:j}) = d_{i:j}`
-
-証明
-
-```
-M2B(md_{i:j})
-  = compared_diff(M2B(ms_i), M2B(ms_j))
-Theorem rx6 より
-  = compared_diff(s_i, s_j)
-  = d_{i:j}
-
-よって，示された．
-```
-
-
-#### Theorem rz8a: `ms_i <<? md_{k:l} ==> M2B(ms_i <<< md_{k:l}) = M2B(ms_i) << M2B(md_{k:l})`
-
-証明
-
-```
-Theorem rz4a より
-ms_i <<? md_{k:l} <==> k == i
-
-M2B(ms_i <<< md_{k:l})
-  = M2B(ms_l)
-  = s_l
-
-M2B(ms_i) << M2B(md_{k:l})
-Theorem rz7a より
-  = s_i << d_{k:l}
-  = s_i << d_{i:l}
-  = s_l
-
-よって，示された．
-```
-
-
-
------
-## 20141006 メモ
-
-
-Th1 (md +++ md') +++ md'' = md +++ (md' +++ md'')
-Th2 ms <<< md <<< md' = ms <<< (md +++ md')
-
-Def md_{i,j} := md_i +++ md_{i+1} +++ ... +++ md_{j-1}
-
-Th rx5 ms_i <<? md_{k,l} ==> ms_i <<< md_{k,l} = ms_l
-
-i + 1 < l のとき
-ms_i <<< md_{k,l}
-= ms_i <<< (md_{k,i+1} +++ md_{i+1,l})
-= ms_i <<< md_{k,i+1} <<< md_{i+1,l}
-= ms_{i+1} <<< md_{i+1,l}
-= ms_l
-
-ms_i <<? md_{k,l} := k <= i < l
-
-i+1 = l のとき
-ms_i <<< md_{k,l}
-= ms_i <<< md_{k,i+1}
-= ms_{i+1}
-
-Lemma: ms_i <<< md_{k,i+1} = ms_{i+1} ただし k <= i
-
-(ms_i <<< md_{i-1} = ms_i)
-
-
-Th2 ms <<< md <<< md' = ms <<< (md +++ md')
-
-ms_i
-ms_i.E と ms_j.E
-
-md +++ md'
-  := md.B-->|md'.E.B, max(md'.E.B, md.E.E)| if md' is clean
-     md.B-->md'.E                           otherwise
-
-Th1 (md +++ md') +++ md'' = md +++ (md' +++ md'') を示す
-
-(md +++ md') +++ md''
-if md' is clean
-  = (md.B-->|md'.E.B, max(md'.E.B, md.E.E)|) +++ md''
-  if md'' is clean
-    = md.B-->|md''.E.B, max(md''.E.B, md'.E.B, md.E.E)|
-  else
-    = md.B-->md''.E
-else
-  = (md.B-->md'.E) +++ md''
-  if md'' is clean
-     = md.B-->|md''.E.B, max(md''.E.B, md'.E.E)|
-  else
-     = md.B-->md''.E
-
-
-md +++ (md' +++ md'')
-if md'' is clean
-  = md +++ (md'.B-->|md''.E.B, max(md''.E.B, md'.E.E)|)
-  if (md' +++ md'') is clean
-    = md.B-->|md''.E.B, max(md''.E.B, md'.E.E, md.E.E)|
-  else
-    = md.B-->|md''.E.B, max(md''.E.B, md'.E.E)|
-else
-  = md +++ (md'.B-->md''.E)
-  if (md' +++ md'') is clean
-    = md.B-->|md''.E.B, max(md''.E.B, md.E.E)|
-  else
-    = md.B-->md''.E
-
-
-
-md ++? md' := md.B.B <= md'.B.B <= md.E.B < md'.E.B
-
-
-
-md +++ md' が clean になる条件
-
-md.B が clean かつ
-  if md' is clean のとき (md'.B is clean and md'.E is clean)
-    md'.E.B >= md.E.E
-  else
-    md'.E is clean
-
-md.B is clean and md'.E is clean and (md'.B is dirty or md'.E.B >= md.E.E)
-
-md.B is clean <=> md.B.B == md.B.E
-md'.B is dirty <=> md'.B.B < md'.B.E
-
-
-md  |    |--->|     |
-md'           |-->|
-    |    |------->| |
-
-|----->|
-       |---->|
-
-|----->|    |
-       |------>|
-|------------->|
-
-
-md ++? md' := md.B.B <= md'.B.B <= md.E.B < md'.E.B
-
-md ++? md' and (md +++ md') ++? md''
-
-md.B.B <= md'.B.B <= md.E.B < md'.E.B
-if md' is clean
-  (md.B-->|md'.E.B, max(md'.E.B, md.E.E)|) ++? md''
-  md.B.B <= md''.B.B <= md'.E.B < md''.E.B
-else
-  (md.B-->md'.E) ++? md''
-  md.B.B <= md''.B.B <= md'.E.B < md''.E.B
-
-md.B.B <= md'.B.B <= md.E.B < md'.E.B < md''.E.B
-md.B.B <= md''.B.B         <= md'.E.B
-
-
-md' ++? md'' and md ++? (md' +++ md'')
-
-md'.B.B <= md''.B.B <= md'.E.B < md''.E.B
-if md'' is clean
-  md ++? (md'.B-->|md''.E.B, max(md''.E.B, md'.E.E)|)
-  md.B.B <= md'.B.B <= md.E.B < md''.E.B
-else
-  md ++? (md'.B-->md''.E)
-  md.B.B <= md'.B.B <= md.E.B < md''.E.B
-
-          md'.B.B <= md''.B.B <= md'.E.B < md''.E.B
-md.B.B <= md'.B.B <= md.E.B              < md''.E.B
-
-     i      j       k       l        m        n
-md.B.B md.E.B md'.B.B md'.E.B md''.B.B md''.E.B
-
-
-(1) md.B.B <= md'.B.B <= md.E.B < md'.E.B < md''.E.B
-  and md.B.B <= md''.B.B         <= md'.E.B
-
-  i <= k <= j < l < n
-  i <=     m <= l
-
-
-(2) md'.B.B <= md''.B.B <= md'.E.B < md''.E.B
-  and md.B.B <= md'.B.B <= md.E.B              < md''.E.B
-
-  i <= k <= m <= l < n
-       k <= j      < n
-
-(1) かつ (2) は
-i <= k <= j < l and k <= m <= l < n
-
-
-
-
-
-(d_{i,j} ++ d_{k,l}) ++ d_{m,n}
-i < j, k < l, m < n
-
-
-i <= k <= j < l
-d_{i,l} +? d_{m,n}
-<=> i <= m <= l < n
-
-i <= k <= j < l
-i     <= m <= l < n
-
-
-d_{i,j} ++ (d_{k,l} ++ d_{m,n})
-
-k <= m <= l < n
-d_{i,j} +? d_{k,n}
-<=> i <= k <= j < n
-
-     k <= m <= l < n
-i <= k <= j      < n
-
-
-両方を満たすためには、
-(d_{i,j} +? d_{k,l}) かつ (d_{k,l} +? d_{m,n})
-<=> i <= k <= j < l and k <= m <= l < n
-<=> i <= k <= j <  l < n
-         k <= m <= l
-でなければならない。
-
-
-(md_i +++ md_{i+1}) +++ md_{i+2} = md_i +++ (md_{i+1} +++ md_{i+2})
-が言えると、
-
-
-
-md_{i,j} +++ md_{j,j+1}
-md_{i,j-1} +++ md_{j-1,j+1}
-
-md_{0, 5} +++ md_{3, 7} = md_{0, 7}
-
-
-
-md_{i,j} +++ md_{j,k} +++ md_{k,l} について結合法則が成り立つことを言う。
-i < k のとき md_{i,k} +++ md_{i,k+1} = md_{i,k+1} を言う。
-
-{0,5} +++ {3,7} = {0,7}
-
-= {0,3} +++ {3,5} +++ {3,6} +++ {6,7}
-= {0,3} +++ {3,6} +++ {6,7}
-= {0,7}
-
-{0,10} +++ {9,15}
-= {0,9} +++ {9,10} +++ {9,11} +++ {11,15}
-= {0,9} +++ {9,11} +++ {11,15}
-= {0,15}
-
-{0,10} +++ {9,11}
-= {0,9} +++ {9,10} +++ {9,11}
-= {0,9} +++ {9,11}
-= {0,11}
-
-a <= c <= b < d
-{a,b} +++ {c,d}
-b + 1 == d のとき
-  = {a,d}
-else
-  = {a,c} +++ {c,b} +++ {c,b+1} +++ {b+1,d}
-  = {a,c} +++ {c,b+1} +++ {b+1,d}
-  = {a,d}
-
-
-(md_{i,j} +++ md_{j,k}) +++ md_{k,l}
-
-if md_{j,k} is clean
-  = md_{i,j}.B-->|md_{j,k}.E.B, max(md_{j,k}.E.B, md_{i,j}.E.E)| +++ md_{k,l}
-  if md_{k,l} is clean
-    = md_{i,j}.B-->|md_{k,l}.E.B, max(md_{k,l}.E.B, md_{j,k}.E.B, md_{i,j}.E.E)|
-    = md_{i,j}.B-->|md_{k,l}.E.B, max(md_{k,l}.E.B, md_{i,j}.E.E)|
-  else
-    = md_{i,j}.B-->md_{k,l}.E
-else
-  = md_{i,j}.B-->md_{j,k}.E +++ md_{k,l}
-  if md_{k,l} is clean
-    = md_{i,j}.B-->|md_{k,l}.E.B, max(md_{k,l}.E.B, md_{j,k}.E.E)|
-  else
-    = md_{i,j}.B-->md_{k,l}.E
-
-
-md_{i,j} +++ (md_{j,k} +++ md_{k,l})
-  = md_{i,j}
-
-
-Th. md_{i,j} +++ md_j = md_{i,j+1}
-
-
-Def. md_{i,i+2} := md_i +++ md_{i+1} +++ md_{i+2}
-
-
-
-#### 定理: `(md_i +++ md_{i+1}) +++ md_{i+2} = md_i +++ (md_{i+1} +++ md_{i+2})`
-
-証明
-
-```
-(a) ms_i から md_i, ms_{i+1} が構成され、
-(b) ms_{i+1} から md_{i+1}, ms_{i+2} が構成され、
-(c) ms_{i+2} から md_{i+2}, ms_{i+3} が構成される。
-
-(111) (a)(b)(c) がルール(1) で構成されたとき、
-
-md_i +++ md_{i+1} = |md_i.B.B|-->|md_{i+1}.E.B|
-(md_i +++ md_{i+1}) +++ md_{i+2} = |md_i.B.B|-->|md_{i+2}.E.B|
-
-md_{i+1} +++ md_{i+2} = |md_{i+1}.B.B|-->|md_{i+2}.E.B|
-md_i +++ (md_{i+1} +++ md_{i+2}) = |md_{i}.B.B|-->|md_{i+2}.E.B|
-
-一致する。
-
-
-(112) (a)(b) が ルール(1)、(c) がルール(2) で構成されたとき、
-
-md_i +++ md_{i+1} = |md_i.B.B|-->|md_{i+1}.E.B|
-(md_i +++ md_{i+1}) +++ md_{i+2} = |md_i.B.B|-->md_{i+2}.E
-
-md_{i+1} +++ md_{i+2} = |md_{i+1}.B.B|-->md_{i+2}.E
-md_i +++ (md_{i+1} +++ md_{i+2}) = |md_i.B.B|-->md_{i+2}.E
-
-一致する。
-
-
-(121) (a)(c) がルール(1)、(b) がルール(2) で構成されたとき、
-
-md_i +++ md_{i+1} = |md_i.B.B|-->md_{i+1}.E
-(md_i +++ md_{i+1}) +++ md_{i+2}
-  = |md_i.B.B|-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)|
-
-md_{i+1} +++ md_{i+2} = md_{i+1}.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)}
-md_i +++ (md_{i+1} +++ md_{i+2})
-  if (md_{i+1} +++ md_{i+2}) is clean
-     = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_i.E.E)|  ...(*1)
-     = md_i.B-->|md_{i+2}.E.B|
-  else
-     = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)}  ...(*2)
-
-(*1)
-md_i |-->|
-ms_{i+1} |
-md_{i+1} |---->|   |
-md_{i+2}       |----->|
-         |----------->|
-md_{i+1}.E.E <= md_{i+2}.E.B
-
-(*2)
-md_{i+1} |  |-->|    |
-md_{i+2}        |------>|
-+++      |  |---------->|
-
-md_{i+1} |  |-->|      |
-md_{i+2}        |-->|
-+++      |  |------>|  |
-
-
-よって，左辺と右辺は一致する．
-
-
-(122) (a)がルール(1)，(b)(c) がルール(2) で構成されたとき，
-
-md_i +++ md_{i+1} = md_i.B-->md_{i+1}.E
-(md_i +++ md_{i+1}) ++ md_{i+2} = md_i.B-->md_{i+2}.E
-
-md_{i+1} +++ md_{i+2} = md_{i+1}.B-->md_{i+2}.E
-md_i +++ (md_{i+1}) ++ md_{i+2})
-if md_{i+1} +++ md_{i+2} is clean
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_i.E.E)|  ...(*1)
-else
-  = md_i.B-->md_{i+2}.E
-
-ms_i      |      |
-md_i      |--->|
-md_{i+1}       | |-->| |
-md_{i+2}             | |-->| |
-
-構成法により，md_{i+1} +++ md_{i+2} は必ず dirty となり，(*1)には成り得ない．
-よって，一致する．
-
-
-(211) (a) がルール(2)，(b)(c) がルール(1) で構成されたとき，
-
-ms_i     | |
-md_i     | |--->|          |
-md_{i+1}        |-->|
-md_{i+2}            |-->|
-
-ms_i     | |
-md_i     | |--->|          |
-md_{i+1}        |-->|
-md_{i+2}            |------>|
-
-md_i +++ md_{i+1}
-  = md_i.B-->|md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-(md_i +++ md_{i+1}) + md_{i+2}
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.B, md_i.E.E)|
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_i.E.E)|
-
-md_{i+1} +++ md_{i+2}
-  = md_{i+1}.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)|
-  = md_{i+1}.B-->|md_{i+2}.E.B|
-md_i +++ (md_{i+1} +++ md_{i+2})
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_i.E.E)|
-
-一致する．
-
-
-
-(212) (a)(c) がルール(2)，(b) がルール(1) で構成されたとき，
-
-ms_i     | |
-md_i     | |-->|      |
-md_{i+1}       |-->|
-md_{i+2}           |  |-->|  |
-
-ms_i     | |
-md_i     | |-->|      |
-md_{i+1}       |------->|
-md_{i+2}                |-->|  |
-
-md_i +++ md_{i+1}
-  = md_i.B-->|md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-(md_i +++ md_{i+1}) +++ md_{i+2}
-  = md_i.B-->md_{i+2}.E
-
-md_{i+1} +++ md_{i+2}
-  = md_{i+1}.B-->md_{i+2}.E
-md_i +++ (md_{i+1} +++ md_{i+2})
-  = md_i.B-->md_{i+2}.E
-
-一致する．
-
-
-(221) (a)(b) がルール(2)，(c) がルール(1) で構成されたとき，
-
-ms_i     | |
-md_i     | |-->|  |
-md_{i+1}       |  |-->|      |
-md_{i+2}              |-->|
-
-ms_i     | |
-md_i     | |-->|  |
-md_{i+1}       |  |-->|   |
-md_{i+2}              |---->|
-
-md_i +++ md_{i+1}
-  = md_i.B-->md_{i+1}.E
-(md_i +++ md_{i+1}) +++ md_{i+2}
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)|
-
-md_{i+1} +++ md_{i+2}
-  = md_{i+1}.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)|
-md_i +++ (md_{i+1} +++ md_{i+2})
-  = md_i.B-->|md_{i+2}.E.B, max(md_{i+2}.E.B, md_{i+1}.E.E)|
-
-一致する．
-
-
-(222) (a)(b)(c) がルール(2) で構成されたとき，
-
-ms_i     |  |
-md_i     |  |-->|  |
-md_{i+1}        |  |-->|  |
-md_{i+2}               |  |-->|  |
-
-md_i +++ md_{i+1}
-  = md_i.B-->md_{i+1}.E
-(md_i +++ md_{i+1}) +++ md_{i+2}
-  = md_i.B-->md_{i+2}.E
-
-md_{i+1} +++ md_{i+2}
-  = md_{i+1}.B-->md_{i+2}.E
-md_i +++ (md_{i+1} +++ md_{i+2})
-  = md_i.B-->md_{i+2}.E
-
-一致する．
-
-
-以上，(111)(112)(121)(122)(211)(212)(221)(222) の 8 通りの
-場合全てにおいて一致したため，示された．
-
-```
-
-
-#### 定理: `ms_i <<< md_i <<< md_{i+1} = ms_i <<< (md_i +++ md_{i+1})`
-
-証明
-
-```
-ms_i <<< md_i <<< md_{i+1} = ms_{i+2}
-これは，ms_i <<< md_i = ms_{i+1} から導かれる．
-
-md_i +++ md_{i+1}
-  if md_{i+1} is clean
-    = md_i.B-->|md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-  else
-    = md_i.B-->md_{i+1}.E
-
-ms_i <<< (md_i +++ md_{i+1})
-  if md_i +++ md_{i+1} is clean   ...(1)
-    = |md_{i+1}.E.B, max(md_{i+1}.E.B, ms_i.E)|
-  else if md_{i+1} is clean       ...(2)
-    = |md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-  else                            ...(3)
-    = md_{i+1}.E
-
-
-(1) md_i +++ md_{i+1} is clean のとき
-  (1-1) md_i も md_{i+1} も clean のとき
-  (1-2) md_i.B が clean，md_i.E が dirty かつ md_{i+1} が clean
-        かつ md_{i+1}.E.B >= md_i.E.E のとき
-
-(2) (1) ではなく，md_{i+1} が clean のとき
-  (2-1) md_i.B is dirty and md_i.E is dirty
-
-(3) (1) でも (2) でもないとき
-  (3-1) md_{i+1} が dirty のとき
-
-
-ms_i <<< (md_i +++ md_{i+1})
-(1-1)
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, ms_i.E)|
-(1-2)
-  = |md_{i+1}.E.B|
-(2-1)
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-(3-1)
-  = md_{i+1}.E これは dirty
-
-ms_i <<< md_i <<< md_{i+1}
-(1-1)
-  = |md_i.E.B, max(md_i.E.B, ms_i)| <<< md_{i+1}
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.B, ms_i)|
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, ms_i)|
-(1-2)
-  = md_i.E <<< md_{i+1}
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-  = |md_{i+1}.E.B|
-(2-1)
-  = md_i.E <<< md_{i+1}
-  = |md_{i+1}.E.B, max(md_{i+1}.E.B, md_i.E.E)|
-(3-1)
-  = md_i.E << md_{i+1}
-  = md_{i+1}.E
-
-よって，全ての場合に一致するので，
-示された．
-```
-
-
-
-
------
 
 #### Lemma rx5b: `md_{i,j} と ms_i, ms_j の関係`
 
@@ -2661,6 +1806,70 @@ md_{i,j} +++ md_{k,l} = md_{i,l}
 ```
 
 
+#### Theorem rx5: `ms_i <<? md_{k,l} ==> ms_i <<< md_{k,l} = ms_l`
+
+証明
+
+```
+ms_i <<? md_{k,l} <=> k <= i < l
+
+Lemma rx5b より，
+
+md_{k,l} に含まれる全 md_i k <= i < l がルール(1) のみで構成される場合，
+
+md_{k,l} = |md_k.B.B|-->|md_{l-1}.E.B|
+
+ms_i <<< md_{k,l}
+  = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_i.E)|
+
+ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_k.E)|
+
+md_{l-1}.E.B < ms_k.E のとき，
+Lemma rx5b2 より、ms_i = |md_{i-1}.E.B, ms_k.E|
+よって、ms_i.E = ms_k.E
+
+md_{l-1}.E.B >= ms_k.E のとき，
+  ms_i.B < ms_k.E のとき
+    ms_i.E = ms_k.E
+  ms_i.B >= ms_k.E のとき
+    ms_i.E = ms_i.B <= md_{l-1}.E.B
+    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
+
+よって，ms_i <<< md_{k,l} = ms_l
+
+
+md_{k,l} に含まれる md_i k <= i < l において，ルール(2) で構成されるものが含まれる場合，
+そのような最後の md を md_{m-1} とする．k < m <= l．
+
+md_{k,l} = md_{k,l}.B-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
+
+ms_i <<< md_{k,l}
+  if md_{k,l} is clean (then md_{l-1}.E.B >= ms_m.E)
+    = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_i.E)|
+  else
+    = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
+
+ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
+
+
+md_{k,l} is clean のとき，
+  i <= m の場合，
+    ms_i.E <= ms_m.E <= md_{l-1}.E.B なので，
+    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
+  m < i の場合，
+    ms_i.B < ms_m.E の場合
+      ms_i.E = ms_m.E
+      よって，ms_i <<< md_{k,l} = ms_l
+    ms_i.B >= ms_m.E の場合
+      ms_i.E = ms_i.B <= ms_l.B = md_{l-1}.E.B
+      よって，ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
+else
+  明らかに ms_i << md_{k,l} = ms_l
+
+以上，全ての場合において ms_i <<< md_{k,l} = ms_l が示された．
+```
+
+
 #### Theorem rx5d: `ms_i <<? md_{k,l} and md_{k,l} ++? md_{m,n} ==> ms_i <<< md_{k,l} <<< md_{m,n} = ms_i <<< md_{k,l} +++ md_{m,n}`
 
 merge してから apply しても，順に apply しても結果は同じ法則．
@@ -2691,6 +1900,244 @@ ms_i <<< md_{k,l} +++ md_{m,n}
 
 よって，示された．
 ```
+
+
+#### Theorem rx6: `M2B(md_i) = d_i, M2B(ms_i) = s_i`
+
+Theorem ry2 で証明済み．
+
+
+#### Theorem rx7: `M2B(md_{i,j}) = d_{i,j}`
+
+証明
+
+```
+Theorem rx6 より，
+M2B(md_i) = d_i for all i
+
+M2B(md_{i,j})
+  = M2B(md_i) ++ M2B(md_{i+1}) ++ ... ++ M2B(md_{j-1})
+  = d_i ++ d_{i+1} ++ ... ++ md_{j-1}
+  = d_{i,j}
+
+よって示された．
+```
+
+#### Theorem rx8: `ms_i <<? md_{k,l} ==> M2B(ms_i <<< md_{k,l}) = M2B(ms_i) << M2B(md_{k,l})`
+
+証明
+
+```
+Theorem rx5 より，
+ms_i <<< md_{k,l} = ms_l
+
+Theorem rx4 より，
+ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
+
+Theorem rx6 より，
+M2B(ms_l) = s_l
+M2B(ms_i) = s_i
+
+Theorem rx7 より，
+M2B(md_{k,l}) = d_{k,l}
+
+M2B(ms_i) << M2B(md_{k,l})
+  = s_i << d_{k,l}
+Theorem m8 より，
+  = s_l
+
+故に，示された．
+```
+
+
+### Level3: apply, merge, compared_diff
+
+```
+単純メタデータモデル(level3: apply, merge, compared_diff)
+
+追加の定義
+
+i < j について
+d_{i:j} := compared_diff(s_i, s_j)
+d_{i:j} +? d_{k,l} := False
+d_{i,j} +? d_{k:l} := False
+d_{i:j} +? d_{k:l} := False
+d_{i:j} について ++ は定義しない．
+s_i <? d_{k:l} := k == i
+d_{i~j} を d_{i,j} もしくは d_{i:j} とする．
+
+追加の証明
+
+Theorem m8: s_i <? d_{k,l} ==> s_i << d_{k,l} = s_l
+を拡張して，
+Theorem mx8a: d = d_{k~l} のとき s_i <? d ==> s_i << d = s_l
+を示す．
+
+Theorem mx1: d_{i,j} +? d_{k,l} ==> d_{i,j} ++ d_{k,l} = d_{i,l}
+は Theorem mx2 として拡張．ただし，d_{i:j} や d_{k:l} は
+merge 不可なので，ほとんど同じ．
+
+
+範囲メタデータモデル(level3: apply, merge, compared_diff)
+
+追加の定義
+
+i < j として，md_{i:j} := ms_i-->md_j
+md_{i:j} ++? md_{k,l} := False
+md_{i,j} ++? md_{k:l} := False
+md_{i:j} ++? md_{k:l} := False
+md_{i:j} について ++ は定義しない．
+ms <<? md_{i:j} := ms == md_{i:j}.B
+ms <<< md_{i:j} := これまでの ms <<< md をそのまま使う
+md_{i~j} を md_{i,j} もしくは md_{i:j} とする．
+M2B(md_{i:j}) := compared_diff(s_i, s_j)
+
+
+追加の証明
+
+Theorem rx1: md_i ++? md_j <==> d_i +? d_j
+変更の必要なし
+
+Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
+変更の必要なし
+
+Theorem rz3: mdx ++? mdy <==> dx +? dy
+ただし
+mdx, dx = md_{i,j}, d_{i,j} または md_{i:j}, d_{i:j}
+mdy, dy = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
+とする．
+
+Theorem rz4a: ms_i <<? md_{k:l} <==> s_i <? d_{k:l}
+を示せば，Theorem rx4 と合わせて
+Theorem rz4: ms_i <<? md <==> s_i <? d
+ただし md, d = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
+が示される．
+
+Theorem rz5a: ms_i <<? md_{k:l} ==> ms_i <<< md_{k:l} = ms_l
+を示せば，Theorem rx5 と合わせて
+Theorem rz5: ms_i <<? md ==> ms_i <<< md = ms_l
+ただし，md = md_{k,l} または md_{k:l}
+が示される．
+
+Theorem rx5c: md_{i,j} ++? md_{k,l} ==> md_{i,j} +++ md_{k,l} = md_{i,l}
+Theorem rx5d: ms_i <<? md_{k,l} and md_{k,l} ++? md_{m,n} ==> ms_i <<< md_{k,l} <<< md_{m,n} = ms_i <<< md_{k,l} +++ md_{m,n}
+は変更の必要なし．md_{i:j} は merge できないから．
+
+Theorem rx6: M2B(md_i) = d_i, M2B(ms_i) = s_i
+変更の必要なし．
+
+Theorem rz7a: M2B(md_{i:j}) = d_{i:j}
+を示せば，Theorem rx7 と合わせて
+Theorem rz7: M2B() = d_{i,j}
+ただし md, d = md_{i,j}, d_{i,j} または md_{k:l}, d_{k:l}
+が示される．
+
+Theorem rz8a: ms_i <<? md_{k:l} ==> M2B(ms_i <<< md_{k:l}) = M2B(ms_i) << M2B(md_{k:l})
+を示せば，Theorem rx8 と合わせて
+Theorem rz8: ms <<? md ==> M2B(ms <<< md) = M2B(ms) << M2B(md)
+が示される．
+
+```
+
+#### Theorem rz3: `dx ++? mdy <==> dx +? dy`
+
+ただし
+```
+mdx, dx = md_{i,j}, d_{i,j} または md_{i:j}, d_{i:j}
+mdy, dy = md_{k,l}, d_{k,l} または md_{k:l}, d_{k:l}
+```
+とする．
+
+証明
+
+```
+mdx, dx = md_{i,j}, d_{i,j},
+mdy, dy = md_{i,j}, d_{i,j} のとき
+
+Theorem rx3 にて示した．
+
+その他のとき，
+
+mdx ++? mdy = False
+dx +? dy = False
+
+よって，示された．
+```
+
+
+#### Theorem rz4a: `ms_i <<? md_{k:l} <==> s_i <? d_{k:l}`
+
+証明
+
+```
+s_i <? d_{k:l}
+  <=> k == i
+
+ms_i <<? md_{k:l}
+  <=> ms_i == md_{k:l}.B
+  <=> ms_i == md_k
+  <=> k == i
+
+よって示された．
+```
+
+
+#### Theorem rz5a: `ms_i <<? md_{k:l} ==> ms_i <<< md_{k:l} = ms_l`
+
+証明
+
+```
+Theorem rz4a より，
+ms_i <<? md_{k:l} <==> k == i
+
+ms_i <<< md_{k:l}
+  = ms_i <<< md_{i:l}
+  = ms_l
+
+よって示された．
+```
+
+
+#### Theorem rz7a: `M2B(md_{i:j}) = d_{i:j}`
+
+証明
+
+```
+M2B(md_{i:j})
+  = compared_diff(M2B(ms_i), M2B(ms_j))
+Theorem rx6 より
+  = compared_diff(s_i, s_j)
+  = d_{i:j}
+
+よって，示された．
+```
+
+
+#### Theorem rz8a: `ms_i <<? md_{k:l} ==> M2B(ms_i <<< md_{k:l}) = M2B(ms_i) << M2B(md_{k:l})`
+
+証明
+
+```
+Theorem rz4a より
+ms_i <<? md_{k:l} <==> k == i
+
+M2B(ms_i <<< md_{k:l})
+  = M2B(ms_l)
+  = s_l
+
+M2B(ms_i) << M2B(md_{k:l})
+Theorem rz7a より
+  = s_i << d_{k:l}
+  = s_i << d_{i:l}
+  = s_l
+
+よって，示された．
+```
+
+
+### Level4: apply, merge, compared_diff, applying
+
+merge と apply の同時実行を禁止する仕様では，このモデルは不要．
 
 
 -----
