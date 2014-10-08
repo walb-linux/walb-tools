@@ -13,6 +13,20 @@
 
 namespace walb {
 
+namespace dirty_hash_sync_local {
+
+inline void compressAndSend(
+    packet::Packet &pkt, diff::Packer &packer,
+    PackCompressor &compr, packet::StreamControl &sendCtl)
+{
+    Buffer compBuf = compr.convert(packer.getPackAsVector().data());
+    sendCtl.next();
+    pkt.write<size_t>(compBuf.size());
+    pkt.write(compBuf.data(), compBuf.size());
+}
+
+} // namespace dirty_hash_sync_local
+
 /**
  * Reader must have the member function: void read(void *data, size_t size).
  */
@@ -28,13 +42,6 @@ inline bool dirtyHashSyncClient(
     diff::Packer packer;
     walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
     cybozu::murmurhash3::Hasher hasher(hashSeed);
-
-    auto compressAndSend = [&]() {
-        Buffer compBuf = compr.convert(packer.getPackAsVector().data());
-        sendCtl.next();
-        pkt.write<size_t>(compBuf.size());
-        pkt.write(compBuf.data(), compBuf.size());
-    };
 
     uint64_t addr = 0;
     uint64_t remainingLb = sizeLb;
@@ -59,7 +66,7 @@ inline bool dirtyHashSyncClient(
 
         const cybozu::murmurhash3::Hash bdHash = hasher(buf.data(), buf.size());
         if (recvHash != bdHash && !packer.add(addr, lb, buf.data())) {
-            compressAndSend();
+            dirty_hash_sync_local::compressAndSend(pkt, packer, compr, sendCtl);
             packer.add(addr, lb, buf.data());
         } else {
             sendCtl.dummy(); // to avoid socket timeout.
@@ -69,7 +76,9 @@ inline bool dirtyHashSyncClient(
         remainingLb -= lb;
         addr += lb;
     }
-    if (!packer.empty()) compressAndSend();
+    if (!packer.empty()) {
+        dirty_hash_sync_local::compressAndSend(pkt, packer, compr, sendCtl);
+    }
     if (recvCtl.isError()) {
         throw cybozu::Exception(FUNC) << "recvCtl";
     }
