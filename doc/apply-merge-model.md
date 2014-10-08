@@ -1512,7 +1512,7 @@ Theorem rx2: ms_i <<? md_j <==> s_i <? d_j
 Theorem rx3: md_{i,j} ++? md_{k,l} <==> d_{i,j} +? d_{k,l}
 Theorem rx4: ms_i <<? md_{k,l} <==> s_i <? d_{k,l}
 
-Theorem rx5a: i < j ==> s_i.E <= s_j.E
+Theorem rx5a: i < j ==> ms_i.E <= ms_j.E
 
 Lemma rx5b: md_{i,j} と ms_i, ms_j の関係
 Theorem rx5c: md_{i,j} ++? md_{k,l} ==> md_{i,j} +++ md_{k,l} = md_{i,l}
@@ -1677,15 +1677,21 @@ ms_i <<< md_{k,l}
 ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_k.E)|
 
 md_{l-1}.E.B < ms_k.E のとき，
-k <= i < l であるため，
-ms_i = |md_{i-1}.E.B, ms_k.E| であるため，
-ms_i.E = ms_k.E
+Lemma rx5b2 より、ms_i = |md_{i-1}.E.B, ms_k.E|
+よって、ms_i.E = ms_k.E
+
+md_{l-1}.E.B >= ms_k.E のとき，
+  ms_i.B < ms_k.E のとき
+    ms_i.E = ms_k.E
+  ms_i.B >= ms_k.E のとき
+    ms_i.E = ms_i.B <= md_{l-1}.E.B
+    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
 
 よって，ms_i <<< md_{k,l} = ms_l
 
 
 md_{k,l} に含まれる md_i k <= i < l において，ルール(2) で構成されるものが含まれる場合，
-そのような最後の md を md_{m-1} とする．k < m < l．
+そのような最後の md を md_{m-1} とする．k < m <= l．
 
 md_{k,l} = md_{k,l}.B-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
 
@@ -1701,14 +1707,14 @@ ms_l = |md_{l-1}.E.B, max(md_{l-1}.E.B, ms_m.E)|
 md_{k,l} is clean のとき，
   i <= m の場合，
     ms_i.E <= ms_m.E <= md_{l-1}.E.B なので，
-    ms_i <<< md_{k,l} = |md_{l-1}.E.B|
+    ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
   m < i の場合，
     ms_i.B < ms_m.E の場合
       ms_i.E = ms_m.E
       よって，ms_i <<< md_{k,l} = ms_l
     ms_i.B >= ms_m.E の場合
       ms_i.E = ms_i.B <= ms_l.B = md_{l-1}.E.B
-      よって，ms_i <<< md_{k,l} = ms_l
+      よって，ms_i <<< md_{k,l} = ms_l = |md_{l-1}.E.B|
 else
   明らかに ms_i << md_{k,l} = ms_l
 
@@ -2529,8 +2535,8 @@ ms_k.E > md_{j-1}.E.B のとき，
   ms_l = |md_{l-1}.E.B, ms_k.E|
 ms_k.E <= md_{j-1}.E.B のとき，
   ms_l = |md_{l-1}.E.B, ms_l.E|
-  ms_l.E = ms_k.E if ms_i.B < ms_k.E
-           ms_i.B otherwise
+  ms_l.E = ms_k.E if ms_l.B < ms_k.E
+           ms_l.B otherwise
 
 証明
 
@@ -2559,7 +2565,7 @@ ms_l
 
 #### Theorem rx5c: `md_{i,j} ++? md_{k,l} ==> md_{i,j} +++ md_{k,l} = md_{i,l}`
 
-結合法則の一般化．
+結合法則。
 
 証明
 
@@ -2584,15 +2590,16 @@ md_{i,l} = |md_i.B.B|-->|md_{l-1}.E.B|
 (b) md_{i,j} が全てルール(1) で，md_{k,l} はルール(2) を含む場合
 
 md_{k,l} 内の最後の dirty diff を md_{n-1} とすると，
-k < n < l．
+k < n <= l．
 
 md_{i,j} = |md_i.B.B|-->|md_{j-1}.E.B|
 md_{k,l} = md_{k,l}.B-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_n.E)|
 md_{i,j} +++ md_{k,l}
-  if md_{k,l} is clean (then md_{l-1}.E.B >= ms_n.E)l
+  if md_{k,l} is clean (==> md_{l-1}.E.B >= ms_n.E)
     = |md_i.B.B|-->|md_{l-1}.E.B|
   else
     = |md_i.B.B|-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_n.E)|
+    = |md_i.B.B|-->|md_{l-1}.E.B, ms_n.E|
 
 このとき，md_{i,l} において，最後の dirty diff は md_{n-1}．
 
@@ -2606,7 +2613,7 @@ md_{i,l}
 (c) md_{i,j} がルール(2) を含み，md_{k,l} は全てルール(1) である場合
 
 md_{i,j} 内の最後の dirty diff を md_{m-1} とすると，
-i < m < j．
+i < m <= j．
 
 md_{i,j} = md_{i,j}.B-->|md_{j-1}.E.B, max(md_{j-1}.E.B, ms_m.E)|
 md_{k,l} = |md_k.B.B|-->|md_{l-1}.E.B|
@@ -2627,7 +2634,7 @@ md_{i,l}
 
 md_{i,j} 内の最後の dirty diff を md_{m-1}，
 md_{k,l} 内の最後の dirty diff を md_{n-1} とすると，
-i < m < j, k < n < l．
+i < m <= j, k < n <= l．
 
 md_{i,j} = md_{i,j}.B-->|md_{j-1}.E.B, max(md_{j-1}.E.B, ms_m.E)|
 md_{k,l} = md_{k,l}.B-->|md_{l-1}.E.B, max(md_{l-1}.E.B, ms_n.E)|
@@ -2656,7 +2663,7 @@ md_{i,j} +++ md_{k,l} = md_{i,l}
 
 #### Theorem rx5d: `ms_i <<? md_{k,l} and md_{k,l} ++? md_{m,n} ==> ms_i <<< md_{k,l} <<< md_{m,n} = ms_i <<< md_{k,l} +++ md_{m,n}`
 
-merge してから apply しても，順に apply しても結果は同じ法則の一般化．
+merge してから apply しても，順に apply しても結果は同じ法則．
 
 証明
 
@@ -2666,6 +2673,9 @@ md_{k,l} ++? md_{m,n} <=> k <= m <= l < n
 
 これらから，k <= l < n が成立する．
 k <= l < n <=> ms_l <<? md_{m,n}
+
+同様に、k <= i < n も成立する。
+k <= i < n <=> ms_i <<? md_{k,n}
 
 Theorem rx5 より，
 ms_i <<< md_{k,l} <<< md_{m,n}
