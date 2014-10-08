@@ -58,11 +58,11 @@ inline bool dirtyHashSyncClient(
         reader.read(buf.data(), buf.size());
 
         const cybozu::murmurhash3::Hash bdHash = hasher(buf.data(), buf.size());
-        if (recvHash != bdHash) {
-            if (!packer.add(addr, lb, buf.data())) {
-                compressAndSend();
-                packer.add(addr, lb, buf.data());
-            }
+        if (recvHash != bdHash && !packer.add(addr, lb, buf.data())) {
+            compressAndSend();
+            packer.add(addr, lb, buf.data());
+        } else {
+            sendCtl.dummy(); // to avoid socket timeout.
         }
         recvCtl.reset();
 
@@ -126,10 +126,14 @@ inline bool dirtyHashSyncServer(
 
     packet::StreamControl ctrl(pkt.sock());
     Buffer buf;
-    while (ctrl.isNext()) {
+    while (ctrl.isNext() || ctrl.isDummy()) {
         if (stopState == ForceStopping || forceQuit) {
             readerTh.join();
             return false;
+        }
+        if (ctrl.isDummy()) {
+            ctrl.reset();
+            continue;
         }
         size_t size;
         pkt.read(size);

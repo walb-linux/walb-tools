@@ -132,7 +132,7 @@ class StreamControl : public Packet
 private:
     bool received_;
     enum class Msg : uint8_t {
-        Next = 0, End = 1, Error = 2,
+        Next = 0, End = 1, Error = 2, Dummy = 3,
     };
     Msg msg_;
 
@@ -145,6 +145,7 @@ public:
     void next() { write(toInt(Msg::Next)); }
     void end() { write(toInt(Msg::End)); }
     void error() { write(toInt(Msg::Error)); }
+    void dummy() { write(toInt(Msg::Dummy)); }
 
     /**
      * For receiver.
@@ -152,6 +153,7 @@ public:
     bool isNext() { return getAndEquals(Msg::Next); }
     bool isEnd() { return getAndEquals(Msg::End); }
     bool isError() { return getAndEquals(Msg::Error); }
+    bool isDummy() { return getAndEquals(Msg::Dummy); }
     void reset() { received_ = false; }
 private:
     static Msg fromInt(uint8_t v) {
