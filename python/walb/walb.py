@@ -1034,8 +1034,24 @@ class Controller:
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(wdevPath, str)
-        self.run_ctl(sx, ["init-vol", vol, wdevPath])
+        self._init_vol(sx, vol, wdevPath)
         self.start(sx, vol)  # start as slave.
+
+    def _init_vol(self, s, vol, wdevPath=None):
+        '''
+        Call walb init-vol command.
+        s :: Server             - storage or archive
+        vol :: str              - volume name.
+        wdevPath :: str or None - specify if s is storage.
+
+        '''
+        verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
+        verify_type(vol, str)
+        cmdL = ['init-vol', vol]
+        if s.kind == K_STORAGE:
+            verify_type(wdevPath, str)
+            cmdL.append(wdevPath)
+        self.run_ctl(s, cmdL)
 
     def clear_vol(self, s, vol):
         '''
@@ -1638,7 +1654,7 @@ class Controller:
 
         st = self.get_state(aDst, vol)
         if st == aClear:
-            self.run_ctl(aDst, ["init-vol", vol])
+            self._init_vol(aDst, vol)
 
         self.replicate_once(aSrc, vol, aDst, timeoutS)
         if synchronizing:
@@ -1878,7 +1894,7 @@ class Controller:
         a0 = self.sLayout.get_primary_archive()
         st = self.get_state(a0, vol)
         if st == aClear:
-            self.run_ctl(a0, ["init-vol", vol])
+            self._init_vol(a0, vol)
 
         self.start_synchronizing(a0, vol)
 
