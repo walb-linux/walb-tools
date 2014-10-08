@@ -834,6 +834,11 @@ inline StrVec getAllStatusAsStrVec()
         s += fmt(" numDiff %zu", volSt.diffMgr.size());
 
         ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        if (!volInfo.lvExists()) {
+            s += fmt(" baseLv NOT FOUND");
+            v.push_back(s);
+            continue;
+        }
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         s += fmt(" latestSnapshot %s", latestSnap.str().c_str());
         const uint64_t sizeLb = volInfo.getLv().sizeLb();
@@ -847,17 +852,15 @@ inline StrVec getAllStatusAsStrVec()
 
 inline StrVec getVolStatusAsStrVec(const std::string &volId)
 {
-    const char *const FUNC = __func__;
     auto fmt = cybozu::util::formatString;
     StrVec v;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
     const std::string &state = volSt.sm.get();
-    if (state == aClear) throw cybozu::Exception(FUNC) << "bad state" << volId << state;
-
     v.push_back(fmt("volume %s", volId.c_str()));
     v.push_back(fmt("state %s", state.c_str()));
+    if (state == aClear) return v;
     v.push_back(formatActions("action", volSt.ac, allActionVec));
     v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
     v.push_back(fmt("lastSyncTime %s"
@@ -866,6 +869,10 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
                     , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str()));
 
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    if (!volInfo.lvExists()) {
+        v.push_back("baseLv NOT FOUND");
+        return v;
+    }
 	for (std::string& s : volInfo.getStatusAsStrVec()) {
 		v.push_back(std::move(s));
 	}
