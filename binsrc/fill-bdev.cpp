@@ -22,6 +22,7 @@ struct Option
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
+        opt.setDescription("Fill a block device or file randomly.\n");
         opt.appendOpt(&bs, 64 << 10, "b", "SIZE: block size [byte] (default: 64K).");
         opt.appendOpt(&offset, 0, "o", "OFFSET: offset to start filling [byte].");
         opt.appendOpt(&size, 0, "s", "SIZE: filling size [byte].");
