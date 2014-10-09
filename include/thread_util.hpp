@@ -993,4 +993,150 @@ inline std::string exceptionPtrToStr(std::exception_ptr ep) try
     return "exceptionPtrToStr:other error";
 }
 
+/**
+ * Parallel converter.
+ * T1 and T2 must be movable and default constructible.
+ */
+template <typename T1, typename T2>
+class ParallelConverter
+{
+    struct Src {
+        uint64_t id;
+        T1 t1;
+    };
+    struct Dst {
+        uint64_t id;
+        T2 t2;
+    };
+
+    template <typename TT1, typename TT2>
+    struct BaseHolder {
+        virtual TT2 convert(TT1&&) = 0;
+    };
+    template <typename TT1, typename TT2, typename Converter>
+    struct Holder : BaseHolder<TT1, TT2> {
+        Converter conv;
+        explicit Holder(Converter&& conv)
+            : conv(std::forward<Converter>(conv)) {
+        }
+        TT2 convert(TT1&& t1) override {
+            return conv(std::move(t1));
+        }
+    };
+    std::unique_ptr<BaseHolder<T1, T2> > holderP_;
+
+    std::mutex pushMu_;
+    uint64_t pushId_;
+
+    std::mutex popMu_;
+    uint64_t popId_;
+    std::map<uint64_t, T2> map_;
+
+    BoundedQueue<Src> inQ_;
+    BoundedQueue<Dst> outQ_;
+    ThreadRunnerSet workerSet_;
+
+public:
+    /**
+     * Convrter must be function of type T2 (*)(T1&&).
+     */
+    template <typename Converter>
+    explicit ParallelConverter(Converter&& conv)
+        : holderP_(new Holder<T1, T2, Converter>(std::forward<Converter>(conv)))
+        , pushMu_(), pushId_(0)
+        , popMu_(), popId_(0), map_()
+        , inQ_(2), outQ_(2)
+        , workerSet_() {
+    }
+    ~ParallelConverter() noexcept {
+        // You called sync() before, this will not effect anything.
+        fail();
+    }
+    void start(size_t concurrency = 0) {
+        std::lock_guard<std::mutex> lock(pushMu_);
+        if (concurrency == 0) {
+            concurrency = std::thread::hardware_concurrency();
+        }
+        const size_t qs = concurrency * 2;
+        inQ_.resize(qs);
+        outQ_.resize(qs);
+        for (size_t i = 0; i < concurrency; i++) {
+            workerSet_.add([this]() { runWorker(); });
+        }
+        workerSet_.start();
+    }
+    /**
+     * Do not call this function from multiple threads.
+     */
+    void push(T1&& t1) {
+        std::lock_guard<std::mutex> lock(pushMu_);
+        inQ_.push(Src { pushId_, std::move(t1) });
+        pushId_++;
+    }
+    /**
+     * Do not call this function from multiple threads.
+     */
+    bool pop(T2& t2) {
+        std::lock_guard<std::mutex> lock(popMu_);
+        Dst dst;
+        if (findInMap(popId_, t2)) {
+            popId_++;
+            return true;
+        }
+        while (outQ_.pop(dst)) {
+            if (dst.id == popId_) {
+                t2 = std::move(dst.t2);
+                popId_++;
+                return true;
+            }
+            map_.insert(std::make_pair(dst.id, std::move(dst.t2)));
+        }
+        return false;
+    }
+    /**
+     * After calling this, push() always fails.
+     */
+    void sync() {
+        inQ_.sync();
+        joinWorkerSet();
+        outQ_.sync();
+    }
+    /**
+     * This is thread-safe.
+     */
+    void fail() noexcept {
+        inQ_.fail();
+        outQ_.fail();
+        joinWorkerSet();
+    }
+private:
+    /**
+     * Lock must be held.
+     */
+    bool findInMap(uint64_t id, T2& t2) {
+        if (map_.empty() || id != map_.begin()->first) {
+            return false;
+        }
+        t2 = std::move(map_.begin()->second);
+        map_.erase(map_.begin());
+        return true;
+    }
+    void joinWorkerSet() noexcept {
+        std::lock_guard<std::mutex> lock(pushMu_);
+        workerSet_.join();
+    }
+    void runWorker() noexcept try {
+        Src src;
+        Dst dst;
+        while (inQ_.pop(src)) {
+            dst.id = src.id;
+            dst.t2 = holderP_->convert(std::move(src.t1));
+            outQ_.push(std::move(dst));
+        }
+    } catch (...) {
+        inQ_.fail();
+        outQ_.fail();
+    }
+};
+
 }} // namespace cybozu::thread
