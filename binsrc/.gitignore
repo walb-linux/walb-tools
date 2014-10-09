@@ -30,3 +30,5 @@ walbc
 wdevc
 packet-repeater
 crash-test
+fill-bdev
+wcmpr
