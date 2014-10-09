@@ -716,7 +716,7 @@ public:
         workerV_.clear();
     }
     /**
-     * Add a task as a function which type is void (*)().
+     * Add a task.
      *
      * RETURN:
      *   true if successfully added.
