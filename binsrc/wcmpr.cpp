@@ -52,9 +52,12 @@ struct Option
     std::string modeStr;
     size_t concurrency;
     size_t level;
+    std::vector<std::string> v;
+    std::string srcPath, dstPath;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
+        opt.setDescription("Simple compressor/decompressor of a file.\n");
         opt.appendOpt(&modeStr, "snappy", "m", ": compression mode (snappy, gzip, lzma)");
         opt.appendOpt(&concurrency, 0, "c", ": number of concurrency");
         opt.appendOpt(&unitSize, 64 << 10, "s", ": unit size to compress (default: 64KiB).");
@@ -62,6 +65,8 @@ struct Option
         opt.appendBoolOpt(&isDecompress, "d", ": decompress instead compress.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show thie message.");
+        opt.appendParamVec(&v, "(SRC_PATH (DST_PATH))", ": source/destination file path. "
+                           "If not spedified, stdin/stdout will be used.");
 
         if (!opt.parse(argc, argv)) {
             opt.usage();
@@ -71,15 +76,42 @@ struct Option
         if (concurrency == 0) {
             concurrency = std::thread::hardware_concurrency();
         }
+        assert(concurrency != 0);
         if (unitSize == 0) {
             throw cybozu::Exception("bad unit size") << unitSize;
         }
         if (level > 9) {
             throw cybozu::Exception("bad level") << level;
         }
+
+        if (!v.empty()) {
+            srcPath = v[0];
+        }
+        if (v.size() >= 2) {
+            dstPath = v[1];
+        }
+
+        if (!srcPath.empty() && dstPath.empty()) {
+            if (isDecompress) {
+                std::string ext(".");
+                ext += modeStr;
+                size_t pos = srcPath.rfind(ext);
+                if (pos != std::string::npos && pos + ext.size() == srcPath.size()) {
+                    dstPath = srcPath.substr(0, pos);
+                }
+            } else {
+                dstPath = srcPath + "." + modeStr;
+            }
+        }
     }
     int getMode() const {
         return strToMode(modeStr);
+    }
+    bool isStdin() const {
+        return srcPath.empty();
+    }
+    bool isStdout() const {
+        return dstPath.empty();
     }
 };
 
@@ -290,7 +322,19 @@ int doMain(int argc, char* argv[])
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
 
-    cybozu::util::File inFile(0), outFile(1);
+    cybozu::util::File inFile, outFile;
+
+    if (opt.isStdin()) {
+        inFile.setFd(0);
+    } else {
+        inFile.open(opt.srcPath, O_RDONLY);
+    }
+    if (opt.isStdout()) {
+        outFile.setFd(1);
+    } else {
+        outFile.open(opt.dstPath, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    }
+
     if (opt.isDecompress) {
 #if 0
         decompress(inFile, outFile);
@@ -306,6 +350,8 @@ int doMain(int argc, char* argv[])
                          opt.concurrency);
 #endif
     }
+    inFile.close();
+    outFile.close();
     return 0;
 }
 
