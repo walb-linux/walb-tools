@@ -32,3 +32,4 @@ packet-repeater
 crash-test
 fill-bdev
 wcmpr
+checksum
