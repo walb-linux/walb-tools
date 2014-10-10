@@ -25,6 +25,7 @@ struct Option
     uint64_t beginLsid;
     uint64_t endLsid;
     bool showHead, showPack, showStat;
+    bool doValidate;
     bool isDebug;
 
     Option(int argc, char* argv[])
@@ -44,6 +45,7 @@ struct Option
         opt.appendBoolOpt(&showHead, "head", ": show file header.");
         opt.appendBoolOpt(&showPack, "pack", ": show packs.");
         opt.appendBoolOpt(&showStat, "stat", ": show statistics.");
+        opt.appendBoolOpt(&doValidate, "validate", ": validate each IO checksum.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -74,6 +76,24 @@ void setupInputFile(LogFile &fileR, const Option &opt)
     }
 }
 
+void validateAndPrintLogPackIos(
+    const LogPackHeader &packH, std::queue<LogBlockShared>& ioQ)
+{
+    for (size_t i = 0; i < packH.nRecords(); i++) {
+        const LogRecord &rec = packH.record(i);
+        if (!rec.hasDataForChecksum()) continue;
+
+        const LogBlockShared &blockS = ioQ.front();
+        const uint32_t csum = blockS.calcChecksum(rec.io_size, packH.salt());
+        if (rec.checksum == csum) {
+            LOGs.debug() << "OK" << rec;
+        } else {
+            LOGs.error() << "NG" << rec << cybozu::util::intToHexStr(csum);
+        }
+        ioQ.pop();
+    }
+}
+
 int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
@@ -92,7 +112,13 @@ int doMain(int argc, char* argv[])
     LogPackHeader packH(wh.pbs(), wh.salt());
     while (readLogPackHeader(fileR, packH, lsid)) {
         if (opt.showPack) std::cout << packH << std::endl;
-        skipAllLogIos(fileR, packH);
+        if (opt.doValidate) {
+            std::queue<LogBlockShared> ioQ;
+            readAllLogIos(fileR, packH, ioQ, false);
+            validateAndPrintLogPackIos(packH, ioQ);
+        } else {
+            skipAllLogIos(fileR, packH);
+        }
         if (opt.showStat) logStat.update(packH);
         lsid = packH.nextLogpackLsid();
     }
