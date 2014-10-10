@@ -12,7 +12,8 @@ import errno
 # Constants for general purpose.
 ########################################
 
-TIMEOUT_SEC = 100
+TIMEOUT_SEC = 86400
+SHORT_TIMEOUT_SEC = 100
 
 Mebi = (1 << 20)  # mebi.
 Lbs = (1 << 9)  # logical block size
@@ -1605,7 +1606,7 @@ class Controller:
         gid = self.run_ctl(sx, ['snapshot', vol])
         return int(gid)
 
-    def snapshot(self, sx, vol, axL):
+    def snapshot(self, sx, vol, axL, timeoutS=TIMEOUT_SEC):
         '''
         Take a snapshot and wait for it to be restorable in archive servers.
         sx :: Server    - storage server.
@@ -1616,10 +1617,10 @@ class Controller:
         verify_type(axL, list, Server)
         gid = self.snapshot_nbk(sx, vol)
         for ax in axL:
-            self.wait_for_restorable(ax, vol, gid)
+            self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
 
-    def apply_diff(self, ax, vol, gid):
+    def apply_diff(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
         ax :: Server - archive server
@@ -1630,9 +1631,9 @@ class Controller:
         verify_type(vol, str)
         verify_type(gid, int)
         self.run_ctl(ax, ["apply", vol, str(gid)])
-        self._wait_for_applied(ax, vol, gid)
+        self._wait_for_applied(ax, vol, gid, timeoutS)
 
-    def merge_diff(self, ax, vol, gidB, gidE):
+    def merge_diff(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Merge diffs in gid ranges.
         ax :: Server - archive server.
@@ -1644,7 +1645,7 @@ class Controller:
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge_diff')
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
-        self._wait_for_merged(ax, vol, gidB, gidE)
+        self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
     def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC):
         '''
@@ -1666,7 +1667,7 @@ class Controller:
 
         self.replicate_once(aSrc, vol, aDst, timeoutS)
         if synchronizing:
-            self.synchronize(aSrc, vol, aDst)
+            self.synchronize(aSrc, vol, aDst, timeoutS)
 
     def get_latest_clean_snapshot(self, ax, vol):
         '''
@@ -1828,7 +1829,7 @@ class Controller:
             time.sleep(0.3)
         raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
 
-    def _wait_for_not_restored(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+    def _wait_for_not_restored(self, ax, vol, gid, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         Wait for a restored snapshot specified of a gid to be removed
         ax :: Server    - archive server.
@@ -1945,7 +1946,7 @@ class Controller:
         verify_type(ax, Server)
         verify_type(vol, str)
         verify_type(sizeMb, int)
-        self._wait_for_no_action(ax, vol, aaResize)
+        self._wait_for_no_action(ax, vol, aaResize, SHORT_TIMEOUT_SEC)
         runCommand = self.get_run_remote_command(ax)
         curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
         if curSizeMb != sizeMb:
