@@ -10,6 +10,8 @@
 #include "fileio.hpp"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
@@ -62,8 +64,7 @@ uint64_t checkBlockDiff(Config& config)
     cybozu::util::File fileR2(config.filePath2(), O_RDONLY);
 
     const uint32_t bs = config.blockSize();
-    std::unique_ptr<char> p1(new char[bs]);
-    std::unique_ptr<char> p2(new char[bs]);
+    AlignedArray a1(bs), a2(bs);
 #if 0
     ::printf("%d\n%d\n", f1.fd(), f2.fd());
 #endif
@@ -72,14 +73,14 @@ uint64_t checkBlockDiff(Config& config)
     uint64_t nChecked = 0;
     try {
         while (true) {
-            fileR1.read(p1.get(), bs);
-            fileR2.read(p2.get(), bs);
-            if (::memcmp(p1.get(), p2.get(), bs) != 0) {
+            fileR1.read(a1.data(), bs);
+            fileR2.read(a2.data(), bs);
+            if (::memcmp(a1.data(), a2.data(), bs) != 0) {
                 nDiffer++;
                 if (config.isVerbose()) {
                     ::printf("block %" PRIu64 " differ\n", nChecked);
-                    cybozu::util::printByteArray(p1.get(), bs);
-                    cybozu::util::printByteArray(p2.get(), bs);
+                    cybozu::util::printByteArray(a1.data(), bs);
+                    cybozu::util::printByteArray(a2.data(), bs);
                 }
             }
             nChecked++;
