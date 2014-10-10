@@ -38,8 +38,8 @@ struct Option
 
         cybozu::Option opt;
         opt.setDescription("wlog-show: pretty-print wlog input.");
-        opt.appendOpt(&beginLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
-        opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
+        opt.appendOpt(&beginLsid, 0, "b", "LSID: begin lsid. (default: 0)");
+        opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid. (default: 0xffffffffffffffff)");
         opt.appendParamOpt(&inWlogPath, "-", "WLOG_PATH", ": input wlog path. '-' for stdin. (default: '-')");
         opt.appendBoolOpt(&showHead, "head", ": show file header.");
         opt.appendBoolOpt(&showPack, "pack", ": show packs.");
