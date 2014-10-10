@@ -22,16 +22,14 @@ private:
     bool isVerbose_;
     std::string file1_;
     std::string file2_;
+    size_t lineSize_;
 public:
-    Config(int argc, char* argv[])
-        : blockSize_(512)
-        , isVerbose_(false)
-        , file1_()
-        , file2_() {
+    Config(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("bdiff: Show block diff.");
         opt.appendOpt(&blockSize_, 512, "b", "SIZE: block size in bytes (default: 512)");
         opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
+        opt.appendOpt(&lineSize_, 64, "l", ": line size in printing invalid block contents.");
         opt.appendHelp("h", ": show this message.");
         opt.appendParam(&file1_, "FILE1");
         opt.appendParam(&file2_, "FILE2");
@@ -46,6 +44,7 @@ public:
     const std::string& filePath2() const { return file2_; }
     uint32_t blockSize() const { return blockSize_; }
     bool isVerbose() const { return isVerbose_; }
+    size_t lineSize() const { return lineSize_; }
 
     void check() const {
         if (blockSize_ == 0) {
@@ -79,8 +78,8 @@ uint64_t checkBlockDiff(Config& config)
                 nDiffer++;
                 if (config.isVerbose()) {
                     ::printf("block %" PRIu64 " differ\n", nChecked);
-                    cybozu::util::printByteArray(a1.data(), bs);
-                    cybozu::util::printByteArray(a2.data(), bs);
+                    cybozu::util::printByteArray(a1.data(), bs, config.lineSize());
+                    cybozu::util::printByteArray(a2.data(), bs, config.lineSize());
                 }
             }
             nChecked++;

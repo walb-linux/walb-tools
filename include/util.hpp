@@ -200,18 +200,19 @@ inline std::string byteArrayToStr(const void *data, size_t size)
 /**
  * Print byte array as hex list.
  */
-inline void printByteArray(::FILE *fp, const void *data, size_t size)
+inline void printByteArray(::FILE *fp, const void *data, size_t size, size_t lineSize = 64)
 {
+    if (lineSize % 2 != 0) lineSize--;
     for (size_t i = 0; i < size; i++) {
         ::fprintf(fp, "%02x", ((const uint8_t *)data)[i]);
-        if (i % 64 == 63) { ::fprintf(fp, "\n"); }
+        if (i % lineSize == lineSize - 1) { ::fprintf(fp, "\n"); }
     }
-    if (size % 64 != 0) { ::fprintf(fp, "\n"); }
+    if (size % lineSize != 0) { ::fprintf(fp, "\n"); }
 }
 
-inline void printByteArray(const void *data, size_t size)
+inline void printByteArray(const void *data, size_t size, size_t lineSize = 64)
 {
-    printByteArray(::stdout, data, size);
+    printByteArray(::stdout, data, size, lineSize);
 }
 
 /**
