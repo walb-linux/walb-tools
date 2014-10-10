@@ -679,6 +679,14 @@ class ServerLayout:
             aL = archiveL
         return ServerLayout(sL, pL, aL)
 
+    def to_cmd_string(self):
+        '''
+        Make command strings to run server
+        '''
+        for s in self.get_all():
+            print ' '.join(get_server_args(s, self))
+
+
 
 def get_server_args(s, sLayout, isDebug=False, useRepeater=False):
     '''
