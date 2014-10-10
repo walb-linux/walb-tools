@@ -9,15 +9,15 @@ sLayout = ServerLayout([s0], [p0], [a0])
 
 ## Initialize volumes
 
-Let volume name of `wdev0` be `vol0`.
+Let volume name of `wdev0` be `VOL=vol0`.
 
 You can initialize volumes in your backup group as follows:
 ```
-python> walbc.init_storage(s0, 'vol0', wdev0.path)
+python> walbc.init_storage(s0, VOL, wdev0.path)
 ```
 
 REMARK : All states of servers must be `Clear` to run the above command.
-check it with `walb.get_all_state('vol0')`.
+check it with `walbc.get_all_state(VOL)`.
 
 Storage servers know just the relationship of volume name and walb device path.
 You must manage relationship of volumes and walb devices by yourself.
@@ -29,7 +29,7 @@ After initialization, you can execute full backup of the initialized volumes.
 ## Full backup
 
 ```
-python> gid = walbc.full_backup(s0, 'vol0', timeoutS)
+python> gid = walbc.full_backup(s0, VOL, timeoutS)
 ```
 This may take much time. set appropriate `timeoutS` in seconds.
 
@@ -48,7 +48,7 @@ If you want asynchronous behavior, you can make `block` argument `False`.
 ## Take a snapshot
 
 ```
-python> gid = walbc.snapshot(s0, 'vol0', [a0])
+python> gid = walbc.snapshot(s0, VOL, [a0])
 ```
 
 `gid` is the generation id of the taken snapshot. The snapshot is clean.
@@ -70,28 +70,28 @@ wlogs/wdiffs data before arriving at archive servers.
 
 You can get restorable clean snapshots (as gid list) as follows:
 ```
-python> gidL = walbc.get_restorable(a0, 'vol0')
+python> gidL = walbc.get_restorable(a0, VOL)
 ```
 
 **TODO**: add option to get_restorable() that shows timestamp of snapshots.
 
 You can restore a clean snapshot as follows:
 ```
-python> walbc.restore(a0, 'vol0', gid)
+python> walbc.restore(a0, VOL, gid)
 ```
 This may take much time, you can use `timeoutS` argument.
 
 The restored path is determined automatically, you can get it by calling
-`walbc.get_restored_path(a0, 'vol0', gid)`.
+`walbc.get_restored_path(a0, VOL, gid)`.
 
 You can get all the restored volumes as follows:
 ```
-python> gidL = walbc.get_restored(a0, 'vol0')
+python> gidL = walbc.get_restored(a0, VOL)
 ```
 
 You can delete a restored volume as follows:
 ```
-python> walbc.del_restored(a0, 'vol0', gid)
+python> walbc.del_restored(a0, VOL, gid)
 ```
 
 
@@ -125,7 +125,7 @@ Before calling this, you must resize the underlying data device.
 Currently **shrinking** is not supported.
 
 ```
-python> walbc.resize('vol0', sizeMb)
+python> walbc.resize(VOL, sizeMb)
 ```
 
 Do not call `wdevc.resize()` directly,
@@ -146,7 +146,7 @@ You must call the function at all the servers to delete data of volumes complete
 
 ```
 python> for s in [s0, p0, a0]:
-...         walbc.clear_vol(s, 'vol0')
+...         walbc.clear_vol(s, VOL)
 ```
 
 
