@@ -19,6 +19,7 @@ struct Option
     uint64_t bgnLsid;
     uint64_t endLsid;
     bool dontUseAio;
+    bool dontShrink;
     bool isVerbose;
     bool isDebug;
 
@@ -37,6 +38,7 @@ struct Option
         opt.appendOpt(&bgnLsid, 0, "b", "LSID: begin lsid to restore. (default: 0)");
         opt.appendOpt(&endLsid, uint64_t(-1), "e", "LSID: end lsid to restore. (default: 0xffffffffffffffff)");
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio.");
+        opt.appendBoolOpt(&dontShrink, "s", ": do not shrink logpack (ignoring log IO invalidness).");
         opt.appendBoolOpt(&isVerbose, "v", ": verbose output to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
 
@@ -92,7 +94,7 @@ void catWldev(const Option& opt)
     bool isNotShrinked = true;
     while (lsid < opt.endLsid && isNotShrinked) {
         if (!readLogPackHeader(reader, packH, lsid)) break;
-        isNotShrinked = readAllLogIos(reader, packH, ioQ);
+        isNotShrinked = readAllLogIos(reader, packH, ioQ, !opt.dontShrink);
         if (!isNotShrinked && packH.nRecords() == 0) break;
         writer.writePack(packH, std::move(ioQ));
         assert(ioQ.empty());

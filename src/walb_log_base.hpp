@@ -731,7 +731,9 @@ inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, Lo
  *   true if not shrinked.
  */
 template <typename Reader>
-inline bool readAllLogIos(Reader &reader, LogPackHeader &packH, std::queue<LogBlockShared> &ioQ)
+inline bool readAllLogIos(
+    Reader &reader, LogPackHeader &packH, std::queue<LogBlockShared> &ioQ,
+    bool doShrink = true)
 {
     bool isNotShrinked = true;
     for (size_t i = 0; i < packH.nRecords(); i++) {
@@ -739,7 +741,8 @@ inline bool readAllLogIos(Reader &reader, LogPackHeader &packH, std::queue<LogBl
         if (!rec.hasData()) continue;
 
         LogBlockShared blockS;
-        if (!readLogIo(reader, packH, i, blockS)) {
+        const bool valid = readLogIo(reader, packH, i, blockS);
+        if (doShrink && !valid) {
             packH.shrink(i);
             isNotShrinked = false;
             break;
