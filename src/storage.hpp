@@ -185,6 +185,12 @@ struct StorageSingleton
         if (i == wdevName2volId.cend()) throw cybozu::Exception("StorageSingleton:getWvolIdFromWdevName:not found") << wdevName;
         return i->second;
     }
+    bool existsWdevName(const std::string& wdevName) const
+    {
+        AutoLock al(wdevName2VolIdMutex);
+        Str2Str::const_iterator i = wdevName2volId.find(wdevName);
+        return i != wdevName2volId.end();
+    }
 private:
     mutable std::mutex wdevName2VolIdMutex;
     Str2Str wdevName2volId;
@@ -404,6 +410,9 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
         StorageVolState &volSt = getStorageVolState(volId);
         StateMachineTransaction tran(volSt.sm, sClear, stInitVol, FUNC);
 
+        if (gs.existsWdevName(device::getWdevNameFromWdevPath(wdevPath))) {
+            throw cybozu::Exception(FUNC) << "wdevPath is already used" << volId << wdevPath;
+        }
         StorageVolInfo volInfo(gs.baseDirStr, volId, wdevPath);
         volInfo.init();
         tran.commit(sSyncReady);

@@ -91,6 +91,7 @@ public:
     }
     int majorId() const { return ::major(deviceId()); }
     int minorId() const { return ::minor(deviceId()); }
+    ino_t getInode() const { return st_.st_ino; }
 };
 
 /**
@@ -442,6 +443,13 @@ inline FilePath getCurrentDir()
         ::free(p);
         throw;
     }
+}
+
+inline bool isSameFile(const std::string& path1, const std::string& path2)
+{
+    const FileStat s1(path1);
+    const FileStat s2(path2);
+    return s1.getInode() == s2.getInode();
 }
 
 }; //namespace cybozu
