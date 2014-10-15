@@ -307,8 +307,6 @@ inline bool restore(const std::string &volId, uint64_t gid)
 {
     using namespace walb::diff;
 
-    const char *const FUNC = __func__;
-
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
@@ -317,9 +315,6 @@ inline bool restore(const std::string &volId, uint64_t gid)
     const std::string tmpLvName = targetName + "_tmp";
     if (lv.hasSnapshot(tmpLvName)) {
         lv.getSnapshot(tmpLvName).remove();
-    }
-    if (lv.hasSnapshot(targetName)) {
-        throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
     }
     const uint64_t snapSizeLb = uint64_t(((double)(lv.sizeLb()) * 1.2));
     cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true, snapSizeLb);
@@ -1232,6 +1227,12 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     try {
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        const std::string targetName = volInfo.restoredSnapshotName(gid);
+        cybozu::lvm::Lv lv = volInfo.getLv();
+        if (lv.hasSnapshot(targetName)) {
+            throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
+        }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
