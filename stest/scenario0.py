@@ -329,7 +329,7 @@ def cleanup(vol, wdevL):
     verify_type(vol, str)
     verify_type(wdevL, list, Device)
     for s in sLayout.get_all():
-        walbc.clear_vol(s, vol)
+        walbc.clear(s, vol)
     for wdev in wdevL:
         recreate_walb_dev(wdev)
 
@@ -785,7 +785,7 @@ def test_m2():
         'test_m2:hash-bkp-fails.', g_count
     walbc.stop_synchronizing(a0, VOL)
     walbc.stop(a0, VOL)
-    walbc.reset_vol(a0, VOL)
+    walbc.reset(a0, VOL)
     write_random(wdev0.path, 1)
     try:
         walbc.hash_backup(s0, VOL, 10)
@@ -1103,10 +1103,10 @@ def test_e12():
     rL = [a0]
     init_repeater_test(sLayoutRepeater1, rL, rateMbps=rateMbps)
     walbc.stop(s0, VOL)
-    walbc.reset_vol(s0, VOL)
+    walbc.reset(s0, VOL)
 
     walbc.stop(a0, VOL)
-    walbc.reset_vol(a0, VOL)
+    walbc.reset(a0, VOL)
 
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
@@ -1140,7 +1140,7 @@ def test_e13():
     rL = [a0]
     init_repeater_test(sLayoutRepeater1, rL, rateMbps=rateMbps)
     walbc.stop(s0, VOL)
-    walbc.reset_vol(s0, VOL)
+    walbc.reset(s0, VOL)
 
     sizeLb = wdev0.get_size_lb()
     print "sizeLb", sizeLb
@@ -1183,7 +1183,7 @@ def test_e14():
     st = walbc.get_state(a1, VOL)
     if st in aActive:
         walbc.stop(a1, VOL)
-        walbc.reset_vol(a1, VOL)
+        walbc.reset(a1, VOL)
     elif st == aClear:
         walbc.run_ctl(a1, ['init-vol', VOL])
 
@@ -1391,7 +1391,7 @@ def test_r1():
     md0 = get_sha1(wdev2.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r1:0', md0, md1)
-    walbc.clear_vol(s0, VOL)
+    walbc.clear(s0, VOL)
 
     # turn back to the beginning state.
     walbc.init_storage(s0, VOL, wdev0.path)
@@ -1402,7 +1402,7 @@ def test_r1():
     md1 = get_sha1_of_restorable(a0, VOL, gid)
     verify_equal_sha1('test_r1:1', md0, md1)
 
-    walbc.clear_vol(s2, VOL)
+    walbc.clear(s2, VOL)
     shutdown(s2)
     print 'test_r1:succeeded'
 
@@ -1421,7 +1421,7 @@ def replace_proxy(pDel, pAdd, volL, newServerLayout):
         walbc.stop_nbk(pDel, vol, 'empty')
     for vol in volL:
         walbc.wait_for_stopped(pDel, vol)
-        walbc.clear_vol(pDel, vol)
+        walbc.clear(pDel, vol)
     shutdown(pDel)
 
     walbc.set_server_layout(newServerLayout)
@@ -1463,7 +1463,7 @@ def replace_archive(aDel, aAdd, volL, newServerLayout):
         walbc.replicate(aDel, vol, aAdd, isSync, TIMEOUT)
         if isSync:
             walbc.stop_synchronizing(aDel, vol)
-        walbc.clear_vol(aDel, vol)
+        walbc.clear(aDel, vol)
     shutdown(aDel)
 
     walbc.set_server_layout(newServerLayout)

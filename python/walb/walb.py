@@ -876,7 +876,7 @@ class Controller:
         num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
         return num
 
-    def reset_vol(self, s, vol):
+    def reset(self, s, vol):
         '''
         Reset a volume.
         s :: Server - storage or archive.
@@ -913,7 +913,7 @@ class Controller:
         else:
             raise Exception('set_slave_storage:bad state', state)
         self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
-        self.reset_vol(sx, vol)
+        self.reset(sx, vol)
         self.start(sx, vol)
 
     def kick_all(self, sL):
@@ -1043,10 +1043,10 @@ class Controller:
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(wdevPath, str)
-        self._init_vol(sx, vol, wdevPath)
+        self._init(sx, vol, wdevPath)
         self.start(sx, vol)  # start as slave.
 
-    def _init_vol(self, s, vol, wdevPath=None):
+    def _init(self, s, vol, wdevPath=None):
         '''
         Call walb init-vol command.
         s :: Server             - storage or archive
@@ -1062,7 +1062,7 @@ class Controller:
             cmdL.append(wdevPath)
         self.run_ctl(s, cmdL)
 
-    def clear_vol(self, s, vol):
+    def clear(self, s, vol):
         '''
         Clear a volume.
         s :: Server
@@ -1078,10 +1078,10 @@ class Controller:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st == sStopped:
-                self.reset_vol(s, vol)
+                self.reset(s, vol)
                 st = self.get_state(s, vol)
             if st != sSyncReady:
-                raise Exception('clear_vol', s, vol, st)
+                raise Exception('clear', s, vol, st)
         elif s.kind == K_PROXY:
             if st == pClear:
                 return
@@ -1089,7 +1089,7 @@ class Controller:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st != pStopped:
-                raise Exception('clear_vol', s, vol, st)
+                raise Exception('clear', s, vol, st)
         else:
             assert s.kind == K_ARCHIVE
             if st == aClear:
@@ -1098,16 +1098,16 @@ class Controller:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st not in aAcceptForClearVol:
-                raise Exception('clear_vol', s, vol, st)
+                raise Exception('clear', s, vol, st)
         self.run_ctl(s, ['clear-vol', vol])
 
-    def _clear_vol_force(self, vol):
+    def _force_clear(self, vol):
         '''
-        clear vol at all servers
+        force to clear vol at all servers
         '''
         verify_type(vol, str)
         for s in self.sLayout.get_all():
-            self.clear_vol(s, vol)
+            self.clear(s, vol)
 
     def get_archive_info_list(self, px, vol):
         '''
@@ -1671,7 +1671,7 @@ class Controller:
 
         st = self.get_state(aDst, vol)
         if st == aClear:
-            self._init_vol(aDst, vol)
+            self._init(aDst, vol)
 
         self.replicate_once(aSrc, vol, aDst, timeoutS)
         if synchronizing:
@@ -1895,7 +1895,7 @@ class Controller:
         elif st == sSlave:
             self.stop(sx, vol)
         elif st == sStopped:
-            self.reset_vol(sx, vol)
+            self.reset(sx, vol)
         else:
             raise Exception("prepare_backup:bad state. call stop if master.", sx, vol, st)
 
@@ -1914,7 +1914,7 @@ class Controller:
         a0 = self.sLayout.get_primary_archive()
         st = self.get_state(a0, vol)
         if st == aClear:
-            self._init_vol(a0, vol)
+            self._init(a0, vol)
 
         self.start_synchronizing(a0, vol)
 
