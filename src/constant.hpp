@@ -28,4 +28,6 @@ const size_t DEFAULT_MAX_IO_LB = MEBI / LBS; // used as max diff IO size.
 
 const size_t DEFAULT_SOCKET_TIMEOUT_SEC = 10;
 
+const uint64_t MAX_FSYNC_DATA_SIZE = 128 * 1024 * 1024;
+
 } // walb

@@ -58,6 +58,7 @@ inline bool dirtyFullSyncServer(
 
     uint64_t c = 0;
     uint64_t remainingLb = sizeLb;
+	uint64_t writeSize = 0;
     while (0 < remainingLb) {
         if (stopState == ForceStopping || forceQuit) {
             return false;
@@ -85,9 +86,16 @@ inline bool dirtyFullSyncServer(
         }
         file.write(&buf[0], size);
         remainingLb -= lb;
+		writeSize += size;
+		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
+            file.fdatasync();
+            writeSize = 0;
+		}
         c++;
     }
+    LOGs.debug() << "fdatasync start";
     file.fdatasync();
+    LOGs.debug() << "fdatasync end";
     packet::Ack(pkt.sock()).send();
     LOGs.debug() << "number of received packets" << c;
     return true;

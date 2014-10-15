@@ -135,6 +135,7 @@ inline bool dirtyHashSyncServer(
 
     packet::StreamControl ctrl(pkt.sock());
     Buffer buf;
+    uint64_t writeSize = 0;
     while (ctrl.isNext() || ctrl.isDummy()) {
         if (stopState == ForceStopping || forceQuit) {
             readerTh.join();
@@ -151,6 +152,11 @@ inline bool dirtyHashSyncServer(
         pkt.read(buf.data(), buf.size());
         verifyDiffPack(buf);
         fileW.write(buf.data(), buf.size());
+        writeSize += buf.size();
+		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
+            fileW.fdatasync();
+            writeSize = 0;
+		}
         ctrl.reset();
     }
     if (ctrl.isError()) {

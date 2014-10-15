@@ -76,6 +76,7 @@ inline bool wdiffTransferServer(
     cybozu::util::File fileW(wdiffOutFd);
     Buffer buf;
     packet::StreamControl ctrl(pkt.sock());
+    uint64_t writeSize = 0;
     while (ctrl.isNext()) {
         if (stopState == ForceStopping || forceQuit) {
             return false;
@@ -87,6 +88,11 @@ inline bool wdiffTransferServer(
         pkt.read(buf.data(), buf.size());
         verifyDiffPack(buf);
         fileW.write(buf.data(), buf.size());
+        writeSize += buf.size();
+		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
+            fileW.fdatasync();
+            writeSize = 0;
+		}
         ctrl.reset();
     }
     if (!ctrl.isEnd()) {
