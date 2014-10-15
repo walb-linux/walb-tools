@@ -418,7 +418,7 @@ private:
             qf.front(pre);
         }
         const std::string wdevPath = wdevPath_.str();
-        const uint64_t lsid = device::getPermanentLsid(wdevPath);
+        const uint64_t lsid = device::getLatestLsid(wdevPath);
         if (device::isOverflow(wdevPath)) {
             throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
         }

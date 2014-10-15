@@ -302,6 +302,14 @@ inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
     }
 }
 
+inline uint64_t getLatestLsid(const std::string& wdevPath)
+{
+    const std::string wdevName = getWdevNameFromWdevPath(wdevPath);
+    LsidSet lsidSet;
+    getLsidSet(wdevName, lsidSet);
+    return lsidSet.latest;
+}
+
 inline void resetWal(const std::string& wdevPath)
 {
     const int dummy = 0;
