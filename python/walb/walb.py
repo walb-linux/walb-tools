@@ -1101,6 +1101,14 @@ class Controller:
                 raise Exception('clear_vol', s, vol, st)
         self.run_ctl(s, ['clear-vol', vol])
 
+    def _clear_vol_force(self, vol):
+        '''
+        clear vol at all servers
+        '''
+        verify_type(vol, str)
+        for s in self.sLayout.get_all():
+            self.clear_vol(s, vol)
+
     def get_archive_info_list(self, px, vol):
         '''
         Get archive list registered to a proxy.
