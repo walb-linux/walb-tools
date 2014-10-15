@@ -100,10 +100,10 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 
-PYTHON_SOURCES = python/walb/walb.py stest/repeater.py stest/scenario0.py
+PYTHON_SOURCES = python/walb/walb.py stest/config0.py stest/repeater.py stest/scenario0.py
 
 pylint:
-	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python')" $(PYTHON_SOURCES)
+	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES)
 
 stest: pylint
 	python stest/scenario0.py
