@@ -859,6 +859,7 @@ def test_e4():
     startup(s0)
     if not walbc.is_overflow(s0, VOL):
         raise Exception('test_e4:must be overflow')
+    walbc.stop(s0, VOL)
     gid = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
@@ -883,6 +884,7 @@ def test_e5():
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid0, 10, 'test_e5')
+    walbc.stop(s0, VOL)
     gid1 = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid1)
@@ -902,6 +904,7 @@ def test_e6():
     walbc.run_ctl(a0, ['init-vol', VOL])
     gid0 = walbc.snapshot_nbk(s0, VOL)
     walbc.verify_not_restorable(a0, VOL, gid0, 10, 'test_e6')
+    walbc.stop(s0, VOL)
     gid1 = walbc.full_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid1)
@@ -1007,6 +1010,7 @@ def test_e10():
         print 'test_e10:wlog overflow ok'
         pass
     start_repeater(p0)
+    walbc.stop(s0, VOL)
     gid = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
