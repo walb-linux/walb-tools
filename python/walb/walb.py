@@ -1890,18 +1890,21 @@ class Controller:
         verify_type(vol, str)
 
         st = self.get_state(sx, vol)
-        if st == sSlave:
+        if st == sSyncReady:
+            pass
+        elif st == sSlave:
             self.stop(sx, vol)
-        elif st == sMaster:
-            self.stop(sx, vol)
+        elif st == sStopped:
             self.reset_vol(sx, vol)
+        else:
+            raise Exception("prepare_backup:bad state. call stop if master.", sx, vol, st)
 
         for s in self.sLayout.storageL:
             if s == sx:
                 continue
             st = self.get_state(s, vol)
             if st not in [sSlave, sClear]:
-                raise Exception("prepare_backup:bad state", s.name, vol, st)
+                raise Exception("prepare_backup:bad state", s.name, sx, vol, st)
 
         for ax in self.sLayout.archiveL:
             if self.is_synchronizing(ax, vol):
