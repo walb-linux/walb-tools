@@ -496,6 +496,7 @@ struct CommandInfo {
     { "get-checkpoint-interval", &g_getCheckpointInterval, "Get checkpoint interval." },
     { "force-checkpoint", &g_forceCheckpoint, "Execute checkpointing immediately." },
     { "set-oldest-lsid", &g_setOldestLsid, "Set oldest lsid (to clear wlogs)" },
+    { "get-oldest-lsid", &g_getOldestLsid, "Get oldest lsid." },
     { "get-written-lsid", &g_getWrittenLsid, "Get written lsid." },
     { "get-permanent-lsid", &g_getPermanentLsid, "Get permanent lsid." },
     { "get-completed-lsid", &g_getCompletedLsid, "Get complete lsid." },
