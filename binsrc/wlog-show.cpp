@@ -24,7 +24,7 @@ struct Option
     std::string inWlogPath;
     uint64_t beginLsid;
     uint64_t endLsid;
-    bool showHead, showPack, showStat;
+    bool showHead, showPack, showStat, showNone;
     bool doValidate;
     bool isDebug;
 
@@ -45,6 +45,7 @@ struct Option
         opt.appendBoolOpt(&showHead, "head", ": show file header.");
         opt.appendBoolOpt(&showPack, "pack", ": show packs.");
         opt.appendBoolOpt(&showStat, "stat", ": show statistics.");
+        opt.appendBoolOpt(&showNone, "none", ": show nothing.");
         opt.appendBoolOpt(&doValidate, "validate", ": validate each IO checksum.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
@@ -60,6 +61,9 @@ struct Option
         // In default, show all.
         if (!showHead && !showPack && !showStat) {
             showHead = showPack = showStat = true;
+        }
+        if (showNone) {
+            showHead = showPack = showStat = false;
         }
     }
     bool isInputStdin() const { return inWlogPath == "-"; }
