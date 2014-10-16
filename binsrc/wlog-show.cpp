@@ -81,7 +81,16 @@ void validateAndPrintLogPackIos(
 {
     for (size_t i = 0; i < packH.nRecords(); i++) {
         const LogRecord &rec = packH.record(i);
-        if (!rec.hasDataForChecksum()) continue;
+
+        if (!rec.isExist()) {
+            throw cybozu::Exception("validateAndPrintLogPackIos")
+                << "exist flag not set" << rec;
+        }
+        if (rec.isDiscard()) continue;
+        if (rec.isPadding()) {
+            ioQ.pop();
+            continue;
+        }
 
         const LogBlockShared &blockS = ioQ.front();
         const uint32_t csum = blockS.calcChecksum(rec.io_size, packH.salt());
