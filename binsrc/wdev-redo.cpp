@@ -55,7 +55,7 @@ void redo(const Option &opt)
     if (opt.isVerbose) super.print();
     LogRedoConfig cfg;
     cfg = {opt.ddevPath, opt.isVerbose, opt.isDiscard, opt.isZeroDiscard,
-           pbs, salt, bgnLsid, true};
+           pbs, salt, bgnLsid, true, false};
 
     bool isShrinked;
     LogPackHeader packH;

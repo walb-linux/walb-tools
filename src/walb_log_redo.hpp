@@ -660,6 +660,7 @@ struct LogRedoConfig
     uint64_t bgnLsid;
 
     bool doShrink;
+    bool doSkipCsum;
 };
 
 template <typename BdevWriter>
@@ -707,7 +708,7 @@ public:
                         packH_.copyFrom(packH);
                         isShrinked = true;
                         break;
-                    } else {
+                    } else if (!cfg_.doSkipCsum) {
                         throw cybozu::Exception(__func__) << "invalid log IO" << i << packH;
                     }
                 }

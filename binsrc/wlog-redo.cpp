@@ -14,6 +14,7 @@ struct Option
     bool isDiscard;
     bool isZeroDiscard;
     bool dontUseAio;
+    bool doSkipCsum;
     bool isVerbose;
     bool isDebug;
 
@@ -24,6 +25,7 @@ struct Option
         opt.appendBoolOpt(&isDiscard, "d", "issue discard for discard logs.");
         opt.appendBoolOpt(&isZeroDiscard, "z", "zero-clear for discard logs.");
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio");
+        opt.appendBoolOpt(&doSkipCsum, "skipcsum", ": skip checksum validation");
         opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendParam(&ddevPath, "DEVICE_PATH");
@@ -60,7 +62,7 @@ int doMain(int argc, char* argv[])
     wh.readFrom(wlogFile);
     LogRedoConfig cfg;
     cfg = {opt.ddevPath, opt.isVerbose, opt.isDiscard, opt.isZeroDiscard,
-           wh.pbs(), wh.salt(), wh.beginLsid(), false};
+           wh.pbs(), wh.salt(), wh.beginLsid(), false, opt.doSkipCsum};
 
     if (opt.dontUseAio) {
         LogApplyer<SimpleBdevWriter> applyer(cfg);
