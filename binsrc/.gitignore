@@ -33,3 +33,4 @@ crash-test
 fill-bdev
 wcmpr
 checksum
+modify-during-write
