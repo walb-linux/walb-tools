@@ -50,7 +50,7 @@ enum IoType
  */
 struct AioData
 {
-    unsigned int key;
+    uint key;
     IoType type;
     struct iocb iocb;
     off_t oft;
@@ -58,46 +58,22 @@ struct AioData
     char *buf;
     double beginTime;
     double endTime;
-    bool done;
     int err;
-};
 
-/**
- * Pointer to AioData.
- */
-using AioDataPtr = std::shared_ptr<AioData>;
-
-/**
- * AioData Allocator.
- */
-class AioDataAllocator
-{
-private:
-    unsigned int key_;
-
-public:
-    AioDataAllocator()
-        : key_(1) {}
-
-    AioDataPtr alloc() {
-        AioDataPtr p(new AioData());
-        p->key = getKey();
-        return p;
-    }
-private:
-    /**
-     * Never return 0.
-     */
-    unsigned int getKey() {
-        unsigned int ret = key_;
-        if (key_ == static_cast<unsigned int>(-1)) {
-            key_ += 2;
-        } else {
-            key_++;
-        }
-        return ret;
+    void init(uint key, IoType type, off_t oft, size_t size, char *buf) {
+        this->key = key;
+        this->type = type;
+        ::memset(&iocb, 0, sizeof(iocb));
+        this->oft = oft;
+        this->size = size;
+        this->buf = buf;
+        beginTime = 0.0;
+        endTime = 0.0;
+        err = 0;
     }
 };
+
+using AioDataPtr = std::unique_ptr<AioData>;
 
 /**
  * Asynchronous IO wrapper.
@@ -124,23 +100,15 @@ private:
     const size_t queueSize_;
     io_context_t ctx_;
 
-    AioDataAllocator allocator_;
-
-    using Umap = std::unordered_map<uint, AioDataPtr>;
-
-    /* Prepared but not submitted IOs. */
+    /*
+     * submitQ_ contains prepared but not submitted IOs.
+     * pendingIOs_ contains submitted but not completed IOs.
+     * completedIOs_ contains completed IOs.
+     *   Key: aiodata.key, value: aiodata ptr.
+     */
     std::list<AioDataPtr> submitQ_;
-
-    /*
-     * Submitted but not completed IOs.
-     * Key: aiodata.key, value: aiodata pointer.
-     */
+    using Umap = std::unordered_map<uint, AioDataPtr>;
     Umap pendingIOs_;
-
-    /*
-     * Completed IOs.
-     * Each aiodata->done must be true, and it must not exist in the pendingIOs_.
-     */
     Umap completedIOs_;
 
     /* temporal use for submit. */
@@ -151,7 +119,7 @@ private:
 
     const bool isMeasureTime_;
     bool isReleased_;
-
+    uint key_;
 public:
     /**
      * @fd Opened file descripter.
@@ -163,14 +131,14 @@ public:
     Aio(int fd, size_t queueSize)
         : fd_(fd)
         , queueSize_(queueSize)
-        , allocator_()
         , submitQ_()
         , pendingIOs_()
         , completedIOs_()
         , iocbs_(queueSize)
         , ioEvents_(queueSize)
         , isMeasureTime_(false)
-        , isReleased_(false) {
+        , isReleased_(false)
+        , key_(1) {
         assert(fd_ >= 0);
         assert(queueSize > 0);
         const int err = ::io_queue_init(queueSize_, &ctx_);
@@ -204,71 +172,44 @@ public:
      */
     uint prepareRead(off_t oft, size_t size, char* buf) {
         if (isQueueFull()) return 0;
-
-        AioDataPtr ptr = allocator_.alloc();
-        assert(ptr->key != 0);
-        submitQ_.push_back(ptr);
-        ptr->type = IOTYPE_READ;
-        ptr->oft = oft;
-        ptr->size = size;
-        ptr->buf = buf;
-        ptr->beginTime = 0.0;
-        ptr->endTime = 0.0;
-        ptr->done = false;
-        ptr->err = 0;
-        ::io_prep_pread(&ptr->iocb, fd_, buf, size, oft);
-        ptr->iocb.data = reinterpret_cast<void *>(ptr->key);
-        return ptr->key;
+        const uint key = getKey();
+        AioDataPtr iop(new AioData());
+        iop->init(key, IOTYPE_READ, oft, size, buf);
+        ::io_prep_pread(&iop->iocb, fd_, buf, size, oft);
+        iop->iocb.data = reinterpret_cast<void *>(key);
+        submitQ_.push_back(std::move(iop));
+        return key;
     }
-
     /**
      * Prepare a write IO.
      */
-    unsigned int prepareWrite(off_t oft, size_t size, const char* buf) {
+    uint prepareWrite(off_t oft, size_t size, const char* buf) {
         if (isQueueFull()) return 0;
-
-        AioDataPtr ptr = allocator_.alloc();
-        assert(ptr->key != 0);
-        submitQ_.push_back(ptr);
-        ptr->type = IOTYPE_WRITE;
-        ptr->oft = oft;
-        ptr->size = size;
-        ptr->buf = const_cast<char *>(buf);
-        ptr->beginTime = 0.0;
-        ptr->endTime = 0.0;
-        ptr->done = false;
-        ptr->err = 0;
-        ::io_prep_pwrite(&ptr->iocb, fd_, ptr->buf, size, oft);
-        ptr->iocb.data = reinterpret_cast<void *>(ptr->key);
-        return ptr->key;
+        const uint key = getKey();
+        AioDataPtr iop(new AioData());
+        char* buf2 = const_cast<char *>(buf);
+        iop->init(key, IOTYPE_WRITE, oft, size, buf2);
+        ::io_prep_pwrite(&iop->iocb, fd_, buf2, size, oft);
+        iop->iocb.data = reinterpret_cast<void *>(key);
+        submitQ_.push_back(std::move(iop));
+        return key;
     }
-
     /**
      * Prepare a flush IO.
      *
      * Currently aio flush is not supported
      * by almost all filesystems and block devices.
      */
-    unsigned int prepareFlush() {
+    uint prepareFlush() {
         if (isQueueFull()) return 0;
-
-        AioDataPtr ptr = allocator_.alloc();
-        assert(ptr->key != 0);
-        submitQ_.push_back(ptr);
-
-        ptr->type = IOTYPE_FLUSH;
-        ptr->oft = 0;
-        ptr->size = 0;
-        ptr->buf = nullptr;
-        ptr->beginTime = 0.0;
-        ptr->endTime = 0.0;
-        ptr->done = false;
-        ptr->err = 0;
-        ::io_prep_fdsync(&ptr->iocb, fd_);
-        ptr->iocb.data = reinterpret_cast<void *>(ptr->key);
-        return ptr->key;
+        const uint key = getKey();
+        AioDataPtr iop(new AioData());
+        iop->init(key, IOTYPE_FLUSH, 0, 0, nullptr);
+        ::io_prep_fdsync(&iop->iocb, fd_);
+        iop->iocb.data = reinterpret_cast<void *>(key);
+        submitQ_.push_back(std::move(iop));
+        return key;
     }
-
     /**
      * Submit all prepared IO(s).
      *
@@ -283,12 +224,13 @@ public:
         double beginTime = 0;
         if (isMeasureTime_) beginTime = util::getTime();
         for (size_t i = 0; i < nr; i++) {
-            AioDataPtr ptr = submitQ_.front();
+            AioDataPtr iop = std::move(submitQ_.front());
             submitQ_.pop_front();
-            iocbs_[i] = &ptr->iocb;
-            ptr->beginTime = beginTime;
-            assert(pendingIOs_.find(ptr->key) == pendingIOs_.end());
-            pendingIOs_.emplace(ptr->key, ptr);
+            iocbs_[i] = &iop->iocb;
+            iop->beginTime = beginTime;
+            const uint key = iop->key;
+            assert(pendingIOs_.find(key) == pendingIOs_.end());
+            pendingIOs_.emplace(key, std::move(iop));
         }
         assert(submitQ_.empty());
 
@@ -311,10 +253,10 @@ public:
     bool cancel(uint key) {
         /* Submit queue. */
         {
-            auto it = submitQ_.begin();
+            std::list<AioDataPtr>::iterator it = submitQ_.begin();
             while (it != submitQ_.end()) {
-                AioDataPtr p = *it;
-                if (p->key == key) {
+                AioDataPtr& iop = *it;
+                if (iop->key == key) {
                     submitQ_.erase(it);
                     return true;
                 }
@@ -324,11 +266,10 @@ public:
 
         /* Pending IOs. */
         {
-            auto it = pendingIOs_.find(key);
+            Umap::iterator it = pendingIOs_.find(key);
             if (it != pendingIOs_.end()) {
-                AioDataPtr p = it->second;
-                struct io_event &event = ioEvents_[0];
-                if (::io_cancel(ctx_, &p->iocb, &event) == 0) {
+                AioDataPtr& iop = it->second;
+                if (::io_cancel(ctx_, &iop->iocb, &ioEvents_[0]) == 0) {
                     pendingIOs_.erase(it);
                     return true;
                 }
@@ -337,7 +278,7 @@ public:
         }
 
         /* Completed IOs. */
-        auto it = completedIOs_.find(key);
+        Umap::iterator it = completedIOs_.find(key);
         if (it != completedIOs_.end()) {
             return false;
         }
@@ -354,15 +295,13 @@ public:
      *   LibcError
      *   std::runtime_error
      */
-    void waitFor(unsigned int key) {
+    void waitFor(uint key) {
         verifyKeyExistance(key);
-        AioDataPtr p;
-        p = popCompleted(key);
-        while (!p) {
+        AioDataPtr iop;
+        while (!popCompleted(key, iop)) {
             wait_(1);
-            p = popCompleted(key);
         }
-        verifyNoError(*p);
+        verifyNoError(*iop);
     }
     /**
      * Check a given IO has been completed or not.
@@ -402,14 +341,15 @@ public:
         bool isLibcError = false;
         while (nr > 0) {
             assert(completedIOs_.empty());
-            AioDataPtr p = popAnyCompleted();
-            if (p->err == 0) {
+            AioDataPtr iop;
+            popAnyCompleted(iop);
+            if (iop->err == 0) {
                 isEofError = true;
-            } else if (p->err < 0) {
+            } else if (iop->err < 0) {
                 isLibcError = true;
             }
-            assert(p->iocb.u.c.nbytes == static_cast<uint>(p->err));
-            queue.push(p->key);
+            assert(iop->iocb.u.c.nbytes == static_cast<uint>(iop->err));
+            queue.push(iop->key);
             nr--;
         }
         if (isLibcError) {
@@ -419,7 +359,6 @@ public:
             throw util::EofError();
         }
     }
-
     /**
      * Wait just one IO completed.
      *
@@ -435,11 +374,22 @@ public:
      */
     uint waitOne() {
         if (completedIOs_.empty()) wait_(1);
-        AioDataPtr p = popAnyCompleted();
-        verifyNoError(*p);
-        return p->key;
+        AioDataPtr iop;
+        popAnyCompleted(iop);
+        verifyNoError(*iop);
+        return iop->key;
     }
 private:
+    /**
+     * Never return 0.
+     */
+    uint getKey() {
+        uint ret = key_;
+        key_++;
+        if (key_ == 0) key_++;
+        assert(ret != 0);
+        return ret;
+    }
     /**
      * Wait IOs completion.
      * @minNr minimum number of waiting IOs. minNr <= queueSize_.
@@ -458,16 +408,14 @@ private:
         if (isMeasureTime_) endTime = util::getTime();
         for (int i = 0; i < nr; i++) {
             const uint key = getKeyFromEvent(ioEvents_[i]);
-            auto it = pendingIOs_.find(key);
+            Umap::iterator it = pendingIOs_.find(key);
             assert(it != pendingIOs_.end());
-            AioDataPtr p = it->second;
-            assert(p->key == key);
-            assert(!p->done);
-            p->done = true;
-            p->endTime = endTime;
-            p->err = ioEvents_[i].res;
+            AioDataPtr& iop = it->second;
+            assert(iop->key == key);
+            iop->endTime = endTime;
+            iop->err = ioEvents_[i].res;
+            completedIOs_.emplace(key, std::move(iop));
             pendingIOs_.erase(it);
-            completedIOs_.emplace(key, p);
         }
         return nr;
     }
@@ -476,32 +424,31 @@ private:
         return static_cast<uint>(reinterpret_cast<uintptr_t>(iocb.data));
     }
     /**
-     * completeIOs_.empty() must be false.
-     * @return aio pointer.
+     * @iop poped data will be set.
+     * @return true if poped.
      */
-    AioDataPtr popAnyCompleted() {
-        assert(!completedIOs_.empty());
-        AioDataPtr p;
-        {
-            auto it = completedIOs_.begin();
-            AioDataPtr p = it->second;
-            completedIOs_.erase(it);
-            assert(p.get() != nullptr);
-        }
-        return p;
+    bool popAnyCompleted(AioDataPtr& iop) {
+        if (completedIOs_.empty()) return false;
+
+        Umap::iterator it = completedIOs_.begin();
+        iop = std::move(it->second);
+        completedIOs_.erase(it);
+        return true;
     }
     /**
+     * @key IO identifier
+     * @iop poped data will be set.
      * @return found AioDataPtr or nullptr.
      */
-    AioDataPtr popCompleted(uint key) {
-        if (completedIOs_.empty()) return nullptr;
-        auto it = completedIOs_.find(key);
-        if (it == completedIOs_.end()) return nullptr;
+    bool popCompleted(uint key, AioDataPtr& iop) {
+        if (completedIOs_.empty()) return false;
+        Umap::iterator it = completedIOs_.find(key);
+        if (it == completedIOs_.end()) return false;
 
-        AioDataPtr p = it->second;
-        assert(p->key == key);
+        iop = std::move(it->second);
+        assert(iop->key == key);
         completedIOs_.erase(it);
-        return p;
+        return true;
     }
     void verifyKeyExistance(uint key) const {
         if (completedIOs_.find(key) == completedIOs_.cend() &&
