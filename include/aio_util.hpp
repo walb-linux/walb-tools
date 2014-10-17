@@ -38,43 +38,6 @@
 namespace cybozu {
 namespace aio {
 
-enum IoType
-{
-    IOTYPE_READ = 0,
-    IOTYPE_WRITE = 1,
-    IOTYPE_FLUSH = 2,
-};
-
-/**
- * An aio data.
- */
-struct AioData
-{
-    uint key;
-    IoType type;
-    struct iocb iocb;
-    off_t oft;
-    size_t size;
-    char *buf;
-    double beginTime;
-    double endTime;
-    int err;
-
-    void init(uint key, IoType type, off_t oft, size_t size, char *buf) {
-        this->key = key;
-        this->type = type;
-        ::memset(&iocb, 0, sizeof(iocb));
-        this->oft = oft;
-        this->size = size;
-        this->buf = buf;
-        beginTime = 0.0;
-        endTime = 0.0;
-        err = 0;
-    }
-};
-
-using AioDataPtr = std::unique_ptr<AioData>;
-
 /**
  * Asynchronous IO wrapper.
  *
@@ -96,6 +59,38 @@ using AioDataPtr = std::unique_ptr<AioData>;
 class Aio
 {
 private:
+    enum IoType
+    {
+        IOTYPE_READ = 0,
+        IOTYPE_WRITE = 1,
+        IOTYPE_FLUSH = 2,
+    };
+
+    struct AioData
+    {
+        uint key;
+        IoType type;
+        struct iocb iocb;
+        off_t oft;
+        size_t size;
+        char *buf;
+        double beginTime;
+        double endTime;
+        int err;
+
+        void init(uint key, IoType type, off_t oft, size_t size, char *buf) {
+            this->key = key;
+            this->type = type;
+            ::memset(&iocb, 0, sizeof(iocb));
+            this->oft = oft;
+            this->size = size;
+            this->buf = buf;
+            beginTime = 0.0;
+            endTime = 0.0;
+            err = 0;
+        }
+    };
+
     const int fd_;
     const size_t queueSize_;
     io_context_t ctx_;
@@ -106,6 +101,7 @@ private:
      * completedIOs_ contains completed IOs.
      *   Key: aiodata.key, value: aiodata ptr.
      */
+    using AioDataPtr = std::unique_ptr<AioData>;
     std::list<AioDataPtr> submitQ_;
     using Umap = std::unordered_map<uint, AioDataPtr>;
     Umap pendingIOs_;
@@ -369,8 +365,6 @@ public:
      *   EofError
      *   LibcError
      *   std::runtime_error
-     *
-     * You should use waitFor() to know errors.
      */
     uint waitOne() {
         if (completedIOs_.empty()) wait_(1);
