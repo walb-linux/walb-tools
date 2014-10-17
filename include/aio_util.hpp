@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <queue>
+#include <list>
 #include <unordered_map>
 #include <map>
 #include <string>
@@ -18,7 +19,6 @@
 #include <cstdio>
 #include <cassert>
 #include <memory>
-#include <thread>
 
 #include <unistd.h>
 #include <time.h>
@@ -126,20 +126,22 @@ private:
 
     AioDataAllocator allocator_;
 
-    /* Prepared but not submitted. */
-    std::queue<AioDataPtr> submitQueue_;
+    using Umap = std::unordered_map<uint, AioDataPtr>;
+
+    /* Prepared but not submitted IOs. */
+    std::list<AioDataPtr> submitQ_;
 
     /*
-     * Submitted but not returned.
-     * Key: aiodata->key, value: aiodata.
+     * Submitted but not completed IOs.
+     * Key: aiodata.key, value: aiodata pointer.
      */
-    std::unordered_map<unsigned int, AioDataPtr> pendingIOs_;
+    Umap pendingIOs_;
 
     /*
      * Completed IOs.
-     * Each aiodata->done must be true, and it must exist in the pendingIOs_.
+     * Each aiodata->done must be true, and it must not exist in the pendingIOs_.
      */
-    std::queue<AioDataPtr> completedIOs_;
+    Umap completedIOs_;
 
     /* temporal use for submit. */
     std::vector<struct iocb *> iocbs_;
@@ -148,8 +150,7 @@ private:
     std::vector<struct io_event> ioEvents_;
 
     const bool isMeasureTime_;
-
-    std::once_flag release_flag_;
+    bool isReleased_;
 
 public:
     /**
@@ -163,49 +164,50 @@ public:
         : fd_(fd)
         , queueSize_(queueSize)
         , allocator_()
-        , submitQueue_()
+        , submitQ_()
         , pendingIOs_()
         , completedIOs_()
         , iocbs_(queueSize)
         , ioEvents_(queueSize)
-        , isMeasureTime_(false) {
+        , isMeasureTime_(false)
+        , isReleased_(false) {
         assert(fd_ >= 0);
         assert(queueSize > 0);
-        int err = ::io_queue_init(queueSize_, &ctx_);
+        const int err = ::io_queue_init(queueSize_, &ctx_);
         if (err < 0) {
             throw util::LibcError(-err);
         }
     }
-
-    ~Aio() noexcept {
-        try {
-            release();
-        } catch (...) {
-        }
+    ~Aio() noexcept try {
+        release();
+    } catch (...) {
     }
-
     void release() {
-        std::call_once(release_flag_, [&]() {
-                int err = ::io_queue_release(ctx_);
-                if (err < 0) {
-                    throw util::LibcError(-err);
-                }
-            });
+        if (isReleased_) return;
+        int err = ::io_queue_release(ctx_);
+        if (err < 0) {
+            throw util::LibcError(-err, "Aio: release failed.");
+        }
+        isReleased_ = true;
     }
-
+    /**
+     * If this returns true, the queue is full.
+     * call submit() and waitXXX() before calling additional prepareXXX().
+     */
+    bool isQueueFull() const {
+        return submitQ_.size() + pendingIOs_.size() >= queueSize_;
+    }
     /**
      * Prepare a read IO.
      * RETURN:
      *   Unique key (non-zero) to identify the IO in success, or 0.
      */
-    unsigned int prepareRead(off_t oft, size_t size, char* buf) {
-        if (submitQueue_.size() >= queueSize_) {
-            return 0;
-        }
+    uint prepareRead(off_t oft, size_t size, char* buf) {
+        if (isQueueFull()) return 0;
 
         AioDataPtr ptr = allocator_.alloc();
         assert(ptr->key != 0);
-        submitQueue_.push(ptr);
+        submitQ_.push_back(ptr);
         ptr->type = IOTYPE_READ;
         ptr->oft = oft;
         ptr->size = size;
@@ -223,13 +225,11 @@ public:
      * Prepare a write IO.
      */
     unsigned int prepareWrite(off_t oft, size_t size, const char* buf) {
-        if (submitQueue_.size() >= queueSize_) {
-            return 0;
-        }
+        if (isQueueFull()) return 0;
 
         AioDataPtr ptr = allocator_.alloc();
         assert(ptr->key != 0);
-        submitQueue_.push(ptr);
+        submitQ_.push_back(ptr);
         ptr->type = IOTYPE_WRITE;
         ptr->oft = oft;
         ptr->size = size;
@@ -250,13 +250,12 @@ public:
      * by almost all filesystems and block devices.
      */
     unsigned int prepareFlush() {
-        if (submitQueue_.size() >= queueSize_) {
-            return 0;
-        }
+        if (isQueueFull()) return 0;
 
         AioDataPtr ptr = allocator_.alloc();
         assert(ptr->key != 0);
-        submitQueue_.push(ptr);
+        submitQ_.push_back(ptr);
+
         ptr->type = IOTYPE_FLUSH;
         ptr->oft = 0;
         ptr->size = 0;
@@ -277,22 +276,21 @@ public:
      *   LibcError
      */
     void submit() {
-        size_t nr = submitQueue_.size();
-        if (nr == 0) {
-            return;
-        }
+        size_t nr = submitQ_.size();
+        if (nr == 0) return;
+
         assert(iocbs_.size() >= nr);
         double beginTime = 0;
-        if (isMeasureTime_) { beginTime = util::getTime(); }
+        if (isMeasureTime_) beginTime = util::getTime();
         for (size_t i = 0; i < nr; i++) {
-            AioDataPtr ptr = submitQueue_.front();
-            submitQueue_.pop();
+            AioDataPtr ptr = submitQ_.front();
+            submitQ_.pop_front();
             iocbs_[i] = &ptr->iocb;
             ptr->beginTime = beginTime;
             assert(pendingIOs_.find(ptr->key) == pendingIOs_.end());
             pendingIOs_.emplace(ptr->key, ptr);
         }
-        assert(submitQueue_.empty());
+        assert(submitQ_.empty());
 
         size_t done = 0;
         while (done < nr) {
@@ -303,27 +301,49 @@ public:
             done += err;
         }
     }
-
     /**
-     * Cancel a submitted IO.
+     * Cancel an IO.
      *
      * EXCEPTION:
      *   LibcError
      *   std::runtime_error
      */
-    void cancel(unsigned int key) {
-        auto &m = pendingIOs_;
-        if (m.find(key) == m.end()) {
-            throw RT_ERR("Aio with key %u is not found.\n");
+    bool cancel(uint key) {
+        /* Submit queue. */
+        {
+            auto it = submitQ_.begin();
+            while (it != submitQ_.end()) {
+                AioDataPtr p = *it;
+                if (p->key == key) {
+                    submitQ_.erase(it);
+                    return true;
+                }
+                ++it;
+            }
         }
-        AioDataPtr p0 = m[key];
-        struct io_event &event = ioEvents_[0];
-        int err = ::io_cancel(ctx_, &p0->iocb, &event);
-        if (err) {
-            throw util::LibcError(err);
-        }
-    }
 
+        /* Pending IOs. */
+        {
+            auto it = pendingIOs_.find(key);
+            if (it != pendingIOs_.end()) {
+                AioDataPtr p = it->second;
+                struct io_event &event = ioEvents_[0];
+                if (::io_cancel(ctx_, &p->iocb, &event) == 0) {
+                    pendingIOs_.erase(it);
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        /* Completed IOs. */
+        auto it = completedIOs_.find(key);
+        if (it != completedIOs_.end()) {
+            return false;
+        }
+
+        throw RT_ERR("Aio: key not found: %u", key);
+    }
     /**
      * Wait for an IO.
      *
@@ -335,44 +355,29 @@ public:
      *   std::runtime_error
      */
     void waitFor(unsigned int key) {
-        auto &m = pendingIOs_;
-        if (m.find(key) == m.end()) {
-            throw RT_ERR("Aio with key %u is not found.\n");
+        verifyKeyExistance(key);
+        AioDataPtr p;
+        p = popCompleted(key);
+        while (!p) {
+            wait_(1);
+            p = popCompleted(key);
         }
-        AioDataPtr p0 = m[key];
-        while (!p0->done) {
-            AioDataPtr p1 = waitOne_(false);
-            if (p0 != p1) {
-                completedIOs_.push(p1);
-            } else {
-                assert(p1->done);
-            }
-        }
-        m.erase(key);
-        if (p0->err == 0) {
-            throw util::EofError();
-        } else if (p0->err < 0) {
-            throw util::LibcError(-(p0->err), "waitFor: ");
-        }
+        verifyNoError(*p);
     }
-
     /**
      * Check a given IO has been completed or not.
+     * Do not call this function for IOs before submission.
      *
      * RETURN:
      *   true if the IO has been completed.
      * EXCEPTION:
      *   std::runtime_error
      */
-    bool isCompleted(unsigned int key) const {
-        const auto &m = pendingIOs_;
-        if (m.find(key) == m.end()) {
-            throw RT_ERR("Aio with key %u is not found.\n");
-        }
-        AioDataPtr p0 = m.at(key);
-        return p0->done;
+    bool isCompleted(uint key) {
+        verifyKeyExistance(key);
+        wait_(0);
+        return completedIOs_.find(key) != completedIOs_.cend();
     }
-
     /**
      * Wait several IO(s) completed.
      *
@@ -388,38 +393,30 @@ public:
      * you can not know which IO(s) failed.
      * Use waitFor() to know it.
      */
-    void wait(size_t nr, std::queue<unsigned int>& queue) {
-        while (nr > 0 && !completedIOs_.empty()) {
-            AioDataPtr p = completedIOs_.front();
-            completedIOs_.pop();
-            assert(pendingIOs_.find(p->key) != pendingIOs_.end());
-            pendingIOs_.erase(p->key);
+    void wait(size_t nr, std::queue<uint>& queue) {
+        verifyNr(nr);
+        if (completedIOs_.size() < nr) {
+            wait_(nr - completedIOs_.size());
+        }
+        bool isEofError = false;
+        bool isLibcError = false;
+        while (nr > 0) {
+            assert(completedIOs_.empty());
+            AioDataPtr p = popAnyCompleted();
+            if (p->err == 0) {
+                isEofError = true;
+            } else if (p->err < 0) {
+                isLibcError = true;
+            }
+            assert(p->iocb.u.c.nbytes == static_cast<uint>(p->err));
             queue.push(p->key);
             nr--;
         }
-        if (nr > 0) {
-            std::queue<AioDataPtr> q;
-            wait_(nr, q, true);
-            bool isEofError = false;
-            bool isLibcError = false;
-            while (!q.empty()) {
-                const AioDataPtr &p = q.front();
-                if (p->err == 0) {
-                    isEofError = true;
-                } else if (p->err < 0) {
-                    isLibcError = true;
-                }
-                assert(p->iocb.u.c.nbytes ==
-                       static_cast<unsigned int>(p->err));
-                queue.push(p->key);
-                q.pop();
-            }
-            if (isLibcError) {
-                throw util::LibcError(EIO, "wait: ");
-            }
-            if (isEofError) {
-                throw util::EofError();
-            }
+        if (isLibcError) {
+            throw util::LibcError(EIO, "Aio: some IOs failed.");
+        }
+        if (isEofError) {
+            throw util::EofError();
         }
     }
 
@@ -436,104 +433,95 @@ public:
      *
      * You should use waitFor() to know errors.
      */
-    unsigned int waitOne() {
-        AioDataPtr p;
-        if (completedIOs_.empty()) {
-            p = waitOne_(true);
-        } else {
-            AioDataPtr p = completedIOs_.front();
-            completedIOs_.pop();
-            assert(pendingIOs_.find(p->key) != pendingIOs_.end());
-            pendingIOs_.erase(p->key);
-        }
-        if (p->err == 0) {
-            throw util::EofError();
-        } else if (p->err < 0) {
-            throw util::LibcError(-(p->err), "waitOne: ");
-        }
-        assert(p->iocb.u.c.nbytes == static_cast<unsigned int>(p->err));
+    uint waitOne() {
+        if (completedIOs_.empty()) wait_(1);
+        AioDataPtr p = popAnyCompleted();
+        verifyNoError(*p);
         return p->key;
     }
-
 private:
     /**
-     * Wait several IO(s) completed.
-     *
-     * @nr number of waiting IO(s). nr >= 0.
-     * @queue completed key(s) will be inserted to.
-     * @isDelete AioDataPtr will be deleted from pendingIOs_ if true.
-     *
-     * EXCEPTION:
-     *  LibcError
-     *  std::runtime_error
+     * Wait IOs completion.
+     * @minNr minimum number of waiting IOs. minNr <= queueSize_.
+     * @return number of completed IOs.
      */
-    void wait_(size_t nr, std::queue<AioDataPtr>& queue, bool isDelete) {
-        size_t done = 0;
-        while (done < nr) {
-            int tmpNr = ::io_getevents(ctx_, 1, nr - done, &ioEvents_[done], NULL);
-            if (tmpNr < 0) {
-                throw util::LibcError(-tmpNr, "io_getevents: ");
-            }
-            if (tmpNr < 1) {
-                throw RT_ERR("io_getevents failed.");
-            }
-            double endTime = 0;
-            if (isMeasureTime_) { endTime = util::getTime(); }
-            for (size_t i = done; i < done + tmpNr; i++) {
-                struct iocb* iocb = static_cast<struct iocb *>(ioEvents_[i].obj);
-                unsigned int key =
-                    static_cast<unsigned int>(
-                        reinterpret_cast<uintptr_t>(iocb->data));
-                assert(pendingIOs_.find(key) != pendingIOs_.end());
-                AioDataPtr ptr = pendingIOs_[key];
-                assert(!ptr->done);
-                ptr->done = true;
-                ptr->endTime = endTime;
-                ptr->err = ioEvents_[i].res;
-                queue.push(ptr);
-                if (isDelete) {
-                    pendingIOs_.erase(key);
-                }
-            }
-            done += tmpNr;
+    size_t wait_(size_t minNr) {
+        assert(minNr <= queueSize_);
+        const int nr = ::io_getevents(ctx_, minNr, queueSize_, &ioEvents_[0], NULL);
+        if (nr < 0) {
+            throw util::LibcError(-nr, "io_getevents: ");
+        }
+        if ((size_t)nr < minNr) {
+            throw RT_ERR("io_getevents returns bad value %d %u.", nr, minNr);
+        }
+        double endTime = 0;
+        if (isMeasureTime_) endTime = util::getTime();
+        for (int i = 0; i < nr; i++) {
+            const uint key = getKeyFromEvent(ioEvents_[i]);
+            auto it = pendingIOs_.find(key);
+            assert(it != pendingIOs_.end());
+            AioDataPtr p = it->second;
+            assert(p->key == key);
+            assert(!p->done);
+            p->done = true;
+            p->endTime = endTime;
+            p->err = ioEvents_[i].res;
+            pendingIOs_.erase(it);
+            completedIOs_.emplace(key, p);
+        }
+        return nr;
+    }
+    static uint getKeyFromEvent(struct io_event &event) {
+        struct iocb &iocb = *static_cast<struct iocb *>(event.obj);
+        return static_cast<uint>(reinterpret_cast<uintptr_t>(iocb.data));
+    }
+    /**
+     * completeIOs_.empty() must be false.
+     * @return aio pointer.
+     */
+    AioDataPtr popAnyCompleted() {
+        assert(!completedIOs_.empty());
+        AioDataPtr p;
+        {
+            auto it = completedIOs_.begin();
+            AioDataPtr p = it->second;
+            completedIOs_.erase(it);
+            assert(p.get() != nullptr);
+        }
+        return p;
+    }
+    /**
+     * @return found AioDataPtr or nullptr.
+     */
+    AioDataPtr popCompleted(uint key) {
+        if (completedIOs_.empty()) return nullptr;
+        auto it = completedIOs_.find(key);
+        if (it == completedIOs_.end()) return nullptr;
+
+        AioDataPtr p = it->second;
+        assert(p->key == key);
+        completedIOs_.erase(it);
+        return p;
+    }
+    void verifyKeyExistance(uint key) const {
+        if (completedIOs_.find(key) == completedIOs_.cend() &&
+            pendingIOs_.find(key) == pendingIOs_.cend()) {
+            throw RT_ERR("Aio: key not found: %u", key);
         }
     }
-
-    /**
-     * Wait just one IO completed.
-     *
-     * @isDelete AioDataPtr will be deleted from pendingIOs_ if true.
-     *
-     * RETURN:
-     *   AioDataPtr.
-     * EXCEPTION:
-     *   std::runtime_error
-     */
-    AioDataPtr waitOne_(bool isDelete) {
-        auto& event = ioEvents_[0];
-        int err = ::io_getevents(ctx_, 1, 1, &event, NULL);
-        double endTime = 0;
-        if (isMeasureTime_) { endTime = util::getTime(); }
-        if (err < 0) {
-            throw util::LibcError(-err);
+    void verifyNr(size_t nr) const {
+        if (nr > queueSize_) {
+            throw RT_ERR("Aio: bad nr. (nr must be <= %zu but %zu)", queueSize_, nr);
         }
-        if (err != 1) {
-            throw RT_ERR("io_getevents failed.");
+    }
+    void verifyNoError(const AioData& io) const {
+        if (io.err == 0) {
+            throw util::EofError();
         }
-        struct iocb *iocb = static_cast<struct iocb *>(event.obj);
-        unsigned int key =
-            static_cast<unsigned int>(
-                reinterpret_cast<uintptr_t>(iocb->data));
-        assert(pendingIOs_.find(key) != pendingIOs_.end());
-        AioDataPtr ptr = pendingIOs_[key];
-        ptr->endTime = endTime;
-        assert(!ptr->done);
-        ptr->done = true;
-        ptr->err = event.res;
-        if (isDelete) {
-            pendingIOs_.erase(key);
+        if (io.err < 0) {
+            throw util::LibcError(-io.err, "Aio: io failed.");
         }
-        return ptr;
+        assert(io.iocb.u.c.nbytes == static_cast<uint>(io.err));
     }
 };
 
