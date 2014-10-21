@@ -14,6 +14,26 @@
 namespace cybozu {
 namespace util {
 
+/**
+ * Rand must have operator() with type IntType (*)().
+ */
+template <typename IntType, typename Rand>
+void fillRandom(Rand &rand, void *data, size_t size)
+{
+    char *p = (char *)data;
+    const size_t s = sizeof(IntType);
+    while (s <= size) {
+        IntType i = rand();
+        ::memcpy(p, &i, s);
+        p += s;
+        size -= s;
+    }
+    if (0 < size) {
+        IntType i = rand();
+        ::memcpy(p, &i, size);
+    }
+}
+
 template <typename IntType>
 class Random
 {
@@ -35,18 +55,7 @@ public:
     }
 
     void fill(void *data, size_t size) {
-        char *p = reinterpret_cast<char *>(data);
-        const size_t s = sizeof(IntType);
-        while (s <= size) {
-            IntType i = operator()();
-            ::memcpy(p, &i, s);
-            p += s;
-            size -= s;
-        }
-        if (0 < size) {
-            IntType i = operator()();
-            ::memcpy(p, &i, size);
-        }
+        fillRandom<IntType>(*this, data, size);
     }
 
     template <typename T>
@@ -98,6 +107,10 @@ public:
     uint32_t get(uint32_t min, uint32_t max) {
         assert(min < max);
         return get() % (max - min) + min;
+    }
+
+    void fill(void *data, size_t size) {
+        fillRandom<uint32_t>(*this, data, size);
     }
 };
 
