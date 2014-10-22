@@ -861,7 +861,7 @@ inline void StorageWorker::operator()()
     {
         const StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string wdevPath = volInfo.getWdevPath();
-        if (storage_local::isOverflow(wdevPath)) {
+        if (device::isOverflow(wdevPath)) {
             LOGs.error() << FUNC << "overflow" << volId << wdevPath;
             // stop to push the task.
             return;
