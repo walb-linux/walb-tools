@@ -115,12 +115,19 @@ private:
                 isEnd_ = true;
             }
         }
+#ifdef DEBUG
         void verifyNotEnd(const char *msg) const {
             if (isEnd()) throw cybozu::Exception(msg) << "reached to end";
         }
         void verifyFilled(const char *msg) const {
             if (!isFilled_) throw cybozu::Exception(msg) << "not filled";
         }
+#else
+        void verifyNotEnd(const char *) const {
+        }
+        void verifyFilled(const char *) const {
+        }
+#endif
     };
 
     bool shouldValidateUuid_;
