@@ -469,6 +469,12 @@ inline void c2sStartServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
+        {
+            const std::string wdevPath = volInfo.getWdevPath();
+            if (device::isOverflow(wdevPath)) {
+                throw cybozu::Exception(FUNC) << "overflow" << volId << wdevPath;
+            }
+        }
         const std::string st = volInfo.getState();
         if (isMaster) {
             StateMachineTransaction tran(volSt.sm, sStopped, stStartMaster, FUNC);
@@ -859,11 +865,17 @@ inline void StorageWorker::operator()()
     verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
     {
-        const StorageVolInfo volInfo(gs.baseDirStr, volId);
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string wdevPath = volInfo.getWdevPath();
         if (device::isOverflow(wdevPath)) {
             LOGs.error() << FUNC << "overflow" << volId << wdevPath;
-            // stop to push the task.
+            // stop to push the task and change state to stop if master
+            if (st != sMaster) return;
+            StateMachineTransaction tran(volSt.sm, sMaster, stStopMaster, FUNC);
+            ul.unlock();
+            storage_local::stopMonitoring(wdevPath, volId);
+            volInfo.setState(sStopped);
+            tran.commit(sStopped);
             return;
         }
     }
