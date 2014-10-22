@@ -1705,14 +1705,20 @@ class Controller:
         st = self.get_state(ax, vol)
         if st == aClear:
             return
-        elif st in aAcceptForResize:
-            args = ['resize', vol, str(sizeMb) + 'm']
-            if doZeroClear:
-                args += ['zeroclear']
-            self.run_ctl(ax, args)
-            self._wait_for_resize(ax, vol, sizeMb)
-        else:
+        elif st not in aAcceptForResize:
             raise Exception('resize_archive:bad state', ax, vol, sizeMb, st)
+
+        runCommand = self.get_run_remote_command(ax)
+        oldSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
+        if oldSizeMb == sizeMb:
+            return
+        if oldSizeMb > sizeMb:
+            raise Exception('resize_archive:shrink is not supported', ax, vol, oldSizeMb, sizeMb)
+        args = ['resize', vol, str(sizeMb) + 'm']
+        if doZeroClear:
+            args += ['zeroclear']
+        self.run_ctl(ax, args)
+        self._wait_for_resize(ax, vol, oldSizeMb, sizeMb)
 
     def resize_storage(self, sx, vol, sizeMb):
         '''
@@ -1947,11 +1953,12 @@ class Controller:
             time.sleep(0.3)
         raise Exception("wait_for_no_action", s, vol, action)
 
-    def _wait_for_resize(self, ax, vol, sizeMb):
+    def _wait_for_resize(self, ax, vol, oldSizeMb, sizeMb):
         '''
         Wait for resize done.
         ax :: Server  - archive server.
         vol :: str    - volume name.
+        oldSizeMb :: int - old size [MiB].
         sizeMb :: int - new size [MiB].
         '''
         verify_type(ax, Server)
@@ -1960,9 +1967,12 @@ class Controller:
         self._wait_for_no_action(ax, vol, aaResize, SHORT_TIMEOUT_SEC)
         runCommand = self.get_run_remote_command(ax)
         curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
+        if curSizeMb == oldSizeMb:
+            raise Exception('wait_for_resize:size is not changed(restored vol may exist)',
+                            ax, vol, oldSizeMb, sizeMb)
         if curSizeMb != sizeMb:
             raise Exception('wait_for_resize:failed',
-                            ax, vol, sizeMb, curSizeMb)
+                            ax, vol, oldSizeMb, sizeMb, curSizeMb)
 
     def _verify_shutdown_mode(self, mode, msg):
         if mode not in ['graceful', 'force']:
