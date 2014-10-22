@@ -843,13 +843,13 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
  */
 inline void StorageWorker::operator()()
 {
-    LOGs.debug() << "StorageWorker::operator() start";
-    const char *const FUNC = __func__;
+    const char *const FUNC = "StorageWorker::operator()";
+    LOGs.debug() << FUNC << "start";
     StorageVolState& volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
-    LOGs.debug() << "StorageWorker::operator()" << volId << st;
+    LOGs.debug() << FUNC << volId << st;
     if (st == stStartSlave || st == stStartMaster) {
         // This is rare case, but possible.
         pushTask(volId, 1000);
@@ -857,6 +857,16 @@ inline void StorageWorker::operator()()
     }
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
     verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
+
+    {
+        const StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const std::string wdevPath = volInfo.getWdevPath();
+        if (storage_local::isOverflow(wdevPath)) {
+            LOGs.error() << FUNC << "overflow" << volId << wdevPath;
+            // stop to push the task.
+            return;
+        }
+    }
 
     if (st == sSlave) {
         ActionCounterTransaction tran(volSt.ac, saWlogRemove);
