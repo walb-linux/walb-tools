@@ -24,9 +24,9 @@ private:
     std::string path_;
     int fd_;
 public:
-    explicit TmpFile(const std::string &dirPath, const std::string &prefix = "tmp")
+    explicit TmpFile(const std::string &dirPath, int flags = 0, const std::string &prefix = "tmp")
         : path_(createTmpPathStatic(dirPath, prefix)), fd_(-1) {
-        fd_ = ::mkstemp(&path_[0]);
+        fd_ = ::mkostemp(&path_[0], flags);
         if (fd_ < 0) {
             throw std::runtime_error("mkstemp failed.");
         }
