@@ -145,9 +145,13 @@ inline void prepareVirtualFullScanner(
         throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
     }
     std::vector<cybozu::util::File> fileV;
-    tryOpenDiffs(fileV, volInfo, allowEmpty, [&](const MetaState &st) {
-            return volInfo.getDiffMgr().getDiffListToSync(st, snap);
-        });
+    MetaState st0;
+    MetaDiffVec diffV;
+    std::tie(st0, diffV) =
+        tryOpenDiffs(fileV, volInfo, allowEmpty, [&](const MetaState &st) {
+                return volInfo.getDiffMgr().getDiffListToSync(st, snap);
+            });
+    LOGs.debug() << "virtual-full-scan-diffs" << st0 << diffV;
     cybozu::util::File fileR(lv.path().str(), O_RDONLY);
     virt.init(std::move(fileR), std::move(fileV));
 }
@@ -218,6 +222,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
             return mgr.getDiffListToApply(st, gid);
         });
 
+    LOGs.debug() << "apply-diffs" << st0 << diffV;
     const MetaState st1 = beginApplying(st0, diffV);
     volInfo.setMetaState(st1);
 
@@ -281,6 +286,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     }
 
     const MetaDiff mergedDiff = merge(diffV);
+    LOGs.debug() << "merge-diffs" << mergedDiff << diffV;
     const cybozu::FilePath diffPath = volInfo.getDiffPath(mergedDiff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     diff::Merger merger;
@@ -338,9 +344,13 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     if (!noNeedToApply) {
         std::vector<cybozu::util::File> fileV;
-        tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
-                return volSt.diffMgr.getDiffListToRestore(st, gid);
-            });
+        MetaState st0;
+        MetaDiffVec diffV;
+        std::tie(st0, diffV) =
+            tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
+                    return volSt.diffMgr.getDiffListToRestore(st, gid);
+                });
+        LOGs.debug() << "restore-diffs" << st0 << diffV;
         if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState)) {
             return false;
         }
@@ -667,6 +677,7 @@ inline bool runDiffReplClient(
         });
 
     const MetaDiff mergedDiff = merge(diffV);
+    LOGs.debug() << "diff-repl-diffs" << st0 << mergedDiff << diffV;
     diff::Merger merger;
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
