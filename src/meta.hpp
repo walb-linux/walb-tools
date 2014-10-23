@@ -185,6 +185,7 @@ struct MetaSnap
 struct MetaDiff
 {
     bool isMergeable;
+    bool isCompDiff; /* compared diff can not merge with any other diffs. */
 
     /* This is timestamp of snapshot after applying the diff. */
     uint64_t timestamp;
@@ -192,13 +193,15 @@ struct MetaDiff
     MetaSnap snapB, snapE;
 
     MetaDiff()
-        : isMergeable(false), timestamp(0), snapB(), snapE() {}
+        : isMergeable(false), isCompDiff(false), timestamp(0), snapB(), snapE() {}
     MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool isMergeable = false, uint64_t ts = 0)
         : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), isMergeable, ts) {}
     MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool isMergeable = false, uint64_t ts = 0)
-        : MetaDiff(MetaSnap(b), MetaSnap(e), isMergeable, ts) {}
+        : MetaDiff(MetaSnap(b), MetaSnap(e), isMergeable, ts) {
+        verify();
+    }
     MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool isMergeable = false, uint64_t ts = 0)
-        : isMergeable(isMergeable), timestamp(ts)
+        : isMergeable(isMergeable), isCompDiff(false), timestamp(ts)
         , snapB(snapB), snapE(snapE) {
         verify();
     }
@@ -228,7 +231,11 @@ struct MetaDiff
     }
     void verify() const {
         if (snapB.gidB >= snapE.gidB) {
-            throw cybozu::Exception("MetaDiff::broken progress constraint")
+            throw cybozu::Exception("MetaDiff::broken progress constraint for B")
+                << snapB.str() << snapE.str();
+        }
+        if (snapB.gidE > snapE.gidE) {
+            throw cybozu::Exception("MetaDiff::broken progress constraint for E")
                 << snapB.str() << snapE.str();
         }
     }
@@ -238,7 +245,10 @@ struct MetaDiff
         auto s = b + "-->" + e;
         if (verbose) {
             s += cybozu::util::formatString(
-                " (%d %s)", isMergeable ? 1 : 0, cybozu::unixTimeToPrettyStr(timestamp).c_str());
+                " (%c%c %s)",
+                isMergeable ? 'M' : '-',
+                isCompDiff ? 'C' : '-',
+                cybozu::unixTimeToPrettyStr(timestamp).c_str());
         }
         return s;
     }
@@ -257,6 +267,7 @@ struct MetaDiff
             throw cybozu::Exception("MetaDiff::check:wrong preamble") << preamble;
         }
         cybozu::load(isMergeable, is);
+        cybozu::load(isCompDiff, is);
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
         cybozu::load(snapE, is);
@@ -269,6 +280,7 @@ struct MetaDiff
     void save(OutputStream &os) const {
         cybozu::save(os, META_DIFF_PREAMBLE);
         cybozu::save(os, isMergeable);
+        cybozu::save(os, isCompDiff);
         cybozu::save(os, timestamp);
         cybozu::save(os, snapB);
         cybozu::save(os, snapE);
@@ -436,20 +448,15 @@ enum class Relation
     TOO_OLD_DIFF, TOO_NEW_DIFF, APPLICABLE_DIFF, NOT_APPLICABLE_DIFF,
 };
 
-inline Relation getRelation(const MetaSnap &snap, const MetaDiff &diff)
+inline Relation getRelation(const MetaSnap &s, const MetaDiff &d)
 {
-    if (diff.isClean()) {
-        if (diff.snapE.gidB <= snap.gidB) {
-            return Relation::TOO_OLD_DIFF;
-        } else if (snap.gidB < diff.snapB.gidB) {
-            return Relation::TOO_NEW_DIFF;
-        }
-        return Relation::APPLICABLE_DIFF;
+    if (d.snapB.gidB > s.gidB) {
+        return Relation::TOO_NEW_DIFF;
     }
-    if (snap == diff.snapB || (diff.snapB.isClean() && diff.snapB.gidB <= snap.gidB && snap.gidB < diff.snapE.gidB)) {
-        return Relation::APPLICABLE_DIFF;
+    if (d.snapE.gidB <= s.gidB) {
+        return Relation::TOO_OLD_DIFF;
     }
-    return Relation::NOT_APPLICABLE_DIFF;
+    return Relation::APPLICABLE_DIFF;
 }
 
 inline bool canApply(const MetaSnap &snap, const MetaDiff &diff)
@@ -505,26 +512,43 @@ inline MetaSnap apply(const MetaSnap &snap, const MetaDiffVec &v)
     return s;
 }
 
-inline bool canMerge(const MetaDiff &diff0, const MetaDiff &diff1)
+/**
+ * d0 ++? d1 := d0.B.B <= d1.B.B <= d0.E.B < d1.E.B
+ *              and not d0.isCompDiff
+ *              and not d1.isCompDiff
+ */
+inline bool canMerge(const MetaDiff &d0, const MetaDiff &d1)
 {
-    return diff1.isMergeable && canApply(diff0.snapE, diff1);
+    if (!d1.isMergeable) return false;
+    if (d0.isCompDiff || d1.isCompDiff) return false;
+    return d0.snapB.gidB <= d1.snapB.gidB
+        && d1.snapB.gidB <= d0.snapE.gidB
+        && d0.snapE.gidB < d1.snapE.gidB;
+}
+
+/**
+ * d0 +++ d1 := d0.B-->|d1.E.B,max(d1.E.B,d0.E.E)| if d1.is_clean
+ *              d0.B-->d1.E                        otherwise
+ */
+inline MetaDiff merge(const MetaDiff &d0, const MetaDiff &d1)
+{
+    assert(canMerge(d0, d1));
+    MetaDiff ret;
+    ret.snapB = d0.snapB;
+    ret.timestamp = d1.timestamp;
+    ret.isMergeable = d0.isMergeable;
+    if (d1.isClean()) {
+        ret.snapE.gidB = d1.snapE.gidB;
+        ret.snapE.gidE = std::max(d1.snapE.gidB, d0.snapE.gidE);
+    } else {
+        ret.snapE = d1.snapE;
+    }
+    return ret;
 }
 
 inline void MetaDiff::merge(const MetaDiff& rhs)
 {
-    if (!walb::canMerge(*this, rhs)) {
-        throw cybozu::Exception("merge:can not merge") << *this << rhs;
-    }
-    snapE = apply(snapE, rhs);
-    timestamp = rhs.timestamp;
-    verify();
-}
-
-inline MetaDiff merge(const MetaDiff &diff0, const MetaDiff &diff1)
-{
-    MetaDiff ret = diff0;
-    ret.merge(diff1);
-    return ret;
+    *this = walb::merge(*this, rhs);
 }
 
 inline bool canMerge(const MetaDiffVec &v)
@@ -553,36 +577,38 @@ inline MetaDiff merge(const MetaDiffVec &v)
     return mdiff;
 }
 
-inline Relation getRelation(const MetaState &st, const MetaDiff &diff)
-{
-    Relation rel = getRelation(st.snapB, diff);
-    if (!st.isApplying || rel != Relation::APPLICABLE_DIFF) return rel;
-    // progress constraint check.
-    if (st.snapE.gidB <= diff.snapE.gidB) {
-        return Relation::APPLICABLE_DIFF;
-    }
-    return Relation::NOT_APPLICABLE_DIFF;
-}
-
 inline bool canApply(const MetaState &st, const MetaDiff &diff)
 {
-    return getRelation(st, diff) == Relation::APPLICABLE_DIFF;
+    const bool b = canApply(st.snapB, diff);
+    if (st.isApplying) {
+        return b && st.snapE.gidB <= diff.snapE.gidB;
+    }
+    return b;
 }
 
-inline MetaState applying(const MetaState &st, const MetaDiff &diff)
+inline MetaState beginApplying(const MetaState &st, const MetaDiff &diff)
 {
-    if (!canApply(st, diff)) {
-        throw cybozu::Exception("applying:can not apply") << st << diff;
-    }
+    assert(canApply(st, diff));
     return MetaState(st.snapB, apply(st.snapB, diff), diff.timestamp);
+}
+
+inline MetaState endApplying(const MetaState &st, const MetaDiff &diff)
+{
+    assert(canApply(st, diff));
+    return MetaState(apply(st.snapB, diff), diff.timestamp);
 }
 
 inline MetaState apply(const MetaState &st, const MetaDiff &diff)
 {
-    if (!canApply(st, diff)) {
-        throw cybozu::Exception("applying:can not apply") << st << diff;
-    }
-    return MetaState(apply(st.snapB, diff), diff.timestamp);
+    /*
+     * Both will produce the same result.
+     */
+#if 0
+    MetaState tmp = beginApplying(st, diff);
+    return endApplying(tmp, diff);
+#else
+    return endApplying(st, diff);
+#endif
 }
 
 inline bool canApply(const MetaState &st, const MetaDiffVec &v)
@@ -596,32 +622,31 @@ inline bool canApply(const MetaState &st, const MetaDiffVec &v)
     return true;
 }
 
-inline MetaState applying(const MetaState &st, const MetaDiffVec &v)
+inline MetaState beginApplying(const MetaState &st, const MetaDiffVec &v)
 {
-    if (!canApply(st, v)) {
-        throw cybozu::Exception("applying:can not apply") << st << v.size();
-    }
+    assert(canApply(st, v));
     if (v.empty()) return st;
     return MetaState(st.snapB, apply(st.snapB, v), v.back().timestamp);
 }
 
-inline MetaState apply(const MetaState &st, const MetaDiffVec &v)
+inline MetaState endApplying(const MetaState &st, const MetaDiffVec &v)
 {
-    if (!canApply(st, v)) {
-        throw cybozu::Exception("apply:can not apply") << st << v.size();
-    }
+    assert(canApply(st, v));
     if (v.empty()) return st;
     return MetaState(apply(st.snapB, v), v.back().timestamp);
 }
 
-/**
- * Check whether a diff is already applied or not.
- * If true, the diff can be deleted safely.
- * This is sufficient condition.
- */
-inline bool isAlreadyApplied(const MetaSnap &snap, const MetaDiff &diff)
+inline MetaState apply(const MetaState &st, const MetaDiffVec &v)
 {
-    return diff.snapE.gidE <= snap.gidB;
+    /*
+     * Both will produce the same result.
+     */
+#if 0
+    MetaState tmp = beginApplying(st, v);
+    return endApplying(tmp, v);
+#else
+    return endApplying(st, v);
+#endif
 }
 
 /**
@@ -642,45 +667,46 @@ inline bool contains(const MetaDiff &diffC, const MetaDiff &diff)
  */
 inline MetaDiff parseDiffFileName(const std::string &name)
 {
+    const char * const FUNC = __func__;
     MetaDiff diff;
-    const std::string minName("YYYYMMDDhhmmss-0-0-1.wdiff");
+    const std::string minName("YYYYMMDDhhmmss-MC-0-1.wdiff");
     std::string s = name;
     if (s.size() < minName.size()) {
-        throw cybozu::Exception("parseDiffFileName:too short name") << name;
+        throw cybozu::Exception(FUNC) << "too short name" << name;
     }
     /* timestamp */
     std::string ts = s.substr(0, 14);
     diff.timestamp = cybozu::strToUnixTime(ts);
     if (s[14] != '-') {
-        throw cybozu::Exception("parseDiffFileName:parse failure1") << name;
+        throw cybozu::Exception(FUNC) << "invalid timestamp str" << name;
     }
-    /* isMergeable */
-    diff.isMergeable = s[15] != '0';
-    if (s[16] != '-') {
-        throw cybozu::Exception("parseDiffFileName:parse failure2") << name;
+    /* isMergeable and isCompDiff */
+    diff.isMergeable = s[15] == 'M';
+    diff.isCompDiff = s[16] == 'C';
+    if (s[17] != '-') {
+        throw cybozu::Exception(FUNC) << "must be - at 17th char" << name;
     }
-    s = s.substr(17);
+    s = s.substr(18);
     /* gid0, gid1(, gid2, gid3). */
     std::vector<uint64_t> gidV;
+    bool isLast = false;
     for (int i = 0; i < 4; i++) {
         size_t n = s.find("-");
-        if (n == std::string::npos) break;
+        if (n == std::string::npos) {
+            isLast = true;
+            n = s.find(".wdiff");
+            if (n == std::string::npos) {
+                throw cybozu::Exception(FUNC) << "wrong suffix" << name;
+            }
+        }
         uint64_t gid;
         if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
-            throw cybozu::Exception("parseDiffFileName:hexStrToInt failure1") << name;
+            throw cybozu::Exception(FUNC) << "wrong hex value" << name << i;
         }
         gidV.push_back(gid);
+        if (isLast) break;
         s = s.substr(n + 1);
     }
-    size_t n = s.find(".wdiff");
-    if (n == std::string::npos) {
-        throw cybozu::Exception("parseDiffFileName:wrong suffix") << name;
-    }
-    uint64_t gid;
-    if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
-        throw cybozu::Exception("parseDiffFileName:hexStrToInt failure2") << name;
-    }
-    gidV.push_back(gid);
     switch (gidV.size()) {
     case 2:
         diff.snapB.set(gidV[0]);
@@ -691,7 +717,7 @@ inline MetaDiff parseDiffFileName(const std::string &name)
         diff.snapE.set(gidV[2], gidV[3]);
         break;
     default:
-        throw cybozu::Exception("parseDiffFileName:parse failure3") << name;
+        throw cybozu::Exception(FUNC) << "number of gids must be 2 or 4" << name;
     }
     diff.verify();
     return diff;
@@ -702,6 +728,11 @@ inline MetaDiff parseDiffFileName(const std::string &name)
  */
 inline std::string createDiffFileName(const MetaDiff &diff)
 {
+    std::string s;
+    s += cybozu::unixTimeToStr(diff.timestamp);
+    s += '-';
+    s += diff.isMergeable ? 'M' : '-';
+    s += diff.isCompDiff ? 'C' : '-';
     std::vector<uint64_t> v;
     if (diff.isDirty()) {
         v.push_back(diff.snapB.gidB);
@@ -712,10 +743,6 @@ inline std::string createDiffFileName(const MetaDiff &diff)
         v.push_back(diff.snapB.gidB);
         v.push_back(diff.snapE.gidB);
     }
-    std::string s;
-    s += cybozu::unixTimeToStr(diff.timestamp);
-    s += '-';
-    s += diff.isMergeable ? '1' : '0';
     for (uint64_t gid : v) {
         s += '-';
         s += cybozu::util::intToHexStr(gid);
@@ -994,11 +1021,9 @@ public:
         MetaDiffVec applicableV, minV;
         getTargetDiffLists(applicableV, minV, st);
         MetaState st0 = apply(st, minV);
-        assert(!st0.isApplying);
         if (st0.snapB.isClean()) ret.push_back(st0);
         for (size_t i = minV.size(); i < applicableV.size(); i++) {
             st0 = apply(st0, applicableV[i]);
-            assert(!st0.isApplying);
             const bool isLast = (i + 1 == applicableV.size());
             const bool isExplicit = isLast || !applicableV[i + 1].isMergeable;
             if (st0.snapB.isClean() && (isAll || isExplicit)) ret.push_back(st0);

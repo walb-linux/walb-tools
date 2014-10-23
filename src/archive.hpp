@@ -218,7 +218,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
             return mgr.getDiffListToApply(st, gid);
         });
 
-    const MetaState st1 = applying(st0, diffV);
+    const MetaState st1 = beginApplying(st0, diffV);
     volInfo.setMetaState(st1);
 
     cybozu::lvm::Lv lv = volInfo.getLv();
@@ -226,7 +226,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
         return false;
     }
 
-    const MetaState st2 = apply(st0, diffV);
+    const MetaState st2 = endApplying(st1, diffV);
     volInfo.setMetaState(st2);
 
     volInfo.removeDiffs(diffV);

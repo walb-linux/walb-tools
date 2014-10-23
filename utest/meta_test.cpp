@@ -5,6 +5,8 @@
 
 using namespace walb;
 
+cybozu::util::Random<size_t> randx;
+
 CYBOZU_TEST_AUTO(diff)
 {
     MetaDiff d0({0, 0}, {1, 2}), d1(1, 2);
@@ -27,9 +29,9 @@ CYBOZU_TEST_AUTO(snap)
         CYBOZU_TEST_ASSERT(apply(s0, d1) == MetaSnap(10, 10));
     }
     {
-        MetaSnap s0(0, 13);
-        MetaDiff d1({0, 13}, {10, 12});
-        CYBOZU_TEST_ASSERT(apply(s0, d1) == MetaSnap(10, 12));
+        MetaSnap s0(0, 10);
+        MetaDiff d1({0, 10}, {11, 12});
+        CYBOZU_TEST_ASSERT(apply(s0, d1) == MetaSnap(11, 12));
     }
 }
 
@@ -54,71 +56,229 @@ CYBOZU_TEST_AUTO(serialize)
     ::unlink("test0.bin");
 }
 
-void testApply(const MetaSnap &s0, const MetaDiff &d1, const MetaSnap &s1)
+void testMerge(const MetaDiff &d0, const MetaDiff &d1, const MetaDiff &md)
 {
-    std::cout << "testApply start:" << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
-    CYBOZU_TEST_ASSERT(canApply(s0, d1));
+    std::cout << "testMerge start:" << d0 << " `merge` " << d1 << " == " << md << std::endl;
+    CYBOZU_TEST_ASSERT(canMerge(d0, d1));
+
+    MetaDiff mdx = merge(d0, d1);
+    CYBOZU_TEST_EQUAL(mdx, md);
+}
+
+CYBOZU_TEST_AUTO(merge)
+{
+    // Clean diff +++ clean diff
+    {
+        /*
+         * |--->|
+         *      |--->|
+         */
+        MetaDiff d0({0}, {1}, true);
+        MetaDiff d1({1}, {2}, true);
+        MetaDiff md({0}, {2}, true);
+        testMerge(d0, d1, md);
+    }
+    {
+        /*
+         * |--->|
+         *    |--->|
+         */
+        MetaDiff d0({0}, {2}, true);
+        MetaDiff d1({1}, {3}, true);
+        MetaDiff md({0}, {3}, true);
+        testMerge(d0, d1, md);
+    }
+    {
+        /*
+         * |--->|
+         *         |--->|
+         */
+        MetaDiff d0({0}, {2}, true);
+        MetaDiff d1({3}, {5}, true);
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+    }
+    {
+        /*
+         * |--------->|
+         *    |--->|
+         */
+        MetaDiff d0({0}, {5}, true);
+        MetaDiff d1({1}, {3}, true);
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+    }
+    {
+        /*
+         *    |--->|
+         * |--------->|
+         */
+        MetaDiff d0({1}, {3}, true);
+        MetaDiff d1({0}, {5}, true);
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+    }
+
+
+    // clean diff +++ dirty diff
+    {
+        /*
+         * |---->|
+         *       |--->|  |
+         */
+        MetaDiff d0({0}, {1}, true);
+        MetaDiff d1({1}, {2, 3}, true);
+        MetaDiff md({0}, {2, 3}, true);
+        testMerge(d0, d1, md);
+    }
+    {
+        /*
+         * |------->|
+         *     |  |--->|  |
+         */
+        MetaDiff d0({0}, {5}, true);
+        MetaDiff d1({1, 2}, {7, 8}, true);
+        MetaDiff md({0}, {7, 8}, true);
+        testMerge(d0, d1, md);
+    }
+    {
+        /*
+         * |  |---->|     |
+         *       |---->|
+         */
+        MetaDiff d0({0, 1}, {5, 10}, true);
+        MetaDiff d1({2}, {7}, true);
+        MetaDiff md({0, 1}, {7, 10}, true);
+        testMerge(d0, d1, md);
+    }
+    {
+        /*
+         * |  |---->|     |
+         *       |---     ->|
+         */
+        MetaDiff d0({0, 1}, {5, 10}, true);
+        MetaDiff d1({2}, {12}, true);
+        MetaDiff md({0, 1}, {12}, true);
+        testMerge(d0, d1, md);
+    }
+
+    // isMergeable
+    {
+        MetaDiff d0({0}, {1}, true);
+        MetaDiff d1({1}, {2}, false);
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+        d1.isMergeable = false;
+        d1.isMergeable = true;
+        CYBOZU_TEST_ASSERT(canMerge(d0, d1));
+    }
+
+    // isCompDiff
+    {
+        MetaDiff d0({0}, {1}, true);
+        MetaDiff d1({1}, {2}, true);
+        d0.isCompDiff = true;
+        d1.isCompDiff = false;
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+        d0.isCompDiff = false;
+        d1.isCompDiff = true;
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+        d0.isCompDiff = true;
+        d1.isCompDiff = true;
+        CYBOZU_TEST_ASSERT(!canMerge(d0, d1));
+    }
+}
+
+void testApply(const MetaSnap &s0, const MetaDiff &d0, const MetaSnap &s1)
+{
+    std::cout << "testApply start:" << s0 << " `apply` " << d0 << " == " << s1 << std::endl;
+    CYBOZU_TEST_ASSERT(canApply(s0, d0));
 
     MetaState st(s0, 0);
     MetaState sa, sb, sc;
-    CYBOZU_TEST_ASSERT(canApply(st, d1));
-    sa = applying(st, d1);
-    sb = apply(st, d1);
-    CYBOZU_TEST_ASSERT(canApply(sa, d1));
-    sc = apply(sa, d1);
+    CYBOZU_TEST_ASSERT(canApply(st, d0));
+    sa = beginApplying(st, d0);
+    sb = apply(st, d0);
+    CYBOZU_TEST_ASSERT(canApply(sa, d0));
+    sc = endApplying(sa, d0);
     CYBOZU_TEST_ASSERT(sa.isApplying);
     CYBOZU_TEST_ASSERT(!sb.isApplying);
     CYBOZU_TEST_ASSERT(!sc.isApplying);
-    CYBOZU_TEST_EQUAL(sa.timestamp, d1.timestamp);
-    CYBOZU_TEST_EQUAL(sb.timestamp, d1.timestamp);
-    CYBOZU_TEST_EQUAL(sc.timestamp, d1.timestamp);
+    CYBOZU_TEST_EQUAL(sa.timestamp, d0.timestamp);
+    CYBOZU_TEST_EQUAL(sb.timestamp, d0.timestamp);
+    CYBOZU_TEST_EQUAL(sc.timestamp, d0.timestamp);
     CYBOZU_TEST_EQUAL(sb, sc);
 
     CYBOZU_TEST_EQUAL(MetaState(s1, 0), sb);
-    std::cout << "testApply end:  " << s0 << " `apply` " << d1 << " == " << s1 << std::endl;
+    std::cout << "testApply end:  " << s0 << " `apply` " << d0 << " == " << s1 << std::endl;
 }
 
 CYBOZU_TEST_AUTO(apply)
 {
+    // Clean snapshot and diffs.
     {
-        MetaSnap s0(0, 0);
-        MetaDiff d1({0, 0}, {10, 10});
-        MetaSnap s1(10, 10);
-        testApply(s0, d1, s1);
+        MetaSnap s0(0);
+        MetaDiff d0({0}, {1});
+        MetaSnap s1(1);
+        testApply(s0, d0, s1);
     }
     {
-        MetaSnap s0(0, 0);
-        MetaDiff d1({0, 1}, {2, 3});
-        CYBOZU_TEST_ASSERT(!canApply(s0, d1));
+        MetaSnap s0(1);
+        MetaDiff d0({0}, {2});
+        MetaSnap s1(2);
+        testApply(s0, d0, s1);
     }
     {
-        MetaSnap s0(0, 10);
-        MetaDiff d1({0, 0}, {12, 12});
-        MetaSnap s1(12, 12);
-        testApply(s0, d1, s1);
+        MetaSnap s0(0);
+        MetaDiff d0({1}, {2});
+        CYBOZU_TEST_ASSERT(getRelation(s0, d0) == Relation::TOO_NEW_DIFF);
+        CYBOZU_TEST_ASSERT(!canApply(s0, d0));
+    }
+    {
+        MetaSnap s0(2);
+        MetaDiff d0({0}, {1});
+        CYBOZU_TEST_ASSERT(getRelation(s0, d0) == Relation::TOO_OLD_DIFF);
+        CYBOZU_TEST_ASSERT(!canApply(s0, d0));
+    }
+    // Dirty snaphsots and clean diffs.
+    {
+        MetaSnap s0(0, 2);
+        MetaDiff d0({0}, {2});
+        MetaSnap s1(2);
+        testApply(s0, d0, s1);
+    }
+    {
+        MetaSnap s0(0, 2);
+        MetaDiff d0({0}, {4});
+        MetaSnap s1(4);
+        testApply(s0, d0, s1);
+    }
+    {
+        MetaSnap s0(0, 2);
+        MetaDiff d0({0}, {1});
+        MetaSnap s1(1, 2);
+        testApply(s0, d0, s1);
+    }
+    // Dirty snapshots and dirty diffs.
+    {
+        MetaSnap s0(0, 5);
+        MetaDiff d0({0, 5}, {15, 16});
+        MetaSnap s1(15, 16);
+        testApply(s0, d0, s1);
+    }
+    {
+        MetaSnap s0(0, 5);
+        MetaDiff d0({0, 5}, {10});
+        MetaSnap s1(10);
+        testApply(s0, d0, s1);
     }
     {
         MetaSnap s0(5, 10);
-        MetaDiff d1({5, 5}, {9, 9});
-        MetaSnap s1(9, 10);
-        testApply(s0, d1, s1);
+        MetaDiff d0({0, 5}, {15});
+        MetaSnap s1(15);
+        testApply(s0, d0, s1);
     }
     {
-        MetaSnap s0(0, 5);
-        MetaDiff d1({0, 5}, {15, 16});
-        MetaSnap s1(15, 16);
-        testApply(s0, d1, s1);
-    }
-    {
-        MetaSnap s0(0, 5);
-        MetaDiff d1({0, 5}, {3, 6});
-        MetaSnap s1(3, 6);
-        testApply(s0, d1, s1);
-    }
-    {
-        MetaSnap s0(0, 10);
-        MetaDiff d1({0, 5}, {12, 15});
-        CYBOZU_TEST_ASSERT(!canApply(s0, d1));
+        MetaSnap s0(5, 10);
+        MetaDiff d0({0, 5}, {7, 10});
+        MetaSnap s1(7, 10);
+        testApply(s0, d0, s1);
     }
 }
 
@@ -153,29 +313,20 @@ CYBOZU_TEST_AUTO(oldOrNew)
 MetaDiff randDiff(const MetaSnap &snap, bool allMergeable = false)
 {
     snap.verify();
-    cybozu::util::Random<uint32_t> rand;
     uint64_t b0, e0, b1, e1;
-    bool isDirty = rand() % 3 == 0;
+    bool isDirty = randx() % 3 == 0;
     if (isDirty) {
         /* dirty diff */
         b0 = snap.gidB;
         e0 = snap.gidE;
     } else {
         /* clean diff */
-#if 0
-        b0 = std::min(snap.gidB - (rand() % 10), snap.gidB);
-#else
         b0 = snap.gidB;
-#endif
         e0 = b0;
     }
-    b1 = snap.gidB + 1 + rand() % 10; // progress constraint.
+    b1 = snap.gidE + 1 + randx() % 10; // progress constraint.
     if (isDirty) {
-        if (rand() % 3 == 0) {
-            e1 = b1;
-        } else {
-            e1 = b1 + rand() % 20;
-        }
+        e1 = b1 + 1 + randx() % 20;
     } else {
         e1 = b1;
     }
@@ -185,13 +336,13 @@ MetaDiff randDiff(const MetaSnap &snap, bool allMergeable = false)
     ret.snapE.set(b1, e1);
     ret.verify();
     assert(canApply(snap, ret));
-    if (!allMergeable) ret.isMergeable = (rand() % 2 == 0);
+    if (!allMergeable) ret.isMergeable = (randx() % 2 == 0);
     return ret;
 }
 
-std::vector<MetaDiff> randDiffList(const MetaSnap &snap, size_t n, bool allMergeable = false)
+MetaDiffVec randDiffList(const MetaSnap &snap, size_t n, bool allMergeable = false)
 {
-    std::vector<MetaDiff> v;
+    MetaDiffVec v;
     MetaSnap s = snap;
     for (size_t i = 0; i < n; i++) {
         MetaDiff d = randDiff(s, allMergeable);
@@ -203,7 +354,7 @@ std::vector<MetaDiff> randDiffList(const MetaSnap &snap, size_t n, bool allMerge
 
 void testContains()
 {
-    std::vector<MetaDiff> v;
+    MetaDiffVec v;
     MetaSnap snap(0);
     for (size_t i = 0; i < 10; i++) {
         MetaDiff d = randDiff(snap);
@@ -280,6 +431,121 @@ CYBOZU_TEST_AUTO(applyMerged)
     }
 }
 
+bool mergeAndReplace(MetaDiffVec& diffV)
+{
+    if (diffV.size() < 2) return false;
+
+    const size_t size = diffV.size();
+    const size_t bgn = size == 2 ? 0 : (randx() % (size - 2));
+    const size_t end = size == 2 ? 2 : (bgn + 2 + randx() % (size - bgn - 2));
+
+    auto ibgn = diffV.begin() + bgn;
+    auto iend = diffV.begin() + end;
+    MetaDiffVec mergeV(ibgn, iend);
+    CYBOZU_TEST_ASSERT(mergeV.size() >= 2);
+    CYBOZU_TEST_ASSERT(canMerge(mergeV));
+    MetaDiff md = merge(mergeV);
+
+    iend = diffV.erase(ibgn, iend - 1);
+    *iend = md;
+    return true;
+}
+
+bool existsApplicableDiffs(const MetaState& st, const MetaDiffVec& diffV)
+{
+    const size_t nr = diffV.size();
+
+    for (size_t i = 0; i < nr; i++) {
+        if (canApply(st.snapB, diffV[i])) {
+            if (!st.isApplying) return true;
+            for (size_t j = i + 1; j <= nr; j++) {
+                MetaDiffVec v(diffV.begin() + i, diffV.begin() + j);
+                if (canApply(st, v)) return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+void printDiffV(const MetaDiffVec& v)
+{
+    for (const MetaDiff& d : v) {
+        std::cout << d << " ";
+    }
+    std::cout << std::endl;
+}
+
+void testMergedApply(const MetaSnap& s0, const MetaDiffVec& dV)
+{
+    CYBOZU_TEST_ASSERT(canMerge(dV));
+    const MetaDiff md = merge(dV);
+    CYBOZU_TEST_ASSERT(canApply(s0, md));
+    const MetaSnap sx0 = apply(s0, md);
+
+    MetaSnap sx1 = s0;
+    for (const MetaDiff& d : dV) {
+        CYBOZU_TEST_ASSERT(canApply(sx1, d));
+        sx1 = apply(sx1, d);
+    }
+    CYBOZU_TEST_EQUAL(sx0, sx1);
+}
+
+CYBOZU_TEST_AUTO(diffList)
+{
+    const size_t nr = 10;
+    const size_t loop = 1000;
+
+    MetaSnap s0(0, 5);
+    const MetaDiffVec diffV = randDiffList(s0, nr, true);
+
+    /*
+     * d_i ++? d_{j} = j == i + 1
+     */
+    for (size_t i = 0; i < nr - 1; i++) {
+        for (size_t j = 0; j < nr; j++) {
+            if (j == i + 1) {
+                CYBOZU_TEST_ASSERT(canMerge(diffV[i], diffV[j]));
+            } else {
+                CYBOZU_TEST_ASSERT(!canMerge(diffV[i], diffV[j]));
+            }
+        }
+    }
+    /*
+     * s0 <<< d0 <<< d1 <<< ... = s0 <<< d0 +++ d1 +++ ...
+     */
+    for (size_t i = 0; i < nr; i++) {
+        MetaDiffVec v0(diffV.begin(), diffV.begin() + i);
+        CYBOZU_TEST_ASSERT(canApply(s0, v0));
+        const MetaSnap si = apply(s0, v0);
+        for (size_t j = i; j < nr; j++) {
+            MetaDiffVec v1(diffV.begin() + i, diffV.begin() + j + 1);
+            testMergedApply(si, v1);
+        }
+    }
+
+    /*
+     * For all metastate st, there exists diffs such that canApply(st, diffs) is true.
+     */
+    for (size_t i = 0; i < loop; i++) {
+        const size_t x1 = randx() % (nr - 2);
+        const size_t x2 = x1 + 1 + randx() % (nr - x1 - 1);
+        MetaDiffVec diffV1(diffV.begin(), diffV.begin() + x1);
+        MetaDiffVec diffV2(diffV.begin() + x1, diffV.begin() + x2);
+
+        MetaSnap sx = apply(s0, diffV1);
+        MetaState st = beginApplying(MetaState(sx, 0), diffV2);
+        //std::cout << st << std::endl;
+
+        MetaDiffVec diffV3 = diffV; // copy
+        //printDiffV(diffV);
+        while (mergeAndReplace(diffV3)) {
+            //printDiffV(diffV);
+            CYBOZU_TEST_ASSERT(existsApplicableDiffs(st, diffV3));
+        }
+    }
+}
+
 /**
  *     |0|
  * (1) |0|-->|1|
@@ -292,7 +558,7 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
 {
     MetaSnap snap(0);
     MetaState st(snap, 0);
-    std::vector<MetaDiff> v;
+    MetaDiffVec v;
 
     v.emplace_back(0, 1, true, 1000);
     v.emplace_back(1, 2, true, 1001);
@@ -334,59 +600,71 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
 }
 
 /**
- *     |0,       10|
- * (1) |0|-->|5|
- * (2)       |5, 10|
- *           -->|10|
- * (3)          |10|-->|15|
+ * s0  |0,       10|
+ * d0  |0|-->|5|
+ * d1        |5, 10|->|15,    20|
+ * d2                 |15|-->|20|
+ * d3                        |20|-->|25|
+ *
+ * s1        |5, 10|
+ * s2                 |15,    20|
+ * s3                        |20|
+ * s4                               |25|
  */
 CYBOZU_TEST_AUTO(metaDiffManager2)
 {
     MetaSnap snap(0, 10);
     MetaState st(snap, 0);
-    std::vector<MetaDiff> v;
+    MetaDiffVec v;
     v.emplace_back(0, 5, false, 1000);
-    v.push_back(MetaDiff({5, 10}, {10}, false, 1001));
-    v.emplace_back(10, 15, false, 1002);
+    v.push_back(MetaDiff({5, 10}, {15, 20}, false, 1001));
+    v.emplace_back(15, 20, false, 1002);
+    v.emplace_back(20, 25, false, 1003);
 
     MetaDiffManager mgr;
     for (MetaDiff &d : v) mgr.add(d);
-    CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 10);
+    CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 20);
     auto v0 = mgr.getApplicableDiffList(st.snapB);
-    CYBOZU_TEST_EQUAL(v0.size(), 3);
+    CYBOZU_TEST_EQUAL(v0.size(), 4);
     auto v1 = mgr.getMinimumApplicableDiffList(st);
     CYBOZU_TEST_EQUAL(v1.size(), 0);
 
     CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 15).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 20).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 25).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 5).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 10).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 15).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 20).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 25).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(5)).size(), 0);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(5, 10)).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(10)).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(15, 20)).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(20)).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(25)).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 2);
 
-    auto st1a = applying(st, v);
-    auto st1b = applying(st1a, v);
-    MetaState st1c(MetaSnap(0, 10), MetaSnap(15), 0);
-    auto st2a = apply(st, v);
-    auto st2b = apply(st1a, v);
-    MetaState st2c(MetaSnap(15), 0);
+    auto st1a = beginApplying(st, v);
+    auto st1b = beginApplying(st1a, v);
+    MetaState st1c(MetaSnap(0, 10), MetaSnap(25), 0);
+    auto st2a = endApplying(st, v);
+    auto st2b = endApplying(st1a, v);
+    MetaState st2c(MetaSnap(25), 0);
     CYBOZU_TEST_EQUAL(st1a, st1b);
     CYBOZU_TEST_EQUAL(st1a, st1c);
     CYBOZU_TEST_EQUAL(st2a, st2b);
     CYBOZU_TEST_EQUAL(st2a, st2c);
 
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 5).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 10).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 15).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 5).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 20).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 25).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 5).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 10).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 15).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 20).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 25).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(5)).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(10)).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(15)).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(20)).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(25)).size(), 4);
 }
 
 /**
@@ -399,7 +677,7 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
 {
     MetaSnap snap(0, 10);
     MetaState st(snap, 0);
-    std::vector<MetaDiff> v;
+    MetaDiffVec v;
     v.emplace_back(0, 5, false, 1000);
     v.push_back(MetaDiff({5, 10}, {15, 20}, false, 1001));
     v.emplace_back(15, 20, false, 1002);
@@ -452,7 +730,6 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     auto v1 = mgr.getApplicableDiffList(snap);
     CYBOZU_TEST_ASSERT(v == v1);
 
-    cybozu::util::Random<uint32_t> rand;
 #if 0
     for (const MetaDiff &d : mgr.getAll()) {
         std::cout << "diff " << d << std::endl;
@@ -465,7 +742,7 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     const size_t restorable0a = mgr.getRestorableList(st, true).size();
 
     for (size_t i = 0; i < 10; i++) {
-        auto v2 = mgr.getMergeableDiffList(rand() % maxGid);
+        auto v2 = mgr.getMergeableDiffList(randx() % maxGid);
         if (v2.size() > 1) {
             mgr.add(merge(v2));
             mgr.gc();
@@ -482,5 +759,55 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     std::vector<uint64_t> gidV = mgr.getCleanSnapshotList(st);
     if (!gidV.empty()) {
         CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), gidV[0]);
+    }
+}
+
+void testDiffFileName(const MetaDiff& d)
+{
+    const std::string name = createDiffFileName(d);
+    const MetaDiff dx = parseDiffFileName(name);
+    CYBOZU_TEST_EQUAL(d, dx);
+    CYBOZU_TEST_EQUAL(d.isMergeable, dx.isMergeable);
+    CYBOZU_TEST_EQUAL(d.isCompDiff, dx.isCompDiff);
+    CYBOZU_TEST_EQUAL(d.timestamp, dx.timestamp);
+}
+
+CYBOZU_TEST_AUTO(diffFileName)
+{
+    const size_t loop = 100;
+
+    for (size_t i = 0; i < loop; i++) {
+        const size_t b = randx() % 10;
+        const size_t e = b + randx() % 10;
+        {
+            MetaDiff d = randDiff(MetaSnap(b));
+            d.isMergeable = true;
+            d.isCompDiff = true;
+            testDiffFileName(d);
+            d.isMergeable = true;
+            d.isCompDiff = false;
+            testDiffFileName(d);
+            d.isMergeable = false;
+            d.isCompDiff = true;
+            testDiffFileName(d);
+            d.isMergeable = false;
+            d.isCompDiff = false;
+            testDiffFileName(d);
+        }
+        {
+            MetaDiff d = randDiff(MetaSnap(b, e));
+            d.isMergeable = true;
+            d.isCompDiff = true;
+            testDiffFileName(d);
+            d.isMergeable = true;
+            d.isCompDiff = false;
+            testDiffFileName(d);
+            d.isMergeable = false;
+            d.isCompDiff = true;
+            testDiffFileName(d);
+            d.isMergeable = false;
+            d.isCompDiff = false;
+            testDiffFileName(d);
+        }
     }
 }
