@@ -233,6 +233,19 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     return true;
 }
 
+inline void verifyNotApplying(const std::string &volId)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    if (volInfo.getMetaState().isApplying) {
+        throw cybozu::Exception(__func__)
+            << "merge is not permitted because the volume is under applying"
+            << volId;
+    }
+}
+
 inline void verifyMergeable(const std::string &volId, uint64_t gid)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
@@ -1612,6 +1625,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForMerge, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        archive_local::verifyNotApplying(volId);
         archive_local::verifyMergeable(volId, gidB);
 
         pkt.writeFin(msgAccept);
