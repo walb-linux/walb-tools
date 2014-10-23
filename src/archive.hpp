@@ -768,7 +768,8 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
                 throw cybozu::Exception(__func__)
                     << "could not execute hash-repl" << srvLatestSnap << cliOldestSnap;
             }
-            const MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
+            MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
+            diff.isCompDiff = true;
             if (!runHashReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, diff, logger)) {
                 return false;
             }
