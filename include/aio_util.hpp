@@ -159,7 +159,10 @@ public:
      * call submit() and waitXXX() before calling additional prepareXXX().
      */
     bool isQueueFull() const {
-        return submitQ_.size() + pendingIOs_.size() >= queueSize_;
+        return submitQ_.size() + pendingIOs_.size() + completedIOs_.size() >= queueSize_;
+    }
+    bool empty() const {
+        return submitQ_.empty() && pendingIOs_.empty() && completedIOs_.empty();
     }
     /**
      * Prepare a read IO.
@@ -330,13 +333,13 @@ public:
      */
     void wait(size_t nr, std::queue<uint>& queue) {
         verifyNr(nr);
-        if (completedIOs_.size() < nr) {
+        while (completedIOs_.size() < nr) {
             wait_(nr - completedIOs_.size());
         }
         bool isEofError = false;
         bool isLibcError = false;
         while (nr > 0) {
-            assert(completedIOs_.empty());
+            assert(!completedIOs_.empty());
             AioDataPtr iop;
             popAnyCompleted(iop);
             if (iop->err == 0) {
