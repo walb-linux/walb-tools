@@ -100,6 +100,7 @@ uint64_t checkBlockDiff(Config& config)
                     ::printf("block %" PRIu64 " differ\n", nChecked);
                     const size_t lineS = config.lineSize();
                     cybozu::util::printByteArray(a1.data(), bs, lineS);
+                    puts("---");
                     cybozu::util::printByteArray(a2.data(), bs, lineS);
                     if (config.doShowDiff) {
                         showDifference(a1.data(), a2.data(), bs, lineS);
