@@ -485,7 +485,11 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         MetaState state(snapTo, curTime);
         volInfo.setMetaState(state);
     } else {
-        const MetaDiff diff(snapFrom, snapTo, true, curTime);
+        /*
+            if snapFrom is clean, then the snapshot must be restorable,
+            then the diff must not be mergeable.
+        */
+        const MetaDiff diff(snapFrom, snapTo, !snapFrom.isClean(), curTime);
         tmpFileP->save(volInfo.getDiffPath(diff).str());
         tmpFileP.reset();
         volSt.diffMgr.add(diff);
