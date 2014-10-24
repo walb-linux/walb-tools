@@ -345,8 +345,9 @@ inline int getTotalNumActions(ActionCounters &ac, const C &actions)
 inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff, size_t size)
 {
     return cybozu::util::formatString(
-        "%s%s %d %s %" PRIu64 ""
-        , prefix, diff.str().c_str(), diff.isMergeable ? 1 : 0
+        "%s%s %c%c %s %" PRIu64 ""
+        , prefix, diff.str().c_str(), diff.isMergeable ? 'M' : '-'
+        , diff.isCompDiff ? 'C' : '-'
         , util::timeToPrintable(diff.timestamp).c_str(), size);
 }
 
