@@ -1623,6 +1623,10 @@ class Controller:
         return :: int   - gid of the taken snapshot.
         '''
         verify_type(axL, list, Server)
+        for ax in axL:
+            st = self.get_state(ax, vol)
+            if st != aArchived:
+                raise Exception('snapshot:bad state', ax.name, vol, st)
         gid = self.snapshot_nbk(sx, vol)
         for ax in axL:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
