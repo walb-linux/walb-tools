@@ -1609,6 +1609,18 @@ class Controller:
             raise Exception('del-restored: exceeds max retry times', ax.name, vol, gid)
         self._wait_for_not_restored(ax, vol, gid)
 
+    def _del_restored_all(self, ax, vol):
+        '''
+        Delete all restored volumes of a volume.
+        ax :: Server - archive server.
+        vol :: str   - volume name.
+        '''
+        verify_type(ax, Server)
+        verify_type(vol, str)
+        gidL = self.get_restored(ax, vol)
+        for gid in gidL:
+            self.del_restored(ax, vol, gid)
+
     def snapshot_nbk(self, sx, vol):
         '''
         Take a snaphsot. This is nonblocking.
