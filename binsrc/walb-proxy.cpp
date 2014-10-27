@@ -76,6 +76,7 @@ struct ProxyThreads
                     startProxyVol(volId);
                 } catch (std::exception &e) {
                     LOGs.error() << "initializeProxy:start failed" << volId << e.what();
+                    ::exit(1);
                 }
             }
         }

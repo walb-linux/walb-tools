@@ -1053,6 +1053,31 @@ inline void ArchiveVolState::initInner(const std::string& volId)
     }
 }
 
+inline void verifyArchiveVol(const std::string& volId)
+{
+    const char *const FUNC = __func__;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+
+    if (st == aClear) return;
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    const std::string st2 = volInfo.getState();
+    if (st2 != st) {
+        throw cybozu::Exception(FUNC) << "invalid state" << volId << st << st2;
+    }
+    // file existance check.
+    volInfo.getUuid();
+    volInfo.getMetaState();
+
+    if (st == aSyncReady) return;
+
+    if (!volInfo.lvExists()) {
+        throw cybozu::Exception(FUNC) << "base lv must exist" << volId;
+    }
+}
+
 inline void c2aStatusServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;

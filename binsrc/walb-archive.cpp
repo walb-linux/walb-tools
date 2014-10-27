@@ -58,6 +58,18 @@ struct Option : cybozu::Option
     }
 };
 
+void verifyArchiveData()
+{
+     for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
+          try {
+              verifyArchiveVol(volId);
+          } catch (std::exception &e) {
+              LOGs.error() << __func__ << "start failed" << volId << e.what();
+              ::exit(1);
+          }
+     }
+}
+
 int main(int argc, char *argv[]) try
 {
     Option opt;
@@ -68,6 +80,7 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(createLogFilePath(opt.logFileStr, ga.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb archive server";
     LOGs.info() << opt;
+    verifyArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,

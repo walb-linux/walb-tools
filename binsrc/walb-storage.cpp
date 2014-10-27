@@ -80,6 +80,7 @@ struct StorageThreads {
                 startIfNecessary(volId);
             } catch (std::exception &e) {
                 LOGs.error() << "initializeStorage:start failed" << volId << e.what();
+                ::exit(1);
             }
         }
 
