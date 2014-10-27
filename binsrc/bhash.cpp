@@ -12,6 +12,7 @@ struct Option
     uint32_t bs;
     uint64_t size;
     uint32_t seed;
+    bool isEach;
     std::string filePath;
 
     Option(int argc, char* argv[]) {
@@ -19,6 +20,7 @@ struct Option
         opt.appendOpt(&bs, 512, "b", ": block size [byte].");
         opt.appendOpt(&size, 0, "s", ": size to calc [byte] (default: whole file size).");
         opt.appendOpt(&seed, 0, "seed", ": hash seed (default 0).");
+        opt.appendBoolOpt(&isEach, "each", ": put hash for each block.");
         opt.appendParam(&filePath, "FILE_PATH", ": block device path");
         opt.appendHelp("h", ": put this message.");
 
@@ -52,13 +54,21 @@ int doMain(int argc, char* argv[])
     cybozu::murmurhash3::Hasher hasher(opt.seed);
     uint64_t remaining = size;
     uint64_t blk = 0;
+    cybozu::murmurhash3::Hash sum;
+    sum.clear();
     while (remaining > 0) {
         file.read(buf.data(), bs);
         cybozu::murmurhash3::Hash h = hasher(buf.data(), bs);
-        ::printf("%10" PRIu64 " %s\n", blk, h.str().c_str());
-
+        if (opt.isEach) {
+            ::printf("%10" PRIu64 " %s\n", blk, h.str().c_str());
+        } else {
+            sum.doXor(h);
+        }
         blk++;
         remaining -= bs;
+    }
+    if (!opt.isEach) {
+        ::printf("%s\n", sum.str().c_str());
     }
     return 0;
 }
