@@ -1754,7 +1754,8 @@ class Controller:
         This will affect all storage servers and archive servers.
         vol :: str          - volume name.
         sizeMb :: int       - new size [MiB].
-        doZeroClear :: bool - True if you want to zero-clear the extended area.
+        doZeroClear :: bool - True if you want to zero-clear the extended area at the archives.
+                              Storage's extended areas will not be filled by this function.
         '''
         verify_type(vol, str)
         verify_type(sizeMb, int)
