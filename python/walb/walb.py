@@ -612,7 +612,7 @@ def verify_server_kind(s, kindL):
     verify_type(s, Server)
     verify_type(kindL, list, int)
     if s.kind not in kindL:
-        raise Exception('invalid server type', s.kind, kindL)
+        raise Exception('invalid server type', s.name, s.kind, kindL)
 
 
 class ServerLayout:
@@ -854,7 +854,7 @@ class Controller:
         verify_type(state, str)
         st = self.get_state(s, vol)
         if st != state:
-            raise Exception('verify_state: differ', st, state)
+            raise Exception('verify_state: differ', s.name, st, state)
 
     def get_diff_list(self, ax, vol):
         '''
@@ -918,7 +918,7 @@ class Controller:
         if state == sMaster:
             self.stop(sx, vol)
         else:
-            raise Exception('set_slave_storage:bad state', state)
+            raise Exception('set_slave_storage:bad state', sx.name, vol, state)
         self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
         self.reset(sx, vol)
         self.start(sx, vol)
@@ -953,7 +953,7 @@ class Controller:
     def verify_not_overflow(self, sx, vol):
         ''' Verify a volume does not overflow. '''
         if self.is_overflow(sx, vol):
-            raise Exception('verify_not_overflow', sx, vol)
+            raise Exception('verify_not_overflow', sx.name, vol)
 
     def is_wdiff_send_error(self, px, vol, ax):
         '''
@@ -1088,7 +1088,7 @@ class Controller:
                 self.reset(s, vol)
                 st = self.get_state(s, vol)
             if st != sSyncReady:
-                raise Exception('clear', s, vol, st)
+                raise Exception('clear', s.name, vol, st)
         elif s.kind == K_PROXY:
             if st == pClear:
                 return
@@ -1096,7 +1096,7 @@ class Controller:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st != pStopped:
-                raise Exception('clear', s, vol, st)
+                raise Exception('clear', s.name, vol, st)
         else:
             assert s.kind == K_ARCHIVE
             if st == aClear:
@@ -1105,7 +1105,7 @@ class Controller:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st not in aAcceptForClearVol:
-                raise Exception('clear', s, vol, st)
+                raise Exception('clear', s.name, vol, st)
         self.run_ctl(s, ['clear-vol', vol])
 
     def _force_clear(self, vol):
@@ -1160,7 +1160,7 @@ class Controller:
         if s.kind == K_STORAGE:
             if not prevSt:
                 raise Exception('wait_for_stopped: '
-                                'prevSt not specified', s, vol)
+                                'prevSt not specified', s.name, vol)
             if prevSt == sSlave:
                 tmpStL = sDuringStopForSlave
                 goalSt = sSyncReady
@@ -1189,7 +1189,7 @@ class Controller:
         verify_type(s, Server)
         verify_type(vol, str)
         if mode not in ['graceful', 'empty', 'force']:
-            raise Exception('stop:bad mode', mode)
+            raise Exception('stop:bad mode', s.name, vol, mode)
         prevSt = self.get_state(s, vol)
         self.run_ctl(s, ["stop", vol, mode])
         return prevSt
@@ -1283,7 +1283,7 @@ class Controller:
             if x.name == name:
                 ret.append(x)
         if len(ret) != 1:
-            raise Exception('get_server:not one', ret, name, sL)
+            raise Exception('get_server:not one', ret, name, map(lambda x:x.name, sL))
         return ret[0]
 
     def copy_archive_info(self, pSrc, vol, pDst):
@@ -1340,7 +1340,7 @@ class Controller:
             if opt == 'all':
                 optL.append(opt)
             else:
-                raise Exception('get_restorable:bad opt', opt)
+                raise Exception('get_restorable:bad opt', ax.name, vol, opt)
         return self._get_gid_list(ax, vol, 'restorable', optL)
 
     def get_restored(self, ax, vol):
@@ -1395,7 +1395,7 @@ class Controller:
             # expect to fail due to timeout.
             pass
         if e:
-            raise Exception(msg, 'gid must not be restorable', gid)
+            raise Exception(msg, 'gid must not be restorable', ax.name, vol, gid)
 
     def replicate_once_nbk(self, aSrc, vol, aDst):
         '''
@@ -1498,7 +1498,7 @@ class Controller:
                                     [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
-            raise Exception('full_backup: sync failed', sx, a0, vol, st)
+            raise Exception('full_backup: sync failed', sx.name, a0.name, vol, st)
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
@@ -1506,7 +1506,7 @@ class Controller:
             if gids:
                 return gids[-1]
             time.sleep(0.3)
-        raise Exception('full_backup:timeout', sx, vol, gids)
+        raise Exception('full_backup:timeout', sx.name, vol, gids)
 
     def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
         '''
@@ -1541,7 +1541,7 @@ class Controller:
                                     [sMaster], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
-            raise Exception('hash_backup: sync failed', sx, a0, vol, st)
+            raise Exception('hash_backup: sync failed', sx.name, a0.name, vol, st)
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
@@ -1549,7 +1549,7 @@ class Controller:
             if gids and gids[-1] > max_gid:
                 return gids[-1]
             time.sleep(0.3)
-        raise Exception('hash_backup:timeout', sx, vol, max_gid, gids)
+        raise Exception('hash_backup:timeout', sx.name, vol, max_gid, gids)
 
     def restore(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
@@ -1606,7 +1606,7 @@ class Controller:
                 print 'del-restored retry', i, e
                 time.sleep(1)
         else:
-            raise Exception('del-restored: exceeds max retry times')
+            raise Exception('del-restored: exceeds max retry times', ax.name, vol, gid)
         self._wait_for_not_restored(ax, vol, gid)
 
     def snapshot_nbk(self, sx, vol):
@@ -1699,7 +1699,7 @@ class Controller:
         if xL:
             return xL[-1]
         else:
-            raise Exception('get_latest_clean_snapshot:not found')
+            raise Exception('get_latest_clean_snapshot:not found', ax.name, vol)
 
     def resize_archive(self, ax, vol, sizeMb, doZeroClear):
         '''
@@ -1717,14 +1717,14 @@ class Controller:
         if st == aClear:
             return
         elif st not in aAcceptForResize:
-            raise Exception('resize_archive:bad state', ax, vol, sizeMb, st)
+            raise Exception('resize_archive:bad state', ax.name, vol, sizeMb, st)
 
         runCommand = self.get_run_remote_command(ax)
         oldSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
         if oldSizeMb == sizeMb:
             return
         if oldSizeMb > sizeMb:
-            raise Exception('resize_archive:shrink is not supported', ax, vol, oldSizeMb, sizeMb)
+            raise Exception('resize_archive:shrink is not supported', ax.name, vol, oldSizeMb, sizeMb)
         args = ['resize', vol, str(sizeMb) + 'm']
         if doZeroClear:
             args += ['zeroclear']
@@ -1776,7 +1776,7 @@ class Controller:
             if pred(st):
                 return
             time.sleep(0.3)
-        raise Exception("wait_for_state_cond", s, vol, msg, st)
+        raise Exception("wait_for_state_cond", s.name, vol, msg, st)
 
     def _wait_for_state(self, s, vol, stateL, timeoutS=10):
         def pred(st):
@@ -1796,7 +1796,7 @@ class Controller:
         st = self.get_state(s, vol)
         if st not in goalStateL:
             raise Exception('wait_for_state_change:bad goal',
-                            s, vol, tmpStateL, goalStateL, st)
+                            s.name, vol, tmpStateL, goalStateL, st)
 
     def _get_gid_list(self, ax, vol, cmd, optL=[]):
         '''
@@ -1810,7 +1810,7 @@ class Controller:
         verify_type(ax, Server)
         verify_type(vol, str)
         if not cmd in ['restorable', 'restored']:
-            raise Exception('get_gid_list : bad cmd', cmd)
+            raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
         verify_type(optL, list, str)
         ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
         return map(int, ret.split())
@@ -1915,7 +1915,8 @@ class Controller:
         elif st == sStopped:
             self.reset(sx, vol)
         else:
-            raise Exception("prepare_backup:bad state. call stop if master.", sx, vol, st)
+            raise Exception("prepare_backup:bad state. call stop if master.",
+                            sx.name, vol, st)
 
         for s in self.sLayout.storageL:
             if s == sx:
@@ -1963,7 +1964,7 @@ class Controller:
             if self.get_num_action(s, vol, action) == 0:
                 return
             time.sleep(0.3)
-        raise Exception("wait_for_no_action", s, vol, action)
+        raise Exception("wait_for_no_action", s.name, vol, action)
 
     def _wait_for_resize(self, ax, vol, oldSizeMb, sizeMb):
         '''
@@ -1981,10 +1982,10 @@ class Controller:
         curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
         if curSizeMb == oldSizeMb:
             raise Exception('wait_for_resize:size is not changed(restored vol may exist)',
-                            ax, vol, oldSizeMb, sizeMb)
+                            ax.name, vol, oldSizeMb, sizeMb)
         if curSizeMb != sizeMb:
             raise Exception('wait_for_resize:failed',
-                            ax, vol, oldSizeMb, sizeMb, curSizeMb)
+                            ax.name, vol, oldSizeMb, sizeMb, curSizeMb)
 
     def _verify_shutdown_mode(self, mode, msg):
         if mode not in ['graceful', 'force']:
