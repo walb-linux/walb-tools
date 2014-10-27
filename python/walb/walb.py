@@ -774,7 +774,7 @@ class Controller:
             ctlArgs += ['-debug']
         return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
 
-    def run_remote_command(self, s, args, putMsg=False):
+    def run_remote_command(self, s, args, putMsg=False, timeoutS=0):
         '''
         Run arbitrary executable at a remote server running walb daemon.
         This will use walb-tools daemons to run commands.
@@ -783,11 +783,18 @@ class Controller:
         args :: [str]  - command line arguments.
                          The head item must be a full-path executable.
         putMsg :: bool - put debug message if True.
+        timeoutS :: int - set timeout sec.
         return :: str  - stdout of the command if the command returned 0.
         '''
         verify_type(s, Server)
         verify_type(args, list, str)
-        return self.run_ctl(s, ['exec', '---'] + args, putMsg)
+        verify_type(putMsg, bool)
+        verify_type(timeoutS, int)
+        cmd = []
+        if timeoutS:
+            cmd += ['-to', str(timeoutS)]
+        cmd += ['exec', '---']
+        return self.run_ctl(s, cmd + args, putMsg)
 
     def get_run_remote_command(self, s):
         '''
