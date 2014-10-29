@@ -1667,6 +1667,22 @@ class Controller:
         self.run_ctl(ax, ["apply", vol, str(gid)])
         self._wait_for_applied(ax, vol, gid, timeoutS)
 
+    def _apply_diff_all(self, ax, vol, timeoutS=TIMEOUT_SEC):
+        '''
+        Apply diffs older than a gid the base lv.
+        ax :: Server - archive server
+        vol :: str   - volume name.
+        return :: int - gid which all previous diffs were applied.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        gidL = self.get_restorable(ax, vol)
+        if not gidL:
+            raise Exception('_apply_diff_all: there are no diffs to apply', ax.name, vol, timeoutS)
+        gid = gidL[-1]
+        self.apply_diff(ax, vol, gid, timeoutS=timeoutS)
+        return gid
+
     def merge_diff(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Merge diffs in gid ranges.
