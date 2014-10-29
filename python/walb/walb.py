@@ -1676,7 +1676,7 @@ class Controller:
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge_diff')
         gidL = self.get_restorable(ax, vol, 'all')
-        if gidB not in gidL or gidE in gidL:
+        if gidB not in gidL or gidE not in gidL:
             raise Exception("merge_diff: specify exact ranges", ax.name, vol, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
