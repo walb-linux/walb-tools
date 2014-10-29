@@ -755,12 +755,13 @@ class Controller:
         verify_type(sLayout, ServerLayout)
         self.sLayout = sLayout
 
-    def run_ctl(self, s, cmdArgs, putMsg=False):
+    def run_ctl(self, s, cmdArgs, putMsg=False, timeoutS=0):
         '''
         Run walb-tools controller.
         s :: Server      - a server.
         cmdArgs :: [str] - command arguments.
         putMsg :: bool   - put debug message if True.
+        timeoutS :: int  - timeout in sec. 0 means default.
         return :: str    - stdout of the control command.
         '''
         verify_type(s, Server)
@@ -772,6 +773,8 @@ class Controller:
                    "-p", str(s.port)]
         if self.isDebug:
             ctlArgs += ['-debug']
+        if timeoutS:
+            ctlArgs += ['-to', str(timeoutS)]
         return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
 
     def run_remote_command(self, s, args, putMsg=False, timeoutS=0):
@@ -790,11 +793,8 @@ class Controller:
         verify_type(args, list, str)
         verify_type(putMsg, bool)
         verify_type(timeoutS, int)
-        cmd = []
-        if timeoutS:
-            cmd += ['-to', str(timeoutS)]
-        cmd += ['exec', '---']
-        return self.run_ctl(s, cmd + args, putMsg)
+        cmdArgs = ['exec', '---'] + args
+        return self.run_ctl(s, cmdArgs, putMsg, timeoutS)
 
     def get_run_remote_command(self, s):
         '''
@@ -883,10 +883,11 @@ class Controller:
         num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
         return num
 
-    def reset(self, s, vol):
+    def reset(self, s, vol, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         Reset a volume.
         s :: Server - storage or archive.
+        timeoutS :: int - timeout in sec. 0 means default.
         vol :: str  - volume name.
         '''
         verify_type(s, Server)
@@ -897,7 +898,7 @@ class Controller:
         else:
             assert s.kind == K_ARCHIVE
             state = aSyncReady
-        self.run_ctl(s, ["reset-vol", vol])  # this is synchronous command.
+        self.run_ctl(s, ["reset-vol", vol], timeoutS=timeoutS)  # this is synchronous command.
         self.verify_state(s, vol, state)
 
     def set_slave_storage(self, sx, vol):
