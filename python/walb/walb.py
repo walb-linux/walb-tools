@@ -1615,12 +1615,14 @@ class Controller:
         Delete all restored volumes of a volume.
         ax :: Server - archive server.
         vol :: str   - volume name.
+        return :: [int] - gid list of deleted snapshots.
         '''
         verify_type(ax, Server)
         verify_type(vol, str)
         gidL = self.get_restored(ax, vol)
         for gid in gidL:
             self.del_restored(ax, vol, gid)
+        return gidL
 
     def snapshot_nbk(self, sx, vol):
         '''
