@@ -1647,7 +1647,7 @@ class Controller:
         verify_type(axL, list, Server)
         for ax in axL:
             st = self.get_state(ax, vol)
-            if st != aArchived:
+            if st not in aActive:
                 raise Exception('snapshot:bad state', ax.name, vol, st)
         gid = self.snapshot_nbk(sx, vol)
         for ax in axL:
@@ -1661,7 +1661,7 @@ class Controller:
         vol :: str   - volume name.
         gid :: int   - generation id.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
         self.run_ctl(ax, ["apply", vol, str(gid)])
