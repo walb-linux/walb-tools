@@ -936,7 +936,7 @@ inline void getDiffList(protocol::GetCommandParams &p)
     using Pair = std::pair<MetaDiff, uint64_t>;
     const std::vector<Pair> diffSizeV = volInfo.getDiffListWithSize();
     StrVec v;
-    v.emplace_back("#snapB-->snapE isMergeable timestamp sizeB");
+    v.emplace_back("#snapB-->snapE isMergeable/isCompDiff timestamp sizeB");
     for (const Pair &p : diffSizeV) {
         const MetaDiff &diff = p.first;
         const uint64_t sizeB = p.second;
