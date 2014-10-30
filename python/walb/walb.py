@@ -863,7 +863,7 @@ class Controller:
         vol :: str      - volume name.
         return :: [str] - wdiff information list managed by the archive server.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         ret = self.run_ctl(ax, ['get', 'diff', vol])
         return ret.split('\n')
@@ -908,7 +908,7 @@ class Controller:
         sx :: Server - storage server.
         vol :: str   - volume name.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         state = self.get_state(sx, vol)
         if state == sSlave:
@@ -932,6 +932,7 @@ class Controller:
         '''
         verify_type(sL, list, Server)
         for s in sL:
+            verify_server_kind(s, [K_STORAGE, K_PROXY])
             self.run_ctl(s, ["kick"])
 
     def kick_all_storage(self):
@@ -945,7 +946,7 @@ class Controller:
         vol :: str     - volume name.
         return :: bool - True if the storage overflows.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         args = ['get', 'is-overflow', vol]
         ret = self.run_ctl(sx, args)
@@ -964,9 +965,9 @@ class Controller:
         ax :: Server   - archive.
         return :: bool
         '''
-        verify_type(px, Server)
+        verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         args = ['get', 'is-wdiff-send-error', vol, ax.name]
         ret = self.run_ctl(px, args)
         return int(ret) != 0
@@ -977,9 +978,8 @@ class Controller:
         s :: Server   - storage or archive.
         return :: str - uuid string that regex pattern [0-9a-f]{32}.
         '''
-        verify_type(s, Server)
-        verify_type(vol, str)
         verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
+        verify_type(vol, str)
         return self.run_ctl(s, ['get', 'uuid', vol])
 
     def status(self, sL=[], vol=None):
@@ -1047,7 +1047,6 @@ class Controller:
         vol :: str
         wdevPath :: str
         '''
-        verify_type(sx, Server)
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(wdevPath, str)
@@ -1076,7 +1075,7 @@ class Controller:
         s :: Server
         vol :: str
         '''
-        verify_type(s, Server)
+        verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         st = self.get_state(s, vol)
         if s.kind == K_STORAGE:
@@ -1122,7 +1121,7 @@ class Controller:
         Get archive list registered to a proxy.
         return :: [str] - list of archive name.
         '''
-        verify_type(px, Server)
+        verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
         st = self.run_ctl(px, ["archive-info", "list", vol])
         return st.split()
@@ -1134,7 +1133,7 @@ class Controller:
         vol :: str
         return :: bool
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         ret = []
         for px in self.sLayout.proxyL:
@@ -1154,7 +1153,7 @@ class Controller:
         vol :: str
         prevSt :: None or str - specify if s is storage server.
         '''
-        verify_type(s, Server)
+        verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         if prevSt:
             verify_type(prevSt, str)
@@ -1187,7 +1186,7 @@ class Controller:
             'empty' is valid only if s is proxy.
         return :: str - state before running stop.
         '''
-        verify_type(s, Server)
+        verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         if mode not in ['graceful', 'empty', 'force']:
             raise Exception('stop:bad mode', s.name, vol, mode)
@@ -1208,7 +1207,7 @@ class Controller:
         s :: Server
         vol :: str
         '''
-        verify_type(s, Server)
+        verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         if s.kind == K_STORAGE:
             st = self.get_state(s, vol)
@@ -1234,9 +1233,9 @@ class Controller:
         vol :: str   - voume name.
         ax :: Server - archive server.
         '''
-        verify_type(px, Server)
+        verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         st = self.get_state(px, vol)
         if st in pActive:
             self.stop(px, vol)
@@ -1255,9 +1254,9 @@ class Controller:
         ax :: server    - archive server.
         doStart :: bool - False if not to start proxy after adding.
         '''
-        verify_type(px, Server)
+        verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(doStart, bool)
         st = self.get_state(px, vol)
         if st in pActive:
@@ -1294,9 +1293,9 @@ class Controller:
         vol :: str
         pDst :: Server - destination proxy. It must be stopped.
         '''
-        verify_type(pSrc, Server)
+        verify_server_kind(pSrc, [K_PROXY])
         verify_type(vol, str)
-        verify_type(pDst, Server)
+        verify_server_kind(pDst, [K_PROXY])
         for axName in self.get_archive_info_list(pSrc, vol):
             ax = self.get_server(axName, self.sLayout.archiveL)
             self.add_archive_to_proxy(pDst, vol, ax, doStart=False)
@@ -1308,7 +1307,7 @@ class Controller:
         ax :: Server - archive server.
         vol :: str   - volume name.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         for px in self.sLayout.proxyL:
             self.del_archive_from_proxy(px, vol, ax)
@@ -1320,7 +1319,7 @@ class Controller:
         ax :: Server - archive server.
         vol :: str   - volume name.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         for px in self.sLayout.proxyL:
             self.add_archive_to_proxy(px, vol, ax)
@@ -1333,7 +1332,7 @@ class Controller:
         vol :: str   - volume name.
         opt :: str   - you can specify 'all'.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(opt, str)
         optL = []
@@ -1408,6 +1407,9 @@ class Controller:
         aDst :: Server - destination archive (as a server).
         return :: int  - latest gid to replicate
         '''
+        verify_server_kind(aSrc, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_server_kind(aDst, [K_ARCHIVE])
         gid = self.get_restorable(aSrc, vol)[-1]
         self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
                             aDst.get_host_port()])
@@ -1421,6 +1423,7 @@ class Controller:
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec].
         '''
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(gid, int)
         self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
         gidL = self.get_restorable(ax, vol, 'all')
@@ -1451,9 +1454,9 @@ class Controller:
         aDst :: Server  - destination archive (as a server).
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(aSrc, Server)
+        verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(aDst, Server)
+        verify_server_kind(aDst, [K_ARCHIVE])
 
         for px in self.sLayout.proxyL:
             st = self.get_state(px, vol)
@@ -1485,7 +1488,7 @@ class Controller:
         block :: Bool   - blocking behavior.
         return :: int   - generation id of a clean snapshot.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
@@ -1523,7 +1526,7 @@ class Controller:
         block :: bool   - blocking behavior.
         return :: int   - generation id of a clean snapshot.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
@@ -1560,7 +1563,7 @@ class Controller:
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec]
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
 
@@ -1577,7 +1580,7 @@ class Controller:
         gid :: int    - generation id.
         return :: str - restored path.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
         return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
@@ -1589,7 +1592,7 @@ class Controller:
         vol :: str    - volume name.
         gid :: int    - generation id.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
 
@@ -1617,7 +1620,7 @@ class Controller:
         vol :: str   - volume name.
         return :: [int] - gid list of deleted snapshots.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         gidL = self.get_restored(ax, vol)
         for gid in gidL:
@@ -1631,7 +1634,7 @@ class Controller:
         vol :: str    - volume name.
         return :: int - gid of the taken snapshot.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         gid = self.run_ctl(sx, ['snapshot', vol])
         return int(gid)
@@ -1695,7 +1698,7 @@ class Controller:
         gidB :: int  - begin gid.
         gidE :: int  - end gid.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge_diff')
         gidL = self.get_restorable(ax, vol, 'all')
@@ -1713,9 +1716,9 @@ class Controller:
         synchronizing :: bool - True if you want to make aDst synchronizing.
         timeoutS :: int       - timeout [sec].
         '''
-        verify_type(aSrc, Server)
+        verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(aDst, Server)
+        verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(synchronizing, bool)
 
         st = self.get_state(aDst, vol)
@@ -1731,7 +1734,7 @@ class Controller:
         ax :: Server - archive server.
         vol :: str   - volume name.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         xL = self.get_restorable(ax, vol)
         if xL:
@@ -1747,7 +1750,7 @@ class Controller:
         sizeMb :: int       - new size [MiB].
         doZeroClear :: bool - True if zero-clear extended area.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(sizeMb, int)
         verify_type(doZeroClear, bool)
@@ -1777,7 +1780,7 @@ class Controller:
         vol :: str    - voume name.
         sizeMb :: int - new size [MiB].
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(sizeMb, int)
         st = self.get_state(sx, vol)
@@ -1845,7 +1848,7 @@ class Controller:
         optL :: [str]   - options.
         return :: [int] - gid list.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         if not cmd in ['restorable', 'restored']:
             raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
@@ -1861,7 +1864,7 @@ class Controller:
         cmd :: str      - 'restorable' or 'restored'.
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
         verify_type(timeoutS, int)
@@ -1881,7 +1884,7 @@ class Controller:
         cmd :: str      - 'restorable' or 'restored'.
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(gid, int)
         verify_type(timeoutS, int)
@@ -1927,7 +1930,10 @@ class Controller:
         gidE :: int     - end generation id.
         timeoutS :: int - timeout [sec].
         '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'wait_for_merged')
+        verify_type(timeoutS, int)
         self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
         gidL = self.get_restorable(ax, vol, 'all')
         pos = gidL.index(gidB)
@@ -1942,7 +1948,7 @@ class Controller:
         sx :: Server - storage server.
         vol :: str   - volume name.
         '''
-        verify_type(sx, Server)
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
 
         st = self.get_state(sx, vol)
@@ -1981,7 +1987,7 @@ class Controller:
         vol :: str    - volume name.
         return :: str - lv path.
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         return '/dev/' + ax.vg + '/i_' + vol
 
@@ -1992,7 +1998,7 @@ class Controller:
         action :: str   - action name.
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(s, Server)
+        verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         verify_type(action, str)
         verify_type(timeoutS, int)
@@ -2012,7 +2018,7 @@ class Controller:
         oldSizeMb :: int - old size [MiB].
         sizeMb :: int - new size [MiB].
         '''
-        verify_type(ax, Server)
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(sizeMb, int)
         self._wait_for_no_action(ax, vol, aaResize, SHORT_TIMEOUT_SEC)
