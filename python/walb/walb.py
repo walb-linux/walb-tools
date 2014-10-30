@@ -1644,12 +1644,16 @@ class Controller:
         axL :: [Server] - archive server list.
         return :: int   - gid of the taken snapshot.
         '''
+        verify_server_kind(sx, [K_STORAGE])
         verify_type(axL, list, Server)
         for ax in axL:
             st = self.get_state(ax, vol)
             if st not in aActive:
                 raise Exception('snapshot:bad state', ax.name, vol, st)
         gid = self.snapshot_nbk(sx, vol)
+        st = self.get_state(sx, vol)
+        if st != sMaster:
+            raise Exception('snapshot: state is not master and can not wait', sx.name, vol, st)
         for ax in axL:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
