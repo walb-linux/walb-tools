@@ -1109,6 +1109,20 @@ public:
         }
         return v;
     }
+    /**
+     * Check existance of a diff.
+     * Equality check uses MetaDiff::operator==().
+     */
+    bool exists(const MetaDiff& diff) const {
+        AutoLock lk(mu_);
+        const MetaDiffVec v = getFirstDiffs(diff.snapB.gidB);
+        for (const MetaDiff& d : v) {
+            if (d == diff) {
+                return true;
+            }
+        }
+        return false;
+    }
     bool empty() const {
         AutoLock lk(mu_);
         return mmap_.empty();

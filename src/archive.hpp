@@ -946,6 +946,25 @@ inline void getDiffList(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
+inline void existsDiff(protocol::GetCommandParams &p)
+{
+    std::string volId, gidS[4];
+    cybozu::util::parseStrVec(p.params, 1, 5, {&volId, &gidS[0], &gidS[1], &gidS[2], &gidS[3]});
+    uint64_t gid[4];
+    for (size_t i = 0; i < 4; i++) {
+        gid[i] = cybozu::atoi(gidS[i]);
+    }
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    verifyStateIn(volSt.sm.get(), aActiveOrStopped, __func__);
+
+    MetaDiff d(MetaSnap(gid[0], gid[1]), MetaSnap(gid[2], gid[3]));
+    const bool s = volSt.diffMgr.exists(d);
+    ul.unlock();
+    protocol::sendValueAndFin(p, s);
+}
+
 /**
  * return whether an action is running on a volume or not.
  *
@@ -1780,6 +1799,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { volTN, archive_local::getVolList },
     { pidTN, archive_local::getPid },
     { diffTN, archive_local::getDiffList },
+    { existsDiffTN, archive_local::existsDiff },
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },
     { restorableTN, archive_local::getRestorable },

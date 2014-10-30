@@ -78,6 +78,7 @@ const char *const hostTypeTN = "host-type";
 const char *const volTN = "vol";
 const char *const pidTN = "pid";
 const char *const diffTN = "diff";
+const char *const existsDiffTN = "exists-diff";
 const char *const restoredTN = "restored";
 const char *const restorableTN = "restorable";
 const char *const uuidTN = "uuid";

@@ -79,8 +79,7 @@ const std::string RESTORE_PREFIX = "r_";
 
 const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};
 const StrVec aActive = {aArchived, atHashSync, atWdiffRecv, atReplSync};
-// aAcceptForResize = aActiev + aStopped
-const StrVec aAcceptForResize = {aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped};
-
+const StrVec aActiveOrStopped = {aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped};
+const StrVec& aAcceptForResize = aActiveOrStopped;
 
 } // namespace walb
