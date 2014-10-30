@@ -135,4 +135,15 @@ inline time_t strToUnixTime(const std::string &ts)
     return ts0 - localTimeDiff();
 }
 
+inline std::string getHighResolutionTimeStr(const struct timespec& ts)
+{
+    std::string ret = unixTimeToPrettyStr(ts.tv_sec);
+    char buf[11];
+    if (::snprintf(buf, 11, ".%09ld", ts.tv_nsec) >= 11) {
+        buf[0] = '\0';
+    }
+    ret += buf;
+    return ret;
+}
+
 } //namespace cybozu
