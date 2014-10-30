@@ -14,12 +14,14 @@ using namespace walb;
 
 struct Option
 {
-    bool isHead;
-    bool isDebug;
+    bool isHead, isDebug, doSearch;
+    uint64_t addr;
     std::string filePath;
 
     Option(int argc, char *argv[]) {
         cybozu::Option opt;
+        opt.appendBoolOpt(&doSearch, "search", ": search a specific block.");
+        opt.appendOpt(&addr, 0, "addr", ": search address [logical block].");
         opt.appendBoolOpt(&isHead, "head", ": put record description.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
         opt.appendParamOpt(&filePath, "-", "WDIFF_PATH", ": wdiff file (default: stdin)");
@@ -31,6 +33,11 @@ struct Option
         }
     }
 };
+
+inline bool matchAddress(uint64_t addr, const DiffRecord& rec)
+{
+    return rec.io_address <= addr && addr < rec.endIoAddress();
+}
 
 int doMain(int argc, char *argv[])
 {
@@ -51,10 +58,12 @@ int doMain(int argc, char *argv[])
     DiffRecord rec;
     DiffIo io;
     while (wdiffR.readDiff(rec, io)) {
-        if (!rec.isValid()) {
-            ::printf("Invalid record: ");
+        if (!opt.doSearch || matchAddress(opt.addr, rec)) {
+            if (!rec.isValid()) {
+                ::printf("Invalid record: ");
+            }
+            rec.printOneline();
         }
-        rec.printOneline();
     }
     return 0;
 }
