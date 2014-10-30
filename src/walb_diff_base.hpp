@@ -87,6 +87,9 @@ struct DiffRecord : public walb_diff_record {
             compression_type, data_offset, data_size,
             checksum, isAllZero(), isDiscard());
     }
+    static void printHeader(::FILE *fp = ::stdout) {
+        ::fprintf(fp, "#wdiff_rec: addr blks cmpr offset size csum allzero discard\n");
+    }
     void setNormal() {
         flags &= ~WALB_DIFF_FLAG(ALLZERO);
         flags &= ~WALB_DIFF_FLAG(DISCARD);
