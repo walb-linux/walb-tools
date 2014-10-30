@@ -82,4 +82,4 @@ int doMain(int argc, char *argv[])
     return 0;
 }
 
-DEFINE_ERROR_SAFE_MAIN("wdiff-show")
+DEFINE_ERROR_SAFE_MAIN("wdiff-dump")
