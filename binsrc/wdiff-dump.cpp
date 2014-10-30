@@ -45,7 +45,7 @@ int doMain(int argc, char *argv[])
     DiffFileHeader wdiffH;
     wdiffR.readHeader(wdiffH);
 
-    cybozu::util::File outF(opt.dumpPath, O_WRONLY | O_CREAT | O_TRUNC);
+    cybozu::util::File outF(opt.dumpPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     uint64_t addr = opt.addr;
     uint32_t blks = opt.blks;
