@@ -8,31 +8,31 @@
 namespace walb {
 
 /**
- * Asynchronous sequential reader of block device using O_DIRECT.
- * Minimum IO size is physical block size.
+ * First of all, call init().
+ *
+ * Steps:
+ *   call s0 = getAvailableSize()
+ *   if s0 is too small, you must complete and read before.
+ *   prepare s1 (<= s0)
+ *   call char *p = prepare(s1)
+ *   fill the buffer [p, p + s1) as you like.
+ *   ...
+ *   call comlete(s1)
+ *   call s2 = getReadableSize()
+ *   prepare s3 (<= s2)
+ *   call read(buf, s3) or consume(s3)
  */
-class AsyncBdevReader
+class RingBufferForSeqRead
 {
 private:
-    cybozu::util::File file_;
-    size_t pbs_;
-    uint64_t devOffset_;
-    uint64_t devTotal_;
-    size_t maxIoSize_;
-    size_t aheadOffset_;
-    size_t readOffset_;
-    size_t availableSize_;
-    AlignedArray ringBuf_;
-    cybozu::aio::Aio aio_;
-
-    struct Io {
-        uint32_t key;
-        size_t size;
-    };
-    std::queue<Io> ioQ_;
+    AlignedArray buf_;
+    size_t aheadOff_;
+    size_t readOff_;
+    bool isFull_;
+    size_t readableSize_;
 
     /*
-     * Internal ring buffer layout.
+     * Ring buffer layout.
      *
      * |___XXXXXXYYYYYYYYYY______|
      *     ^     ^         ^
@@ -45,8 +45,98 @@ private:
      * XXX: completed IOs but not be read.
      * YYY: submitted IOs but not be completed.
      *
-     * (readOffset_ + availableSize) % bufferSize is completeOffset.
+     * (readOffset_ + readableSize) % bufferSize is completeOffset.
      */
+
+public:
+    static constexpr const char *NAME() { return "RingBufferForSeqRead"; }
+    void init(size_t size) {
+        if (size == 0) {
+            throw cybozu::Exception(NAME()) << __func__ << "size must not be 0.";
+        }
+        buf_.resize(size, false);
+        reset();
+    }
+    void reset() {
+        aheadOff_ = 0;
+        readOff_ = 0;
+        isFull_ = false;
+        readableSize_ = 0;
+    }
+    size_t getFreeSize() const {
+        if (isFull_) {
+            return 0;
+        } else if (aheadOff_ == readOff_) {
+            return buf_.size();
+        } else if (aheadOff_ > readOff_) {
+            return readOff_ + buf_.size() - aheadOff_;
+        } else {
+            return readOff_ - aheadOff_;
+        }
+    }
+    /**
+     * Max size of the next contiguous memory.
+     */
+    size_t getAvailableSize() const {
+        /* There is right edge limitation to get contiguous memory area. */
+        return std::min(getFreeSize(), buf_.size() - aheadOff_);
+    }
+    char *prepare(size_t size) {
+        assert(0 < size);
+        assert(size <= getAvailableSize());
+        char *data = &buf_[aheadOff_];
+        proceedOff(aheadOff_, size);
+        if (aheadOff_ == readOff_) isFull_ = true;
+        return data;
+    }
+    void complete(size_t size) {
+        readableSize_ += size;
+    }
+    size_t getReadableSize() const {
+        return readableSize_;
+    }
+    size_t read(void *data, size_t size) {
+        return consume(data, size, true);
+    }
+    size_t skip(size_t size) {
+        return consume(nullptr, size, false);
+    }
+private:
+    void proceedOff(size_t &off, size_t value) {
+        off = (off + value) % buf_.size();
+    }
+    size_t consume(void *data, size_t size, bool doCopy) {
+        const size_t s = std::min(size, readableSize_);
+        if (doCopy) {
+            assert(data);
+            ::memcpy(data, &buf_[readOff_], s);
+        }
+        proceedOff(readOff_, s);
+        readableSize_ -= s;
+        if (isFull_) isFull_ = false;
+        return s;
+    }
+};
+
+/**
+ * Asynchronous sequential reader of block device using O_DIRECT.
+ * Minimum IO size is physical block size.
+ */
+class AsyncBdevReader
+{
+private:
+    cybozu::util::File file_;
+    size_t pbs_;
+    uint64_t devOffset_;
+    uint64_t devTotal_;
+    size_t maxIoSize_;
+    RingBufferForSeqRead ringBuf_;
+    cybozu::aio::Aio aio_;
+    struct Io {
+        uint32_t key;
+        size_t size;
+    };
+    std::queue<Io> ioQ_;
 
     static constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
     static constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
@@ -66,19 +156,17 @@ public:
         , devOffset_(0)
         , devTotal_(cybozu::util::getBlockDeviceSize(file_.fd()))
         , maxIoSize_(maxIoSize)
-        , aheadOffset_(0)
-        , readOffset_(0)
-        , availableSize_(0)
-        , ringBuf_(bufferSize)
+        , ringBuf_()
         , aio_(file_.fd(), bufferSize / pbs_)
         , ioQ_() {
         if (bufferSize < maxIoSize) {
             throw cybozu::Exception(NAME())
                 << "bufferSize must be >= maxIoSize" << bufferSize << maxIoSize;
         }
-        verifyAligned(devTotal_, pbs_, "bad device size");
-        verifyAligned(maxIoSize_, pbs_, "bad maxIoSize");
-        verifyAligned(ringBuf_.size(), pbs_, "bad bufferSize");
+        verifyMultiple(devTotal_, pbs_, "bad device size");
+        verifyMultiple(maxIoSize_, pbs_, "bad maxIoSize");
+        verifyMultiple(bufferSize, pbs_, "bad bufferSize");
+        ringBuf_.init(bufferSize);
         readAhead();
     }
     ~AsyncBdevReader() noexcept {
@@ -97,38 +185,28 @@ public:
         char *ptr = (char *)data;
         while (size > 0) {
             prepareAvailableData();
-            const size_t s = readFromBuffer(ptr, size);
+            const size_t s = ringBuf_.read(ptr, size);
             ptr += s;
             size -= s;
+            readAhead();
         }
     }
 private:
-    void verifyAligned(uint64_t size, size_t pbs, const char *msg) const {
+    void verifyMultiple(uint64_t size, size_t pbs, const char *msg) const {
         assert(pbs != 0);
         if (size == 0 || size % pbs != 0) {
             throw cybozu::Exception(NAME()) << msg << size << pbs;
         }
     }
-    void proceedOffset(size_t &offset, size_t value) {
-        offset = (offset + value) % ringBuf_.size();
-    }
     bool prepareAheadIo() {
-        if (getFreeSize() < maxIoSize_) {
-            /* There is not enough buffer size. */
-            return false;
-        }
+        if (aio_.isQueueFull()) return false;
         const size_t ioSize = decideIoSize();
-        if (ioSize == 0) {
-            /* Reached to the end of the device. Do nothing. */
-            return false;
-        }
-        const uint32_t aioKey = aio_.prepareRead(devOffset_, ioSize, &ringBuf_[aheadOffset_]);
-        if (aioKey == 0) {
-            throw cybozu::Exception(NAME())
-                << __func__ << "preapreRead failed" << devOffset_ << ioSize << aheadOffset_;
-        }
+        if (ioSize == 0) return false;
+
+        char *ptr = ringBuf_.prepare(ioSize);
+        const uint32_t aioKey = aio_.prepareRead(devOffset_, ioSize, ptr);
+        assert(aioKey > 0);
         devOffset_ += ioSize;
-        proceedOffset(aheadOffset_, ioSize);
         ioQ_.push({aioKey, ioSize});
         return true;
     }
@@ -145,40 +223,24 @@ private:
         return io.size;
     }
     void prepareAvailableData() {
-        if (availableSize_ > 0) return;
+        if (ringBuf_.getReadableSize() > 0) return;
         if (ioQ_.empty()) readAhead();
         if (ioQ_.empty()) {
             throw cybozu::Exception(NAME()) << "Reached the end of the device";
         }
-        availableSize_ += waitForIo();
-    }
-    size_t readFromBuffer(void *data, size_t size) {
-        const size_t s = std::min(size, availableSize_);
-        ::memcpy(data, &ringBuf_[readOffset_], s);
-        proceedOffset(readOffset_, s);
-        availableSize_ -= s;
-        readAhead();
-        return s;
-    }
-    size_t getFreeSize() const {
-        if (aheadOffset_ > readOffset_) {
-            return readOffset_ + ringBuf_.size() - aheadOffset_;
-        } else if (aheadOffset_ < readOffset_) {
-            return readOffset_ - aheadOffset_;
-        } else if (ioQ_.empty() && availableSize_ == 0) {
-            return ringBuf_.size();
-        } else {
-            return 0;
-        }
+        ringBuf_.complete(waitForIo());
     }
     size_t decideIoSize() const {
+        if (ringBuf_.getFreeSize() < maxIoSize_) {
+            /* There is not enough buffer size. */
+            return 0;
+        }
         size_t s = maxIoSize_;
-        /* Free buffer size. */
-        s = std::min(s, getFreeSize());
-        /* Internal ring buffer edge. */
-        s = std::min(s, ringBuf_.size() - aheadOffset_);
+        /* Available size in ring buffer. */
+        s = std::min(s, ringBuf_.getAvailableSize());
         /* Block device remaining size. */
         s = std::min(s, devTotal_ - devOffset_);
+        /* Here, 0 means the file offset reached the end of the device. */
         assert(s % pbs_ == 0);
         return s;
     }

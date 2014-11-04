@@ -17,18 +17,15 @@
 #include "walb_util.hpp"
 #include "aio_util.hpp"
 #include "bdev_util.hpp"
+#include "bdev_io.hpp"
 #include "random.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"
 #include "walb/log_record.h"
 #include "walb_log.h"
 
-
 namespace walb {
 namespace device {
-
-constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
-constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 
 namespace local {
 
@@ -280,7 +277,6 @@ public:
     }
     explicit SimpleWldevReader(const std::string &wldevPath)
         : SimpleWldevReader(cybozu::util::File(wldevPath, O_RDONLY | O_DIRECT)) {
-        init();
     }
     SuperBlock &super() { return super_; }
     void reset(uint64_t lsid) {
@@ -288,11 +284,11 @@ public:
         seek();
     }
     void read(void *data, size_t size) {
-        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        assert(size % pbs_ == 0);
         readPb(data, size / pbs_);
     }
     void skip(size_t size) {
-        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
+        assert(size % pbs_ == 0);
         skipPb(size / pbs_);
     }
 private:
@@ -346,62 +342,62 @@ class AsyncWldevReader
 {
 private:
     cybozu::util::File file_;
-    const uint32_t pbs_;
-    const uint32_t bufferPb_; /* [physical block]. */
-    const uint32_t maxIoPb_;
-    AlignedArray buffer_;
+    const size_t pbs_;
+    const size_t maxIoSize_;
+
     SuperBlock super_;
     cybozu::aio::Aio aio_;
     uint64_t aheadLsid_;
-    std::queue<std::pair<uint32_t, uint32_t> > ioQ_; /* aioKey, ioPb */
-    uint32_t aheadIdx_;
-    uint32_t readIdx_;
-    uint32_t pendingPb_; /* submitted but not completed. */
-    uint32_t remainingPb_; /* completed but not read (and collected). */
+    RingBufferForSeqRead ringBuf_;
+
+    struct Io
+    {
+        uint32_t key;
+        size_t size;
+    };
+    std::queue<Io> ioQ_;
+
+    static constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
+    static constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 public:
+    static constexpr const char *NAME() { return "AsyncWldevReader"; }
     /**
      * @wldevPath walb log device path.
      * @bufferSize buffer size to read ahead [byte].
      * @maxIoSize max IO size [byte].
      */
     AsyncWldevReader(cybozu::util::File &&wldevFile,
-                   uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
-                   uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
+                     size_t bufferSize = DEFAULT_BUFFER_SIZE,
+                     size_t maxIoSize = DEFAULT_MAX_IO_SIZE)
         : file_(std::move(wldevFile))
         , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
-        , bufferPb_(bufferSize / pbs_)
-        , maxIoPb_(maxIoSize / pbs_)
-        , buffer_(bufferPb_ * pbs_)
+        , maxIoSize_(maxIoSize)
         , super_()
-        , aio_(file_.fd(), bufferPb_)
+        , aio_(file_.fd(), bufferSize / pbs_ + 1)
         , aheadLsid_(0)
-        , ioQ_()
-        , aheadIdx_(0)
-        , readIdx_(0)
-        , pendingPb_(0)
-        , remainingPb_(0) {
-        init();
+        , ringBuf_()
+        , ioQ_() {
+        assert(pbs_ != 0);
+        verifyMultiple(bufferSize, pbs_, "bad bufferSize");
+        verifyMultiple(maxIoSize_, pbs_, "bad maxIoSize");
+        super_.read(file_.fd());
+        ringBuf_.init(bufferSize);
     }
     AsyncWldevReader(const std::string &wldevPath,
-                     uint32_t bufferSize = DEFAULT_BUFFER_SIZE,
-                     uint32_t maxIoSize = DEFAULT_MAX_IO_SIZE)
+                     size_t bufferSize = DEFAULT_BUFFER_SIZE,
+                     size_t maxIoSize = DEFAULT_MAX_IO_SIZE)
         : AsyncWldevReader(
             cybozu::util::File(wldevPath, O_RDONLY | O_DIRECT),
             bufferSize, maxIoSize) {
-        init();
     }
     ~AsyncWldevReader() noexcept {
         while (!ioQ_.empty()) {
             try {
-                uint32_t aioKey, ioPb;
-                std::tie(aioKey, ioPb) = ioQ_.front();
-                aio_.waitFor(aioKey);
+                waitForIo();
             } catch (...) {
             }
-            ioQ_.pop();
         }
     }
-    uint32_t queueSize() const { return bufferPb_; }
     SuperBlock &super() { return super_; }
     /**
      * Reset current IOs and start read from a lsid.
@@ -409,138 +405,85 @@ public:
     void reset(uint64_t lsid) {
         /* Wait for all pending aio(s). */
         while (!ioQ_.empty()) {
-            uint32_t aioKey, ioPb;
-            std::tie(aioKey, ioPb) = ioQ_.front();
-            aio_.waitFor(aioKey);
-            ioQ_.pop();
+            waitForIo();
         }
         /* Reset indicators. */
         aheadLsid_ = lsid;
-        readIdx_ = 0;
-        aheadIdx_ = 0;
-        pendingPb_ = 0;
-        remainingPb_ = 0;
+        ringBuf_.reset();
     }
     void read(void *data, size_t size) {
-        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
-        readPb(data, size / pbs_);
-    }
-    void skip(size_t size) {
-        local::verifySizeIsMultipleOfPbs(size, pbs_, __func__);
-        skipPb(size / pbs_);
-    }
-private:
-    void init() {
-        if (bufferPb_ == 0) {
-            throw RT_ERR("bufferSize must be more than physical block size.");
-        }
-        if (maxIoPb_ == 0) {
-            throw RT_ERR("maxIoSize must be more than physical block size.");
-        }
-        super_.read(file_.fd());
-    }
-    char *getBuffer(size_t idx) {
-        return &buffer_[idx * pbs_];
-    }
-    void plusIdx(uint32_t &idx, size_t diff) {
-        idx += diff;
-        assert(idx <= bufferPb_);
-        if (idx == bufferPb_) {
-            idx = 0;
-        }
-    }
-    uint32_t decideIoPb() const {
-        uint64_t ioPb = maxIoPb_;
-        /* available buffer size. */
-        uint64_t availBufferPb0 = bufferPb_ - (remainingPb_ + pendingPb_);
-        ioPb = std::min(ioPb, availBufferPb0);
-        /* Internal ring buffer edge. */
-        uint64_t availBufferPb1 = bufferPb_ - aheadIdx_;
-        ioPb = std::min(ioPb, availBufferPb1);
-        /* Log device ring buffer edge. */
-        uint64_t s = super_.getRingBufferSize();
-        ioPb = std::min(ioPb, s - aheadLsid_ % s);
-        assert(ioPb <= std::numeric_limits<uint32_t>::max());
-        return ioPb;
-    }
-    void prepareAheadIo() {
-        /* Decide IO size. */
-        uint32_t ioPb = decideIoPb();
-        assert(aheadIdx_ + ioPb <= bufferPb_);
-        uint64_t off = super_.getOffsetFromLsid(aheadLsid_);
-#ifdef DEBUG
-        uint64_t off1 = super_.getOffsetFromLsid(aheadLsid_ + ioPb);
-        assert(off < off1 || off1 == super_.getRingBufferOffset());
-#endif
-
-        /* Prepare an IO. */
-        char *buf = getBuffer(aheadIdx_);
-        uint32_t aioKey = aio_.prepareRead(off * pbs_, ioPb * pbs_, buf);
-        assert(aioKey != 0);
-        ioQ_.emplace(aioKey, ioPb);
-        aheadLsid_ += ioPb;
-        pendingPb_ += ioPb;
-        plusIdx(aheadIdx_, ioPb);
-    }
-    /**
-     * Invoke asynchronous read IOs to fill the buffer.
-     */
-    void readAhead() {
-        size_t n = 0;
-        while (remainingPb_ + pendingPb_ < bufferPb_) {
-            prepareAheadIo();
-            n++;
-        }
-        if (0 < n) {
-            aio_.submit();
-        }
-    }
-    void prepareBlock() {
-        if (remainingPb_ + pendingPb_ <= bufferPb_ / 2) {
+        char *ptr = (char *)data;
+        while (size > 0) {
+            prepareReadableData();
+            const size_t s = ringBuf_.read(ptr, size);
+            ptr += s;
+            size -= s;
             readAhead();
         }
-        if (remainingPb_ == 0) {
-            assert(0 < pendingPb_);
-            assert(!ioQ_.empty());
-            uint32_t aioKey, ioPb;
-            std::tie(aioKey, ioPb) = ioQ_.front();
-            ioQ_.pop();
-            aio_.waitFor(aioKey);
-            remainingPb_ = ioPb;
-            assert(ioPb <= pendingPb_);
-            pendingPb_ -= ioPb;
-        }
-        assert(0 < remainingPb_);
     }
-    void readBlock(void *data) {
-        prepareBlock();
-        ::memcpy(data, getBuffer(readIdx_), pbs_);
-        remainingPb_--;
-        plusIdx(readIdx_, 1);
-    }
-    void trashBlock() {
-        prepareBlock();
-        remainingPb_--;
-        plusIdx(readIdx_, 1);
-    }
-    /**
-     * Read data.
-     * @data buffer pointer to fill.
-     * @pb size [physical block].
-     */
-    void readPb(void *data, size_t pb) {
-        char *p = (char*)data;
-        while (0 < pb) {
-            readBlock(p);
-            p += pbs_;
-            pb--;
+    void skip(size_t size) {
+        while (size > 0) {
+            prepareReadableData();
+            const size_t s = ringBuf_.skip(size);
+            size -= s;
+            readAhead();
         }
     }
-    void skipPb(size_t sizePb) {
-        while (sizePb > 0) {
-            trashBlock();
-            sizePb--;
+private:
+    void verifyMultiple(uint64_t size, size_t pbs, const char *msg) const {
+        if (size == 0 || size % pbs != 0) {
+            throw cybozu::Exception(NAME()) << msg << size << pbs;
         }
+    }
+    size_t waitForIo() {
+        assert(!ioQ_.empty());
+        const Io io = ioQ_.front();
+        ioQ_.pop();
+        aio_.waitFor(io.key);
+        return io.size;
+    }
+    void prepareReadableData() {
+        if (ringBuf_.getReadableSize() > 0) return;
+        if (ioQ_.empty()) readAhead();
+        assert(!ioQ_.empty());
+        ringBuf_.complete(waitForIo());
+    }
+    void readAhead() {
+        size_t n = 0;
+        while (prepareAheadIo()) n++;
+        if (n > 0) aio_.submit();
+    }
+    bool prepareAheadIo() {
+        if (aio_.isQueueFull()) return false;
+        const size_t ioSize = decideIoSize();
+        if (ioSize == 0) return false;
+        char *ptr = ringBuf_.prepare(ioSize);
+
+        const uint64_t offPb = super_.getOffsetFromLsid(aheadLsid_);
+        const size_t ioPb = ioSize / pbs_;
+#ifdef DEBUG
+        const uint64_t offPb1 = super_.getOffsetFromLsid(aheadLsid_ + ioPb);
+        assert(offPb < offPb1 || offPb1 == super_.getRingBufferOffset());
+#endif
+        const uint64_t off = offPb * pbs_;
+        const uint32_t aioKey = aio_.prepareRead(off, ioSize, ptr);
+        assert(aioKey > 0);
+        aheadLsid_ += ioPb;
+        ioQ_.push({aioKey, ioSize});
+        return true;
+    }
+    size_t decideIoSize() const {
+        if (ringBuf_.getFreeSize() < maxIoSize_) {
+            /* There is not enough free space. */
+            return 0;
+        }
+        size_t ioSize = maxIoSize_;
+        /* Log device ring buffer edge. */
+        uint64_t s = super_.getRingBufferSize();
+        s = s - aheadLsid_ % s;
+        ioSize = std::min<uint64_t>(ioSize / pbs_, s) * pbs_;
+        /* Ring buffer available size. */
+        return std::min(ioSize, ringBuf_.getAvailableSize());
     }
 };
 
