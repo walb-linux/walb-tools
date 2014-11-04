@@ -5,6 +5,7 @@
 #include "packet.hpp"
 #include "fileio.hpp"
 #include "walb_logger.hpp"
+#include "bdev_io.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {
@@ -19,7 +20,7 @@ inline bool dirtyFullSyncClient(
     const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
 {
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    cybozu::util::File file(bdevPath, O_RDONLY);
+    AsyncBdevReader reader(bdevPath);
     std::string encBuf;
 
     uint64_t c = 0;
@@ -30,7 +31,7 @@ inline bool dirtyFullSyncClient(
         }
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
-        file.read(&buf[0], size);
+        reader.read(&buf[0], size);
         const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
         pkt.write(encSize);
         pkt.write(&encBuf[0], encSize);

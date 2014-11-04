@@ -15,6 +15,7 @@
 #include "dirty_full_sync.hpp"
 #include "dirty_hash_sync.hpp"
 #include "walb_util.hpp"
+#include "bdev_io.hpp"
 
 namespace walb {
 
@@ -636,8 +637,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             }
         } else {
             const uint32_t hashSeed = curTime;
-            cybozu::util::File file(volInfo.getWdevPath(), O_RDONLY);
-            if (!dirtyHashSyncClient(aPkt, file, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.forceQuit)) {
+            AsyncBdevReader reader(volInfo.getWdevPath());
+            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.forceQuit)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
