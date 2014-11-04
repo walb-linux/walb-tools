@@ -88,8 +88,19 @@ inline StrVec getDirEntNameList(const std::string &dirStr, bool isDir, const cha
     StrVec ret;
     std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
     for (const cybozu::FileInfo &info : list) {
-        if ((isDir && info.isDirectory()) ||
-            (!isDir && info.isFile())) {
+        bool isDir2, isFile2;
+        if (info.isUnknown()) {
+            cybozu::FilePath fpath(dirStr);
+            fpath += info.name;
+            cybozu::FileStat stat = fpath.stat();
+            if (!stat.exists()) continue;
+            isDir2 = stat.isDirectory();
+            isFile2 = stat.isFile();
+        } else {
+            isDir2 = info.isDirectory();
+            isFile2 = info.isFile();
+        }
+        if ((isDir && isDir2) || (!isDir && isFile2)) {
             ret.push_back(info.name);
         }
     }
