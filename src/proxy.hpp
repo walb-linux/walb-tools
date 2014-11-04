@@ -190,6 +190,8 @@ inline void ProxyVolState::initInner(const std::string &volId)
 
     sm.set(pStopped);
     volInfo.loadAllArchiveInfo();
+    LOGs.info() << "volume archive info" << volId << archiveSet.size()
+                << cybozu::util::concat(archiveSet, ",");
 
     // Retry to make hard links of wdiff files in the master directory.
     MetaDiffVec diffV = volInfo.getAllDiffsInMaster();

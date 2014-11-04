@@ -71,7 +71,9 @@ struct ProxyThreads
 
         // Start each volume if necessary
         if (!opt.isStopped) {
+            LOGs.info() << "search volume metadata directories" << gp.baseDirStr;
             for (const std::string &volId : util::getDirNameList(gp.baseDirStr)) {
+                LOGs.info() << "found volume" << volId;
                 try {
                     startProxyVol(volId);
                 } catch (std::exception &e) {
