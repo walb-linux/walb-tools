@@ -100,6 +100,7 @@ inline bool dirtyHashSyncServer(
         cybozu::murmurhash3::Hasher hasher(hashSeed);
         packet::StreamControl ctrl(pkt.sock());
 
+        Buffer buf;
         uint64_t remaining = sizeLb;
         try {
             while (remaining > 0) {
@@ -108,7 +109,7 @@ inline bool dirtyHashSyncServer(
                     return;
                 }
                 const uint64_t lb = std::min<uint64_t>(remaining, bulkLb);
-                Buffer buf(lb * LOGICAL_BLOCK_SIZE);
+                buf.resize(lb * LOGICAL_BLOCK_SIZE);
                 reader.read(buf.data(), buf.size());
                 const cybozu::murmurhash3::Hash hash = hasher(buf.data(), buf.size());
                 ctrl.next();
