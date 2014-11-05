@@ -82,10 +82,10 @@ struct DiffRecord : public walb_diff_record {
            checksum, isAllZero(), isDiscard());
     }
     void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%d%d\n",
+        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%c%c\n",
             io_address, io_blocks,
             compression_type, data_offset, data_size,
-            checksum, isAllZero(), isDiscard());
+            checksum, isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
     }
     static void printHeader(::FILE *fp = ::stdout) {
         ::fprintf(fp, "#wdiff_rec: addr blks cmpr offset size csum allzero discard\n");

@@ -79,9 +79,9 @@ struct LogRecord : public walb_log_record
             " csum %08x"
             , lsid, lsid_local
             , offset, io_size
-            , isExist() ? 'E' : '_'
-            , isPadding() ? 'P' : '_'
-            , isDiscard() ? 'D' : '_'
+            , isExist() ? 'E' : '-'
+            , isPadding() ? 'P' : '-'
+            , isDiscard() ? 'D' : '-'
             , checksum);
     }
     std::string strDetail() const {
