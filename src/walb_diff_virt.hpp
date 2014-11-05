@@ -42,7 +42,7 @@ private:
     void init_inner(cybozu::util::File&& reader) {
         reader_ = std::move(reader);
         isInputFdSeekable_ = reader_.seekable();
-        if (isInputFdSeekable_) bufForSkip_.resize(LOGICAL_BLOCK_SIZE);
+        if (!isInputFdSeekable_) bufForSkip_.resize(LOGICAL_BLOCK_SIZE);
     }
 public:
     /**
