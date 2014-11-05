@@ -1001,7 +1001,7 @@ inline void getRestored(protocol::GetCommandParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
-    verifyStateIn(volSt.sm.get(), aActive, FUNC);
+    verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
     const StrVec strV = archive_local::listRestored(volId);
     ul.unlock();
     protocol::sendValueAndFin(p, strV);
