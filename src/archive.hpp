@@ -1344,7 +1344,7 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
         verifyActionNotRunning(volSt.ac, aActionOnLvm, FUNC);
         ul.unlock();
 
