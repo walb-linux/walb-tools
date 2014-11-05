@@ -91,7 +91,7 @@ public:
 
         while (offB < endB) {
             const size_t ioB = decideIoSizeB(endB - offB);
-            ioL_.push_back(Io{0, walb::AlignedArray(ioB * bs)});
+            ioL_.push_back(Io{0, walb::AlignedArray(ioB * bs, false)});
             Io &io = ioL_.back();
             fillBuffer(io.buf);
             const uint32_t csum = cybozu::util::calcChecksum(io.buf.data(), io.buf.size(), 0);

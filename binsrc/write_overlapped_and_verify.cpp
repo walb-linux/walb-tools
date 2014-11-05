@@ -301,7 +301,7 @@ void verify(
     cybozu::util::File &file, const std::vector<AlignedArray> &blksV)
 {
     const uint32_t bs = opt.bs;
-    AlignedArray blk(bs);
+    AlignedArray blk(bs, false);
     uint64_t nVerified = 0, nWritten = 0;
     if (opt.isVerbose) {
         ::printf("thId written read\n");
@@ -377,7 +377,7 @@ void writeConcurrentlyAndVerify(const Option &opt)
     std::vector<AlignedArray> blksV;
     std::vector<std::shared_ptr<Worker> > thV;
     for (size_t i = 0; i < opt.numThreads; i++) {
-        blksV.emplace_back(opt.size);
+        blksV.emplace_back(opt.size, false);
 #if 0 // fill randomly.
         rand.fill(blksV.back().data(), opt.size);
 #else // fill fixed value per thread.

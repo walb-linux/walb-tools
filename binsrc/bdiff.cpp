@@ -83,7 +83,7 @@ uint64_t checkBlockDiff(Config& config)
     cybozu::util::File fileR2(config.filePath2(), O_RDONLY);
 
     const uint32_t bs = config.blockSize();
-    AlignedArray a1(bs), a2(bs);
+    AlignedArray a1(bs, false), a2(bs, false);
 #if 0
     ::printf("%d\n%d\n", f1.fd(), f2.fd());
 #endif

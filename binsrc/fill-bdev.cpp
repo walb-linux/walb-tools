@@ -118,13 +118,13 @@ int doMain(int argc, char* argv[])
     const size_t bs = opt.bs;
     const size_t fillSize = bs * opt.randPml / 1000;
     assert(fillSize <= bs);
-    AlignedArray rbuf(fillSize);
+    AlignedArray rbuf(fillSize, false);
     uint64_t size = opt.size == 0 ? (bdevSize - opt.offset) : opt.size;
     assert(size % 512 == 0);
     const uint64_t rem = size % bs;
     if (rem != 0) size -= rem;
     assert(size % bs == 0);
-    AlignedArray wbuf(bs);
+    AlignedArray wbuf(bs, false);
 #if 0
     cybozu::util::Random<size_t> rand;
 #else

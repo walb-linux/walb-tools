@@ -593,7 +593,7 @@ public:
             data_.resize(nBlocks0);
         }
         while (data_.size() < nBlocks0) {
-            data_.emplace_back(pbs_);
+            data_.emplace_back(pbs_, false);
         }
     }
     void addBlock(AlignedArray &&block) {
