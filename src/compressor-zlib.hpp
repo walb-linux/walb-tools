@@ -9,13 +9,17 @@ struct CompressorZlib : walb::compressor_local::CompressorIF {
     {
         if (compressionLevel > 9) throw cybozu::Exception("CompressorZlib:bad compressionLevel") << compressionLevel;
     }
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
+    bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
+        try
     {
         cybozu::MemoryOutputStream os(out, maxOutSize);
         cybozu::ZlibCompressorT<cybozu::MemoryOutputStream> enc(os, false, compressionLevel_);
         enc.write(in, inSize);
         enc.flush();
-        return os.pos;
+        *outSize = os.pos;
+        return true;
+    } catch (...) {
+        return false;
     }
 };
 

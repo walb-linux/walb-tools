@@ -35,16 +35,15 @@ inline Uncompressor &getSnappyUncompressor() {
 template <typename CharT>
 bool compressToVec(const void *data, size_t size, std::vector<CharT> &outV)
 {
-    outV.resize(size);
+    outV.resize(size * 2); // margin to encode
     size_t outSize;
-    try {
-        outSize = getSnappyCompressor().run(&outV[0], size, data, size);
-    } catch (cybozu::Exception &) {
-        ::memcpy(&outV[0], data, size);
+    if (getSnappyCompressor().run(outV.data(), &outSize, outV.size(), data, size) && outSize < size) {
+        outV.resize(outSize);
+        return true;
+    } else {
+        ::memcpy(outV.data(), data, size);
         return false;
     }
-    outV.resize(outSize);
-    return true;
 }
 
 /**

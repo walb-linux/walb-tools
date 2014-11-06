@@ -3,11 +3,12 @@
 
 struct CompressorAsIs : walb::compressor_local::CompressorIF {
     CompressorAsIs(size_t) {}
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
+    bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
     {
-        if (maxOutSize < inSize) throw cybozu::Exception("CompressorAsIs:run:small maxOutSize") << inSize << maxOutSize;
+        if (maxOutSize < inSize) return false;
         memcpy(out, in, inSize);
-        return inSize;
+        *outSize = inSize;
+        return true;
     }
 };
 

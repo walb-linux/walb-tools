@@ -12,18 +12,15 @@ struct CompressorXz : walb::compressor_local::CompressorIF {
     {
         if (present_ > 9) throw cybozu::Exception("CompressorXz:bad compressionLevel") << compressionLevel;
     }
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
+    bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
     {
 //        const size_t requiredSize = lzma_stream_buffer_bound(inSize);
 //        if (maxOutSize < requiredSize) throw cybozu::Exception("CompressorXz:run:small maxOutSize") << requiredSize << maxOutSize;
         lzma_allocator *allocator = NULL;
-        size_t out_pos = 0;
+        *outSize = 0;
         lzma_ret ret = lzma_easy_buffer_encode(present_, LZMA_CHECK_CRC64, allocator,
-            (const uint8_t*)in, inSize, (uint8_t*)out, &out_pos, maxOutSize);
-        if (ret != LZMA_OK) {
-            throw cybozu::Exception("CompressorXz:run:lzma_easy_buffer_encode") << ret;
-        }
-        return out_pos;
+            (const uint8_t*)in, inSize, (uint8_t*)out, outSize, maxOutSize);
+        return ret == LZMA_OK;
     }
 };
 

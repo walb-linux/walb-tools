@@ -11,8 +11,10 @@ void test(int mode)
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
     walb::Compressor c(mode);
     std::string enc;
-    enc.resize(in.size());
-    size_t encSize = c.run(&enc[0], enc.size(), &in[0], in.size());
+    enc.resize(in.size() * 2);
+    size_t encSize;
+    bool ret = c.run(&enc[0], &encSize, enc.size(), in.data(), in.size());
+    CYBOZU_TEST_ASSERT(ret);
     printf("inSize=%d, encSize=%d\n", (int)in.size(), (int)encSize);
     std::string dec;
     walb::Uncompressor d(mode);

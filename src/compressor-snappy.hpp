@@ -4,13 +4,19 @@
 
 struct CompressorSnappy : walb::compressor_local::CompressorIF {
     CompressorSnappy(size_t) {}
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
+    bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
     {
+        const size_t maxCompressedSize = snappy::MaxCompressedLength(inSize);
+        if (maxCompressedSize <= maxOutSize) {
+            snappy::RawCompress((const char*)in, inSize, (char*)out, outSize);
+            return true;
+        }
         std::string enc;
         size_t encSize = snappy::Compress((const char*)in, inSize, &enc);
-        if (maxOutSize < encSize) throw cybozu::Exception("CompressorSnappy:run:small maxOutSize") << encSize << maxOutSize;
+        if (maxOutSize < encSize) return false;
         memcpy(out, &enc[0], encSize);
-        return encSize;
+        *outSize = encSize;
+        return true;
     }
 };
 

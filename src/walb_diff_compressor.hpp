@@ -96,18 +96,8 @@ public:
     {
         outRecord = inRecord;
         const size_t inSize = inRecord.data_size;
-        size_t encSize = inSize;
-        try {
-            encSize = c_.run(out, maxOutSize, in, inSize);
-        } catch (std::bad_alloc&) {
-            throw;
-        } catch (std::exception& e) {
-#if 0
-            LOGd("encode error %s\n", e.what());
-#endif
-            // through
-        }
-        if (encSize < inSize) {
+        size_t encSize;
+        if (c_.run(out, &encSize, maxOutSize, in, inSize) && encSize < inSize) {
             outRecord.compression_type = type_;
             outRecord.data_size = encSize;
         } else {

@@ -178,10 +178,14 @@ void compress(cybozu::util::File &inFile, cybozu::util::File &outFile,
     for (;;) {
         const size_t rs = inFile.readsome(src.data(), src.size());
         if (rs == 0) break;
-        const size_t ws = c.run(dst.data(), dst.size(), src.data(), rs);
-        const BlockHeader bh = { false, rs, ws };
-        cybozu::save(outFile, bh);
-        outFile.write(dst.data(), ws);
+        size_t ws;
+        if (c.run(dst.data(), &ws, dst.size(), src.data(), rs) && ws <= rs) {
+            const BlockHeader bh = { false, rs, ws };
+            cybozu::save(outFile, bh);
+            outFile.write(dst.data(), ws);
+        } else {
+            throw cybozu::Exception("wcmpr:compres:error");
+        }
     }
     const BlockHeader endMark = { true, 0, 0 };
     cybozu::save(outFile, endMark);
@@ -219,9 +223,13 @@ struct Cmpr
         , uncompr_(mode) {
     }
     Buffer compress(void *data, size_t size, size_t enoughSize) {
-        Buffer dst(enoughSize);
-        size_t s = compr_.run(dst.data(), dst.size(), data, size);
-        dst.resize(s);
+        Buffer dst(enoughSize * 2);
+        size_t s;
+        if (compr_.run(dst.data(), &s, dst.size(), data, size) && s <= size) {
+            dst.resize(s);
+        } else {
+            throw cybozu::Exception("Cmpr:compress");
+        }
         return dst;
     }
     Buffer uncompress(void *data, size_t size, size_t origSize) {

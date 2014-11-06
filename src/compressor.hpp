@@ -9,6 +9,7 @@
 #include <string>
 #include <cybozu/exception.hpp>
 #include "walb_diff.h"
+#include "compressor.hpp"
 
 namespace walb {
 
@@ -16,7 +17,7 @@ namespace compressor_local {
 
 struct CompressorIF {
     virtual ~CompressorIF() throw() {}
-    virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
+    virtual bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize) = 0;
 };
 
 struct UncompressorIF {
@@ -24,8 +25,14 @@ struct UncompressorIF {
     virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
 };
 
-}
+} } // walb::compressor_local
 
+#include "compressor-asis.hpp"
+#include "compressor-snappy.hpp"
+#include "compressor-zlib.hpp"
+#include "compressor-xz.hpp"
+
+namespace walb {
 /**
  * compression class
  */
@@ -38,21 +45,47 @@ public:
      *                  not used for AsIs, Snappy
      *                  [0, 9] (default 6) for Zlib, Xz
      */
-    explicit Compressor(int mode, size_t compressionLevel = 0);
-    ~Compressor() throw();
+    explicit Compressor(int mode, size_t compressionLevel = 0)
+        : engine_(nullptr)
+    {
+        switch (mode) {
+        case WALB_DIFF_CMPR_NONE:
+            engine_ = new CompressorAsIs(compressionLevel);
+            break;
+        case WALB_DIFF_CMPR_SNAPPY:
+            engine_ = new CompressorSnappy(compressionLevel);
+            break;
+        case WALB_DIFF_CMPR_GZIP:
+            engine_ = new CompressorZlib(compressionLevel);
+            break;
+        case WALB_DIFF_CMPR_LZMA: \
+            engine_ = new CompressorXz(compressionLevel);
+            break;
+        default:
+            throw cybozu::Exception("Compressor:invalid mode") << mode;
+        }
+    }
+    ~Compressor() throw()
+    {
+        delete engine_;
+    }
     /**
      * compress data
      * @param out [out] compressed data
+     * @param outSize [out] compressed size
      * @param maxOutSize [in] maximum output size
+     *        it is better that maxOutSize has margin for snappy.
      * @param in [in] input data
      * @param inSize [in] input size
-     * @return compressed size
-     *
+     * @return success
      */
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize);
+    bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
+    {
+        return engine_->run(out, outSize, maxOutSize, in, inSize);
+    }
 private:
-    Compressor(const Compressor&);
-    void operator=(const Compressor&);
+    Compressor(const Compressor&) = delete;
+    void operator=(const Compressor&) = delete;
     compressor_local::CompressorIF *engine_;
 };
 
@@ -68,8 +101,30 @@ public:
      *                  not used for AsIs, Snappy, Zlib
      *                  memLimit(default 16MiB) for Xz
      */
-    explicit Uncompressor(int mode, size_t para = 0);
-    ~Uncompressor() throw();
+    explicit Uncompressor(int mode, size_t para = 0)
+        : engine_(nullptr)
+    {
+        switch (mode) {
+        case WALB_DIFF_CMPR_NONE:
+            engine_ = new UncompressorAsIs(para);
+            break;
+        case WALB_DIFF_CMPR_SNAPPY:
+            engine_ = new UncompressorSnappy(para);
+            break;
+        case WALB_DIFF_CMPR_GZIP:
+            engine_ = new UncompressorZlib(para);
+            break;
+        case WALB_DIFF_CMPR_LZMA: \
+            engine_ = new UncompressorXz(para);
+            break;
+        default:
+            throw cybozu::Exception("Uncompressor:invalid mode") << mode;
+        }
+    }
+    ~Uncompressor() throw()
+    {
+        delete engine_;
+    }
     /**
      * uncompress data
      * @param out [out] uncompressed data
@@ -79,12 +134,15 @@ public:
      * @return uncompressed size
      *
      */
-    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize);
+    size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
+    {
+        return engine_->run(out, maxOutSize, in, inSize);
+    }
 private:
-    Uncompressor(const Uncompressor&);
-    void operator=(const Uncompressor&);
+    Uncompressor(const Uncompressor&) = delete;
+    void operator=(const Uncompressor&) = delete;
     compressor_local::UncompressorIF *engine_;
 };
 
-} //namespace walb
+} // walb
 
