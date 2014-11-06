@@ -14,17 +14,23 @@ using namespace walb;
 
 struct Option
 {
-    bool isHead, isDebug, doSearch, doStat, noRec;
+    bool isDebug, doSearch, doStat, noHead, noRec;
     uint64_t addr;
     std::string filePath;
     std::vector<std::string> filePathV;
 
     Option(int argc, char *argv[]) {
         cybozu::Option opt;
+
+        std::string desc("wdiff-show: show the contents of wdiff files.\n");
+        desc += "Records description:\n  ";
+        desc += DiffRecord::getHeader();
+        opt.setDescription(desc);
+
         opt.appendBoolOpt(&doSearch, "search", ": search a specific block.");
         opt.appendOpt(&addr, 0, "addr", ": search address [logical block].");
-        opt.appendBoolOpt(&isHead, "head", ": put record description.");
         opt.appendBoolOpt(&doStat, "stat", ": put statistics.");
+        opt.appendBoolOpt(&noHead, "nohead", ": does not put header..");
         opt.appendBoolOpt(&noRec, "norec", "; does not put records.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
         opt.appendParamVec(&filePathV, "WDIFF_PATH_LIST", ": wdiff file list (default: stdin)");
@@ -100,9 +106,8 @@ void printWdiff(diff::Reader &reader, DiffStatistics &stat, const Option &opt)
 {
     DiffFileHeader wdiffH;
     reader.readHeader(wdiffH);
-    wdiffH.print();
+    if (!opt.noHead) wdiffH.print();
 
-    if (opt.isHead) DiffRecord::printHeader();
     DiffRecord rec;
     DiffIo io;
     while (reader.readDiff(rec, io)) {
