@@ -17,6 +17,7 @@ struct Option
     bool isHead, isDebug, doSearch, doStat, noRec;
     uint64_t addr;
     std::string filePath;
+    std::vector<std::string> filePathV;
 
     Option(int argc, char *argv[]) {
         cybozu::Option opt;
@@ -26,7 +27,7 @@ struct Option
         opt.appendBoolOpt(&doStat, "stat", ": put statistics.");
         opt.appendBoolOpt(&noRec, "norec", "; does not put records.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
-        opt.appendParamOpt(&filePath, "-", "WDIFF_PATH", ": wdiff file (default: stdin)");
+        opt.appendParamVec(&filePathV, "WDIFF_PATH_LIST", ": wdiff file list (default: stdin)");
         opt.appendHelp("h", ": put this message.");
 
         if (!opt.parse(argc, argv)) {
@@ -95,32 +96,41 @@ struct DiffStatistics
     }
 };
 
-int doMain(int argc, char *argv[])
+void printWdiff(diff::Reader &reader, DiffStatistics &stat, const Option &opt)
 {
-    Option opt(argc, argv);
-    util::setLogSetting("-", opt.isDebug);
-
-    diff::Reader wdiffR;
-    if (opt.filePath == "-") {
-        wdiffR.setFd(0);
-    } else {
-        wdiffR.open(opt.filePath);
-    }
     DiffFileHeader wdiffH;
-    wdiffR.readHeader(wdiffH);
+    reader.readHeader(wdiffH);
     wdiffH.print();
 
     if (opt.isHead) DiffRecord::printHeader();
-    DiffStatistics stat;
     DiffRecord rec;
     DiffIo io;
-    while (wdiffR.readDiff(rec, io)) {
+    while (reader.readDiff(rec, io)) {
         if (!opt.doSearch || matchAddress(opt.addr, rec)) {
             if (!opt.noRec) {
                 if (!rec.isValid()) ::printf("Invalid record: ");
                 rec.printOneline();
             }
             if (opt.doStat) stat.update(rec);
+        }
+    }
+}
+
+int doMain(int argc, char *argv[])
+{
+    Option opt(argc, argv);
+    util::setLogSetting("-", opt.isDebug);
+
+    diff::Reader reader;
+    DiffStatistics stat;
+    if (opt.filePathV.empty()) {
+        reader.setFd(0);
+        printWdiff(reader, stat, opt);
+    } else {
+        for (const std::string &path : opt.filePathV) {
+            reader.open(path);
+            printWdiff(reader, stat, opt);
+            reader.close();
         }
     }
     if (opt.doStat) stat.print();
