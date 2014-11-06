@@ -223,7 +223,7 @@ struct Cmpr
         , uncompr_(mode) {
     }
     Buffer compress(void *data, size_t size, size_t enoughSize) {
-        Buffer dst(enoughSize * 2);
+        Buffer dst(enoughSize);
         size_t s;
         if (compr_.run(dst.data(), &s, dst.size(), data, size) && s <= size) {
             dst.resize(s);
@@ -257,7 +257,7 @@ void parallelCompress(
     Cmpr cmpr(mode, level);
 
     cybozu::thread::ParallelConverter<Buffer, CmprData> pconv([&](Buffer&& src) {
-            Buffer dst = cmpr.compress(src.data(), src.size(), src.size() * 2);
+            Buffer dst = cmpr.compress(src.data(), src.size(), src.size() * 2 + 4096);
             return CmprData { src.size(), std::move(dst) };
         });
     pconv.start(concurrency);
