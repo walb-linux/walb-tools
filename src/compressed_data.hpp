@@ -42,6 +42,7 @@ bool compressToVec(const void *data, size_t size, std::vector<CharT> &outV)
         return true;
     } else {
         ::memcpy(outV.data(), data, size);
+        outV.resize(size);
         return false;
     }
 }
