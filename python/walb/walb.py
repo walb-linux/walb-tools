@@ -1476,26 +1476,32 @@ class Controller:
             self.start(px, vol)
         self.kick_storage_all()
 
-    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
+    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None):
         '''
         Run full backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
         This function will return when a clean snapshot is
-        sx :: Server    - storage server.
-        vol :: str      - volume name.
-        timeoutS :: int - timeout [sec].
-                          Counter will start after dirty full backup done.
-        block :: Bool   - blocking behavior.
-        return :: int   - generation id of a clean snapshot.
+        sx :: Server     - storage server.
+        vol :: str       - volume name.
+        timeoutS :: int  - timeout [sec].
+                           Counter will start after dirty full backup done.
+        block :: Bool    - blocking behavior.
+        bulkSizeU :: str - bulk size with unit suffix [byte]. '64K' etc.
+        return :: int    - generation id of a clean snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
+        if bulkSizeU:
+            verify_type(bulkSizeU, str)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
-        self.run_ctl(sx, ["full-bkp", vol])
+        args = ["full-bkp", vol]
+        if bulkSizeU:
+            args.append(bulkSizeU)
+        self.run_ctl(sx, args)
         if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringFullSync,
@@ -1512,24 +1518,27 @@ class Controller:
             time.sleep(0.3)
         raise Exception('full_backup:timeout', sx.name, vol, gids)
 
-    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
+    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None):
         '''
         Run hash backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
         This function will return a gid of a clean snapshot that is
         restorable at the primary archive server.
 
-        sx :: Server    - storage server.
-        vol :: str      - volume name.
-        timeoutS :: int - timeout [sec].
-                          Counter will start after dirty hash backup done.
-        block :: bool   - blocking behavior.
-        return :: int   - generation id of a clean snapshot.
+        sx :: Server     - storage server.
+        vol :: str       - volume name.
+        timeoutS :: int  - timeout [sec].
+                           Counter will start after dirty hash backup done.
+        block :: bool    - blocking behavior.
+        bulkSizeU :: str - bulk size with unit suffix [byte]. '64K' etc.
+        return :: int    - generation id of a clean snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
+        if bulkSizeU:
+            verify_type(bulkSizeU, str)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol)
@@ -1538,7 +1547,10 @@ class Controller:
             max_gid = prev_gids[-1]
         else:
             max_gid = -1
-        self.run_ctl(sx, ["hash-bkp", vol])
+        args = ["hash-bkp", vol]
+        if bulkSizeU:
+            args.append(bulkSizeU)
+        self.run_ctl(sx, args)
         if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringHashSync,
