@@ -35,7 +35,7 @@ using Buffer = std::vector<char>;
  * @return buffer of converted pack data
  */
 template<class Convertor>
-Buffer convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
+Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
 {
     const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
     Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize);
@@ -115,7 +115,8 @@ public:
     compressor::Buffer convert(const char *inPackTop)
     {
         const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
-        return compressor::convert(*this, inPackTop, inPack.total_size);
+        const size_t margin = 4096;
+        return compressor::g_convert(*this, inPackTop, inPack.total_size + margin);
     }
 };
 
@@ -153,7 +154,7 @@ public:
     {
         const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
         const size_t uncompressedSize = compressor::calcTotalBlockNum(inPack) * 512;
-        return compressor::convert(*this, inPackTop, uncompressedSize);
+        return compressor::g_convert(*this, inPackTop, uncompressedSize);
     }
 };
 
