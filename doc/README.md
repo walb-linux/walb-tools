@@ -3,12 +3,12 @@
 * [Overview](overview.md)
 * [Build](build.md)
 * [Usage](usage.md)
-  * how to use walb-tools
-   1. [Design your backup/replication system](design.md)
-   1. [Server processes configuration](server-config.md)
-   1. [Prepare walb devices](prepare-wdev.md)
-   1. [Basic backup operations](basic-backup.md)
-   1. [Manage archive data](manage-archive-data.md)
+  * How to use walb-tools
+    1. [Design your backup/replication system](design.md)
+    1. [Server processes configuration](server-config.md)
+    1. [Prepare walb devices](prepare-wdev.md)
+    1. [Basic backup operations](basic-backup.md)
+    1. [Manage archive data](manage-archive-data.md)
   * Advanced
     - [Manage multiple archive servers](manage-multiple-archive.md)
     - [Manage volume replicas using walb devices](manage-volume-replica.md)
