@@ -508,7 +508,7 @@ def test_n5():
         gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
         time.sleep(0.5)
     md0 = get_sha1_of_restorable(a0, VOL, gid)
-    walbc.apply_diff(a0, VOL, gid, TIMEOUT)
+    walbc.apply(a0, VOL, gid, TIMEOUT)
     restore_and_verify_sha1('test_n5', md0, a0, VOL, gid)
     print 'test_n5:succeeded'
 
@@ -539,7 +539,7 @@ def test_n6():
     # merge gidB and gidE
 
     md0 = get_sha1_of_restorable(a0, VOL, gidE)
-    walbc.merge_diff(a0, VOL, gidB, gidE, TIMEOUT)
+    walbc.merge(a0, VOL, gidB, gidE, TIMEOUT)
     print "merged gidL", walbc.get_restorable(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
     print 'test_n6:succeeded'
@@ -591,7 +591,7 @@ def test_n9():
         'test_n9:replicate-hash', g_count
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
-    walbc.apply_diff(a0, VOL, gid0, TIMEOUT)
+    walbc.apply(a0, VOL, gid0, TIMEOUT)
     list0 = walbc.get_restorable(a0, VOL)
     if len(list0) != 1:
         raise Exception('test_n9: list size must be 1', list0)
@@ -779,7 +779,7 @@ def test_m3():
     if not walbc.is_wdiff_send_error(p0, VOL, a0):
         raise Exception('test_m3:must occur wdiff-send-error')
     walbc.resize_archive(a0, VOL, newSizeMb, True)
-    walbc.kick_all_storage()
+    walbc.kick_storage_all()
     walbc.kick_all(sLayout.proxyL)
     walbc.wait_for_restorable(a0, VOL, gid1, TIMEOUT)
     if walbc.is_wdiff_send_error(p0, VOL, a0):
@@ -805,7 +805,7 @@ def test_e1():
     write_over_wldev(wdev0)
     walbc.verify_not_overflow(s0, VOL)
     startup(p0)
-    walbc.kick_all_storage()
+    walbc.kick_storage_all()
     gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
@@ -1179,7 +1179,7 @@ def test_e15():
     walbc.replicate_once(a0, VOL, a1, TIMEOUT)
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
-    walbc.apply_diff(a0, VOL, gid0, TIMEOUT)
+    walbc.apply(a0, VOL, gid0, TIMEOUT)
     write_random(wdev0.path, wdev0.get_size_lb() / 3)
     gid1 = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
 

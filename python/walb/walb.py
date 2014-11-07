@@ -831,7 +831,7 @@ class Controller:
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol])
 
-    def get_all_state(self, vol):
+    def get_state_all(self, vol):
         '''
         Get all state fo a volume.
         vol :: str - volume name
@@ -935,7 +935,7 @@ class Controller:
             verify_server_kind(s, [K_STORAGE, K_PROXY])
             self.run_ctl(s, ["kick"])
 
-    def kick_all_storage(self):
+    def kick_storage_all(self):
         ''' Kick all storage servers. '''
         self.kick_all(self.sLayout.storageL)
 
@@ -1311,7 +1311,7 @@ class Controller:
         verify_type(vol, str)
         for px in self.sLayout.proxyL:
             self.del_archive_from_proxy(px, vol, ax)
-        self.kick_all_storage()
+        self.kick_storage_all()
 
     def start_synchronizing(self, ax, vol):
         '''
@@ -1323,7 +1323,7 @@ class Controller:
         verify_type(vol, str)
         for px in self.sLayout.proxyL:
             self.add_archive_to_proxy(px, vol, ax)
-        self.kick_all_storage()
+        self.kick_storage_all()
 
     def get_restorable(self, ax, vol, opt=''):
         '''
@@ -1474,7 +1474,7 @@ class Controller:
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
-        self.kick_all_storage()
+        self.kick_storage_all()
 
     def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True):
         '''
@@ -1661,7 +1661,7 @@ class Controller:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
 
-    def apply_diff(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+    def apply(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
         ax :: Server - archive server
@@ -1674,7 +1674,7 @@ class Controller:
         self.run_ctl(ax, ["apply", vol, str(gid)])
         self._wait_for_applied(ax, vol, gid, timeoutS)
 
-    def _apply_diff_all(self, ax, vol, timeoutS=TIMEOUT_SEC):
+    def _apply_all(self, ax, vol, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
         ax :: Server - archive server
@@ -1685,12 +1685,12 @@ class Controller:
         verify_type(vol, str)
         gidL = self.get_restorable(ax, vol)
         if not gidL:
-            raise Exception('_apply_diff_all: there are no diffs to apply', ax.name, vol, timeoutS)
+            raise Exception('_apply_all: there are no diffs to apply', ax.name, vol, timeoutS)
         gid = gidL[-1]
-        self.apply_diff(ax, vol, gid, timeoutS=timeoutS)
+        self.apply(ax, vol, gid, timeoutS=timeoutS)
         return gid
 
-    def merge_diff(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
+    def merge(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Merge diffs in gid ranges.
         ax :: Server - archive server.
@@ -1700,10 +1700,10 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_gid_range(gidB, gidE, 'merge_diff')
+        verify_gid_range(gidB, gidE, 'merge')
         gidL = self.get_restorable(ax, vol, 'all')
         if gidB not in gidL or gidE not in gidL:
-            raise Exception("merge_diff: specify exact ranges", ax.name, vol, gidB, gidE)
+            raise Exception("merge: specify exact ranges", ax.name, vol, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
