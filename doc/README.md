@@ -2,7 +2,7 @@
 
 * [Overview](overview.md)
 * [Build](build.md)
-* [Usage](usage.md)
+* Usage
   * How to use walb-tools
     1. [Design your backup/replication system](design.md)
     1. [Server processes configuration](server-config.md)
