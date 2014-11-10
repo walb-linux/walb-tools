@@ -287,13 +287,13 @@ struct HostInfoForRepl
     AddrPort addrPort; // archive host info.
     CompressOpt cmpr; // compression parameters for diff-repl.
     uint64_t maxWdiffMergeSize; // max wdiff size in bytes to merge for diff-repl.
-    uint64_t bulkLb; // bulk size in logical block for full-repl/hash-repl.
+    uint64_t bulkLb; // bulk size in logical block for full-repl/hash-repl. [logical block]
 
-    HostInfoForRepl() : addrPort(), cmpr(), maxWdiffMergeSize(), bulkLb() {
+    HostInfoForRepl() : addrPort(), cmpr(), maxWdiffMergeSize(0), bulkLb(0) {
     }
     HostInfoForRepl(const std::string &addr, uint64_t port, const CompressOpt &cmpr = CompressOpt(),
                     uint64_t maxWdiffMergeSize = DEFAULT_MAX_WDIFF_MERGE_MB * MEBI,
-                    uint64_t bulkLb = DEFAULT_BULK_LB * LOGICAL_BLOCK_SIZE)
+                    uint64_t bulkLb = DEFAULT_BULK_LB)
         : addrPort(addr, port), cmpr(cmpr)
         , maxWdiffMergeSize(maxWdiffMergeSize)
         , bulkLb(bulkLb) {
