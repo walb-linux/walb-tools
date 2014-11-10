@@ -1,0 +1,12 @@
+
+import time
+execfile('walb-config.py')
+gid = walbc.get_restorable(a0, VOL, 'all')
+
+for _ in xrange(5):
+    t0 = time.time()
+    walbc._apply_diff_all(a0, VOL)
+    t1 = time.time()
+    print 'Elapsed time:', t1 - t0
+    !sh restore-a0.sh >> restore-a0.log
+
