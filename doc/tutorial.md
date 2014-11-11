@@ -4,7 +4,7 @@
 詳細は[README](README.md)を参照してください。
 
 * Walb概要
-Walb自体の概要は[Walb概要pptx](walb-is-hard.pptx)を参照してください。
+Walb自体の概要は[Walb概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
 
 * Walbシステム
   * storage : バックアップ対象となるデーモン。Walbドライバが載っていてディスクへのの書き込みに対してlogを生成する。
