@@ -22,6 +22,7 @@ WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/wa
     * a0(archive) : port 10200
   * ディスク構成
     * 新しくパーティションを切る場所がない、うっかり失敗してもいいようにループバックデバイスを使ってやってみる。
+  * 全体像はこんな感じ![レイアウト](layout.png)
 
 * インストール
   * workディレクトリを作り
@@ -159,7 +160,7 @@ execfile('tutorial-config.py')
   mount /dev/walb/0 /mnt/tmp
   ```
 * full-backupをする。
-  * storageをSyncReady状態にする。
+  * storageをSyncReady状態にする。どの状態からどの状態にいけるのか大まかな説明は![遷移図](state.png)を参照。
   ```
   walbc.stop(s0, VOL)
   ```
