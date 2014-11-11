@@ -1,17 +1,17 @@
-## Walb-toolsチュートリアル
+# WalB-toolsチュートリアル
 
-このチュートリアルはWalb-tools(以下tools)の使い方を説明します。
+このチュートリアルはWalB-tools(以下tools)の使い方を説明します。
 詳細は[README](README.md)を参照してください。
 
-* Walb概要
-Walb自体の概要は[Walb概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
+## WalB概要
+WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
 
-* Walbシステム
-  * storage : バックアップ対象となるデーモン。Walbドライバが載っていてディスクへのの書き込みに対してlogを生成する。
+* WalBシステム
+  * storage : バックアップ対象となるデーモン。WalBドライバが載っていてディスクへのの書き込みに対してlogを生成する。
   * proxy : storageからlogを吸い出してwdiff形式に変換してarchiveに転送する。
   * archive : wdiffを貯蔵する。wdiffをあるsnapshotに適用して好きな時刻のsnapshotを作成する。
 
-* Walb最小構成
+* WalB最小構成
   * PC2台
     * pc1 : バックアップ対象
     * pc2 : バックアップしたものをおくところ
@@ -30,9 +30,9 @@ Walb自体の概要は[Walb概要pptx](https://github.dev.cybozu.co.jp/herumi/wa
       * pc2の/var/walb/p0はproxyデーモンが利用するディレクトリ。
       * pc2の/var/walb/a0はarchiveデーモンが利用するディレクトリ。
     * 更にpc2にpc1のdataを復元する領域data2を作る。少なくともpc1のdataより大きい空き容量が必要。
-    * [図pptx](tutorial-fig.pptx)参照
+    * [図pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/tutorial-fig.pptx)参照
 
-* システム構築手順
+## システム構築手順
   * walb-toolsをインストールする。
   * config.pyを作る。例 :
 ```
@@ -65,3 +65,30 @@ wdev0 = Device(0, '/dev/data/log', '/dev/data/data', wdevcPath, runCommand)
 
 VOL = 'vol0'
 ```
+## ipythonでの使用例
+* conifg.pyの読み込み
+config.pyをwalb-toolsにおいてそのディレクトリで
+```
+sudo ipython
+execfile('config.py')
+```
+とする。
+* サーバの起動
+`sLayout.to_cmd_string()`でそのconfig.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
+これを使ってpc1でwalb-storage, pc2でwalb-proxy, walb-archveを起動する。
+exeのあるパスが間違ってないか注意する。
+* ドライバのインストール
+walb-mod.koをinsmodする。
+* WalBデバイスの初期化
+  1. logデバイスの初期化
+  `wdev0.format_ldev()`
+  2. WalBデバイスの作成
+  `wdev0.create()`
+  これで/dev/walb/0ができる。
+* ボリューム(VOL)の初期化
+`walbc.init_storage(s0, VOL, wdev0.path)`
+* 状態の確認
+`walbc.get_state_all(VOL)`でそれぞれのサーバがどういう状態かわかる。
+* full-backupをする。
+`walbc.full_backup(s0, VOL)`
+このコマンドにより、storageの/dev/walb/0の全てのブロックをreadしてデータをarchiveに転送する。

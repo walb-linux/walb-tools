@@ -17,7 +17,7 @@ python> walbc.init_storage(s0, VOL, wdev0.path)
 ```
 
 REMARK : All states of servers must be `Clear` to run the above command.
-check it with `walbc.get_all_state(VOL)`.
+check it with `walbc.get_state_all(VOL)`.
 
 Storage servers know just the relationship of volume name and walb device path.
 You must manage relationship of volumes and walb devices by yourself.
@@ -29,10 +29,8 @@ After initialization, you can execute full backup of the initialized volumes.
 ## Full backup
 
 ```
-python> gid = walbc.full_backup(s0, VOL, timeoutS)
+python> gid = walbc.full_backup(s0, VOL)
 ```
-This may take much time. set appropriate `timeoutS` in seconds.
-
 `gid` is generation id of the clean snapshot of the backup.
 You can use the `gid` to restore the snapshot.
 After full backup finished, the volume will be in **synchronizing** mode,
