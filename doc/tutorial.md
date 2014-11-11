@@ -7,88 +7,191 @@
 WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
 
 * WalBシステム
-  * storage : バックアップ対象となるデーモン。WalBドライバが載っていてディスクへのの書き込みに対してlogを生成する。
+  * storage : バックアップ対象となるサーバ。WalBドライバが載っていてディスクへのの書き込みに対してlogを生成する。
   * proxy : storageからlogを吸い出してwdiff形式に変換してarchiveに転送する。
   * archive : wdiffを貯蔵する。wdiffをあるsnapshotに適用して好きな時刻のsnapshotを作成する。
 
-* WalB最小構成
-  * PC2台
-    * pc1 : バックアップ対象
-    * pc2 : バックアップしたものをおくところ
-  * デーモン : storage, proxy, archiveが一つずつ存在する。
-
-* システム設計をする。
+* 最小構成で試してみる
+  * PC1台でwalb-storage, walb-proxy, walb-archiveを動かす。
+    * これらは単なるexeなのでデーモンとして起動するときは別途設定が必要。
+    * walbcコマンドを使ってこれらのプロセスと通信し操作を行う。
+    * 更にpython/walb/walb.pyを使うとより抽象度の高い操作ができる。
   * サービス構成
-    * s0(storage) : pc1のport 10000
-    * p0(proxy) : pc2のport 10100
-    * a0(archive) : pc2のport 10200
+    * s0(storage) : port 10000
+    * p0(proxy) :   port 10100
+    * a0(archive) : port 10200
   * ディスク構成
-    * pc1に/dev/data/log, /dev/data/dataという名前のLVMを作る。
-      * dataはそのサーバが実際に使う領域。サイズはたとえば128GiBとか。
-      * logはwalbがバックアップのための情報を書き込む領域。たとえば4GiBとか。
-    * pc2に/var/walb/{p0,a0}というディレクトリを作る。
-      * pc2の/var/walb/p0はproxyデーモンが利用するディレクトリ。
-      * pc2の/var/walb/a0はarchiveデーモンが利用するディレクトリ。
-    * 更にpc2にpc1のdataを復元する領域data2を作る。少なくともpc1のdataより大きい空き容量が必要。
-    * [図pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/tutorial-fig.pptx)参照
+    * 新しくパーティションを切る場所がない、うっかり失敗してもいいようにループバックデバイスを使ってやってみる。
 
-## システム構築手順
-  * walb-toolsをインストールする。
-  * config.pyを作る。例 :
+* インストール
+  * workディレクトリを作り
+  ```
+  mkdir work
+  cd work
+  git clone git@github.com:herumi/cybozulib.git
+  git clone git@github.dev.cybozu.co.jp:starpos/walb.git
+  git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
+  ```
+  をする。
+  * ドライバのbuildとインストール
+    * kernelのバージョンに合わせてチェックアウトする。
+      * kernel 3.13なら
+      ```
+      git co -b for-3.10 origin/for-3.10
+      cd module
+      make
+      insmod walb-mod.ko
+      ```
+  * walb-toolsのbuild
+    * clang++, gcc-4.8以降のC++11の機能を使う。
+    * 各種ライブラリをインストールする。
+    ```
+    sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
+1    ```
+    * walbとcybozulibにシンボリックリンクを張る。
+    ```
+    cd walb-tools
+    ln -s ../walb .
+    ln -s ../cybozulib .
+    ```
+    * buildする。
+    ```
+    make -j 8 DEBUG=0
+    ```
+    * binsrc/に各種exeができる。
+
+* ディスクの準備
+  * ループパックデバイス用に100MiBのファイルを作る。
+  ```
+  dd if=/dev/zero of=tutorial-disk bs=1k count=100k
+  ```
+  * /dev/loop0に割り当てる。
+  ```
+  sudo losetup /dev/loop0 tutorial-disk
+  ```
+  * 物理ボリュームを初期化する。
+  ```
+  sudo pvcreate /dev/loop0
+  sudo pvs
+  PV         VG   Fmt  Attr PSize   PFree
+  /dev/loop0      lvm2 a--   100.00m  100.00m
+  ```
+  * LVをいくつか作る。
+  ```
+  sudo vgcreate tutorial /dev/loop0
+  sudo lvcreate -n wdata -L 10m tutorial
+  sudo lvcreate -n wlog -L 10m tutorial
+  sudo lvcreate -n data -L 20m tutorial
+  ```
+    * /dev/tutorial/wdataと/dev/tutorial/wlogを合わせてwalbデバイスとして扱う。
+  * /dev/tutorial/dataをproxy, archiveやシステムログ置き場にする。
+  ```
+  sudo mkfs.ext4 /dev/tutorial/data
+  sudo mkdir -p /mnt/tutorial/data
+  sudo mount /dev/tutorial/data /mnt/tutorial
+  sudo mkdir -p /mnt/tutorial/data/{a0,p0,s0}
+  ```
+
+* tutorial-config.pyの作成
+<work>/walb-tools/にtutorial-config.pyを作る。
 ```
 #!/usr/bin/env python
-
 import sys
-DIR='<walb-toolsのディレクトリ>/'
-sys.path.append(DIR + 'python/walb/')
+sys.path.append('./python/walb/')
 from walb import *
 
-binDir = DIR + 'binsrc/'
+binDir = '/home/shigeo/Program/walb-tools/binsrc/'
 wdevcPath = binDir + 'wdevc'
 walbcPath = binDir + 'walbc'
 
 def dataPath(s):
-    return '/var/walb/%s/' % s
+    return '/mnt/tutorial/data/%s/' % s
 
 def logPath(s):
-    return '/var/walb/%s.log' % s
+    return '/mnt/tutorial/data/%s.log' % s
 
-s0 = Server('s0', 'pc1', 10000, K_STORAGE, binDir, dataPath('s0'), logPath('s0'))
-p0 = Server('p0', 'pc2', 10100, K_PROXY, binDir, dataPath('p0'), logPath('p0'))
-a0 = Server('a0', 'pc2', 10200, K_ARCHIVE, binDir, dataPath('a0'), logPath('a0'), 'data2')
+s0 = Server('s0', 'localhost', 10000, K_STORAGE, binDir, dataPath('s0'), logPath('s0'))
+p0 = Server('p0', 'vm4', 10100, K_PROXY, binDir, dataPath('p0'), logPath('p0'))
+a0 = Server('a0', 'vm4', 10200, K_ARCHIVE, binDir, dataPath('a0'), logPath('a0'), 'tutorial')
 
 sLayout = ServerLayout([s0], [p0], [a0])
 walbc = Controller(walbcPath, sLayout, isDebug=False)
 
 runCommand = walbc.get_run_remote_command(s0)
-wdev0 = Device(0, '/dev/data/log', '/dev/data/data', wdevcPath, runCommand)
+wdev0 = Device(0, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
 
-VOL = 'vol0'
+VOL = 'volm'
 ```
 ## ipythonでの使用例
-* conifg.pyの読み込み
-config.pyをwalb-toolsにおいてそのディレクトリで
+* tutorial-conifg.pyの読み込み
+tutorial-config.pyをwalb-toolsにおいてそのディレクトリで
 ```
 sudo ipython
-execfile('config.py')
+execfile('tutorial-config.py')
 ```
 とする。
 * サーバの起動
-  * `sLayout.to_cmd_string()`でそのconfig.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
-  * これを使ってpc1でwalb-storage, pc2でwalb-proxy, walb-archveを起動する。
-  * exeのあるパスが間違ってないか注意する。
-* ドライバのインストール
-  * walb-mod.koをinsmodする。
+  * `sLayout.to_cmd_string()`でそのtutorial-config.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
+  * これを使ってwalb-storage, walb-proxy, walb-archveをsudoで起動する。
 * WalBデバイスの初期化
-  1. logデバイスの初期化
+  1. /dev/tutorial/wlogの初期化
   `wdev0.format_ldev()`
   2. WalBデバイスの作成
   `wdev0.create()`
-  * これで/dev/walb/0ができる。
+  * これでwdev0.path(通常/dev/walb/0)ができる。
 * ボリューム(VOL)の初期化
   * `walbc.init_storage(s0, VOL, wdev0.path)`
 * 状態の確認
   * `walbc.get_state_all(VOL)`でそれぞれのサーバがどういう状態かわかる。
+  ```
+  s0 localhost:10000 storage Slave
+  p0 vm4:10100 proxy Started
+  a0 vm4:10200 archive Archived
+  ```
+* /dev/walb/0にファイルシステムを作る。
+  * ext4で初期化する。
+  ```
+  sudo mkfs.ext4 /dev/walb/0
+  ```
+  * mountする。
+  ```
+  sudo mkdir -p /mnt/tmp
+  mount /dev/walb/0 /mnt/tmp
+  ```
 * full-backupをする。
-  * `walbc.full_backup(s0, VOL)`
+  * storageをSyncReady状態にする。
+  ```
+  walbc.stop(s0, VOL)
+  ```
+  * フルバックアップを開始する。
+  ```
+  walbc.full_backup(s0, VOL)
+  ```
   * このコマンドにより、storageの/dev/walb/0の全てのブロックをreadしてデータをarchiveに転送する。
+
+* バックアップの復元をしてみる。
+  * /mnt/tmpに適当にファイルを作る。 ***
+  * ファイルを完全にディスクに書き終わらすためにumountする。
+  ```
+  sudo umount /dev/walb/0
+  ```
+  * snapshotをとる。
+  ```
+  walbc.snapshot(s0, VOL, [a0])
+  ```
+  * 表示された値がそのsnapshotに名付けられたgid。
+  * restoreする。
+  ```
+  >walbc.restore(a0, VOL, <snapshotで返ってきたgid>)
+  > 8
+  ```
+  * できたLVMのsnapshotは`get_restored_path`でわかる。
+  ```
+  > walbc.get_restored_path(a0, VOL, 8)
+  > '/dev/tutorial/r_vol_8'
+  ```
+  * そのsnapshotのpathをmountする。
+  ```
+  sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
+  ```
+  * /mnt/tmpの中に *** で書いたファイルがあることを確認する。
