@@ -1,10 +1,10 @@
 ## Walb-toolsチュートリアル
 
 このチュートリアルはWalb-tools(以下tools)の使い方を説明します。
-詳細は(README)[README.md]を参照してください。
+詳細は[README](README.md)を参照してください。
 
 * Walb概要
-Walb自体の概要は(Walbは難しい)[walb-is-hard.pptx]を参照してください。
+Walb自体の概要は[Walb概要pptx](walb-is-hard.pptx)を参照してください。
 
 * Walbシステム
   * storage : バックアップ対象となるデーモン。Walbドライバが載っていてディスクへのの書き込みに対してlogを生成する。
@@ -30,6 +30,7 @@ Walb自体の概要は(Walbは難しい)[walb-is-hard.pptx]を参照してくだ
       * pc2の/var/walb/p0はproxyデーモンが利用するディレクトリ。
       * pc2の/var/walb/a0はarchiveデーモンが利用するディレクトリ。
     * 更にpc2にpc1のdataを復元する領域data2を作る。少なくともpc1のdataより大きい空き容量が必要。
+    * [図pptx](tutorial-fig.pptx)参照
 
 * システム構築手順
   * walb-toolsをインストールする。
@@ -62,5 +63,5 @@ walbc = Controller(walbcPath, sLayout, isDebug=False)
 runCommand = walbc.get_run_remote_command(s0)
 wdev0 = Device(0, '/dev/data/log', '/dev/data/data', wdevcPath, runCommand)
 
-VOL = 'vol'
+VOL = 'vol0'
 ```
