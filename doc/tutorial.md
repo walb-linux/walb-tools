@@ -74,21 +74,21 @@ execfile('config.py')
 ```
 とする。
 * サーバの起動
-`sLayout.to_cmd_string()`でそのconfig.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
-これを使ってpc1でwalb-storage, pc2でwalb-proxy, walb-archveを起動する。
-exeのあるパスが間違ってないか注意する。
+  * `sLayout.to_cmd_string()`でそのconfig.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
+  * これを使ってpc1でwalb-storage, pc2でwalb-proxy, walb-archveを起動する。
+  * exeのあるパスが間違ってないか注意する。
 * ドライバのインストール
-walb-mod.koをinsmodする。
+  * walb-mod.koをinsmodする。
 * WalBデバイスの初期化
   1. logデバイスの初期化
   `wdev0.format_ldev()`
   2. WalBデバイスの作成
   `wdev0.create()`
-  これで/dev/walb/0ができる。
+  * これで/dev/walb/0ができる。
 * ボリューム(VOL)の初期化
-`walbc.init_storage(s0, VOL, wdev0.path)`
+  * `walbc.init_storage(s0, VOL, wdev0.path)`
 * 状態の確認
-`walbc.get_state_all(VOL)`でそれぞれのサーバがどういう状態かわかる。
+  * `walbc.get_state_all(VOL)`でそれぞれのサーバがどういう状態かわかる。
 * full-backupをする。
-`walbc.full_backup(s0, VOL)`
-このコマンドにより、storageの/dev/walb/0の全てのブロックをreadしてデータをarchiveに転送する。
+  * `walbc.full_backup(s0, VOL)`
+  * このコマンドにより、storageの/dev/walb/0の全てのブロックをreadしてデータをarchiveに転送する。
