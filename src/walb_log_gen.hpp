@@ -39,6 +39,7 @@ public:
         bool isPadding;
         bool isDiscard;
         bool isAllZero;
+        bool isRandom;
         bool isVerbose;
 
         void check() const {
@@ -117,7 +118,11 @@ private:
                     for (uint32_t j = 0; j < ioSizePb; j++) {
                         AlignedArray b(pbs); // zero-cleared.
                         if (!isAllZero) {
-                            ::memcpy(b.data(), &tmpLsid, sizeof(tmpLsid));
+                            if (config_.isRandom) {
+                                rand.fill(b.data(), b.size());
+                            } else {
+                                ::memcpy(b.data(), &tmpLsid, sizeof(tmpLsid));
+                            }
                         }
                         tmpLsid++;
                         cc.update(b.data(), b.size());

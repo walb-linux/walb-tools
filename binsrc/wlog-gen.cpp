@@ -28,6 +28,7 @@ struct Option
     bool isNotPadding;
     bool isNotDiscard;
     bool isNotAllZero;
+    bool isRandom;
     bool isVerbose;
     std::string outPath;
 
@@ -62,6 +63,7 @@ struct Option
         opt.appendBoolOpt(&isNotPadding, "-nopadding", "no padding. (default: randomly inserted)");
         opt.appendBoolOpt(&isNotDiscard, "-nodiscard", "no discard. (default: randomly inserted)");
         opt.appendBoolOpt(&isNotAllZero, "-noallzero", "no all-zero. (default: randomly inserted)");
+        opt.appendBoolOpt(&isRandom, "-rand", "use random IO data instead of almost zero");
         opt.appendOpt(&outPath, "-", "o", "PATH: output file path or '-' for stdout.");
         opt.appendBoolOpt(&isVerbose, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
@@ -98,6 +100,7 @@ struct Option
         cfg.isPadding = !isNotPadding;
         cfg.isDiscard = !isNotDiscard;
         cfg.isAllZero = !isNotAllZero;
+        cfg.isRandom = isRandom;
         cfg.isVerbose = isVerbose;
         return cfg;
     }
