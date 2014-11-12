@@ -11,24 +11,26 @@ WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/wa
 詳しくは[用語一覧](word.md) - まだ作ってない - を参照。
 ここでは最小限の言葉を記す。
 
-* **WalBブロックデバイス** : WalBデバイスドライバがユーザに見せるブロックデバイス。
+* **WalBブロックデバイス(wdev)** : WalBデバイスドライバがユーザに見せるブロックデバイス。
 ユーザはこの上にファイルシステムを作ったり、パーティションを切ったりしてデータを置く。
-* **wlog** : WalBブロックデバイスにwriteしたときに生成されるログ情報。
+* **wlog** : wdevにwriteしたときに生成されるログ情報。
 通常ユーザが直接見ることはない。
 * **wdiff** : wlogをユーザが見える形式に変換したもの。
-* **ldev** : wlogが実際に書き込まれるデバイス。
-* **wdev** : WalBブロックデバイスにwriteしたデータが実際に書き込まれるデバイス。
-WalBブロックデバイスはldevとwdevをセットにして一つのデバイスに見せている。
-ユーザがWalBブロックデバイスを通して見えるデータ領域。
+* **WalBログデバイス(ldev)** : wlogが実際に書き込まれるデバイス。
+* **WalBデータデバイス(ddev)** : wdevにwriteしたデータが実際に書き込まれるデバイス。
+WalBはldevとwdevをセットにして一つのデバイスwdevに見せている。
+ユーザがwdevを通して見えるデータ領域。
 * **snapshotをとる** : wdevのある瞬間における状態に名前をつけること。
 * **gid** : snapshotをとったときにつけられる名前(一意な64bit整数)。
 * **restore** : あるsnapshotをLVMのボリュームに復元すること。
 * **merge** : 複数のwdiffをまとめること。内部的には重複の除去、圧縮、ソートが行われる。
 * **apply** : restoreされたLVMのボリュームに複数のwdiffを適用して別のsnapshotを生成すること。
-* **storage** : WalBブロックデバイスのあるサーバ。ldevからwlogを取り出してproxyに転送する。
+* **storage** : wdevのあるサーバ。ldevからwlogを取り出してproxyに転送する。
 * **proxy** : storageから受け取ったwlogをwdiffに変換して一時保存する。
 wdiffはarchiveに転送される。
 * **archive** : proxyから受け取ったwdiffを貯蔵する。
+* full-backup : 全ddevのデータをstorageからarchiveに転送すること。
+* hash-backup : 全ddevをチェックして必要な差分データをstorageからarchiveに転送すること。
 
 ## 最小構成
 
@@ -43,20 +45,24 @@ wdiffはarchiveに転送される。
 * ディスク構成
   * 新しくパーティションを切る場所がない、うっかり失敗してもいいようにループバックデバイスを使ってやってみる。
   * 全体像はこんな感じ![レイアウト](layout.png)
-    * WalBブロックデバイス : /dev/walb/0
-      * wdev : /dev/tutorial/mdata
-      * /dev/tutorial/mlog : wlog用領域。
+    * wdev : /dev/walb/0
+      * ddev : /dev/tutorial/mdata
+      * ldev : /dev/tutorial/mlog
+    * /mnt/tutorial/data/s0/ : storageサーバが管理するメータデータやログ情報を置く場所
+    * /mnt/tutorial/data/p0/ : proxyサーバが管理するwdiffなどの情報を置く場所
+    * /mnt/tutorial/data/a0/ : archiveサーバが管理するwdiffなどの情報を置く場所
+      * restoreしてできるLVM snapshotは/dev/tutorial/r_vol_???の形になる。
 
 ## インストール
 
 * workディレクトリの作成
 
 ```
-mkdir work
-cd work
-git clone git@github.com:herumi/cybozulib.git
-git clone git@github.dev.cybozu.co.jp:starpos/walb.git
-git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
+> mkdir work
+> cd work
+> git clone git@github.com:herumi/cybozulib.git
+> git clone git@github.dev.cybozu.co.jp:starpos/walb.git
+> git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
 ```
 
 * ドライバのbuildとインストール
@@ -71,22 +77,22 @@ git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
 * walb-toolsのbuild
   * clang++, gcc-4.8以降のC++11の機能を使う。
   * 各種ライブラリをインストールする。
-  ```
-  sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
-   ```
+```
+> sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
+```
 * walbとcybozulibにシンボリックリンクを張る。
 
-  ```
-  cd walb-tools
-  ln -s ../walb .
-  ln -s ../cybozulib .
-  ```
+```
+> cd walb-tools
+> ln -s ../walb .
+> ln -s ../cybozulib .
+```
 
 * buildする。
 
-  ```
-  make -j 8 DEBUG=0
-  ```
+```
+> make -j 8 DEBUG=0
+```
 
 * binsrc/に各種exeができる。
 
@@ -95,41 +101,41 @@ git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
 * ループパックデバイス用に100MiBのファイルを作る。
 
 ```
-dd if=/dev/zero of=tutorial-disk bs=1k count=100k
+> dd if=/dev/zero of=tutorial-disk bs=1k count=100k
 ```
 
 * /dev/loop0に割り当てる。
 
 ```
-sudo losetup /dev/loop0 tutorial-disk
+> sudo losetup /dev/loop0 tutorial-disk
 ```
 
 * 物理ボリュームを初期化する。
 
 ```
-sudo pvcreate /dev/loop0
-sudo pvs
-PV         VG   Fmt  Attr PSize   PFree
-/dev/loop0      lvm2 a--   100.00m  100.00m
+> sudo pvcreate /dev/loop0
+> sudo pvs
+> PV         VG   Fmt  Attr PSize   PFree
+> /dev/loop0      lvm2 a--   100.00m  100.00m
 ```
 
 * LVをいくつか作る。
 
 ```
-sudo vgcreate tutorial /dev/loop0
-sudo lvcreate -n wdata -L 10m tutorial
-sudo lvcreate -n wlog -L 10m tutorial
-sudo lvcreate -n data -L 20m tutorial
+> sudo vgcreate tutorial /dev/loop0
+> sudo lvcreate -n wdata -L 10m tutorial
+> sudo lvcreate -n wlog -L 10m tutorial
+> sudo lvcreate -n data -L 20m tutorial
 ```
 
-* /dev/tutorial/wdataと/dev/tutorial/wlogを合わせてwalbデバイスとして扱う。
+* /dev/tutorial/wdataと/dev/tutorial/wlogを合わせてwdevとして扱う。
 * /dev/tutorial/dataをproxy, archiveやシステムログ置き場にする。
 
 ```
-sudo mkfs.ext4 /dev/tutorial/data
-sudo mkdir -p /mnt/tutorial/data
-sudo mount /dev/tutorial/data /mnt/tutorial
-sudo mkdir -p /mnt/tutorial/data/{a0,p0,s0}
+> sudo mkfs.ext4 /dev/tutorial/data
+> sudo mkdir -p /mnt/tutorial/data
+> sudo mount /dev/tutorial/data /mnt/tutorial
+> sudo mkdir -p /mnt/tutorial/data/{a0,p0,s0}
 ```
 
 ## tutorial-config.pyの作成
@@ -172,8 +178,8 @@ VOL = 'volm'
 tutorial-config.pyをwalb-toolsにおいてそのディレクトリで
 
 ```
-sudo ipython
-execfile('tutorial-config.py')
+> sudo ipython
+> execfile('tutorial-config.py')
 ```
 
 ### サーバの起動
@@ -208,14 +214,14 @@ a0 vm4:10200 archive Archived
 * ext4で初期化する。
 
 ```
-sudo mkfs.ext4 /dev/walb/0
+> sudo mkfs.ext4 /dev/walb/0
 ```
 
 * mountする。
 
 ```
-sudo mkdir -p /mnt/tmp
-mount /dev/walb/0 /mnt/tmp
+> sudo mkdir -p /mnt/tmp
+> mount /dev/walb/0 /mnt/tmp
 ```
 
 ### full-backup
@@ -223,16 +229,16 @@ mount /dev/walb/0 /mnt/tmp
 * storageをSyncReady状態にする。どの状態からどの状態にいけるのか大まかな説明は![遷移図](state.png)を参照。
 
 ```
-walbc.stop(s0, VOL)
+> walbc.stop(s0, VOL)
 ```
 
 * フルバックアップを開始する。
 
 ```
-walbc.full_backup(s0, VOL)
+> walbc.full_backup(s0, VOL)
 ```
 
-* このコマンドにより、storageの/dev/walb/0の全てのブロックをreadしてデータをarchiveに転送する。
+* このコマンドにより、storageのwdevの全てのブロックをreadしてデータをarchiveに転送する。
 
 ### バックアップの復元
 
@@ -240,20 +246,20 @@ walbc.full_backup(s0, VOL)
 * ファイルを完全にディスクに書き終わらすためにumountする。
 
 ```
-sudo umount /dev/walb/0
+> sudo umount /dev/walb/0
 ```
 
 * snapshotをとる。
 
 ```
-walbc.snapshot(s0, VOL, [a0])
+> walbc.snapshot(s0, VOL, [a0])
 ```
 
 * 表示された値がそのsnapshotに名付けられたgid。
 * restoreする。
 
 ```
->walbc.restore(a0, VOL, <snapshotで返ってきたgid>)
+> walbc.restore(a0, VOL, <snapshotで返ってきたgid>)
 > 8
 ```
 
@@ -267,7 +273,88 @@ walbc.snapshot(s0, VOL, [a0])
 * そのsnapshotのpathをmountする。
 
 ```
-sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
+> sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
 ```
 
 * /mnt/tmpの中に *** で書いたファイルがあることを確認する。
+
+* snapshotを削除する。
+restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
+対象となるLVM snapshotがmountされているとエラーになるのでまずumountが必要。
+```
+> walbc.del_restored(a0, VOL, 8) ; mountしたまま実行
+> 2014-11-12 07:03:56 ERROR Controller: error: c2aDelRestoredClient:child process has returned non-zero:1280
+> cmd:/sbin/lvremove
+> args:-f /dev/tutorial/r_vol_8
+> stderr:  Logical volume tutorial/r_vol_8 contains a filesystem in use.
+> umount /mnt/tmp
+> walbc.del_restored(a0, VOL, 8) ; これで削除される
+```
+
+* restoreしたLVM snapshot一覧は`walbc.get_restored(a0, VOL)`で取得できる。
+
+### merge
+複数のwdiffはmergeするとapplyが速くなることがある。
+また重複データが除去されるためデータサイズが小さくなることもある。
+運用時には定期的にmergeするとよい。
+```
+> walbc.get_diff_list(a0,VOL)
+```
+でwdiffを一覧できる。
+```
+ '|0|-->|1| -- 2014-11-11T07:12:14 4120',
+ '|1|-->|2| -- 2014-11-11T07:12:42 17221',
+ '|2|-->|3| M- 2014-11-11T07:14:30 8445',
+ '|3|-->|4| M- 2014-11-11T07:14:33 8216',
+ '|4|-->|5| M- 2014-11-11T07:14:38 8732',
+ '|5|-->|6| M- 2014-11-11T07:15:00 8488',
+ '|6|-->|7| M- 2014-11-11T07:15:18 8649',
+ '|7|-->|8| M- 2014-11-11T07:15:43 4120',
+ '|8|-->|9| -- 2014-11-11T07:15:52 8496',
+ '|9|-->|10| M- 2014-11-11T07:16:01 8542',
+ '|10|-->|11| M- 2014-11-11T07:16:11 9278',
+ '|11|-->|12| M- 2014-11-11T07:16:17 8876',
+```
+`M`のマークがついたwdiffはmergeできる。2から8までのwdiffをmergeしてみる。
+```
+> walbc.merge(a0,VOL,2,8)
+> walbc.get_diff_list(a0,VOL)
+ '|0|-->|1| -- 2014-11-11T07:12:14 4120',
+ '|1|-->|2| -- 2014-11-11T07:12:42 17221',
+ '|2|-->|8| M- 2014-11-11T07:15:43 5570',
+ '|8|-->|9| -- 2014-11-11T07:15:52 8496',
+ '|9|-->|10| M- 2014-11-11T07:16:01 8542',
+ '|10|-->|11| M- 2014-11-11T07:16:11 9278',
+ '|11|-->|12| M- 2014-11-11T07:16:17 8876',
+
+```
+8445, 8216, 8732, 8488, 8649, 4120byteのwdiffがmergeされて5570byteのwdiffになったことを確認できる。
+
+### apply
+古いsnapshotをrestoreする必要がなくなると、applyすることでディスク容量を減らすことができる。
+またrestoreにかかる時間も短縮できる。
+```
+> walbc.get_diff_list(a0,VOL)
+['#snapB-->snapE isMergeable/isCompDiff timestamp sizeB',
+ '|0|-->|1| -- 2014-11-11T07:12:14 4120',
+ '|1|-->|2| -- 2014-11-11T07:12:42 17221',
+ '|2|-->|8| M- 2014-11-11T07:15:43 5570',
+ '|8|-->|9| -- 2014-11-11T07:15:52 8496',
+ '|9|-->|10| M- 2014-11-11T07:16:01 8542',
+ '|10|-->|11| M- 2014-11-11T07:16:11 9278',
+ '|11|-->|12| M- 2014-11-11T07:16:17 8876',
+ ...
+```
+0～8までのwdiffを0にapplyする。
+```
+> walbc.apply(a0, VOL, 8)
+walbc.get_diff_list(a0,VOL)
+Out[11]:
+['#snapB-->snapE isMergeable/isCompDiff timestamp sizeB',
+ '|8|-->|9| -- 2014-11-11T07:15:52 8496',
+ '|9|-->|10| M- 2014-11-11T07:16:01 8542',
+ '|10|-->|11| M- 2014-11-11T07:16:11 9278',
+ '|11|-->|12| M- 2014-11-11T07:16:17 8876',
+ ...
+```
+applyされて0～8のdiffが削除された。
