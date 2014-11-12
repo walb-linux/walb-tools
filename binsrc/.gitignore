@@ -8,6 +8,7 @@ wdiff-redo
 wdiff-show
 wdiff-send
 wdiff-dump
+wdiff-name-gen
 wldev-info
 wldev-show
 wlog-analyze
