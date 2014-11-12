@@ -316,15 +316,23 @@ def wait_for_lv_ready(lvPath, runCommand=run_local_command):
 # Constants for walb.
 ########################################
 
+# Server kinds.
+
 K_STORAGE = 0
 K_PROXY = 1
 K_ARCHIVE = 2
 
 serverKinds = [K_STORAGE, K_PROXY, K_ARCHIVE]
 
-def kindToStr(kind):
+
+def server_kind_to_str(kind):
+    '''
+    kind :: int   - K_XXX.
+    return :: str - server kind representation.
+    '''
     m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
     return m[kind]
+
 
 # storage steady states
 sClear = "Clear"
@@ -590,7 +598,7 @@ class Server:
 
     def __str__(self):
         l = [self.name, self.address, str(self.port),
-             kindToStr(self.kind), self.binDir, self.dataDir,
+             server_kind_to_str(self.kind), self.binDir, self.dataDir,
              self.logPath]
         if self.vg:
             l.append(self.vg)
@@ -640,7 +648,7 @@ class ServerLayout:
         for kind, sL in [(K_STORAGE, storageL), (K_PROXY, proxyL), (K_ARCHIVE, archiveL)]:
             for s in sL:
                 if s.kind != kind:
-                    raise Exception('server_layout: invalid server kind:', kindToStr(kind), str(s))
+                    raise Exception('server_layout: invalid server kind:', server_kind_to_str(kind), str(s))
 
         self.storageL = storageL
         self.proxyL = proxyL
@@ -838,7 +846,7 @@ class Controller:
         '''
         verify_type(vol, str)
         for s in self.sLayout.get_all():
-            msg = "%s %s:%d %s" % (s.name, s.address, s.port, kindToStr(s.kind))
+            msg = "%s %s:%d %s" % (s.name, s.address, s.port, server_kind_to_str(s.kind))
             try:
                 st= self.get_state(s, vol)
             except:
