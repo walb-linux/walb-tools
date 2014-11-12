@@ -1158,7 +1158,11 @@ class Controller:
         verify_type(sL, list, Server)
         self._verify_shutdown_mode(mode, 'shutdown_list')
         for s in sL:
-            self.run_ctl(s, ["shutdown", mode])
+            try:
+                self.run_ctl(s, ["shutdown", mode])
+                print 'shutdown succeeded', s.name
+            except Exception, e:
+                print 'shutdown failed', s.name, e
 
     def shutdown_all(self, mode='graceful'):
         '''
