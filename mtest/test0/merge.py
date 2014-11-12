@@ -12,5 +12,5 @@ while len(gidL) >= 3:
     gB = r[0]
     gE = r[-1]
     print 'merge', gB, gE
-    walbc.merge_diff(a0, VOL, gB, gE)
+    walbc.merge(a0, VOL, gB, gE)
     

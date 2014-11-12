@@ -1,23 +1,26 @@
 import time
 import sys
-execfile('walb-config.py')
-nrLoop = 5
+execfile('config.py')
+nrLoop = 2
+walb_dir = '/var/walb-test0/a0/volm/'
+mount_dir = '/mnt/data/'
 while True:
     print 'get restorable.'
     gidL = walbc.get_restorable(a0, VOL, 'all')
     gid = gidL[-1]
+    num = len(gidL) - 1
     print 'wdiff statistics'
-    !ls /var/walbh/a0/volh/*.wdiff |wc
-    !wdiff-show -norec -nohead -stat /var/walbh/a0/volh/*.wdiff
+    !ls {walb_dir}*.wdiff |wc
+    !{binDir}wdiff-show -norec -nohead -stat {walb_dir}*.wdiff
     print 'restore expr'
     sys.stdout.flush()
     for _ in xrange(nrLoop):
-        !sudo umount /var/walbh/a0real
-        !sudo mount /dev/ubuntu/archiveh /var/walbh/a0real
+        !sudo umount {mount_dir}
+        !sudo mount /dev/sdb1 {mount_dir}
         t0 = time.time()
         walbc.restore(a0, VOL, gid)
         t1 = time.time()
-        print 'Restore time:', t1 - t0
+        print 'Restore:', num, t1 - t0
         sys.stdout.flush()
         time.sleep(1)
         walbc._del_restored_all(a0, VOL)
@@ -28,15 +31,20 @@ while True:
     print 'apply expr'
     sys.stdout.flush()
     for _ in xrange(nrLoop):
-        !sudo umount /var/walbh/a0real
-        !sudo mount /dev/ubuntu/archiveh /var/walbh/a0real
+        print "_", _
+        !sudo umount {mount_dir}
+        !sudo mount /dev/sdb1 {mount_dir}
+        print "start"
         t0 = time.time()
-        walbc._apply_diff_all(a0, VOL)
+        walbc._apply_all(a0, VOL)
         t1 = time.time()
-        print 'Apply time:', t1 - t0
+        print 'Apply:', num, t1 - t0
         sys.stdout.flush()
         time.sleep(1)
+        print "restore"
         !sh restore-a0.sh >> restore-a0.log
+        time.sleep(2)
+        print "restore done"
     if len(gidL) <= 2:
         break
     print 'merge'
