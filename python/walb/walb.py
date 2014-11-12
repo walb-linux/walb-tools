@@ -7,6 +7,7 @@ import sys
 import socket
 from contextlib import closing
 import errno
+import re
 
 ########################################
 # Constants for general purpose.
@@ -58,6 +59,18 @@ def verify_gid_range(gidB, gidE, msg):
     verify_type(gidE, int)
     if gidB > gidE:
         raise Exception(msg, 'bad gid range', gidB, gidE)
+
+
+def verify_size_unit(sizeU):
+    '''
+    sizeU - Normal non-negative integer with optional unit suffix.
+      unit suffix must be one of
+      'k', 'm', 'g', 't', 'p',
+      'K', 'M', 'G', 'T', 'P'.
+    '''
+    verify_type(sizeU, str)
+    if re.match('[0-9]+(?:[kKmMgGtTpP])?', sizeU) is None:
+        raise Exception('bad size unit', sizeU)
 
 
 ########################################
@@ -407,6 +420,125 @@ aDuringReplicate = [atReplSync, atFullSync]
 aDuringStop = aActive + [atStop]
 aDuringFullSync = [atFullSync]
 aDuringHashSync = [atHashSync]
+
+
+# Compression parameters.
+
+CMPR_NONE = 0
+CMPR_SNAPPY = 1
+CMPR_GZIP = 2
+CMPR_LZMA = 3
+
+
+def verify_compress_kind(kind):
+    '''
+    kind :: int - CMPR_XXX.
+    return :: None
+    '''
+    if kind not in [CMPR_NONE, CMPR_SNAPPY, CMPR_GZIP, CMPR_LZMA]:
+        raise Exception('verify_compress_kind: bad value', kind)
+
+
+def compress_kind_to_str(kind):
+    '''
+    kind :: int   - CMPR_XXX.
+    return :: str - string representation.
+    '''
+    verify_compress_kind(kind)
+    m = {CMPR_NONE: 'none', CMPR_SNAPPY: 'snappy', CMPR_GZIP: 'gzip', CMPR_LZMA: 'lzma'}
+    assert kind in m
+    return m[kind]
+
+
+def compress_str_to_kind(s):
+    '''
+    s :: str      - input string.
+    return :: int - CMPR_XXX
+    '''
+    verify_type(s, str)
+    m = {'none': CMPR_NONE, 'snappy': CMPR_SNAPPY, 'gzip': CMPR_GZIP, 'lzma': CMPR_LZMA}
+    if s not in m:
+        raise Exception('compress_str_to_kind: bad kind', s)
+    return m[s]
+
+
+class CompressOpt:
+    '''
+    Compress option for archive info and replication.
+    '''
+    def __init__(self, kind=CMPR_SNAPPY, level=0, nrCpu=1):
+        '''
+        kind :: int  - CMPR_XXX.
+        level :: int - compression level. [0, 9].
+        nrCpu :: int - number of CPUs. 1 or more.
+        '''
+        self.kind = kind
+        self.level = level
+        self.nrCpu = nrCpu
+        self.verify()
+
+    def verify(self):
+        verify_compress_kind(self.kind)
+        verify_type(self.level, int)
+        if self.level < 0 or self.level > 9:
+            raise Exception('CompressOpt: bad level', self.kind, self.level, self.nrCpu)
+        verify_type(self.nrCpu, int)
+        if self.nrCpu == 0:
+            raise Exception('CompressOpt: bad nrCpu', self.kind, self.level, self.nrCpu)
+
+    def __str__(self):
+        return ':'.join([compress_kind_to_str(self.kind), str(self.level), str(self.nrCpu)])
+
+    def parse(self, s):
+        '''
+        s :: str - string representation.
+        return :: None
+        '''
+        v = s.split(':')
+        if len(v) != 3:
+            raise Exception('CompressOpt: parse failed', s)
+        self.kind = compress_str_to_kind(v[0])
+        self.level = int(v[1])
+        self.nrCpu = int(v[2])
+        self.verify()
+
+
+# Synchronization option.
+
+class SyncOpt:
+    '''
+    Synchronization option.
+    This is used for optional arguments of archive-info and replicate command.
+    '''
+    def __init__(self, cmprOpt=CompressOpt(), delayS=0, maxWdiffMergeSizeU='1G', bulkSizeU='64K'):
+        '''
+        cmprOpt :: CompressOpt    - compression option.
+        delayS :: int             - delay to forward diffs from proxy to archive [sec].
+        maxWdiffMergeSizeU :: str - max wdiff merge size [byte].
+                                    Unit suffix like '1G' is allowed.
+        bulkSizeU :: str          - bulk size [byte]. can be like '64K'.
+                                    Unit suffix like '64K' is allowed.
+        '''
+        verify_type(cmprOpt, CompressOpt)
+        verify_type(delayS, int)
+        verify_size_unit(maxWdiffMergeSizeU)
+        verify_size_unit(bulkSizeU)
+        self.cmprOpt = cmprOpt
+        self.delayS = delayS
+        self.maxWdiffMergeSizeU = maxWdiffMergeSizeU
+        self.bulkSizeU = bulkSizeU
+
+    def getArchiveInfoArgs(self):
+        '''
+        return :: [str]
+        '''
+        return [str(self.cmprOpt), str(self.delayS)]
+
+    def getReplicateArgs(self):
+        '''
+        return :: [str]
+        '''
+        return [str(self.cmprOpt), self.maxWdiffMergeSizeU, self.bulkSizeU]
 
 
 ########################################
@@ -1134,6 +1266,40 @@ class Controller:
         st = self.run_ctl(px, ["archive-info", "list", vol])
         return st.split()
 
+    def get_archive_info(self, px, vol, ax):
+        '''
+        Get archive info of an archive.
+        return :: (str, SyncOpt) - hostPort, syncOpt.
+        '''
+        verify_server_kind(px, [K_PROXY])
+        verify_type(vol, str)
+        verify_server_kind(ax, [K_ARCHIVE])
+        v = self.run_ctl(px, ['archive-info', 'get', vol, ax.name]).split()
+        if len(v) != 3:
+            raise Exception('get_archive_info: bad value', v)
+        cmprOpt = CompressOpt()
+        cmprOpt.parse(v[1])
+        return v[0], SyncOpt(cmprOpt=cmprOpt, delayS=int(v[2]))
+
+    def update_archive_info(self, px, vol, ax, syncOpt):
+        '''
+        Update archive information.
+        return :: None
+        '''
+        verify_server_kind(px, [K_PROXY])
+        verify_type(vol, str)
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(syncOpt, SyncOpt)
+        st = self.get_state(px, vol)
+        if st != pStopped:
+            raise Exception('update_archive_info: bad state', st, px.name, vol, ax.name, str(syncOpt))
+        aL = self.get_archive_info_list(px, vol)
+        if ax.name not in aL:
+            raise Exception('update_archvie_info: not exists', px.name, vol, ax.name, str(syncOpt))
+        args = ['archive-info', 'update', vol, ax.name, ax.get_host_port()]
+        args += syncOpt.getArchiveInfoArgs()
+        self.run_ctl(px, args)
+
     def is_synchronizing(self, ax, vol):
         '''
         Check whether a volume is synchronizing with an archive server or not.
@@ -1254,25 +1420,30 @@ class Controller:
         if st == pStopped:
             self.start(px, vol)
 
-    def add_archive_to_proxy(self, px, vol, ax, doStart=True):
+    def add_archive_to_proxy(self, px, vol, ax, doStart=True, syncOpt=None):
         '''
         Add an archive to a proxy.
         px :: Server    - proxy server.
         vol :: str      - volume name.
         ax :: server    - archive server.
         doStart :: bool - False if not to start proxy after adding.
+        syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(doStart, bool)
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
         st = self.get_state(px, vol)
         if st in pActive:
             self.stop(px, vol)
         aL = self.get_archive_info_list(px, vol)
-        if ax.name not in aL:
-            self.run_ctl(px, ['archive-info', 'add', vol, ax.name,
-                              ax.get_host_port()])
+        cmd = 'update' if ax.name in aL else 'add'
+        args = ['archive-info', cmd, vol, ax.name, ax.get_host_port()]
+        if syncOpt:
+            args += syncOpt.getArchiveInfoArgs()
+        self.run_ctl(px, args)
         st = self.get_state(px, vol)
         if st == pStopped and doStart:
             self.start(px, vol)
@@ -1306,7 +1477,8 @@ class Controller:
         verify_server_kind(pDst, [K_PROXY])
         for axName in self.get_archive_info_list(pSrc, vol):
             ax = self.get_server(axName, self.sLayout.archiveL)
-            self.add_archive_to_proxy(pDst, vol, ax, doStart=False)
+            _, syncOpt = self.get_archive_info(pSrc, vol, ax)
+            self.add_archive_to_proxy(pDst, vol, ax, doStart=False, syncOpt=syncOpt)
         self.start(pDst, vol)
 
     def stop_synchronizing(self, ax, vol):
@@ -1321,16 +1493,19 @@ class Controller:
             self.del_archive_from_proxy(px, vol, ax)
         self.kick_storage_all()
 
-    def start_synchronizing(self, ax, vol):
+    def start_synchronizing(self, ax, vol, syncOpt=None):
         '''
         Start synchronization of a volume with an archive.
         ax :: Server - archive server.
         vol :: str   - volume name.
+        syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
         for px in self.sLayout.proxyL:
-            self.add_archive_to_proxy(px, vol, ax)
+            self.add_archive_to_proxy(px, vol, ax, doStart=True, syncOpt=syncOpt)
         self.kick_storage_all()
 
     def get_restorable(self, ax, vol, opt=''):
@@ -1405,7 +1580,7 @@ class Controller:
         if e:
             raise Exception(msg, 'gid must not be restorable', ax.name, vol, gid)
 
-    def replicate_once_nbk(self, aSrc, vol, aDst):
+    def replicate_once_nbk(self, aSrc, vol, aDst, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
@@ -1413,14 +1588,19 @@ class Controller:
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
+        syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - latest gid to replicate
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
         gid = self.get_restorable(aSrc, vol)[-1]
-        self.run_ctl(aSrc, ['replicate', vol, "gid", str(gid),
-                            aDst.get_host_port()])
+        args = ['replicate', vol, "gid", str(gid), aDst.get_host_port()]
+        if syncOpt:
+            args += syncOpt.getReplicateArgs()
+        self.run_ctl(aSrc, args)
         return gid
 
     def wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
@@ -1440,20 +1620,22 @@ class Controller:
         raise Exception("wait_for_replicated:replicate failed",
                         ax.name, vol, gid, gidL)
 
-    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
+    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
+        timeoutS :: int - timeout [sec].
+        syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - replicated gid.
         '''
-        gid = self.replicate_once_nbk(aSrc, vol, aDst)
+        gid = self.replicate_once_nbk(aSrc, vol, aDst, syncOpt)
         self.wait_for_replicated(aDst, vol, gid, timeoutS)
         return gid
 
-    def synchronize(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC):
+    def synchronize(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, syncOpt=None):
         '''
         Synchronize aDst with (aSrc, vol).
         To reduce proxies stopped period, replicate nosync before calling this.
@@ -1461,10 +1643,13 @@ class Controller:
         vol :: str      - volume name.
         aDst :: Server  - destination archive (as a server).
         timeoutS :: int - timeout [sec].
+        syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
 
         for px in self.sLayout.proxyL:
             st = self.get_state(px, vol)
@@ -1474,17 +1659,19 @@ class Controller:
         for px in self.sLayout.proxyL:
             self.wait_for_stopped(px, vol)
             aL = self.get_archive_info_list(px, vol)
-            if aDst.name not in aL:
-                self.run_ctl(px, ["archive-info", "add", vol,
-                                  aDst.name, aDst.get_host_port()])
+            cmd = 'update' if aDst.name in aL else 'add'
+            args = ["archive-info", cmd, vol, aDst.name, aDst.get_host_port()]
+            if syncOpt:
+                args += syncOpt.getArchiveInfoArgs()
+            self.run_ctl(px, args)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, syncOpt)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
         self.kick_storage_all()
 
-    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None):
+    def full_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None, syncOpt=None):
         '''
         Run full backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1495,6 +1682,7 @@ class Controller:
                            Counter will start after dirty full backup done.
         block :: Bool    - blocking behavior.
         bulkSizeU :: str - bulk size with unit suffix [byte]. '64K' etc.
+        syncOpt :: SyncOpt or None - synchronization option.
         return :: int    - generation id of a clean snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
@@ -1502,10 +1690,12 @@ class Controller:
         verify_type(timeoutS, int)
         verify_type(block, bool)
         if bulkSizeU:
-            verify_type(bulkSizeU, str)
+            verify_size_unit(bulkSizeU)
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
 
         a0 = self.sLayout.get_primary_archive()
-        self._prepare_backup(sx, vol)
+        self._prepare_backup(sx, vol, syncOpt)
         args = ["full-bkp", vol]
         if bulkSizeU:
             args.append(bulkSizeU)
@@ -1526,7 +1716,7 @@ class Controller:
             time.sleep(0.3)
         raise Exception('full_backup:timeout', sx.name, vol, gids)
 
-    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None):
+    def hash_backup(self, sx, vol, timeoutS=TIMEOUT_SEC, block=True, bulkSizeU=None, syncOpt=None):
         '''
         Run hash backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
@@ -1538,7 +1728,8 @@ class Controller:
         timeoutS :: int  - timeout [sec].
                            Counter will start after dirty hash backup done.
         block :: bool    - blocking behavior.
-        bulkSizeU :: str - bulk size with unit suffix [byte]. '64K' etc.
+        bulkSizeU :: str or None - bulk size with unit suffix [byte]. '64K' etc.
+        syncOpt :: SyncOpt or None - synchronization option.
         return :: int    - generation id of a clean snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
@@ -1546,10 +1737,12 @@ class Controller:
         verify_type(timeoutS, int)
         verify_type(block, bool)
         if bulkSizeU:
-            verify_type(bulkSizeU, str)
+            verify_size_unit(bulkSizeU)
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
 
         a0 = self.sLayout.get_primary_archive()
-        self._prepare_backup(sx, vol)
+        self._prepare_backup(sx, vol, syncOpt)
         prev_gids = self.get_restorable(a0, vol)
         if prev_gids:
             max_gid = prev_gids[-1]
@@ -1727,7 +1920,7 @@ class Controller:
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
-    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC):
+    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, syncOpt=None):
         '''
         Replicate archive data by copying a volume from one archive to another.
         aSrc :: Server        - source archive server (as client).
@@ -1735,6 +1928,7 @@ class Controller:
         aDst :: Server        - destination archive server (as server).
         synchronizing :: bool - True if you want to make aDst synchronizing.
         timeoutS :: int       - timeout [sec].
+        syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
@@ -1745,9 +1939,9 @@ class Controller:
         if st == aClear:
             self._init(aDst, vol)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, syncOpt)
         if synchronizing:
-            self.synchronize(aSrc, vol, aDst, timeoutS)
+            self.synchronize(aSrc, vol, aDst, timeoutS, syncOpt)
 
     def get_latest_clean_snapshot(self, ax, vol):
         '''
@@ -1962,14 +2156,17 @@ class Controller:
         raise Exception("wait_for_merged:failed",
                         ax.name, vol, gidB, gidE, pos, gidL)
 
-    def _prepare_backup(self, sx, vol):
+    def _prepare_backup(self, sx, vol, syncOpt=None):
         '''
         Prepare backup.
-        sx :: Server - storage server.
-        vol :: str   - volume name.
+        sx :: Server               - storage server.
+        vol :: str                 - volume name.
+        syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
+        if syncOpt:
+            verify_type(syncOpt, SyncOpt)
 
         st = self.get_state(sx, vol)
         if st == sSyncReady:
@@ -1999,7 +2196,7 @@ class Controller:
         if st == aClear:
             self._init(a0, vol)
 
-        self.start_synchronizing(a0, vol)
+        self.start_synchronizing(a0, vol, syncOpt)
 
     def _get_lv_path(self, ax, vol):
         '''
