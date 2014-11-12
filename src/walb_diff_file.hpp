@@ -197,7 +197,7 @@ public:
         }
 
         DiffRecord compRec;
-        std::vector<char> compData = rec.compress(compRec, data);
+        std::vector<char> compData = rec.tryCompress(compRec, data);
         writeDiff(compRec, std::move(compData));
     }
 
