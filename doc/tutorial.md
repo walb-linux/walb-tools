@@ -1,15 +1,34 @@
 # WalB-toolsチュートリアル
 
-このチュートリアルはWalB-tools(以下tools)の使い方を説明します。
+このチュートリアルはWalB-tools(以下tools)の簡単な使い方を説明します。
 詳細は[README](README.md)を参照してください。
 
 ## WalB概要
 WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
 
-## WalBシステム
-  * storage : バックアップ対象となるサーバ。WalBドライバが載っていてディスクへのの書き込みに対してlogを生成する。
-  * proxy : storageからlogを吸い出してwdiff形式に変換してarchiveに転送する。
-  * archive : wdiffを貯蔵する。wdiffをあるsnapshotに適用して好きな時刻のsnapshotを作成する。
+
+## 用語
+詳しくは[用語一覧](word.md) - まだ作ってない - を参照。
+ここでは最小限の言葉を記す。
+
+* **WalBブロックデバイス** : WalBデバイスドライバがユーザに見せるブロックデバイス。
+ユーザはこの上にファイルシステムを作ったり、パーティションを切ったりしてデータを置く。
+* **wlog** : WalBブロックデバイスにwriteしたときに生成されるログ情報。
+通常ユーザが直接見ることはない。
+* **wdiff** : wlogをユーザが見える形式に変換したもの。
+* **ldev** : wlogが実際に書き込まれるデバイス。
+* **wdev** : WalBブロックデバイスにwriteしたデータが実際に書き込まれるデバイス。
+WalBブロックデバイスはldevとwdevをセットにして一つのデバイスに見せている。
+ユーザがWalBブロックデバイスを通して見えるデータ領域。
+* **snapshotをとる** : wdevのある瞬間における状態に名前をつけること。
+* **gid** : snapshotをとったときにつけられる名前(一意な64bit整数)。
+* **restore** : あるsnapshotをLVMのボリュームに復元すること。
+* **merge** : 複数のwdiffをまとめること。内部的には重複の除去、圧縮、ソートが行われる。
+* **apply** : restoreされたLVMのボリュームに複数のwdiffを適用して別のsnapshotを生成すること。
+* **storage** : WalBブロックデバイスのあるサーバ。ldevからwlogを取り出してproxyに転送する。
+* **proxy** : storageから受け取ったwlogをwdiffに変換して一時保存する。
+wdiffはarchiveに転送される。
+* **archive** : proxyから受け取ったwdiffを貯蔵する。
 
 ## 最小構成
 
@@ -24,6 +43,9 @@ WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/wa
 * ディスク構成
   * 新しくパーティションを切る場所がない、うっかり失敗してもいいようにループバックデバイスを使ってやってみる。
   * 全体像はこんな感じ![レイアウト](layout.png)
+    * WalBブロックデバイス : /dev/walb/0
+      * wdev : /dev/tutorial/mdata
+      * /dev/tutorial/mlog : wlog用領域。
 
 ## インストール
 
