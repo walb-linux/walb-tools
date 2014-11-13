@@ -11,27 +11,27 @@ WalB 自体の概要は [WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/
 詳しくは [用語一覧](word.md) - まだ作ってない - を参照。
 ここでは最小限の言葉を記す。
 
-* ** WalB ブロックデバイス (wdev)** : WalB デバイスドライバがユーザに見せるブロックデバイス。
+* **WalB ブロックデバイス (wdev)**: WalB デバイスドライバがユーザに見せるブロックデバイス。
 ユーザはこの上にファイルシステムを作ったり、パーティションを切ったりしてデータを置く。
-* ** wlog ** : wdev に write したときに生成されるログ情報。
+* **wlog**: wdev に write したときに生成されるログ情報。
 通常ユーザが直接見ることはない。
-* ** wdiff ** : wlog をユーザが見える形式に変換したもの。
-* ** WalB ログデバイス (ldev) ** : wlog が実際に書き込まれるデバイス。
-* ** WalB データデバイス (ddev) ** : wdev に write したデータが実際に書き込まれるデバイス。
+* **wdiff**: wlog をユーザが見える形式に変換したもの。
+* **WalB ログデバイス (ldev)**: wlog が実際に書き込まれるデバイス。
+* **WalB データデバイス (ddev)**: wdev に write したデータが実際に書き込まれるデバイス。
 WalB は ldev と wdev をセットにして一つのデバイス wdev に見せている。
 ユーザが wdev を通して見えるデータ領域。
-* ** snapshot をとる ** : wdev のある瞬間における状態に名前をつけること。
-* ** gid ** : snapshot をとったときにつけられる名前(一意な64bit整数)。
-* ** restore ** : ある snapshot を LVM のボリュームに復元すること。
-* ** merge ** : 複数の wdiff をまとめること。内部的には重複の除去、圧縮、ソートが行われる。
-* ** apply ** : フルイメージを保持する LVM のボリュームに古い wdiff を適用して削除すること。
+* **snapshot をとる**: wdev のある瞬間における状態に名前をつけること。
+* **gid**: snapshot をとったときにつけられる名前(一意な64bit整数)。
+* **restore**: ある snapshot を LVM のボリュームに復元すること。
+* **merge**: 複数の wdiff をまとめること。内部的には重複の除去、圧縮、ソートが行われる。
+* **apply**: フルイメージを保持する LVM のボリュームに古い wdiff を適用して削除すること。
 古い snapshot は復元できなくなるが使用領域を減らすことが出来る。
-* ** storage ** : wdevのあるサーバ。ldev から wlog を取り出して proxyに 転送する。
-* ** proxy ** : storage から受け取った wlog を wdiff に変換して一時保存する。
+* **storage**: wdevのあるサーバ。ldev から wlog を取り出して proxyに 転送する。
+* **proxy**: storage から受け取った wlog を wdiff に変換して一時保存する。
 wdiff は archive に転送される。
-* ** archive ** : proxy から受け取った wdiff を貯蔵する。フルイメージも保持。
-* ** full-backup ** : wdev の全データを storage から archive に転送し、フルイメージとして保存すること。
-* ** hash-backup ** : 全 wdev をチェックして必要な差分データを storage から archive に転送すること。
+* **archive**: proxy から受け取った wdiff を貯蔵する。フルイメージも保持。
+* **full-backup**: wdev の全データを storage から archive に転送し、フルイメージとして保存すること。
+* **hash-backup**: 全 wdev をチェックして必要な差分データを storage から archive に転送すること。
 差分は wdiff として保存される。
 
 ## 最小構成
@@ -279,7 +279,7 @@ a0 vm4:10200 archive Archived
 > sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
 ```
 
-* /mnt/tmp の中に *** で書いたファイルがあることを確認する。
+* /mnt/tmp の中に ***で書いたファイルがあることを確認する。
 
 * snapshot を削除する。
 restore してできた LVM snapshot は `walbc.del_restored` で削除できる。
