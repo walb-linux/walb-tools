@@ -953,15 +953,30 @@ inline void getPid(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
 }
 
+inline void parseVolIdAndGidRange(const StrVec &v, size_t pos,
+                                  std::string &volId, uint64_t &gid0, uint64_t &gid1)
+{
+    std::string gid0S, gid1S;
+    cybozu::util::parseStrVec(v, pos, 1, {&volId, &gid0S, &gid1S});
+    gid0 = 0;
+    gid1 = -1;
+    if (!gid0S.empty()) gid0 = cybozu::atoi(gid0S);
+    if (!gid1S.empty()) gid1 = cybozu::atoi(gid1S);
+    if (gid0 >= gid1) {
+        throw cybozu::Exception(__func__) << "bad gid range" << gid0 << gid1;
+    }
+}
+
 inline void getDiffList(protocol::GetCommandParams &p)
 {
     std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    uint64_t gid0, gid1;
+    parseVolIdAndGidRange(p.params, 1, volId, gid0, gid1);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    const MetaDiffVec diffV = volSt.diffMgr.getAll();
+    const MetaDiffVec diffV = volSt.diffMgr.getAll(gid0, gid1);
     StrVec v;
     v.emplace_back("#snapB-->snapE isMergeable/isCompDiff timestamp sizeB");
     for (const MetaDiff &diff : diffV) {
@@ -969,6 +984,24 @@ inline void getDiffList(protocol::GetCommandParams &p)
     }
     ul.unlock();
     protocol::sendValueAndFin(p, v);
+}
+
+inline void getTotalDiffSize(protocol::GetCommandParams &p)
+{
+    std::string volId;
+    uint64_t gid0, gid1;
+    parseVolIdAndGidRange(p.params, 1, volId, gid0, gid1);
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    size_t totalSize = 0;
+    const MetaDiffVec diffV = volSt.diffMgr.getAll(gid0, gid1);
+    for (const MetaDiff &d : diffV) {
+        totalSize += d.dataSize;
+    }
+    ul.unlock();
+    protocol::sendValueAndFin(p, totalSize);
 }
 
 inline void existsDiff(protocol::GetCommandParams &p)
@@ -1825,6 +1858,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { volTN, archive_local::getVolList },
     { pidTN, archive_local::getPid },
     { diffTN, archive_local::getDiffList },
+    { totalDiffSizeTN, archive_local::getTotalDiffSize },
     { existsDiffTN, archive_local::existsDiff },
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },
