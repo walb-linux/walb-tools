@@ -162,6 +162,7 @@ struct DiffRecord : public walb_diff_record {
             compData.resize(dataSize);
             compRec.compression_type = ::WALB_DIFF_CMPR_NONE;
             compRec.data_size = dataSize;
+            ::memcpy(compData.data(), data, dataSize);
         }
         compRec.checksum = cybozu::util::calcChecksum(compData.data(), compData.size(), 0);
         return compData;
