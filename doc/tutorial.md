@@ -377,7 +377,7 @@ sLayout = ServerLayout([s0], [p0], [a0, a1])
 * ボリュームの追加
 新たにtutorial2-diskを作りそこにtutorial2というボリュームグループを作る。
 ```
-dd if=/dev/zero of=tutorial2-disk bs=1M count=20
+dd if=/dev/zero of=tutorial2-disk bs=1M count=50
 sudo losetup /dev/loop1 tutorial2-disk
 sudo pvcreate /dev/loop1
 sudo vgcreate tutorial2 /dev/loop1
@@ -408,4 +408,20 @@ ipythonを起動し直して、`execfile('config.py')`して`sLayout.to_cmd_stri
 > walbc.replicate_once(a0, VOL, a1)
 > 22
 ```
+このgid(22)は環境によって変わる。
 restoreする。
+```
+> walbc.restore(a1, VOL, 22)
+```
+するとtutorial2にr_vol_22ができる。
+`a0`側も22をrestoreする。
+```
+> walbc.restore(a0, VOL, 22)
+```
+二つのsha1が等しいことを確認する。
+```
+sudo sha1sum /dev/tutorial/r_vol_22
+ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
+has:/home/shigeo/Program/walb-tools% sudo sha1sum /dev/tutorial2/r_vol_22
+ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/r_vol_22
+```
