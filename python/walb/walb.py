@@ -1600,6 +1600,11 @@ class Controller:
         verify_server_kind(aDst, [K_ARCHIVE])
         if syncOpt:
             verify_type(syncOpt, SyncOpt)
+
+        st = self.get_state(aDst, vol)
+        if st == aClear:
+            self._init(aDst, vol)
+
         gid = self.get_restorable(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port()]
         if syncOpt:
@@ -1938,10 +1943,6 @@ class Controller:
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(synchronizing, bool)
-
-        st = self.get_state(aDst, vol)
-        if st == aClear:
-            self._init(aDst, vol)
 
         self.replicate_once(aSrc, vol, aDst, timeoutS, syncOpt)
         if synchronizing:
