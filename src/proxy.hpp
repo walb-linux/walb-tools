@@ -347,20 +347,15 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
 
         const MetaDiffVec diffV = mgr.getAll();
         uint64_t totalSize = 0;
-        StrVec wdiffStrV;
         uint64_t minTs = -1;
         for (const MetaDiff &diff : diffV) {
-            const uint64_t size = volInfo.getDiffFileSize(diff, archiveName);
-            wdiffStrV.push_back(formatMetaDiff("  wdiff ", diff, size));
-            totalSize += size;
+            totalSize += volInfo.getDiffFileSize(diff, archiveName);
             if (minTs > diff.timestamp) minTs = diff.timestamp;
         }
-        const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
-        ret.push_back(fmt("  totalSize %s", totalSizeStr.c_str()));
+        ret.push_back(fmt("  wdiffTotalSize %" PRIu64 "", totalSize));
         uint64_t sendDelay = 0;
         if (!diffV.empty()) sendDelay = ::time(0) - minTs;
         ret.push_back(fmt("  wdiffSendDelayMeasured %" PRIu64, sendDelay));
-        for (std::string &s : wdiffStrV) ret.push_back(std::move(s));
 
         i++;
     }

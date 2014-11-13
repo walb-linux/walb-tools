@@ -215,10 +215,9 @@ public:
 
         MetaDiffVec dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
         v.push_back(fmt("numDiff %zu", dv.size()));
-        for (const MetaDiff &d : dv) {
-            const size_t size = wdiffs_.getDiffFileSize(d);
-            v.push_back(formatMetaDiff("wdiff ", d, size));
-        }
+        uint64_t totalSize = 0;
+        for (const MetaDiff &d : dv) totalSize += wdiffs_.getDiffFileSize(d);
+        v.push_back(fmt("wdiffTotalSize %" PRIu64 "", totalSize));
         return v;
     }
     std::string restoredSnapshotName(uint64_t gid) const {
