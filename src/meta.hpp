@@ -1206,6 +1206,18 @@ private:
     }
     MetaDiffVec getMergeableCandidates(const MetaDiff &diff) const {
         MetaDiffVec v;
+
+        /*
+         * Fast path. O(log(N)).
+         */
+        const bool ret = fastSearch(diff.snapE.gidB, v, [&](const MetaDiff &d) {
+                return diff != d && canMerge(diff, d);
+            });
+        if (ret) return v;
+
+        /*
+         * Slow path. O(N).
+         */
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
             if (diff.snapE.gidE < d.snapB.gidB) {
@@ -1220,6 +1232,18 @@ private:
     }
     MetaDiffVec getApplicableCandidates(const MetaSnap &snap) const {
         MetaDiffVec v;
+
+        /*
+         * Fast path. O(log(N)).
+         */
+        const bool ret = fastSearch(snap.gidB, v, [&](const MetaDiff &d) {
+                return canApply(snap, d);
+            });
+        if (ret) return v;
+
+        /*
+         * Slow path. O(N).
+         */
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
             if (snap.gidE < d.snapB.gidB) {
@@ -1231,6 +1255,24 @@ private:
             }
         }
         return v;
+    }
+    template <typename Pred>
+    bool fastSearch(uint64_t gid, MetaDiffVec &v, Pred &&pred) const {
+        size_t nr = 0;
+        Key key0{gid, 0};
+        Key key1{gid + 1, 0};
+        Mmap::const_iterator it, end;
+        it = mmap_.lower_bound(key0);
+        end = mmap_.lower_bound(key1);
+        while (it != end) {
+            const MetaDiff &d = it->second;
+            if (pred(d)) {
+                nr++;
+                v.push_back(d);
+            }
+            ++it;
+        }
+        return nr > 0;
     }
 };
 
