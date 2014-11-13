@@ -213,7 +213,7 @@ public:
         const size_t numRestorableAll = getRestorableSnapshots(true).size();
         v.push_back(fmt("numRestorableAll %zu", numRestorableAll));
 
-        MetaDiffVec dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
+        MetaDiffVec dv = wdiffs_.getMgr().getAll();
         v.push_back(fmt("numDiff %zu", dv.size()));
         uint64_t totalSize = 0;
         for (const MetaDiff &d : dv) totalSize += d.dataSize;
