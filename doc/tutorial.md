@@ -1,63 +1,63 @@
-# WalB-toolsチュートリアル
+# WalB-tools チュートリアル
 
-このチュートリアルはWalB-tools(以下tools)の簡単な使い方を説明します。
-詳細は[README](README.md)を参照してください。
+このチュートリアルは WalB-tools(以下 tools) の簡単な使い方を説明します。
+詳細は [README](README.md) を参照してください。
 
-## WalB概要
-WalB自体の概要は[WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx)を参照してください。
+## WalB 概要
+WalB 自体の概要は [WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx) を参照してください。
 
 
 ## 用語
-詳しくは[用語一覧](word.md) - まだ作ってない - を参照。
+詳しくは [用語一覧](word.md) - まだ作ってない - を参照。
 ここでは最小限の言葉を記す。
 
-* **WalBブロックデバイス(wdev)** : WalBデバイスドライバがユーザに見せるブロックデバイス。
+* ** WalB ブロックデバイス (wdev)** : WalB デバイスドライバがユーザに見せるブロックデバイス。
 ユーザはこの上にファイルシステムを作ったり、パーティションを切ったりしてデータを置く。
-* **wlog** : wdevにwriteしたときに生成されるログ情報。
+* ** wlog ** : wdev に write したときに生成されるログ情報。
 通常ユーザが直接見ることはない。
-* **wdiff** : wlogをユーザが見える形式に変換したもの。
-* **WalBログデバイス(ldev)** : wlogが実際に書き込まれるデバイス。
-* **WalBデータデバイス(ddev)** : wdevにwriteしたデータが実際に書き込まれるデバイス。
-WalBはldevとwdevをセットにして一つのデバイスwdevに見せている。
-ユーザがwdevを通して見えるデータ領域。
-* **snapshotをとる** : wdevのある瞬間における状態に名前をつけること。
-* **gid** : snapshotをとったときにつけられる名前(一意な64bit整数)。
-* **restore** : あるsnapshotをLVMのボリュームに復元すること。
-* **merge** : 複数のwdiffをまとめること。内部的には重複の除去、圧縮、ソートが行われる。
-* **apply** : フルイメージを保持するLVMのボリュームに古いwdiffを適用して削除すること。
-古いsnapshotは復元できなくなるが使用領域を減らすことが出来る。
-* **storage** : wdevのあるサーバ。ldevからwlogを取り出してproxyに転送する。
-* **proxy** : storageから受け取ったwlogをwdiffに変換して一時保存する。
-wdiffはarchiveに転送される。
-* **archive** : proxyから受け取ったwdiffを貯蔵する。フルイメージも保持。
-* **full-backup** : wdevの全データをstorageからarchiveに転送し、フルイメージとして保存すること。
-* **hash-backup** : 全wdevをチェックして必要な差分データをstorageからarchiveに転送すること。
+* ** wdiff ** : wlog をユーザが見える形式に変換したもの。
+* ** WalB ログデバイス (ldev) ** : wlog が実際に書き込まれるデバイス。
+* ** WalB データデバイス (ddev) ** : wdev に write したデータが実際に書き込まれるデバイス。
+WalB は ldev と wdev をセットにして一つのデバイス wdev に見せている。
+ユーザが wdev を通して見えるデータ領域。
+* ** snapshot をとる ** : wdev のある瞬間における状態に名前をつけること。
+* ** gid ** : snapshot をとったときにつけられる名前(一意な64bit整数)。
+* ** restore ** : ある snapshot を LVM のボリュームに復元すること。
+* ** merge ** : 複数の wdiff をまとめること。内部的には重複の除去、圧縮、ソートが行われる。
+* ** apply ** : フルイメージを保持する LVM のボリュームに古い wdiff を適用して削除すること。
+古い snapshot は復元できなくなるが使用領域を減らすことが出来る。
+* ** storage ** : wdevのあるサーバ。ldev から wlog を取り出して proxyに 転送する。
+* ** proxy ** : storage から受け取った wlog を wdiff に変換して一時保存する。
+wdiff は archive に転送される。
+* ** archive ** : proxy から受け取った wdiff を貯蔵する。フルイメージも保持。
+* ** full-backup ** : wdev の全データを storage から archive に転送し、フルイメージとして保存すること。
+* ** hash-backup ** : 全 wdev をチェックして必要な差分データを storage から archive に転送すること。
 差分は wdiff として保存される。
 
 ## 最小構成
 
-* PC1台でwalb-storage, walb-proxy, walb-archiveを動かす。
-  * これらは単なるexeなのでデーモンとして起動するときは別途設定が必要。
-  * walbcコマンドを使ってこれらのプロセスと通信し操作を行う。
-  * 更にpython/walb/walb.pyを使うとより抽象度の高い操作ができる。
+* PC 1台で walb-storage, walb-proxy, walb-archive を動かす。
+  * これらは単なる exeなので デーモンとして起動するときは別途設定が必要。
+  * walbc コマンドを使ってこれらのプロセスと通信し操作を行う。
+  * 更に python/walb/walb.py を使うとより抽象度の高い操作ができる。
 * サービス構成
   * s0(storage) : port 10000
   * p0(proxy) : port 10100
   * a0(archive) : port 10200
 * ディスク構成
   * 新しくパーティションを切る場所がない、うっかり失敗してもいいようにループバックデバイスを使ってやってみる。
-  * 全体像はこんな感じ![レイアウト](layout.png)
+  * 全体像はこんな感じ ![レイアウト](layout.png)
     * wdev : /dev/walb/0
       * ddev : /dev/tutorial/mdata
       * ldev : /dev/tutorial/mlog
-    * /mnt/tutorial/data/s0/ : storageサーバが管理するメータデータやログ情報を置く場所
-    * /mnt/tutorial/data/p0/ : proxyサーバが管理するwdiffなどの情報を置く場所
-    * /mnt/tutorial/data/a0/ : archiveサーバが管理するwdiffなどの情報を置く場所
-      * restoreしてできるLVM snapshotは/dev/tutorial/r_vol_???の形になる。
+    * /mnt/tutorial/data/s0/ : storage サーバが管理するメータデータやログ情報を置く場所
+    * /mnt/tutorial/data/p0/ : proxy サーバが管理するwdiffなどの情報を置く場所
+    * /mnt/tutorial/data/a0/ : archive サーバが管理するwdiffなどの情報を置く場所
+      * restore してできる LVM snapshot は /dev/tutorial/r_vol_??? の形になる。
 
 ## インストール
 
-* workディレクトリの作成
+* work ディレクトリの作成
 
 ```
 > mkdir work
@@ -67,22 +67,22 @@ wdiffはarchiveに転送される。
 > git clone git@github.dev.cybozu.co.jp:starpos/walb-tools.git
 ```
 
-* ドライバのbuildとインストール
-  * kernelのバージョンに合わせてチェックアウトする。
-    * kernel 3.13なら
+* ドライバの build とインストール
+  * kernel のバージョンに合わせてチェックアウトする。
+    * kernel 3.13 なら
     ```
     git co -b for-3.10 origin/for-3.10
     cd module
     make
     insmod walb-mod.ko
     ```
-* walb-toolsのbuild
-  * clang++, gcc-4.8以降のC++11の機能を使う。
+* walb-tools の build
+  * clang++, gcc-4.8 以降の C++11 の機能を使う。
   * 各種ライブラリをインストールする。
 ```
 > sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
 ```
-* walbとcybozulibにシンボリックリンクを張る。
+* walb と cybozulib にシンボリックリンクを張る。
 
 ```
 > cd walb-tools
@@ -90,23 +90,23 @@ wdiffはarchiveに転送される。
 > ln -s ../cybozulib .
 ```
 
-* buildする。
+* build する。
 
 ```
 > make -j 8 DEBUG=0
 ```
 
-* binsrc/に各種exeができる。
+* binsrc/ に各種 exe ができる。
 
 ## ディスクの準備
 
-* ループパックデバイス用に100MiBのファイルを作る。
+* ループパックデバイス用に 100MiB のファイルを作る。
 
 ```
 > dd if=/dev/zero of=tutorial-disk bs=1M count=100
 ```
 
-* /dev/loop0に割り当てる。
+* /dev/loop0 に割り当てる。
 
 ```
 > sudo losetup /dev/loop0 tutorial-disk
@@ -121,7 +121,7 @@ wdiffはarchiveに転送される。
 > /dev/loop0      lvm2 a--   100.00m  100.00m
 ```
 
-* LVをいくつか作る。
+* LV をいくつか作る。
 
 ```
 > sudo vgcreate tutorial /dev/loop0
@@ -130,8 +130,8 @@ wdiffはarchiveに転送される。
 > sudo lvcreate -n data -L 20m tutorial
 ```
 
-* /dev/tutorial/wdataと/dev/tutorial/wlogを合わせてwdevとして扱う。
-* /dev/tutorial/dataをproxy, archiveやシステムログ置き場にする。
+* /dev/tutorial/wdata と /dev/tutorial/wlog を合わせて wdev として扱う。
+* /dev/tutorial/data を proxy, archive やシステムログ置き場にする。
 
 ```
 > sudo mkfs.ext4 /dev/tutorial/data
@@ -140,9 +140,9 @@ wdiffはarchiveに転送される。
 > sudo mkdir -p /mnt/tutorial/data/{a0,p0,s0}
 ```
 
-## tutorial-config.pyの作成
+## tutorial-config.py の作成
 
-<work>/walb-tools/にtutorial-config.pyを作る。
+<work>/walb-tools/にtutorial-config.py を作る。
 
 ```
 #!/usr/bin/env python
@@ -173,11 +173,11 @@ wdev0 = Device(0, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCom
 VOL = 'volm'
 ```
 
-## ipythonでの使用例
+## ipython での使用例
 
-### tutorial-conifg.pyの読み込み
+### tutorial-conifg.py の読み込み
 
-tutorial-config.pyをwalb-toolsにおいてそのディレクトリで
+tutorial-config.py を walb-tools においてそのディレクトリで
 
 ```
 > sudo ipython
@@ -186,18 +186,18 @@ tutorial-config.pyをwalb-toolsにおいてそのディレクトリで
 
 ### サーバの起動
 
-* `sLayout.to_cmd_string()`でそのtutorial-config.pyに応じたwalb-{storage, proxy, archive}を起動するためのコマンドラインオプションが表示される。
-* これを使ってwalb-storage, walb-proxy, walb-archveをsudoで起動する。
+* `sLayout.to_cmd_string()` でその tutorial-config.py に応じた walb-{storage, proxy, archive} を起動するためのコマンドラインオプションが表示される。
+* これを使って walb-storage, walb-proxy, walb-archve を sudo で起動する。
 
-### WalBデバイスの初期化
+### WalB デバイスの初期化
 
-1. /dev/tutorial/wlogの初期化
+1. /dev/tutorial/wlog の初期化
   `wdev0.format_ldev()`
-2. WalBデバイスの作成
+2. WalB デバイス の作成
   `wdev0.create()`
-* これでwdev0.path(通常/dev/walb/0)ができる。
+* これで wdev0.path (通常/dev/walb/0) ができる。
 
-### ボリューム(VOL)の初期化
+### ボリューム(VOL) の初期化
 
 * `walbc.init_storage(s0, VOL, wdev0.path)`
 
@@ -211,15 +211,15 @@ p0 vm4:10100 proxy Started
 a0 vm4:10200 archive Archived
 ```
 
-### /dev/walb/0にファイルシステムの作成
+### /dev/walb/0 にファイルシステムの作成
 
-* ext4で初期化する。
+* ext4 で初期化する。
 
 ```
 > sudo mkfs.ext4 /dev/walb/0
 ```
 
-* mountする。
+* mount する。
 
 ```
 > sudo mkdir -p /mnt/tmp
@@ -228,7 +228,8 @@ a0 vm4:10200 archive Archived
 
 ### full-backup
 
-* storageをSyncReady状態にする。どの状態からどの状態にいけるのか大まかな説明は![遷移図](state.png)を参照。
+* storage を SyncReady 状態にする。
+どの状態からどの状態にいけるのか大まかな説明は ![遷移図](state.png) を参照。
 
 ```
 > walbc.stop(s0, VOL)
@@ -240,51 +241,51 @@ a0 vm4:10200 archive Archived
 > walbc.full_backup(s0, VOL)
 ```
 
-* このコマンドにより、storageのwdevの全てのブロックをreadしてデータをarchiveに転送する。
+* このコマンドにより、storage の wdev の全てのブロックを read してデータを archive に転送する。
 
 ### バックアップの復元
 
-* /mnt/tmpに適当にファイルを作る。 ***
-* ファイルを完全にディスクに書き終わらすためにumountする。
+* /mnt/tmpに 適当にファイルを作る。 ***
+* ファイルを完全にディスクに書き終わらすために umount する。
 
 ```
 > sudo umount /dev/walb/0
 ```
 
-* snapshotをとる。
+* snapshot をとる。
 
 ```
 > walbc.snapshot(s0, VOL, [a0])
 > 8
 ```
 
-* 表示された値がそのsnapshotに名付けられたgid。
-* restoreする。
+* 表示された値がその snapshot に名付けられた gid。
+* restore する。
 
 ```
 > walbc.restore(a0, VOL, 8)
 ```
 
-* できたLVMのsnapshotは`get_restored_path`でわかる。
+* できた LVM の snapshot は `get_restored_path` でわかる。
 
 ```
 > walbc.get_restored_path(a0, VOL, 8)
 > '/dev/tutorial/r_vol_8'
 ```
 
-* そのsnapshotのpathをmountする。
+* その snapshot の path を mount する。
 
 ```
 > sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
 ```
 
-* /mnt/tmpの中に *** で書いたファイルがあることを確認する。
+* /mnt/tmp の中に *** で書いたファイルがあることを確認する。
 
-* snapshotを削除する。
-restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
-対象となるLVM snapshotがmountされているとエラーになるのでまずumountが必要。
+* snapshot を削除する。
+restore してできた LVM snapshot は `walbc.del_restored` で削除できる。
+対象となる LVM snapshot が mount されていると削除できないのでまず umount が必要。
 ```
-> walbc.del_restored(a0, VOL, 8) ; mountしたまま実行
+> walbc.del_restored(a0, VOL, 8) ; mount したまま実行
 > 2014-11-12 07:03:56 ERROR Controller: error: c2aDelRestoredClient:child process has returned non-zero:1280
 > cmd:/sbin/lvremove
 > args:-f /dev/tutorial/r_vol_8
@@ -293,16 +294,16 @@ restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
 > walbc.del_restored(a0, VOL, 8) ; これで削除される
 ```
 
-* restoreしたLVM snapshot一覧は`walbc.get_restored(a0, VOL)`で取得できる。
+* restore した LVM snapshot一覧は `walbc.get_restored(a0, VOL)` で取得できる。
 
 ### merge
-複数のwdiffはmergeするとapplyが速くなることがある。
+複数の wdiff は merge すると apply が速くなることがある。
 また重複データが除去されるためデータサイズが小さくなることもある。
-運用時には定期的にmergeするとよい。
+運用時には定期的に merge するとよい。
 ```
 > walbc.get_diff_list(a0,VOL)
 ```
-でwdiffを一覧できる。
+で wdiff を一覧できる。
 ```
  '|0|-->|1| -- 2014-11-11T07:12:14 4120',
  '|1|-->|2| -- 2014-11-11T07:12:42 17221',
@@ -317,7 +318,7 @@ restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
  '|10|-->|11| M- 2014-11-11T07:16:11 9278',
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
 ```
-`M`のマークがついたwdiffはmergeできる。2から8までのwdiffをmergeしてみる。
+`M` のマークがついた wdiff は merge できる。2から8までの wdiff を merge してみる。
 ```
 > walbc.merge(a0,VOL,2,8)
 > walbc.get_diff_list(a0,VOL)
@@ -330,11 +331,11 @@ restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
 
 ```
-8445, 8216, 8732, 8488, 8649, 4120byteのwdiffがmergeされて5570byteのwdiffになったことを確認できる。
+8445, 8216, 8732, 8488, 8649, 4120byte の wdiff が merge されて 5570byte の wdiff になったことを確認できる。
 
 ### apply
-古いsnapshotをrestoreする必要がなくなると、applyすることでディスク容量を減らすことができる。
-またrestoreにかかる時間も短縮できる。
+古い snapshot を restore する必要がなくなると、apply することで古い snapshot に必要な wdiff が削除されてディスク容量を減らすことができる。
+また restore にかかる時間も短縮できる。
 ```
 > walbc.get_diff_list(a0,VOL)
 ['#snapB-->snapE isMergeable/isCompDiff timestamp sizeB',
@@ -347,7 +348,7 @@ restoreしてできたLVM snapshotは`walbc.del_restored`で削除できる。
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
  ...
 ```
-0～8までのwdiffを0にapplyする。
+0～8までの wdiff を 0 に apply する。
 ```
 > walbc.apply(a0, VOL, 8)
 walbc.get_diff_list(a0,VOL)
@@ -359,23 +360,40 @@ Out[11]:
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
  ...
 ```
-applyされて0～8のdiffが削除された。
+apply されて 0～8 の diff が削除された。
+
+### ハッシュバックアップ
+なんらかの障害で proxy サーバのデータが飛んだときなどに
+storage と archive の間で持っているデータの hash を比較して必要なものだけを転送する。
+フルバックアップに比べて転送データ量が少なくてすむ。
+ハッシュバックアップを試してみる。
+storage を止める。
+```
+> walbc.get_state_all(VOL)
+> s0 localhost:10000 storage Stopped
+> p0 localhost:10100 proxy Started
+> a0 localhost:10200 archive Archived
+```
+この状態でハッシュバックアップを行う。
+```
+walbc.hash_backup(s0, VOL)
+```
 
 ### レプリケーション
-* archiveの非同期レプリケーションを行う。
-最小構成にもう1個archiveサーバを加える。
+* archive の非同期レプリケーションを行う。
+最小構成にもう1個 archive サーバを加える。
 
-* config.pyの書き換え
+* config.py の書き換え
 ```
 a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, dataPath('a1'), logPath('a1'), 'tutorial2')
 ```
-を追加し、sLayoutを
+を追加し、sLayout を
 ```
 sLayout = ServerLayout([s0], [p0], [a0, a1])
 ```
 に変更する。
 * ボリュームの追加
-新たにtutorial2-diskを作りそこにtutorial2というボリュームグループを作る。
+新たに tutorial2-disk を作りそこに tutorial2 というボリュームグループを作る。
 ```
 dd if=/dev/zero of=tutorial2-disk bs=1M count=50
 sudo losetup /dev/loop1 tutorial2-disk
@@ -383,7 +401,7 @@ sudo pvcreate /dev/loop1
 sudo vgcreate tutorial2 /dev/loop1
 ```
 * サーバの再起動
-ipythonを起動し直して、`execfile('config.py')`して`sLayout.to_cmd_string()`の結果を使ってサーバを起動し直す。
+ipython を起動し直して、`execfile('config.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
 
 * 状態の確認
 ```
@@ -393,7 +411,7 @@ ipythonを起動し直して、`execfile('config.py')`して`sLayout.to_cmd_stri
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive Clear
 ```
-`a1`の追加直後は`Clear`状態なので`SyncReady`状態に持っていく。
+`a1` の追加直後は `Clear` 状態なので `SyncReady` 状態に持っていく。
 ```
 > walbc._init(a1, VOL)
 
@@ -408,17 +426,17 @@ ipythonを起動し直して、`execfile('config.py')`して`sLayout.to_cmd_stri
 > walbc.replicate_once(a0, VOL, a1)
 > 22
 ```
-このgid(22)は環境によって変わる。
-restoreする。
+この gid(22) は環境によって変わる。
+restore する。
 ```
 > walbc.restore(a1, VOL, 22)
 ```
-するとtutorial2にr_vol_22ができる。
-`a0`側も22をrestoreする。
+すると tutorial2 に r_vol_22 ができる。
+`a0` 側も 22 を restore する。
 ```
 > walbc.restore(a0, VOL, 22)
 ```
-二つのsha1が等しいことを確認する。
+二つの sha1 が等しいことを確認する。
 ```
 > sudo sha1sum /dev/tutorial/r_vol_22
 > ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
@@ -427,13 +445,13 @@ restoreする。
 ```
 
 * シンクロナイズモード
-replicate_onceは実行後はa0とa1は同期していない。
+`replicate_once` は実行後はa0とa1は同期していない。
 そのあとも常時動悸するようにするにはシンクロナイズモードに移行しなければならない。
 ```
 > walbc.synchronize(a0, VOL, a1)
 ```
 で同期モードになる。
-今同期モードかそうでないかは`is_synchronizing`でわかる。
+今同期モードかそうでないかは `is_synchronizing` でわかる。
 ```
 > walbc.synchronize(a0, VOL, a1)
 > walbc.is_synchronizing(a1, VOL)
@@ -442,3 +460,5 @@ replicate_onceは実行後はa0とa1は同期していない。
 > walbc.is_synchronizing(a1, VOL)
 > False
 ```
+最初からシンクロナイズモードでレプリケーションするには
+`replicate_once` ではなく `replicate` を使えばよい。
