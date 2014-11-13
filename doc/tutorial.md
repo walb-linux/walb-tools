@@ -420,8 +420,25 @@ restoreする。
 ```
 二つのsha1が等しいことを確認する。
 ```
-sudo sha1sum /dev/tutorial/r_vol_22
-ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
-has:/home/shigeo/Program/walb-tools% sudo sha1sum /dev/tutorial2/r_vol_22
-ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/r_vol_22
+> sudo sha1sum /dev/tutorial/r_vol_22
+> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
+> has:/home/shigeo/Program/walb-tools% sudo sha1sum /dev/tutorial2/r_vol_22
+> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/r_vol_22
+```
+
+* シンクロナイズモード
+replicate_onceは実行後はa0とa1は同期していない。
+そのあとも常時動悸するようにするにはシンクロナイズモードに移行しなければならない。
+```
+> walbc.synchronize(a0, VOL, a1)
+```
+で同期モードになる。
+今同期モードかそうでないかは`is_synchronizing`でわかる。
+```
+> walbc.synchronize(a0, VOL, a1)
+> walbc.is_synchronizing(a1, VOL)
+> True
+> walbc.stop_synchronizing(a1, VOL)
+> walbc.is_synchronizing(a1, VOL)
+> False
 ```
