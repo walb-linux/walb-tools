@@ -360,3 +360,52 @@ Out[11]:
  ...
 ```
 applyされて0～8のdiffが削除された。
+
+### レプリケーション
+* archiveの非同期レプリケーションを行う。
+最小構成にもう1個archiveサーバを加える。
+
+* config.pyの書き換え
+```
+a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, dataPath('a1'), logPath('a1'), 'tutorial2')
+```
+を追加し、sLayoutを
+```
+sLayout = ServerLayout([s0], [p0], [a0, a1])
+```
+に変更する。
+* ボリュームの追加
+新たにtutorial2-diskを作りそこにtutorial2というボリュームグループを作る。
+```
+dd if=/dev/zero of=tutorial2-disk bs=1M count=20
+sudo losetup /dev/loop1 tutorial2-disk
+sudo pvcreate /dev/loop1
+sudo vgcreate tutorial2 /dev/loop1
+```
+* サーバの再起動
+ipythonを起動し直して、`execfile('config.py')`して`sLayout.to_cmd_string()`の結果を使ってサーバを起動し直す。
+
+* 状態の確認
+```
+> walbc.get_state_all(VOL)
+> s0 localhost:10000 storage Master
+> p0 localhost:10100 proxy Started
+> a0 localhost:10200 archive Archived
+> a1 localhost:10201 archive Clear
+```
+`a1`の追加直後は`Clear`状態なので`SyncReady`状態に持っていく。
+```
+> walbc._init(a1, VOL)
+
+> walbc.get_state_all(VOL)
+> s0 localhost:10000 storage Master
+> p0 localhost:10100 proxy Started
+> a0 localhost:10200 archive Archived
+> a1 localhost:10201 archive SyncReady
+```
+レプリケーションを一度だけする。レプリケーションされたあと継続しない。
+```
+> walbc.replicate_once(a0, VOL, a1)
+> 22
+```
+restoreする。
