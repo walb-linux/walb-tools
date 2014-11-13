@@ -19,6 +19,8 @@ SHORT_TIMEOUT_SEC = 100
 Mebi = (1 << 20)  # mebi.
 Lbs = (1 << 9)  # logical block size
 
+UINT64_MAX = (1 << 64) - 1
+
 
 ########################################
 # Verification functions.
@@ -996,17 +998,37 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
-    def get_diff_list(self, ax, vol):
+    def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get wdiff list.
         ax :: Server    - archive server.
         vol :: str      - volume name.
+        gid0 :: int     - range begin.
+        gid1 :: int     - range end.
         return :: [str] - wdiff information list managed by the archive server.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        ret = self.run_ctl(ax, ['get', 'diff', vol])
+        verify_type(gid0, int)
+        verify_type(gid1, int)
+        ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
         return ret.split('\n')
+
+    def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Get total wdiff size.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid0 :: int     - range begin.
+        gid1 :: int     - range end.
+        return :: int - total size [byte].
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(gid0, int)
+        verify_type(gid1, int)
+        ret = self.run_ctl(ax, ['get', 'total-diff-size', vol, str(gid0), str(gid1)])
+        return int(ret)
 
     def get_num_action(self, s, vol, action):
         '''
