@@ -1102,16 +1102,7 @@ public:
         }
         AutoLock lk(mu_);
         MetaDiffVec v;
-        for (const auto &p : mmap_) {
-            const MetaDiff &d = p.second;
-            if (gid1 < d.snapB.gidB) {
-                // There is no matching diff after here.
-                break;
-            }
-            if (gid0 <= d.snapB.gidB && d.snapE.gidE <= gid1) {
-                v.push_back(d);
-            }
-        }
+        fastSearch(gid0, gid1, v, [](const MetaDiff &){ return true; });
         return v;
     }
     /**
@@ -1210,7 +1201,7 @@ private:
         /*
          * Fast path. O(log(N)).
          */
-        const bool ret = fastSearch(diff.snapE.gidB, v, [&](const MetaDiff &d) {
+        const bool ret = fastSearch(diff.snapE.gidB, diff.snapE.gidB + 1, v, [&](const MetaDiff &d) {
                 return diff != d && canMerge(diff, d);
             });
         if (ret) return v;
@@ -1236,7 +1227,7 @@ private:
         /*
          * Fast path. O(log(N)).
          */
-        const bool ret = fastSearch(snap.gidB, v, [&](const MetaDiff &d) {
+        const bool ret = fastSearch(snap.gidB, snap.gidB + 1, v, [&](const MetaDiff &d) {
                 return canApply(snap, d);
             });
         if (ret) return v;
@@ -1257,10 +1248,11 @@ private:
         return v;
     }
     template <typename Pred>
-    bool fastSearch(uint64_t gid, MetaDiffVec &v, Pred &&pred) const {
+    bool fastSearch(uint64_t gid0, uint64_t gid1, MetaDiffVec &v, Pred &&pred) const {
+        assert(gid0 < gid1);
         size_t nr = 0;
-        Key key0{gid, 0};
-        Key key1{gid + 1, 0};
+        Key key0{gid0, 0};
+        Key key1{gid1, 0};
         Mmap::const_iterator it, end;
         it = mmap_.lower_bound(key0);
         end = mmap_.lower_bound(key1);
