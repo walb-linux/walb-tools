@@ -17,6 +17,7 @@
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
+#include "walb_diff_stat.hpp"
 #include "fileio.hpp"
 
 namespace walb {
@@ -106,6 +107,9 @@ private:
             verifyFilled(__func__);
             return rec_.io_address;
         }
+        const DiffStatistics& getStat() const {
+            return reader_.getStat();
+        }
     private:
         void fill() const {
             if (isEnd_ || isFilled_) return;
@@ -129,7 +133,6 @@ private:
         }
 #endif
     };
-
     bool shouldValidateUuid_;
     uint16_t maxIoBlocks_;
 
@@ -150,6 +153,13 @@ private:
      * See moveToDiffMemory() for detail.
      */
 
+    /**
+     * statIn: input wdiffs statistics.
+     * statOut: output wdiff statistics.
+     *     This is meaningful only when you use mergeToFd().
+     */
+    mutable DiffStatistics statIn_, statOut_;
+
 public:
     Merger()
         : shouldValidateUuid_(false)
@@ -158,7 +168,8 @@ public:
         , isHeaderPrepared_(false)
         , wdiffs_()
         , diffMem_()
-        , mergedQ_() {
+        , mergedQ_()
+        , statIn_(), statOut_() {
     }
     /**
      * @maxIoBlocks Max io blocks in the output wdiff [logical block].
@@ -214,6 +225,7 @@ public:
         writer.flush();
         assert(wdiffs_.empty());
         assert(diffMem_.empty());
+        statOut_.update(writer.getStat());
     }
     /**
      * Prepare wdiff header and variables.
@@ -251,11 +263,25 @@ public:
         assert(isHeaderPrepared_);
         while (mergedQ_.empty()) {
             const uint64_t doneAddr = moveToDiffMemory();
-            if (!moveToMergedQueue(doneAddr)) return false;
+            if (!moveToMergedQueue(doneAddr)) {
+                assert(wdiffs_.empty());
+                return false;
+            }
         }
         recIo = std::move(mergedQ_.front());
         mergedQ_.pop();
         return true;
+    }
+    const DiffStatistics& statIn() const {
+        assert(wdiffs_.empty());
+        return statIn_;
+    }
+    /**
+     * Use this only if you used mergeToFd().
+     */
+    const DiffStatistics& statOut() const {
+        assert(wdiffs_.empty());
+        return statOut_;
     }
 private:
     /**
@@ -277,6 +303,7 @@ private:
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
                 if (wdiff.isEnd()) {
+                    statIn_.update(wdiff.getStat());
                     it = wdiffs_.erase(it);
                     goNext = false;
                 }
@@ -310,6 +337,7 @@ private:
         while (it != wdiffs_.end()) {
             const Wdiff &wdiff = **it;
             if (wdiff.isEnd()) {
+                statIn_.update(wdiff.getStat());
                 it = wdiffs_.erase(it);
             } else {
                 ++it;

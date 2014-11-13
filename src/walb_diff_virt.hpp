@@ -38,6 +38,7 @@ private:
     uint16_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
     bool emptyWdiff_;
+    DiffStatistics statOut_;
 
     void init_inner(cybozu::util::File&& reader) {
         reader_ = std::move(reader);
@@ -59,7 +60,8 @@ public:
         , recIo_()
         , offInIo_(0)
         , isEndDiff_(false)
-        , emptyWdiff_(false) {}
+        , emptyWdiff_(false)
+        , statOut_() {}
 
     void init(cybozu::util::File&& reader, const StrVec &wdiffPaths) {
         init_inner(std::move(reader));
@@ -68,6 +70,7 @@ public:
             merger_.addWdiffs(wdiffPaths);
             merger_.prepare();
         }
+        statOut_.clear();
     }
     void init(cybozu::util::File&& reader, std::vector<cybozu::util::File> &&fileV) {
         init_inner(std::move(reader));
@@ -76,6 +79,7 @@ public:
             merger_.addWdiffs(std::move(fileV));
             merger_.prepare();
         }
+        statOut_.clear();
     }
     /**
      * Write all data to a specified fd.
@@ -146,6 +150,12 @@ public:
             p += r;
             size -= r;
         }
+    }
+    const DiffStatistics& statIn() const {
+        return merger_.statIn();
+    }
+    const DiffStatistics& statOut() const {
+        return statOut_;
     }
 private:
     /**
@@ -224,7 +234,10 @@ private:
             if (!merger_.getAndRemove(recIo_)) {
                 isEndDiff_ = true;
                 recIo_ = DiffRecIo();
+                statOut_.wdiffNr = -1;
+                statOut_.dataSize = -1;
             }
+            statOut_.update(recIo_.record());
         }
     }
     uint64_t currentDiffAddr() const {

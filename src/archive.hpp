@@ -168,9 +168,12 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
     }
 }
 
-inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv, const std::atomic<int>& stopState)
+inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv,
+                             const std::atomic<int>& stopState,
+                             DiffStatistics& statIn, DiffStatistics& statOut)
 {
     const char *const FUNC = __func__;
+    statOut.clear();
     diff::Merger merger;
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
@@ -183,6 +186,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
             return false;
         }
         const DiffRecord& rec = recIo.record();
+        statOut.update(rec);
         assert(!rec.isCompressed());
         const uint64_t ioAddress = rec.io_address;
         const uint64_t ioBlocks = rec.io_blocks;
@@ -205,6 +209,9 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     }
     file.fdatasync();
     file.close();
+    statIn = merger.statIn();
+    statOut.wdiffNr = -1;
+    statOut.dataSize = -1;
     return true;
 }
 
@@ -227,9 +234,12 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     volInfo.setMetaState(st1);
 
     cybozu::lvm::Lv lv = volInfo.getLv();
-    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState)) {
+    DiffStatistics statIn, statOut;
+    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut)) {
         return false;
     }
+    LOGs.info() << "apply-mergeIn " << volId << statIn;
+    LOGs.info() << "apply-mergeOut" << volId << statOut;
 
     const MetaState st2 = endApplying(st1, diffV);
     volInfo.setMetaState(st2);
@@ -301,6 +311,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
         if (volSt.stopState == ForceStopping || ga.forceQuit) {
             return false;
         }
+        // TODO: currently we can use snappy only.
         writer.compressAndWriteDiff(recIo.record(), recIo.io().get());
     }
     writer.flush();
@@ -351,9 +362,12 @@ inline bool restore(const std::string &volId, uint64_t gid)
                     return volSt.diffMgr.getDiffListToRestore(st, gid);
                 });
         LOGs.debug() << "restore-diffs" << st0 << diffV;
-        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState)) {
+        DiffStatistics statIn, statOut;
+        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState, statIn, statOut)) {
             return false;
         }
+        LOGs.info() << "restore-mergeIn " << volId << statIn;
+        LOGs.info() << "restore-mergeOut" << volId << statOut;
     }
     cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
     return true;
@@ -473,6 +487,10 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         diff::VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
         isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.forceQuit);
+        if (isOk) {
+            logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
+            logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
+        }
     }
     if (!isOk) {
         logger.warn() << FUNC << "force stopped" << volId;
@@ -623,6 +641,8 @@ inline bool runHashReplClient(
         logger.warn() << "hash-repl-client force-stopped" << volId;
         return false;
     }
+    logger.info() << "hash-repl-client-mergeIn " << volId << virt.statIn();
+    logger.info() << "hash-repl-client-mergeOut" << volId << virt.statOut();
     logger.info() << "hash-repl-client done" << volId;
     return true;
 }
@@ -664,6 +684,8 @@ inline bool runHashReplServer(
     volSt.diffMgr.add(diff);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
+    logger.info() << "hash-repl-server-mergeIn " << volId << virt.statIn();
+    logger.info() << "hash-repl-server-mergeOut" << volId << virt.statOut();
     logger.info() << "hash-repl-server done" << volId;
     return true;
 }
@@ -700,12 +722,15 @@ inline bool runDiffReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
+    DiffStatistics statOut;
     if (!wdiffTransferClient(
-            pkt, merger, cmpr, volSt.stopState, ga.forceQuit)) {
+            pkt, merger, cmpr, volSt.stopState, ga.forceQuit, statOut)) {
         logger.warn() << "diff-repl-client force-stopped" << volId;
         return false;
     }
     packet::Ack(pkt.sock()).recv();
+    logger.info() << "diff-repl-mergeIn " << volId << merger.statIn();
+    logger.info() << "diff-repl-mergeOut" << volId << statOut;
     logger.info() << "diff-repl-client done" << volId << mergedDiff;
     return true;
 }

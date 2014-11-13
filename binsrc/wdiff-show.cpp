@@ -7,6 +7,7 @@
  */
 #include "util.hpp"
 #include "walb_diff_file.hpp"
+#include "walb_diff_stat.hpp"
 #include "cybozu/option.hpp"
 #include "walb_util.hpp"
 
@@ -48,60 +49,6 @@ inline bool matchAddress(uint64_t addr, const DiffRecord& rec)
     return rec.io_address <= addr && addr < rec.endIoAddress();
 }
 
-struct DiffStatistics
-{
-    size_t normalNr; // normal IOs.
-    size_t allZeroNr; // all zero IOs.
-    size_t discardNr; // discard IOs.
-
-    uint64_t normalLb; // normal IO total size. [logical block]
-    uint64_t allZeroLb; // all zero IO total size. [logical block]
-    uint64_t discardLb; // discard IO totalsize. [logical block]
-
-    uint64_t dataSize; // total IO data size (compressed) [byte]
-
-    DiffStatistics()
-        : normalNr(0)
-        , allZeroNr(0)
-        , discardNr(0)
-        , normalLb(0)
-        , allZeroLb(0)
-        , discardLb(0)
-        , dataSize(0) {
-    }
-    void update(const DiffRecord& rec) {
-        if (rec.isNormal()) {
-            normalNr++;
-            normalLb += rec.io_blocks;
-        } else if (rec.isDiscard()) {
-            discardNr++;
-            discardLb += rec.io_blocks;
-        } else if (rec.isAllZero()) {
-            allZeroNr++;
-            allZeroLb += rec.io_blocks;
-        }
-        dataSize += rec.data_size;
-    }
-    void print() const {
-        const char *const pre = "wdiff_stat:";
-        ::printf(
-            "%s normalNr %zu\n"
-            "%s allZeroNr %zu\n"
-            "%s discardNr %zu\n"
-            "%s normalLb %" PRIu64 "\n"
-            "%s allZeroLb %" PRIu64 "\n"
-            "%s discardLb %" PRIu64 "\n"
-            "%s dataSize %" PRIu64 "\n"
-            , pre, normalNr
-            , pre, allZeroNr
-            , pre, discardNr
-            , pre, normalLb
-            , pre, allZeroLb
-            , pre, discardLb
-            , pre, dataSize);
-    }
-};
-
 void printWdiff(diff::Reader &reader, DiffStatistics &stat, const Option &opt)
 {
     DiffFileHeader wdiffH;
@@ -138,7 +85,7 @@ int doMain(int argc, char *argv[])
             reader.close();
         }
     }
-    if (opt.doStat) stat.print();
+    if (opt.doStat) stat.print(::stdout, "wdiff_stat: ");
     return 0;
 }
 

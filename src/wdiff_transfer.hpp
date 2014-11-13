@@ -15,14 +15,18 @@ namespace walb {
  */
 inline bool wdiffTransferClient(
     packet::Packet &pkt, diff::Merger &merger, const CompressOpt &cmpr,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit,
+    DiffStatistics &statOut)
 {
+    statOut.clear();
+    statOut.wdiffNr = -1;
     packet::StreamControl ctrl(pkt.sock());
 
     auto sendPack = [&](const Buffer& pack) {
         ctrl.next();
         pkt.write<size_t>(pack.size());
         pkt.write(pack.data(), pack.size());
+        statOut.update(*(const walb_diff_pack*)pack.data());
     };
 
     DiffRecIo recIo;

@@ -969,11 +969,14 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     std::string res;
     pkt.read(res);
     if (res == msgAccept) {
-        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit)) {
+        DiffStatistics statOut;
+        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit, statOut)) {
             logger.warn() << FUNC << "force stopped wdiff sending" << volId;
             return DONT_SEND;
         }
         packet::Ack(pkt.sock()).recv();
+        logger.info() << "mergeIn " << volId << merger.statIn();
+        logger.info() << "mergeOut" << volId << statOut;
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();

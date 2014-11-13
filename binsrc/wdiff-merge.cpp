@@ -14,21 +14,22 @@ struct Option : public cybozu::Option
     uint32_t maxIoSize;
     std::vector<std::string> inputWdiffs;
     std::string outputWdiff;
-    Option() {
-        setUsage("Usage: wdiff-merge (options) -i [input wdiffs] -o [merged wdiff]");
-        appendOpt(&maxIoSize, 0, "x", "max IO size [byte]. 0 means no limitation.");
-        appendVec(&inputWdiffs, "i", "Input wdiff paths.");
-        appendMust(&outputWdiff, "o", "Output wdiff path.");
-        appendHelp("h");
-    }
+    bool doStat;
 
+    Option() {
+        setDescription("Merge wdiff files.");
+        appendOpt(&maxIoSize, 0, "x", "SIZE: max IO size [byte]. 0 means no limitation.");
+        appendVec(&inputWdiffs, "i", "WDIFF_PATH_LIST: input wdiff paths.");
+        appendMust(&outputWdiff, "o", "WDIFF_PATH: output wdiff path.");
+        appendBoolOpt(&doStat, "stat", ": put statistics.");
+        appendHelp("h", ": put this message.");
+    }
     uint16_t maxIoBlocks() const {
         if (uint16_t(-1) < maxIoSize) {
             throw RT_ERR("Max IO size must be less than 32M.");
         }
         return maxIoSize / LOGICAL_BLOCK_SIZE;
     }
-
     bool parse(int argc, char *argv[]) {
         if (!cybozu::Option::parse(argc, argv)) {
             goto error;
@@ -57,6 +58,10 @@ int doMain(int argc, char *argv[])
     merger.setShouldValidateUuid(false);
     merger.mergeToFd(file.fd());
     file.close();
+    if (opt.doStat) {
+        merger.statIn().printOneline(::stdout, "input:  ");
+        merger.statOut().printOneline(::stdout, "output: ");
+    }
     return 0;
 }
 

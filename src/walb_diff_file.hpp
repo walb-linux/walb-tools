@@ -4,6 +4,7 @@
  * @brief walb diff utiltities for files.
  */
 #include "walb_diff_pack.hpp"
+#include "walb_diff_stat.hpp"
 #include "uuid.hpp"
 
 namespace walb {
@@ -108,22 +109,19 @@ private:
     DiffPackHeader pack_;
     std::queue<DiffIo> ioQ_;
 
+    DiffStatistics stat_;
+
 public:
-    explicit Writer(int fd)
-        : fileW_(fd)
-        , isWrittenHeader_(false)
-        , isClosed_(false)
-        , pack_()
-        , ioQ_() {
+    Writer() {
+        init();
+    }
+    explicit Writer(int fd) : Writer() {
+        fileW_.setFd(fd);
     }
     explicit Writer(const std::string &diffPath, int flags, mode_t mode)
-        : fileW_(diffPath, flags, mode)
-        , isWrittenHeader_(false)
-        , isClosed_(false)
-        , pack_()
-        , ioQ_() {
+        : Writer() {
+        fileW_.open(diffPath, flags, mode);
     }
-
     ~Writer() noexcept {
         try {
             close();
@@ -208,7 +206,18 @@ public:
         writePack();
     }
 
+    const DiffStatistics& getStat() const {
+        return stat_;
+    }
 private:
+    void init() {
+        isWrittenHeader_ = false;
+        isClosed_ = false;
+        pack_.reset();
+        while (!ioQ_.empty()) ioQ_.pop();
+        stat_.clear();
+        stat_.wdiffNr = 1;
+    }
     /* Write the buffered pack and its related diff ios. */
     void writePack() {
         if (pack_.nRecords() == 0) {
@@ -217,6 +226,7 @@ private:
         }
 
         size_t total = 0;
+        stat_.update(pack_);
         pack_.writeTo(fileW_);
 
         assert(pack_.nRecords() == ioQ_.size());
@@ -230,11 +240,9 @@ private:
         assert(total == pack_.totalSize());
         pack_.reset();
     }
-
     void writeEof() {
         writeDiffEofPack(fileW_);
     }
-
     void checkWrittenHeader() const {
         if (!isWrittenHeader_) {
             throw RT_ERR("Call writeHeader() before calling writeDiff().");
@@ -264,34 +272,21 @@ private:
     uint16_t recIdx_;
     uint32_t totalSize_;
 
+    DiffStatistics stat_;
+
 public:
-    Reader()
-        : fileR_()
-        , isReadHeader_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {
+    Reader() {
+        init();
     }
-    explicit Reader(int fd)
-        : fileR_(fd)
-        , isReadHeader_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {
+    explicit Reader(int fd) : Reader() {
+        fileR_.setFd(fd);
     }
-    Reader(const std::string &diffPath, int flags)
-        : fileR_(diffPath, flags)
-        , isReadHeader_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {
+    // flags will be deprecated.
+    Reader(const std::string &diffPath, int flags = O_RDONLY) : Reader() {
+        fileR_.open(diffPath, flags);
     }
-    explicit Reader(cybozu::util::File &&fileR)
-        : fileR_(std::move(fileR))
-        , isReadHeader_(false)
-        , pack_()
-        , recIdx_(0)
-        , totalSize_(0) {
+    explicit Reader(cybozu::util::File &&fileR) : Reader() {
+        fileR_ = std::move(fileR);
     }
     ~Reader() noexcept try {
         close();
@@ -403,6 +398,9 @@ public:
         totalSize_ += rec.data_size;
         recIdx_++;
     }
+    const DiffStatistics& getStat() const {
+        return stat_;
+    }
 private:
     /**
      * Read pack header.
@@ -411,13 +409,17 @@ private:
      *   false if EofError caught.
      */
     bool readPackHeader() {
-        return readPackHeader(pack_);
+        const bool ret = readPackHeader(pack_);
+        stat_.update(pack_);
+        return ret;
     }
     void init() {
         pack_.reset();
         isReadHeader_ = false;
         recIdx_ = 0;
         totalSize_ = 0;
+        stat_.clear();
+        stat_.wdiffNr = 1;
     }
 };
 

@@ -11,6 +11,13 @@
 
 namespace walb {
 
+#if 0 // QQQ
+struct DiffPackHeader2 : walb_diff_pack
+{
+    // QQQ
+};
+#endif
+
 /**
  * Walb diff pack wrapper.
  * This can be a wrapper or a manager of 4KiB memory image.

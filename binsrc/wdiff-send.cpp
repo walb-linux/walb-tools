@@ -142,7 +142,8 @@ void runDummyProxy(const Option &opt)
     const CompressOpt cmpr;
     std::atomic<int> stopState(NotStopping);
     std::atomic<bool> forceQuit(false);
-    if (!wdiffTransferClient(pkt, merger, cmpr, stopState, forceQuit)) {
+    DiffStatistics statOut;
+    if (!wdiffTransferClient(pkt, merger, cmpr, stopState, forceQuit, statOut)) {
         throw cybozu::Exception(__func__) << "wdiffTransferClient failed";
     }
     packet::Ack(sock).recv();
