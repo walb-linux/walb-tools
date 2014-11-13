@@ -40,6 +40,23 @@ def verify_type(obj, typeValue, elemType=None):
             raise Exception('invalid list type', type(obj), typeValue, elemType)
 
 
+def verify_int(obj):
+    '''
+    obj -- object to verify.
+    '''
+    if not isinstance(obj, int) and not isinstance(obj, long):
+        raise Exception('invalid type', type(obj))
+
+
+def verify_u64(obj):
+    '''
+    obj -- object to verify.
+    '''
+    verify_int(obj)
+    if obj >= 2**64:
+        raise Exception('cannot be unsigned 64bit integer', obj)
+
+
 def verify_function(obj):
     '''
     obj - function object.
@@ -57,8 +74,8 @@ def verify_gid_range(gidB, gidE, msg):
     gidE - end gid.
     msg :: str - message for error.
     '''
-    verify_type(gidB, int)
-    verify_type(gidE, int)
+    verify_u64(gidB)
+    verify_u64(gidE)
     if gidB > gidE:
         raise Exception(msg, 'bad gid range', gidB, gidE)
 
@@ -210,12 +227,12 @@ def zero_clear(bdevPath, offsetLb, sizeLb, runCommand=run_local_command):
     Zero-clear a block device.
     bdevPath :: str - block device path.
     offsetLb :: int - offset [logical block].
-    sizeLb :: innt  - size [logical block].
+    sizeLb :: int  - size [logical block].
     runCommand :: RunCommand
     '''
     verify_type(bdevPath, str)
-    verify_type(offsetLb, int)
-    verify_type(sizeLb, int)
+    verify_u64(offsetLb)
+    verify_u64(sizeLb)
     runCommand(['/bin/dd', 'if=/dev/zero', 'of=' + bdevPath,
                 'bs=512', 'seek=' + str(offsetLb), 'count=' + str(sizeLb),
                 'conv=fdatasync'])
@@ -252,8 +269,8 @@ def resize_lv(lvPath, curSizeMb, newSizeMb, doZeroClear,
     runCommand :: RunCommand
     """
     verify_type(lvPath, str)
-    verify_type(curSizeMb, int)
-    verify_type(newSizeMb, int)
+    verify_u64(curSizeMb)
+    verify_u64(newSizeMb)
     verify_type(doZeroClear, bool)
     verify_function(runCommand)
 
@@ -1009,8 +1026,8 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid0, int)
-        verify_type(gid1, int)
+        verify_u64(gid0)
+        verify_u64(gid1)
         ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
         return ret.split('\n')
 
@@ -1025,8 +1042,8 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid0, int)
-        verify_type(gid1, int)
+        verify_u64(gid0)
+        verify_u64(gid1)
         ret = self.run_ctl(ax, ['get', 'total-diff-size', vol, str(gid0), str(gid1)])
         return int(ret)
 
@@ -1578,7 +1595,7 @@ class Controller:
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(gid, int)
+        verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaRestore, timeoutS)
         gids = self.get_restored(ax, vol)
         if gid in gids:
@@ -1643,7 +1660,7 @@ class Controller:
         timeoutS :: int - timeout [sec].
         '''
         verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(gid, int)
+        verify_u64(gid)
         self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
         gidL = self.get_restorable(ax, vol, 'all')
         if gidL and gid <= gidL[-1]:
@@ -1809,7 +1826,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
 
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)
@@ -1826,7 +1843,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
         return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
 
     def del_restored(self, ax, vol, gid):
@@ -1838,7 +1855,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
 
         runCommand = self.get_run_remote_command(ax)
         path = self._get_lv_path(ax, vol)
@@ -1914,7 +1931,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
         self.run_ctl(ax, ["apply", vol, str(gid)])
         self._wait_for_applied(ax, vol, gid, timeoutS)
 
@@ -1993,7 +2010,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(sizeMb, int)
+        verify_u64(sizeMb)
         verify_type(doZeroClear, bool)
         st = self.get_state(ax, vol)
         if st == aClear:
@@ -2023,7 +2040,7 @@ class Controller:
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
-        verify_type(sizeMb, int)
+        verify_u64(sizeMb)
         st = self.get_state(sx, vol)
         if st == sClear:
             return
@@ -2040,7 +2057,7 @@ class Controller:
                               Storage's extended areas will not be filled by this function.
         '''
         verify_type(vol, str)
-        verify_type(sizeMb, int)
+        verify_u64(sizeMb)
         verify_type(doZeroClear, bool)
         for ax in self.sLayout.archiveL:
             self.resize_archive(ax, vol, sizeMb, doZeroClear)
@@ -2107,7 +2124,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
         verify_type(timeoutS, int)
         t0 = time.time()
         while time.time() < t0 + timeoutS:
@@ -2127,7 +2144,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(gid, int)
+        verify_u64(gid)
         verify_type(timeoutS, int)
         t0 = time.time()
         while time.time() < t0 + timeoutS:
@@ -2155,7 +2172,7 @@ class Controller:
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec].
         '''
-        verify_type(gid, int)
+        verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaApply, timeoutS)
         gidL = self.get_restorable(ax, vol)
         if gidL and gid <= gidL[0]:
@@ -2264,7 +2281,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(sizeMb, int)
+        verify_u64(sizeMb)
         self._wait_for_no_action(ax, vol, aaResize, SHORT_TIMEOUT_SEC)
         runCommand = self.get_run_remote_command(ax)
         curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
