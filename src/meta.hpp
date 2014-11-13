@@ -192,8 +192,10 @@ struct MetaDiff
 
     MetaSnap snapB, snapE;
 
+    uint64_t dataSize; /* Optional. */
+
     MetaDiff()
-        : isMergeable(false), isCompDiff(false), timestamp(0), snapB(), snapE() {}
+        : isMergeable(false), isCompDiff(false), timestamp(0), snapB(), snapE(), dataSize(0) {}
     MetaDiff(uint64_t snapBgid, uint64_t snapEgid, bool isMergeable = false, uint64_t ts = 0)
         : MetaDiff(MetaSnap(snapBgid), MetaSnap(snapEgid), isMergeable, ts) {}
     MetaDiff(std::initializer_list<uint64_t> b, std::initializer_list<uint64_t> e, bool isMergeable = false, uint64_t ts = 0)
@@ -245,10 +247,11 @@ struct MetaDiff
         auto s = b + "-->" + e;
         if (verbose) {
             s += cybozu::util::formatString(
-                " (%c%c %s)",
-                isMergeable ? 'M' : '-',
-                isCompDiff ? 'C' : '-',
-                cybozu::unixTimeToPrettyStr(timestamp).c_str());
+                " (%c%c %s %" PRIu64 ")"
+                , isMergeable ? 'M' : '-'
+                , isCompDiff ? 'C' : '-'
+                , cybozu::unixTimeToPrettyStr(timestamp).c_str()
+                , dataSize);
         }
         return s;
     }
@@ -271,6 +274,7 @@ struct MetaDiff
         cybozu::load(timestamp, is);
         cybozu::load(snapB, is);
         cybozu::load(snapE, is);
+        cybozu::load(dataSize, is);
         verify();
     }
     /**
@@ -284,6 +288,7 @@ struct MetaDiff
         cybozu::save(os, timestamp);
         cybozu::save(os, snapB);
         cybozu::save(os, snapE);
+        cybozu::save(os, dataSize);
     }
     void merge(const MetaDiff &rhs);
 };

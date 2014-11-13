@@ -216,7 +216,7 @@ public:
         MetaDiffVec dv = wdiffs_.getMgr().getApplicableDiffList(metaSt.snapB);
         v.push_back(fmt("numDiff %zu", dv.size()));
         uint64_t totalSize = 0;
-        for (const MetaDiff &d : dv) totalSize += wdiffs_.getDiffFileSize(d);
+        for (const MetaDiff &d : dv) totalSize += d.dataSize;
         v.push_back(fmt("wdiffTotalSize %" PRIu64 "", totalSize));
         return v;
     }
@@ -292,19 +292,6 @@ public:
         return v;
     }
     /**
-     * RETURN:
-     *   list of pairs of meta diff and size (bytes)
-     */
-    std::vector<std::pair<MetaDiff, uint64_t>> getDiffListWithSize() const {
-        std::vector<std::pair<MetaDiff, uint64_t>> ret;
-        const MetaDiffVec diffV = getDiffMgr().getAll();
-        for (const MetaDiff &diff : diffV) {
-            const uint64_t sizeB = wdiffs_.getDiffFileSize(diff);
-            ret.push_back(std::make_pair(diff, sizeB));
-        }
-        return ret;
-    }
-    /**
      * @srvSnap latest snapshot of the remote server.
      * @cliSnap latest snapshot of the client server (self).
      * @minSizeB if total wdiff size is less than this size, diff repl is not required.
@@ -324,8 +311,7 @@ public:
             if (minSizeB == 0) return DO_DIFF_REPL;
             uint64_t totalB = 0;
             for (const MetaDiff &diff : diffV) {
-                const uint64_t diffSizeB = wdiffs_.getDiffFileSize(diff);
-                totalB += diffSizeB;
+                totalB += diff.dataSize;
                 if (totalB > minSizeB) return DO_DIFF_REPL;
             }
             return DONT_REPL;

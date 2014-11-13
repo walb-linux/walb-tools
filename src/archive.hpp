@@ -295,7 +295,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
         throw cybozu::Exception(__func__) << "There is no mergeable diff.";
     }
 
-    const MetaDiff mergedDiff = merge(diffV);
+    MetaDiff mergedDiff = merge(diffV);
     LOGs.debug() << "merge-diffs" << mergedDiff << diffV;
     const cybozu::FilePath diffPath = volInfo.getDiffPath(mergedDiff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -316,6 +316,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     }
     writer.flush();
 
+    mergedDiff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(diffPath.str());
     mgr.add(mergedDiff);
     volInfo.removeDiffs(diffV);
@@ -507,7 +508,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
             if snapFrom is clean, then the snapshot must be restorable,
             then the diff must not be mergeable.
         */
-        const MetaDiff diff(snapFrom, snapTo, !snapFrom.isClean(), curTime);
+        MetaDiff diff(snapFrom, snapTo, !snapFrom.isClean(), curTime);
+        diff.dataSize = cybozu::FileStat(tmpFileP->fd()).size();
         tmpFileP->save(volInfo.getDiffPath(diff).str());
         tmpFileP.reset();
         volSt.diffMgr.add(diff);
@@ -680,6 +682,7 @@ inline bool runHashReplServer(
         logger.warn() << "hash-repl-server force-stopped" << volId;
         return false;
     }
+    diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
     volSt.diffMgr.add(diff);
     volInfo.setUuid(uuid);
@@ -769,6 +772,7 @@ inline bool runDiffReplServer(
         logger.warn() << "diff-repl-server force-stopped" << volId;
         return false;
     }
+    diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(fPath.str());
     volSt.diffMgr.add(diff);
     packet::Ack(pkt.sock()).send();
@@ -956,16 +960,12 @@ inline void getDiffList(protocol::GetCommandParams &p)
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
-    using Pair = std::pair<MetaDiff, uint64_t>;
-    const std::vector<Pair> diffSizeV = volInfo.getDiffListWithSize();
+    const MetaDiffVec diffV = volSt.diffMgr.getAll();
     StrVec v;
     v.emplace_back("#snapB-->snapE isMergeable/isCompDiff timestamp sizeB");
-    for (const Pair &p : diffSizeV) {
-        const MetaDiff &diff = p.first;
-        const uint64_t sizeB = p.second;
-        v.push_back(formatMetaDiff("", diff, sizeB));
+    for (const MetaDiff &diff : diffV) {
+        v.push_back(formatMetaDiff("", diff));
     }
     ul.unlock();
     protocol::sendValueAndFin(p, v);
@@ -1533,6 +1533,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             logger.warn() << FUNC << "force stopped" << volId;
             return;
         }
+        diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
         tmpFile.save(fPath.str());
 
         ul.lock();

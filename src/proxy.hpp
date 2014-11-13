@@ -349,7 +349,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
         uint64_t totalSize = 0;
         uint64_t minTs = -1;
         for (const MetaDiff &diff : diffV) {
-            totalSize += volInfo.getDiffFileSize(diff, archiveName);
+            totalSize += diff.dataSize;
             if (minTs > diff.timestamp) minTs = diff.timestamp;
         }
         ret.push_back(fmt("  wdiffTotalSize %" PRIu64 "", totalSize));
@@ -839,6 +839,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     if (!diff.isClean()) {
         throw cybozu::Exception(FUNC) << "diff is not clean" << diff;
     }
+    diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
     packet::Ack(p.sock).sendFin();
 

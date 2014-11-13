@@ -342,13 +342,15 @@ inline int getTotalNumActions(ActionCounters &ac, const C &actions)
     return total;
 }
 
-inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff, size_t size)
+inline std::string formatMetaDiff(const char *prefix, const MetaDiff &diff)
 {
     return cybozu::util::formatString(
         "%s%s %c%c %s %" PRIu64 ""
-        , prefix, diff.str().c_str(), diff.isMergeable ? 'M' : '-'
+        , prefix, diff.str().c_str()
+        , diff.isMergeable ? 'M' : '-'
         , diff.isCompDiff ? 'C' : '-'
-        , util::timeToPrintable(diff.timestamp).c_str(), size);
+        , util::timeToPrintable(diff.timestamp).c_str()
+        , diff.dataSize);
 }
 
 inline std::string createLogFilePath(const std::string &fileStr, const std::string &baseDirStr)

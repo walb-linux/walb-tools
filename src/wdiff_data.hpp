@@ -22,8 +22,11 @@ namespace walb {
 inline MetaDiffVec loadWdiffMetadata(const std::string &dirStr)
 {
     MetaDiffVec ret;
+    cybozu::FilePath dirPath(dirStr);
     for (const std::string &fname : util::getFileNameList(dirStr, "wdiff")) {
-        ret.push_back(parseDiffFileName(fname));
+        MetaDiff d = parseDiffFileName(fname);
+        d.dataSize = (dirPath + fname).stat().size();
+        ret.push_back(d);
     }
     return ret;
 }
@@ -165,16 +168,6 @@ public:
     const cybozu::FilePath &dirPath() const {
         return dir_;
     }
-    /**
-     * Get size of a wdiff files.
-     * RETURN:
-     *   size [byte].
-     *   0 if the file does not exist.
-     */
-    size_t getDiffFileSize(const MetaDiff &diff) const {
-        cybozu::FilePath fPath(createDiffFileName(diff));
-        return (dir_ + fPath).stat().size();
-    }
 private:
     /**
      * Convert diff list to name list.
@@ -188,10 +181,10 @@ private:
     }
     void truncateDiffVecBySize(MetaDiffVec &v, uint64_t size) const {
         if (v.empty()) return;
-        uint64_t total = getDiffFileSize(v[0]);
+        uint64_t total = v[0].dataSize;
         size_t i = 1;
         while (i < v.size()) {
-            uint64_t s = getDiffFileSize(v[i]);
+            const uint64_t s = v[i].dataSize;
             if (size < total + s) break;
             total += s;
             i++;

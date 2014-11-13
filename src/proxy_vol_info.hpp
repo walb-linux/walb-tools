@@ -188,19 +188,9 @@ public:
         if (!archiveName.empty()) p = &diffMgrMap_.get(archiveName);
         uint64_t total = 0;
         for (const MetaDiff &d : p->getAll()) {
-            total += getDiffFileSize(d, archiveName);
-            LOGs.debug() << "total size" << total; // debug
+            total += d.dataSize;
         }
         return total;
-    }
-    /**
-     * get diff file size.
-     * RETURN:
-     *   [byte]
-     */
-    uint64_t getDiffFileSize(const MetaDiff &diff, const std::string &archiveName = "") const {
-        cybozu::FileStat st = getDiffPath(diff, archiveName).stat();
-        return st.isFile() ? st.size() : 0;
     }
     cybozu::FilePath getDiffPath(const MetaDiff &diff, const std::string &archiveName = "") const {
         const std::string fname = createDiffFileName(diff);
