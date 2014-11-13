@@ -20,7 +20,7 @@ while True:
     (d1, d2) = getTwo(ls)
     print "merge", d1, d2, len(ls)
     try:
-        walbc.merge_diff(a0, VOL, d1, d2)
+        walbc.merge(a0, VOL, d1, d2)
         print "done"
     except Exception, e:
         print "ignore:", e

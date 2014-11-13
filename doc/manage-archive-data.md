@@ -9,7 +9,7 @@ You must **explicitly** call the following function to reduce disk usage
 by removing older snapshots.
 
 ```
-python> walbc.apply_diff(ax, vol, gid)
+python> walbc.apply(ax, vol, gid)
 ```
 
 All the snapshots older than the snapshot of `gid` will be removed
@@ -31,7 +31,7 @@ avoiding mergeing their corresponding wdiff files.
 
 The command line is here:
 ```
-python> walbc.merge_diff(ax, vol, gidB, gidE)
+python> walbc.merge(ax, vol, gidB, gidE)
 ```
 `gidB` and `gidE` is gid range to try to merge. `gidB < gidE` must be satisfied.
 
