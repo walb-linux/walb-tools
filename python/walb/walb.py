@@ -1122,7 +1122,7 @@ class Controller:
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'uuid', vol])
 
-    def status(self, sL=[], vol=None):
+    def status(self, sL=[], vol=None, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         print server status.
         sL :: Server|[Server] - server or server list.
@@ -1138,7 +1138,7 @@ class Controller:
             if vol:
                 args.append(vol)
             print '++++++++++++++++++++', s.name, '++++++++++++++++++++'
-            print self.run_ctl(s, args)
+            print self.run_ctl(s, args, timeoutS=timeoutS)
 
     def shutdown(self, s, mode="graceful"):
         '''
