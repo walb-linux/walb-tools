@@ -44,7 +44,7 @@ int doMain(int argc, char *argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
-    diff::Converter c;
+    DiffConverter c;
     cybozu::util::File inputFile, outputFile;
     setupFile(inputFile, opt.input, true);
     setupFile(outputFile, opt.output, false);

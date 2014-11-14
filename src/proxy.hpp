@@ -122,7 +122,7 @@ class ProxyWorker
 private:
     const ProxyTask task_;
 
-    void setupMerger(diff::Merger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+    void setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
@@ -865,7 +865,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     logger.info() << "wlog-transfer succeeded" << volId;
 }
 
-inline void ProxyWorker::setupMerger(diff::Merger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+inline void ProxyWorker::setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
 {
     const char *const FUNC = __func__;
     const int maxRetryNum = 10;
@@ -887,7 +887,7 @@ retry:
                 fileV.clear();
                 goto retry;
             }
-            diff::Reader reader(file.fd());
+            DiffReader reader(file.fd());
             DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
             if (fileV.empty()) {
@@ -938,7 +938,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 
     MetaDiffVec diffV;
-    diff::Merger merger;
+    DiffMerger merger;
     MetaDiff mergedDiff;
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
     if (diffV.empty()) {

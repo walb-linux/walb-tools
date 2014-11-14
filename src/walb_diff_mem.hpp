@@ -346,7 +346,7 @@ public:
     }
     DiffFileHeader& header() { return fileH_; }
     void writeTo(int outFd, bool isCompressed = true) {
-        diff::Writer writer(outFd);
+        DiffWriter writer(outFd);
         writer.writeHeader(fileH_);
         auto it = map_.cbegin();
         while (it != map_.cend()) {
@@ -362,7 +362,7 @@ public:
         writer.close();
     }
     void readFrom(int inFd) {
-        diff::Reader reader(inFd);
+        DiffReader reader(inFd);
         reader.readHeader(fileH_);
         DiffRecord rec;
         DiffIo io;

@@ -95,12 +95,10 @@ inline void writeDiffEofPack(Writer& writer)
     pack.writeTo(writer);
 }
 
-namespace diff {
-
 /**
  * Walb diff writer.
  */
-class Writer /* final */
+class DiffWriter /* final */
 {
 private:
     cybozu::util::File fileW_;
@@ -116,17 +114,17 @@ private:
     DiffStatistics stat_;
 
 public:
-    Writer() : pack_(*(DiffPackHeader *)buf_) {
+    DiffWriter() : pack_(*(DiffPackHeader *)buf_) {
         init();
     }
-    explicit Writer(int fd) : Writer() {
+    explicit DiffWriter(int fd) : DiffWriter() {
         fileW_.setFd(fd);
     }
-    explicit Writer(const std::string &diffPath, int flags, mode_t mode)
-        : Writer() {
+    explicit DiffWriter(const std::string &diffPath, int flags, mode_t mode)
+        : DiffWriter() {
         fileW_.open(diffPath, flags, mode);
     }
-    ~Writer() noexcept {
+    ~DiffWriter() noexcept {
         try {
             close();
         } catch (...) {}
@@ -265,7 +263,7 @@ private:
  *   (2) call readDiffIo() multiple times after readPackHeader() once.
  *   (3) repeat (2) until readPackHeader() returns false.
  */
-class Reader
+class DiffReader
 {
 private:
     cybozu::util::File fileR_;
@@ -280,20 +278,20 @@ private:
     DiffStatistics stat_;
 
 public:
-    Reader() : pack_(*(DiffPackHeader *)buf_) {
+    DiffReader() : pack_(*(DiffPackHeader *)buf_) {
         init();
     }
-    explicit Reader(int fd) : Reader() {
+    explicit DiffReader(int fd) : DiffReader() {
         fileR_.setFd(fd);
     }
     // flags will be deprecated.
-    explicit Reader(const std::string &diffPath, int flags = O_RDONLY) : Reader() {
+    explicit DiffReader(const std::string &diffPath, int flags = O_RDONLY) : DiffReader() {
         fileR_.open(diffPath, flags);
     }
-    explicit Reader(cybozu::util::File &&fileR) : Reader() {
+    explicit DiffReader(cybozu::util::File &&fileR) : DiffReader() {
         fileR_ = std::move(fileR);
     }
-    ~Reader() noexcept try {
+    ~DiffReader() noexcept try {
         close();
     } catch (...) {
     }
@@ -418,4 +416,4 @@ private:
     }
 };
 
-}} //namespace walb::diff
+} //namespace walb

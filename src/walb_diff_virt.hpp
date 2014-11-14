@@ -18,7 +18,6 @@
 #include "walb_diff_merge.hpp"
 
 namespace walb {
-namespace diff {
 
 /**
  * Virtual full image scanner.
@@ -32,7 +31,7 @@ private:
     cybozu::util::File reader_;
     bool isInputFdSeekable_;
     AlignedArray bufForSkip_;
-    diff::Merger merger_;
+    DiffMerger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     DiffRecIo recIo_; /* current diff rec IO. */
     uint16_t offInIo_; /* offset in the IO [logical block]. */
@@ -249,4 +248,4 @@ private:
     }
 };
 
-}} //namespace walb::diff
+} //namespace walb

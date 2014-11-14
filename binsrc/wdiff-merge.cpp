@@ -9,6 +9,8 @@
 #include "util.hpp"
 #include "walb_diff_merge.hpp"
 
+using namespace walb;
+
 struct Option : public cybozu::Option
 {
     uint32_t maxIoSize;
@@ -52,7 +54,7 @@ int doMain(int argc, char *argv[])
 {
     Option opt;
     if (!opt.parse(argc, argv)) return 1;
-    walb::diff::Merger merger;
+    DiffMerger merger;
     for (std::string &path : opt.inputWdiffs) {
         merger.addWdiff(path);
     }

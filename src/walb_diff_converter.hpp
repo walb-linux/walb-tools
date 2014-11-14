@@ -85,12 +85,10 @@ inline bool convertLogToDiff(
     return true;
 }
 
-namespace diff {
-
 /**
  * Converter from walb logs to a walb diff.
  */
-class Converter /* final */
+class DiffConverter /* final */
 {
 public:
     void convert(int inputLogFd, int outputWdiffFd,
@@ -189,4 +187,4 @@ private:
     }
 };
 
-}} //namespace walb::diff
+} //namespace walb

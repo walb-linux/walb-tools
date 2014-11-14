@@ -49,7 +49,7 @@ inline bool matchAddress(uint64_t addr, const DiffRecord& rec)
     return rec.io_address <= addr && addr < rec.endIoAddress();
 }
 
-void printWdiff(diff::Reader &reader, DiffStatistics &stat, const Option &opt)
+void printWdiff(DiffReader &reader, DiffStatistics &stat, const Option &opt)
 {
     DiffFileHeader wdiffH;
     reader.readHeader(wdiffH);
@@ -73,7 +73,7 @@ int doMain(int argc, char *argv[])
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
 
-    diff::Reader reader;
+    DiffReader reader;
     DiffStatistics stat;
     if (opt.filePathV.empty()) {
         reader.setFd(0);

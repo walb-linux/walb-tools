@@ -9,6 +9,8 @@
 #include "walb_diff_virt.hpp"
 #include "fileio.hpp"
 
+using namespace walb;
+
 struct Option : public cybozu::Option
 {
     std::string inputPath;
@@ -65,7 +67,7 @@ int doMain(int argc, char *argv[])
     if (!opt.parse(argc, argv)) return 1;
     cybozu::util::File inFile, outFile;
     setupFiles(inFile, outFile, opt);
-    walb::diff::VirtualFullScanner virt;
+    VirtualFullScanner virt;
     virt.init(std::move(inFile), opt.inputWdiffs);
     virt.readAndWriteTo(outFile.fd(), opt.bufferSize);
     outFile.close();

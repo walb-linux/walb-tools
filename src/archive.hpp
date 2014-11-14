@@ -135,7 +135,7 @@ inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
 const bool allowEmpty = true;
 
 inline void prepareVirtualFullScanner(
-    diff::VirtualFullScanner &virt,
+    VirtualFullScanner &virt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
     const char *const FUNC = __func__;
@@ -174,7 +174,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
 {
     const char *const FUNC = __func__;
     statOut.clear();
-    diff::Merger merger;
+    DiffMerger merger;
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
     DiffRecIo recIo;
@@ -299,11 +299,11 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     LOGs.debug() << "merge-diffs" << mergedDiff << diffV;
     const cybozu::FilePath diffPath = volInfo.getDiffPath(mergedDiff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
-    diff::Merger merger;
+    DiffMerger merger;
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
-    diff::Writer writer(tmpFile.fd());
+    DiffWriter writer(tmpFile.fd());
     DiffFileHeader wdiffH = merger.header();
     writer.writeHeader(wdiffH);
     DiffRecIo recIo;
@@ -336,8 +336,6 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
  */
 inline bool restore(const std::string &volId, uint64_t gid)
 {
-    using namespace walb::diff;
-
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
 
@@ -485,7 +483,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
-        diff::VirtualFullScanner virt;
+        VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
         isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.forceQuit);
         if (isOk) {
@@ -637,7 +635,7 @@ inline bool runHashReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    diff::VirtualFullScanner virt;
+    VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapE);
     if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.forceQuit)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
@@ -674,7 +672,7 @@ inline bool runHashReplServer(
         throw;
     }
 
-    diff::VirtualFullScanner virt;
+    VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
@@ -707,7 +705,7 @@ inline bool runDiffReplClient(
 
     const MetaDiff mergedDiff = merge(diffV);
     LOGs.debug() << "diff-repl-diffs" << st0 << mergedDiff << diffV;
-    diff::Merger merger;
+    DiffMerger merger;
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 

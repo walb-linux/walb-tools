@@ -10,6 +10,8 @@
 #include "bdev_util.hpp"
 #include "walb_diff_file.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
@@ -53,8 +55,6 @@ private:
         }
     }
 };
-
-using namespace walb;
 
 /**
  * Simple diff IO executor.
@@ -135,7 +135,7 @@ public:
     /**
      * Execute a diff Io.
      */
-    void executeDiffIo(const walb::DiffRecord& rec, const DiffIo& io) {
+    void executeDiffIo(const DiffRecord& rec, const DiffIo& io) {
         const uint64_t ioAddr = rec.io_address;
         const uint16_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
@@ -180,12 +180,12 @@ public:
         } else {
             file.setFd(0);
         }
-        walb::diff::Reader wdiffR(file.fd());
+        DiffReader wdiffR(file.fd());
         DiffFileHeader wdiffH;
         wdiffR.readHeader(wdiffH);
         wdiffH.print();
 
-        walb::DiffRecord rec;
+        DiffRecord rec;
         DiffIo io;
         while (wdiffR.readAndUncompressDiff(rec, io)) {
             if (!rec.isValid()) {

@@ -129,27 +129,26 @@ struct DiffPackHeader : walb_diff_pack
     }
 };
 
-namespace diff {
 /**
  * Manage a pack as a contiguous memory.
  */
-class MemoryPack
+class MemoryDiffPack
 {
 private:
     const char *p_;
     size_t size_;
 public:
-    MemoryPack(const char *p, size_t size) : p_(), size_(0) {
+    MemoryDiffPack(const char *p, size_t size) : p_(), size_(0) {
         reset(p, size);
     }
-    MemoryPack(const MemoryPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
+    MemoryDiffPack(const MemoryDiffPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
     }
-    MemoryPack(MemoryPack &&) = delete;
-    MemoryPack &operator=(const MemoryPack &rhs) {
+    MemoryDiffPack(MemoryDiffPack &&) = delete;
+    MemoryDiffPack &operator=(const MemoryDiffPack &rhs) {
         reset(rhs.p_, rhs.size_);
         return *this;
     }
-    MemoryPack &operator=(MemoryPack &&) = delete;
+    MemoryDiffPack &operator=(MemoryDiffPack &&) = delete;
 
     size_t size() const { return size_; }
 
@@ -176,7 +175,7 @@ public:
     }
 private:
     void verify() const {
-        const char *const NAME = "MemoryPack";
+        const char *const NAME = "MemoryDiffPack";
         header().verify();
         for (size_t i = 0; i < header().n_records; i++) {
             const DiffRecord& rec = header()[i];
@@ -201,14 +200,14 @@ private:
 /**
  * Generator of a pack as a memory image.
  */
-class Packer
+class DiffPacker
 {
 private:
     std::vector<char> data_;
     DiffPackHeader *pack_;
 
 public:
-    Packer()
+    DiffPacker()
         : data_(::WALB_DIFF_PACK_SIZE)
         , pack_((DiffPackHeader *)data_.data()) {
     }
@@ -267,7 +266,7 @@ public:
         return ret;
     }
     void verify() const {
-        MemoryPack mpack(data_.data(), data_.size());
+        MemoryDiffPack mpack(data_.data(), data_.size());
     }
     void print(FILE *fp = ::stdout) const {
         pack_->print(fp);
@@ -308,11 +307,9 @@ private:
     }
 };
 
-} // namespace diff
-
 inline void verifyDiffPack(const std::vector<char> &buf)
 {
-    diff::MemoryPack(buf.data(), buf.size());
+    MemoryDiffPack(buf.data(), buf.size());
 }
 
 inline void verifyDiffPackSize(size_t size, const char *msg)

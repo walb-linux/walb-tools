@@ -4,15 +4,14 @@
 #include "walb_diff_compressor.hpp"
 #include "walb_types.hpp"
 
-// TODO:
-// using namespace walb;
+using namespace walb;
 
 using Buffer = walb::compressor::Buffer;
 
 void test(int mode)
 {
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
-    walb::Compressor c(mode);
+    Compressor c(mode);
     std::string enc;
     enc.resize(in.size() * 2);
     size_t encSize;
@@ -20,7 +19,7 @@ void test(int mode)
     CYBOZU_TEST_ASSERT(ret);
     printf("inSize=%d, encSize=%d\n", (int)in.size(), (int)encSize);
     std::string dec;
-    walb::Uncompressor d(mode);
+    Uncompressor d(mode);
     dec.resize(in.size() + 10);
     size_t decSize = d.run(&dec[0], dec.size(), &enc[0], encSize);
     CYBOZU_TEST_EQUAL(decSize, in.size());
@@ -41,9 +40,9 @@ CYBOZU_TEST_AUTO(testCompressor)
 #include "walb_diff_compressor.hpp"
 #include "walb_diff_gen.hpp"
 
-walb::log::Generator::Config createConfig()
+log::Generator::Config createConfig()
 {
-    walb::log::Generator::Config cfg;
+    log::Generator::Config cfg;
     cfg.devLb = (10 << 20) >> 9;
     cfg.minIoLb = 512 >> 9;
     cfg.maxIoLb = 262144 >> 9;
@@ -63,7 +62,7 @@ walb::log::Generator::Config createConfig()
 
 void printPackRaw(char *packRaw)
 {
-    walb::DiffPackHeader &pack = *(walb::DiffPackHeader *)packRaw;
+    DiffPackHeader &pack = *(DiffPackHeader *)packRaw;
     ::printf("<<<<<<<<<<<<<<<<<<<<<\n");
     pack.print();
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
@@ -71,18 +70,18 @@ void printPackRaw(char *packRaw)
 
 std::vector<std::vector<char>> generateRawPacks()
 {
-    walb::log::Generator::Config cfg = createConfig();
-    walb::diff::Generator g(cfg);
+    log::Generator::Config cfg = createConfig();
+    DiffGenerator g(cfg);
     g.generate();
-    walb::DiffMemory &diffMem0 = g.data();
+    DiffMemory &diffMem0 = g.data();
 
     std::vector<std::vector<char>> packV0;
-    walb::diff::Packer packer;
+    DiffPacker packer;
 
     /* Convert memory data to raw pack list. */
-    const walb::DiffMemory::Map& map = diffMem0.getMap();
+    const DiffMemory::Map& map = diffMem0.getMap();
 	for (const auto& i : map) {
-		const walb::DiffRecIo& recIo = i.second;
+		const DiffRecIo& recIo = i.second;
         if (!packer.add(recIo.record(), recIo.io().get())) {
             packV0.push_back(packer.getPackAsVector());
             packer.add(recIo.record(), recIo.io().get());
@@ -98,15 +97,15 @@ std::vector<std::vector<char>> generateRawPacks()
 
 void testPackCompression(int type, const char *rawPack, size_t size)
 {
-    walb::PackCompressor compr(type);
-    walb::PackUncompressor ucompr(type);
+    PackCompressor compr(type);
+    PackUncompressor ucompr(type);
 
-    walb::diff::MemoryPack mpack0(rawPack, size);
+    MemoryDiffPack mpack0(rawPack, size);
 
     Buffer p1 = compr.convert(mpack0.rawPtr());
-    walb::diff::MemoryPack mpack1(p1.data(), p1.size());
+    MemoryDiffPack mpack1(p1.data(), p1.size());
     Buffer p2 = ucompr.convert(mpack1.rawPtr());
-    walb::diff::MemoryPack mpack2(p2.data(), p2.size());
+    MemoryDiffPack mpack2(p2.data(), p2.size());
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
     int ret = ::memcmp(mpack0.rawPtr(), mpack2.rawPtr(), mpack0.size());
@@ -175,7 +174,7 @@ static std::string create(uint32_t len, int idx)
     return ret;
 }
 
-struct NoConverter : walb::compressor::PackCompressorBase {
+struct NoConverter : compressor::PackCompressorBase {
     NoConverter(int, size_t) {}
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
     Buffer convert(const char *buf)
@@ -188,7 +187,7 @@ struct NoConverter : walb::compressor::PackCompressorBase {
     }
 };
 
-typedef walb::compressor_local::ConverterQueueT<NoConverter, NoConverter> ConvQ;
+typedef compressor_local::ConverterQueueT<NoConverter, NoConverter> ConvQ;
 
 CYBOZU_TEST_AUTO(ConverterQueue)
 {
@@ -200,7 +199,7 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     ConvQ cv(maxQueueNum, threadNum, doCompress, type, para);
     const uint32_t len = 1000;
     const size_t bufN = 300;
-    walb::StrVec inData(bufN);
+    StrVec inData(bufN);
     std::vector<Buffer> inBuf(bufN);
     puts("CREATE"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {
@@ -231,7 +230,7 @@ std::vector<Buffer> parallelConverter(
     size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     const int level = 0;
-    walb::ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
+    ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
     std::exception_ptr ep;
     std::vector<Buffer> packV1;
 
@@ -276,7 +275,7 @@ std::vector<Buffer> parallelConverter(
 
 CYBOZU_TEST_AUTO(convertNothing)
 {
-    walb::ConverterQueue cq(4, 2, true, WALB_DIFF_CMPR_SNAPPY, 0);
+    ConverterQueue cq(4, 2, true, WALB_DIFF_CMPR_SNAPPY, 0);
     std::exception_ptr ep;
 
     std::thread popper([&cq, &ep]() {

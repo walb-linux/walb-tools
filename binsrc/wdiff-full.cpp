@@ -9,6 +9,8 @@
 #include "walb_diff_base.hpp"
 #include "walb_diff_file.hpp"
 
+using namespace walb;
+
 class FullImageToWalbDiffConverter
 {
 private:
@@ -24,15 +26,15 @@ public:
     }
     void convert(int inFd, int outFd) {
         cybozu::util::File reader(inFd);
-        walb::diff::Writer writer(outFd);
-        walb::DiffFileHeader head;
+        DiffWriter writer(outFd);
+        DiffFileHeader head;
         head.setMaxIoBlocksIfNecessary(ioBlocks_);
         writer.writeHeader(head);
 
         uint64_t ioAddr = 0;
         uint16_t blks = readChunk(reader);
         while (0 < blks) {
-            walb::DiffRecord rec;
+            DiffRecord rec;
             rec.io_address = ioAddr;
             rec.io_blocks = blks;
             rec.setNormal();

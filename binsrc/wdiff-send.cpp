@@ -95,7 +95,7 @@ private:
         diff.verify();
     }
     void setupFileHeader() {
-        diff::Reader reader;
+        DiffReader reader;
         reader.open(wdiffPath);
         reader.readHeader(fileH);
         if (!uuidStr.empty()) {
@@ -136,7 +136,7 @@ void runDummyProxy(const Option &opt)
 
     // transfer diff data if necessary.
     if (res != msgAccept) return;
-    diff::Merger merger;
+    DiffMerger merger;
     merger.addWdiffs({opt.wdiffPath});
     merger.prepare();
     const CompressOpt cmpr;

@@ -23,21 +23,20 @@
 #include "walb_diff_converter.hpp"
 
 namespace walb {
-namespace diff {
 
 /**
  * Walb diff generator for test.
  */
-class Generator
+class DiffGenerator
 {
 private:
     const log::Generator::Config &config_;
     DiffMemory diffMem_;
 
 public:
-    explicit Generator(const log::Generator::Config &config)
+    explicit DiffGenerator(const log::Generator::Config &config)
         : config_(config), diffMem_() {}
-    ~Generator() noexcept = default;
+    ~DiffGenerator() noexcept = default;
     DiffMemory &data() { return diffMem_; }
     const DiffMemory &data() const { return diffMem_; }
     /**
@@ -83,7 +82,7 @@ public:
                 std::exception_ptr ep;
                 try {
                     ::printf("start worker1.\n"); /* debug */
-                    Converter c;
+                    DiffConverter c;
                     c.convert(inFd_, outFd_);
                 } catch (...) {
                     ep = std::current_exception();
@@ -124,4 +123,4 @@ public:
     }
 };
 
-}} //namespace walb::diff
+} //namespace walb

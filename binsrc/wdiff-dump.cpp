@@ -41,7 +41,7 @@ int doMain(int argc, char *argv[])
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
 
-    diff::Reader wdiffR(opt.wdiffPath, O_RDONLY);
+    DiffReader wdiffR(opt.wdiffPath, O_RDONLY);
     DiffFileHeader wdiffH;
     wdiffR.readHeader(wdiffH);
 

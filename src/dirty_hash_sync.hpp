@@ -16,7 +16,7 @@ namespace walb {
 namespace dirty_hash_sync_local {
 
 inline void compressAndSend(
-    packet::Packet &pkt, diff::Packer &packer,
+    packet::Packet &pkt, DiffPacker &packer,
     PackCompressor &compr, packet::StreamControl &sendCtl)
 {
     Buffer compBuf = compr.convert(packer.getPackAsVector().data());
@@ -39,7 +39,7 @@ inline bool dirtyHashSyncClient(
     const char *const FUNC = __func__;
     packet::StreamControl recvCtl(pkt.sock());
     packet::StreamControl sendCtl(pkt.sock());
-    diff::Packer packer;
+    DiffPacker packer;
     walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
     cybozu::murmurhash3::Hasher hasher(hashSeed);
 

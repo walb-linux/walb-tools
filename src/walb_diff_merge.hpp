@@ -21,7 +21,6 @@
 #include "fileio.hpp"
 
 namespace walb {
-namespace diff {
 
 /**
  * To merge walb diff files.
@@ -32,13 +31,13 @@ namespace diff {
  *   (3a) call mergeToFd() to write out the merged diff data.
  *   (3b) call prepare(), then call header() and getAndRemove() multiple times for other purpose.
  */
-class Merger /* final */
+class DiffMerger /* final */
 {
 private:
     class Wdiff {
     private:
         const std::string wdiffPath_;
-        mutable Reader reader_;
+        mutable DiffReader reader_;
         DiffFileHeader header_;
         mutable DiffRecord rec_;
         mutable DiffIo io_;
@@ -158,7 +157,7 @@ private:
     mutable DiffStatistics statIn_, statOut_;
 
 public:
-    Merger()
+    DiffMerger()
         : shouldValidateUuid_(false)
         , maxIoBlocks_(0)
         , wdiffH_()
@@ -210,7 +209,7 @@ public:
      */
     void mergeToFd(int outFd) {
         prepare();
-        Writer writer(outFd);
+        DiffWriter writer(outFd);
         writer.writeHeader(wdiffH_);
 
         DiffRecIo d;
@@ -370,4 +369,4 @@ private:
     }
 };
 
-}} //namespace walb::diff
+} //namespace walb
