@@ -77,7 +77,7 @@ public:
      */
     void restore(LogFile &wlogFile) {
         /* Read walb log file header from stdin. */
-        log::FileHeader wlHead;
+        WlogFileHeader wlHead;
         wlHead.readFrom(wlogFile);
         const uint32_t pbs = wlHead.pbs();
         const uint32_t salt = wlHead.salt();

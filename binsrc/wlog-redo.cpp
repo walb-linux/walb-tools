@@ -58,7 +58,7 @@ int doMain(int argc, char* argv[])
 
     cybozu::util::File wlogFile;
     setupInputFile(wlogFile, opt);
-    log::FileHeader wh;
+    WlogFileHeader wh;
     wh.readFrom(wlogFile);
     LogRedoConfig cfg;
     cfg = {opt.ddevPath, opt.isVerbose, opt.isDiscard, opt.isZeroDiscard,

@@ -76,10 +76,10 @@ void catWldev(const Option& opt)
 
     cybozu::util::File fileW;
     setupOutputFile(fileW, opt);
-    log::Writer writer(std::move(fileW));
+    WlogWriter writer(std::move(fileW));
 
     /* Create and write walblog header. */
-    log::FileHeader wh;
+    WlogFileHeader wh;
     wh.init(pbs, salt, super.getUuid(), bgnLsid, opt.endLsid);
     writer.writeHeader(wh);
     if (opt.isVerbose || opt.isDebug) std::cerr << wh << std::endl;

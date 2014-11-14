@@ -15,7 +15,6 @@
 #include "walb_logger.hpp"
 
 namespace walb {
-namespace log {
 
 constexpr size_t Q_SIZE = 16;
 
@@ -57,7 +56,7 @@ inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData
  *   (4) repeat (3).
  *   (5) call sync() for normal finish, or fail().
  */
-class Sender
+class WlogSender
 {
 private:
     cybozu::Socket &sock_;
@@ -110,13 +109,13 @@ private:
     BoundedQ q1_; /* compressor_ to sender_. */
 
 public:
-    static constexpr const char *NAME() { return "LogSender"; }
-    Sender(cybozu::Socket &sock, Logger &logger)
+    static constexpr const char *NAME() { return "WlogSender"; }
+    WlogSender(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
         , isEnd_(false), isFailed_(false)
         , q0_(Q_SIZE), q1_(Q_SIZE) {
     }
-    ~Sender() noexcept {
+    ~WlogSender() noexcept {
         if (!isEnd_ && !isFailed_) fail();
     }
     void setParams(uint32_t pbs, uint32_t salt) {
@@ -183,9 +182,9 @@ private:
             try {
                 f();
             } catch (std::exception &e) {
-                logger_.error() << "walb::log::Sender" << e.what();
+                logger_.error() << "WlogSender" << e.what();
             } catch (...) {
-                logger_.error() << "walb::log::Sender:unknown error";
+                logger_.error() << "WlogSender:unknown error";
             }
         }
     }
@@ -209,7 +208,7 @@ private:
  *   (4) repeat (3) while popHeader() returns true.
  *   popHeader() will throw an error if something is wrong.
  */
-class Receiver
+class WlogReceiver
 {
 private:
     cybozu::Socket &sock_;
@@ -264,13 +263,13 @@ private:
     BoundedQ q1_; /* uncompressor_ to output. */
 
 public:
-    static constexpr const char *NAME() { return "LogReceiver"; }
-    Receiver(cybozu::Socket &sock, Logger &logger)
+    static constexpr const char *NAME() { return "WlogReceiver"; }
+    WlogReceiver(cybozu::Socket &sock, Logger &logger)
         : sock_(sock), logger_(logger)
         , isEnd_(false), isFailed_(false)
         , q0_(Q_SIZE), q1_(Q_SIZE) {
     }
-    ~Receiver() noexcept {
+    ~WlogReceiver() noexcept {
         if (!isEnd_ && !isFailed_) fail();
     }
     void setParams(uint32_t pbs, uint32_t salt) {
@@ -313,9 +312,9 @@ public:
     void popIo(const LogRecord &rec, LogBlockShared &blockS) {
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
-            if (!q1_.pop(cd)) throw cybozu::Exception("Receiver:popIo:failed.");
+            if (!q1_.pop(cd)) throw cybozu::Exception("WlogReceiver:popIo:failed.");
             convertToLogBlockShared(blockS, cd, rec.ioSizePb(pbs_), pbs_);
-            verifyLogChecksum(rec, blockS, salt_);
+            verifyWlogChecksum(rec, blockS, salt_);
         } else {
             blockS.init(pbs_);
         }
@@ -341,12 +340,12 @@ private:
             try {
                 f();
             } catch (std::exception &e) {
-                logger_.error("walb::log::Receiver: %s.", e.what());
+                logger_.error("WlogReceiver: %s.", e.what());
             } catch (...) {
-                logger_.error("walb::log::Receiver: unknown error.");
+                logger_.error("WlogReceiver: unknown error.");
             }
         }
     }
 };
 
-}} //namespace walb::log
+} //namespace walb

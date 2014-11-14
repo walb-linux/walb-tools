@@ -19,12 +19,11 @@
 #include "walb_log_file.hpp"
 
 namespace walb {
-namespace log {
 
 /**
- * WalbLog Generator for test.
+ * Wlog generator for test.
  */
-class Generator
+class WlogGenerator
 {
 public:
     struct Config
@@ -67,7 +66,7 @@ private:
     const Config& config_;
 
 public:
-    Generator(const Config& config)
+    WlogGenerator(const Config& config)
         : config_(config) {
     }
     void generate(int outFd) {
@@ -77,10 +76,10 @@ private:
     using Rand = cybozu::util::Random<uint64_t>;
 
     void generateAndWrite(int fd) {
-        Writer writer(fd);
+        WlogWriter writer(fd);
         Rand rand;
         uint64_t writtenPb = 0;
-        log::FileHeader wlHead;
+        WlogFileHeader wlHead;
         cybozu::Uuid uuid;
         rand.fill(uuid.rawData(), uuid.rawSize());
 
@@ -212,4 +211,4 @@ private:
     }
 };
 
-}} //namespace walb::log
+} //namespace walb

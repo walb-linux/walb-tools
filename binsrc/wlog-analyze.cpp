@@ -14,6 +14,8 @@
 #include "walb/walb.h"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
@@ -115,8 +117,8 @@ private:
      */
     uint64_t analyzeWlog(int inFd, uint64_t beginLsid, cybozu::Uuid &uuid) {
         /* Read header. */
-        walb::log::Reader reader(inFd);
-        walb::log::FileHeader wh;
+        WlogReader reader(inFd);
+        WlogFileHeader wh;
         try {
             reader.readHeader(wh);
         } catch (cybozu::util::EofError &e) {
@@ -142,8 +144,8 @@ private:
             throw RT_ERR("wrong lsid.");
         }
         /* Read pack IO. */
-        walb::LogRecord rec;
-        walb::LogBlockShared blockS;
+        LogRecord rec;
+        LogBlockShared blockS;
         while (reader.readLog(rec, blockS)) {
             updateBitmap(rec);
         }
@@ -152,7 +154,7 @@ private:
     /**
      * Update bitmap with a log record.
      */
-    void updateBitmap(const walb::LogRecord &rec) {
+    void updateBitmap(const LogRecord &rec) {
         if (rec.isPadding()) return;
         const uint32_t pbs = config_.blockSize();
         const uint64_t offLb = rec.offset;

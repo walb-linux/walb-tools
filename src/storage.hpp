@@ -798,7 +798,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     }
 
     ProtocolLogger logger(gs.nodeId, serverId);
-    log::Sender sender(sock, logger);
+    WlogSender sender(sock, logger);
     sender.setParams(pbs, salt);
     sender.start();
 

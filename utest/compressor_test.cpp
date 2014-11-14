@@ -40,9 +40,9 @@ CYBOZU_TEST_AUTO(testCompressor)
 #include "walb_diff_compressor.hpp"
 #include "walb_diff_gen.hpp"
 
-log::Generator::Config createConfig()
+WlogGenerator::Config createConfig()
 {
-    log::Generator::Config cfg;
+    WlogGenerator::Config cfg;
     cfg.devLb = (10 << 20) >> 9;
     cfg.minIoLb = 512 >> 9;
     cfg.maxIoLb = 262144 >> 9;
@@ -70,7 +70,7 @@ void printPackRaw(char *packRaw)
 
 std::vector<std::vector<char>> generateRawPacks()
 {
-    log::Generator::Config cfg = createConfig();
+    WlogGenerator::Config cfg = createConfig();
     DiffGenerator g(cfg);
     g.generate();
     DiffMemory &diffMem0 = g.data();

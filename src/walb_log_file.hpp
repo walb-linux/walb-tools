@@ -8,12 +8,8 @@
 #include "uuid.hpp"
 
 namespace walb {
-namespace log {
 
-/**
- * Walb logfile header.
- */
-class FileHeader
+class WlogFileHeader
 {
 private:
     std::vector<uint8_t> data_;
@@ -21,7 +17,7 @@ private:
     static_assert(WALBLOG_HEADER_SIZE >= sizeof(struct walblog_header), "WALBLOG_HEADER_SIZE too small");
 
 public:
-    FileHeader()
+    WlogFileHeader()
         : data_(WALBLOG_HEADER_SIZE, 0) {}
 
     void init(uint32_t pbs, uint32_t salt, const cybozu::Uuid &uuid, uint64_t beginLsid, uint64_t endLsid) {
@@ -88,7 +84,7 @@ public:
     }
     void verify() const {
         if (!isValid(true)) {
-            throw cybozu::Exception("log::FileHeader") << "invalid";
+            throw cybozu::Exception("WlogFileHeader") << "invalid";
         }
     }
 
@@ -130,7 +126,7 @@ public:
             , header().begin_lsid
             , header().end_lsid);
     }
-    friend inline std::ostream& operator<<(std::ostream& os, FileHeader& wh) {
+    friend inline std::ostream& operator<<(std::ostream& os, WlogFileHeader& wh) {
         os << wh.str();
         return os;
     }
@@ -139,7 +135,7 @@ public:
 /**
  * Walb log reader.
  */
-class Reader /* final */
+class WlogReader /* final */
 {
 private:
     cybozu::util::File fileR_;
@@ -154,7 +150,7 @@ private:
     uint64_t endLsid_;
 
 public:
-    explicit Reader(cybozu::util::File &&fileR)
+    explicit WlogReader(cybozu::util::File &&fileR)
         : fileR_(std::move(fileR))
         , isReadHeader_(false)
         , pbs_(0)
@@ -164,14 +160,14 @@ public:
         , packH_()
         , recIdx_(0)
         , endLsid_(0) {}
-    explicit Reader(int fd)
-        : Reader(cybozu::util::File(fd)) {}
+    explicit WlogReader(int fd)
+        : WlogReader(cybozu::util::File(fd)) {}
 
     /**
      * Read log file header.
      * This will throw EofError.
      */
-    void readHeader(FileHeader &fileH) {
+    void readHeader(WlogFileHeader &fileH) {
         if (isReadHeader_) throw RT_ERR("Wlog file header has been read already.");
         isReadHeader_ = true;
         fileH.readFrom(fileR_);
@@ -246,7 +242,7 @@ private:
 /**
  * Walb log writer.
  */
-class Writer
+class WlogWriter
 {
 private:
     cybozu::util::File fileW_;
@@ -259,13 +255,13 @@ private:
     uint64_t beginLsid_;
     uint64_t lsid_;
 public:
-    explicit Writer(cybozu::util::File &&fileW)
+    explicit WlogWriter(cybozu::util::File &&fileW)
         : fileW_(std::move(fileW))
         , isWrittenHeader_(false), isClosed_(false)
         , pbs_(0), salt_(0), beginLsid_(-1), lsid_(-1)  {}
-    explicit Writer(int fd)
-        : Writer(cybozu::util::File(fd)) {}
-    ~Writer() noexcept {
+    explicit WlogWriter(int fd)
+        : WlogWriter(cybozu::util::File(fd)) {}
+    ~WlogWriter() noexcept {
         try {
             close();
         } catch (...) {}
@@ -289,7 +285,7 @@ public:
      * You must call this just once.
      * You need not call fileH.updateChecksum() by yourself before.
      */
-    void writeHeader(FileHeader &fileH) {
+    void writeHeader(WlogFileHeader &fileH) {
         if (isWrittenHeader_) throw RT_ERR("Wlog file header has been written already.");
         if (!fileH.isValid(false)) throw RT_ERR("Wlog file header is invalid.");
         fileH.writeTo(fileW_);
@@ -372,10 +368,6 @@ private:
         h.updateChecksumAndWriteTo(fileW_);
     }
 };
-
-}} //namespace walb::log
-
-namespace walb {
 
 /**
  * Log file reader which has skip().

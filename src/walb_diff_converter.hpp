@@ -135,10 +135,10 @@ private:
      *   true if wlog is remaining, or false.
      */
     bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd, DiffMemory &diffMem) {
-        log::Reader reader(fd);
+        WlogReader reader(fd);
 
         /* Read walblog header. */
-        log::FileHeader wlHeader;
+        WlogFileHeader wlHeader;
         try {
             reader.readHeader(wlHeader);
         } catch (cybozu::util::EofError &e) {

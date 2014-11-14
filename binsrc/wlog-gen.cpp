@@ -88,8 +88,8 @@ struct Option
         return file.fd();
     }
 
-    log::Generator::Config genConfig() const {
-        log::Generator::Config cfg;
+    WlogGenerator::Config genConfig() const {
+        WlogGenerator::Config cfg;
         cfg.devLb = devLb();
         cfg.minIoLb = minIoLb();
         cfg.maxIoLb = maxIoLb();
@@ -109,8 +109,8 @@ struct Option
 int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
-    log::Generator::Config cfg = opt.genConfig();
-    log::Generator wlGen(cfg);
+    WlogGenerator::Config cfg = opt.genConfig();
+    WlogGenerator wlGen(cfg);
     wlGen.generate(opt.getOutFd());
     return 0;
 }

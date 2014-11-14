@@ -55,7 +55,7 @@ void verifyWlog(const Option &opt)
     util::IoRecipeParser recipeParser(recipeFile.fd());
 
     cybozu::util::File wlogFile = getFile(opt.wlogPath);
-    log::FileHeader wh;
+    WlogFileHeader wh;
     wh.readFrom(wlogFile);
 
     verifyLogStream(wlogFile, recipeParser, wh.beginLsid(), -1, wh.pbs(), wh.salt());

@@ -673,9 +673,7 @@ private:
     }
 };
 
-namespace log {
-
-inline void verifyLogChecksum(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
+inline void verifyWlogChecksum(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
     if (!rec.hasDataForChecksum()) return;
     const uint32_t checksum = blockS.calcChecksum(rec.io_size, salt);
@@ -685,17 +683,15 @@ inline void verifyLogChecksum(const LogRecord& rec, const LogBlockShared& blockS
     }
 }
 
-inline bool isLogChecksumValid(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
+inline bool isWlogChecksumValid(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
     try {
-        verifyLogChecksum(rec, blockS, salt);
+        verifyWlogChecksum(rec, blockS, salt);
         return true;
     } catch (std::exception &) {
         return false;
     }
 }
-
-} // walb::log
 
 template <typename Reader>
 inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid = uint64_t(-1))
@@ -719,7 +715,7 @@ inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, Lo
     const size_t ioSizePb = lrec.ioSizePb(pbs);
     if (blockS.pbs() != pbs) blockS.init(pbs);
     blockS.read(reader, ioSizePb);
-    return log::isLogChecksumValid(lrec, blockS, packH.salt());
+    return isWlogChecksumValid(lrec, blockS, packH.salt());
 }
 
 /**

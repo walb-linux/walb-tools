@@ -14,6 +14,8 @@
 #include "cybozu/atoi.hpp"
 #include "walb_util.hpp"
 
+using namespace walb;
+
 /**
  * Command line configuration.
  */
@@ -93,7 +95,7 @@ public:
 
     void update() {
         cybozu::util::File file(config_.inWlogPath(), O_RDWR);
-        walb::log::FileHeader wh;
+        WlogFileHeader wh;
 
         /* Read header. */
         file.lseek(0, SEEK_SET);

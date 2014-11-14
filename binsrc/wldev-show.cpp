@@ -65,7 +65,7 @@ void showWldev(const Option &opt)
     const uint64_t bgnLsid = std::max(opt.bgnLsid, super.getOldestLsid());
     if (opt.showSuper) super.print();
 
-    log::FileHeader wh;
+    WlogFileHeader wh;
     wh.init(pbs, salt, super.getUuid(), bgnLsid, opt.endLsid);
     wh.updateChecksum();
     if (opt.showHead) std::cout << wh.str() << std::endl;

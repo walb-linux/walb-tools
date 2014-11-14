@@ -115,7 +115,7 @@ int doMain(int argc, char* argv[])
     LogFile fileR;
     setupInputFile(fileR, opt);
 
-    log::FileHeader wh;
+    WlogFileHeader wh;
     wh.readFrom(fileR);
     if (opt.showHead) std::cout << wh.str() << std::endl;
     uint64_t lsid = wh.beginLsid();

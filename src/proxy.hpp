@@ -748,7 +748,7 @@ inline bool recvWlogAndWriteDiff(
 
     LogPackHeader packH(pbs, salt);
 
-    log::Receiver receiver(sock, logger);
+    WlogReceiver receiver(sock, logger);
     receiver.setParams(pbs, salt);
     receiver.start();
 

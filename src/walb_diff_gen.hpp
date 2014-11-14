@@ -30,11 +30,11 @@ namespace walb {
 class DiffGenerator
 {
 private:
-    const log::Generator::Config &config_;
+    const WlogGenerator::Config &config_;
     DiffMemory diffMem_;
 
 public:
-    explicit DiffGenerator(const log::Generator::Config &config)
+    explicit DiffGenerator(const WlogGenerator::Config &config)
         : config_(config), diffMem_() {}
     ~DiffGenerator() noexcept = default;
     DiffMemory &data() { return diffMem_; }
@@ -52,14 +52,14 @@ public:
         struct Worker0
         {
             int outFd_;
-            const log::Generator::Config &config_;
-            Worker0(int outFd, const log::Generator::Config &config)
+            const WlogGenerator::Config &config_;
+            Worker0(int outFd, const WlogGenerator::Config &config)
                 : outFd_(outFd), config_(config) {}
             void operator()() {
                 std::exception_ptr ep;
                 try {
                     ::printf("start worker0.\n"); /* debug */
-                    log::Generator g(config_);
+                    WlogGenerator g(config_);
                     g.generate(outFd_);
                 } catch (...) {
                     ep = std::current_exception();
