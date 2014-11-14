@@ -84,7 +84,7 @@ void validateAndPrintLogPackIos(
     const LogPackHeader &packH, std::queue<LogBlockShared>& ioQ)
 {
     for (size_t i = 0; i < packH.nRecords(); i++) {
-        const LogRecord &rec = packH.record(i);
+        const WlogRecord &rec = packH.record(i);
 
         if (!rec.isExist()) {
             throw cybozu::Exception("validateAndPrintLogPackIos")

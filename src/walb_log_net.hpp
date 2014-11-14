@@ -146,7 +146,7 @@ public:
      */
     void pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS) {
         verifyPbsAndSalt(header);
-        const LogRecord &rec = header.record(recIdx);
+        const WlogRecord &rec = header.record(recIdx);
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockS, false);
             assert(0 < cd.originalSize());
@@ -309,7 +309,7 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const LogRecord &rec, LogBlockShared &blockS) {
+    void popIo(const WlogRecord &rec, LogBlockShared &blockS) {
         if (rec.hasDataForChecksum()) {
             CompressedData cd;
             if (!q1_.pop(cd)) throw cybozu::Exception("WlogReceiver:popIo:failed.");

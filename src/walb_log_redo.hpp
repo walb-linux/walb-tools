@@ -121,7 +121,7 @@ public:
     }
 private:
     void redoLogIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
-        const LogRecord &rec = packH.record(idx);
+        const WlogRecord &rec = packH.record(idx);
         assert(rec.isExist());
 
         if (rec.isPadding()) {
@@ -148,13 +148,13 @@ private:
         stat_.normalLb += rec.ioSizeLb();
         redoNormalIo(packH, idx, std::move(blockS));
     }
-    void redoDiscard(const LogRecord &rec) {
+    void redoDiscard(const WlogRecord &rec) {
         assert(cfg_.isDiscard);
         assert(rec.isDiscard());
         ddevWriter_.discard(rec.offset, rec.ioSizeLb());
     }
     void redoNormalIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
-        const LogRecord &rec = packH.record(idx);
+        const WlogRecord &rec = packH.record(idx);
         const uint32_t pbs = packH.pbs();
         assert(!rec.isPadding());
         assert(cfg_.isZeroDiscard || !rec.isDiscard());

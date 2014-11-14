@@ -182,7 +182,7 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(LogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr)
+    bool readLog(WlogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr)
     {
         if (!fetchNextPackHeader()) return false;
 

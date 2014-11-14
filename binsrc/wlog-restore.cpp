@@ -185,7 +185,7 @@ private:
         size_t i = 0;
         UNUSED const uint16_t totalIoSize0 = packH.totalIoSize();
         while (i < packH.nRecords()) {
-            LogRecord &rec = packH.record(i);
+            WlogRecord &rec = packH.record(i);
             if (rec.offset + rec.ioSizeLb() <= opt_.ddevLb) {
                 // do nothing.
                 i++;

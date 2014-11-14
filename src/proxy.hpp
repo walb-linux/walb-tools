@@ -758,7 +758,7 @@ inline bool recvWlogAndWriteDiff(
         }
         LogBlockShared blockS(pbs);
         for (size_t i = 0; i < packH.header().n_records; i++) {
-            LogRecord &lrec = packH.record(i);
+            WlogRecord &lrec = packH.record(i);
             receiver.popIo(lrec, blockS);
             DiffRecord drec;
             DiffIo diffIo;

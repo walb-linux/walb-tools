@@ -8,7 +8,7 @@ namespace walb {
 namespace local {
 
 inline void verifyLogIoAndPrint(
-    const util::IoRecipe &recipe, const LogRecord &rec,
+    const util::IoRecipe &recipe, const WlogRecord &rec,
     const LogBlockShared &blockS, uint32_t salt)
 {
     bool isValid = true;
@@ -63,7 +63,7 @@ inline void verifyLogStream(
         if (!readLogPackHeader(reader, packH, lsid)) break;
         LogBlockShared blockS;
         for (size_t i = 0; i < packH.nRecords(); i++) {
-            const LogRecord &rec = packH.record(i);
+            const WlogRecord &rec = packH.record(i);
             if (!readLogIo(reader, packH, i, blockS)) {
                 throw cybozu::Exception(__func__)
                     << "read log IO failed" << i << packH;

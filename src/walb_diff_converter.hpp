@@ -32,7 +32,7 @@ namespace walb {
  *   true if the pack IO is normal IO or discard or allzero.
  */
 inline bool convertLogToDiff(
-    uint32_t pbs, const LogRecord &rec, const LogBlockShared& blockS,
+    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
     DiffRecord& mrec, DiffIo &diffIo)
 {
     /* Padding */
@@ -170,7 +170,7 @@ private:
         }
 
         /* Convert each log. */
-        LogRecord lrec;
+        WlogRecord lrec;
         LogBlockShared blockS;
         while (reader.readLog(lrec, blockS)) {
             DiffRecord diffRec;

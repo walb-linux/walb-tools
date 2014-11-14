@@ -144,7 +144,7 @@ private:
             throw RT_ERR("wrong lsid.");
         }
         /* Read pack IO. */
-        LogRecord rec;
+        WlogRecord rec;
         LogBlockShared blockS;
         while (reader.readLog(rec, blockS)) {
             updateBitmap(rec);
@@ -154,7 +154,7 @@ private:
     /**
      * Update bitmap with a log record.
      */
-    void updateBitmap(const LogRecord &rec) {
+    void updateBitmap(const WlogRecord &rec) {
         if (rec.isPadding()) return;
         const uint32_t pbs = config_.blockSize();
         const uint64_t offLb = rec.offset;

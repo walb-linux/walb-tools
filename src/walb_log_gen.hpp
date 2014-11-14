@@ -104,7 +104,7 @@ private:
             /* Prepare blocks and calc checksum if necessary. */
             std::queue<LogBlockShared> blockSQ;
             for (uint32_t i = 0; i < packH.nRecords(); i++) {
-                LogRecord &rec = packH.record(i);
+                WlogRecord &rec = packH.record(i);
                 ChecksumCalculator cc(rec.io_size, salt);
 
                 if (rec.hasData()) {

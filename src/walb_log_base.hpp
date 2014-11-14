@@ -25,7 +25,7 @@
 
 namespace walb {
 
-struct LogRecord : public walb_log_record
+struct WlogRecord : public walb_log_record
 {
     uint64_t packLsid() const { return lsid - lsid_local; }
     bool isExist() const {
@@ -63,7 +63,7 @@ struct LogRecord : public walb_log_record
     }
     bool isValid() const { return ::is_valid_log_record_const(this); }
     void verify() const {
-        if (!isValid()) throw cybozu::Exception("LogRecord:verify");
+        if (!isValid()) throw cybozu::Exception("WlogRecord:verify");
     }
     uint32_t ioSizePb(uint32_t pbs) const {
         return ::capacity_pb(pbs, io_size);
@@ -102,7 +102,7 @@ struct LogRecord : public walb_log_record
             , isDiscard()
             , offset, io_size);
     }
-    friend inline std::ostream& operator<<(std::ostream& os, const LogRecord& rec) {
+    friend inline std::ostream& operator<<(std::ostream& os, const WlogRecord& rec) {
         os << rec.str();
         return os;
     }
@@ -163,13 +163,13 @@ public:
      * Utilities.
      */
     const uint8_t *rawData() const { return (const uint8_t*)header_; }
-    const LogRecord &record(size_t pos) const {
+    const WlogRecord &record(size_t pos) const {
         checkIndexRange(pos);
-        return static_cast<const LogRecord &>(header_->record[pos]);
+        return static_cast<const WlogRecord &>(header_->record[pos]);
     }
-    struct LogRecord &record(size_t pos) {
+    struct WlogRecord &record(size_t pos) {
         checkIndexRange(pos);
-        return static_cast<LogRecord &>(header_->record[pos]);
+        return static_cast<WlogRecord &>(header_->record[pos]);
     }
     uint64_t nextLogpackLsid() const {
         if (nRecords() > 0) {
@@ -505,7 +505,7 @@ public:
      */
     size_t invalidate(size_t idx) {
         assert(idx < nRecords());
-        LogRecord &rec = record(idx);
+        WlogRecord &rec = record(idx);
 
         if (rec.isDiscard()) {
             const size_t n = nRecords();
@@ -673,7 +673,7 @@ private:
     }
 };
 
-inline void verifyWlogChecksum(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
+inline void verifyWlogChecksum(const WlogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
     if (!rec.hasDataForChecksum()) return;
     const uint32_t checksum = blockS.calcChecksum(rec.io_size, salt);
@@ -683,7 +683,7 @@ inline void verifyWlogChecksum(const LogRecord& rec, const LogBlockShared& block
     }
 }
 
-inline bool isWlogChecksumValid(const LogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
+inline bool isWlogChecksumValid(const WlogRecord& rec, const LogBlockShared& blockS, uint32_t salt)
 {
     try {
         verifyWlogChecksum(rec, blockS, salt);
@@ -708,7 +708,7 @@ inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsi
 template <typename Reader>
 inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, LogBlockShared &blockS)
 {
-    const LogRecord &lrec = packH.record(idx);
+    const WlogRecord &lrec = packH.record(idx);
     if (!lrec.hasData()) return true;
 
     const uint32_t pbs = packH.pbs();
@@ -733,7 +733,7 @@ inline bool readAllLogIos(
 {
     bool isNotShrinked = true;
     for (size_t i = 0; i < packH.nRecords(); i++) {
-        const LogRecord &rec = packH.record(i);
+        const WlogRecord &rec = packH.record(i);
         if (!rec.hasData()) continue;
 
         LogBlockShared blockS;
@@ -783,7 +783,7 @@ struct LogStatistics
     }
     void update(const LogPackHeader &packH) {
         for (size_t i = 0; i < packH.nRecords(); i++) {
-            const LogRecord &rec = packH.record(i);
+            const WlogRecord &rec = packH.record(i);
             if (rec.isDiscard()) {
                 discardLb += rec.io_size;
             } else if (rec.isPadding()) {
