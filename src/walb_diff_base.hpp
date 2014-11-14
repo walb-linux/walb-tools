@@ -20,6 +20,7 @@
 #include "walb/block_size.h"
 #include "backtrace.hpp"
 #include "compressor.hpp"
+#include "compression_type.hpp"
 
 static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
@@ -69,23 +70,33 @@ struct DiffRecord : public walb_diff_record {
 
     void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "----------\n"
-           "ioAddress: %" PRIu64 "\n"
-           "ioBlocks: %u\n"
-           "compressionType: %u\n"
-           "dataOffset: %u\n"
-           "dataSize: %u\n"
-           "checksum: %08x\n"
-           "isAllZero: %d\n"
-           "isDiscard: %d\n",
-           io_address, io_blocks,
-           compression_type, data_offset, data_size,
-           checksum, isAllZero(), isDiscard());
+                  "ioAddress: %" PRIu64 "\n"
+                  "ioBlocks: %u\n"
+                  "compressionType: %u (%s)\n"
+                  "dataOffset: %u\n"
+                  "dataSize: %u\n"
+                  "checksum: %08x\n"
+                  "isAllZero: %d\n"
+                  "isDiscard: %d\n"
+                  , io_address, io_blocks
+                  , compression_type, compressionTypeToStr(compression_type).c_str()
+                  , data_offset, data_size
+                  , checksum, isAllZero(), isDiscard());
     }
     void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "wdiff_rec:\t%" PRIu64 "\t%u\t%u\t%u\t%u\t%08x\t%c%c\n",
-            io_address, io_blocks,
-            compression_type, data_offset, data_size,
-            checksum, isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
+        ::fprintf(fp, "%s\n", toStr("wdiff_rec:\t").c_str());
+    }
+    std::string toStr(const char *prefix = "") const {
+        return cybozu::util::formatString(
+            "%s""%" PRIu64 "\t%u\t%s\t%u\t%u\t%08x\t%c%c"
+            , prefix, io_address, io_blocks
+            , compressionTypeToStr(compression_type).c_str()
+            , data_offset, data_size, checksum
+            , isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const DiffRecord &rec) {
+        os << rec.toStr();
+        return os;
     }
     static void printHeader(::FILE *fp = ::stdout) {
         ::fprintf(fp, "%s\n", getHeader());

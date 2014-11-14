@@ -6,6 +6,7 @@
 #include "walb_diff_pack.hpp"
 #include "walb_diff_stat.hpp"
 #include "uuid.hpp"
+#include "cybozu/exception.hpp"
 
 namespace walb {
 
@@ -87,10 +88,11 @@ inline void writeDiffFileHeader(Writer& writer, uint16_t maxIoBlocks, const cybo
 template<class Writer>
 inline void writeDiffEofPack(Writer& writer)
 {
-    DiffPackHeader pack;
+    char buf[WALB_DIFF_PACK_SIZE];
+    DiffPackHeader &pack = *(DiffPackHeader*)buf;
+    pack.reset();
     pack.setEnd();
-    pack.updateChecksum();
-    writer.write(pack.rawData(), pack.rawSize());
+    pack.writeTo(writer);
 }
 
 namespace diff {
@@ -106,13 +108,15 @@ private:
     bool isClosed_;
 
     /* Buffers. */
-    DiffPackHeader pack_;
+    char buf_[WALB_DIFF_PACK_SIZE];
+    DiffPackHeader &pack_;
+
     std::queue<DiffIo> ioQ_;
 
     DiffStatistics stat_;
 
 public:
-    Writer() {
+    Writer() : pack_(*(DiffPackHeader *)buf_) {
         init();
     }
     explicit Writer(int fd) : Writer() {
@@ -220,16 +224,16 @@ private:
     }
     /* Write the buffered pack and its related diff ios. */
     void writePack() {
-        if (pack_.nRecords() == 0) {
+        if (pack_.n_records == 0) {
             assert(ioQ_.empty());
             return;
         }
 
-        size_t total = 0;
         stat_.update(pack_);
         pack_.writeTo(fileW_);
 
-        assert(pack_.nRecords() == ioQ_.size());
+        assert(pack_.n_records == ioQ_.size());
+        size_t total = 0;
         while (!ioQ_.empty()) {
             DiffIo io0 = std::move(ioQ_.front());
             ioQ_.pop();
@@ -237,7 +241,7 @@ private:
             io0.writeTo(fileW_);
             total += io0.getSize();
         }
-        assert(total == pack_.totalSize());
+        assert(total == pack_.total_size);
         pack_.reset();
     }
     void writeEof() {
@@ -268,21 +272,22 @@ private:
     bool isReadHeader_;
 
     /* Buffers. */
-    DiffPackHeader pack_;
+    char buf_[WALB_DIFF_PACK_SIZE];
+    DiffPackHeader &pack_;
     uint16_t recIdx_;
     uint32_t totalSize_;
 
     DiffStatistics stat_;
 
 public:
-    Reader() {
+    Reader() : pack_(*(DiffPackHeader *)buf_) {
         init();
     }
     explicit Reader(int fd) : Reader() {
         fileR_.setFd(fd);
     }
     // flags will be deprecated.
-    Reader(const std::string &diffPath, int flags = O_RDONLY) : Reader() {
+    explicit Reader(const std::string &diffPath, int flags = O_RDONLY) : Reader() {
         fileR_.open(diffPath, flags);
     }
     explicit Reader(cybozu::util::File &&fileR) : Reader() {
@@ -295,12 +300,15 @@ public:
 
     void close() {
         fileR_.close();
+        pack_.setEnd();
     }
     void open(const std::string &diffPath) {
+        close();
         init();
         fileR_.open(diffPath, O_RDONLY);
     }
     void setFd(int fd) {
+        close();
         init();
         fileR_.setFd(fd);
     }
@@ -331,20 +339,17 @@ public:
      *   false if the input stream reached the end.
      */
     bool readDiff(DiffRecord &rec, DiffIo &io) {
-        if (!canRead()) return false;
-        rec = pack_.record(recIdx_);
+        if (!prepareRead()) return false;
+        assert(pack_.n_records == 0 || recIdx_ < pack_.n_records);
+        rec = pack_[recIdx_];
 
         if (!rec.isValid()) {
-#ifdef DEBUG
-            rec.print();
-            pack_.record(recIdx_).print();
-#endif
-            throw RT_ERR("Invalid record.");
+            throw cybozu::Exception(__func__)
+                << "invalid record" << fileR_.fd() << recIdx_ << rec;
         }
         readDiffIo(rec, io);
         return true;
     }
-
     /**
      * Read a diff IO and uncompress it.
      *
@@ -364,25 +369,13 @@ public:
         rec.checksum = io.calcChecksum();
         return true;
     }
-
-    bool canRead() {
-        if (pack_.isEnd() ||
-            (recIdx_ == pack_.nRecords() && !readPackHeader())) {
-            return false;
+    bool prepareRead() {
+        if (pack_.isEnd()) return false;
+        bool ret = true;
+        if (recIdx_ == pack_.n_records) {
+            ret = readPackHeader();
         }
-        return true;
-    }
-
-    bool readPackHeader(DiffPackHeader& pack) {
-        try {
-            pack.readFrom(fileR_);
-        } catch (cybozu::util::EofError &e) {
-            return false;
-        }
-        if (pack.isEnd()) return false;
-        recIdx_ = 0;
-        totalSize_ = 0;
-        return true;
+        return ret;
     }
     /**
      * Read a diff IO.
@@ -402,16 +395,18 @@ public:
         return stat_;
     }
 private:
-    /**
-     * Read pack header.
-     *
-     * RETURN:
-     *   false if EofError caught.
-     */
     bool readPackHeader() {
-        const bool ret = readPackHeader(pack_);
+        try {
+            pack_.readFrom(fileR_);
+        } catch (cybozu::util::EofError &e) {
+            pack_.setEnd();
+            return false;
+        }
+        if (pack_.isEnd()) return false;
+        recIdx_ = 0;
+        totalSize_ = 0;
         stat_.update(pack_);
-        return ret;
+        return true;
     }
     void init() {
         pack_.reset();

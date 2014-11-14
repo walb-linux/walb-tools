@@ -4,6 +4,9 @@
 #include "walb_diff_compressor.hpp"
 #include "walb_types.hpp"
 
+// TODO:
+// using namespace walb;
+
 using Buffer = walb::compressor::Buffer;
 
 void test(int mode)
@@ -60,9 +63,9 @@ walb::log::Generator::Config createConfig()
 
 void printPackRaw(char *packRaw)
 {
-    walb::DiffPackHeader packh(packRaw);
+    walb::DiffPackHeader &pack = *(walb::DiffPackHeader *)packRaw;
     ::printf("<<<<<<<<<<<<<<<<<<<<<\n");
-    packh.print();
+    pack.print();
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
 }
 
@@ -74,43 +77,20 @@ std::vector<std::vector<char>> generateRawPacks()
     walb::DiffMemory &diffMem0 = g.data();
 
     std::vector<std::vector<char>> packV0;
-    std::vector<char> packRaw(::WALB_DIFF_PACK_SIZE);
-    walb::DiffPackHeader packh(&packRaw[0]);
-    packh.reset();
-
-    auto addIo = [&](const walb::DiffRecord &rec, const char *data, size_t size) {
-        //packh.print(); /* debug */
-        //if (!packh.add(rec)) {
-        if (10 <= packh.nRecords() || !packh.add(rec)) {
-            //::printf("packh.nRecords: %u\n", packh.nRecords()); /* debug */
-            //printPackRaw(&packRaw[0]); /* debug */
-            packh.updateChecksum();
-            packV0.push_back(std::move(packRaw));
-            CYBOZU_TEST_ASSERT(packRaw.empty());
-            packRaw.resize(::WALB_DIFF_PACK_SIZE);
-            packh.resetBuffer(&packRaw[0]);
-            packh.reset();
-            UNUSED bool ret = packh.add(rec);
-            assert(ret);
-        }
-        //::printf("nRecords: %u\n", packh.nRecords()); /* debug */
-
-        size_t pos = packRaw.size();
-        CYBOZU_TEST_EQUAL(packh.record(packh.nRecords() - 1).data_offset,
-                          pos - ::WALB_DIFF_PACK_SIZE);
-        packRaw.resize(pos + size);
-        packh.resetBuffer(&packRaw[0]);
-        ::memcpy(&packRaw[pos], data, size);
-    };
+    walb::diff::Packer packer;
 
     /* Convert memory data to raw pack list. */
     const walb::DiffMemory::Map& map = diffMem0.getMap();
 	for (const auto& i : map) {
 		const walb::DiffRecIo& recIo = i.second;
-		addIo(recIo.record(), recIo.io().get(), recIo.io().getSize());
+        if (!packer.add(recIo.record(), recIo.io().get())) {
+            packV0.push_back(packer.getPackAsVector());
+            packer.add(recIo.record(), recIo.io().get());
+        }
 	}
-    packh.updateChecksum();
-    packV0.push_back(std::move(packRaw));
+    if (!packer.empty()) {
+        packV0.push_back(packer.getPackAsVector());
+    }
     //::printf("Number of packs: %zu\n", packV0.size());
 
     return packV0;

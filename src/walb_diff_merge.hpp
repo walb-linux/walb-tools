@@ -38,7 +38,6 @@ private:
     class Wdiff {
     private:
         const std::string wdiffPath_;
-        cybozu::util::File file_;
         mutable Reader reader_;
         DiffFileHeader header_;
         mutable DiffRecord rec_;
@@ -48,8 +47,7 @@ private:
     public:
         explicit Wdiff(const std::string &wdiffPath)
             : wdiffPath_(wdiffPath)
-            , file_(wdiffPath, O_RDONLY)
-            , reader_(file_.fd())
+            , reader_(cybozu::util::File(wdiffPath, O_RDONLY))
             , rec_()
             , io_()
             , isFilled_(false)
@@ -61,8 +59,7 @@ private:
          */
         explicit Wdiff(cybozu::util::File &&file)
             : wdiffPath_()
-            , file_(std::move(file))
-            , reader_(file_.fd())
+            , reader_(std::move(file))
             , rec_()
             , io_()
             , isFilled_(false)

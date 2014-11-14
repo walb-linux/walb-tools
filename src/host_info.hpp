@@ -4,6 +4,7 @@
 #include <iostream>
 #include "walb_util.hpp"
 #include "walb_diff_base.hpp"
+#include "compression_type.hpp"
 #include "cybozu/serializer.hpp"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
@@ -159,45 +160,6 @@ struct HostInfoForBkp
         return os;
     }
 };
-
-namespace host_info_local {
-
-struct Pair
-{
-    std::string typeStr;
-    int type;
-};
-
-static const Pair compressionTypeTable[] = {
-    { "none", ::WALB_DIFF_CMPR_NONE },
-    { "snappy", ::WALB_DIFF_CMPR_SNAPPY },
-    { "gzip", ::WALB_DIFF_CMPR_GZIP },
-    { "lzma", ::WALB_DIFF_CMPR_LZMA },
-};
-
-} // namespace host_info_local
-
-inline int parseCompressionType(const std::string &typeStr)
-{
-    namespace lo = host_info_local;
-    for (const lo::Pair &p : lo::compressionTypeTable) {
-        if (p.typeStr == typeStr) {
-            return p.type;
-        }
-    }
-    throw cybozu::Exception("parseCompressionType:wrong type") << typeStr;
-}
-
-inline const std::string &compressionTypeToStr(int type)
-{
-    namespace lo = host_info_local;
-    for (const lo::Pair &p : lo::compressionTypeTable) {
-        if (p.type == type) {
-            return p.typeStr;
-        }
-    }
-    throw cybozu::Exception("compressionTypeToStr:wrong type") << type;
-}
 
 inline CompressOpt parseCompressOpt(const std::string &comprOpt)
 {

@@ -9,7 +9,6 @@
 #include <string>
 #include <cybozu/exception.hpp>
 #include "walb_diff.h"
-#include "compressor.hpp"
 
 namespace walb {
 
@@ -145,4 +144,3 @@ private:
 };
 
 } // walb
-

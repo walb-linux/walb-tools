@@ -26,7 +26,7 @@ inline bool wdiffTransferClient(
         ctrl.next();
         pkt.write<size_t>(pack.size());
         pkt.write(pack.data(), pack.size());
-        statOut.update(*(const walb_diff_pack*)pack.data());
+        statOut.update(*(const DiffPackHeader*)pack.data());
     };
 
     DiffRecIo recIo;

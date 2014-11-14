@@ -53,20 +53,10 @@ struct DiffStatistics
     }
     void update(const DiffPackHeader& pack) {
         if (pack.isEnd()) return;
-        const size_t nr = pack.nRecords();
-        for (size_t i = 0; i < nr; i++) {
-            update(pack.record(i));
-        }
-    }
-#if 1 // QQQ
-    void update(const walb_diff_pack& pack) {
-        const uint8_t mask = 1U << WALB_DIFF_PACK_END;
-        if ((pack.flags & mask) != 0) return; // isEnd
         for (size_t i = 0; i < pack.n_records; i++) {
-            update(static_cast<const DiffRecord&>(pack.record[i]));
+            update(pack[i]);
         }
     }
-#endif
     void update(const DiffStatistics& stat) {
         wdiffNr += stat.wdiffNr;
         normNr += stat.normNr;
