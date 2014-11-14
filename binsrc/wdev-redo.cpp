@@ -53,7 +53,7 @@ void redo(const Option &opt)
     reader.reset(bgnLsid);
 
     if (opt.isVerbose) super.print();
-    LogRedoConfig cfg;
+    WlogRedoConfig cfg;
     cfg = {opt.ddevPath, opt.isVerbose, opt.isDiscard, opt.isZeroDiscard,
            pbs, salt, bgnLsid, true, false};
 
@@ -61,11 +61,11 @@ void redo(const Option &opt)
     LogPackHeader packH;
     uint64_t writtenLsid;
     if (opt.dontUseAio) {
-        LogApplyer<SimpleBdevWriter> applyer(cfg);
+        WlogApplyer<SimpleBdevWriter> applyer(cfg);
         isShrinked = applyer.run(reader, &writtenLsid);
         applyer.getPackHeader(packH);
     } else {
-        LogApplyer<AsyncBdevWriter> applyer(cfg);
+        WlogApplyer<AsyncBdevWriter> applyer(cfg);
         isShrinked = applyer.run(reader, &writtenLsid);
         applyer.getPackHeader(packH);
     }

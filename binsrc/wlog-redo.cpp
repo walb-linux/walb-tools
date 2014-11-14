@@ -60,15 +60,15 @@ int doMain(int argc, char* argv[])
     setupInputFile(wlogFile, opt);
     WlogFileHeader wh;
     wh.readFrom(wlogFile);
-    LogRedoConfig cfg;
+    WlogRedoConfig cfg;
     cfg = {opt.ddevPath, opt.isVerbose, opt.isDiscard, opt.isZeroDiscard,
            wh.pbs(), wh.salt(), wh.beginLsid(), false, opt.doSkipCsum};
 
     if (opt.dontUseAio) {
-        LogApplyer<SimpleBdevWriter> applyer(cfg);
+        WlogApplyer<SimpleBdevWriter> applyer(cfg);
         applyer.run(wlogFile);
     } else {
-        LogApplyer<AsyncBdevWriter> applyer(cfg);
+        WlogApplyer<AsyncBdevWriter> applyer(cfg);
         applyer.run(wlogFile);
     }
     wlogFile.close();
