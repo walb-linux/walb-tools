@@ -321,6 +321,8 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     mgr.add(mergedDiff);
     volInfo.removeDiffs(diffV);
 
+    LOGs.info() << "merge-mergeIn " << volId << merger.statIn();
+    LOGs.info() << "merge-mergeOut" << volId << writer.getStat();
     LOGs.info() << "merged" << diffV.size() << mergedDiff;
     return true;
 }
