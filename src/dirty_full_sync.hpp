@@ -5,7 +5,7 @@
 #include "packet.hpp"
 #include "fileio.hpp"
 #include "walb_logger.hpp"
-#include "bdev_io.hpp"
+#include "bdev_reader.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {

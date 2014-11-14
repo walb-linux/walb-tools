@@ -1,5 +1,5 @@
 #include "cybozu/test.hpp"
-#include "bdev_io.hpp"
+#include "bdev_reader.hpp"
 #include "tmp_file.hpp"
 #include "random.hpp"
 

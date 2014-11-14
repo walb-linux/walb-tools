@@ -17,7 +17,7 @@
 #include "walb_util.hpp"
 #include "aio_util.hpp"
 #include "bdev_util.hpp"
-#include "bdev_io.hpp"
+#include "bdev_reader.hpp"
 #include "random.hpp"
 #include "walb/super.h"
 #include "walb/log_device.h"

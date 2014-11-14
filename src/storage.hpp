@@ -15,7 +15,7 @@
 #include "dirty_full_sync.hpp"
 #include "dirty_hash_sync.hpp"
 #include "walb_util.hpp"
-#include "bdev_io.hpp"
+#include "bdev_reader.hpp"
 
 namespace walb {
 
