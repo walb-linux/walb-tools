@@ -862,7 +862,7 @@ CYBOZU_TEST_AUTO(metaStataStr)
     {
         time_t ts = ::time(0);
         MetaState metaSt0 (MetaSnap(100), ts);
-        MetaState metaSt1 = strToMetaState(metaSt0.str() + "-" + cybozu::unixTimeToStr(ts));
+        MetaState metaSt1 = strToMetaState(metaSt0.strTs());
         CYBOZU_TEST_EQUAL(metaSt0, metaSt1);
         CYBOZU_TEST_EQUAL(metaSt0.timestamp, metaSt1.timestamp);
     }

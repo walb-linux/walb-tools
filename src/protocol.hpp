@@ -86,6 +86,7 @@ const char *const existsDiffTN = "exists-diff";
 const char *const restoredTN = "restored";
 const char *const restorableTN = "restorable";
 const char *const uuidTN = "uuid";
+const char *const baseTN = "base";
 
 /**
  * Internal protocol name.

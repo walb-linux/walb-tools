@@ -362,6 +362,9 @@ struct MetaState
             return cybozu::util::formatString("<%s>", b.c_str());
         }
     }
+    std::string strTs() const {
+        return str() + "-" + cybozu::unixTimeToStr(timestamp);
+    }
     friend inline std::ostream &operator<<(std::ostream &os, const MetaState &st) {
         os << st.str();
         return os;
