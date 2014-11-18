@@ -811,3 +811,59 @@ CYBOZU_TEST_AUTO(diffFileName)
         }
     }
 }
+
+CYBOZU_TEST_AUTO(snapStr)
+{
+    MetaSnap snap;
+    {
+        snap.set(5, 10);
+        MetaSnap snap2 = strToMetaSnap(snap.str());
+        CYBOZU_TEST_EQUAL(snap, snap2);
+    }
+    {
+        snap.set(100);
+        MetaSnap snap2 = strToMetaSnap(snap.str());
+        CYBOZU_TEST_EQUAL(snap, snap2);
+    }
+}
+
+CYBOZU_TEST_AUTO(metaStataStr)
+{
+    {
+        MetaState metaSt(MetaSnap(100), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        MetaState metaSt(MetaSnap(100, 200), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        MetaState metaSt(MetaSnap(100), MetaSnap(300), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        MetaState metaSt(MetaSnap(100), MetaSnap(300, 400), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        MetaState metaSt(MetaSnap(100, 200), MetaSnap(300), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        MetaState metaSt(MetaSnap(100, 200), MetaSnap(300, 400), ::time(0));
+        MetaState metaSt2 = strToMetaState(metaSt.str());
+        CYBOZU_TEST_EQUAL(metaSt, metaSt2);
+    }
+    {
+        time_t ts = ::time(0);
+        MetaState metaSt0 (MetaSnap(100), ts);
+        MetaState metaSt1 = strToMetaState(metaSt0.str() + "-" + cybozu::unixTimeToStr(ts));
+        CYBOZU_TEST_EQUAL(metaSt0, metaSt1);
+        CYBOZU_TEST_EQUAL(metaSt0.timestamp, metaSt1.timestamp);
+    }
+}

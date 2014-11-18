@@ -64,6 +64,9 @@ const char *const resizeCN = "resize";
 const char *const shutdownCN = "shutdown";
 const char *const kickCN = "kick";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
+const char *const dbgSetUuid = "dbg-set-uuid";
+const char *const dbgSetState = "dbg-set-state";
+const char *const dbgSetBase = "dbg-set-base";
 const char *const getCN = "get";
 const char *const execCN = "exec";
 

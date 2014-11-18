@@ -1824,10 +1824,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.empty()) {
-            throw cybozu::Exception(FUNC) << "specify volId";
-        }
+        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
         const std::string &volId = v[0];
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
@@ -1846,6 +1843,88 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 
         pkt.writeFin(msgOk);
         logger.info() << "reset succeeded" << volId;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
+/**
+ * This is dangerous. Use for debug purpose.
+ */
+inline void c2aSetUuidServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const std::string &uuidStr = v[1];
+        cybozu::Uuid uuid;
+        uuid.set(uuidStr);
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        volInfo.setUuid(uuid);
+        ul.unlock();
+        pkt.writeFin(msgOk);
+        logger.info() << "set-uuid succeeded" << volId << uuid;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
+/**
+ * This is dangerous. Use for debug purpose.
+ */
+inline void c2aSetStateServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const std::string &state = v[1];
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        volSt.sm.set(state);
+        volInfo.setState(state);
+        ul.unlock();
+        pkt.writeFin(msgOk);
+        logger.info() << "set-state succeeded" << volId << state;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
+/**
+ * This is dangerous. Use for debug purpose.
+ */
+inline void c2aSetBaseServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
+        const std::string &volId = v[0];
+        const std::string &metaStateStr = v[1];
+        MetaState metaSt = strToMetaState(metaStateStr);
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        volInfo.setMetaState(metaSt);
+        ul.unlock();
+        pkt.writeFin(msgOk);
+        logger.info() << "set-base succeeded" << volId << metaSt;
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());
@@ -1891,6 +1970,9 @@ const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
     { applyCN, c2aApplyServer },
     { mergeCN, c2aMergeServer },
     { resizeCN, c2aResizeServer },
+    { dbgSetUuid, c2aSetUuidServer },
+    { dbgSetState, c2aSetStateServer },
+    { dbgSetBase, c2aSetBaseServer },
     { getCN, c2aGetServer },
     { execCN, c2aExecServer },
     // protocols.

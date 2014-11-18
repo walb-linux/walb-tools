@@ -201,6 +201,42 @@ inline void c2aReloadMetadataClient(protocol::ClientParams &p)
 }
 
 /**
+ * params[0]: volId.
+ * params[1]: uuid string.
+ *
+ * !!!CAUSION!!!
+ * This is for test and debug.
+ */
+inline void  c2aSetUuidClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+}
+
+/**
+ * params[0]: volId.
+ * params[1]: state string.
+ *
+ * !!!CAUSION!!!
+ * This is for test and debug.
+ */
+inline void  c2aSetStateClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+}
+
+/**
+ * params[0]: volId.
+ * params[1]: MetaState string.
+ *
+ * !!!CAUSION!!!
+ * This is for test and debug.
+ */
+inline void  c2aSetBaseClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+}
+
+/**
  * params[0] volId
  * params[1] sizeMbStr. allowed size of remaining wdiffs [MiB].
  * params[2] archiveAddrPortStr like "192.168.1.1:10000".
@@ -311,6 +347,9 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { resizeCN, c2xResizeClient },
     { kickCN, c2xKickClient },
     { dbgReloadMetadataCN, c2aReloadMetadataClient },
+    { dbgSetUuid, c2aSetUuidClient },
+    { dbgSetState, c2aSetStateClient },
+    { dbgSetBase, c2aSetBaseClient },
     { getCN, c2xGetClient },
     { execCN, c2xGetStrVecClient },
 };

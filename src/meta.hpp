@@ -1268,4 +1268,89 @@ private:
     }
 };
 
+namespace meta_local {
+
+inline size_t findNonInt(const std::string &s, size_t i)
+{
+    assert(i < s.size());
+    while ('0' <= s[i] && s[i] <= '9') i++;
+    return i;
+}
+
+/**
+ * parse '|gid|' or '|gid,gid|' string.
+ * RETURN:
+ *   next position.
+ */
+inline size_t parseMetaSnap(const std::string &s, size_t i, MetaSnap &snap)
+{
+    const char *const FUNC = __func__;
+    const char *msg = "bad input string";
+    if (s[i] != '|') throw cybozu::Exception(FUNC) << msg << s << i;
+    i++;
+    size_t j = findNonInt(s, i);
+    const uint64_t gidB = cybozu::atoi(s.substr(i, j - i));
+    if (s[j] == '|') {
+        snap.set(gidB);
+        return j + 1;
+    }
+    if (s[j] != ',') throw cybozu::Exception(FUNC) << msg << s << i;
+    i = j + 1;
+    j = findNonInt(s, i);
+    if (s[j] != '|') throw cybozu::Exception(FUNC) << msg << s << i;
+    const uint64_t gidE = cybozu::atoi(s.substr(i, j - i));
+    snap.set(gidB, gidE);
+    return j + 1;
+}
+
+} // namespace meta_local
+
+inline MetaSnap strToMetaSnap(const std::string &s)
+{
+    MetaSnap snap;
+    meta_local::parseMetaSnap(s, 0, snap);
+    return snap;
+}
+
+/**
+ * <SNAP>-TIMESTAMP or <SNAP-->SNAP>-TIMESTAMP
+ * TIMESTAMP format is 'YYYYMMDDhhmmss'.
+ * SNAP format is '|gid|' or '|gid,gid|'
+ */
+inline MetaState strToMetaState(const std::string &s)
+{
+    const char *const FUNC = __func__;
+    const char *msg = "bad input string";
+    if (s[0] != '<') throw cybozu::Exception(FUNC) << msg << s << 0;
+
+    MetaSnap snapB, snapE;
+    size_t pos = meta_local::parseMetaSnap(s, 1, snapB);
+    const bool isApplying = s[pos] != '>';
+    if (isApplying) {
+        if (s.substr(pos, 3) != "-->") {
+            throw cybozu::Exception(FUNC) << msg << s << pos;
+        }
+        pos = meta_local::parseMetaSnap(s, pos + 3, snapE);
+    }
+    if (s[pos] != '>') throw cybozu::Exception(FUNC) << msg << s << pos;
+    pos++;
+    time_t ts;
+    if (s.size() == pos) {
+        ts = ::time(0);
+    } else {
+        if (s[pos] != '-') throw cybozu::Exception(FUNC) << msg << s << pos;
+        pos++;
+        size_t pos2 = meta_local::findNonInt(s, pos);
+        if (pos2 != s.size()) {
+            throw cybozu::Exception(FUNC) << msg << s << pos;
+        }
+        ts = cybozu::strToUnixTime(s.substr(pos, pos2));
+    }
+    if (isApplying) {
+        return MetaState(snapB, snapE, ts);
+    } else {
+        return MetaState(snapB, ts);
+    }
+}
+
 } //namespace walb
