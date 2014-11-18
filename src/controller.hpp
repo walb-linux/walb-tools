@@ -2,6 +2,7 @@
 #include "protocol.hpp"
 #include "constant.hpp"
 #include "host_info.hpp"
+#include "murmurhash3.hpp"
 
 namespace walb {
 
@@ -302,6 +303,29 @@ inline void c2xKickClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
+/**
+ * params[0]: volId
+ * params[1]: gidStr
+ * params[2]: blkSizeU (optional)
+ */
+inline void c2aBlockHashClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgAccept);
+
+    packet::StreamControl ctrl(p.sock);
+    while (ctrl.isDummy()) ctrl.reset();
+
+    packet::Packet pkt(p.sock);
+    std::string msg;
+    pkt.read(msg);
+    if (msg != msgOk) {
+        throw cybozu::Exception(__func__) << "failed" << msg;
+    }
+    cybozu::murmurhash3::Hash hash;
+    pkt.read(hash);
+    std::cout << hash << std::endl;
+}
+
 inline void c2xGetClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
@@ -347,6 +371,7 @@ const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
     { mergeCN, c2aMergeClient },
     { resizeCN, c2xResizeClient },
     { kickCN, c2xKickClient },
+    { blockHashCN, c2aBlockHashClient },
     { dbgReloadMetadataCN, c2aReloadMetadataClient },
     { dbgSetUuid, c2aSetUuidClient },
     { dbgSetState, c2aSetStateClient },

@@ -1135,6 +1135,48 @@ inline void getBase(protocol::GetCommandParams &p)
     p.logger.debug() << "get base succeeded" << volId << metaStStr;
 }
 
+/**
+ * For test use only.
+ */
+inline bool getBlockHash(
+    const std::string &volId, uint64_t gid, uint64_t bulkLb,
+    packet::Packet &pkt, Logger &, cybozu::murmurhash3::Hash &hash)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+
+    VirtualFullScanner virt;
+    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, MetaSnap(gid));
+
+    std::vector<char> buf;
+    buf.reserve(bulkLb * LOGICAL_BLOCK_SIZE);
+    packet::StreamControl ctrl(pkt.sock());
+    cybozu::murmurhash3::Hasher hasher(0); // seed is 0.
+    hash.clear();
+    uint64_t remaining = sizeLb;
+    double t0 = cybozu::util::getTime();
+    while (remaining > 0) {
+        if (volSt.stopState == ForceStopping || ga.forceQuit) {
+            ctrl.end();
+            return false;
+        }
+        const uint64_t lb = std::min(remaining, bulkLb);
+        buf.resize(lb * LOGICAL_BLOCK_SIZE);
+        virt.read(buf.data(), buf.size());
+        const cybozu::murmurhash3::Hash h = hasher(buf.data(), buf.size());
+        hash.doXor(h);
+        const double t1 = cybozu::util::getTime();
+        if (t1 - t0 > 1.0) { // to avoid timeout.
+            ctrl.dummy();
+            t0 = t1;
+        }
+        remaining -= bulkLb;
+    }
+    ctrl.end();
+    return true;
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -1869,6 +1911,45 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 }
 
 /**
+ * params[0]: volId
+ * params[1]: gid
+ * params[2]: bulkSizeU (optional)
+ */
+inline void c2aBlockHashServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+    bool sendErr = true;
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::string volId, gidStr, bulkSizeU;
+        cybozu::util::parseStrVec(v, 0, 2, {&volId, &gidStr, &bulkSizeU});
+        const uint64_t gid = cybozu::atoi(gidStr);
+        uint64_t bulkLb = DEFAULT_BULK_LB;
+        if (!bulkSizeU.empty()) bulkLb = util::parseBulkLb(bulkSizeU, FUNC);
+
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        // This does not lock volSt.
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        pkt.write(msgAccept);
+
+        cybozu::murmurhash3::Hash hash;
+        if (!archive_local::getBlockHash(volId, gid, bulkLb, pkt, logger, hash)) {
+            throw cybozu::Exception(FUNC) << "force stopped" << volId;
+        }
+        pkt.write(msgOk);
+        sendErr = false;
+        pkt.writeFin(hash);
+        logger.info() << "bhash succeeded" << volId << hash;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
+/**
  * This is dangerous. Use for debug purpose.
  */
 inline void c2aSetUuidServer(protocol::ServerParams &p)
@@ -1990,6 +2071,7 @@ const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
     { applyCN, c2aApplyServer },
     { mergeCN, c2aMergeServer },
     { resizeCN, c2aResizeServer },
+    { blockHashCN, c2aBlockHashServer },
     { dbgSetUuid, c2aSetUuidServer },
     { dbgSetState, c2aSetStateServer },
     { dbgSetBase, c2aSetBaseServer },
