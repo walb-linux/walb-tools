@@ -31,7 +31,7 @@ python> for vol, wdev in alPairsOfVolAndWdev:
 - Run hash backup of all the backup target volumes:
 ```
 python> for vol in targetVolumes:
-...         walbc.hash_backup(s2, vol, timeoutS)
+...         walbc.hash_backup(s2, vol)
 ```
 - Now `s0` does not have backup target volumes and all the volumes are backup target at `s1` or `s2`.
   You can safely detatch `s0` from the backup group.
@@ -84,7 +84,7 @@ The procedure:
 - Replicate all the volumes and make them synchronizing mode:
 ```
 python> for vol in allVolumes:
-...         walbc.replicate(a0, vol, a2, True, timeoutS)
+...         walbc.replicate(a0, vol, a2, True)
 ```
 - Restart all the storage servers, changing `-archive` command-line argument.
   Specify host info of `a2` instead of `a0`.
@@ -119,7 +119,7 @@ The procedure:
 ```
 python> for vol in allVolumes:
 ...         isSync = walbc.is_synchronizing(a1, vol)
-...         walbc.replicate(a1, vol, a2, isSync, timeoutS)
+...         walbc.replicate(a1, vol, a2, isSync)
 ```
 - Stop synchronizing mode at `a1`:
 ```

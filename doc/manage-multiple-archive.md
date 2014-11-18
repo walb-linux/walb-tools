@@ -33,7 +33,7 @@ You can use replicate command in such situations to keep track of the latest wal
 
 Run the following command to replicate form `a0` to `a1` once.
 ```
-python> walbc.replicate_once(a0, vol, a1, timeoutS)
+python> walbc.replicate_once(a0, vol, a1)
 ```
 
 This function checks what type of replication is required from the source to the destination,
@@ -61,7 +61,7 @@ Alternatively, you can make the volume in `a1` **synchronizing** mode.
 To make a volume at `a1` synchronizing mode,
 you just run the following command:
 ```
-python> walbc.synchronize(a0, vol, a1, timeoutS)
+python> walbc.synchronize(a0, vol, a1)
 ```
 
 After changing to synchronizing mode, updated wdiffs generated from the walb device

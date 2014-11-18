@@ -27,7 +27,7 @@ python> isOverflow = walbc.is_overflow(sx, vol)
 It returns a boolean value.
 If the volume overflows, run hash backup as follows:
 ```
-python> walbc.hash_backup(s0, vol, timeoutS)
+python> walbc.hash_backup(s0, vol)
 ```
 
 After hash backup finished, the volume will be in synchronizing mode automatically
@@ -95,7 +95,7 @@ can not continue backup.
 
 ```
 python> walbc.start_synchronizing(a0, vol)
-python> walbc.hash_backup(sx, vol, timeoutS)
+python> walbc.hash_backup(sx, vol)
 ```
 Assume `a0` is primary archive server.
 You must call `start_synchronizing()` for all volumes existing in the backup group.
@@ -147,7 +147,7 @@ python> walbc.stop_synchronizing(a0, vol)
 Your archive data for the volume has lost from the world.
 You need to setup new `a0` and re-run full backup of the volume:
 ```
-python>  walbc.full_backup(sx, vol, timeoutS)
+python>  walbc.full_backup(sx, vol)
 ```
 You must determine `sx` as backup target for the volume.
 

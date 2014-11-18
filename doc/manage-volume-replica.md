@@ -52,7 +52,7 @@ All the volume names of walb-tools volumes must be the same for a virtual volume
 
 Next, choose primary backup target and run full backup. Here you shall choose `s0`:
 ```
-python> walbc.full_backup(s0, 'vol0', timeoutS)
+python> walbc.full_backup(s0, 'vol0')
 ```
 
 Confirm the volume state at each storage server:
@@ -71,7 +71,7 @@ When you want to change the backup target from `s0` to `s1`,
 You can make the replica of `s0` slave and the one of `s1` master as follows:
 ```
 python> walbc.set_slave_storage(s0, 'vol0')
-python> walbc.hash_backup(s1, 'vol0', timeoutS)
+python> walbc.hash_backup(s1, 'vol0')
 ```
 Use `walbc.clear_vol()` instead of `walbc.set_slave_storage()`
 when the corresponding walb device is no more available due to its failure or so.
@@ -91,7 +91,7 @@ If you use full backup, stop and reset the volume before calling full backup:
 ```
 python> walbc.stop(a0, 'vol0')
 python> walbc.reset_vol(a0, 'vol0')
-python> walb.full_backup(s1, 'vol0', timeoutS)
+python> walb.full_backup(s1, 'vol0')
 ```
 
 -----

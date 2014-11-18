@@ -17,9 +17,10 @@ See help for details.
 
 ## Wait
 
-- `walbc.wait_for_replicated(ax, vol, gid, timeoutS=100)`
-- `walbc.wait_for_restorable(ax, vol, gid, timeoutS=100)`
-- `walbc.wait_for_restored(ax, vol, gid, timeoutS=100)`
+- `TIMEOUT_SEC = 86400`
+- `walbc.wait_for_replicated(ax, vol, gid, timeoutS=TIMEOUT_SEC)`
+- `walbc.wait_for_restorable(ax, vol, gid, timeoutS=TIMEOUT_SEC)`
+- `walbc.wait_for_restored(ax, vol, gid, timeoutS=TIMEOUT_SEC)`
 - `walbc.wait_for_stopped(s, vol, prevSt=None)`
 
 -----
