@@ -809,49 +809,44 @@ public:
     /**
      * Garbage collect.
      *
-     * Currently we avoid to erase dirty diffs,
-     * because it is not confirmed that contains() works well with dirty diffs.
-     *
      * RETURN:
      *   Removed diffs.
      */
     MetaDiffVec gc() {
         AutoLock lk(mu_);
-        MetaDiffVec v;
-        // Get clean diffs.
-        for (const auto &p : mmap_) {
+        uint64_t maxRange = 0;
+        for (const Mmap::value_type &p : mmap_) {
             const MetaDiff &d = p.second;
-            if (d.isClean()) {
-                v.push_back(d);
-            }
+            maxRange = std::max(maxRange, d.snapE.gidB - d.snapB.gidB);
         }
-
-        // This is O(NlogN) algorithm if O(d.snapB.gidE - d.snapB.gidB) is constant.
-        std::multimap<uint64_t, MetaDiff> m;
-        for (const MetaDiff &d : v) {
-            m.emplace(d.snapB.gidB, d);
-        }
-        std::set<MetaDiff> s;
-        for (const MetaDiff &d0 : v) {
-            assert(d0.isClean());
-            // All candidates exist in this range.
-            auto itr = m.lower_bound(d0.snapB.gidB);
-            auto end = m.upper_bound(d0.snapE.gidB);
-            while (itr != end) {
-                const MetaDiff &d1 = itr->second;
-                assert(d1.isClean());
-                if (d0 != d1 && contains(d0, d1)) {
-                    erase(d1);
-                    assert(s.find(d1) == s.end());
-                    s.insert(d1);
-                    itr = m.erase(itr);
-                } else {
-                    ++itr;
+        /*
+         * If max(d.snapB.gidE - d.snapB.gidB) is small, O(NlogN).
+         * otherwise O(N^2).
+         */
+        MetaDiffVec v;
+        Mmap::iterator it = mmap_.begin();
+        while (it != mmap_.end()) {
+            const MetaDiff &d = it->second;
+            const uint64_t key =
+                d.snapB.gidB > maxRange ? d.snapB.gidB - maxRange : 0;
+            Mmap::const_iterator it0 = mmap_.lower_bound(Key{key, 0});
+            bool canRemove = false;
+            while (it0 != mmap_.cend() && it0->first.first <= d.snapB.gidB) {
+                const MetaDiff &d0 = it0->second;
+                if (d0 != d && contains(d0, d)) {
+                    canRemove = true;
+                    break;
                 }
+                ++it0;
             }
-            assert(s.size() + m.size() == v.size());
+            if (canRemove) {
+                v.push_back(d);
+                it = mmap_.erase(it);
+            } else {
+                ++it;
+            }
         }
-        return MetaDiffVec(s.begin(), s.end());
+        return v;
     }
     /**
      * Clear all diffs.
