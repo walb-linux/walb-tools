@@ -866,7 +866,7 @@ public:
         }
     }
     /**
-     * Erase all diffs whose snapE.gidE is not greater than a specified gid.
+     * Erase all diffs whose snapE.gidB is not greater than a specified gid.
      */
     MetaDiffVec eraseBeforeGid(uint64_t gid) {
         AutoLock lk(mu_);
@@ -878,7 +878,7 @@ public:
                 // There are no matching diffs after this.
                 break;
             }
-            if (d.snapE.gidE <= gid) {
+            if (d.snapE.gidB <= gid) {
                 v.push_back(d);
                 it = mmap_.erase(it);
             } else {
@@ -982,12 +982,7 @@ public:
      * @st base state.
      */
     MetaSnap getLatestSnapshot(const MetaState &st) const {
-        MetaDiffVec applicableV;
-        {
-            AutoLock lk(mu_);
-            applicableV = getApplicableDiffList(st.snapB);
-        }
-        return apply(st.snapB, applicableV);
+        return apply(st.snapB, getApplicableDiffList(st.snapB));
     }
     /**
      * Get the oldest clean snapshot
