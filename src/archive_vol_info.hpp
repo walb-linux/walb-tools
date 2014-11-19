@@ -320,6 +320,27 @@ public:
             return gid <= diffV[0].snapB.gidB ? DONT_REPL : DO_DIFF_REPL;
         }
     }
+    /**
+     * Remove garbage wdiff files.
+     */
+    size_t gcDiffs() {
+        return wdiffs_.gc();
+    }
+    /**
+     * Remove temporarily created volumes for restore.
+     */
+    size_t gcVolumes() {
+        size_t nr = 0;
+        const std::string prefix = restoredSnapshotNamePrefix();
+        for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
+            if (cybozu::util::hasPrefix(lv.snapName(), prefix) &&
+                cybozu::util::hasSuffix(lv.snapName(), RESTORE_TMP_SUFFIX)) {
+                lv.remove();
+                nr++;
+            }
+        }
+        return nr;
+    }
 private:
     cybozu::lvm::Vg getVg() const {
         return cybozu::lvm::getVg(vgName);

@@ -63,6 +63,7 @@ void verifyArchiveData()
      for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
           try {
               verifyArchiveVol(volId);
+              gcArchiveVol(volId);
           } catch (std::exception &e) {
               LOGs.error() << __func__ << "start failed" << volId << e.what();
               ::exit(1);

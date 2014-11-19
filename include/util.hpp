@@ -344,6 +344,12 @@ inline std::string removePrefix(const std::string &name, const std::string &pref
     return name.substr(prefix.size());
 }
 
+inline bool hasSuffix(const std::string &name, const std::string &suffix)
+{
+    if (name.size() < suffix.size()) return false;
+    return name.substr(name.size() - suffix.size()) == suffix;
+}
+
 inline bool isAllDigit(const std::string &s)
 {
     return std::all_of(s.cbegin(), s.cend(), [](const char &c) {

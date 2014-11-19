@@ -343,7 +343,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     cybozu::lvm::Lv lv = volInfo.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
-    const std::string tmpLvName = targetName + "_tmp";
+    const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
     if (lv.hasSnapshot(tmpLvName)) {
         lv.getSnapshot(tmpLvName).remove();
     }
@@ -1210,8 +1210,28 @@ inline void verifyArchiveVol(const std::string& volId)
 
     if (st == aSyncReady) return;
 
+    assert(isStateIn(st, aActive));
     if (!volInfo.lvExists()) {
         throw cybozu::Exception(FUNC) << "base lv must exist" << volId;
+    }
+}
+
+inline void gcArchiveVol(const std::string& volId)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+
+    if (!isStateIn(st, aActive)) return;
+
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    const size_t nrDiffs = volInfo.gcDiffs();
+    if (nrDiffs > 0) {
+        LOGs.info() << volId << "garbage collected wdiff files" << nrDiffs;
+    }
+    const size_t nrVols = volInfo.gcVolumes();
+    if (nrVols) {
+        LOGs.info() << volId << "garbage collected incompleted restored volumes" << nrVols;
     }
 }
 

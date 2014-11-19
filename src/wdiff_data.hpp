@@ -112,14 +112,14 @@ public:
     /**
      * Garbage collect.
      */
-    void gc() {
-        removeDiffFiles(mgr_.gc());
+    size_t gc() {
+        return removeDiffFiles(mgr_.gc());
     }
     /**
      * Remove wdiffs before a specified gid.
      */
-    void removeBeforeGid(uint64_t gid) {
-        removeDiffFiles(mgr_.eraseBeforeGid(gid));
+    size_t removeBeforeGid(uint64_t gid) {
+        return removeDiffFiles(mgr_.eraseBeforeGid(gid));
     }
     /**
      * Remove wdiffs from memory and storage.
@@ -159,8 +159,10 @@ private:
     /**
      * Remove diff files.
      * @diffV diff list.
+     * RETURN:
+     *   number of removed files.
      */
-    void removeDiffFiles(const MetaDiffVec &v) {
+    size_t removeDiffFiles(const MetaDiffVec &v) {
         for (const MetaDiff &d : v) {
             cybozu::FilePath p = dir_ + createDiffFileName(d);
             if (!p.stat().isFile()) continue;
@@ -168,6 +170,7 @@ private:
                 LOGs.error() << "removeDiffFiles:unlink failed" << p.str();
             }
         }
+        return v.size();
     }
     /**
      * Convert diff list to name list.

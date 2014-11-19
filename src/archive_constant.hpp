@@ -76,6 +76,7 @@ const StrVec aActionOnLvm = {aaRestore, aaResize};
 
 const std::string VOLUME_PREFIX = "i_";
 const std::string RESTORE_PREFIX = "r_";
+const std::string RESTORE_TMP_SUFFIX = "_tmp";
 
 const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};
 const StrVec aActive = {aArchived, atHashSync, atWdiffRecv, atReplSync};
