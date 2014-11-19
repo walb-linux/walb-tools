@@ -288,13 +288,13 @@ private:
      *   uint64_t(-1) if there is no wdiffs.
      */
     uint64_t moveToDiffMemory() {
-        uint64_t minAddr = -1;
+        uint64_t minAddr = -1; // max value.
         WdiffPtrList::iterator it = wdiffs_.begin();
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
             const DiffRecord rec = wdiff.getFrontRec();
-            if (canMergeIo(it, rec)) {
+            if (rec.endIoAddress() <= minAddr) {
                 DiffIo io;
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
@@ -343,13 +343,6 @@ private:
     void mergeIo(const DiffRecord &rec, DiffIo &&io) {
         assert(!rec.isCompressed());
         diffMem_.add(rec, std::move(io), maxIoBlocks_);
-    }
-    bool canMergeIo(const WdiffPtrList::iterator &i, const DiffRecord &rec) {
-        for (WdiffPtrList::iterator j = wdiffs_.begin(); j != i; ++j) {
-            const Wdiff &wdiff = **j;
-            if (rec.endIoAddress() > wdiff.currentAddress()) return false;
-        }
-        return true;
     }
     void verifyUuid(const cybozu::Uuid &uuid) const {
         for (const WdiffPtr &wdiffP : wdiffs_) {
