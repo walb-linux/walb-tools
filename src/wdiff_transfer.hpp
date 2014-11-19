@@ -15,7 +15,7 @@ namespace walb {
  */
 inline bool wdiffTransferClient(
     packet::Packet &pkt, DiffMerger &merger, const CompressOpt &cmpr,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit,
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps,
     DiffStatistics &statOut)
 {
     statOut.clear();
@@ -35,7 +35,7 @@ inline bool wdiffTransferClient(
     DiffPacker packer;
     size_t pushedNum = 0;
     while (merger.getAndRemove(recIo)) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         const DiffRecord& rec = recIo.record();
@@ -74,7 +74,7 @@ inline bool wdiffTransferClient(
  */
 inline bool wdiffTransferServer(
     packet::Packet &pkt, int wdiffOutFd,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     cybozu::util::File fileW(wdiffOutFd);
@@ -82,7 +82,7 @@ inline bool wdiffTransferServer(
     packet::StreamControl ctrl(pkt.sock());
     uint64_t writeSize = 0;
     while (ctrl.isNext()) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         size_t size;

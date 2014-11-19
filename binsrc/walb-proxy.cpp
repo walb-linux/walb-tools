@@ -30,7 +30,7 @@ class ProxyRequestWorker : public server::RequestWorker
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        protocol::serverDispatch(sock_, nodeId_, procStat_, proxyHandlerMap);
+        protocol::serverDispatch(sock_, nodeId_, ps_, proxyHandlerMap);
     }
 };
 
@@ -111,14 +111,14 @@ int main(int argc, char *argv[]) try
         ProxyThreads threads(opt);
         auto createRequestWorker = [&](
             cybozu::Socket &&sock,
-            std::atomic<server::ProcessStatus> &procStat) {
+            server::ProcessStatus &ps) {
             return std::make_shared<ProxyRequestWorker>(
-                std::move(sock), gp.nodeId, procStat);
+                std::move(sock), gp.nodeId, ps);
         };
 
         ProxySingleton &g = getProxyGlobal();
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server::MultiThreadedServer server(g.forceQuit, concurrency);
+        server::MultiThreadedServer server(g.ps, concurrency);
         server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
     }
     LOGs.info() << "shutdown walb proxy server";

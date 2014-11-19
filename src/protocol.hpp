@@ -248,15 +248,15 @@ struct ServerParams
 {
     cybozu::Socket &sock;
 	const std::string& clientId;
-    std::atomic<walb::server::ProcessStatus> &procStat;
+    walb::server::ProcessStatus &ps;
 
     ServerParams(
         cybozu::Socket &sock,
         const std::string &clientId,
-        std::atomic<walb::server::ProcessStatus> &procStat)
+        walb::server::ProcessStatus &ps)
         : sock(sock)
 		, clientId(clientId)
-        , procStat(procStat) {
+        , ps(ps) {
     }
 };
 
@@ -281,9 +281,11 @@ inline void shutdownServer(ServerParams &p)
     bool isForce;
     packet::Packet pkt(p.sock);
     pkt.read(isForce);
-    p.procStat = (isForce
-                  ? walb::server::ProcessStatus::FORCE_SHUTDOWN
-                  : walb::server::ProcessStatus::GRACEFUL_SHUTDOWN);
+    if (isForce) {
+        p.ps.setForceShutdown();
+    } else {
+        p.ps.setGracefulShutdown();
+    }
     LOGs.info() << "shutdown" << (isForce ? "force" : "graceful") << p.clientId;
     pkt.writeFin(msgAccept);
 }
@@ -329,7 +331,7 @@ inline void clientDispatch(
  */
 inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
-    std::atomic<walb::server::ProcessStatus> &procStat,
+    walb::server::ProcessStatus &ps,
     const std::map<std::string, ServerHandler> &handlers) noexcept try
 {
     std::string clientId, protocolName;
@@ -338,7 +340,7 @@ inline void serverDispatch(
     try {
         run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
         ServerHandler handler = findServerHandler(handlers, protocolName);
-        ServerParams serverParams(sock, clientId, procStat);
+        ServerParams serverParams(sock, clientId, ps);
         pkt.write(msgOk);
         sendErr = false;
         handler(serverParams);

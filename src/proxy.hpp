@@ -159,7 +159,7 @@ struct ProxySingleton
     /**
      * Writable and must be thread-safe.
      */
-    std::atomic<bool> forceQuit;
+    server::ProcessStatus ps;
     AtomicMap<ProxyVolState> stMap;
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
@@ -741,7 +741,7 @@ namespace proxy_local {
  */
 inline bool recvWlogAndWriteDiff(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit, Logger &logger)
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps, Logger &logger)
 {
     DiffMemory diffMem(DEFAULT_MAX_IO_LB);
     diffMem.header().setUuid(uuid);
@@ -753,7 +753,7 @@ inline bool recvWlogAndWriteDiff(
     receiver.start();
 
     while (receiver.popHeader(packH)) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         LogBlockShared blockS(pbs);
@@ -830,7 +830,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
     cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
-                                           volSt.stopState, gp.forceQuit, logger)) {
+                                           volSt.stopState, gp.ps, logger)) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
         return;
     }
@@ -971,7 +971,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     pkt.read(res);
     if (res == msgAccept) {
         DiffStatistics statOut;
-        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.forceQuit, statOut)) {
+        if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.ps, statOut)) {
             logger.warn() << FUNC << "force stopped wdiff sending" << volId;
             return DONT_SEND;
         }

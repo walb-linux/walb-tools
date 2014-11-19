@@ -17,7 +17,7 @@ namespace walb {
 inline bool dirtyFullSyncClient(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
 {
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
     AsyncBdevReader reader(bdevPath);
@@ -26,7 +26,7 @@ inline bool dirtyFullSyncClient(
     uint64_t c = 0;
     uint64_t remainingLb = sizeLb;
     while (0 < remainingLb) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
@@ -50,7 +50,7 @@ inline bool dirtyFullSyncClient(
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     cybozu::util::File file(bdevPath, O_RDWR);
@@ -61,7 +61,7 @@ inline bool dirtyFullSyncServer(
     uint64_t remainingLb = sizeLb;
 	uint64_t writeSize = 0;
     while (0 < remainingLb) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);

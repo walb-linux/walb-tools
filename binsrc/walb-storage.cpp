@@ -33,7 +33,7 @@ class StorageRequestWorker : public server::RequestWorker
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        protocol::serverDispatch(sock_, nodeId_, procStat_, storageHandlerMap);
+        protocol::serverDispatch(sock_, nodeId_, ps_, storageHandlerMap);
     }
 };
 
@@ -123,14 +123,14 @@ int main(int argc, char *argv[]) try
         StorageThreads threads(opt);
         auto createRequestWorker = [&](
             cybozu::Socket &&sock,
-            std::atomic<server::ProcessStatus> &procStat) {
+            server::ProcessStatus &ps) {
             return std::make_shared<StorageRequestWorker>(
-                std::move(sock), gs.nodeId, procStat);
+                std::move(sock), gs.nodeId, ps);
         };
 
         StorageSingleton &g = getStorageGlobal();
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server::MultiThreadedServer server(g.forceQuit, concurrency);
+        server::MultiThreadedServer server(g.ps, concurrency);
         server.run<StorageRequestWorker>(opt.port, createRequestWorker);
     }
     LOGs.info() << "shutdown walb storage server";

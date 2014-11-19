@@ -34,7 +34,7 @@ template <typename Reader>
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed,
-    const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     packet::StreamControl recvCtl(pkt.sock());
@@ -47,7 +47,7 @@ inline bool dirtyHashSyncClient(
     uint64_t remainingLb = sizeLb;
     Buffer buf;
     for (;;) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
         const bool hasNext = recvCtl.isNext();
@@ -90,7 +90,7 @@ template <typename Reader>
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
-    int outDiffFd, const std::atomic<int> &stopState, const std::atomic<bool> &forceQuit)
+    int outDiffFd, const std::atomic<int> &stopState, const server::ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
 
@@ -104,7 +104,7 @@ inline bool dirtyHashSyncServer(
         uint64_t remaining = sizeLb;
         try {
             while (remaining > 0) {
-                if (stopState == ForceStopping || forceQuit) {
+                if (stopState == ForceStopping || ps.isForceShutdown()) {
                     quit = true;
                     return;
                 }
@@ -138,7 +138,7 @@ inline bool dirtyHashSyncServer(
     Buffer buf;
     uint64_t writeSize = 0;
     while (ctrl.isNext() || ctrl.isDummy()) {
-        if (stopState == ForceStopping || forceQuit) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
             readerTh.join();
             return false;
         }

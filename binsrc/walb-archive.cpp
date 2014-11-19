@@ -31,7 +31,7 @@ class ArchiveRequestWorker : public server::RequestWorker
 public:
     using RequestWorker :: RequestWorker;
     void run() override {
-        protocol::serverDispatch(sock_, nodeId_, procStat_, archiveHandlerMap);
+        protocol::serverDispatch(sock_, nodeId_, ps_, archiveHandlerMap);
     }
 };
 
@@ -84,14 +84,14 @@ int main(int argc, char *argv[]) try
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
-        std::atomic<server::ProcessStatus> &procStat) {
+        server::ProcessStatus &ps) {
         return std::make_shared<ArchiveRequestWorker>(
-            std::move(sock), ga.nodeId, procStat);
+            std::move(sock), ga.nodeId, ps);
     };
 
     ArchiveSingleton &g = getArchiveGlobal();
     const size_t concurrency = g.maxForegroundTasks + 5;
-    server::MultiThreadedServer server(g.forceQuit, concurrency);
+    server::MultiThreadedServer server(g.ps, concurrency);
     server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
     LOGs.info() << "shutdown walb archive server";
 

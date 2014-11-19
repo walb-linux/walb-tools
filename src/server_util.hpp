@@ -22,9 +22,19 @@
 namespace walb {
 namespace server {
 
-enum class ProcessStatus
+class ProcessStatus
 {
-    RUNNING, GRACEFUL_SHUTDOWN, FORCE_SHUTDOWN,
+    std::atomic<int> status_;
+    enum {
+        RUNNING, GRACEFUL_SHUTDOWN, FORCE_SHUTDOWN
+    };
+public:
+    ProcessStatus() : status_(RUNNING) {}
+    bool isRunning() const noexcept { return status_ == RUNNING; }
+    bool isGracefulShutdown() const noexcept { return status_ == GRACEFUL_SHUTDOWN; }
+    bool isForceShutdown() const noexcept { return status_ == FORCE_SHUTDOWN; }
+    void setGracefulShutdown() noexcept { status_ = GRACEFUL_SHUTDOWN; }
+    void setForceShutdown() noexcept { status_ = FORCE_SHUTDOWN; }
 };
 
 /**
@@ -33,41 +43,38 @@ enum class ProcessStatus
 class MultiThreadedServer
 {
 private:
-    std::atomic<bool> &forceQuit_;
+    ProcessStatus& ps_;
     const size_t maxNumThreads_;
     const size_t socketTimeout_;
 
 public:
     template <typename Func>
     using RequestWorkerGenerator =
-        std::function<std::shared_ptr<Func>(cybozu::Socket &&, std::atomic<ProcessStatus> &)>;
+        std::function<std::shared_ptr<Func>(cybozu::Socket &&, ProcessStatus &)>;
 
-    MultiThreadedServer(std::atomic<bool> &forceQuit, size_t maxNumThreads = 0, size_t socketTimeout = 10)
-        : forceQuit_(forceQuit), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
+    MultiThreadedServer(ProcessStatus &ps, size_t maxNumThreads = 0, size_t socketTimeout = 10)
+        : ps_(ps), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
     }
     template <typename Func>
     void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) {
         const char *const FUNC = __func__;
-        forceQuit_ = false;
         cybozu::Socket ssock;
         ssock.bind(port);
         cybozu::thread::ThreadRunnerFixedPool pool;
         pool.start(maxNumThreads_);
-        std::atomic<ProcessStatus> st(ProcessStatus::RUNNING);
-        while (st == ProcessStatus::RUNNING) {
-            while (!ssock.queryAccept() && st == ProcessStatus::RUNNING) {}
-            if (st != ProcessStatus::RUNNING) break;
+        while (ps_.isRunning()) {
+            while (!ssock.queryAccept() && ps_.isRunning()) {}
+            if (!ps_.isRunning()) break;
             cybozu::Socket sock;
             ssock.accept(sock);
             sock.setSendTimeout(socketTimeout_ * 1000);
             sock.setReceiveTimeout(socketTimeout_ * 1000);
             logErrors(pool.gc());
-            if (!pool.add(gen(std::move(sock), st))) {
+            if (!pool.add(gen(std::move(sock), ps_))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
                 // The socket will be closed.
             }
         }
-        if (st == ProcessStatus::FORCE_SHUTDOWN) forceQuit_ = true;
         LOGs.info() << FUNC << "Waiting for remaining tasks";
         pool.stop();
         logErrors(pool.gc());
@@ -90,13 +97,13 @@ class RequestWorker
 protected:
     cybozu::Socket sock_;
     std::string nodeId_;
-    std::atomic<ProcessStatus> &procStat_;
+    server::ProcessStatus &ps_;
 public:
     RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  std::atomic<ProcessStatus> &procStat)
+                  server::ProcessStatus &ps)
         : sock_(std::move(sock))
         , nodeId_(nodeId)
-        , procStat_(procStat) {}
+        , ps_(ps) {}
     void operator()() try {
         run();
         sock_.close();

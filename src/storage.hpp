@@ -151,7 +151,7 @@ struct StorageSingleton
     /**
      * Writable and must be thread-safe.
      */
-    std::atomic<bool> forceQuit;
+    server::ProcessStatus ps;
     AtomicMap<StorageVolState> stMap;
     TaskQueue<std::string> taskQueue;
     std::unique_ptr<DispatchTask<std::string, StorageWorker>> dispatcher;
@@ -631,14 +631,14 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
         // (7) in storage-daemon.txt
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
-            if (!dirtyFullSyncClient(aPkt, bdevPath, sizeLb, bulkLb, volSt.stopState, gs.forceQuit)) {
+            if (!dirtyFullSyncClient(aPkt, bdevPath, sizeLb, bulkLb, volSt.stopState, gs.ps)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
         } else {
             const uint32_t hashSeed = curTime;
             AsyncBdevReader reader(volInfo.getWdevPath());
-            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.forceQuit)) {
+            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.ps)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
@@ -808,7 +808,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     LogBlockShared blockS;
     uint64_t lsid = lsidB;
     for (;;) {
-        if (volSt.stopState == ForceStopping || gs.forceQuit) {
+        if (volSt.stopState == ForceStopping || gs.ps.isForceShutdown()) {
             throw cybozu::Exception(FUNC) << "force stopped" << volId;
         }
         if (lsid == lsidLimit) break;

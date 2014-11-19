@@ -83,7 +83,7 @@ struct ArchiveSingleton
     /**
      * Writable and must be thread-safe.
      */
-    std::atomic<bool> forceQuit;
+    server::ProcessStatus ps;
     AtomicMap<ArchiveVolState> stMap;
 };
 
@@ -182,7 +182,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     std::vector<char> zero;
 	const uint64_t lvSnapSizeLb = lv.sizeLb();
     while (merger.getAndRemove(recIo)) {
-        if (stopState == ForceStopping || ga.forceQuit) {
+        if (stopState == ForceStopping || ga.ps.isForceShutdown()) {
             return false;
         }
         const DiffRecord& rec = recIo.record();
@@ -308,7 +308,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     writer.writeHeader(wdiffH);
     DiffRecIo recIo;
     while (merger.getAndRemove(recIo)) {
-        if (volSt.stopState == ForceStopping || ga.forceQuit) {
+        if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
             return false;
         }
         // TODO: currently we can use snappy only.
@@ -481,13 +481,13 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     if (isFull) {
         volInfo.createLv(sizeLb);
         const std::string lvPath = volInfo.getLv().path().str();
-        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit);
+        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
-        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.forceQuit);
+        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.ps);
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
             logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
@@ -573,7 +573,7 @@ inline bool runFullReplClient(
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
     const std::string lvPath = volInfo.getLv().path().str();
-    if (!dirtyFullSyncClient(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit)) {
+    if (!dirtyFullSyncClient(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
         logger.warn() << "full-repl-client force-stopped" << volId;
         return false;
     }
@@ -606,7 +606,7 @@ inline bool runFullReplServer(
 
     volInfo.createLv(sizeLb);
     const std::string lvPath = volInfo.getLv().path().str();
-    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.forceQuit)) {
+    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }
@@ -639,7 +639,7 @@ inline bool runHashReplClient(
 
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapE);
-    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.forceQuit)) {
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
         return false;
     }
@@ -678,7 +678,7 @@ inline bool runHashReplServer(
     archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
-                             volSt.stopState, ga.forceQuit)) {
+                             volSt.stopState, ga.ps)) {
         logger.warn() << "hash-repl-server force-stopped" << volId;
         return false;
     }
@@ -726,8 +726,7 @@ inline bool runDiffReplClient(
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
     DiffStatistics statOut;
-    if (!wdiffTransferClient(
-            pkt, merger, cmpr, volSt.stopState, ga.forceQuit, statOut)) {
+    if (!wdiffTransferClient(pkt, merger, cmpr, volSt.stopState, ga.ps, statOut)) {
         logger.warn() << "diff-repl-client force-stopped" << volId;
         return false;
     }
@@ -768,7 +767,7 @@ inline bool runDiffReplServer(
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
     writeDiffFileHeader(fileW, maxIoBlocks, uuid);
-    if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
+    if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps)) {
         logger.warn() << "diff-repl-server force-stopped" << volId;
         return false;
     }
@@ -1157,7 +1156,7 @@ inline bool getBlockHash(
     uint64_t remaining = sizeLb;
     double t0 = cybozu::util::getTime();
     while (remaining > 0) {
-        if (volSt.stopState == ForceStopping || ga.forceQuit) {
+        if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
             ctrl.end();
             return false;
         }
@@ -1623,7 +1622,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
         cybozu::util::File fileW(tmpFile.fd());
         writeDiffFileHeader(fileW, maxIoBlocks, uuid);
-        if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.forceQuit)) {
+        if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps)) {
             logger.warn() << FUNC << "force stopped" << volId;
             return;
         }
