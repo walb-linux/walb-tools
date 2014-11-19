@@ -1932,6 +1932,9 @@ class Controller:
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_u64(gid)
+        gidL = self.get_restorable(ax, vol, 'all')
+        if gid not in gidL:
+            raise Exception('apply: gid is not restorable', ax.name, vol, gid)
         self.run_ctl(ax, ["apply", vol, str(gid)])
         self._wait_for_applied(ax, vol, gid, timeoutS)
 
