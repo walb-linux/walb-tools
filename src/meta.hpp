@@ -707,10 +707,7 @@ inline MetaDiff parseDiffFileName(const std::string &name)
                 throw cybozu::Exception(FUNC) << "wrong suffix" << name;
             }
         }
-        uint64_t gid;
-        if (!cybozu::util::hexStrToInt<uint64_t>(s.substr(0, n), gid)) {
-            throw cybozu::Exception(FUNC) << "wrong hex value" << name << i;
-        }
+        const uint64_t gid = cybozu::atoi(s.substr(0, n));
         gidV.push_back(gid);
         if (isLast) break;
         s = s.substr(n + 1);
@@ -753,7 +750,7 @@ inline std::string createDiffFileName(const MetaDiff &diff)
     }
     for (uint64_t gid : v) {
         s += '-';
-        s += cybozu::util::intToHexStr(gid);
+        s += cybozu::itoa(gid);
     }
     s += ".wdiff";
     return s;
