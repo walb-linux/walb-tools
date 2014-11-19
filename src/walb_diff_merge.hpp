@@ -293,8 +293,9 @@ private:
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
-            const DiffRecord rec = wdiff.getFrontRec();
-            if (rec.endIoAddress() <= minAddr) {
+            DiffRecord rec = wdiff.getFrontRec();
+            const uint64_t startAddr = rec.endIoAddress();
+            while (shouldMerge(rec, startAddr, minAddr)) {
                 DiffIo io;
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
@@ -302,12 +303,23 @@ private:
                     statIn_.update(wdiff.getStat());
                     it = wdiffs_.erase(it);
                     goNext = false;
+                    break;
                 }
+                rec = wdiff.getFrontRec();
             }
             minAddr = std::min(minAddr, wdiff.currentAddress());
             if (goNext) ++it;
         }
         return minAddr;
+    }
+    bool shouldMerge(const DiffRecord& rec, uint64_t startAddr, uint64_t minAddr) const {
+        const uint64_t endAddr = rec.endIoAddress();
+        if (minAddr == uint64_t(-1)) {
+            /* first wdiff */
+            return endAddr <= startAddr + (1 * MEBI / LBS);
+        } else {
+            return endAddr <= minAddr;
+        }
     }
     /**
      * Move all IOs which ioAddress + ioBlocks <= doneAddr
