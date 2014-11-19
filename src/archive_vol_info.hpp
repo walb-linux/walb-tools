@@ -90,6 +90,9 @@ public:
     {
         wdiffs_.removeDiffs(diffV);
     }
+    void removeBeforeGid(uint64_t gid) {
+        wdiffs_.removeBeforeGid(gid);
+    }
     cybozu::Uuid getUuid() const {
         cybozu::Uuid uuid;
         util::loadFile(volDir, "uuid", uuid);

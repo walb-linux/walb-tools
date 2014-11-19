@@ -244,7 +244,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     const MetaState st2 = endApplying(st1, diffV);
     volInfo.setMetaState(st2);
 
-    volInfo.removeDiffs(diffV);
+    volInfo.removeBeforeGid(st2.snapB.gidB);
     return true;
 }
 
