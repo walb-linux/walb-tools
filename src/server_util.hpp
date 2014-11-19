@@ -48,7 +48,7 @@ private:
     static ProcessStatus *pps_;
     const size_t maxNumThreads_;
     const size_t socketTimeout_;
-    static inline void quitHandler(int sig) noexcept
+    static inline void quitHandler(int) noexcept
     {
         if (pps_) {
             pps_->setForceShutdown();
