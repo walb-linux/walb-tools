@@ -707,7 +707,11 @@ inline MetaDiff parseDiffFileName(const std::string &name)
                 throw cybozu::Exception(FUNC) << "wrong suffix" << name;
             }
         }
-        const uint64_t gid = cybozu::atoi(s.substr(0, n));
+        bool b;
+        const uint64_t gid = cybozu::atoi(&b, s.c_str(), n);
+        if (!b) {
+            throw cybozu::Exception(FUNC) << "wrong digit value" << name << i;
+        }
         gidV.push_back(gid);
         if (isLast) break;
         s = s.substr(n + 1);
