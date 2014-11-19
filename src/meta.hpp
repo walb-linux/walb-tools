@@ -781,8 +781,7 @@ inline MetaDiff getMaxProgressDiff(const MetaDiffVec &v) {
 class MetaDiffManager
 {
 private:
-    using Key = std::pair<uint64_t, uint64_t>; // diff.snapB
-    using Mmap = std::multimap<Key, MetaDiff>;
+    using Mmap = std::multimap<uint64_t, MetaDiff>; // key is d.snapB.gidB.
     Mmap mmap_;
 
     mutable std::recursive_mutex mu_;
@@ -829,9 +828,9 @@ public:
             const MetaDiff &d = it->second;
             const uint64_t key =
                 d.snapB.gidB > maxRange ? d.snapB.gidB - maxRange : 0;
-            Mmap::const_iterator it0 = mmap_.lower_bound(Key{key, 0});
+            Mmap::const_iterator it0 = mmap_.lower_bound(key);
             bool canRemove = false;
-            while (it0 != mmap_.cend() && it0->first.first <= d.snapB.gidB) {
+            while (it0 != mmap_.cend() && it0->first <= d.snapB.gidB) {
                 const MetaDiff &d0 = it0->second;
                 if (d0 != d && contains(d0, d)) {
                     canRemove = true;
@@ -1133,13 +1132,10 @@ public:
     }
 private:
     void addNolock(const MetaDiff &diff) {
-        uint64_t b = diff.snapB.gidB;
-        uint64_t e = diff.snapB.gidE;
-
         if (search(diff) != mmap_.end()) {
             throw cybozu::Exception("MetaDiffManager::add:already exists") << diff;
         }
-        mmap_.emplace(std::make_pair(b, e), diff);
+        mmap_.emplace(diff.snapB.gidB, diff);
     }
     void eraseNolock(const MetaDiff &diff, bool doesThrowError = false) {
         auto it = search(diff);
@@ -1151,13 +1147,9 @@ private:
         }
         mmap_.erase(it);
     }
-    Key getKey(const MetaDiff &diff) const {
-        return std::make_pair(diff.snapB.gidB, diff.snapB.gidE);
-    }
     Mmap::iterator search(const MetaDiff &diff) {
-        Key key = getKey(diff);
         Mmap::iterator it, end;
-        std::tie(it, end) = mmap_.equal_range(key);
+        std::tie(it, end) = mmap_.equal_range(diff.snapB.gidB);
         if (it != end) {
             const MetaDiff &d = it->second;
             if (diff == d) return it;
@@ -1174,15 +1166,13 @@ private:
      *   and they have the same snapB.
      */
     MetaDiffVec getFirstDiffs(uint64_t gid = 0) const {
-        Key key0 = {gid, gid};
-        auto it0 = mmap_.lower_bound(key0);
+        Mmap::const_iterator it0 = mmap_.lower_bound(gid);
         if (it0 == mmap_.cend()) return {};
         const MetaDiff &d = it0->second;
-        Key key1 = getKey(d);
 
         MetaDiffVec v;
-        decltype(it0) it, it1;
-        std::tie(it, it1) = mmap_.equal_range(key1);
+        Mmap::const_iterator it, it1;
+        std::tie(it, it1) = mmap_.equal_range(d.snapB.gidB);
         while (it != it1) {
             v.push_back(it->second);
             ++it;
@@ -1245,11 +1235,9 @@ private:
     bool fastSearch(uint64_t gid0, uint64_t gid1, MetaDiffVec &v, Pred &&pred) const {
         assert(gid0 < gid1);
         size_t nr = 0;
-        Key key0{gid0, 0};
-        Key key1{gid1, 0};
         Mmap::const_iterator it, end;
-        it = mmap_.lower_bound(key0);
-        end = mmap_.lower_bound(key1);
+        it = mmap_.lower_bound(gid0);
+        end = mmap_.lower_bound(gid1);
         while (it != end) {
             const MetaDiff &d = it->second;
             if (pred(d)) {
