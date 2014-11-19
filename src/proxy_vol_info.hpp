@@ -163,9 +163,8 @@ public:
     void deleteDiffs(const MetaDiffVec &diffV, const std::string& archiveName = "") {
 		const bool isMaster = archiveName.empty();
         MetaDiffManager& mgr = isMaster ? diffMgr_ : diffMgrMap_.get(archiveName);
-        mgr.erase(diffV);
         WalbDiffFiles wdiffs(mgr, isMaster ? getMasterDir().str() : getSlaveDir(archiveName).str());
-        wdiffs.removeDiffFiles(diffV);
+        wdiffs.removeDiffs(diffV);
     }
     cybozu::FilePath getMasterDir() const {
         return volDir + "master";

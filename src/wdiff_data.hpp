@@ -129,19 +129,6 @@ public:
         removeDiffFiles(v);
     }
     /**
-     * Remove diff files.
-     * @diffV diff list.
-     */
-    void removeDiffFiles(const MetaDiffVec &v) {
-        for (const MetaDiff &d : v) {
-            cybozu::FilePath p = dir_ + createDiffFileName(d);
-            if (!p.stat().isFile()) continue;
-            if (!p.unlink()) {
-                LOGs.error() << "removeDiffFiles:unlink failed" << p.str();
-            }
-        }
-    }
-    /**
      * List of wdiff name in order of gid.
      * RETURN:
      *   list of wdiff name.
@@ -169,6 +156,19 @@ public:
         return dir_;
     }
 private:
+    /**
+     * Remove diff files.
+     * @diffV diff list.
+     */
+    void removeDiffFiles(const MetaDiffVec &v) {
+        for (const MetaDiff &d : v) {
+            cybozu::FilePath p = dir_ + createDiffFileName(d);
+            if (!p.stat().isFile()) continue;
+            if (!p.unlink()) {
+                LOGs.error() << "removeDiffFiles:unlink failed" << p.str();
+            }
+        }
+    }
     /**
      * Convert diff list to name list.
      */
