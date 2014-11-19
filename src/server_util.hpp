@@ -10,6 +10,7 @@
 #include <functional>
 #include <atomic>
 #include <string>
+#include <signal.h>
 #include "thread_util.hpp"
 #include "cybozu/socket.hpp"
 #include "file_path.hpp"
@@ -44,8 +45,30 @@ class MultiThreadedServer
 {
 private:
     ProcessStatus& ps_;
+    static ProcessStatus *pps_;
     const size_t maxNumThreads_;
     const size_t socketTimeout_;
+    static inline void quitHandler(int sig) noexcept
+    {
+        if (pps_) {
+            pps_->setForceShutdown();
+        }
+    }
+    void setQuitHandler()
+    {
+        struct sigaction sa;
+        sa.sa_handler = &quitHandler;
+        sigfillset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        bool isOK = (sigaction(SIGINT, &sa, NULL) == 0)
+            && (sigaction(SIGQUIT, &sa, NULL) == 0)
+            && (sigaction(SIGABRT, &sa, NULL) == 0)
+            && (sigaction(SIGTERM, &sa, NULL) == 0);
+		if (!isOK) {
+            LOGs.error() << "can't set sigaction";
+			exit(1);
+		}
+    }
 
 public:
     template <typename Func>
@@ -54,6 +77,8 @@ public:
 
     MultiThreadedServer(ProcessStatus &ps, size_t maxNumThreads = 0, size_t socketTimeout = 10)
         : ps_(ps), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
+        pps_ = &ps;
+        setQuitHandler();
     }
     template <typename Func>
     void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) {
@@ -62,9 +87,18 @@ public:
         ssock.bind(port);
         cybozu::thread::ThreadRunnerFixedPool pool;
         pool.start(maxNumThreads_);
-        while (ps_.isRunning()) {
-            while (!ssock.queryAccept() && ps_.isRunning()) {}
-            if (!ps_.isRunning()) break;
+        for (;;) {
+            for (;;) {
+                if (!ps_.isRunning()) goto quit;
+                int ret = ssock.queryAcceptNothrow();
+                if (ret > 0) break; // accepted
+                if (ret == 0) continue; // timeout
+                if (ret == -EINTR) {
+                    LOGs.info() << FUNC << "queryAccept:interrupted";
+                    goto quit;
+                }
+                throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
+            }
             cybozu::Socket sock;
             ssock.accept(sock);
             sock.setSendTimeout(socketTimeout_ * 1000);
@@ -75,6 +109,7 @@ public:
                 // The socket will be closed.
             }
         }
+    quit:
         LOGs.info() << FUNC << "Waiting for remaining tasks";
         pool.stop();
         logErrors(pool.gc());
@@ -88,6 +123,8 @@ private:
         }
     }
 };
+
+server::ProcessStatus *MultiThreadedServer::pps_;
 
 /**
  * Request worker for daemons.
