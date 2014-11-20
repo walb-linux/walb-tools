@@ -14,7 +14,6 @@
 #include "util.hpp"
 #include "walb_logger.hpp"
 #include "walb_util.hpp"
-#include "server_util.hpp"
 #include "process.hpp"
 
 namespace walb {

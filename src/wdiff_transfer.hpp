@@ -4,7 +4,7 @@
 #include "walb_diff_merge.hpp"
 #include "walb_diff_compressor.hpp"
 #include "walb_diff_pack.hpp"
-#include "protocol.hpp"
+#include "server_util.hpp"
 #include "host_info.hpp"
 
 namespace walb {

@@ -24,6 +24,29 @@
 namespace walb {
 namespace server {
 
+struct RequestWorker
+{
+    cybozu::Socket sock_;
+    std::string nodeId_;
+    ProcessStatus &ps_;
+    const protocol::Str2ServerHandler& map_;
+public:
+    RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
+                  ProcessStatus &ps, const protocol::Str2ServerHandler& map)
+        : sock_(std::move(sock))
+        , nodeId_(nodeId)
+        , ps_(ps)
+        , map_(map) {}
+    void operator()() try {
+        protocol::serverDispatch(sock_, nodeId_, ps_, map_);
+        sock_.close();
+    } catch (...) {
+        sock_.close();
+        throw;
+    }
+    cybozu::Socket& socket() { return sock_; }
+};
+
 /**
  * Multi threaded server.
  */
@@ -57,17 +80,12 @@ private:
     }
 
 public:
-    template <typename Func>
-    using RequestWorkerGenerator =
-        std::function<std::shared_ptr<Func>(cybozu::Socket &&, ProcessStatus &)>;
-
     MultiThreadedServer(ProcessStatus &ps, size_t maxNumThreads = 0, size_t socketTimeout = 10)
         : ps_(ps), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
         pps_ = &ps;
         setQuitHandler();
     }
-    template <typename Func>
-    void run(uint16_t port, const RequestWorkerGenerator<Func> &gen) {
+    void run(uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& map) {
         const char *const FUNC = __func__;
         cybozu::Socket ssock;
         ssock.bind(port);
@@ -90,7 +108,7 @@ public:
             sock.setSendTimeout(socketTimeout_ * 1000);
             sock.setReceiveTimeout(socketTimeout_ * 1000);
             logErrors(pool.gc());
-            if (!pool.add(gen(std::move(sock), ps_))) {
+            if (!pool.add(std::make_shared<RequestWorker>(std::move(sock), nodeId, ps_, map))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
                 // The socket will be closed.
             }
@@ -111,32 +129,6 @@ private:
 };
 
 ProcessStatus *MultiThreadedServer::pps_;
-
-/**
- * Request worker for daemons.
- */
-class RequestWorker
-{
-protected:
-    cybozu::Socket sock_;
-    std::string nodeId_;
-    ProcessStatus &ps_;
-public:
-    RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  ProcessStatus &ps)
-        : sock_(std::move(sock))
-        , nodeId_(nodeId)
-        , ps_(ps) {}
-    void operator()() try {
-        run();
-        sock_.close();
-    } catch (...) {
-        sock_.close();
-        throw;
-    }
-    virtual void run() = 0;
-    cybozu::Socket& socket() { return sock_; }
-};
 
 } //namespace server
 

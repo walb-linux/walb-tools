@@ -22,18 +22,6 @@ const std::string DEFAULT_LOG_FILE = "-";
 
 using namespace walb;
 
-/**
- * Request worker.
- */
-class ProxyRequestWorker : public server::RequestWorker
-{
-public:
-    using RequestWorker :: RequestWorker;
-    void run() override {
-        protocol::serverDispatch(sock_, nodeId_, ps_, proxyHandlerMap);
-    }
-};
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -109,17 +97,10 @@ int main(int argc, char *argv[]) try
     LOGs.info() << opt;
     {
         ProxyThreads threads(opt);
-        auto createRequestWorker = [&](
-            cybozu::Socket &&sock,
-            ProcessStatus &ps) {
-            return std::make_shared<ProxyRequestWorker>(
-                std::move(sock), gp.nodeId, ps);
-        };
-
         ProxySingleton &g = getProxyGlobal();
         const size_t concurrency = g.maxForegroundTasks + 5;
         server::MultiThreadedServer server(g.ps, concurrency);
-        server.run<ProxyRequestWorker>(opt.port, createRequestWorker);
+        server.run(opt.port, gp.nodeId, proxyHandlerMap);
     }
     LOGs.info() << "shutdown walb proxy server";
 

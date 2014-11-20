@@ -25,18 +25,6 @@ const std::string DEFAULT_LOG_FILE = "-";
 
 using namespace walb;
 
-/**
- * Request worker.
- */
-class StorageRequestWorker : public server::RequestWorker
-{
-public:
-    using RequestWorker :: RequestWorker;
-    void run() override {
-        protocol::serverDispatch(sock_, nodeId_, ps_, storageHandlerMap);
-    }
-};
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -121,17 +109,10 @@ int main(int argc, char *argv[]) try
     LOGs.info() << opt;
     {
         StorageThreads threads(opt);
-        auto createRequestWorker = [&](
-            cybozu::Socket &&sock,
-            ProcessStatus &ps) {
-            return std::make_shared<StorageRequestWorker>(
-                std::move(sock), gs.nodeId, ps);
-        };
-
         StorageSingleton &g = getStorageGlobal();
         const size_t concurrency = g.maxForegroundTasks + 5;
         server::MultiThreadedServer server(g.ps, concurrency);
-        server.run<StorageRequestWorker>(opt.port, createRequestWorker);
+        server.run(opt.port, gs.nodeId, storageHandlerMap);
     }
     LOGs.info() << "shutdown walb storage server";
 

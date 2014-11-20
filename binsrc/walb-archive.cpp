@@ -23,18 +23,6 @@ const std::string DEFAULT_VG = "vg";
 
 using namespace walb;
 
-/**
- * Request worker.
- */
-class ArchiveRequestWorker : public server::RequestWorker
-{
-public:
-    using RequestWorker :: RequestWorker;
-    void run() override {
-        protocol::serverDispatch(sock_, nodeId_, ps_, archiveHandlerMap);
-    }
-};
-
 struct Option : cybozu::Option
 {
     uint16_t port;
@@ -83,17 +71,10 @@ int main(int argc, char *argv[]) try
     LOGs.info() << opt;
     verifyArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
-    auto createRequestWorker = [&](
-        cybozu::Socket &&sock,
-        ProcessStatus &ps) {
-        return std::make_shared<ArchiveRequestWorker>(
-            std::move(sock), ga.nodeId, ps);
-    };
-
     ArchiveSingleton &g = getArchiveGlobal();
     const size_t concurrency = g.maxForegroundTasks + 5;
     server::MultiThreadedServer server(g.ps, concurrency);
-    server.run<ArchiveRequestWorker>(opt.port, createRequestWorker);
+    server.run(opt.port, ga.nodeId, archiveHandlerMap);
     LOGs.info() << "shutdown walb archive server";
 
 } catch (std::exception &e) {
