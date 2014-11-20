@@ -978,6 +978,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         packet::Ack(pkt.sock()).recv();
         logger.info() << "mergeIn " << volId << merger.statIn();
         logger.info() << "mergeOut" << volId << statOut;
+        logger.info() << "mergeMemUsage" << volId << merger.memUsageStr();
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();

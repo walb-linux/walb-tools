@@ -156,6 +156,9 @@ public:
     const DiffStatistics& statOut() const {
         return statOut_;
     }
+    std::string memUsageStr() const {
+        return merger_.memUsageStr();
+    }
 private:
     /**
      * Read from the base full image.

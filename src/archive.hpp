@@ -170,7 +170,7 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
 
 inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv,
                              const std::atomic<int>& stopState,
-                             DiffStatistics& statIn, DiffStatistics& statOut)
+                             DiffStatistics& statIn, DiffStatistics& statOut, std::string& memUsageStr)
 {
     const char *const FUNC = __func__;
     statOut.clear();
@@ -212,6 +212,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     statIn = merger.statIn();
     statOut.wdiffNr = -1;
     statOut.dataSize = -1;
+    memUsageStr = merger.memUsageStr();
     return true;
 }
 
@@ -235,11 +236,13 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
 
     cybozu::lvm::Lv lv = volInfo.getLv();
     DiffStatistics statIn, statOut;
-    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut)) {
+    std::string memUsageStr;
+    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
         return false;
     }
     LOGs.info() << "apply-mergeIn " << volId << statIn;
     LOGs.info() << "apply-mergeOut" << volId << statOut;
+    LOGs.info() << "apply-mergeMemUsage" << volId << memUsageStr;
 
     const MetaState st2 = endApplying(st1, diffV);
     volInfo.setMetaState(st2);
@@ -323,6 +326,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
 
     LOGs.info() << "merge-mergeIn " << volId << merger.statIn();
     LOGs.info() << "merge-mergeOut" << volId << writer.getStat();
+    LOGs.info() << "merge-mergeMemUsage" << volId << merger.memUsageStr();
     LOGs.info() << "merged" << diffV.size() << mergedDiff;
     return true;
 }
@@ -382,11 +386,13 @@ inline bool restore(const std::string &volId, uint64_t gid)
                 });
         LOGs.debug() << "restore-diffs" << st0 << diffV;
         DiffStatistics statIn, statOut;
-        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState, statIn, statOut)) {
+        std::string memUsageStr;
+        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState, statIn, statOut, memUsageStr)) {
             return false;
         }
         LOGs.info() << "restore-mergeIn " << volId << statIn;
         LOGs.info() << "restore-mergeOut" << volId << statOut;
+        LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
     }
     cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
     return true;
@@ -509,6 +515,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
             logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
+            logger.info() << "hash-backup-mergeMemUsage" << volId << virt.memUsageStr();
         }
     }
     if (!isOk) {
@@ -663,6 +670,7 @@ inline bool runHashReplClient(
     }
     logger.info() << "hash-repl-client-mergeIn " << volId << virt.statIn();
     logger.info() << "hash-repl-client-mergeOut" << volId << virt.statOut();
+    logger.info() << "hash-repl-client-mergeMemUsage" << volId << virt.memUsageStr();
     logger.info() << "hash-repl-client done" << volId;
     return true;
 }
@@ -707,6 +715,7 @@ inline bool runHashReplServer(
     volSt.updateLastSyncTime();
     logger.info() << "hash-repl-server-mergeIn " << volId << virt.statIn();
     logger.info() << "hash-repl-server-mergeOut" << volId << virt.statOut();
+    logger.info() << "hash-repl-server-mergeMemUsage" << volId << virt.memUsageStr();
     logger.info() << "hash-repl-server done" << volId;
     return true;
 }
@@ -751,6 +760,7 @@ inline bool runDiffReplClient(
     packet::Ack(pkt.sock()).recv();
     logger.info() << "diff-repl-mergeIn " << volId << merger.statIn();
     logger.info() << "diff-repl-mergeOut" << volId << statOut;
+    logger.info() << "diff-repl-mergeMemUsage" << volId << merger.memUsageStr();
     logger.info() << "diff-repl-client done" << volId << mergedDiff;
     return true;
 }

@@ -297,8 +297,8 @@ public:
         assert(wdiffs_.empty());
         return statOut_;
     }
-    size_t searchLen() const {
-        return searchLen_;
+    std::string memUsageStr() const {
+        return cybozu::itoa(searchLen_ * LBS / KIBI) + "KiB";
     }
 private:
     uint64_t getMinimumAddr() const {
