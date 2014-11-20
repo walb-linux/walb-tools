@@ -64,8 +64,9 @@ int doMain(int argc, char *argv[])
     merger.mergeToFd(file.fd());
     file.close();
     if (opt.doStat) {
-        merger.statIn().printOneline(::stdout, "input:  ");
-        merger.statOut().printOneline(::stdout, "output: ");
+        std::cerr << "mergeIn  " << merger.statIn() << std::endl
+                  << "mergeOut " << merger.statOut() << std::endl
+                  << "mergeMemUsage " << merger.memUsageStr() << std::endl;
     }
     return 0;
 }
