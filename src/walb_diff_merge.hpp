@@ -96,10 +96,10 @@ private:
          * RETURN:
          *   if the iterator has not reached the end,
          *   address of the current diff record.
-         *   otherwise, -1.
+         *   otherwise, UINT64_MAX.
          */
         uint64_t currentAddress() const {
-            if (isEnd()) return uint64_t(-1);
+            if (isEnd()) return UINT64_MAX;
             verifyFilled(__func__);
             return rec_.io_address;
         }
@@ -140,6 +140,8 @@ private:
     WdiffPtrList wdiffs_;
     DiffMemory diffMem_;
     std::queue<DiffRecIo> mergedQ_;
+    uint64_t doneAddr_;
+    size_t searchLen_;
     /**
      * Diff recIos will be read from wdiffs_,
      * then added to diffMem_ (and merged inside it),
@@ -147,6 +149,18 @@ private:
      *
      * The point of the algorithm is which wdiff will be chosen to get recIos.
      * See moveToDiffMemory() for detail.
+     *
+     * doneAddr_ is the minimum address in all the input wdiff streams.
+     * There is no overlapped IOs which endAddr is <= doneAddr in all the streams.
+     * so such IOs in diffMem_ can be put out safely.
+     *
+     * searchLen_ is required length [block size] as a buffer to merge wdiffs.
+     * Ex. with the following diffs, we need to merge them at once.
+     *
+     * diff2     XXXXX
+     * diff1        XXXXX
+     * diff0          XXXXX
+     * required  <-------->
      */
 
     /**
@@ -165,6 +179,8 @@ public:
         , wdiffs_()
         , diffMem_()
         , mergedQ_()
+        , doneAddr_(0)
+        , searchLen_(0)
         , statIn_(), statOut_() {
     }
     /**
@@ -239,6 +255,8 @@ public:
             wdiffH_.setMaxIoBlocksIfNecessary(
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
 
+            doneAddr_ = getMinimumAddr();
+
             removeEndedWdiffs();
             isHeaderPrepared_ = true;
         }
@@ -258,8 +276,8 @@ public:
     bool getAndRemove(DiffRecIo &recIo) {
         assert(isHeaderPrepared_);
         while (mergedQ_.empty()) {
-            const uint64_t doneAddr = moveToDiffMemory();
-            if (!moveToMergedQueue(doneAddr)) {
+            moveToDiffMemory();
+            if (!moveToMergedQueue()) {
                 assert(wdiffs_.empty());
                 return false;
             }
@@ -279,23 +297,64 @@ public:
         assert(wdiffs_.empty());
         return statOut_;
     }
+    size_t searchLen() const {
+        return searchLen_;
+    }
 private:
+    uint64_t getMinimumAddr() const {
+        uint64_t addr = UINT64_MAX;
+        WdiffPtrList::const_iterator it = wdiffs_.begin();
+        while (it != wdiffs_.end()) {
+            Wdiff &wdiff = **it;
+            DiffRecord rec = wdiff.getFrontRec();
+            addr = std::min(addr, rec.io_address);
+            ++it;
+        }
+        return addr;
+    }
+
+    struct Range
+    {
+        uint64_t bgn;
+        uint64_t end;
+
+        void set(const DiffRecord &rec) {
+            bgn = rec.io_address;
+            end = rec.endIoAddress();
+        }
+        bool isOverlapped(const Range &rhs) const {
+            return bgn < rhs.end && rhs.bgn < end;
+        }
+        void merge(const Range &rhs) {
+            bgn = std::min(bgn, rhs.bgn);
+            end = std::max(end, rhs.end);
+        }
+        size_t size() const {
+            assert(end - bgn <= SIZE_MAX);
+            return end - bgn;
+        }
+    };
+
     /**
      * Try to get Ios from wdiffs and add to wdiffMem_.
      *
-     * RETURN:
-     *   minimum current address among wdiffs.
-     *   uint64_t(-1) if there is no wdiffs.
+     * minimum current address among wdiffs will be set to doneAddr_.
+     * UINT64_MAX if there is no wdiffs.
      */
-    uint64_t moveToDiffMemory() {
-        uint64_t minAddr = -1; // max value.
+    void moveToDiffMemory() {
+        uint64_t minAddr = UINT64_MAX;
         WdiffPtrList::iterator it = wdiffs_.begin();
+        Range range{0, 0};
+        if (it != wdiffs_.end()) {
+            Wdiff &wdiff = **it;
+            range.set(wdiff.getFrontRec());
+        }
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
             DiffRecord rec = wdiff.getFrontRec();
-            const uint64_t startAddr = rec.endIoAddress();
-            while (shouldMerge(rec, startAddr, minAddr)) {
+            searchLen_ = std::max<size_t>(searchLen_, rec.io_blocks);
+            while (shouldMerge(rec, minAddr)) {
                 DiffIo io;
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
@@ -307,19 +366,24 @@ private:
                 }
                 rec = wdiff.getFrontRec();
             }
-            minAddr = std::min(minAddr, wdiff.currentAddress());
-            if (goNext) ++it;
+            if (goNext) {
+                Range curRange;
+                curRange.set(rec);
+                if (range.isOverlapped(curRange)) {
+                    range.merge(curRange);
+                } else {
+                    range = curRange;
+                }
+                minAddr = std::min(minAddr, wdiff.currentAddress());
+                ++it;
+            }
         }
-        return minAddr;
+        searchLen_ = std::max(searchLen_, range.size());
+        doneAddr_ = minAddr;
     }
-    bool shouldMerge(const DiffRecord& rec, uint64_t startAddr, uint64_t minAddr) const {
-        const uint64_t endAddr = rec.endIoAddress();
-        if (minAddr == uint64_t(-1)) {
-            /* first wdiff */
-            return endAddr <= startAddr + (1 * MEBI / LBS);
-        } else {
-            return endAddr <= minAddr;
-        }
+    bool shouldMerge(const DiffRecord& rec, uint64_t minAddr) const {
+        return (rec.io_address < doneAddr_ + searchLen_)
+            && (rec.endIoAddress() <= minAddr);
     }
     /**
      * Move all IOs which ioAddress + ioBlocks <= doneAddr
@@ -328,13 +392,13 @@ private:
      * RETURN:
      *   false if there is no Io to move.
      */
-    bool moveToMergedQueue(uint64_t doneAddr) {
+    bool moveToMergedQueue() {
         if (diffMem_.empty()) return false;
         DiffMemory::Map& map = diffMem_.getMap();
         DiffMemory::Map::iterator i = map.begin();
         while (i != map.end()) {
             DiffRecIo& recIo = i->second;
-            if (recIo.record().endIoAddress() > doneAddr) break;
+            if (recIo.record().endIoAddress() > doneAddr_) break;
             mergedQ_.push(std::move(recIo));
             diffMem_.eraseFromMap(i);
         }
