@@ -327,6 +327,22 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     return true;
 }
 
+inline void removeSnapshot(cybozu::lvm::Lv& lv, const std::string& name)
+{
+    if (lv.hasSnapshot(name)) {
+        lv.getSnapshot(name).remove();
+    }
+}
+struct TmpSnapshotDeleter {
+    cybozu::lvm::Lv& lv;
+    std::string name;
+    ~TmpSnapshotDeleter()
+        try
+    {
+        removeSnapshot(lv, name);
+    } catch (...) {
+    }
+};
 /**
  * Restore a snapshot.
  * (1) create lvm snapshot of base lv. (with temporal lv name)
@@ -344,9 +360,9 @@ inline bool restore(const std::string &volId, uint64_t gid)
     cybozu::lvm::Lv lv = volInfo.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
     const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
-    if (lv.hasSnapshot(tmpLvName)) {
-        lv.getSnapshot(tmpLvName).remove();
-    }
+    removeSnapshot(lv, tmpLvName);
+    TmpSnapshotDeleter deleter{lv, tmpLvName};
+
     const uint64_t snapSizeLb = uint64_t(((double)(lv.sizeLb()) * 1.2));
     cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true, snapSizeLb);
 
