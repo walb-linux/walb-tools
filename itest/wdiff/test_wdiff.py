@@ -41,7 +41,7 @@ def consolidation_test1():
         run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.wdiff" % i))
         run(BIN + ("/wlog-redo -z ddev32M.1 < %d.wlog" % i))
 
-    run(BIN + "/wdiff-merge -x 16K -i 1.wdiff 2.wdiff 3.wdiff 4.wdiff -o all.wdiff")
+    run(BIN + "/wdiff-merge -stat -x 16K -i 1.wdiff 2.wdiff 3.wdiff 4.wdiff -o all.wdiff")
     run(BIN + "/wdiff-redo -z ddev32M.2 < all.wdiff")
     run("sha1sum ddev32M.0 ddev32M.1 ddev32M.2")
     run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
@@ -55,7 +55,7 @@ def consolidation_test2():
     for i in xrange(1, 5):
         run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.wdiff" % i))
 
-    run(BIN + "/virt-full-cat -i ddev32M -o ddev32M.1 -d 1.wdiff 2.wdiff 3.wdiff 4.wdiff")
+    run(BIN + "/virt-full-cat -stat -i ddev32M -o ddev32M.1 -d 1.wdiff 2.wdiff 3.wdiff 4.wdiff")
     run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
     check_result("consolidation test 3.")
 
