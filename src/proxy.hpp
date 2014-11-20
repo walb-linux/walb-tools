@@ -1198,7 +1198,7 @@ inline void c2pExecServer(protocol::ServerParams &p)
     protocol::runExecServer(p, gp.nodeId);
 }
 
-const std::map<std::string, protocol::ServerHandler> proxyHandlerMap = {
+const protocol::Str2ServerHandler proxyHandlerMap = {
     { statusCN, c2pStatusServer },
     { startCN, c2pStartServer },
     { stopCN, c2pStopServer },

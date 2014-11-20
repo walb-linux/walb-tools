@@ -2093,7 +2093,7 @@ inline void c2aExecServer(protocol::ServerParams &p)
     protocol::runExecServer(p, ga.nodeId);
 }
 
-const std::map<std::string, protocol::ServerHandler> archiveHandlerMap = {
+const protocol::Str2ServerHandler archiveHandlerMap = {
     // commands
     { statusCN, c2aStatusServer },
     { initVolCN, c2aInitVolServer },

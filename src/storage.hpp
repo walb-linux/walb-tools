@@ -1185,7 +1185,7 @@ inline void c2sExecServer(protocol::ServerParams &p)
     protocol::runExecServer(p, gs.nodeId);
 }
 
-const std::map<std::string, protocol::ServerHandler> storageHandlerMap = {
+const protocol::Str2ServerHandler storageHandlerMap = {
     { statusCN, c2sStatusServer },
     { initVolCN, c2sInitVolServer },
     { clearVolCN, c2sClearVolServer },

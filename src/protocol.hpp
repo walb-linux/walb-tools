@@ -294,14 +294,15 @@ inline void shutdownServer(ServerParams &p)
  * Server handler type.
  */
 using ServerHandler = void (*)(ServerParams &);
+typedef std::map<std::string, ServerHandler> Str2ServerHandler;
 
 inline ServerHandler findServerHandler(
-    const std::map<std::string, ServerHandler> &handlers, const std::string protocolName)
+    const Str2ServerHandler &handlers, const std::string protocolName)
 {
     if (protocolName == shutdownCN) {
         return shutdownServer;
     }
-    std::map<std::string, ServerHandler>::const_iterator it = handlers.find(protocolName);
+    Str2ServerHandler::const_iterator it = handlers.find(protocolName);
     if (it == handlers.cend()) {
         throw cybozu::Exception(__func__) << "bad protocol" << protocolName;
     }
@@ -332,7 +333,7 @@ inline void clientDispatch(
 inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
     walb::server::ProcessStatus &ps,
-    const std::map<std::string, ServerHandler> &handlers) noexcept try
+    const Str2ServerHandler &handlers) noexcept try
 {
     std::string clientId, protocolName;
     packet::Packet pkt(sock);
