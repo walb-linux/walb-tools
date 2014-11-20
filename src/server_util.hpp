@@ -24,39 +24,13 @@
 namespace walb {
 namespace server {
 
-struct RequestWorker
-{
-    cybozu::Socket sock_;
-    std::string nodeId_;
-    ProcessStatus &ps_;
-    const protocol::Str2ServerHandler& map_;
-public:
-    RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  ProcessStatus &ps, const protocol::Str2ServerHandler& map)
-        : sock_(std::move(sock))
-        , nodeId_(nodeId)
-        , ps_(ps)
-        , map_(map) {}
-    void operator()() try {
-        protocol::serverDispatch(sock_, nodeId_, ps_, map_);
-        sock_.close();
-    } catch (...) {
-        sock_.close();
-        throw;
-    }
-    cybozu::Socket& socket() { return sock_; }
-};
-
 /**
  * Multi threaded server.
  */
 class MultiThreadedServer
 {
 private:
-    ProcessStatus& ps_;
     static ProcessStatus *pps_;
-    const size_t maxNumThreads_;
-    const size_t socketTimeout_;
     static inline void quitHandler(int) noexcept
     {
         if (pps_) {
@@ -80,20 +54,17 @@ private:
     }
 
 public:
-    MultiThreadedServer(ProcessStatus &ps, size_t maxNumThreads = 0, size_t socketTimeout = 10)
-        : ps_(ps), maxNumThreads_(maxNumThreads), socketTimeout_(socketTimeout) {
+    void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& handlers, size_t maxNumThreads = 0, size_t socketTimeout = 10) {
+        const char *const FUNC = __func__;
         pps_ = &ps;
         setQuitHandler();
-    }
-    void run(uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& map) {
-        const char *const FUNC = __func__;
         cybozu::Socket ssock;
         ssock.bind(port);
         cybozu::thread::ThreadRunnerFixedPool pool;
-        pool.start(maxNumThreads_);
+        pool.start(maxNumThreads);
         for (;;) {
             for (;;) {
-                if (!ps_.isRunning()) goto quit;
+                if (!ps.isRunning()) goto quit;
                 int ret = ssock.queryAcceptNothrow();
                 if (ret > 0) break; // accepted
                 if (ret == 0) continue; // timeout
@@ -105,11 +76,11 @@ public:
             }
             cybozu::Socket sock;
             ssock.accept(sock);
-            sock.setSendTimeout(socketTimeout_ * 1000);
-            sock.setReceiveTimeout(socketTimeout_ * 1000);
+            sock.setSendTimeout(socketTimeout * 1000);
+            sock.setReceiveTimeout(socketTimeout * 1000);
             logErrors(pool.gc());
-            if (!pool.add(std::make_shared<RequestWorker>(std::move(sock), nodeId, ps_, map))) {
-                LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads_;
+            if (!pool.add(std::make_shared<protocol::RequestWorker>(std::move(sock), nodeId, ps, handlers))) {
+                LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads;
                 // The socket will be closed.
             }
         }

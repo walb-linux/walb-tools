@@ -104,15 +104,15 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    util::setLogSetting(createLogFilePath(opt.logFileStr, gs.baseDirStr), opt.isDebug);
+    StorageSingleton &g = getStorageGlobal();
+    util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb storage server";
     LOGs.info() << opt;
     {
         StorageThreads threads(opt);
-        StorageSingleton &g = getStorageGlobal();
+        server::MultiThreadedServer server;
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server::MultiThreadedServer server(g.ps, concurrency);
-        server.run(opt.port, gs.nodeId, storageHandlerMap);
+        server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, concurrency);
     }
     LOGs.info() << "shutdown walb storage server";
 

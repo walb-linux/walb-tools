@@ -92,15 +92,15 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    util::setLogSetting(createLogFilePath(opt.logFileStr, gp.baseDirStr), opt.isDebug);
+    ProxySingleton &g = getProxyGlobal();
+    util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb proxy server";
     LOGs.info() << opt;
     {
         ProxyThreads threads(opt);
-        ProxySingleton &g = getProxyGlobal();
+        server::MultiThreadedServer server;
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server::MultiThreadedServer server(g.ps, concurrency);
-        server.run(opt.port, gp.nodeId, proxyHandlerMap);
+        server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, concurrency);
     }
     LOGs.info() << "shutdown walb proxy server";
 

@@ -329,35 +329,48 @@ inline void clientDispatch(
 /**
  * Server dispatcher.
  */
-inline void serverDispatch(
-    cybozu::Socket &sock, const std::string &nodeId,
-    walb::ProcessStatus &ps,
-    const Str2ServerHandler &handlers) noexcept try
-{
-    std::string clientId, protocolName;
-    packet::Packet pkt(sock);
-    bool sendErr = true;
-    try {
-        run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
-        ServerHandler handler = findServerHandler(handlers, protocolName);
-        ServerParams serverParams(sock, clientId, ps);
-        pkt.write(msgOk);
-        sendErr = false;
-        handler(serverParams);
-    } catch (std::exception &e) {
-        LOGs.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    } catch (...) {
-        cybozu::Exception e(__func__);
-        e << "other error";
-        LOGs.error() << e.what();
-        if (sendErr) pkt.write(e.what());
+class RequestWorker {
+    cybozu::Socket sock;
+    std::string nodeId;
+    ProcessStatus &ps;
+public:
+    const protocol::Str2ServerHandler& handlers;
+    RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
+                  ProcessStatus &ps, const protocol::Str2ServerHandler& handlers)
+        : sock(std::move(sock))
+        , nodeId(nodeId)
+        , ps(ps)
+        , handlers(handlers) {}
+    void operator()() noexcept {
+        try {
+            std::string clientId, protocolName;
+            packet::Packet pkt(sock);
+            bool sendErr = true;
+            try {
+                run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
+                ServerHandler handler = findServerHandler(handlers, protocolName);
+                ServerParams serverParams(sock, clientId, ps);
+                pkt.write(msgOk);
+                sendErr = false;
+                handler(serverParams);
+            } catch (std::exception &e) {
+                LOGs.error() << e.what();
+                if (sendErr) pkt.write(e.what());
+            } catch (...) {
+                cybozu::Exception e(__func__);
+                e << "other error";
+                LOGs.error() << e.what();
+                if (sendErr) pkt.write(e.what());
+            }
+        } catch (std::exception &e) {
+            LOGs.error() << e.what();
+        } catch (...) {
+            LOGs.error() << "other error";
+        }
+        const bool dontThrow = true;
+        sock.close(dontThrow);
     }
-} catch (std::exception &e) {
-    LOGs.error() << e.what();
-} catch (...) {
-    LOGs.error() << "other error";
-}
+};
 
 /**
  * If numToSend == 0, it will not check the vector size.

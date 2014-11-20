@@ -66,15 +66,15 @@ int main(int argc, char *argv[]) try
         opt.usage();
         return 1;
     }
-    util::setLogSetting(createLogFilePath(opt.logFileStr, ga.baseDirStr), opt.isDebug);
+    ArchiveSingleton &g = getArchiveGlobal();
+    util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb archive server";
     LOGs.info() << opt;
     verifyArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
-    ArchiveSingleton &g = getArchiveGlobal();
+    server::MultiThreadedServer server;
     const size_t concurrency = g.maxForegroundTasks + 5;
-    server::MultiThreadedServer server(g.ps, concurrency);
-    server.run(opt.port, ga.nodeId, archiveHandlerMap);
+    server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, concurrency);
     LOGs.info() << "shutdown walb archive server";
 
 } catch (std::exception &e) {
