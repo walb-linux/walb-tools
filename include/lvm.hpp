@@ -8,7 +8,6 @@
  */
 #include <cassert>
 #include <cstdio>
-#include <exception>
 #include <string>
 #include <map>
 #include <vector>
@@ -19,6 +18,7 @@
 #include "cybozu/atoi.hpp"
 #include "cybozu/itoa.hpp"
 #include "cybozu/string_operation.hpp"
+#include "cybozu/exception.hpp"
 #include "fileio.hpp"
 #include "file_path.hpp"
 #include "process.hpp"
@@ -97,7 +97,9 @@ inline void sleepMs(unsigned int ms)
 inline uint64_t parseSizeLb(const std::string &s) {
     uint64_t size = cybozu::atoi(s);
     if (size % LBS != 0) {
-        throw std::runtime_error("size must be multiples of logical block size.");
+        throw cybozu::Exception(__func__)
+            << "size must be multiples of logical block size"
+            << s << size;
     }
     return size / LBS;
 }
@@ -164,7 +166,7 @@ private:
     bool isSnapshot_;
 public:
     Lv() {
-        throw std::runtime_error("default constructor invalid.");
+        throw cybozu::Exception("default constructor invalid.");
     }
     Lv(const std::string &vgName, const std::string &lvName,
                   const std::string &snapName, uint64_t sizeLb, bool isSnapshot)
@@ -220,7 +222,7 @@ public:
                 return lv;
             }
         }
-        throw std::runtime_error("Not found.");
+        throw cybozu::Exception(__func__) << "Not found" << snapName;
     }
     Lv parent() const {
         checkSnapshot();
@@ -229,7 +231,7 @@ public:
                 return lv;
             }
         }
-        throw std::runtime_error("Every snapshot must have parent logical volume.");
+        throw cybozu::Exception(__func__) << "Not found" << name();
     }
     void resize(uint64_t newSizeLb) {
         cybozu::lvm::resize(path().str(), newSizeLb);
@@ -248,22 +250,24 @@ public:
         print(ss);
         std::string s(ss.str());
         if (::fwrite(&s[0], 1, s.size(), fp) < s.size()) {
-            throw std::runtime_error("fwrite failed.");
+            throw cybozu::Exception(__func__) << "fwrite failed";
         }
         if (::fflush(fp) != 0) {
-            throw std::runtime_error("fflush failed.");
+            throw cybozu::Exception(__func__) << "fflush failed";
         }
     }
     void print() const { print(::stdout); }
 private:
     void checkVolume() const {
         if (isSnapshot_) {
-            throw std::logic_error("This must be logical volume.");
+            throw cybozu::Exception(__func__)
+                << "Must be logical volume" << name();
         }
     }
     void checkSnapshot() const {
         if (!isSnapshot_) {
-            throw std::logic_error("This must be snapshot.");
+            throw cybozu::Exception(__func__)
+                << "This must be snapshot" << name();
         }
     }
 };
@@ -280,14 +284,15 @@ private:
 
 public:
     Vg() {
-        throw std::runtime_error("default constructor invalid.");
+        throw cybozu::Exception("default constructor invalid.");
     }
     Vg(const std::string &vgName, uint64_t sizeLb, uint64_t freeLb)
         : vgName_(vgName), sizeLb_(sizeLb), freeLb_(freeLb) {
     }
     Lv create(const std::string &lvName, uint64_t sizeLb) {
         if (freeLb_ < sizeLb) {
-            throw std::runtime_error("VG free size not enough.");
+            throw cybozu::Exception(__func__)
+                << "free size not enough" << freeLb_ << sizeLb;
         }
         Lv lv = createLv(vgName_, lvName, sizeLb);
         freeLb_ -= sizeLb;
@@ -331,7 +336,8 @@ Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeL
         return Lv(vgName, lvName, "", sizeLb, false);
     }
     /* creation failed. */
-    throw std::runtime_error("LV seems invalid: abort.");
+    throw cybozu::Exception(__func__)
+        << "LV creation failed" << vgName << lvName << sizeLb;
 }
 
 /**
@@ -356,7 +362,9 @@ Lv createSnapshot(
         return Lv(vgName, lvName, snapName, sizeLb, true);
     }
     /* possible invalid snapshot. */
-    throw std::runtime_error("Snapshot seems invalid; abort.");
+    throw cybozu::Exception(__func__)
+        << "Snapshot creation failed"
+        << vgName << lvName << snapName << isWritable << sizeLb;
 }
 
 /**
@@ -377,7 +385,7 @@ inline void remove(const std::string &pathStr)
 {
     cybozu::FilePath path(pathStr);
     if (!path.stat().exists()) {
-        throw std::runtime_error("not found.");
+        throw cybozu::Exception(__func__) << "not found" << pathStr;
     }
 
     cybozu::process::call("/sbin/lvremove", { "-f", path.str() });
@@ -415,7 +423,7 @@ inline LvList listLv(const std::string &arg = "")
         if (s0.empty()) continue; /* last '\n' */
         const std::vector<std::string> v = local::splitAndTrim(s0, ',');
         if (v.size() != 4) {
-            throw std::runtime_error("invalid output of lvs.");
+            throw cybozu::Exception(__func__) << "invalid output" << s0;
         }
         const bool isSnapshot = !v[1].empty();
         const std::string &lvName = isSnapshot ? v[1] : v[0];
@@ -515,7 +523,7 @@ inline Lv locate(const std::string &pathStr)
 {
     LvList list = listLv(pathStr);
     if (list.empty()) {
-        throw std::runtime_error("failed to detect LV " + pathStr);
+        throw cybozu::Exception(__func__) << "failed to detect LV" << pathStr;
     }
     return list.front();
 }
@@ -538,7 +546,7 @@ inline VgList listVg()
         if (s0.empty()) continue;
         std::vector<std::string> v = local::splitAndTrim(s0, ',');
         if (v.size() != 3) {
-            throw std::runtime_error("invalid output of vgs.");
+            throw cybozu::Exception(__func__) << "invalid output" << s0;
         }
         std::string vgName = v[0];
         uint64_t sizeLb = local::parseSizeLb(v[1]);
@@ -556,7 +564,7 @@ inline Vg getVg(const std::string &vgName)
     for (Vg &vg : listVg()) {
         if (vg.name() == vgName) return vg;
     }
-    throw std::runtime_error("VG not found.");
+    throw cybozu::Exception(__func__) << "not found" << vgName;
 }
 
 inline bool vgExists(const std::string &vgName)
