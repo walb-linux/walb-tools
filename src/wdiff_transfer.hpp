@@ -15,7 +15,7 @@ namespace walb {
  */
 inline bool wdiffTransferClient(
     packet::Packet &pkt, DiffMerger &merger, const CompressOpt &cmpr,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps,
+    const std::atomic<int> &stopState, const ProcessStatus &ps,
     DiffStatistics &statOut)
 {
     statOut.clear();
@@ -74,7 +74,7 @@ inline bool wdiffTransferClient(
  */
 inline bool wdiffTransferServer(
     packet::Packet &pkt, int wdiffOutFd,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     cybozu::util::File fileW(wdiffOutFd);

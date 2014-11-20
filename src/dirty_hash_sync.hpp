@@ -34,7 +34,7 @@ template <typename Reader>
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     packet::StreamControl recvCtl(pkt.sock());
@@ -90,7 +90,7 @@ template <typename Reader>
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
-    int outDiffFd, const std::atomic<int> &stopState, const server::ProcessStatus &ps)
+    int outDiffFd, const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
 

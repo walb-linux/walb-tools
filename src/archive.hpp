@@ -83,7 +83,7 @@ struct ArchiveSingleton
     /**
      * Writable and must be thread-safe.
      */
-    server::ProcessStatus ps;
+    ProcessStatus ps;
     AtomicMap<ArchiveVolState> stMap;
 };
 

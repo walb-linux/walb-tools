@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) try
         ProxyThreads threads(opt);
         auto createRequestWorker = [&](
             cybozu::Socket &&sock,
-            server::ProcessStatus &ps) {
+            ProcessStatus &ps) {
             return std::make_shared<ProxyRequestWorker>(
                 std::move(sock), gp.nodeId, ps);
         };

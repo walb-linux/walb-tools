@@ -36,6 +36,22 @@
 #include "walb_types.hpp"
 
 namespace walb {
+
+class ProcessStatus
+{
+    std::atomic<int> status_;
+    enum {
+        RUNNING, GRACEFUL_SHUTDOWN, FORCE_SHUTDOWN
+    };
+public:
+    ProcessStatus() : status_(RUNNING) {}
+    bool isRunning() const noexcept { return status_ == RUNNING; }
+    bool isGracefulShutdown() const noexcept { return status_ == GRACEFUL_SHUTDOWN; }
+    bool isForceShutdown() const noexcept { return status_ == FORCE_SHUTDOWN; }
+    void setGracefulShutdown() noexcept { status_ = GRACEFUL_SHUTDOWN; }
+    void setForceShutdown() noexcept { status_ = FORCE_SHUTDOWN; }
+};
+
 namespace util {
 
 inline void saveMap(const std::string& file)

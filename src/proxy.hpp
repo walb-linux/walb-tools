@@ -159,7 +159,7 @@ struct ProxySingleton
     /**
      * Writable and must be thread-safe.
      */
-    server::ProcessStatus ps;
+    ProcessStatus ps;
     AtomicMap<ProxyVolState> stMap;
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
@@ -741,7 +741,7 @@ namespace proxy_local {
  */
 inline bool recvWlogAndWriteDiff(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps, Logger &logger)
+    const std::atomic<int> &stopState, const ProcessStatus &ps, Logger &logger)
 {
     DiffMemory diffMem(DEFAULT_MAX_IO_LB);
     diffMem.header().setUuid(uuid);

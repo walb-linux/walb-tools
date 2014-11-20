@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) try
         StorageThreads threads(opt);
         auto createRequestWorker = [&](
             cybozu::Socket &&sock,
-            server::ProcessStatus &ps) {
+            ProcessStatus &ps) {
             return std::make_shared<StorageRequestWorker>(
                 std::move(sock), gs.nodeId, ps);
         };

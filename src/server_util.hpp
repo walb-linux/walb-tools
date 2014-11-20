@@ -19,24 +19,10 @@
 #include "walb_util.hpp"
 #include "counter.hpp"
 #include "meta.hpp"
+#include "protocol.hpp"
 
 namespace walb {
 namespace server {
-
-class ProcessStatus
-{
-    std::atomic<int> status_;
-    enum {
-        RUNNING, GRACEFUL_SHUTDOWN, FORCE_SHUTDOWN
-    };
-public:
-    ProcessStatus() : status_(RUNNING) {}
-    bool isRunning() const noexcept { return status_ == RUNNING; }
-    bool isGracefulShutdown() const noexcept { return status_ == GRACEFUL_SHUTDOWN; }
-    bool isForceShutdown() const noexcept { return status_ == FORCE_SHUTDOWN; }
-    void setGracefulShutdown() noexcept { status_ = GRACEFUL_SHUTDOWN; }
-    void setForceShutdown() noexcept { status_ = FORCE_SHUTDOWN; }
-};
 
 /**
  * Multi threaded server.
@@ -124,7 +110,7 @@ private:
     }
 };
 
-server::ProcessStatus *MultiThreadedServer::pps_;
+ProcessStatus *MultiThreadedServer::pps_;
 
 /**
  * Request worker for daemons.
@@ -134,10 +120,10 @@ class RequestWorker
 protected:
     cybozu::Socket sock_;
     std::string nodeId_;
-    server::ProcessStatus &ps_;
+    ProcessStatus &ps_;
 public:
     RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  server::ProcessStatus &ps)
+                  ProcessStatus &ps)
         : sock_(std::move(sock))
         , nodeId_(nodeId)
         , ps_(ps) {}

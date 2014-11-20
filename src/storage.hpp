@@ -151,7 +151,7 @@ struct StorageSingleton
     /**
      * Writable and must be thread-safe.
      */
-    server::ProcessStatus ps;
+    ProcessStatus ps;
     AtomicMap<StorageVolState> stMap;
     TaskQueue<std::string> taskQueue;
     std::unique_ptr<DispatchTask<std::string, StorageWorker>> dispatcher;

@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) try
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     auto createRequestWorker = [&](
         cybozu::Socket &&sock,
-        server::ProcessStatus &ps) {
+        ProcessStatus &ps) {
         return std::make_shared<ArchiveRequestWorker>(
             std::move(sock), ga.nodeId, ps);
     };

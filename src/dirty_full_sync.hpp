@@ -17,7 +17,7 @@ namespace walb {
 inline bool dirtyFullSyncClient(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
     AsyncBdevReader reader(bdevPath);
@@ -50,7 +50,7 @@ inline bool dirtyFullSyncClient(
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const server::ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
     cybozu::util::File file(bdevPath, O_RDWR);

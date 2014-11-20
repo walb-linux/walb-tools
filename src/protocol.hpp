@@ -248,12 +248,12 @@ struct ServerParams
 {
     cybozu::Socket &sock;
 	const std::string& clientId;
-    walb::server::ProcessStatus &ps;
+    walb::ProcessStatus &ps;
 
     ServerParams(
         cybozu::Socket &sock,
         const std::string &clientId,
-        walb::server::ProcessStatus &ps)
+        walb::ProcessStatus &ps)
         : sock(sock)
 		, clientId(clientId)
         , ps(ps) {
@@ -332,7 +332,7 @@ inline void clientDispatch(
  */
 inline void serverDispatch(
     cybozu::Socket &sock, const std::string &nodeId,
-    walb::server::ProcessStatus &ps,
+    walb::ProcessStatus &ps,
     const Str2ServerHandler &handlers) noexcept try
 {
     std::string clientId, protocolName;
