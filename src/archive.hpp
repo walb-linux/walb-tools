@@ -333,7 +333,9 @@ inline void removeSnapshot(cybozu::lvm::Lv& lv, const std::string& name)
         lv.getSnapshot(name).remove();
     }
 }
-struct TmpSnapshotDeleter {
+
+struct TmpSnapshotDeleter
+{
     cybozu::lvm::Lv& lv;
     std::string name;
     ~TmpSnapshotDeleter()
@@ -343,6 +345,7 @@ struct TmpSnapshotDeleter {
     } catch (...) {
     }
 };
+
 /**
  * Restore a snapshot.
  * (1) create lvm snapshot of base lv. (with temporal lv name)
@@ -361,10 +364,9 @@ inline bool restore(const std::string &volId, uint64_t gid)
     const std::string targetName = volInfo.restoredSnapshotName(gid);
     const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
     removeSnapshot(lv, tmpLvName);
-    TmpSnapshotDeleter deleter{lv, tmpLvName};
-
     const uint64_t snapSizeLb = uint64_t(((double)(lv.sizeLb()) * 1.2));
     cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true, snapSizeLb);
+    TmpSnapshotDeleter deleter{lv, tmpLvName};
 
     const MetaState baseSt = volInfo.getMetaState();
     const bool noNeedToApply =
