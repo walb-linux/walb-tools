@@ -334,14 +334,25 @@ private:
             return end - bgn;
         }
     };
-
+    void moveToDiffMemory() {
+        const uint64_t prevAddr = doneAddr_;
+        tryMoveToDiffMemory();
+        if (prevAddr == doneAddr_ && !wdiffs_.empty()) {
+            // Retry with enlarged searchLen_.
+            tryMoveToDiffMemory();
+        }
+        if (!wdiffs_.empty()) {
+            // It must progress.
+            assert(prevAddr < doneAddr_);
+        }
+    }
     /**
      * Try to get Ios from wdiffs and add to wdiffMem_.
      *
      * minimum current address among wdiffs will be set to doneAddr_.
      * UINT64_MAX if there is no wdiffs.
      */
-    void moveToDiffMemory() {
+    void tryMoveToDiffMemory() {
         uint64_t minAddr = UINT64_MAX;
         WdiffPtrList::iterator it = wdiffs_.begin();
         Range range{0, 0};
@@ -349,12 +360,18 @@ private:
             Wdiff &wdiff = **it;
             range.set(wdiff.getFrontRec());
         }
+        size_t wdiffId = 0;
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
             DiffRecord rec = wdiff.getFrontRec();
-            searchLen_ = std::max<size_t>(searchLen_, rec.io_blocks);
+#if 0 // debug code
+            std::cout << "candidate " << wdiffId << " " << rec << std::endl;
+#endif
             while (shouldMerge(rec, minAddr)) {
+#if 0 // debug code
+                std::cout << "merge " << rec << std::endl;
+#endif
                 DiffIo io;
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
@@ -377,8 +394,13 @@ private:
                 minAddr = std::min(minAddr, wdiff.currentAddress());
                 ++it;
             }
+            wdiffId++;
         }
         searchLen_ = std::max(searchLen_, range.size());
+#if 0 // debug code
+        ::printf("doneAddr_ %" PRIu64 " minAddr %" PRIu64 " searchLen %zu\n"
+                 , doneAddr_, minAddr, searchLen_);
+#endif
         doneAddr_ = minAddr;
     }
     bool shouldMerge(const DiffRecord& rec, uint64_t minAddr) const {
