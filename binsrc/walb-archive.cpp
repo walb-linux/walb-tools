@@ -37,6 +37,7 @@ struct Option : cybozu::Option
         ArchiveSingleton &a = getArchiveGlobal();
         appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
+        appendOpt(&a.thinpool, "", "tp", "lvm thinpool (optional).");
         appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
         appendOpt(&a.nodeId, hostName, "id", "node identifier");
@@ -55,6 +56,9 @@ void verifyArchiveData()
     }
     if (!cybozu::lvm::vgExists(ga.volumeGroup)) {
         throw cybozu::Exception(FUNC) << "volume group does not exist" << ga.volumeGroup;
+    }
+    if (isThinpool() && !cybozu::lvm::tpExists(ga.volumeGroup, ga.thinpool)) {
+        throw cybozu::Exception(FUNC) << "thinpool does not exist" << ga.thinpool;
     }
     for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
           try {

@@ -334,8 +334,8 @@ public:
         }
         return rmdir();
     }
-    friend inline std::ostream &operator<<(std::ostream &os, const FilePath &path) {
-        os << path.str();
+    friend inline std::ostream &operator<<(std::ostream &os, const FilePath &fp) {
+        os << fp.removeRedundancy().str();
         return os;
     }
 private:

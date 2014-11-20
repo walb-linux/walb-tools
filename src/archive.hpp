@@ -77,6 +77,7 @@ struct ArchiveSingleton
     std::string nodeId;
     std::string baseDirStr;
     std::string volumeGroup;
+    std::string thinpool;
     size_t maxForegroundTasks;
     size_t socketTimeout;
 
@@ -102,7 +103,12 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 inline ArchiveVolInfo getArchiveVolInfo(const std::string &volId)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    return ArchiveVolInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    return ArchiveVolInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, volSt.diffMgr);
+}
+
+inline bool isThinpool()
+{
+    return !ga.thinpool.empty();
 }
 
 namespace archive_local {
@@ -374,8 +380,14 @@ inline bool restore(const std::string &volId, uint64_t gid)
     const std::string targetName = volInfo.restoredSnapshotName(gid);
     const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
     removeSnapshot(lv, tmpLvName);
-    const uint64_t snapSizeLb = uint64_t(((double)(lv.sizeLb()) * 1.2));
-    cybozu::lvm::Lv lvSnap = lv.takeSnapshot(tmpLvName, true, snapSizeLb);
+
+    cybozu::lvm::Lv lvSnap;
+    if (isThinpool()) {
+        lv = lv.createSnapshot(tmpLvName, true);
+    } else {
+        const uint64_t snapSizeLb = uint64_t((double)(lv.sizeLb()) * 1.2);
+        lv = lv.createSnapshot(tmpLvName, true, snapSizeLb);
+    }
     TmpSnapshotDeleter deleter{lv, tmpLvName};
 
     const MetaState baseSt = volInfo.getMetaState();
@@ -1202,7 +1214,7 @@ inline bool getBlockHash(
 
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, diffMgr);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, diffMgr);
     if (volInfo.existsVolDir()) {
         sm.set(volInfo.getState());
         WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());

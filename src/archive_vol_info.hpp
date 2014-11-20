@@ -37,6 +37,7 @@ public:
     const cybozu::FilePath volDir;
     const std::string volId;
     const std::string vgName;
+    const std::string thinpool;
 private:
     WalbDiffFiles wdiffs_;
 
@@ -47,10 +48,12 @@ public:
      * @vgName volume group name.
      */
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
-                   const std::string &vgName, MetaDiffManager &diffMgr)
+                   const std::string &vgName, const std::string &thinpool,
+                   MetaDiffManager &diffMgr)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
         , vgName(vgName)
+        , thinpool(thinpool)
         , wdiffs_(diffMgr, volDir.str()) {
         // Check of baseDirStr and vgName must have been done at startup time.
         if (volId.empty()) {
@@ -136,13 +139,23 @@ public:
             throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is zero");
         }
         if (lvExists()) {
-            uint64_t curSizeLb = getLv().sizeLb();
+            cybozu::lvm::Lv lv = getLv();
+            uint64_t curSizeLb = lv.sizeLb();
             if (curSizeLb != sizeLb) {
                 throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is different") << curSizeLb << sizeLb;
             }
+            if (isThinProvisioning()) {
+                // Deallocate all the area to execute efficient full backup/replication.
+                cybozu::util::File file(lv.path().str(), O_RDWR | O_DIRECT);
+                cybozu::util::issueDiscard(file.fd(), 0, curSizeLb);
+            }
             return;
         }
-        getVg().create(lvName(), sizeLb);
+        if (isThinProvisioning()) {
+            getVg().createThin(thinpool, lvName(), sizeLb);
+        } else {
+            getVg().create(lvName(), sizeLb);
+        }
     }
     /**
      * Get volume data.
@@ -337,6 +350,9 @@ public:
             }
         }
         return nr;
+    }
+    bool isThinProvisioning() const {
+        return !thinpool.empty();
     }
 private:
     cybozu::lvm::Vg getVg() const {

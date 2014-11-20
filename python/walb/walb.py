@@ -840,7 +840,7 @@ class Server:
     Server configuration.
     '''
     def __init__(self, name, address, port, kind, binDir, dataDir,
-                 logPath=None, vg=None):
+                 logPath=None, vg=None, tp=None):
         '''
         name :: str            - daemon identifier in the system.
         address :: str         - host name
@@ -852,6 +852,8 @@ class Server:
         logPath :: str or None - log path. None means default.
         vg :: str              - volume group name.
                                  This is required by archive server only.
+        tp :: str              - thinpool name.
+                                 This is optional and required by archive server only.
         '''
         verify_type(name, str)
         verify_type(address, str)
@@ -865,6 +867,8 @@ class Server:
             verify_type(logPath, str)
         if kind == K_ARCHIVE or vg is not None:
             verify_type(vg, str)
+        if kind == K_ARCHIVE and tp is not None:
+            verify_type(tp, str)
 
         self.name = name
         self.address = address
@@ -873,7 +877,9 @@ class Server:
         self.binDir = binDir
         self.dataDir = dataDir
         self.logPath = logPath
-        self.vg = vg
+        if kind == K_ARCHIVE:
+            self.vg = vg
+            self.tp = tp
 
     def __str__(self):
         l = [self.name, self.address, str(self.port),
@@ -881,6 +887,8 @@ class Server:
              self.logPath]
         if self.vg:
             l.append(self.vg)
+        if self.tp:
+            l.append(self.tp)
         return ', '.join(l)
 
     def get_host_port(self):
@@ -998,6 +1006,9 @@ def get_server_args(s, sLayout, isDebug=False, useRepeater=False):
     else:
         assert s.kind == K_ARCHIVE
         ret = [s.binDir + 'walb-archive', '-vg', s.vg]
+        if s.tp is not None:
+            ret += ['-tp', s.tp]
+
     if s.logPath:
         logPath = s.logPath
     else:
