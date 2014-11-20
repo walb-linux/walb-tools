@@ -17,6 +17,7 @@ struct Option : public cybozu::Option
     std::string outputPath;
     std::vector<std::string> inputWdiffs;
     uint32_t bufferSize;
+    bool doStat;
     Option() {
         setUsage("virt-full-cat:\n"
                  "  Full scan of virtul full image that consists\n"
@@ -27,11 +28,13 @@ struct Option : public cybozu::Option
                  "  -o arg:  Output full image path. '-' means stdout. (default '-')\n"
                  "  -w args: Input wdiff paths\n"
                  "  -b arg:  Buffer size [byte]. default: '64K'\n"
+                 "  -stat:   Put merging statistics.\n"
                  "  -h:      Show this help message.\n");
         appendOpt(&inputPath, "-", "i", "Input full image path. '-' means stdin. (default '-')");
         appendOpt(&outputPath, "-", "o", "Output full image path. '-' means stdout. (default '-')");
         appendVec(&inputWdiffs, "d", "Input wdiff paths");
         appendOpt(&bufferSize, 2 << 16, "b", "Buffer size [byte].");
+        appendBoolOpt(&doStat, "stat");
         appendHelp("h");
     }
     bool parse(int argc, char *argv[]) {
@@ -70,6 +73,11 @@ int doMain(int argc, char *argv[])
     VirtualFullScanner virt;
     virt.init(std::move(inFile), opt.inputWdiffs);
     virt.readAndWriteTo(outFile.fd(), opt.bufferSize);
+    if (opt.doStat) {
+        std::cerr << "mergeIn  " << virt.statIn()  << std::endl
+                  << "mergeOut " << virt.statOut() << std::endl
+                  << "mergeMemUsage " << virt.memUsageStr() << std::endl;
+    }
     outFile.close();
     return 0;
 }
