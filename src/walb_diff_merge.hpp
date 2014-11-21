@@ -318,12 +318,23 @@ private:
         uint64_t bgn;
         uint64_t end;
 
+        Range() : bgn(0), end(0) {
+        }
+        Range(uint64_t bgn, uint64_t end)
+            : bgn(bgn), end(end) {
+        }
+        explicit Range(const DiffRecord &rec) {
+            set(rec);
+        }
         void set(const DiffRecord &rec) {
             bgn = rec.io_address;
             end = rec.endIoAddress();
         }
         bool isOverlapped(const Range &rhs) const {
             return bgn < rhs.end && rhs.bgn < end;
+        }
+        bool isLeftRight(const Range &rhs) const {
+            return end <= rhs.bgn;
         }
         void merge(const Range &rhs) {
             bgn = std::min(bgn, rhs.bgn);
@@ -333,17 +344,20 @@ private:
             assert(end - bgn <= SIZE_MAX);
             return end - bgn;
         }
+        friend inline std::ostream &operator<<(std::ostream &os, const Range &range) {
+            os << "(" << range.bgn << ", " << range.end << ")";
+            return os;
+        }
     };
     void moveToDiffMemory() {
-        const uint64_t prevAddr = doneAddr_;
-        tryMoveToDiffMemory();
-        if (prevAddr == doneAddr_ && !wdiffs_.empty()) {
+        size_t nr = tryMoveToDiffMemory();
+        if (nr == 0 && !wdiffs_.empty()) {
             // Retry with enlarged searchLen_.
-            tryMoveToDiffMemory();
+            nr = tryMoveToDiffMemory();
         }
         if (!wdiffs_.empty()) {
             // It must progress.
-            assert(prevAddr < doneAddr_);
+            assert(nr > 0);
         }
     }
     /**
@@ -351,27 +365,35 @@ private:
      *
      * minimum current address among wdiffs will be set to doneAddr_.
      * UINT64_MAX if there is no wdiffs.
+     *
+     * RETURN:
+     *   the number of merged IOs.
      */
-    void tryMoveToDiffMemory() {
+    size_t tryMoveToDiffMemory() {
+        size_t nr = 0;
+        uint64_t nextDoneAddr = UINT64_MAX;
         uint64_t minAddr = UINT64_MAX;
         WdiffPtrList::iterator it = wdiffs_.begin();
-        Range range{0, 0};
+        Range range;
         if (it != wdiffs_.end()) {
             Wdiff &wdiff = **it;
             range.set(wdiff.getFrontRec());
         }
-        size_t wdiffId = 0;
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
             DiffRecord rec = wdiff.getFrontRec();
 #if 0 // debug code
-            std::cout << "candidate " << wdiffId << " " << rec << std::endl;
+            std::cout << "candidate " << rec << std::endl;
 #endif
-            while (shouldMerge(rec, minAddr)) {
+            minAddr = std::min(minAddr, rec.io_address);
+            Range curRange(rec);
+            while (shouldMerge(rec, nextDoneAddr)) {
 #if 0 // debug code
-                std::cout << "merge " << rec << std::endl;
+                std::cout << "merge     " << rec << std::endl;
 #endif
+                nr++;
+                curRange.merge(Range(rec));
                 DiffIo io;
                 wdiff.getAndRemoveIo(io);
                 mergeIo(rec, std::move(io));
@@ -383,25 +405,42 @@ private:
                 }
                 rec = wdiff.getFrontRec();
             }
-            if (goNext) {
-                Range curRange;
-                curRange.set(rec);
-                if (range.isOverlapped(curRange)) {
-                    range.merge(curRange);
-                } else {
-                    range = curRange;
-                }
-                minAddr = std::min(minAddr, wdiff.currentAddress());
-                ++it;
+#if 0 // debug code
+            std::cout << "curRange " << curRange << std::endl;
+#endif
+            if (range.isOverlapped(curRange)) {
+                range.merge(curRange);
+            } else if (curRange.isLeftRight(range)) {
+                range = curRange;
+            } else {
+                assert(range.isLeftRight(curRange));
+                // do nothing
             }
-            wdiffId++;
+            uint64_t nextAddr;
+            if (goNext) {
+                nextAddr = wdiff.currentAddress();
+            } else {
+                nextAddr = rec.endIoAddress();
+            }
+            nextDoneAddr = std::min(nextDoneAddr, nextAddr);
+            if (goNext) ++it;
         }
+#if 0 // QQQ
+        if (minAddr != UINT64_MAX && minAddr != range.bgn) {
+            throw cybozu::Exception(__func__) << "assert" << range << minAddr;
+        }
+#endif
+        if (minAddr != UINT64_MAX) assert(minAddr == range.bgn);
         searchLen_ = std::max(searchLen_, range.size());
 #if 0 // debug code
-        ::printf("doneAddr_ %" PRIu64 " minAddr %" PRIu64 " searchLen %zu\n"
-                 , doneAddr_, minAddr, searchLen_);
+        std::cout << "doneAddr_ " << doneAddr_ << " "
+                  << "nextDoneAddr " << nextDoneAddr << " "
+                  << "searchLen_ " << searchLen_ << " "
+                  << "minAddr " << minAddr << " "
+                  << "range " << range << std::endl;
 #endif
-        doneAddr_ = minAddr;
+        doneAddr_ = nextDoneAddr;
+        return nr;
     }
     bool shouldMerge(const DiffRecord& rec, uint64_t minAddr) const {
         return (rec.io_address < doneAddr_ + searchLen_)
