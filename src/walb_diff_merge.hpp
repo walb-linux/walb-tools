@@ -383,15 +383,9 @@ private:
             bool goNext = true;
             Wdiff &wdiff = **it;
             DiffRecord rec = wdiff.getFrontRec();
-#if 0 // debug code
-            std::cout << "candidate " << rec << std::endl;
-#endif
             minAddr = std::min(minAddr, rec.io_address);
             Range curRange(rec);
             while (shouldMerge(rec, nextDoneAddr)) {
-#if 0 // debug code
-                std::cout << "merge     " << rec << std::endl;
-#endif
                 nr++;
                 curRange.merge(Range(rec));
                 DiffIo io;
@@ -405,9 +399,6 @@ private:
                 }
                 rec = wdiff.getFrontRec();
             }
-#if 0 // debug code
-            std::cout << "curRange " << curRange << std::endl;
-#endif
             if (range.isOverlapped(curRange)) {
                 range.merge(curRange);
             } else if (curRange.isLeftRight(range)) {
@@ -425,11 +416,6 @@ private:
             nextDoneAddr = std::min(nextDoneAddr, nextAddr);
             if (goNext) ++it;
         }
-#if 0 // QQQ
-        if (minAddr != UINT64_MAX && minAddr != range.bgn) {
-            throw cybozu::Exception(__func__) << "assert" << range << minAddr;
-        }
-#endif
         if (minAddr != UINT64_MAX) assert(minAddr == range.bgn);
         searchLen_ = std::max(searchLen_, range.size());
 #if 0 // debug code
