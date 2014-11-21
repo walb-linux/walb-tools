@@ -373,12 +373,12 @@ private:
         size_t nr = 0;
         uint64_t nextDoneAddr = UINT64_MAX;
         uint64_t minAddr = UINT64_MAX;
-        WdiffPtrList::iterator it = wdiffs_.begin();
-        Range range;
-        if (it != wdiffs_.end()) {
-            Wdiff &wdiff = **it;
-            range.set(wdiff.getFrontRec());
+        if (wdiffs_.empty()) {
+            doneAddr_ = nextDoneAddr;
+            return 0;
         }
+        WdiffPtrList::iterator it = wdiffs_.begin();
+        Range range(wdiffs_.front()->getFrontRec());
         while (it != wdiffs_.end()) {
             bool goNext = true;
             Wdiff &wdiff = **it;
@@ -416,7 +416,9 @@ private:
             nextDoneAddr = std::min(nextDoneAddr, nextAddr);
             if (goNext) ++it;
         }
-        if (minAddr != UINT64_MAX) assert(minAddr == range.bgn);
+        if (minAddr != UINT64_MAX) {
+            assert(minAddr == range.bgn);
+        }
         searchLen_ = std::max(searchLen_, range.size());
 #if 0 // debug code
         std::cout << "doneAddr_ " << doneAddr_ << " "
