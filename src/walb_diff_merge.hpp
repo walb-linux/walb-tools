@@ -180,7 +180,7 @@ public:
         , diffMem_()
         , mergedQ_()
         , doneAddr_(0)
-        , searchLen_(0)
+        , searchLen_(1 * MEBI / LBS)
         , statIn_(), statOut_() {
     }
     /**
