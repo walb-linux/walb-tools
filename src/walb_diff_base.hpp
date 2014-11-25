@@ -159,26 +159,6 @@ struct DiffRecord : public walb_diff_record {
         assert(!v.empty());
         return v;
     }
-    std::vector<char> tryCompress(DiffRecord& compRec, const char *data) const {
-        std::vector<char> compData;
-        const size_t dataSize = io_blocks * LOGICAL_BLOCK_SIZE;
-        compData.resize(snappy::MaxCompressedLength(dataSize));
-        size_t compressedSize;
-        snappy::RawCompress(data, dataSize, compData.data(), &compressedSize);
-        compRec = *this; // copy
-        if (compressedSize < dataSize) {
-            compData.resize(compressedSize);
-            compRec.compression_type = ::WALB_DIFF_CMPR_SNAPPY;
-            compRec.data_size = compressedSize;
-        } else {
-            compData.resize(dataSize);
-            compRec.compression_type = ::WALB_DIFF_CMPR_NONE;
-            compRec.data_size = dataSize;
-            ::memcpy(compData.data(), data, dataSize);
-        }
-        compRec.checksum = cybozu::util::calcChecksum(compData.data(), compData.size(), 0);
-        return compData;
-    }
 };
 
 /**
@@ -306,19 +286,6 @@ struct DiffIo
             p += size;
         }
         return v;
-    }
-    void uncompress()
-    {
-        assert(isCompressed());
-        walb::Uncompressor dec(compressionType);
-        const size_t decSize = ioBlocks * LOGICAL_BLOCK_SIZE;
-        std::vector<char> decData(decSize);
-        size_t size = dec.run(decData.data(), decSize, data.data(), data.size());
-        if (size != decSize) {
-            throw cybozu::Exception("uncompressIoData:size is invalid") << size << decSize;
-        }
-        compressionType = WALB_DIFF_CMPR_NONE;
-        data = std::move(decData);
     }
     template <typename Writer>
     void writeTo(Writer &writer) const {
