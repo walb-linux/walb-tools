@@ -171,7 +171,7 @@ private:
     mutable DiffStatistics statIn_, statOut_;
 
 public:
-    DiffMerger()
+    explicit DiffMerger(size_t initSearchLen = DEFAULT_MERGE_BUFFER_LB)
         : shouldValidateUuid_(false)
         , maxIoBlocks_(0)
         , wdiffH_()
@@ -180,7 +180,7 @@ public:
         , diffMem_()
         , mergedQ_()
         , doneAddr_(0)
-        , searchLen_(1 * MEBI / LBS)
+        , searchLen_(initSearchLen)
         , statIn_(), statOut_() {
     }
     /**
@@ -407,22 +407,19 @@ private:
                 assert(range.isLeftRight(curRange));
                 // do nothing
             }
-            uint64_t nextAddr;
             if (goNext) {
-                nextAddr = wdiff.currentAddress();
-            } else {
-                nextAddr = rec.endIoAddress();
+                nextDoneAddr = std::min(nextDoneAddr, wdiff.currentAddress());
+                ++it;
             }
-            nextDoneAddr = std::min(nextDoneAddr, nextAddr);
-            if (goNext) ++it;
         }
         if (minAddr != UINT64_MAX) {
             assert(minAddr == range.bgn);
         }
         searchLen_ = std::max(searchLen_, range.size());
 #if 0 // debug code
-        std::cout << "doneAddr_ " << doneAddr_ << " "
-                  << "nextDoneAddr " << nextDoneAddr << " "
+        std::cout << "nr " << nr << " "
+                  << "doneAddr_ " << doneAddr_ << " "
+                  << "nextDoneAddr " << (nextDoneAddr == UINT64_MAX ? "-" : cybozu::itoa(nextDoneAddr)) << " "
                   << "searchLen_ " << searchLen_ << " "
                   << "minAddr " << minAddr << " "
                   << "range " << range << std::endl;
