@@ -154,60 +154,56 @@ public:
     /**
      * Write a diff data.
      *
-     * @rec record.
-     * @data0 IO data.
+     * @rec diff record
+     * @io IO data.
+     *    if rec is not normal, io must be empty.
      */
-    void writeDiff(const DiffRecord &rec0, const char *data0) {
-        std::vector<char> data(data0, data0 + rec0.data_size);
-        writeDiff(rec0, std::move(data));
-    }
-    void writeDiff(const DiffRecord &rec0, std::vector<char> &&data0) {
+    void writeDiff(const DiffRecord &rec, DiffIo &&io) {
         checkWrittenHeader();
-        DiffIo io;
-        io.set(rec0);
-        io.data.swap(data0);
+        assertRecAndIo(rec, io);
 
-        /* Try to add. */
-        if (pack_.add(rec0)) {
-            ioQ_.push(std::move(io));
-            return;
-        }
-
-        /* Flush and add. */
+        if (addAndPush(rec, std::move(io))) return;
         writePack();
-        UNUSED bool ret = pack_.add(rec0);
+        UNUSED const bool ret = addAndPush(rec, std::move(io));
         assert(ret);
-        ioQ_.push(std::move(io));
     }
-
+    void writeDiff(const DiffRecord &rec, const char *data) {
+        DiffIo io;
+        io.set(rec);
+        if (rec.isNormal()) {
+            ::memcpy(io.get(), data, rec.data_size);
+        }
+        writeDiff(rec, std::move(io));
+    }
     /**
      * Compress and write a diff data.
+     * Do not use this for already compressed IOs. It  works but inefficient.
      *
      * @rec record.
      * @data IO data.
      */
-    void compressAndWriteDiff(const DiffRecord &rec, const char *data) {
+    void compressAndWriteDiff(const DiffRecord &rec, const char *data,
+                              int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0) {
         if (rec.isCompressed()) {
             writeDiff(rec, data);
             return;
         }
         if (!rec.isNormal()) {
-            writeDiff(rec, {});
+            writeDiff(rec, DiffIo());
             return;
         }
-
         DiffRecord compRec;
-        std::vector<char> compData = rec.tryCompress(compRec, data);
-        writeDiff(compRec, std::move(compData));
+        DiffIo compIo;
+        compressDiffIo(rec, data, compRec, compIo.data, type, level);
+        compIo.set(compRec);
+        writeDiff(compRec, std::move(compIo));
     }
-
     /**
      * Write buffered data.
      */
     void flush() {
         writePack();
     }
-
     const DiffStatistics& getStat() const {
         return stat_;
     }
@@ -220,7 +216,28 @@ private:
         stat_.clear();
         stat_.wdiffNr = 1;
     }
-    /* Write the buffered pack and its related diff ios. */
+    bool addAndPush(const DiffRecord &rec, DiffIo &&io) {
+        if (pack_.add(rec)) {
+            ioQ_.push(std::move(io));
+            return true;
+        }
+        return false;
+    }
+#ifdef DEBUG
+    static void assertRecAndIo(const DiffRecord &rec, const DiffIo &io) {
+        if (rec.isNormal()) {
+            assert(!io.empty());
+            assert(io.compressionType == rec.compression_type);
+        } else {
+            assert(io.empty());
+        }
+    }
+#else
+    static void assertRecAndIo(const DiffRecord &, const DiffIo &) {}
+#endif
+    /**
+     * Write the buffered pack and its related diff ios.
+     */
     void writePack() {
         if (pack_.n_records == 0) {
             assert(ioQ_.empty());
@@ -358,13 +375,15 @@ public:
         if (!readDiff(rec, io)) {
             return false;
         }
-        if (!rec.isCompressed()) {
+        if (!rec.isNormal() || !rec.isCompressed()) {
             return true;
         }
-        io.uncompress();
-        rec.compression_type = ::WALB_DIFF_CMPR_NONE;
-        rec.data_size = io.getSize();
-        rec.checksum = io.calcChecksum();
+        DiffRecord outRec;
+        DiffIo outIo;
+        uncompressDiffIo(rec, io.get(), outRec, outIo.data);
+        outIo.set(outRec);
+        rec = outRec;
+        io = std::move(outIo);
         return true;
     }
     bool prepareRead() {

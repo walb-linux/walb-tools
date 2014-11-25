@@ -60,7 +60,13 @@ int doMain(int argc, char *argv[])
         const uint32_t sizeB = endAddr - addr;
 
         if (rec.isNormal()) {
-            if (io.isCompressed()) io.uncompress();
+            if (rec.isCompressed()) {
+                DiffRecord outRec;
+                DiffIo outIo;
+                uncompressDiffIo(rec, io.data.data(), outRec, outIo.data);
+                outIo.set(outRec);
+                io = std::move(outIo);
+            }
             outF.write(io.data.data() + offB * LBS, sizeB * LBS);
         } else {
             // currently dump all-zero for discard records also.
