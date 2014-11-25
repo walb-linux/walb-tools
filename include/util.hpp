@@ -394,19 +394,8 @@ void printList(const C &container)
 
 inline bool calcIsAllZero(const void *data, size_t size)
 {
-    assert(data);
     const char *p = (const char *)data;
-    if (uintptr_t(data) % sizeof(uintptr_t) == 0) {
-        /* aligned. */
-        const uintptr_t *q = (const uintptr_t *)p;
-        while (sizeof(uintptr_t) <= size) {
-            if (*q) return false;
-            ++q;
-            size -= sizeof(uintptr_t);
-        }
-        p = (const char *)q;
-    }
-    while (0 < size) {
+    while (size > 0) {
         if (*p) return false;
         ++p;
         --size;
