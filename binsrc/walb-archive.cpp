@@ -48,7 +48,15 @@ struct Option : cybozu::Option
 
 void verifyArchiveData()
 {
-     for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
+    const char *const FUNC = __func__;
+    cybozu::FilePath baseDir(ga.baseDirStr);
+    if (!baseDir.stat().isDirectory()) {
+        throw cybozu::Exception(FUNC) << "base directory not found" << ga.baseDirStr;
+    }
+    if (!cybozu::lvm::vgExists(ga.volumeGroup)) {
+        throw cybozu::Exception(FUNC) << "volume group does not exist" << ga.volumeGroup;
+    }
+    for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
           try {
               verifyArchiveVol(volId);
               gcArchiveVol(volId);

@@ -52,13 +52,7 @@ public:
         , volId(volId)
         , vgName(vgName)
         , wdiffs_(diffMgr, volDir.str()) {
-        cybozu::FilePath baseDir(baseDirStr);
-        if (!baseDir.stat().isDirectory()) {
-            throw cybozu::Exception("ArchiveVolInfo:Directory not found: " + baseDirStr);
-        }
-        if (!cybozu::lvm::vgExists(vgName)) {
-            throw cybozu::Exception("ArchiveVolInfo:Vg does not exist: " + vgName);
-        }
+        // Check of baseDirStr and vgName must have been done at startup time.
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
         }
