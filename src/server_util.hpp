@@ -79,7 +79,7 @@ public:
             sock.setSendTimeout(socketTimeout * 1000);
             sock.setReceiveTimeout(socketTimeout * 1000);
             logErrors(pool.gc());
-            if (!pool.add(std::make_shared<protocol::RequestWorker>(std::move(sock), nodeId, ps, handlers))) {
+            if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads;
                 // The socket will be closed.
             }
