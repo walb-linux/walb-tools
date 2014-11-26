@@ -25,3 +25,4 @@ counter_test
 memory_data_test
 walb_queue_file_test
 bdev_reader_test
+walb_diff_merge_test
