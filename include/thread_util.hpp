@@ -71,16 +71,26 @@ private:
         }
     };
     template <typename Func>
-    struct PtrHolder : public BaseHolder
+    struct UPtrHolder : public BaseHolder
     {
-        std::shared_ptr<Func> funcP;
-        explicit PtrHolder(std::shared_ptr<Func> funcP) : funcP(funcP) {
+        std::unique_ptr<Func> funcP;
+        explicit UPtrHolder(std::unique_ptr<Func> &&funcP) : funcP(std::move(funcP)) {
         }
         void run() override {
             (*funcP)();
         }
     };
-    std::shared_ptr<BaseHolder> holderP_;
+    template <typename Func>
+    struct SPtrHolder : public BaseHolder
+    {
+        std::shared_ptr<Func> funcP;
+        explicit SPtrHolder(std::shared_ptr<Func> funcP) : funcP(funcP) {
+        }
+        void run() override {
+            (*funcP)();
+        }
+    };
+    std::unique_ptr<BaseHolder> holderP_;
 
     std::promise<void> promise_;
     std::shared_future<void> future_;
@@ -116,16 +126,24 @@ private:
     }
 public:
     template <typename Func>
-    explicit Runner(std::shared_ptr<Func> funcP)
-        : holderP_(new PtrHolder<Func>(funcP))
+    explicit Runner(Func&& func)
+        : holderP_(new Holder<Func>(std::forward<Func>(func)))
         , promise_()
         , future_(promise_.get_future())
         , isEnd_(false)
         , callback_() {
     }
     template <typename Func>
-    explicit Runner(Func&& func)
-        : holderP_(new Holder<Func>(std::forward<Func>(func)))
+    explicit Runner(std::unique_ptr<Func> &&funcP)
+        : holderP_(new UPtrHolder<Func>(std::move(funcP)))
+        , promise_()
+        , future_(promise_.get_future())
+        , isEnd_(false)
+        , callback_() {
+    }
+    template <typename Func>
+    explicit Runner(std::shared_ptr<Func> funcP)
+        : holderP_(new SPtrHolder<Func>(funcP))
         , promise_()
         , future_(promise_.get_future())
         , isEnd_(false)
@@ -169,10 +187,6 @@ public:
     template <typename Func>
     explicit ThreadRunner(Func&& func)
         : runnerP_(new Runner(std::forward<Func>(func)))
-        , threadP_() {
-    }
-    explicit ThreadRunner(std::shared_ptr<Runner> runnerP)
-        : runnerP_(runnerP)
         , threadP_() {
     }
     ThreadRunner(const ThreadRunner &) = delete;
@@ -270,10 +284,6 @@ public:
     template <typename Func>
     void add(Func&& func) {
         v_.emplace_back(std::forward<Func>(func));
-    }
-    template <typename Func>
-    void add(std::shared_ptr<Func> funcP) {
-        v_.emplace_back(funcP);
     }
     void start() {
         for (ThreadRunner &r : v_) {
@@ -736,10 +746,6 @@ public:
     template <typename Func>
     bool add(Func&& func) {
         return addDetail(std::unique_ptr<Runner>(new Runner(std::forward<Func>(func))));
-    }
-    template <typename Func>
-    bool add(std::shared_ptr<Func> funcP) {
-        return addDetail(std::unique_ptr<Runner>(new Runner(funcP)));
     }
     /**
      * Get errors of finished tasks.
