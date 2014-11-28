@@ -214,6 +214,12 @@ inline ProxyVolState &getProxyVolState(const std::string &volId)
     return getProxyGlobal().stMap.get(volId);
 }
 
+inline ProxyVolInfo getProxyVolInfo(const std::string &volId)
+{
+    ProxyVolState &volSt = getProxyVolState(volId);
+    return ProxyVolInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+}
+
 namespace proxy_local {
 
 class ConversionMemoryTransaction
@@ -271,7 +277,7 @@ inline StrVec getAllStatusAsStrVec()
         UniqueLock ul(volSt.mu);
         const std::string state = volSt.sm.get();
         if (state == pClear) continue;
-        const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        const ProxyVolInfo volInfo = getProxyVolInfo(volId);
         const uint64_t totalSize = volInfo.getTotalDiffFileSize();
         const std::string totalSizeStr = cybozu::util::toUnitIntString(totalSize);
         const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
@@ -309,7 +315,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
 
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    const ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    const ProxyVolInfo volInfo = getProxyVolInfo(volId);
 
     const std::string state = volSt.sm.get();
     const size_t numDiff = volSt.diffMgr.size();
@@ -588,7 +594,7 @@ inline void getArchiveInfo(const std::string& volId, const std::string &archiveN
     const char *const FUNC = __func__;
     ProxyVolState& volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
     if (!volInfo.existsArchiveInfo(archiveName)) {
         throw cybozu::Exception(FUNC) << "archive info not exists" << archiveName;
     }
@@ -605,7 +611,7 @@ inline void addArchiveInfo(const std::string &volId, const std::string &archiveN
 
     StateMachineTransaction tran(volSt.sm, curr, ptAddArchiveInfo);
     ul.unlock();
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
     if (curr == pClear) volInfo.init();
     volInfo.addArchiveInfo(archiveName, hi, ensureNotExistance);
     tran.commit(pStopped);
@@ -620,7 +626,7 @@ inline void deleteArchiveInfo(const std::string &volId, const std::string &archi
 
     StateMachineTransaction tran(volSt.sm, pStopped, ptDeleteArchiveInfo);
     ul.unlock();
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
     volInfo.deleteArchiveInfo(archiveName);
     ul.lock();
     bool shouldClear = volInfo.notExistsArchiveInfo();
@@ -721,7 +727,7 @@ inline void c2pClearVolServer(protocol::ServerParams &p)
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
         volSt.archiveSet.clear();
         ul.unlock();
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        ProxyVolInfo volInfo = getProxyVolInfo(volId);
         volInfo.clear();
         tran.commit(pClear);
         pkt.writeFin(msgOk);
@@ -827,7 +833,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
     ul.unlock();
 
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
     cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
                                            volSt.stopState, gp.ps, logger)) {
@@ -935,7 +941,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     }
     verifyStateIn(st, pAcceptForWdiffSend, FUNC);
 
-    ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
 
     MetaDiffVec diffV;
     DiffMerger merger;
@@ -1072,7 +1078,7 @@ inline void c2pResizeServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStopped}, FUNC);
 
-        ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+        ProxyVolInfo volInfo = getProxyVolInfo(volId);
         const uint64_t oldSizeLb = volInfo.getSizeLb();
         volInfo.setSizeLb(sizeLb);
 
@@ -1118,7 +1124,7 @@ inline void c2pKickServer(protocol::ServerParams &p)
             if (archiveName.empty()) {
                 proxy_local::pushAllTasksForVol(volId, &logger);
             } else {
-                ProxyVolInfo volInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
+                ProxyVolInfo volInfo = getProxyVolInfo(volId);
                 if (!volInfo.existsArchiveInfo(archiveName)) {
                     throw cybozu::Exception(FUNC) << "archive does not exist" << archiveName;
                 }
