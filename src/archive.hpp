@@ -515,7 +515,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     if (isFull) {
         volInfo.createLv(sizeLb);
         const std::string lvPath = volInfo.getLv().path().str();
-        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps);
+        const bool skipZero = isThinpool();
+        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
@@ -641,7 +642,8 @@ inline bool runFullReplServer(
 
     volInfo.createLv(sizeLb);
     const std::string lvPath = volInfo.getLv().path().str();
-    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
+    const bool skipZero = isThinpool();
+    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero)) {
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }

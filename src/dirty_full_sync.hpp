@@ -32,9 +32,14 @@ inline bool dirtyFullSyncClient(
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
         reader.read(&buf[0], size);
-        const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
-        pkt.write(encSize);
-        pkt.write(&encBuf[0], encSize);
+        if (cybozu::util::calcIsAllZero(buf.data(), buf.size())) {
+            pkt.write(0);
+        } else {
+            const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
+            assert(encSize > 0);
+            pkt.write(encSize);
+            pkt.write(&encBuf[0], encSize);
+        }
         remainingLb -= lb;
         c++;
     }
@@ -43,6 +48,24 @@ inline bool dirtyFullSyncClient(
     return true;
 }
 
+namespace dirty_full_sync {
+
+inline void uncompress(const std::vector<char> &src, std::vector<char> &dst, const char *msg)
+{
+    size_t decSize;
+    if (!snappy::GetUncompressedLength(src.data(), src.size(), &decSize)) {
+        throw cybozu::Exception(msg) << "GetUncompressedLength" << src.size();
+    }
+    if (decSize != dst.size()) {
+        throw cybozu::Exception(msg) << "decSize differs" << decSize << dst.size();
+    }
+    if (!snappy::RawUncompress(src.data(), src.size(), dst.data())) {
+        throw cybozu::Exception(msg) << "RawUncompress";
+    }
+}
+
+} // namespace dirty_full_sync
+
 /**
  * RETURN:
  *   false if force stopped.
@@ -50,10 +73,11 @@ inline bool dirtyFullSyncClient(
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps, bool skipZero)
 {
     const char *const FUNC = __func__;
     cybozu::util::File file(bdevPath, O_RDWR);
+    const std::vector<char> zeroBuf(bulkLb * LOGICAL_BLOCK_SIZE);
     std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
     std::vector<char> encBuf;
 
@@ -69,23 +93,18 @@ inline bool dirtyFullSyncServer(
         size_t encSize;
         pkt.read(encSize);
         if (encSize == 0) {
-            throw cybozu::Exception(FUNC) << "encSize is zero";
+            if (skipZero) {
+                file.lseek(size, SEEK_CUR);
+            } else {
+                file.write(&zeroBuf[0], size);
+            }
+        } else {
+            encBuf.resize(encSize);
+            pkt.read(&encBuf[0], encSize);
+            buf.resize(size);
+            dirty_full_sync::uncompress(encBuf, buf, FUNC);
+            file.write(&buf[0], size);
         }
-        encBuf.resize(encSize);
-        pkt.read(&encBuf[0], encSize);
-        size_t decSize;
-        if (!snappy::GetUncompressedLength(&encBuf[0], encSize, &decSize)) {
-            throw cybozu::Exception(FUNC)
-                << "GetUncompressedLength" << encSize;
-        }
-        if (decSize != size) {
-            throw cybozu::Exception(FUNC)
-                << "decSize differs" << decSize << size;
-        }
-        if (!snappy::RawUncompress(&encBuf[0], encSize, &buf[0])) {
-            throw cybozu::Exception(FUNC) << "RawUncompress";
-        }
-        file.write(&buf[0], size);
         remainingLb -= lb;
 		writeSize += size;
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
