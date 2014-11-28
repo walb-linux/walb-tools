@@ -255,9 +255,8 @@ public:
             wdiffH_.setMaxIoBlocksIfNecessary(
                 maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
 
-            doneAddr_ = getMinimumAddr();
-
             removeEndedWdiffs();
+            doneAddr_ = getMinimumAddr();
             isHeaderPrepared_ = true;
         }
     }
