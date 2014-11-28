@@ -48,9 +48,6 @@ public:
         : mgr_(mgr), dir_(dirStr) {
         if (doesMakeDir) walb::util::makeDir(dir_.str(), "WalbDiffFiles");
     }
-    DISABLE_COPY_AND_ASSIGN(WalbDiffFiles);
-    DISABLE_MOVE(WalbDiffFiles);
-
     /**
      * CAUSION:
      *   All data inside the directory will be removed.

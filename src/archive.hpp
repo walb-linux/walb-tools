@@ -99,6 +99,12 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
     return getArchiveGlobal().stMap.get(volId);
 }
 
+inline ArchiveVolInfo getArchiveVolInfo(const std::string &volId)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    return ArchiveVolInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+}
+
 namespace archive_local {
 
 template <typename F>
@@ -159,7 +165,7 @@ inline void prepareVirtualFullScanner(
 inline void verifyApplicable(const std::string& volId, uint64_t gid)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     UniqueLock ul(volSt.mu);
 
     const MetaState st = volInfo.getMetaState();
@@ -220,7 +226,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     std::vector<cybozu::util::File> fileV;
     MetaState st0;
@@ -256,7 +262,7 @@ inline void verifyNotApplying(const std::string &volId)
     ArchiveVolState& volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (volInfo.getMetaState().isApplying) {
         throw cybozu::Exception(__func__)
             << "merge is not permitted because the volume is under applying"
@@ -279,7 +285,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, mgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     std::vector<cybozu::util::File> fileV;
     MetaState st0;
@@ -362,7 +368,7 @@ struct TmpSnapshotDeleter
 inline bool restore(const std::string &volId, uint64_t gid)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     cybozu::lvm::Lv lv = volInfo.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
@@ -405,9 +411,7 @@ inline void delRestored(const std::string &volId, uint64_t gid)
 {
     const char *const FUNC = __func__;
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
-
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     cybozu::lvm::Lv lv = volInfo.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
     if (!lv.hasSnapshot(targetName)) {
@@ -422,8 +426,7 @@ inline void delRestored(const std::string &volId, uint64_t gid)
  */
 inline StrVec listRestored(const std::string &volId)
 {
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     const std::vector<uint64_t> gidV = volInfo.getRestoredSnapshots();
     StrVec ret;
@@ -433,8 +436,7 @@ inline StrVec listRestored(const std::string &volId)
 
 inline StrVec listRestorable(const std::string &volId, bool isAll = false, bool isVerbose = false)
 {
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     StrVec ret;
     const std::vector<MetaState> stV = volInfo.getRestorableSnapshots(isAll);
@@ -467,7 +469,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     StateMachine &sm = volSt.sm;
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     const std::string &stFrom = isFull ? aSyncReady : aArchived;
     MetaSnap snapFrom;
@@ -813,7 +815,7 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
     packet::Packet pkt(sock);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     bool isFull;
     pkt.read(isFull);
@@ -859,7 +861,7 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     packet::Packet pkt(sock);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     pkt.write(isFull);
     if (isFull) {
@@ -913,7 +915,7 @@ inline StrVec getAllStatusAsStrVec()
                  , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str());
         s += fmt(" numDiff %zu", volSt.diffMgr.size());
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         if (!volInfo.lvExists()) {
             s += fmt(" baseLv NOT FOUND");
             v.push_back(s);
@@ -948,7 +950,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     v.push_back(fmt("lastWdiffReceivedTime %s"
                     , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str()));
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (!volInfo.lvExists()) {
         v.push_back("baseLv NOT FOUND");
         return v;
@@ -1135,7 +1137,7 @@ inline void getUuid(protocol::GetCommandParams &p)
     if (!isStateIn(st, aActive)) {
         throw cybozu::Exception(FUNC) << "bad state" << volId << st;
     }
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const cybozu::Uuid uuid = volInfo.getUuid();
     ul.unlock();
     const std::string uuidStr = uuid.str();
@@ -1154,7 +1156,7 @@ inline void getBase(protocol::GetCommandParams &p)
     if (!isStateIn(st, aActive)) {
         throw cybozu::Exception(FUNC) << "bad state" << volId << st;
     }
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const MetaState metaSt = volInfo.getMetaState();
     ul.unlock();
     const std::string metaStStr = metaSt.strTs();
@@ -1170,7 +1172,7 @@ inline bool getBlockHash(
     packet::Packet &pkt, Logger &, cybozu::murmurhash3::Hash &hash)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const uint64_t sizeLb = volInfo.getLv().sizeLb();
 
     VirtualFullScanner virt;
@@ -1227,7 +1229,7 @@ inline void verifyArchiveVol(const std::string& volId)
 
     if (st == aClear) return;
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const std::string st2 = volInfo.getState();
     if (st2 != st) {
         throw cybozu::Exception(FUNC) << "invalid state" << volId << st << st2;
@@ -1252,7 +1254,7 @@ inline void gcArchiveVol(const std::string& volId)
 
     if (!isStateIn(st, aActive)) return;
 
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const size_t nrDiffs = volInfo.gcDiffs();
     if (nrDiffs > 0) {
         LOGs.info() << volId << "garbage collected wdiff files" << nrDiffs;
@@ -1302,7 +1304,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
 
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.init();
         tran.commit(aSyncReady);
         pkt.writeFin(msgOk);
@@ -1331,7 +1333,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
 
         StateMachineTransaction tran(sm, currSt, atClearVol, FUNC);
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.clear();
         tran.commit(aClear);
         pkt.writeFin(msgOk);
@@ -1361,8 +1363,7 @@ inline void c2aStartServer(protocol::ServerParams &p)
 
         StateMachineTransaction tran(volSt.sm, aStopped, atStart, FUNC);
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
-                               getArchiveVolState(volId).diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string st = volInfo.getState();
         if (st != aStopped) {
             throw cybozu::Exception(FUNC) << "not Stopped state" << st;
@@ -1416,7 +1417,7 @@ inline void c2aStopServer(protocol::ServerParams &p)
 
         StateMachineTransaction tran(sm, aArchived, atStop, FUNC);
         ul.unlock();
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string fst = volInfo.getState();
         if (fst != aArchived) {
             throw cybozu::Exception(FUNC) << "not Archived state" << fst;
@@ -1466,7 +1467,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     try {
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string targetName = volInfo.restoredSnapshotName(gid);
         cybozu::lvm::Lv lv = volInfo.getLv();
         if (lv.hasSnapshot(targetName)) {
@@ -1545,7 +1546,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
         wdiffs.reload();
         pkt.writeFin(msgOk);
@@ -1613,7 +1614,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             }
         }
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         if (!volInfo.existsVolDir()) {
             const char *msg = msgArchiveNotFound;
             logger.info() << msg << volId;
@@ -1899,7 +1900,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForResize, FUNC);
         verifyStateIn(volSt.sm.get(), aAcceptForResize, FUNC);
@@ -1943,8 +1944,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
         StateMachineTransaction tran(volSt.sm, currSt, atResetVol, FUNC);
         ul.unlock();
 
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup,
-                               getArchiveVolState(volId).diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.clear();
         volInfo.init();
         tran.commit(aSyncReady);
@@ -2013,7 +2013,7 @@ inline void c2aSetUuidServer(protocol::ServerParams &p)
         uuid.set(uuidStr);
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.setUuid(uuid);
         ul.unlock();
         pkt.writeFin(msgOk);
@@ -2039,7 +2039,7 @@ inline void c2aSetStateServer(protocol::ServerParams &p)
         const std::string &state = v[1];
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volSt.sm.set(state);
         volInfo.setState(state);
         ul.unlock();
@@ -2067,7 +2067,7 @@ inline void c2aSetBaseServer(protocol::ServerParams &p)
         MetaState metaSt = strToMetaState(metaStateStr);
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, volSt.diffMgr);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.setMetaState(metaSt);
         ul.unlock();
         pkt.writeFin(msgOk);
