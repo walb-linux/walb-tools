@@ -74,7 +74,12 @@ public:
     void clear() {
         // Delete all related lvm volumes and snapshots.
         if (lvExists()) {
-            getLv().remove();
+            cybozu::lvm::Lv lv = getLv();
+            if (isThinProvisioning()) {
+                // Thin provisioned snapshot will not be removed implicitly.
+                lv.removeAllSnapshots();
+            }
+            lv.remove();
         }
         wdiffs_.clearDir();
 #if 0 // wdiffs_.clearDir() includes the following operation.
