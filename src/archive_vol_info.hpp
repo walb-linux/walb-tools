@@ -128,7 +128,7 @@ public:
         return volDir.stat().isDirectory();
     }
     bool lvExists() const {
-        return cybozu::lvm::exists(vgName, lvName());
+        return cybozu::lvm::fileExists(vgName, lvName());
     }
     /**
      * Create a volume.
