@@ -383,10 +383,10 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     cybozu::lvm::Lv lvSnap;
     if (isThinpool()) {
-        lv = lv.createSnapshot(tmpLvName, true);
+        lvSnap = lv.createSnapshot(tmpLvName, true);
     } else {
         const uint64_t snapSizeLb = uint64_t((double)(lv.sizeLb()) * 1.2);
-        lv = lv.createSnapshot(tmpLvName, true, snapSizeLb);
+        lvSnap = lv.createSnapshot(tmpLvName, true, snapSizeLb);
     }
     TmpSnapshotDeleter deleter{lv, tmpLvName};
 
