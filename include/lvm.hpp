@@ -343,8 +343,7 @@ public:
         const std::string parent = lv.isSnapshot() ? lv.lvName_ : "";
         os << lv.vgName_ << "/" << lv.name() << " sizeLb " << lv.sizeLb_
            << " parent (" << parent << ") "
-           << " thinpool (" << lv.poolName_ << ")"
-           << std::endl;
+           << " thinpool (" << lv.poolName_ << ")";
         return os;
     }
     void print(::FILE *fp = ::stdout) const {
