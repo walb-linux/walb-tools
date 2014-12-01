@@ -2003,10 +2003,12 @@ class Controller:
         verify_type(vol, str)
         verify_u64(gid)
 
+        path = self.get_restored_path(ax, vol, gid)
+        runCommand = self.get_run_remote_command(ax)
+        if exists_file(path, runCommand):
+            raise Exception('restore: alreay restored', ax.name, vol, gid)
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)
-        runCommand = self.get_run_remote_command(ax)
-        path = self.get_restored_path(ax, vol, gid)
         wait_for_lv_ready(path, runCommand)
 
     def get_restored_path(self, ax, vol, gid):
