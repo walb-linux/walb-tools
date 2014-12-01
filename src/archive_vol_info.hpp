@@ -153,6 +153,7 @@ public:
                 // Deallocate all the area to execute efficient full backup/replication.
                 cybozu::util::File file(lv.path().str(), O_RDWR | O_DIRECT);
                 cybozu::util::issueDiscard(file.fd(), 0, curSizeLb);
+                file.fdatasync();
             }
             return;
         }
