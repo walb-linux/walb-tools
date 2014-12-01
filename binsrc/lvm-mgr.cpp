@@ -41,6 +41,7 @@ struct Option : public cybozu::Option
             "  resize [name]: resize a lv or a snapshot. specify -vg and -s.\n"
             "  parent [snapname]: get parent logical volume. specify -vg.\n"
             "  createpool [poolname]: create a lv for thin provsioning pool. specify -vg and -s.\n"
+            "  exists-tp: check existance of a thin pool. specify -vg and -tp.\n"
             "Options:\n"
             "  -vg [volume group name]:\n"
             "  -lv [logical volume name]:\n"
@@ -56,6 +57,11 @@ struct Option : public cybozu::Option
     void checkVgName() const {
         if (vgName.empty()) {
             throw std::runtime_error("Specify vg.");
+        }
+    }
+    void checkTpName() const {
+        if (tpName.empty()) {
+            throw std::runtime_error("Specify tp.");
         }
     }
     void checkLvName() const {
@@ -171,6 +177,10 @@ void dispatch(const Option &opt)
         cybozu::lvm::Lv lv = vg.createThinpool(poolName, opt.sizeLb());
         lv.print();
         ::printf("created.\n");
+    } else if (opt.command == "exists-tp") {
+        opt.checkVgName();
+        opt.checkTpName();
+        ::printf("%d\n", cybozu::lvm::tpExists(opt.vgName, opt.tpName));
     } else {
         ::printf("command %s is not supported now.\n", opt.command.c_str());
         opt.usage();
