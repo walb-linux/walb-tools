@@ -27,6 +27,7 @@ namespace cybozu {
 namespace lvm {
 
 const unsigned int LBS = 512;
+const size_t DEFAULT_TIMEOUT_MS = 5000;
 
 using StrVec = std::vector<std::string>;
 
@@ -47,6 +48,37 @@ enum
     NOPASSDOWN,
     PASSDOWN
 };
+
+
+/**
+ * Prototypes.
+ */
+std::string getLvStr(const std::string &vgName, const std::string &name);
+cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
+Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb);
+Lv createTv(const std::string &vgName, const std::string &poolName, const std::string &lvName, uint64_t sizeLb);
+Lv createTp(const std::string &vgName, const std::string &poolName, uint64_t sizeLb);
+Lv createSnap(
+    const std::string &vgName, const std::string &lvName, const std::string &snapName,
+    bool isWritable, uint64_t sizeLb);
+Lv createTSnap(
+    const std::string &vgName, const std::string &lvName, const std::string &snapName,
+    bool isWritable);
+void remove(const std::string &lvStr);
+void resize(const std::string &lvStr, uint64_t newSizeLb);
+LvList listLv(const std::string &arg);
+LvMap getLvMap(const std::string &arg);
+bool fileExists(const std::string &vgName, const std::string &name);
+bool lvExists(const std::string &vgName, const std::string &lvName);
+bool snapExists(const std::string &vgName, const std::string &snapName);
+bool tpExists(const std::string &vgName, const std::string &poolName);
+Lv locate(const std::string &arg);
+Lv locate(const std::string &vgName, const std::string &name);
+VgList listVg(const std::string &vgName);
+Vg getVg(const std::string &vgName);
+bool vgExists(const std::string &vgName);
+LvAttr getLvAttr(const std::string lvPathStr);
+
 
 namespace local {
 
@@ -164,11 +196,14 @@ inline std::string getDiscardsOpt(int opt)
 }
 
 /**
+ * CAUSION:
+ *   Do not use this for thinpool volumes.
+ *
  * RETURN:
  *   true when available,
  *   false in timeout.
  */
-inline void waitForDeviceAvailable(cybozu::FilePath &path, size_t timeoutMs = 5000)
+inline void waitForDeviceAvailable(cybozu::FilePath &path, size_t timeoutMs = DEFAULT_TIMEOUT_MS)
 {
     const size_t intervalMs = 100;
     for (size_t i = 0; i < timeoutMs / intervalMs + 1; i++) {
@@ -178,35 +213,17 @@ inline void waitForDeviceAvailable(cybozu::FilePath &path, size_t timeoutMs = 50
     throw cybozu::Exception(__func__) << "wait for device timeout" << path;
 }
 
-} //namespace local
+inline void waitForThinpoolAvailable(const std::string &vgName, const std::string &poolName, size_t timeoutMs = DEFAULT_TIMEOUT_MS)
+{
+    const size_t intervalMs = 500;
+    for (size_t i = 0; i < timeoutMs / intervalMs + 1; i++) {
+        if (tpExists(vgName, poolName)) return;
+        local::sleepMs(intervalMs);
+    }
+    throw cybozu::Exception(__func__) << "wait for thinpool timeout" << vgName << poolName;
+}
 
-/**
- * Prototypes.
- */
-cybozu::FilePath getLvmPath(const std::string &vgName, const std::string &name);
-Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb);
-Lv createTv(const std::string &vgName, const std::string &poolName, const std::string &lvName, uint64_t sizeLb);
-Lv createTp(const std::string &vgName, const std::string &poolName, uint64_t sizeLb);
-Lv createSnap(
-    const std::string &vgName, const std::string &lvName, const std::string &snapName,
-    bool isWritable, uint64_t sizeLb);
-Lv createTSnap(
-    const std::string &vgName, const std::string &lvName, const std::string &snapName,
-    bool isWritable);
-void remove(const std::string &pathStr);
-void resize(const std::string &pathStr, uint64_t newSizeLb);
-LvList listLv(const std::string &arg);
-LvMap getLvMap(const std::string &arg);
-bool exists(const std::string &vgName, const std::string &name);
-bool lvExists(const std::string &vgName, const std::string &lvName);
-bool snapExists(const std::string &vgName, const std::string &snapName);
-Lv locate(const std::string &arg);
-Lv locate(const std::string &vgName, const std::string &name);
-VgList listVg(const std::string &vgName);
-Vg getVg(const std::string &vgName);
-bool vgExists(const std::string &vgName);
-LvAttr getLvAttr(const std::string lvPathStr);
-bool tpExists(const std::string &vgName, const std::string &poolName);
+} //namespace local
 
 
 /**
@@ -277,8 +294,15 @@ public:
     cybozu::FilePath path() const {
         return getLvmPath(vgName_, name());
     }
+    std::string lvStr() const {
+        return getLvStr(vgName_, name());
+    }
     bool exists() const {
-        return cybozu::lvm::exists(vgName(), name());
+        if (attr_.isTypeThinpool()) {
+            return cybozu::lvm::tpExists(vgName_, name());
+        } else {
+            return cybozu::lvm::fileExists(vgName(), name());
+        }
     }
     const LvAttr &attr() const { return attr_; }
     Lv createSnapshot(const std::string &snapName, bool isWritable, uint64_t sizeLb) const {
@@ -306,7 +330,7 @@ public:
             }
             return false;
         } else {
-            if (!cybozu::lvm::exists(vgName_, snapName)) return false;
+            if (!cybozu::lvm::fileExists(vgName_, snapName)) return false;
             Lv lv = locate(vgName_, snapName);
             return lv.isSnapshot() && lv.lvName() == lvName_;
         }
@@ -328,16 +352,22 @@ public:
         }
         throw cybozu::Exception(__func__) << "Not found" << vgName_ << lvName_ << snapName;
     }
+    void removeAllSnapshots() {
+        verifyVolume();
+        for (Lv &snap : snapshotList()) {
+            snap.remove();
+        }
+    }
     Lv parent() const {
         verifySnapshot();
         return locate(vgName_, lvName_);
     }
     void resize(uint64_t newSizeLb) {
-        cybozu::lvm::resize(path().str(), newSizeLb);
+        cybozu::lvm::resize(lvStr(), newSizeLb);
         sizeLb_ = newSizeLb;
     }
     void remove() {
-        cybozu::lvm::remove(path().str());
+        cybozu::lvm::remove(lvStr());
     }
     friend inline std::ostream& operator<<(std::ostream& os, const Lv& lv) {
         const std::string parent = lv.isSnapshot() ? lv.lvName_ : "";
@@ -418,6 +448,14 @@ private:
 };
 
 /**
+ * Get lv string.
+ */
+std::string getLvStr(const std::string &vgName, const std::string &name)
+{
+    return vgName + '/' + name;
+}
+
+/**
  * Get lvm path.
  */
 inline cybozu::FilePath getLvmPath(
@@ -447,7 +485,7 @@ inline Lv createLv(const std::string &vgName, const std::string &lvName, uint64_
         return lv;
     }
     throw cybozu::Exception(__func__)
-        << "volume creation failed" << vgName << lvName << sizeLb;
+        << "volume creation failed" << vgName << lvName << sizeLb << lv;
 }
 
 /**
@@ -485,10 +523,9 @@ inline Lv createTp(const std::string &vgName, const std::string &poolName, uint6
             local::getDiscardsOpt(NOPASSDOWN)
         });
 
-    cybozu::FilePath lvPath = getLvmPath(vgName, poolName);
-    local::waitForDeviceAvailable(lvPath);
+    local::waitForThinpoolAvailable(vgName, poolName);
 
-    Lv lv = locate(lvPath.str());
+    Lv lv = locate(getLvStr(vgName, poolName));
     if (lv.vgName() == vgName && lv.lvName() == poolName &&
         lv.attr().isTypeThinpool()) {
         return lv;
@@ -505,17 +542,17 @@ inline Lv createSnap(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
     bool isWritable, uint64_t sizeLb)
 {
-    cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
-    Lv lv = locate(lvPath.str());
+    const std::string lvStr = getLvStr(vgName, lvName);
+    Lv lv = locate(lvStr);
     if (!lv.attr().isTypeOrigin() && !lv.attr().isTypeNone()) {
-        throw cybozu::Exception(__func__) << "bad lv to be origin" << lvPath;
+        throw cybozu::Exception(__func__) << "bad lv to be origin" << lvStr;
     }
     const StrVec args = {
         "-s",
         local::getSizeOpt(sizeLb),
         local::getNameOpt(snapName),
         local::getPermissionOpt(isWritable),
-        lvPath.str()
+        lvStr
     };
     cybozu::process::call("/sbin/lvcreate", args);
 
@@ -538,17 +575,17 @@ inline Lv createTSnap(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
     bool isWritable)
 {
-    cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
-    Lv lv = locate(lvPath.str());
+    const std::string lvStr = getLvStr(vgName, lvName);
+    Lv lv = locate(lvStr);
     if (!lv.attr().isTypeThinVolume()) {
-        throw cybozu::Exception(__func__) << "not thin volume" << lvPath;
+        throw cybozu::Exception(__func__) << "not thin volume" << lvStr;
     }
 
     const StrVec args = {
         "-s",
         local::getNameOpt(snapName),
         local::getPermissionOpt(isWritable),
-        lvPath.str()
+        lvStr
     };
     cybozu::process::call("/sbin/lvcreate", args);
 
@@ -578,27 +615,25 @@ inline void renameLv(
 /**
  * Remove a volume or a snapshot.
  */
-inline void remove(const std::string &pathStr)
+inline void remove(const std::string &lvStr)
 {
-    cybozu::FilePath path(pathStr);
-    if (!path.stat().exists()) {
-        throw cybozu::Exception(__func__) << "not found" << pathStr;
-    }
-
-    cybozu::process::call("/sbin/lvremove", { "-f", path.str() });
+    cybozu::process::call("/sbin/lvremove", { "-f", lvStr });
     local::sleepMs(100); /* for safety. */
 }
 
 /**
  * Resize a volume.
  */
-inline void resize(const std::string &pathStr, uint64_t newSizeLb)
+inline void resize(const std::string &lvStr, uint64_t newSizeLb)
 {
     cybozu::process::call("/sbin/lvresize", {
         "-f", /* force volume shrink */
         local::getSizeOpt(newSizeLb),
-        pathStr
+        lvStr
     });
+    /*
+     * It is better to use 'blockdev --flushbufs device' command.
+     */
     local::sleepMs(100); /* for safety. */
 }
 
@@ -651,24 +686,38 @@ inline LvMap getLvMap(const std::string &arg)
 }
 
 /**
+ * CAUSION:
+ *   DO NOT USE this function for thinpool volumes.
  * RETURN:
  *   True when the volume with the name exists.
  */
-inline bool exists(const std::string &vgName, const std::string &name)
+inline bool fileExists(const std::string &vgName, const std::string &name)
 {
     return getLvmPath(vgName, name).stat().exists();
 }
 
 inline bool lvExists(const std::string &vgName, const std::string &lvName)
 {
-    if (!exists(vgName, lvName)) return false;
+    if (!fileExists(vgName, lvName)) return false;
     return !locate(vgName, lvName).isSnapshot();
 }
 
 inline bool snapExists(const std::string &vgName, const std::string &snapName)
 {
-    if (!exists(vgName, snapName)) return false;
+    if (!fileExists(vgName, snapName)) return false;
     return locate(vgName, snapName).isSnapshot();
+}
+
+inline bool tpExists(const std::string &vgName, const std::string &poolName)
+{
+    /*
+     * Thinpools do not exist as /dev/vgName/poolName files.
+     * However, 'lvs vgName/poolName' command can find thinpools.
+     */
+    LvList lvs = listLv(getLvStr(vgName, poolName));
+    if (lvs.empty()) return false;
+    Lv &lv = lvs.front();
+    return lv.lvName() == poolName && lv.attr().isTypeThinpool();
 }
 
 /**
@@ -700,7 +749,10 @@ inline Lv locate(const std::string &arg)
 
 inline Lv locate(const std::string &vgName, const std::string &name)
 {
-    return locate(getLvmPath(vgName, name).str());
+    /**
+     * Do not use getLvmPath() because such passes do not exist for thinpool volumes.
+     */
+    return locate(getLvStr(vgName, name));
 }
 
 /**
@@ -757,12 +809,6 @@ inline LvAttr getLvAttr(const std::string lvPathStr)
     }
     if (i != 1) throw cybozu::Exception(__func__) << "result is not oneline" << i << result;
     return attr;
-}
-
-inline bool tpExists(const std::string &vgName, const std::string &poolName)
-{
-    if (!exists(vgName, poolName)) return false;
-    return locate(vgName, poolName).attr().isTypeThinpool();
 }
 
 }} //namespace cybozu::lvm
