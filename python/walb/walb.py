@@ -8,6 +8,7 @@ import socket
 from contextlib import closing
 import errno
 import re
+import datetime
 
 ########################################
 # Constants for general purpose.
@@ -479,6 +480,97 @@ def compress_str_to_kind(s):
     if s not in m:
         raise Exception('compress_str_to_kind: bad kind', s)
     return m[s]
+
+
+class Snapshot:
+    '''
+    Snapshot class
+    '''
+    def __init__(self, gidB=0, gidE=0):
+        '''
+        gidB :: int
+        gidE :: int
+        '''
+        verify_type(gidB, int)
+        verify_type(gidE, int)
+        self.gidB = gidB
+        self.gidE = gidE
+        self.verify()
+    def __str__(self):
+        if self.gidB == self.gidE:
+            return "|%d|" % self.gidB
+        else:
+            return "|%d,%d|" % (self.gidB, self.gidE)
+    def from_str(self, s):
+        '''
+        s :: str
+        '''
+        verify_type(s, str)
+        if s[0] != '|' or s[-1] != '|':
+            raise Exception('Snapshot:from_str:bad format', s)
+        pos = s.find(',')
+        if pos >= 0:
+            self.gidB = int(s[1:pos])
+            self.gidE = int(s[pos+1:-1])
+            self.verify()
+        else:
+            self.gidB = self.gidE = int(s[1:-1])
+        return self
+    def verify(self):
+        if self.gidB > self.gidE:
+            raise Exception('Snapshot:verify:bad gid', self.gidB, self.gidE)
+
+
+class Diff:
+    '''
+    DIff class
+    '''
+    def __init__(self, B=Snapshot(), E=Snapshot()):
+        '''
+        B :: Snapshot
+        E :: Snapshot
+        '''
+        verify_type(B, Snapshot)
+        verify_type(E, Snapshot)
+        self.B = B
+        self.E = E
+        self.isMergeable = False
+        self.isCompDiff = False
+        self.ts = datetime.datetime.now()
+        self.dataSize = 0
+
+    def verify(self):
+        if B.gidB >= E.gidB or B.gidE > E.gidE:
+            raise Exception('Diff:bad progress', str(B), str(E))
+    def __str__(self):
+        if self.isMergeable:
+            m = 'M'
+        else:
+            m = '-'
+        if self.isCompDiff:
+            c = 'C'
+        else:
+            c = '-'
+        ts_str = self.ts.strftime('%Y-%m-%dT%H:%M:%S')
+        return "%s-->%s (%s%s %s %d)" % (self.B, self.E, m, c, ts_str, self.dataSize)
+
+    def from_str(self, s):
+        '''
+        parse string
+        s :: str
+        '''
+        verify_type(s, str)
+        p = re.compile(r'([^)]+)-->([^(]+) \(([M-])([C-]) ([^ ]+) (\d+)\)')
+        m = p.match(s)
+        if not m:
+            raise Exception('Diff:bad format', s)
+        self.B.from_str(m.group(1))
+        self.E.from_str(m.group(2))
+        self.isMergeable = m.group(3) == 'M'
+        self.isCompDiff = m.group(4) == 'C'
+        self.ts.strptime(m.group(5), '%Y-%m-%dT%H:%M:%S')
+        self.dataSize = int(m.group(6))
+        return self
 
 
 class CompressOpt:
