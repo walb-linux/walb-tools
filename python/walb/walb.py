@@ -486,13 +486,13 @@ class Snapshot:
     '''
     Snapshot class
     '''
-    def __init__(self, gidB=0, gidE=0):
+    def __init__(self, gidB=0, gidE=UINT64_MAX):
         '''
         gidB :: int
         gidE :: int
         '''
         verify_u64(gidB)
-        verify_type(gidE, int)
+        verify_u64(gidE)
         self.gidB = gidB
         self.gidE = gidE
         verify_gid_range(gidB, gidE, "Snapshot:init")
@@ -501,22 +501,23 @@ class Snapshot:
             return "|%d|" % self.gidB
         else:
             return "|%d,%d|" % (self.gidB, self.gidE)
-    def from_str(self, s):
-        '''
-        s :: str
-        '''
-        verify_type(s, str)
-        if s[0] != '|' or s[-1] != '|':
-            raise Exception('Snapshot:from_str:bad format', s)
-        pos = s.find(',')
-        if pos >= 0:
-            self.gidB = int(s[1:pos])
-            self.gidE = int(s[pos+1:-1])
-            self.verify()
-        else:
-            self.gidB = self.gidE = int(s[1:-1])
-        verify_gid_range(self.gidB, self.gidE, "Snapshot:from_str")
-        return self
+
+
+def create_snapshot_from_str(s):
+    '''
+    create snapshot from str
+    s :: str such as |num| or |num1,num2|
+    '''
+    verify_type(s, str)
+    if s[0] != '|' or s[-1] != '|':
+        raise Exception('create_snapshot_from_str:bad format', s)
+    pos = s.find(',')
+    if pos >= 0:
+        gidB = int(s[1:pos])
+        gidE = int(s[pos+1:-1])
+    else:
+        gidB = gidE = int(s[1:-1])
+    return Snapshot(gidB, gidE)
 
 
 class Diff:
@@ -536,10 +537,11 @@ class Diff:
         self.isCompDiff = False
         self.ts = datetime.datetime.now()
         self.dataSize = 0
+#        self.verify()
 
     def verify(self):
-        if B.gidB >= E.gidB or B.gidE > E.gidE:
-            raise Exception('Diff:bad progress', str(B), str(E))
+        if self.B.gidB >= self.E.gidB or self.B.gidE > self.E.gidE:
+            raise Exception('Diff:bad progress', str(self.B), str(self.E))
     def __str__(self):
         if self.isMergeable:
             m = 'M'
@@ -550,25 +552,27 @@ class Diff:
         else:
             c = '-'
         ts_str = self.ts.strftime('%Y-%m-%dT%H:%M:%S')
-        return "%s-->%s (%s%s %s %d)" % (self.B, self.E, m, c, ts_str, self.dataSize)
+        return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
 
-    def from_str(self, s):
-        '''
-        parse string
-        s :: str
-        '''
-        verify_type(s, str)
-        p = re.compile(r'([^)]+)-->([^(]+) \(([M-])([C-]) ([^ ]+) (\d+)\)')
-        m = p.match(s)
-        if not m:
-            raise Exception('Diff:bad format', s)
-        self.B.from_str(m.group(1))
-        self.E.from_str(m.group(2))
-        self.isMergeable = m.group(3) == 'M'
-        self.isCompDiff = m.group(4) == 'C'
-        self.ts.strptime(m.group(5), '%Y-%m-%dT%H:%M:%S')
-        self.dataSize = int(m.group(6))
-        return self
+
+def create_diff_from_str(s):
+    '''
+    create diff from str
+    s :: str
+    '''
+    verify_type(s, str)
+    p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
+    m = p.match(s)
+    if not m:
+        raise Exception('create_diff_from_str:bad format', s)
+    d = Diff()
+    d.B = create_snapshot_from_str(m.group(1))
+    d.E = create_snapshot_from_str(m.group(2))
+    d.isMergeable = m.group(3) == 'M'
+    d.isCompDiff = m.group(4) == 'C'
+    d.ts.strptime(m.group(5), '%Y-%m-%dT%H:%M:%S')
+    d.dataSize = int(m.group(6))
+    return d
 
 
 class CompressOpt:
@@ -1105,21 +1109,16 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
-    def get_diff_list_old(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+    def get_diff_list_str(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
-        Get wdiff list.
+        Get readable wdiff list.
         ax :: Server    - archive server.
         vol :: str      - volume name.
         gid0 :: int     - range begin.
         gid1 :: int     - range end.
         return :: [str] - wdiff information list managed by the archive server.
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid0)
-        verify_u64(gid1)
-        ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
-        return ret.split('\n')
+        return map(str, self.get_diff_list(ax, vol, gid0, gid1))
 
 
     def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
@@ -1135,8 +1134,8 @@ class Controller:
         verify_type(vol, str)
         verify_u64(gid0)
         verify_u64(gid1)
-        ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
-        return map(ret.split('\n'), lambda x : return Diff().from_str(x))
+        ls = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
+        return map(create_diff_from_str, ls.split('\n'))
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''

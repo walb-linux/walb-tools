@@ -1007,7 +1007,6 @@ inline void getDiffList(protocol::GetCommandParams &p)
 
     const MetaDiffVec diffV = volSt.diffMgr.getAll(gid0, gid1);
     StrVec v;
-    v.emplace_back("#snapB-->snapE isMergeable/isCompDiff timestamp sizeB");
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
     }
