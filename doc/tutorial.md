@@ -301,7 +301,7 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 また重複データが除去されるためデータサイズが小さくなることもある。
 運用時には定期的に merge するとよい。
 ```
-> walbc.get_diff_list(a0,VOL)
+> walbc.get_diff_list_str(a0,VOL)
 ```
 で wdiff を一覧できる。
 ```
@@ -321,7 +321,7 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 `M` のマークがついた wdiff は merge できる。2から8までの wdiff を merge してみる。
 ```
 > walbc.merge(a0,VOL,2,8)
-> walbc.get_diff_list(a0,VOL)
+> walbc.get_diff_list_str(a0,VOL)
  '|0|-->|1| -- 2014-11-11T07:12:14 4120',
  '|1|-->|2| -- 2014-11-11T07:12:42 17221',
  '|2|-->|8| M- 2014-11-11T07:15:43 5570',
@@ -337,9 +337,8 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 古い snapshot を restore する必要がなくなると、apply することで古い snapshot に必要な wdiff が削除されてディスク容量を減らすことができる。
 また restore にかかる時間も短縮できる。
 ```
-> walbc.get_diff_list(a0,VOL)
-['#snapB-->snapE isMergeable/isCompDiff timestamp sizeB',
- '|0|-->|1| -- 2014-11-11T07:12:14 4120',
+> walbc.get_diff_list_str(a0,VOL)
+['|0|-->|1| -- 2014-11-11T07:12:14 4120',
  '|1|-->|2| -- 2014-11-11T07:12:42 17221',
  '|2|-->|8| M- 2014-11-11T07:15:43 5570',
  '|8|-->|9| -- 2014-11-11T07:15:52 8496',
@@ -351,10 +350,9 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 0～8までの wdiff を 0 に apply する。
 ```
 > walbc.apply(a0, VOL, 8)
-walbc.get_diff_list(a0,VOL)
+walbc.get_diff_list_str(a0,VOL)
 Out[11]:
-['#snapB-->snapE isMergeable/isCompDiff timestamp sizeB',
- '|8|-->|9| -- 2014-11-11T07:15:52 8496',
+['|8|-->|9| -- 2014-11-11T07:15:52 8496',
  '|9|-->|10| M- 2014-11-11T07:16:01 8542',
  '|10|-->|11| M- 2014-11-11T07:16:11 9278',
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
