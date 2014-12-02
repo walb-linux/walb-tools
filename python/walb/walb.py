@@ -54,7 +54,7 @@ def verify_u64(obj):
     obj -- object to verify.
     '''
     verify_int(obj)
-    if obj >= 2**64:
+    if obj < 0 or obj >= 2**64:
         raise Exception('cannot be unsigned 64bit integer', obj)
 
 
@@ -491,11 +491,11 @@ class Snapshot:
         gidB :: int
         gidE :: int
         '''
-        verify_type(gidB, int)
+        verify_u64(gidB)
         verify_type(gidE, int)
         self.gidB = gidB
         self.gidE = gidE
-        self.verify()
+        verify_gid_range(gidB, gidE, "Snapshot:init")
     def __str__(self):
         if self.gidB == self.gidE:
             return "|%d|" % self.gidB
@@ -515,10 +515,8 @@ class Snapshot:
             self.verify()
         else:
             self.gidB = self.gidE = int(s[1:-1])
+        verify_gid_range(self.gidB, self.gidE, "Snapshot:from_str")
         return self
-    def verify(self):
-        if self.gidB > self.gidE:
-            raise Exception('Snapshot:verify:bad gid', self.gidB, self.gidE)
 
 
 class Diff:
@@ -1107,7 +1105,7 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
-    def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+    def get_diff_list_old(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get wdiff list.
         ax :: Server    - archive server.
@@ -1122,6 +1120,23 @@ class Controller:
         verify_u64(gid1)
         ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
         return ret.split('\n')
+
+
+    def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Get wdiff list.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid0 :: int     - range begin.
+        gid1 :: int     - range end.
+        return :: [Diff] - wdiff information list managed by the archive server.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_u64(gid0)
+        verify_u64(gid1)
+        ret = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
+        return map(ret.split('\n'), lambda x : return Diff().from_str(x))
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
