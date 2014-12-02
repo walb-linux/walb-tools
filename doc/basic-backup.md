@@ -112,7 +112,7 @@ There are several getter functions for scripts:
 - `walbc.get_server()`
 - `walbc.get_state()`
 - `walbc.get_uuid()`
-- `walbc.get_diff_list_str()`
+- `walbc.print_diff_list()`
 
 
 

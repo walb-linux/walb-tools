@@ -450,6 +450,10 @@ CMPR_GZIP = 2
 CMPR_LZMA = 3
 
 
+def printL(ls):
+    for x in ls:
+        print x
+
 def verify_compress_kind(kind):
     '''
     kind :: int - CMPR_XXX.
@@ -1109,18 +1113,6 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
-    def get_diff_list_str(self, ax, vol, gid0=0, gid1=UINT64_MAX):
-        '''
-        Get readable wdiff list.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid0 :: int     - range begin.
-        gid1 :: int     - range end.
-        return :: [str] - wdiff information list managed by the archive server.
-        '''
-        return map(str, self.get_diff_list(ax, vol, gid0, gid1))
-
-
     def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get wdiff list.
@@ -1136,6 +1128,16 @@ class Controller:
         verify_u64(gid1)
         ls = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
         return map(create_diff_from_str, ls.split('\n'))
+
+    def print_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Print wdiff list.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid0 :: int     - range begin.
+        gid1 :: int     - range end.
+        '''
+        printL(self.get_diff_list(ax, vol, gid0, gid1))
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
