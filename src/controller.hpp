@@ -41,7 +41,7 @@ inline void c2xClearVolClient(protocol::ClientParams &p)
 /**
  * For storage:
  *   params[0]: volId
- *   params[1]: master
+ *   params[1]: target
  * For archive:
  *   params[0]: volId
  */

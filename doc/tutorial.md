@@ -4,7 +4,7 @@
 詳細は [README](README.md) を参照してください。
 
 ## WalB 概要
-WalB 自体の概要は [WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/master/doc/walb-is-hard.pptx) を参照してください。
+WalB 自体の概要は [WalB概要pptx](https://github.dev.cybozu.co.jp/herumi/walb-tools/raw/target/doc/walb-is-hard.pptx) を参照してください。
 
 
 ## 用語
@@ -206,7 +206,7 @@ tutorial-config.py を walb-tools においてそのディレクトリで
 * `walbc.get_state_all(VOL)`でそれぞれのサーバがどういう状態かわかる。
 
 ```
-s0 localhost:10000 storage Slave
+s0 localhost:10000 storage Standby
 p0 vm4:10100 proxy Started
 a0 vm4:10200 archive Archived
 ```
@@ -406,7 +406,7 @@ ipython を起動し直して、`execfile('config.py')` して `sLayout.to_cmd_s
 * 状態の確認
 ```
 > walbc.get_state_all(VOL)
-> s0 localhost:10000 storage Master
+> s0 localhost:10000 storage Target
 > p0 localhost:10100 proxy Started
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive Clear
@@ -416,7 +416,7 @@ ipython を起動し直して、`execfile('config.py')` して `sLayout.to_cmd_s
 > walbc._init(a1, VOL)
 
 > walbc.get_state_all(VOL)
-> s0 localhost:10000 storage Master
+> s0 localhost:10000 storage Target
 > p0 localhost:10100 proxy Started
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive SyncReady

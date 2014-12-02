@@ -8,19 +8,19 @@ namespace walb {
 const char *const sClear = "Clear";
 const char *const sSyncReady = "SyncReady";
 const char *const sStopped = "Stopped";
-const char *const sMaster = "Master";
-const char *const sSlave = "Slave";
-const StrVec sSteadyStates = { sClear, sSyncReady, sStopped, sMaster, sSlave };
+const char *const sTarget = "Target";
+const char *const sStandby = "Standby";
+const StrVec sSteadyStates = { sClear, sSyncReady, sStopped, sTarget, sStandby };
 
 // temporary states.
 const char *const stInitVol = "InitVol";
 const char *const stClearVol = "ClearVol";
-const char *const stStartSlave = "StartSlave";
-const char *const stStopSlave = "StopSlave";
+const char *const stStartStandby = "StartStandby";
+const char *const stStopStandby = "StopStandby";
 const char *const stFullSync = "FullSync";
 const char *const stHashSync = "HashSync";
-const char *const stStartMaster = "StartMaster";
-const char *const stStopMaster = "StopMaster";
+const char *const stStartTarget = "StartTarget";
+const char *const stStopTarget = "StopTarget";
 const char *const stReset = "Reset";
 
 const struct StateMachine::Pair statePairTbl[] = {
@@ -29,10 +29,10 @@ const struct StateMachine::Pair statePairTbl[] = {
     { sSyncReady, stClearVol },
     { stClearVol, sClear },
 
-    { sSyncReady, stStartSlave },
-    { stStartSlave, sSlave },
-    { sSlave, stStopSlave },
-    { stStopSlave, sSyncReady },
+    { sSyncReady, stStartStandby },
+    { stStartStandby, sStandby },
+    { sStandby, stStopStandby },
+    { stStopStandby, sSyncReady },
 
     { sSyncReady, stFullSync },
     { stFullSync, sStopped },
@@ -41,10 +41,10 @@ const struct StateMachine::Pair statePairTbl[] = {
     { sStopped, stReset },
     { stReset, sSyncReady },
 
-    { sStopped, stStartMaster },
-    { stStartMaster, sMaster },
-    { sMaster, stStopMaster },
-    { stStopMaster, sStopped },
+    { sStopped, stStartTarget },
+    { stStartTarget, sTarget },
+    { sTarget, stStopTarget },
+    { stStopTarget, sStopped },
 };
 
 // action
@@ -52,10 +52,10 @@ const char *const saWlogSend = "WlogSend";
 const char *const saWlogRemove = "WlogRemove";
 
 const StrVec allActionVec = {saWlogSend, saWlogRemove};
-const StrVec sAcceptForStop = { sMaster, sSlave };
-const StrVec sAcceptForSnapshot = { sMaster, sStopped };
+const StrVec sAcceptForStop = { sTarget, sStandby };
+const StrVec sAcceptForSnapshot = { sTarget, sStopped };
 // action = WlogSend + WlogRemove
-const StrVec sAcceptForWlogAction = {sMaster, stFullSync, stHashSync, sSlave};
-const StrVec sAcceptForResize = {sSyncReady, sStopped, sMaster, sSlave};
+const StrVec sAcceptForWlogAction = {sTarget, stFullSync, stHashSync, sStandby};
+const StrVec sAcceptForResize = {sSyncReady, sStopped, sTarget, sStandby};
 
 } // namespace walb

@@ -55,7 +55,7 @@ struct ProxyVolState
     ActionCounters ac; // archive name is action identifier here.
     ActionState actionState;
 
-    MetaDiffManager diffMgr; // for the master.
+    MetaDiffManager diffMgr; // for the target.
     AtomicMap<MetaDiffManager> diffMgrMap; // for each archive.
 
     /**
@@ -193,18 +193,18 @@ inline void ProxyVolState::initInner(const std::string &volId)
     LOGs.info() << "volume archive info" << volId << archiveSet.size()
                 << cybozu::util::concat(archiveSet, ",");
 
-    // Retry to make hard links of wdiff files in the master directory.
-    MetaDiffVec diffV = volInfo.getAllDiffsInMaster();
+    // Retry to make hard links of wdiff files in the target directory.
+    MetaDiffVec diffV = volInfo.getAllDiffsInTarget();
     LOGs.debug() << "found diffs" << volId << diffV.size(); // debug
     for (const MetaDiff &d : diffV) {
         LOGs.debug() << "try to make hard link" << d; // debug
-        volInfo.tryToMakeHardlinkInSlave(d);
+        volInfo.tryToMakeHardlinkInStandby(d);
     }
     volInfo.deleteDiffs(diffV);
-    // Here the master directory must contain no wdiff file.
+    // Here the target directory must contain no wdiff file.
     if (!diffMgr.getAll().empty()) {
         throw cybozu::Exception("ProxyVolState::initInner")
-            << "there are wdiff files in the master directory"
+            << "there are wdiff files in the target directory"
             << volId;
     }
 }
@@ -834,7 +834,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ul.unlock();
 
     ProxyVolInfo volInfo = getProxyVolInfo(volId);
-    cybozu::TmpFile tmpFile(volInfo.getMasterDir().str());
+    cybozu::TmpFile tmpFile(volInfo.getTargetDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
                                            volSt.stopState, gp.ps, logger)) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
@@ -851,8 +851,8 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
 
     ul.lock();
     volSt.actionState.clearAll();
-    volInfo.addDiffToMaster(diff);
-    volInfo.tryToMakeHardlinkInSlave(diff);
+    volInfo.addDiffToTarget(diff);
+    volInfo.tryToMakeHardlinkInStandby(diff);
     volInfo.deleteDiffs({diff});
     for (const std::string &archiveName : volSt.archiveSet) {
         ProxyTask task(volId, archiveName);

@@ -450,7 +450,7 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
 
 /**
  * params[0]: volId
- * params[1]: "master" or "slave".
+ * params[1]: "target" or "standby".
  */
 inline void c2sStartServer(protocol::ServerParams &p)
 {
@@ -462,10 +462,10 @@ inline void c2sStartServer(protocol::ServerParams &p)
 	    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
 	    const std::string &volId = v[0];
 		const std::string& role = v[1];
-		if (role != "master" && role != "slave") {
-            throw cybozu::Exception(FUNC) << "neighter master nor slave" << role;
+		if (role != "target" && role != "standby") {
+            throw cybozu::Exception(FUNC) << "neighter target nor standby" << role;
 		}
-        const bool isMaster = role == "master";
+        const bool isTarget = role == "target";
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -477,18 +477,18 @@ inline void c2sStartServer(protocol::ServerParams &p)
             }
         }
         const std::string st = volInfo.getState();
-        if (isMaster) {
-            StateMachineTransaction tran(volSt.sm, sStopped, stStartMaster, FUNC);
+        if (isTarget) {
+            StateMachineTransaction tran(volSt.sm, sStopped, stStartTarget, FUNC);
             if (st != sStopped) throw cybozu::Exception(FUNC) << "bad state" << st;
-            volInfo.setState(sMaster);
+            volInfo.setState(sTarget);
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
-            tran.commit(sMaster);
+            tran.commit(sTarget);
         } else {
-            StateMachineTransaction tran(volSt.sm, sSyncReady, stStartSlave, FUNC);
+            StateMachineTransaction tran(volSt.sm, sSyncReady, stStartStandby, FUNC);
             if (st != sSyncReady) throw cybozu::Exception(FUNC) << "bad state" << st;
-            volInfo.setState(sSlave);
+            volInfo.setState(sStandby);
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
-            tran.commit(sSlave);
+            tran.commit(sStandby);
         }
         pkt.writeFin(msgOk);
         logger.info() << "start succeeded" << volId;
@@ -502,7 +502,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
  * params[0]: volId
  * params[1]: StopOpt as string (optional)
  *
- * Master --> Stopped, or Slave --> SyncReady.
+ * Target --> Stopped, or Standby --> SyncReady.
  */
 inline void c2sStopServer(protocol::ServerParams &p)
 {
@@ -537,18 +537,18 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
-        if (st == sMaster) {
-            StateMachineTransaction tran(sm, sMaster, stStopMaster, FUNC);
+        if (st == sTarget) {
+            StateMachineTransaction tran(sm, sTarget, stStopTarget, FUNC);
             ul.unlock();
             storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
-            if (fst != sMaster) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            if (fst != sTarget) throw cybozu::Exception(FUNC) << "bad state" << fst;
             volInfo.setState(sStopped);
             tran.commit(sStopped);
         } else {
-            assert(st == sSlave);
-            StateMachineTransaction tran(sm, sSlave, stStopSlave, FUNC);
+            assert(st == sStandby);
+            StateMachineTransaction tran(sm, sStandby, stStopStandby, FUNC);
             ul.unlock();
-            if (fst != sSlave) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            if (fst != sStandby) throw cybozu::Exception(FUNC) << "bad state" << fst;
             storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
             volInfo.setState(sSyncReady);
             tran.commit(sSyncReady);
@@ -654,9 +654,9 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     }
     ul.lock();
     tran0.commit(sStopped);
-    StateMachineTransaction tran1(sm, sStopped, stStartMaster, FUNC);
-    volInfo.setState(sMaster);
-    tran1.commit(sMaster);
+    StateMachineTransaction tran1(sm, sStopped, stStartTarget, FUNC);
+    volInfo.setState(sTarget);
+    tran1.commit(sTarget);
     monitorMgr.dontStop();
 
     if (isFull) {
@@ -857,7 +857,7 @@ inline void StorageWorker::operator()()
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
     LOGs.debug() << FUNC << volId << st;
-    if (st == stStartSlave || st == stStartMaster) {
+    if (st == stStartStandby || st == stStartTarget) {
         // This is rare case, but possible.
         pushTask(volId, 1000);
         return;
@@ -870,9 +870,9 @@ inline void StorageWorker::operator()()
         const std::string wdevPath = volInfo.getWdevPath();
         if (device::isOverflow(wdevPath)) {
             LOGs.error() << FUNC << "overflow" << volId << wdevPath;
-            // stop to push the task and change state to stop if master
-            if (st != sMaster) return;
-            StateMachineTransaction tran(volSt.sm, sMaster, stStopMaster, FUNC);
+            // stop to push the task and change state to stop if target
+            if (st != sTarget) return;
+            StateMachineTransaction tran(volSt.sm, sTarget, stStopTarget, FUNC);
             ul.unlock();
             storage_local::stopMonitoring(wdevPath, volId);
             volInfo.setState(sStopped);
@@ -881,7 +881,7 @@ inline void StorageWorker::operator()()
         }
     }
 
-    if (st == sSlave) {
+    if (st == sStandby) {
         ActionCounterTransaction tran(volSt.ac, saWlogRemove);
         ul.unlock();
         storage_local::deleteWlogs(volId);
@@ -992,7 +992,7 @@ inline void startIfNecessary(const std::string &volId)
     StorageVolInfo volInfo(gs.baseDirStr, volId);
 
     const std::string st = volSt.sm.get();
-    if (st == sMaster || st == sSlave) {
+    if (st == sTarget || st == sStandby) {
         storage_local::startMonitoring(volInfo.getWdevPath(), volId);
     }
     LOGs.info() << "start monitoring" << volId;

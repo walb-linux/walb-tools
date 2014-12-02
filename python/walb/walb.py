@@ -370,18 +370,18 @@ def server_kind_to_str(kind):
 sClear = "Clear"
 sSyncReady = "SyncReady"
 sStopped = "Stopped"
-sMaster = "Master"
-sSlave = "Slave"
+sTarget = "Target"
+sStandby = "Standby"
 
 # storage temporary states
 stInitVol = "InitVol"
 stClearVol = "ClearVol"
-stStartSlave = "StartSlave"
-stStopSlave = "StopSlave"
+stStartStandby = "StartStandby"
+stStopStandby = "StopStandby"
 stFullSync = "FullSync"
 stHashSync = "HashSync"
-stStartMaster = "StartMaster"
-stStopMaster = "StopMaster"
+stStartTarget = "StartTarget"
+stStopTarget = "StopTarget"
 stReset = "Reset"
 
 # storage actions
@@ -426,10 +426,10 @@ aaRestore = "Restore"
 aaReplSync = "ReplSyncAsClient"
 aaResize = "Resize"
 
-sDuringFullSync = [stFullSync, sStopped, stStartMaster]
-sDuringHashSync = [stHashSync, sStopped, stStartMaster]
-sDuringStopForMaster = [sMaster, stStopMaster]
-sDuringStopForSlave = [sSlave, stStopSlave]
+sDuringFullSync = [stFullSync, sStopped, stStartTarget]
+sDuringHashSync = [stHashSync, sStopped, stStartTarget]
+sDuringStopForTarget = [sTarget, stStopTarget]
+sDuringStopForStandby = [sStandby, stStopStandby]
 pActive = [pStarted, ptWlogRecv]
 pDuringStop = [pStarted, ptWlogRecv, ptStop, ptWaitForEmpty]
 aActive = [aArchived, atWdiffRecv, atHashSync, atReplSync]
@@ -1080,9 +1080,9 @@ class Controller:
         self.run_ctl(s, ["reset-vol", vol], timeoutS=timeoutS)  # this is synchronous command.
         self.verify_state(s, vol, state)
 
-    def set_slave_storage(self, sx, vol):
+    def set_standby_storage(self, sx, vol):
         '''
-        Set a volume slave storage in sx.
+        Set a volume standby storage in sx.
 
         sx :: Server - storage server.
         vol :: str   - volume name.
@@ -1090,15 +1090,15 @@ class Controller:
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
         state = self.get_state(sx, vol)
-        if state == sSlave:
+        if state == sStandby:
             return
         if state == sSyncReady:
             self.start(sx, vol)
             return
-        if state == sMaster:
+        if state == sTarget:
             self.stop(sx, vol)
         else:
-            raise Exception('set_slave_storage:bad state', sx.name, vol, state)
+            raise Exception('set_standby_storage:bad state', sx.name, vol, state)
         self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
         self.reset(sx, vol)
         self.start(sx, vol)
@@ -1234,7 +1234,7 @@ class Controller:
         verify_type(vol, str)
         verify_type(wdevPath, str)
         self._init(sx, vol, wdevPath)
-        self.start(sx, vol)  # start as slave.
+        self.start(sx, vol)  # start as standby.
 
     def _init(self, s, vol, wdevPath=None):
         '''
@@ -1264,7 +1264,7 @@ class Controller:
         if s.kind == K_STORAGE:
             if st == sClear:
                 return
-            if st in [sMaster, sSlave]:
+            if st in [sTarget, sStandby]:
                 self.stop(s, vol)
                 st = self.get_state(s, vol)
             if st == sStopped:
@@ -1378,11 +1378,11 @@ class Controller:
             if not prevSt:
                 raise Exception('wait_for_stopped: '
                                 'prevSt not specified', s.name, vol)
-            if prevSt == sSlave:
-                tmpStL = sDuringStopForSlave
+            if prevSt == sStandby:
+                tmpStL = sDuringStopForStandby
                 goalSt = sSyncReady
             else:
-                tmpStL = sDuringStopForMaster
+                tmpStL = sDuringStopForTarget
                 goalSt = sStopped
         elif s.kind == K_PROXY:
             tmpStL = pDuringStop
@@ -1429,12 +1429,12 @@ class Controller:
         if s.kind == K_STORAGE:
             st = self.get_state(s, vol)
             if st == sSyncReady:
-                self.run_ctl(s, ['start', vol, 'slave'])
-                self._wait_for_state_change(s, vol, [stStartSlave], [sSlave])
+                self.run_ctl(s, ['start', vol, 'standby'])
+                self._wait_for_state_change(s, vol, [stStartStandby], [sStandby])
             else:
                 assert st == sStopped
-                self.run_ctl(s, ['start', vol, 'master'])
-                self._wait_for_state_change(s, vol, [stStartMaster], [sMaster])
+                self.run_ctl(s, ['start', vol, 'target'])
+                self._wait_for_state_change(s, vol, [stStartTarget], [sTarget])
         elif s.kind == K_PROXY:
             self.run_ctl(s, ['start', vol])
             self._wait_for_state_change(s, vol, [ptStart], pActive)
@@ -1751,7 +1751,7 @@ class Controller:
         if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringFullSync,
-                                    [sMaster], timeoutS)
+                                    [sTarget], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
             raise Exception('full_backup: sync failed', sx.name, a0.name, vol, st)
@@ -1803,7 +1803,7 @@ class Controller:
         if not block:
             return
         self._wait_for_state_change(sx, vol, sDuringHashSync,
-                                    [sMaster], timeoutS)
+                                    [sTarget], timeoutS)
         st = self.get_state(a0, vol)
         if st not in aActive:
             raise Exception('hash_backup: sync failed', sx.name, a0.name, vol, st)
@@ -1916,8 +1916,8 @@ class Controller:
                 raise Exception('snapshot:bad state', ax.name, vol, st)
         gid = self.snapshot_nbk(sx, vol)
         st = self.get_state(sx, vol)
-        if st != sMaster:
-            raise Exception('snapshot: state is not master and can not wait', sx.name, vol, st)
+        if st != sTarget:
+            raise Exception('snapshot: state is not target and can not wait', sx.name, vol, st)
         for ax in axL:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
@@ -2218,19 +2218,19 @@ class Controller:
         st = self.get_state(sx, vol)
         if st == sSyncReady:
             pass
-        elif st == sSlave:
+        elif st == sStandby:
             self.stop(sx, vol)
         elif st == sStopped:
             self.reset(sx, vol)
         else:
-            raise Exception("prepare_backup:bad state. call stop if master.",
+            raise Exception("prepare_backup:bad state. call stop if target.",
                             sx.name, vol, st)
 
         for s in self.sLayout.storageL:
             if s == sx:
                 continue
             st = self.get_state(s, vol)
-            if st not in [sSlave, sClear]:
+            if st not in [sStandby, sClear]:
                 raise Exception("prepare_backup:bad state", s.name, sx, vol, st)
 
         for ax in self.sLayout.archiveL:

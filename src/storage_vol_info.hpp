@@ -137,8 +137,8 @@ public:
         const char *tbl[] = {
             sSyncReady,
             sStopped,
-            sMaster,
-            sSlave,
+            sTarget,
+            sStandby,
         };
         for (const char *p : tbl) {
             if (newState == p) {

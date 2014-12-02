@@ -58,23 +58,23 @@ so you need not call `walbc` command directly.
 | `Clear`      | There is no metadata for the volume.             |
 | `SyncReady`  | Initialized and ready to full/hash backup.       |
 | `Stopped`    | Wlogs will be preserved in the log device.       |
-| `Master`     | Master mode. Try to transfer wlogs to proxies.   |
-| `Slave`      | Slave mode. Try to remove wlogs.                 |
+| `Target`     | Target mode. Try to transfer wlogs to proxies.   |
+| `Standby`      | Standby mode. Try to remove wlogs.                 |
 
-- In `Master` mode, wlogs will be transferred and removed automatically,
+- In `Target` mode, wlogs will be transferred and removed automatically,
   so the risk of log device overflow will be minimized.
 
 | State transition                       | Description                                 |
 |:---------------------------------------|:--------------------------------------------|
 | `Clear` -> `InitVol` -> `SyncReady`    | Invoked by `init-vol` command.              |
 | `SyncReady` -> `ClearVol` -> `Clear`   | Invoked by `clear-vol` command.             |
-| `SyncReady` -> `StartSlave` -> `Slave` | Invoked by `start slave` command.           |
-| `Slave` -> `StopSlave` -> `SyncReady`  | Invoked by `stop` command at slave mode.    |
+| `SyncReady` -> `StartStandby` -> `Standby` | Invoked by `start standby` command.           |
+| `Standby` -> `StopStandby` -> `SyncReady`  | Invoked by `stop` command at standby mode.    |
 | `SyncReady` -> `FullSync` -> `Stopped` | Invoked by `full-bkp` command.              |
 | `SyncReady` -> `HashSync` -> `Stopped` | Invoked by `hash-bkp` command.              |
 | `Stopped` -> `Reset` -> `SyncReady`    | Invoked by `reset-vol` command.             |
-| `Stopped` -> `StartMaster` -> `Master` | Invoked by `start` command at master mode.  |
-| `Master` -> `StopMaster` -> `Stopped`  | Invoked by `stop` command at master mode.   |
+| `Stopped` -> `StartTarget` -> `Target` | Invoked by `start` command at target mode.  |
+| `Target` -> `StopTarget` -> `Stopped`  | Invoked by `stop` command at target mode.   |
 
 - All the transition pattern is `Static state` -> `dynamic state` -> `static state`.
 - If commands failed on a volume, its state will be rollbacked to the previous static state.
@@ -88,8 +88,8 @@ so you need not call `walbc` command directly.
 
 | Action       | Description                                      |
 |:-------------|:-------------------------------------------------|
-| `WlogSend`   | Transferring wlogs to a proxy (master mode).     |
-| `WlogRemove` | Removing wlogs from the log device (slave mode). |
+| `WlogSend`   | Transferring wlogs to a proxy (target mode).     |
+| `WlogRemove` | Removing wlogs from the log device (standby mode). |
 
 - `WlogSend` and `WlogRemove` actions are invoked by
   walb device monitor implemented in the storage server
@@ -100,13 +100,13 @@ so you need not call `walbc` command directly.
 | `init-vol`          | `Clear` (trivial)                         |
 | `clear-vol`         | `SyncReady` (trivial)                     |
 | `reset-vol`         | `Stopped` (trivial)                       |
-| `start master`      | `Stopped` (trivial)                       |
-| `start slave`       | `SyncReady` (trivial)                     |
-| `stop`              | `Master`, `Slave`                         |
+| `start target`      | `Stopped` (trivial)                       |
+| `start standby`       | `SyncReady` (trivial)                     |
+| `stop`              | `Target`, `Standby`                         |
 | `full-bkp`          | `SyncReady` (trivial)                     |
 | `hash-bkp`          | `SyncReady` (trivial)                     |
-| `resize`            | `SyncReady`, `Stopped`, `Master`, `Slave` |
-| `snapshot`          | `Master`, `Stopped`                       |
+| `resize`            | `SyncReady`, `Stopped`, `Target`, `Standby` |
+| `snapshot`          | `Target`, `Stopped`                       |
 | `get is-overflow`   | not `Clear`                               |
 | `get uuid`          | not `Clear`                               |
 | `get *` (remaining) | Any                                       |
@@ -116,8 +116,8 @@ so you need not call `walbc` command directly.
 
 | Action       | Required states                  |
 |:-------------|:---------------------------------|
-| `WlogSend`   | `Master`, `FullSync`, `HashSync` |
-| `WlogRemove` | `Slave`                          |
+| `WlogSend`   | `Target`, `FullSync`, `HashSync` |
+| `WlogRemove` | `Standby`                          |
 
 See `src/storage_constants.hpp` for details.
 

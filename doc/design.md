@@ -130,12 +130,12 @@ A volume can be duplicated in `s0` and `s1`,
 where its replicas belong to software RAID1 block devices.
 This achieves availability of volumes even if walb-kernel-driver fails.
 It is also useful to replace storage hosts online.
-A replica is managed as master mode at one storage server and
-another replica as slave mode at another storage server.
-In master mode, generated wlogs will be transferred to archive servers
+A replica is managed as target mode at one storage server and
+another replica as standby mode at another storage server.
+In target mode, generated wlogs will be transferred to archive servers
 through proxy servers.
-In slave mode, generated wlogs will be just removed.
-We call volume replicas in master mode **backup targets**.
+In standby mode, generated wlogs will be just removed.
+We call volume replicas in target mode **backup targets**.
 Hash backup will be used to switch backup target from one replica to another.
 
 Archive data can be also duplicated in `a0` and `a1` using replicate command.

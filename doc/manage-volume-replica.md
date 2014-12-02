@@ -58,9 +58,9 @@ python> walbc.full_backup(s0, 'vol0')
 Confirm the volume state at each storage server:
 ```
 python> walbc.get_state(s0, 'vol0')
-'Master'
+'Target'
 python> walbc.get_state(s1, 'vol0')
-'Slave'
+'Standby'
 ```
 
 Now updated data of `wdev0` will be transferred to `a0` continuously,
@@ -68,20 +68,20 @@ while that of `wdev1` will be discarded.
 
 
 When you want to change the backup target from `s0` to `s1`,
-You can make the replica of `s0` slave and the one of `s1` master as follows:
+You can make the replica of `s0` standby and the one of `s1` target as follows:
 ```
-python> walbc.set_slave_storage(s0, 'vol0')
+python> walbc.set_standby_storage(s0, 'vol0')
 python> walbc.hash_backup(s1, 'vol0')
 ```
-Use `walbc.clear_vol()` instead of `walbc.set_slave_storage()`
+Use `walbc.clear_vol()` instead of `walbc.set_standby_storage()`
 when the corresponding walb device is no more available due to its failure or so.
 
 Confirm the volume state at each storage server:
 ```
 python> walbc.get_state(s0, 'vol0')
-'Slave'
+'Standby'
 python> walbc.get_state(s1, 'vol0')
-'Master'
+'Target'
 ```
 Now the backup target for volume 'vol0' is `s1`.
 

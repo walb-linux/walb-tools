@@ -52,17 +52,17 @@ public:
     void init() {
         util::makeDir(volDir.str(), "ProxyVolInfo::init:makdir failed", true);
         setSizeLb(0);
-        util::makeDir(getMasterDir().str(), "ProxyVolInfo::init:makedir failed", true);
-        util::makeDir(getSlaveDir().str(), "ProxyVolInfo::init:makedir failed", true);
+        util::makeDir(getTargetDir().str(), "ProxyVolInfo::init:makedir failed", true);
+        util::makeDir(getStandbyDir().str(), "ProxyVolInfo::init:makedir failed", true);
     }
     /**
-     * Load wdiff meta data for master and each archive directory.
+     * Load wdiff meta data for target and each archive directory.
      */
     void loadAllArchiveInfo() {
-        reloadMaster();
+        reloadTarget();
         for (const std::string &name : getArchiveNameList()) {
             archiveSet_.insert(name);
-            reloadSlave(name);
+            reloadStandby(name);
         }
     }
     bool notExistsArchiveInfo() const {
@@ -75,20 +75,20 @@ public:
         if (!getArchiveInfoPath(name).stat().isFile()) {
             return false;
         }
-        if (!getSlaveDir(name).stat().isDirectory()) {
+        if (!getStandbyDir(name).stat().isDirectory()) {
             return false;
         }
         return true;
     }
     void addArchiveInfo(const std::string& name, const HostInfoForBkp &hi, bool ensureNotExistance) {
         util::saveFile(volDir, name + ArchiveSuffix, hi);
-        util::makeDir(getSlaveDir(name).str(),
+        util::makeDir(getStandbyDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
         archiveSet_.insert(name);
     }
     void deleteArchiveInfo(const std::string &name) {
         diffMgrMap_.get(name).clear();
-        getSlaveDir(name).rmdirRecursive();
+        getStandbyDir(name).rmdirRecursive();
         getArchiveInfoPath(name).remove();
         archiveSet_.erase(name);
     }
@@ -135,49 +135,49 @@ public:
      */
     MetaDiffVec getDiffListToSend(const std::string &archiveName, uint64_t size) const {
         MetaDiffManager &mgr = diffMgrMap_.get(archiveName);
-        WalbDiffFiles wdiffs(mgr, getSlaveDir(archiveName).str());
+        WalbDiffFiles wdiffs(mgr, getStandbyDir(archiveName).str());
         return wdiffs.getDiffListToSend(size);
     }
-    MetaDiffVec getAllDiffsInMaster() const {
+    MetaDiffVec getAllDiffsInTarget() const {
         return diffMgr_.getAll();
     }
     /**
      * Call this after settle the corresponding wdiff file.
      */
-    void addDiffToMaster(const MetaDiff &diff) {
+    void addDiffToTarget(const MetaDiff &diff) {
         diffMgr_.add(diff);
     }
     /**
      * Try make a hard link of a diff file in all the archive directories.
      * If the diff file already exists in an archive directory, it will do nothing.
      */
-    void tryToMakeHardlinkInSlave(const MetaDiff &diff) {
+    void tryToMakeHardlinkInStandby(const MetaDiff &diff) {
         for (const std::string &archiveName : archiveSet_) {
             tryToMakeHardlinkForArchive(diff, archiveName);
         }
     }
     /**
-     * Delete a diff file from the master directory.
+     * Delete a diff file from the target directory.
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */
     void deleteDiffs(const MetaDiffVec &diffV, const std::string& archiveName = "") {
-		const bool isMaster = archiveName.empty();
-        MetaDiffManager& mgr = isMaster ? diffMgr_ : diffMgrMap_.get(archiveName);
-        WalbDiffFiles wdiffs(mgr, isMaster ? getMasterDir().str() : getSlaveDir(archiveName).str());
+		const bool isTarget = archiveName.empty();
+        MetaDiffManager& mgr = isTarget ? diffMgr_ : diffMgrMap_.get(archiveName);
+        WalbDiffFiles wdiffs(mgr, isTarget ? getTargetDir().str() : getStandbyDir(archiveName).str());
         wdiffs.removeDiffs(diffV);
     }
-    cybozu::FilePath getMasterDir() const {
-        return volDir + "master";
+    cybozu::FilePath getTargetDir() const {
+        return volDir + "target";
     }
-    cybozu::FilePath getSlaveDir() const {
-        return volDir + "slave";
+    cybozu::FilePath getStandbyDir() const {
+        return volDir + "standby";
     }
-    cybozu::FilePath getSlaveDir(const std::string &archiveName) const {
-        return getSlaveDir() + archiveName;
+    cybozu::FilePath getStandbyDir(const std::string &archiveName) const {
+        return getStandbyDir() + archiveName;
     }
     /**
      * Get total diff size.
-     * getTotalDiffFileSize() means master wdiff files.
+     * getTotalDiffFileSize() means target wdiff files.
      *
      * RETURN:
      *   [byte]
@@ -194,9 +194,9 @@ public:
     cybozu::FilePath getDiffPath(const MetaDiff &diff, const std::string &archiveName = "") const {
         const std::string fname = createDiffFileName(diff);
         if (archiveName.empty()) {
-            return getMasterDir() + fname;
+            return getTargetDir() + fname;
         } else {
-            return getSlaveDir(archiveName) + fname;
+            return getStandbyDir(archiveName) + fname;
         }
     }
 private:
@@ -217,27 +217,27 @@ private:
     /**
      * Reload metada for the mater.
      */
-    void reloadMaster() {
-        WalbDiffFiles wdiffs(diffMgr_, getMasterDir().str());
+    void reloadTarget() {
+        WalbDiffFiles wdiffs(diffMgr_, getTargetDir().str());
         wdiffs.reload();
     }
     /**
      * Reload meta data for an archive.
      */
-    void reloadSlave(const std::string &archiveName) {
-        WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getSlaveDir(archiveName).str());
+    void reloadStandby(const std::string &archiveName) {
+        WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getStandbyDir(archiveName).str());
         wdiffs.reload();
     }
     void tryToMakeHardlinkForArchive(const MetaDiff &diff, const std::string &archiveName) {
         std::string fname = createDiffFileName(diff);
-        cybozu::FilePath oldPath = getMasterDir() + fname;
-        cybozu::FilePath newPath = getSlaveDir(archiveName) + fname;
+        cybozu::FilePath oldPath = getTargetDir() + fname;
+        cybozu::FilePath newPath = getStandbyDir(archiveName) + fname;
         if (!oldPath.stat().exists()) {
             // Do nothing.
             return;
         }
         if (!oldPath.link(newPath)) {
-            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInSlave")
+            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInStandby")
                 << "make hardlink failed" << oldPath.str() << newPath.str();
         }
         diffMgrMap_.get(archiveName).add(diff);

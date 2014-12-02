@@ -17,10 +17,10 @@ Assume the following things:
 The procedure:
 
 - Prepare `s2` and make walb devices for replica volumes if necessary. (ex. add to a md device.)
-- Make all the target volumes slave and set new server layout.
+- Make all the target volumes standby and set new server layout.
 ```
 python> for vol in targetVolumes:
-...         walbc.set_slave_storage(s0, vol)
+...         walbc.set_standby_storage(s0, vol)
 python> walbc.set_server_layout(newServerLayout)
 ```
 - Initialize volumes at `s2`:
