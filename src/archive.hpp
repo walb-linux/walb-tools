@@ -434,18 +434,14 @@ inline StrVec listRestored(const std::string &volId)
     return ret;
 }
 
-inline StrVec listRestorable(const std::string &volId, bool isAll = false, bool isVerbose = false)
+inline StrVec listRestorable(const std::string &volId, bool isAll = false)
 {
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     StrVec ret;
     const std::vector<MetaState> stV = volInfo.getRestorableSnapshots(isAll);
     for (const MetaState &st : stV) {
-        ret.push_back(cybozu::itoa(st.snapB.gidB));
-        if (isVerbose) {
-            ret.back() += " ";
-            ret.back() += util::timeToPrintable(st.timestamp);
-        }
+        ret.push_back(cybozu::itoa(st.snapB.gidB) + ' ' + util::timeToPrintable(st.timestamp));
     }
     return ret;
 }
@@ -1100,12 +1096,9 @@ inline void getRestorable(protocol::GetCommandParams &p)
     std::string volId, opt[2];
     cybozu::util::parseStrVec(p.params, 1, 1, {&volId, &opt[0], &opt[1]});
     bool isAll = false;
-    bool isVerbose = false;
     for (const std::string &o : opt) {
         if (o.empty()) break;
-        if (o == "vervose") {
-            isVerbose = true;
-        } else if (o == "all") {
+        if (o == "all") {
             isAll = true;
         } else {
             throw cybozu::Exception(FUNC) << "bad opt" << o;
@@ -1118,7 +1111,7 @@ inline void getRestorable(protocol::GetCommandParams &p)
     const std::string st = volSt.sm.get();
     StrVec strV;
     if (isStateIn(st, aActive)) {
-        strV = archive_local::listRestorable(volId, isAll, isVerbose);
+        strV = archive_local::listRestorable(volId, isAll);
     }
     ul.unlock();
     protocol::sendValueAndFin(p, strV);

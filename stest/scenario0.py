@@ -440,7 +440,7 @@ def test_n3():
     print 'test_n3:succeeded'
 
 
-def printL(aL, bL):
+def printL2(aL, bL):
     print '[',
     for a in aL:
         print a.name,
@@ -451,7 +451,7 @@ def printL(aL, bL):
 
 
 def test_stop(stopL, startL):
-    printL(stopL, startL)
+    printL2(stopL, startL)
     with RandomWriter(wdev0.path):
         for s in stopL:
             walbc.stop(s, VOL)
@@ -486,7 +486,6 @@ def test_n4_detail(numPatterns=0):
         targetL = combiL
     for stopL, startL in targetL:
         test_stop(stopL, startL)
-#        printL(stopL, startL)
     print 'test_n4:succeeded'
 
 

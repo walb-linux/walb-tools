@@ -486,6 +486,14 @@ def compress_str_to_kind(s):
     return m[s]
 
 
+def str_to_datetime(s):
+    return datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S')
+
+
+def datetime_to_str(ts):
+    return ts.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class Snapshot:
     '''
     Snapshot class
@@ -555,7 +563,7 @@ class Diff:
             c = 'C'
         else:
             c = '-'
-        ts_str = self.ts.strftime('%Y-%m-%dT%H:%M:%S')
+        ts_str = datetime_to_str(self.ts)
         return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
 
 
@@ -574,9 +582,27 @@ def create_diff_from_str(s):
     d.E = create_snapshot_from_str(m.group(2))
     d.isMergeable = m.group(3) == 'M'
     d.isCompDiff = m.group(4) == 'C'
-    d.ts.strptime(m.group(5), '%Y-%m-%dT%H:%M:%S')
+    d.ts = str_to_datetime(m.group(5))
     d.dataSize = int(m.group(6))
     return d
+
+
+class GidInfo:
+    '''
+    gid information
+    '''
+    def __init__(self, s):
+        '''
+        s :: str such as '<gid> <datetime>'
+        '''
+        verify_type(s, str)
+        p = s.split()
+        if len(p) != 2:
+            raise Exception('GidInfo:bad format', s)
+        self.gid = int(p[0])
+        self.ts = str_to_datetime(p[1])
+    def __str__(self):
+        return str(self.gid) + " " + datetime_to_str(self.ts)
 
 
 class CompressOpt:
@@ -1677,6 +1703,24 @@ class Controller:
                 raise Exception('get_restorable:bad opt', ax.name, vol, opt)
         return self._get_gid_list(ax, vol, 'restorable', optL)
 
+    def print_restorable(self, ax, vol, opt=''):
+        '''
+        Print restorable gid list.
+        ax :: Server - archive server.
+        vol :: str   - volume name.
+        opt :: str   - you can specify 'all'.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(opt, str)
+        optL = []
+        if opt:
+            if opt == 'all':
+                optL.append(opt)
+            else:
+                raise Exception('get_restorable:bad opt', ax.name, vol, opt)
+        printL(self._get_gidinfo_list(ax, vol, 'restorable', optL))
+
     def get_restored(self, ax, vol):
         '''
         Get restored gid list.
@@ -2208,6 +2252,23 @@ class Controller:
             raise Exception('wait_for_state_change:bad goal',
                             s.name, vol, tmpStateL, goalStateL, st)
 
+    def _get_gidinfo_list(self, ax, vol, cmd, optL=[]):
+        '''
+        Get gid list
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        cmd :: str      - 'restorable' or 'restored'.
+        optL :: [str]   - options.
+        return :: [GidInfo] - gid info list.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        if not cmd in ['restorable', 'restored']:
+            raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
+        verify_type(optL, list, str)
+        ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
+        return map(GidInfo, ret.split('\n'))
+
     def _get_gid_list(self, ax, vol, cmd, optL=[]):
         '''
         Get gid list
@@ -2217,13 +2278,8 @@ class Controller:
         optL :: [str]   - options.
         return :: [int] - gid list.
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        if not cmd in ['restorable', 'restored']:
-            raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
-        verify_type(optL, list, str)
-        ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
-        return map(int, ret.split())
+        ret = self._get_gidinfo_list(ax, vol, cmd, optL)
+        return map(lambda x : x.gid, ret)
 
     def _wait_for_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
         '''
