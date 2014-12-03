@@ -334,6 +334,10 @@ public:
         }
         return rmdir();
     }
+    friend inline std::ostream &operator<<(std::ostream &os, const FilePath &path) {
+        os << path.str();
+        return os;
+    }
 private:
     void swap(FilePath &rhs) noexcept {
         std::swap(path_, rhs.path_);
