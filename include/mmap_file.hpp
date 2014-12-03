@@ -20,32 +20,31 @@ namespace util {
 
 /**
  * Mmaped file wrapper.
- * You can inherit this class and add your favorite header data manaement.
  */
-class MmappedFile
+class MmappedFile final
 {
 private:
-    const unsigned int pageSize_;
     void *mapped_;
     uint64_t mappedSize_;
     uint64_t size_;
     File file_;
 
 public:
+    MmappedFile()
+        : mapped_(nullptr)
+        , mappedSize_(0)
+        , size_(0)
+        , file_() {
+    }
     /**
      * @size file size in bytes. 0 means not changing the file size.
      * @filePath File path.
      * @flags open flags.
      */
     MmappedFile(uint64_t size, const std::string& filePath, int flags)
-        : pageSize_(getpagesize())
-        , mapped_(nullptr)
-        , mappedSize_(0)
-        , size_(size)
-        , file_(filePath, flags) {
-        init();
+        : MmappedFile() {
+        reset(File(filePath, flags), size);
     }
-
     /**
      * @size file size in bytes.
      * @filePath Bitmap file path.
@@ -53,32 +52,35 @@ public:
      * @mode open mode.
      */
     MmappedFile(uint64_t size, const std::string& filePath, int flags, int mode)
-        : pageSize_(getpagesize())
-        , mapped_(nullptr)
-        , mappedSize_(0)
-        , size_(size)
-        , file_(filePath, flags, mode) {
+        : MmappedFile() {
+        reset(File(filePath, flags, mode), size);
+    }
+    MmappedFile(const std::string& filePath, int flags)
+        : MmappedFile() {
+        reset(File(filePath, flags));
+    }
+    ~MmappedFile() noexcept try {
+        reset();
+    } catch (...) {
+    }
+    void reset(File &&file, size_t size = 0) {
+        munmap();
+        file_.close();
+        file_ = std::move(file);
+        size_ = size;
         init();
     }
-
-    MmappedFile(const std::string& filePath, int flags)
-        : MmappedFile(0, filePath, flags) {
+    void reset() {
+        munmap();
+        file_.close();
+        size_ = 0;
     }
-
-    virtual ~MmappedFile() noexcept {
-        try {
-            munmap();
-        } catch (...) {
-        }
-    }
-
     /**
      * Current size. This is not file size.
      */
     uint64_t size() const { return size_; }
-
     /**
-     * Pointer to access the mmapped file contents.
+     * Pointer to access the mmapped file.
      */
     template <typename T> const T* ptr() const {
         return reinterpret_cast<const T*>(mapped_);
@@ -86,7 +88,17 @@ public:
     template <typename T> T* ptr() {
         return reinterpret_cast<T*>(mapped_);
     }
-
+    /**
+     * Char reference to access the mmapped file.
+     */
+    char &operator[](size_t i) {
+        assert(mapped_);
+        return *((char *)mapped_ + i);
+    }
+    const char &operator[](size_t i) const {
+        assert(mapped_);
+        return *((const char *)mapped_ + i);
+    }
     /**
      * Sync data down to the file.
      */
@@ -96,7 +108,6 @@ public:
         }
         file_.fdatasync();
     }
-
     /**
      * Resize the file and mapping.
      */
@@ -105,7 +116,6 @@ public:
         uint64_t fileSize = adjustFileSize();
         mremap(fileSize);
     }
-
 private:
     void init() {
         uint64_t fileSize = 0;
@@ -117,15 +127,12 @@ private:
         }
         mmap(fileSize);
     }
-
     uint64_t calcFileSize() const {
-        return ((size_ - 1) / pageSize_ + 1) * pageSize_;
+        return ((size_ - 1) / pageSize() + 1) * pageSize();
     }
-
     uint64_t lseek(off_t offset, int whence) {
         return file_.lseek(offset, whence);
     }
-
     void appendZeroData(uint64_t len) {
         lseek(0, SEEK_END);
         char buf[4096];
@@ -136,7 +143,6 @@ private:
             len -= l;
         }
     }
-
     uint64_t adjustFileSize() {
         uint64_t fileSize = calcFileSize();
         uint64_t currFileSize = lseek(0, SEEK_END);
@@ -148,8 +154,8 @@ private:
         }
         return fileSize;
     }
-
     void mmap(uint64_t fileSize) {
+        if (mapped_) return;
         lseek(0, SEEK_SET);
         void *p = ::mmap(NULL, fileSize, PROT_READ | PROT_WRITE, MAP_SHARED, file_.fd(), 0);
         if (p == MAP_FAILED) {
@@ -158,22 +164,26 @@ private:
         mapped_ = p;
         mappedSize_ = fileSize;
     }
-
     void munmap() {
+        if (!mapped_) return;
         if (::munmap(mapped_, mappedSize_)) {
             throw std::runtime_error("munmap failed.");
         }
         mapped_ = nullptr;
         mappedSize_ = 0;
     }
-
     void mremap(uint64_t fileSize) {
+        if (!mapped_) return;
         void *p = ::mremap(mapped_, mappedSize_, fileSize, MREMAP_MAYMOVE);
         if (p == MAP_FAILED) {
             throw std::runtime_error("mremap failed.");
         }
         mapped_ = p;
         mappedSize_ = fileSize;
+    }
+    static size_t pageSize() {
+        static const size_t s = ::getpagesize();
+        return s;
     }
 };
 
