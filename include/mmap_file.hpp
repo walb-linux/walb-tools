@@ -59,9 +59,18 @@ public:
         : MmappedFile() {
         reset(File(filePath, flags));
     }
+    MmappedFile(MmappedFile &&rhs)
+        : MmappedFile() {
+        swap(std::move(rhs));
+    }
     ~MmappedFile() noexcept try {
         reset();
     } catch (...) {
+    }
+    MmappedFile& operator=(MmappedFile &&rhs) {
+        reset();
+        swap(std::move(rhs));
+        return *this;
     }
     void reset(File &&file, size_t size = 0) {
         munmap();
@@ -74,6 +83,12 @@ public:
         munmap();
         file_.close();
         size_ = 0;
+    }
+    void swap(MmappedFile &&rhs) {
+        std::swap(mapped_, rhs.mapped_);
+        std::swap(mappedSize_, rhs.mappedSize_);
+        std::swap(size_, rhs.size_);
+        std::swap(file_, rhs.file_);
     }
     /**
      * Current size. This is not file size.
