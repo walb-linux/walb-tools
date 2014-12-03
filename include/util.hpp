@@ -45,6 +45,11 @@
     ClassName(ClassName &&rhs) = delete;            \
     ClassName &operator=(ClassName &&rhs) = delete
 
+template <typename T>
+inline void unusedVar(T &)
+{
+}
+
 namespace cybozu {
 namespace util {
 
