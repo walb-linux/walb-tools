@@ -537,22 +537,22 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
-        // QQQ
-        if (st == sTarget) {
-            StateMachineTransaction tran(sm, sTarget, stStopTarget, FUNC);
+        {
+            static const struct State {
+                const char *from;
+                const char *pass;
+                const char *to;
+            } stateTbl[] = {
+                { sTarget, stStopTarget, sStopped },
+                { sStandby, stStopStandby, sSyncReady },
+            };
+            const State& s = stateTbl[st == sTarget ? 0 : 1];
+            StateMachineTransaction tran(sm, s.from, s.pass, FUNC);
             ul.unlock();
-            if (fst != sTarget) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            if (fst != s.from) throw cybozu::Exception(FUNC) << "bad state" << fst;
             storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
-            volInfo.setState(sStopped);
-            tran.commit(sStopped);
-        } else {
-            assert(st == sStandby);
-            StateMachineTransaction tran(sm, sStandby, stStopStandby, FUNC);
-            ul.unlock();
-            if (fst != sStandby) throw cybozu::Exception(FUNC) << "bad state" << fst;
-            storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
-            volInfo.setState(sSyncReady);
-            tran.commit(sSyncReady);
+            volInfo.setState(s.to);
+            tran.commit(s.to);
         }
         logger.info() << "stop succeeded" << volId;
     } catch (std::exception &e) {
