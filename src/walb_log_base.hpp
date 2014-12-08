@@ -616,14 +616,14 @@ public:
             writer.write(get(i), pbs_);
         }
     }
-    bool calcIsAllZero(size_t ioSizeLb) const {
+    bool isAllZero(size_t ioSizeLb) const {
         checkPbs();
         checkSizeLb(ioSizeLb);
         size_t remaining = ioSizeLb * LOGICAL_BLOCK_SIZE;
         size_t i = 0;
         while (0 < remaining) {
             const size_t s = std::min<size_t>(pbs_, remaining);
-            if (!cybozu::util::calcIsAllZero(get(i), s)) return false;
+            if (!cybozu::util::isAllZero(get(i), s)) return false;
             remaining -= s;
             i++;
         }

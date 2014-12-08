@@ -51,7 +51,7 @@ inline bool convertLogToDiff(
     }
 
     /* AllZero */
-    if (blockS.calcIsAllZero(rec.ioSizeLb())) {
+    if (blockS.isAllZero(rec.ioSizeLb())) {
         mrec.setAllZero();
         mrec.data_size = 0;
         diffIo.set(mrec);

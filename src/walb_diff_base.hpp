@@ -221,11 +221,11 @@ struct DiffIo
     /**
      * Calculate whether all-zero or not.
      */
-    bool calcIsAllZero() const {
+    bool isAllZero() const {
         const size_t size = getSize();
         if (isCompressed() || size == 0) { return false; }
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::calcIsAllZero(get(), size);
+        return cybozu::util::isAllZero(get(), size);
     }
 
     void print(::FILE *fp = ::stdout) const {
@@ -319,7 +319,7 @@ inline uint32_t calcDiffIoChecksum(const Buffer &io)
 inline bool calcDiffIoIsAllZero(const Buffer &io)
 {
     if (io.size() == 0) return false;
-    return cybozu::util::calcIsAllZero(io.data(), io.size());
+    return cybozu::util::isAllZero(io.data(), io.size());
 }
 
 inline void compressDiffIo(

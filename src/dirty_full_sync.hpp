@@ -32,7 +32,7 @@ inline bool dirtyFullSyncClient(
         const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
         reader.read(&buf[0], size);
-        if (cybozu::util::calcIsAllZero(buf.data(), buf.size())) {
+        if (cybozu::util::isAllZero(buf.data(), buf.size())) {
             pkt.write(0);
         } else {
             const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);

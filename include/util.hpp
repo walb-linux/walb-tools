@@ -397,7 +397,7 @@ void printList(const C &container)
     std::cout << "]" << std::endl;
 }
 
-inline bool calcIsAllZero(const void *data, size_t size)
+inline bool isAllZero(const void *data, size_t size)
 {
     const char *p = (const char *)data;
     while (size > 0) {

@@ -178,15 +178,15 @@ CYBOZU_TEST_AUTO(formatString)
     }
 }
 
-CYBOZU_TEST_AUTO(calcIsAllZero)
+CYBOZU_TEST_AUTO(isAllZero)
 {
     const size_t s = 1024;
     std::vector<char> v(s);
     for (size_t i = 0; i < 32; i++) {
-        CYBOZU_TEST_ASSERT(cybozu::util::calcIsAllZero(&v[i], s - i));
+        CYBOZU_TEST_ASSERT(cybozu::util::isAllZero(&v[i], s - i));
     }
     v[s - 1] = 1;
     for (size_t i = 0; i < 32; i++) {
-        CYBOZU_TEST_ASSERT(!cybozu::util::calcIsAllZero(&v[i], s - i));
+        CYBOZU_TEST_ASSERT(!cybozu::util::isAllZero(&v[i], s - i));
     }
 }
