@@ -431,7 +431,7 @@ def test_n3():
         hash-backup -> sha1 -> restore -> sha1
     """
     print "++++++++++++++++++++++++++++++++++++++ test_n3:hash-backup", g_count
-    walbc.set_standby_storage(s0, VOL)
+    walbc.go_standby(s0, VOL)
     write_random(wdev0.path, 1)
     md0 = get_sha1(wdev0.path)
     gid = walbc.hash_backup(s0, VOL, TIMEOUT)
@@ -656,7 +656,7 @@ def test_n11(doZeroClear):
     if doZeroClear:
         gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
     else:
-        walbc.set_standby_storage(s0, VOL)
+        walbc.go_standby(s0, VOL)
         gid = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
@@ -685,7 +685,7 @@ def test_n12():
     with RandomWriter(wdev0.path):
         with RandomWriter(wdev1.path):
             time.sleep(0.3)
-            walbc.set_standby_storage(s0, VOL)
+            walbc.go_standby(s0, VOL)
             time.sleep(0.3)
     gid = walbc.hash_backup(s1, VOL, TIMEOUT)
     md0 = get_sha1(wdev1.path)
@@ -698,7 +698,7 @@ def test_n12():
     if st1 != 'Target':
         raise Exception('test_n12:s1:1:bad state', st1)
 
-    walbc.set_standby_storage(s1, VOL)
+    walbc.go_standby(s1, VOL)
     gid = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)
     md1 = get_sha1_of_restorable(a0, VOL, gid)
@@ -749,7 +749,7 @@ def test_m2():
         walbc.hash_backup(s0, VOL, 10)
     except:
         # expect to catch an exception.
-        walbc.set_standby_storage(s0, VOL)
+        walbc.go_standby(s0, VOL)
         walbc.full_backup(s0, VOL, TIMEOUT)
         print 'test_m2:succeeded'
         return
@@ -1347,7 +1347,7 @@ def test_r1():
     walbc.init_storage(s2, VOL, wdev2.path)
     resize_storage_if_necessary(s2, VOL, wdev2, wdev0.get_size_mb())
 
-    walbc.set_standby_storage(s0, VOL)
+    walbc.go_standby(s0, VOL)
     write_random(wdev2.path, 1)
     gid = walbc.hash_backup(s2, VOL, TIMEOUT)
     md0 = get_sha1(wdev2.path)
@@ -1357,7 +1357,7 @@ def test_r1():
 
     # turn back to the beginning state.
     walbc.init_storage(s0, VOL, wdev0.path)
-    walbc.set_standby_storage(s2, VOL)
+    walbc.go_standby(s2, VOL)
     write_random(wdev0.path, 1)
     gid = walbc.hash_backup(s0, VOL, TIMEOUT)
     md0 = get_sha1(wdev0.path)

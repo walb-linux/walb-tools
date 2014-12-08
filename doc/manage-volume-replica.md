@@ -70,10 +70,10 @@ while that of `wdev1` will be discarded.
 When you want to change the backup target from `s0` to `s1`,
 You can make the replica of `s0` standby and the one of `s1` target as follows:
 ```
-python> walbc.set_standby_storage(s0, 'vol0')
+python> walbc.go_standby(s0, 'vol0')
 python> walbc.hash_backup(s1, 'vol0')
 ```
-Use `walbc.clear_vol()` instead of `walbc.set_standby_storage()`
+Use `walbc.clear_vol()` instead of `walbc.go_standby()`
 when the corresponding walb device is no more available due to its failure or so.
 
 Confirm the volume state at each storage server:

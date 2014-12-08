@@ -20,7 +20,7 @@ The procedure:
 - Make all the target volumes standby and set new server layout.
 ```
 python> for vol in targetVolumes:
-...         walbc.set_standby_storage(s0, vol)
+...         walbc.go_standby(s0, vol)
 python> walbc.set_server_layout(newServerLayout)
 ```
 - Initialize volumes at `s2`:

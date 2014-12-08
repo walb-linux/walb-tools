@@ -1214,7 +1214,7 @@ class Controller:
         self.run_ctl(s, ["reset-vol", vol], timeoutS=timeoutS)  # this is synchronous command.
         self.verify_state(s, vol, state)
 
-    def set_standby_storage(self, sx, vol):
+    def go_standby(self, sx, vol):
         '''
         Set a volume standby storage in sx.
 
@@ -1232,7 +1232,7 @@ class Controller:
         if state == sTarget:
             self.stop(sx, vol)
         else:
-            raise Exception('set_standby_storage:bad state', sx.name, vol, state)
+            raise Exception('go_standby:bad state', sx.name, vol, state)
         self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
         self.reset(sx, vol)
         self.start(sx, vol)
