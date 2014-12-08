@@ -1065,6 +1065,8 @@ def test_e12():
     rL = [a0]
     init_repeater_test(sLayoutRepeater1, rL, rateMbps=rateMbps)
     walbc.stop(s0, VOL)
+    #zero_clear(wdev0.path, 0, wdev0.get_size_lb())
+    run_local_command(['/bin/dd', 'if=/dev/urandom', 'of=' + wdev0.path, 'bs=512', 'count=' + str(wdev0.get_size_lb()), 'conv=fdatasync'])
     walbc.reset(s0, VOL)
 
     walbc.stop(a0, VOL)
