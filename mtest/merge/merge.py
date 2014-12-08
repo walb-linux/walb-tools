@@ -10,10 +10,10 @@ def getTwo(ls):
     r2 = random.randint(r1 + 1, n - 1)
     return (ls[r1], ls[r2])
 
-minls = walbc.get_restorable(a0, VOL)
+minls = walbc.get_restorable_gid(a0, VOL)
 gid = minls[-1]
 while True:
-    ls = walbc.get_restorable(a0, VOL, 'all')
+    ls = walbc.get_restorable_gid(a0, VOL, 'all')
 #   if len(ls) < len(minls) * 2:
     if len(ls) < 100:
         break

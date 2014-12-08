@@ -593,20 +593,16 @@ class GidInfo:
     '''
     def __init__(self, s):
         '''
-        s :: str such as '<gid>[ <datetime>]'
+        s :: str such as '<gid> <datetime>'
         '''
         verify_type(s, str)
         p = s.split()
-        if len(p) > 2:
+        if len(p) != 2:
             raise Exception('GidInfo:bad format', s)
         self.gid = int(p[0])
-        if len(p) == 2:
-            self.ts = str_to_datetime(p[1])
+        self.ts = str_to_datetime(p[1])
     def __str__(self):
-        if self.ts:
-            return str(self.gid) + " " + datetime_to_str(self.ts)
-        else:
-            return str(self.gid)
+        return str(self.gid) + " " + datetime_to_str(self.ts)
 
 
 class CompressOpt:
@@ -1714,17 +1710,31 @@ class Controller:
         ax :: Server - archive server.
         vol :: str   - volume name.
         opt :: str   - you can specify 'all'.
+        return :: [GidInfo] - gid info list.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_type(opt, str)
-        optL = []
+        args = ['get', 'restorable', vol]
         if opt:
             if opt == 'all':
-                optL.append(opt)
+                args.append(opt)
             else:
                 raise Exception('get_restorable:bad opt', ax.name, vol, opt)
-        return self._get_gid_list(ax, vol, 'restorable', optL)
+        ret = self.run_ctl(ax, args)
+        if not ret:
+            return []
+        return map(GidInfo, ret.split('\n'))
+
+    def get_restorable_gid(self, ax, vol, opt=''):
+        '''
+        Get restorable gid list.
+        ax :: Server - archive server.
+        vol :: str   - volume name.
+        opt :: str   - you can specify 'all'.
+        return :: [int] - gid list.
+        '''
+        return map(lambda x : x.gid, self.get_restorable(ax, vol, opt))
 
     def print_restorable(self, ax, vol, opt=''):
         '''
@@ -1733,24 +1743,21 @@ class Controller:
         vol :: str   - volume name.
         opt :: str   - you can specify 'all'.
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_type(opt, str)
-        optL = []
-        if opt:
-            if opt == 'all':
-                optL.append(opt)
-            else:
-                raise Exception('get_restorable:bad opt', ax.name, vol, opt)
-        printL(self._get_gidinfo_list(ax, vol, 'restorable', optL))
+        printL(self.get_restorable(ax, vol, opt))
 
     def get_restored(self, ax, vol):
         '''
         Get restored gid list.
         ax :: Server - archive server.
         vol :: str   - volume name.
+        return :: [int] - gid list.
         '''
-        return self._get_gid_list(ax, vol, 'restored')
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        ret = self.run_ctl(ax, ['get', 'restored', vol])
+        if not ret:
+            return []
+        return map(int, ret.split('\n'))
 
     def wait_for_restorable(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
@@ -1819,7 +1826,7 @@ class Controller:
         if st == aClear:
             self._init(aDst, vol)
 
-        gid = self.get_restorable(aSrc, vol)[-1]
+        gid = self.get_restorable_gid(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port()]
         if syncOpt:
             args += syncOpt.getReplicateArgs()
@@ -1837,7 +1844,7 @@ class Controller:
         verify_server_kind(ax, [K_ARCHIVE])
         verify_u64(gid)
         self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.get_restorable(ax, vol, 'all')
+        gidL = self.get_restorable_gid(ax, vol, 'all')
         if gidL and gid <= gidL[-1]:
             return
         raise Exception("wait_for_replicated:replicate failed",
@@ -1933,7 +1940,7 @@ class Controller:
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self.get_restorable(a0, vol)
+            gids = self.get_restorable_gid(a0, vol)
             if gids:
                 return gids[-1]
             time.sleep(0.3)
@@ -1966,7 +1973,7 @@ class Controller:
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol, syncOpt)
-        prev_gids = self.get_restorable(a0, vol)
+        prev_gids = self.get_restorable_gid(a0, vol)
         if prev_gids:
             max_gid = prev_gids[-1]
         else:
@@ -1985,7 +1992,7 @@ class Controller:
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self.get_restorable(a0, vol)
+            gids = self.get_restorable_gid(a0, vol)
             if gids and gids[-1] > max_gid:
                 return gids[-1]
             time.sleep(0.3)
@@ -2040,7 +2047,7 @@ class Controller:
         retryTimes = 3
         for i in xrange(retryTimes):
             try:
-                if i != 0 and gid not in self._get_gid_list(ax, vol, 'restored'):
+                if i != 0 and gid not in self.get_restored(ax, vol):
                     break
                 self.run_ctl(ax, ['del-restored', vol, str(gid)])
                 break
@@ -2109,7 +2116,7 @@ class Controller:
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_u64(gid)
-        gidL = self.get_restorable(ax, vol, 'all')
+        gidL = self.get_restorable_gid(ax, vol, 'all')
         if gid not in gidL:
             raise Exception('apply: gid is not restorable', ax.name, vol, gid)
         self.run_ctl(ax, ["apply", vol, str(gid)])
@@ -2124,7 +2131,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        gidL = self.get_restorable(ax, vol)
+        gidL = self.get_restorable_gid(ax, vol)
         if not gidL:
             raise Exception('_apply_all: there are no diffs to apply', ax.name, vol, timeoutS)
         gid = gidL[-1]
@@ -2142,7 +2149,7 @@ class Controller:
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge')
-        gidL = self.get_restorable(ax, vol, 'all')
+        gidL = self.get_restorable_gid(ax, vol, 'all')
         if gidB not in gidL or gidE not in gidL:
             raise Exception("merge: specify exact ranges", ax.name, vol, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
@@ -2174,7 +2181,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        xL = self.get_restorable(ax, vol)
+        xL = self.get_restorable_gid(ax, vol)
         if xL:
             return xL[-1]
         else:
@@ -2277,72 +2284,29 @@ class Controller:
             raise Exception('wait_for_state_change:bad goal',
                             s.name, vol, tmpStateL, goalStateL, st)
 
-    def _get_gidinfo_list(self, ax, vol, cmd, optL=[]):
-        '''
-        Get gid list
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        optL :: [str]   - options.
-        return :: [GidInfo] - gid info list.
-        '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        if not cmd in ['restorable', 'restored']:
-            raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
-        verify_type(optL, list, str)
-        ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
-        if not ret:
-            return []
-        return map(GidInfo, ret.split('\n'))
-
-    def _get_gid_list(self, ax, vol, cmd, optL=[]):
-        '''
-        Get gid list
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        optL :: [str]   - options.
-        return :: [int] - gid list.
-        '''
-        ret = self._get_gidinfo_list(ax, vol, cmd, optL)
-        return map(lambda x : x.gid, ret)
+    def _make_get_int_list(self, cmd, ax, vol):
+        if cmd == 'restorable':
+            return lambda : self.get_restorable_gid(ax, vol)
+        elif cmd == 'restored':
+            return lambda : self.get_restored(ax, vol)
+        else:
+            raise Exception('bad cmd', cmd, ax.name, vol)
 
     def _wait_for_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for an gid is available.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid)
-        verify_type(timeoutS, int)
+        f = self._make_get_int_list(cmd, ax, vol)
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self._get_gid_list(ax, vol, cmd)
+            gids = f()
             if gid in gids:
                 return
             time.sleep(0.3)
         raise Exception('wait_for_gid: timeout', ax.name, vol, gid, cmd, gids)
 
     def _wait_for_not_gid(self, ax, vol, gid, cmd, timeoutS=TIMEOUT_SEC):
-        '''
-        Wait for a gid is not available.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        cmd :: str      - 'restorable' or 'restored'.
-        timeoutS :: int - timeout [sec].
-        '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid)
-        verify_type(timeoutS, int)
+        f = self._make_get_int_list(cmd, ax, vol)
         t0 = time.time()
         while time.time() < t0 + timeoutS:
-            gids = self._get_gid_list(ax, vol, cmd)
+            gids = f()
             if gid not in gids:
                 return
             time.sleep(0.3)
@@ -2368,7 +2332,7 @@ class Controller:
         '''
         verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaApply, timeoutS)
-        gidL = self.get_restorable(ax, vol)
+        gidL = self.get_restorable_gid(ax, vol)
         if gidL and gid <= gidL[0]:
             return
         raise Exception('wait_for_applied:failed', ax.name, vol, gid, gidL)
@@ -2387,7 +2351,7 @@ class Controller:
         verify_gid_range(gidB, gidE, 'wait_for_merged')
         verify_type(timeoutS, int)
         self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
-        gidL = self.get_restorable(ax, vol, 'all')
+        gidL = self.get_restorable_gid(ax, vol, 'all')
         pos = gidL.index(gidB)
         if gidL[pos + 1] == gidE:
             return

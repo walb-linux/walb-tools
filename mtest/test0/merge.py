@@ -1,6 +1,6 @@
 
 execfile('walb-config.py')
-gidL = walbc.get_restorable(a0, VOL, 'all')
+gidL = walbc.get_restorable_gid(a0, VOL, 'all')
 print len(gidL)
 
 ret = []

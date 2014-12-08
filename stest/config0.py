@@ -5,7 +5,7 @@ sys.path.insert(0, './python/walb')
 import os
 from walb import *
 
-isDebug = True
+isDebug = False
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'

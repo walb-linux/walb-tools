@@ -68,10 +68,10 @@ wlogs/wdiffs data before arriving at archive servers.
 
 You can get restorable clean snapshots (as gid list) as follows:
 ```
-python> gidL = walbc.get_restorable(a0, VOL)
+python> gidL = walbc.get_restorable_gid(a0, VOL)
 ```
 
-**TODO**: add option to get_restorable() that shows timestamp of snapshots.
+Use get_restorable() to get gid and timestamp of snapshots.
 
 You can restore a clean snapshot as follows:
 ```

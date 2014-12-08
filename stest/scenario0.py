@@ -370,8 +370,8 @@ def verify_equal_restorable_list(msg, ax, ay, vol):
     verify_type(ay, Server)
     verify_type(vol, str)
 
-    xL = walbc.get_restorable(ax, vol)
-    yL = walbc.get_restorable(ay, vol)
+    xL = walbc.get_restorable_gid(ax, vol)
+    yL = walbc.get_restorable_gid(ay, vol)
     if isDebug:
         print 'list0', xL
         print 'list1', yL
@@ -421,7 +421,7 @@ def test_n2():
     md0 = get_sha1(wdev0.path)
     gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
     print "gid=", gid
-    print walbc.get_restorable(a0, VOL)
+    walbc.print_restorable(a0, VOL)
     restore_and_verify_sha1('test_n2', md0, a0, VOL, gid)
     print 'test_n2:succeeded'
 
@@ -528,7 +528,7 @@ def test_n6():
         walbc.start(p0, VOL)
         time.sleep(1)
         gidE = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
-        gidL = walbc.get_restorable(a0, VOL, 'all')
+        gidL = walbc.get_restorable_gid(a0, VOL, 'all')
         posB = gidL.index(gidB)
         posE = gidL.index(gidE)
         print "gidB", gidB, "gidE", gidE, "gidL", gidL
@@ -539,7 +539,7 @@ def test_n6():
 
     md0 = get_sha1_of_restorable(a0, VOL, gidE)
     walbc.merge(a0, VOL, gidB, gidE, TIMEOUT)
-    print "merged gidL", walbc.get_restorable(a0, VOL, 'all')
+    print "merged gidL", walbc.get_restorable_gid(a0, VOL, 'all')
     restore_and_verify_sha1('test_n6', md0, a0, VOL, gidE)
     print 'test_n6:succeeded'
 
@@ -591,7 +591,7 @@ def test_n9():
     write_random(wdev0.path, 1)
     gid0 = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
     walbc.apply(a0, VOL, gid0, TIMEOUT)
-    list0 = walbc.get_restorable(a0, VOL)
+    list0 = walbc.get_restorable_gid(a0, VOL)
     if len(list0) != 1:
         raise Exception('test_n9: list size must be 1', list0)
     write_random(wdev0.path, 1)
@@ -1109,14 +1109,14 @@ def test_e13():
     sizeLb = wdev0.get_size_lb()
     print "sizeLb", sizeLb
     write_random(wdev0.path, sizeLb / 3)
-    list0 = walbc.get_restorable(a0, VOL, opt='all')
+    list0 = walbc.get_restorable_gid(a0, VOL, opt='all')
 
     md0 = get_sha1(wdev0.path)
     print 'test_e13:hash_backup'
     gid = walbc.hash_backup(s0, VOL, TIMEOUT, block=False)
     print 'test_e13:wait 1sec'
     time.sleep(1)
-    list1 = walbc.get_restorable(a0, VOL, opt='all')
+    list1 = walbc.get_restorable_gid(a0, VOL, opt='all')
     if list0 != list1:
         raise Exception('test_e13: not equal list', list0, list1)
     stop_repeater(a0)
