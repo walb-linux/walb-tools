@@ -44,3 +44,8 @@ wdev2 = Device(2, '/dev/test/log3', '/dev/test/data3', wdevcPath)
 wdevL = [wdev0, wdev1, wdev2]
 
 walbc = Controller(walbcPath, sLayout, isDebug)
+
+def use_thinp():
+    a0.tp = 'tp0'
+    a1.tp = 'tp0'
+    a2.tp = 'tp0'
