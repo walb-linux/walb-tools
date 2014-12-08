@@ -593,16 +593,20 @@ class GidInfo:
     '''
     def __init__(self, s):
         '''
-        s :: str such as '<gid> <datetime>'
+        s :: str such as '<gid>[ <datetime>]'
         '''
         verify_type(s, str)
         p = s.split()
-        if len(p) != 2:
+        if len(p) > 2:
             raise Exception('GidInfo:bad format', s)
         self.gid = int(p[0])
-        self.ts = str_to_datetime(p[1])
+        if len(p) == 2:
+            self.ts = str_to_datetime(p[1])
     def __str__(self):
-        return str(self.gid) + " " + datetime_to_str(self.ts)
+        if self.ts:
+            return str(self.gid) + " " + datetime_to_str(self.ts)
+        else:
+            return str(self.gid)
 
 
 class CompressOpt:
@@ -2267,6 +2271,8 @@ class Controller:
             raise Exception('get_gid_list : bad cmd', ax.name, vol, cmd, optL)
         verify_type(optL, list, str)
         ret = self.run_ctl(ax, ['get', cmd, vol] + optL)
+        if not ret:
+            return []
         return map(GidInfo, ret.split('\n'))
 
     def _get_gid_list(self, ax, vol, cmd, optL=[]):
