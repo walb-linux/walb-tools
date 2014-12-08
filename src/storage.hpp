@@ -537,11 +537,12 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
         StorageVolInfo volInfo(gs.baseDirStr, volId);
         const std::string fst = volInfo.getState();
+        // QQQ
         if (st == sTarget) {
             StateMachineTransaction tran(sm, sTarget, stStopTarget, FUNC);
             ul.unlock();
-            storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
             if (fst != sTarget) throw cybozu::Exception(FUNC) << "bad state" << fst;
+            storage_local::stopMonitoring(volInfo.getWdevPath(), volId);
             volInfo.setState(sStopped);
             tran.commit(sStopped);
         } else {
