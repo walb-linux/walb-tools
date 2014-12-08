@@ -882,14 +882,14 @@ class Server:
             self.tp = tp
 
     def __str__(self):
-        l = [self.name, self.address, str(self.port),
+        L = [self.name, self.address, str(self.port),
              server_kind_to_str(self.kind), self.binDir, self.dataDir,
              self.logPath]
-        if self.vg:
-            l.append(self.vg)
-        if self.tp:
-            l.append(self.tp)
-        return ', '.join(l)
+        if self.kind == K_ARCHIVE:
+            L.append(self.vg)
+            if self.tp:
+                L.append(self.tp)
+        return ', '.join(L)
 
     def get_host_port(self):
         '''
