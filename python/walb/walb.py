@@ -1220,8 +1220,7 @@ class Controller:
 
     def go_standby(self, sx, vol):
         '''
-        Set a volume standby storage in sx.
-
+        change state in sx to Standby from anywhere
         sx :: Server - storage server.
         vol :: str   - volume name.
         '''
@@ -1231,15 +1230,30 @@ class Controller:
         if state == sStandby:
             return
         if state == sSyncReady:
-            self.start(sx, vol)
+            self._go_standby(sx, vol)
             return
         if state == sTarget:
             self.stop(sx, vol)
-        else:
-            raise Exception('go_standby:bad state', sx.name, vol, state)
-        self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
-        self.reset(sx, vol)
-        self.start(sx, vol)
+            self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
+            self.reset(sx, vol)
+            self._go_standby(sx, vol)
+            return
+        raise Exception('go_standby:bad state', sx.name, vol, state)
+
+    def _go_standby(self, sx, vol):
+        '''
+        change state in sx from SyncReady to Standby
+
+        sx :: Server - storage server.
+        vol :: str   - volume name.
+        '''
+        verify_server_kind(sx, [K_STORAGE])
+        verify_type(vol, str)
+        state = self.get_state(sx, vol)
+        if state != sSyncReady:
+            raise Exception('_go_standby:bad state', sx.name, vol, state)
+        self.run_ctl(sx, ['start', vol, 'standby']) # QQQ
+        self._wait_for_state_change(sx, vol, [stStartStandby], [sStandby])
 
     def kick_all(self, sL):
         '''
@@ -1372,7 +1386,7 @@ class Controller:
         verify_type(vol, str)
         verify_type(wdevPath, str)
         self._init(sx, vol, wdevPath)
-        self.start(sx, vol)  # start as standby.
+        self._go_standby(sx, vol)  # start as standby.
 
     def _init(self, s, vol, wdevPath=None):
         '''
@@ -1565,19 +1579,13 @@ class Controller:
         verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         if s.kind == K_STORAGE:
-            st = self.get_state(s, vol)
-            if st == sSyncReady:
-                self.run_ctl(s, ['start', vol, 'standby'])
-                self._wait_for_state_change(s, vol, [stStartStandby], [sStandby])
-            else:
-                assert st == sStopped
-                self.run_ctl(s, ['start', vol, 'target'])
-                self._wait_for_state_change(s, vol, [stStartTarget], [sTarget])
+            self.run_ctl(s, ['start', vol, 'target']) # QQQ
+            self._wait_for_state_change(s, vol, [stStartTarget], [sTarget])
         elif s.kind == K_PROXY:
             self.run_ctl(s, ['start', vol])
             self._wait_for_state_change(s, vol, [ptStart], pActive)
         else:
-            assert s.kind == K_ARCHIVE
+            #s.kind == K_ARCHIVE
             self.run_ctl(s, ['start', vol])
             self._wait_for_state_change(s, vol, [atStart], aActive)
 
