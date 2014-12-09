@@ -381,20 +381,28 @@ inline std::string getPrefix(const std::string &name, const std::string &base)
     return name.substr(0, s0 - s1);
 }
 
-template <typename C>
-void printList(const C &container)
+template <typename Ostream, typename C>
+void printList(Ostream &&os, const C &c)
 {
-    std::cout << "[";
-    if (!container.empty()) {
-        typename C::const_iterator it = container.cbegin();
-        std::cout << *it;
-        ++it;
-        while (it != container.cend()) {
-            std::cout << ", " << *it;
-            ++it;
-        }
+    os << "[";
+    if (c.empty()) {
+        os << "]" << '\n';
+        return;
     }
-    std::cout << "]" << std::endl;
+    typename C::const_iterator it = c.cbegin();
+    os << *it;
+    ++it;
+    while (it != c.cend()) {
+        os << ", " << *it;
+        ++it;
+    }
+    os << "]" << '\n';
+}
+
+template <typename C>
+void printList(const C &c)
+{
+    printList(std::cout, c);
 }
 
 inline bool isAllZero(const void *data, size_t size)
