@@ -23,6 +23,8 @@
 #include "file_path.hpp"
 #include "process.hpp"
 
+// #define DEBUG_PRINT_LVM_COMMAND_ARGS
+
 namespace cybozu {
 namespace lvm {
 
@@ -82,6 +84,18 @@ LvAttr getLvAttr(const std::string lvPathStr);
 
 namespace local {
 
+#ifdef DEBUG_PRINT_LVM_COMMAND_ARGS
+inline void putArgsDebug(const char *msg, const StrVec &v)
+{
+    std::cout << msg << std::endl;
+    cybozu::util::printList(v);
+}
+#else
+inline void putArgsDebug(const char *, const StrVec &)
+{
+}
+#endif
+
 inline bool isSpace(char c)
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
@@ -121,11 +135,12 @@ inline std::string callLvm(
     const std::string &cmd, const std::string &options,
     const std::vector<std::string> &args = {})
 {
-    std::vector<std::string> args0 = {
+    StrVec args0 = {
         "--units=b", "--nosuffix", "--options=" + options,
         "--separator=,", "--noheadings", "--unbuffered",
     };
     args0.insert(args0.end(), args.cbegin(), args.cend());
+    local::putArgsDebug(__func__, args0);
     return cybozu::process::call(cmd, args0);
 }
 
@@ -470,11 +485,13 @@ inline cybozu::FilePath getLvmPath(
  */
 inline Lv createLv(const std::string &vgName, const std::string &lvName, uint64_t sizeLb)
 {
-    cybozu::process::call("/sbin/lvcreate", {
-            local::getNameOpt(lvName),
-            local::getSizeOpt(sizeLb),
-            vgName
-    });
+    const StrVec args = {
+        local::getNameOpt(lvName),
+        local::getSizeOpt(sizeLb),
+        vgName
+    };
+    local::putArgsDebug(__func__, args);
+    cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     local::waitForDeviceAvailable(lvPath);
@@ -493,11 +510,13 @@ inline Lv createLv(const std::string &vgName, const std::string &lvName, uint64_
  */
 inline Lv createTv(const std::string &vgName, const std::string &poolName, const std::string &lvName, uint64_t sizeLb)
 {
-    cybozu::process::call("/sbin/lvcreate", {
-            local::getNameOpt(lvName),
-            local::getThinpoolOpt(vgName, poolName),
-            local::getVirtualSizeOpt(sizeLb)
-        });
+    const StrVec args = {
+        local::getNameOpt(lvName),
+        local::getThinpoolOpt(vgName, poolName),
+        local::getVirtualSizeOpt(sizeLb)
+    };
+    local::putArgsDebug(__func__, args);
+    cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
     local::waitForDeviceAvailable(lvPath);
@@ -517,11 +536,13 @@ inline Lv createTv(const std::string &vgName, const std::string &poolName, const
  */
 inline Lv createTp(const std::string &vgName, const std::string &poolName, uint64_t sizeLb)
 {
-    cybozu::process::call("/sbin/lvcreate", {
-            local::getThinpoolOpt(vgName, poolName),
-            local::getSizeOpt(sizeLb),
-            local::getDiscardsOpt(NOPASSDOWN)
-        });
+    const StrVec args = {
+        local::getThinpoolOpt(vgName, poolName),
+        local::getSizeOpt(sizeLb),
+        local::getDiscardsOpt(NOPASSDOWN)
+    };
+    local::putArgsDebug(__func__, args);
+    cybozu::process::call("/sbin/lvcreate", args);
 
     local::waitForThinpoolAvailable(vgName, poolName);
 
@@ -554,6 +575,7 @@ inline Lv createSnap(
         local::getPermissionOpt(isWritable),
         lvStr
     };
+    local::putArgsDebug(__func__, args);
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
@@ -587,6 +609,7 @@ inline Lv createTSnap(
         local::getPermissionOpt(isWritable),
         lvStr
     };
+    local::putArgsDebug(__func__, args);
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
@@ -609,6 +632,7 @@ inline void renameLv(
     const std::string &vgName,
     const std::string &oldLvName, const std::string &newLvName)
 {
+    local::putArgsDebug(__func__, StrVec{vgName, oldLvName, newLvName});
     cybozu::process::call("/sbin/lvrename", { vgName, oldLvName, newLvName });
 }
 
@@ -617,6 +641,7 @@ inline void renameLv(
  */
 inline void remove(const std::string &lvStr)
 {
+    local::putArgsDebug(__func__, StrVec{lvStr});
     cybozu::process::call("/sbin/lvremove", { "-f", lvStr });
     local::sleepMs(100); /* for safety. */
 }
@@ -626,11 +651,13 @@ inline void remove(const std::string &lvStr)
  */
 inline void resize(const std::string &lvStr, uint64_t newSizeLb)
 {
-    cybozu::process::call("/sbin/lvresize", {
+    const StrVec args = {
         "-f", /* force volume shrink */
         local::getSizeOpt(newSizeLb),
         lvStr
-    });
+    };
+    local::putArgsDebug(__func__, args);
+    cybozu::process::call("/sbin/lvresize", args);
     /*
      * It is better to use 'blockdev --flushbufs device' command.
      */
