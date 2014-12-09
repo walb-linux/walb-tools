@@ -180,9 +180,14 @@ inline std::string getNameOpt(const std::string &name)
     return std::string("--name=") + name;
 }
 
+inline std::string getThinpoolOpt(const std::string &name)
+{
+    return std::string("--thinpool=") + name;
+}
+
 inline std::string getThinpoolOpt(const std::string &vgName, const std::string &tpName)
 {
-    return std::string("--thinpool=") + vgName + "/" + tpName;
+    return getThinpoolOpt(vgName + "/" + tpName);
 }
 
 inline std::string getPermissionOpt(bool isWritable)
@@ -535,9 +540,10 @@ inline Lv createTv(const std::string &vgName, const std::string &tpName, const s
 inline Lv createTp(const std::string &vgName, const std::string &tpName, uint64_t sizeLb)
 {
     const StrVec args = {
-        local::getThinpoolOpt(vgName, tpName),
+        local::getThinpoolOpt(tpName),
         local::getSizeOpt(sizeLb),
-        local::getDiscardsOpt(NOPASSDOWN)
+        local::getDiscardsOpt(NOPASSDOWN),
+        vgName
     };
     local::putArgsDebug(__func__, args);
     cybozu::process::call("/sbin/lvcreate", args);
