@@ -37,7 +37,6 @@ class LvAttr;
 class Lv;
 class Vg;
 
-using LvMap = std::map<std::string, Lv>;
 using LvList = std::vector<Lv>;
 using VgList = std::vector<Vg>;
 
@@ -69,7 +68,6 @@ Lv createTvSnap(
 void remove(const std::string &lvStr);
 void resize(const std::string &lvStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
-LvMap getLvMap(const std::string &arg);
 bool existsFile(const std::string &vgName, const std::string &name);
 bool existsLv(const std::string &vgName, const std::string &lvName);
 bool existsSnap(const std::string &vgName, const std::string &snapName);
@@ -694,22 +692,6 @@ inline LvList listLv(const std::string &arg = "")
         list.emplace_back(vgName, lvName, snapName, sizeLb, tpName, attr);
     }
     return list;
-}
-
-/**
- * RETURN:
- *   Volume list not including snapshots.
- * @arg "" or vgName or volumePath.
- */
-inline LvMap getLvMap(const std::string &arg)
-{
-    LvMap map;
-    for (Lv &lv : listLv(arg)) {
-        if (lv.isSnap()) continue;
-        auto pair = map.emplace(lv.name(), lv);
-        if (!pair.second) assert(false);
-    }
-    return map;
 }
 
 /**
