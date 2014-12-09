@@ -13,7 +13,9 @@ wdevSizeMb = 12
 g_count = 0
 
 
-def setup_test():
+def setup_test(useTp):
+    if useTp:
+        use_thinp()
     kill_all_repeaters()
     kill_all_servers()
     run_local_command(['/bin/rm', '-rf', workDir])
@@ -1517,20 +1519,32 @@ allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
 
 
 def main():
-    try:
-        count = int(sys.argv[1])
-        pos = 2
-    except:
-        count = 1
-        pos = 1
-
-    testL = sys.argv[pos:]
+    """
+        [-c count] [-tp] [n1 n2 ...]
+    """
+    i = 1
+    argv = " ".join(sys.argv).split()
+    args = len(argv)
+    count = 1
+    useTp = False
+    testL = []
+    while i < args:
+        c = argv[i]
+        if c == "-tp":
+            useTp = True
+        elif i + 1 < args and c == "-c":
+            count = int(argv[i + 1])
+            i += 1
+        else:
+            testL.append(c)
+        i += 1
     if not testL:
         testL = allL
 
     print "count", count
-    print 'test', testL
-    setup_test()
+    print "test", testL
+    print "useTptp", useTp
+    setup_test(useTp)
     startup_all()
     for i in xrange(count):
         global g_count

@@ -106,10 +106,10 @@ pylint:
 	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES)
 
 stest: pylint
-	python stest/scenario0.py
+	python stest/scenario0.py $(OPT)
 
 stest100: pylint
-	python stest/scenario0.py 100
+	python stest/scenario0.py -c 100
 
 archive:
 	git archive --format=tar master > walb-tools.tgz
