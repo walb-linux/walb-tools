@@ -54,10 +54,10 @@ void verifyArchiveData()
     if (!baseDir.stat().isDirectory()) {
         throw cybozu::Exception(FUNC) << "base directory not found" << ga.baseDirStr;
     }
-    if (!cybozu::lvm::vgExists(ga.volumeGroup)) {
+    if (!cybozu::lvm::existsVg(ga.volumeGroup)) {
         throw cybozu::Exception(FUNC) << "volume group does not exist" << ga.volumeGroup;
     }
-    if (isThinpool() && !cybozu::lvm::tpExists(ga.volumeGroup, ga.thinpool)) {
+    if (isThinpool() && !cybozu::lvm::existsTp(ga.volumeGroup, ga.thinpool)) {
         throw cybozu::Exception(FUNC) << "thinpool does not exist" << ga.thinpool;
     }
     for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {

@@ -345,8 +345,8 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
 
 inline void removeSnapshot(cybozu::lvm::Lv& lv, const std::string& name)
 {
-    if (lv.hasSnapshot(name)) {
-        lv.getSnapshot(name).remove();
+    if (lv.hasSnap(name)) {
+        lv.getSnap(name).remove();
     }
 }
 
@@ -383,10 +383,10 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     cybozu::lvm::Lv lvSnap;
     if (isThinpool()) {
-        lvSnap = lv.createSnapshot(tmpLvName, true);
+        lvSnap = lv.createTvSnap(tmpLvName, true);
     } else {
         const uint64_t snapSizeLb = uint64_t((double)(lv.sizeLb()) * 1.2);
-        lvSnap = lv.createSnapshot(tmpLvName, true, snapSizeLb);
+        lvSnap = lv.createLvSnap(tmpLvName, true, snapSizeLb);
     }
     TmpSnapshotDeleter deleter{lv, tmpLvName};
 
@@ -426,11 +426,11 @@ inline void delRestored(const std::string &volId, uint64_t gid)
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     cybozu::lvm::Lv lv = volInfo.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
-    if (!lv.hasSnapshot(targetName)) {
+    if (!lv.hasSnap(targetName)) {
         throw cybozu::Exception(FUNC)
             << "restored volume not found" << volId << gid;
     }
-    lv.getSnapshot(targetName).remove();
+    lv.getSnap(targetName).remove();
 }
 
 /**
@@ -1476,7 +1476,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string targetName = volInfo.restoredSnapshotName(gid);
         cybozu::lvm::Lv lv = volInfo.getLv();
-        if (lv.hasSnapshot(targetName)) {
+        if (lv.hasSnap(targetName)) {
             throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
         }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);

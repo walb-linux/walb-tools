@@ -77,7 +77,7 @@ public:
             cybozu::lvm::Lv lv = getLv();
             if (isThinProvisioning()) {
                 // Thin provisioned snapshot will not be removed implicitly.
-                lv.removeAllSnapshots();
+                lv.removeAllSnap();
             }
             lv.remove();
         }
@@ -133,7 +133,7 @@ public:
         return volDir.stat().isDirectory();
     }
     bool lvExists() const {
-        return cybozu::lvm::fileExists(vgName, lvName());
+        return cybozu::lvm::existsFile(vgName, lvName());
     }
     /**
      * Create a volume.
@@ -158,9 +158,9 @@ public:
             return;
         }
         if (isThinProvisioning()) {
-            getVg().createThin(thinpool, lvName(), sizeLb);
+            getVg().createTv(thinpool, lvName(), sizeLb);
         } else {
-            getVg().create(lvName(), sizeLb);
+            getVg().createLv(lvName(), sizeLb);
         }
     }
     /**
@@ -168,7 +168,7 @@ public:
      */
     cybozu::lvm::Lv getLv() const {
         cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName, lvName());
-        if (lv.isSnapshot()) {
+        if (lv.isSnap()) {
             throw cybozu::Exception(
                 "The target must not be snapshot: " + lv.path().str());
         }
@@ -248,7 +248,7 @@ public:
     std::vector<uint64_t> getRestoredSnapshots() const {
         std::vector<uint64_t> v;
         const std::string prefix = restoredSnapshotNamePrefix();
-        for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
+        for (cybozu::lvm::Lv &lv : getLv().getSnapList()) {
             if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
                 const std::string gidStr = cybozu::util::removePrefix(lv.snapName(), prefix);
                 if (cybozu::util::isAllDigit(gidStr)) {
@@ -348,7 +348,7 @@ public:
     size_t gcVolumes() {
         size_t nr = 0;
         const std::string prefix = restoredSnapshotNamePrefix();
-        for (cybozu::lvm::Lv &lv : getLv().snapshotList()) {
+        for (cybozu::lvm::Lv &lv : getLv().getSnapList()) {
             if (cybozu::util::hasPrefix(lv.snapName(), prefix) &&
                 cybozu::util::hasSuffix(lv.snapName(), RESTORE_TMP_SUFFIX)) {
                 lv.remove();

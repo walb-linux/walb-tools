@@ -106,7 +106,7 @@ void dispatch(const Option &opt)
     } else if (opt.command == "listsnap") {
         opt.checkLvName();
         cybozu::lvm::Lv lv = cybozu::lvm::locate(opt.vgName, opt.lvName);
-        for (cybozu::lvm::Lv &snap : lv.snapshotList()) {
+        for (cybozu::lvm::Lv &snap : lv.getSnapList()) {
             snap.print();
         }
     } else if (opt.command == "create") {
@@ -117,9 +117,9 @@ void dispatch(const Option &opt)
         cybozu::lvm::Vg vg = cybozu::lvm::getVg(opt.vgName);
         cybozu::lvm::Lv lv;
         if (opt.tpName.empty()) {
-            lv = vg.create(lvName, opt.sizeLb());
+            lv = vg.createLv(lvName, opt.sizeLb());
         } else {
-            lv = vg.createThin(opt.tpName, lvName, opt.sizeLb());
+            lv = vg.createTv(opt.tpName, lvName, opt.sizeLb());
         }
         lv.print();
         ::printf("created.\n");
@@ -127,18 +127,18 @@ void dispatch(const Option &opt)
         opt.checkVgName();
         opt.checkLvName();
         cybozu::lvm::Lv lv = cybozu::lvm::locate(opt.vgName, opt.lvName);
-        if (lv.isSnapshot() || lv.attr().isTypeThinpool()) {
+        if (lv.isSnap() || lv.attr().isTvType()) {
             throw std::runtime_error("Specify logical/thin volume.");
         }
         opt.checkNumArgs(1);
         std::string name = opt.args[0];
         cybozu::lvm::Lv snap;
-        if (lv.isThinVolume()) {
-            snap = lv.createSnapshot(name, opt.isWritable);
+        if (lv.isTv()) {
+            snap = lv.createTvSnap(name, opt.isWritable);
         } else {
             const uint64_t sizeLb =
                 opt.sizeLb() == 0 ? uint64_t((double)(lv.sizeLb()) * 1.2) : opt.sizeLb();
-            snap = lv.createSnapshot(name, opt.isWritable, sizeLb);
+            snap = lv.createLvSnap(name, opt.isWritable, sizeLb);
         }
         snap.print();
         ::printf("snapshot created.\n");
@@ -164,7 +164,7 @@ void dispatch(const Option &opt)
         opt.checkNumArgs(1);
         std::string snapName = opt.args[0];
         cybozu::lvm::Lv lv = cybozu::lvm::locate(opt.vgName, snapName);
-        if (!lv.isSnapshot()) {
+        if (!lv.isSnap()) {
             throw std::runtime_error("Specify a snapshot.");
         }
         lv.parent().print();
@@ -174,13 +174,13 @@ void dispatch(const Option &opt)
         std::string poolName = opt.args[0];
         opt.checkSize();
         cybozu::lvm::Vg vg = cybozu::lvm::getVg(opt.vgName);
-        cybozu::lvm::Lv lv = vg.createThinpool(poolName, opt.sizeLb());
+        cybozu::lvm::Lv lv = vg.createTp(poolName, opt.sizeLb());
         lv.print();
         ::printf("created.\n");
     } else if (opt.command == "exists-tp") {
         opt.checkVgName();
         opt.checkTpName();
-        ::printf("%d\n", cybozu::lvm::tpExists(opt.vgName, opt.tpName));
+        ::printf("%d\n", cybozu::lvm::existsTp(opt.vgName, opt.tpName));
     } else {
         ::printf("command %s is not supported now.\n", opt.command.c_str());
         opt.usage();
