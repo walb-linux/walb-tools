@@ -562,7 +562,7 @@ inline Lv createSnap(
     Lv snap = locate(snapPath.str());
     if (snap.snapName() == snapName && snap.isSnapshot() && snap.lvName() == lvName &&
         !snap.isThinVolume() && snap.attr().isTypeSnapshot()) {
-        return lv;
+        return snap;
     }
     throw cybozu::Exception(__func__)
         << "failed" << vgName << lvName << snapName << isWritable << sizeLb;
