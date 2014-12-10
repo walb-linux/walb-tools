@@ -38,3 +38,4 @@ checksum
 modify-during-write
 bhash
 mon-blk
+trim
