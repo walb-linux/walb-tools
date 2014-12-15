@@ -1543,7 +1543,7 @@ def main():
 
     print "count", count
     print "test", testL
-    print "useTptp", useTp
+    print "useTp", useTp
     setup_test(useTp)
     startup_all()
     for i in xrange(count):
