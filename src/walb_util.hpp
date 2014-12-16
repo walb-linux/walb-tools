@@ -262,6 +262,14 @@ public:
     }
 };
 
+template <typename IntType>
+inline void verifyNotZero(const IntType &t, const char *msg)
+{
+    if (t == 0) {
+        throw cybozu::Exception(msg) << "must not be 0.";
+    }
+}
+
 }} // walb::util
 
 inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)

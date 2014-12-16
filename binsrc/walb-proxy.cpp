@@ -22,34 +22,47 @@ const std::string DEFAULT_LOG_FILE = "-";
 
 using namespace walb;
 
-struct Option : cybozu::Option
+struct Option
 {
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
     size_t maxBackgroundTasks;
     bool isStopped;
-    Option() {
-        //setUsage();
-        appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
-        appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
+    cybozu::Option opt;
+
+    Option(int argc, char *argv[]) {
+
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
+        opt.appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
+        opt.appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
         ProxySingleton &p = getProxyGlobal();
-        appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
-        appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "max size of wdiff files to send [MiB].");
-        appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
-        appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "Retry timeout (total period) [sec].");
-        appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
-        appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "max memory size of wlog-wdiff conversion [MiB].");
+        opt.appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
+        opt.appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "max size of wdiff files to send [MiB].");
+        opt.appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
+        opt.appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
+        opt.appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "Retry timeout (total period) [sec].");
+        opt.appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
+        opt.appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "max memory size of wlog-wdiff conversion [MiB].");
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&p.nodeId, hostName, "id", "node identifier");
-        appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendOpt(&p.nodeId, hostName, "id", "node identifier");
+        opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
-        appendHelp("h");
+        opt.appendHelp("h");
+
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
+
+        util::verifyNotZero(maxBackgroundTasks, "maxBackgroundtasks");
+        util::verifyNotZero(p.maxForegroundTasks, "maxForegroundtasks");
+        util::verifyNotZero(p.maxWdiffSendMb, "maxWdiffSendMb");
+        util::verifyNotZero(p.maxWdiffSendNr, "maxWdiffSendNr");
+        util::verifyNotZero(p.maxConversionMb, "maxConversionMb");
     }
 };
 
@@ -88,15 +101,11 @@ struct ProxyThreads
 
 int main(int argc, char *argv[]) try
 {
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        return 1;
-    }
+    Option opt(argc, argv);
     ProxySingleton &g = getProxyGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb proxy server";
-    LOGs.info() << opt;
+    LOGs.info() << opt.opt;
     {
         ProxyThreads threads(opt);
         server::MultiThreadedServer server;

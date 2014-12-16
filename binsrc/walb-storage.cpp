@@ -25,7 +25,7 @@ const std::string DEFAULT_LOG_FILE = "-";
 
 using namespace walb;
 
-struct Option : cybozu::Option
+struct Option
 {
     uint16_t port;
     std::string logFileStr;
@@ -33,24 +33,35 @@ struct Option : cybozu::Option
     std::string multiProxyDStr;
     bool isDebug;
     size_t maxBackgroundTasks;
-    Option() {
-        appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
-        appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
-        appendBoolOpt(&isDebug, "debug", "put debug message.");
-        appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
+    cybozu::Option opt;
+
+    Option(int argc, char *argv[]) {
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        opt.appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
+        opt.appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
+        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
+        opt.appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
 
         StorageSingleton &s = getStorageGlobal();
-        appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foregroud tasks.");
-        appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        opt.appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foregroud tasks.");
+        opt.appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&s.nodeId, hostName, "id", "node identifier");
-        appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
-        appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendOpt(&s.nodeId, hostName, "id", "node identifier");
+        opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
+        opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
+        opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
 
-        appendHelp("h");
+        opt.appendHelp("h");
+
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
+
+        util::verifyNotZero(maxBackgroundTasks, "maxBackgroundTasks");
+        util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
+        util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
     }
 };
 
@@ -99,15 +110,11 @@ struct StorageThreads {
 
 int main(int argc, char *argv[]) try
 {
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        return 1;
-    }
+    Option opt(argc, argv);
     StorageSingleton &g = getStorageGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb storage server";
-    LOGs.info() << opt;
+    LOGs.info() << opt.opt;
     {
         StorageThreads threads(opt);
         server::MultiThreadedServer server;

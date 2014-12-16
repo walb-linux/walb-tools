@@ -23,28 +23,37 @@ const std::string DEFAULT_VG = "vg";
 
 using namespace walb;
 
-struct Option : cybozu::Option
+struct Option
 {
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
+    cybozu::Option opt;
 
-    Option() {
-        appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        appendBoolOpt(&isDebug, "debug", "put debug message.");
+    Option(int argc, char *argv[]) {
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
+        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
 
         ArchiveSingleton &a = getArchiveGlobal();
-        appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
-        appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
-        appendOpt(&a.thinpool, "", "tp", "lvm thinpool (optional).");
-        appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
+        opt.appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        opt.appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
+        opt.appendOpt(&a.thinpool, "", "tp", "lvm thinpool (optional).");
+        opt.appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
-        appendOpt(&a.nodeId, hostName, "id", "node identifier");
-        appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
-        appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
+        opt.appendOpt(&a.nodeId, hostName, "id", "node identifier");
+        opt.appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
 
-        appendHelp("h");
+        opt.appendHelp("h");
+
+        if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
+
+        util::verifyNotZero(a.maxForegroundTasks, "maxForegroundTasks");
+        util::verifyNotZero(a.maxWdiffSendNr, "maxWdiffSendNr");
     }
 };
 
@@ -74,15 +83,11 @@ void verifyArchiveData()
 
 int main(int argc, char *argv[]) try
 {
-    Option opt;
-    if (!opt.parse(argc, argv)) {
-        opt.usage();
-        return 1;
-    }
+    Option opt(argc, argv);
     ArchiveSingleton &g = getArchiveGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb archive server";
-    LOGs.info() << opt;
+    LOGs.info() << opt.opt;
     verifyArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     server::MultiThreadedServer server;
