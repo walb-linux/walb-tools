@@ -353,31 +353,4 @@ inline void c2xGetClient(protocol::ClientParams &p)
     protocol::recvValueAndPut(p.sock, valType, FUNC);
 }
 
-const std::map<std::string, protocol::ClientHandler> controllerHandlerMap = {
-    { statusCN, c2xGetStrVecClient },
-    { initVolCN, c2xInitVolClient },
-    { clearVolCN, c2xClearVolClient },
-    { resetVolCN, c2xResetVolClient },
-    { fullBkpCN, c2sFullBkpClient },
-    { hashBkpCN, c2sHashBkpClient },
-    { restoreCN, c2aRestoreClient },
-    { delRestoredCN, c2aDelRestoredClient },
-    { startCN, c2xStartClient },
-    { stopCN, c2xStopClient },
-    { archiveInfoCN, c2pArchiveInfoClient },
-    { snapshotCN, c2sSnapshotClient },
-    { replicateCN, c2aReplicateClient },
-    { applyCN, c2aApplyClient },
-    { mergeCN, c2aMergeClient },
-    { resizeCN, c2xResizeClient },
-    { kickCN, c2xKickClient },
-    { blockHashCN, c2aBlockHashClient },
-    { dbgReloadMetadataCN, c2aReloadMetadataClient },
-    { dbgSetUuid, c2aSetUuidClient },
-    { dbgSetState, c2aSetStateClient },
-    { dbgSetBase, c2aSetBaseClient },
-    { getCN, c2xGetClient },
-    { execCN, c2xGetStrVecClient },
-};
-
 } // namespace walb
