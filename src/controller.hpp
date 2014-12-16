@@ -20,7 +20,7 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
 /**
  * For storage:
  *   params[0]: volId
- *   params[2]: wdevPath
+ *   params[1]: wdevPath
  * For archive:
  *   params[0]: volId
  */
@@ -295,7 +295,7 @@ inline void c2xResetVolClient(protocol::ClientParams &p)
  * For storage:
  *   No parameter is required.
  * For proxy:
- *   params[0]: volId
+ *   params[0]: volId (optional)
  *   params[1]: archiveName (optional)
  */
 inline void c2xKickClient(protocol::ClientParams &p)

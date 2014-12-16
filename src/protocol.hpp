@@ -308,24 +308,6 @@ inline ServerHandler findServerHandler(
     return it->second;
 }
 
-inline void clientDispatch(
-    const std::string& protocolName, cybozu::Socket& sock, ProtocolLogger& logger,
-    const StrVec &params,
-    const std::map<std::string, ClientHandler> &handlers)
-{
-    ClientParams clientParams(sock, logger, params);
-    if (protocolName == shutdownCN) {
-        shutdownClient(clientParams);
-        return;
-    }
-    std::map<std::string, ClientHandler>::const_iterator it = handlers.find(protocolName);
-    if (it == handlers.cend()) {
-        throw cybozu::Exception("clientDispatch:bad protocoName") << protocolName;
-    }
-    ClientHandler h = it->second;
-    h(clientParams);
-}
-
 /**
  * Server dispatcher.
  */
