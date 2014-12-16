@@ -91,10 +91,12 @@ public:
      * Get transfer diff list for archive repl-sync.
      * @snap base snapshot.
      * @size max total file size [byte].
+     * @nr   max number of diff files.
      */
-    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
+    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size, size_t nr) const {
         MetaDiffVec v = mgr_.getApplicableAndMergeableDiffList(snap);
         truncateDiffVecBySize(v, size);
+        if (v.size() > nr) v.resize(nr);
         return v;
     }
     /**

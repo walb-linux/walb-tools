@@ -80,6 +80,7 @@ struct ArchiveSingleton
     std::string thinpool;
     size_t maxForegroundTasks;
     size_t socketTimeout;
+    size_t maxWdiffSendNr;
 
     /**
      * Writable and must be thread-safe.
@@ -741,7 +742,7 @@ inline bool runDiffReplClient(
     MetaDiffVec diffV;
     std::vector<cybozu::util::File> fileV;
     std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
-            return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize);
+            return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize, ga.maxWdiffSendNr);
         });
 
     const MetaDiff mergedDiff = merge(diffV);

@@ -288,11 +288,12 @@ public:
     /**
      * @snap base snapshot.
      * @size maximum total size [byte].
+     * @nr   maximum number of wdiff files.
      * RETURN:
      *   MetaDiff list that can be merged and applicable to the snapshot.
      */
-    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size) const {
-        return wdiffs_.getDiffListToSend(snap, size);
+    MetaDiffVec getDiffListToSend(const MetaSnap &snap, uint64_t size, size_t nr) const {
+        return wdiffs_.getDiffListToSend(snap, size, nr);
     }
     MetaDiffVec getDiffListToMerge(uint64_t gid, uint64_t size) const {
         return wdiffs_.getDiffListToMerge(gid, size);
