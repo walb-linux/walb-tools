@@ -1087,7 +1087,7 @@ class Controller:
         verify_type(args, list, str)
         verify_type(putMsg, bool)
         verify_type(timeoutS, int)
-        cmdArgs = ['exec', '---'] + args
+        cmdArgs = ['exec'] + args
         return self.run_ctl(s, cmdArgs, putMsg, timeoutS)
 
     def get_run_remote_command(self, s):
