@@ -82,9 +82,10 @@ public:
     /**
      * Get transfer diff list for proxy WdiffTransfer.
      * @size max total file size [byte].
+     * @nr   max number of diff files.
      */
-    MetaDiffVec getDiffListToSend(uint64_t size) const {
-        return getDiffListToMerge(0, size);
+    MetaDiffVec getDiffListToSend(uint64_t size, size_t nr) const {
+        return getDiffListToMerge(0, size, nr);
     }
     /**
      * Get transfer diff list for archive repl-sync.
@@ -100,10 +101,12 @@ public:
      * Get diff list for merge.
      * @gid start gid.
      * @size max total file size [byte].
+     * @nr   max number of diff files.
      */
-    MetaDiffVec getDiffListToMerge(uint64_t gid, uint64_t size) const {
+    MetaDiffVec getDiffListToMerge(uint64_t gid, uint64_t size, uint64_t nr = SIZE_MAX) const {
         MetaDiffVec v = mgr_.getMergeableDiffList(gid);
         truncateDiffVecBySize(v, size);
+        if (v.size() > nr) v.resize(nr);
         return v;
     }
     /**

@@ -128,15 +128,16 @@ public:
      *
      * @name archive host name.
      * @size maximum total size [byte].
+     * @nr   maximum number of wdiffs.
      *
      * RETURN:
      *   MetaDiff list that can be merged.
      *   which will be sent to the server.
      */
-    MetaDiffVec getDiffListToSend(const std::string &archiveName, uint64_t size) const {
+    MetaDiffVec getDiffListToSend(const std::string &archiveName, uint64_t size, size_t nr) const {
         MetaDiffManager &mgr = diffMgrMap_.get(archiveName);
         WalbDiffFiles wdiffs(mgr, getStandbyDir(archiveName).str());
-        return wdiffs.getDiffListToSend(size);
+        return wdiffs.getDiffListToSend(size, nr);
     }
     MetaDiffVec getAllDiffsInTarget() const {
         return diffMgr_.getAll();

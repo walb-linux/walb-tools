@@ -150,6 +150,7 @@ struct ProxySingleton
     std::string nodeId;
     std::string baseDirStr;
     size_t maxWdiffSendMb;
+    size_t maxWdiffSendNr;
     size_t delaySecForRetry;
     size_t retryTimeout;
     size_t maxForegroundTasks;
@@ -880,7 +881,7 @@ inline void ProxyWorker::setupMerger(DiffMerger& merger, MetaDiffVec& diffV, Met
     std::vector<cybozu::util::File> fileV;
 retry:
     {
-        diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * 1024 * 1024);
+        diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * MEBI, gp.maxWdiffSendNr);
         if (diffV.empty()) return;
         // apply wdiff files indicated by diffV to lvSnap.
         for (const MetaDiff& diff : diffV) {
