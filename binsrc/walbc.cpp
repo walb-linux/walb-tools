@@ -218,7 +218,12 @@ struct Option
             opt1.usage();
             return 1;
         }
-		if (pci->name != execCN) { // `exec` cmd does not parse opt2
+		if (pci->name == execCN) { // `exec` cmd does not parse opt2
+			if (cmdPos == argc) {
+				opt2.usage();
+				return 1;
+			}
+		} else {
 	        if (!opt2.parse(argc, argv, cmdPos)) {
 	            opt2.usage();
 	            return 1;
