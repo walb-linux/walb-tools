@@ -112,10 +112,14 @@ public:
             std::string name = getName(fd);
             if (!name.empty()) {
                 v.push_back(name);
+                // Reset the trigger by reading the file.
                 char buf[4096];
-                ::lseek(fd, 0, SEEK_SET);
-                int s = ::read(fd, buf, 4096);
-                LOGs.debug() << FUNC << "read bytes" << s;
+                if (::lseek(fd, 0, SEEK_SET) >= 0) {
+                    const int s = ::read(fd, buf, 4096);
+                    LOGs.debug() << FUNC << "read bytes" << s;
+                } else {
+                    // Ignore.
+                }
             }
         }
         return v;
