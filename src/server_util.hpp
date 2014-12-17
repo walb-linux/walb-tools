@@ -65,7 +65,7 @@ public:
         for (;;) {
             for (;;) {
                 if (!ps.isRunning()) goto quit;
-                int ret = ssock.queryAcceptNothrow();
+                int ret = ssock.queryAcceptNoThrow();
                 if (ret > 0) break; // accepted
                 if (ret == 0) continue; // timeout
                 if (ret == -EINTR) {
