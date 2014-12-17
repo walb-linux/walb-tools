@@ -521,11 +521,6 @@ CommandInfo* getCommand(const std::string& cmd)
     return nullptr;
 }
 
-void addSpaces(std::string& s, size_t n)
-{
-    s.resize(s.size() + n, ' ');
-}
-
 class Dispatcher {
     cybozu::Option opt1;
     cybozu::Option opt2;
@@ -540,13 +535,10 @@ class Dispatcher {
         for (const CommandInfo& ci : g_cmdTbl) {
             maxLen = std::max(maxLen, ::strlen(ci.cmdName));
         }
+        maxLen++;
         for (const CommandInfo& ci : g_cmdTbl) {
             opt1.appendDelimiter(ci.cmdName);
-            usage += "  ";
-            usage += ci.cmdName;
-            addSpaces(usage, maxLen - ::strlen(ci.cmdName) + 1);
-            usage += ci.help;
-            usage += "\n";
+            usage += cybozu::util::formatString("  %-*s%s\n", maxLen, ci.cmdName, ci.help);
         }
         opt1.appendBoolOpt(&isDebug, "debug");
         opt1.appendHelp("h");
