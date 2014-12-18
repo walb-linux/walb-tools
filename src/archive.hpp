@@ -1611,7 +1611,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
                 msg = msgWdiffRecv;
             }
             if (msg) {
-                logger.info() << msg << volId;
+                logger.info() << FUNC << "rejected due to" << msg << volId;
+                ul.unlock();
                 pkt.writeFin(msg);
                 return;
             }
@@ -1624,27 +1625,17 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         if (!volInfo.existsVolDir()) {
             const char *msg = msgArchiveNotFound;
-            logger.info() << msg << volId;
+            logger.info() << FUNC << "rejected due to" << msg << volId;
+            ul.unlock();
             pkt.writeFin(msg);
             return;
         }
         if (hostType == proxyHT && volInfo.getUuid() != uuid) {
             const char *msg = msgDifferentUuid;
-            logger.info() << msg << volId;
+            logger.info() << FUNC << "rejected due to" << msg << volId;
+            ul.unlock();
             pkt.writeFin(msg);
             return;
-        }
-        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
-        if (selfSizeLb < sizeLb) {
-            const char *msg = msgSmallerLvSize;
-            logger.error() << msg << volId << sizeLb << selfSizeLb;
-            pkt.writeFin(msg);
-            return;
-        }
-
-        if (sizeLb < selfSizeLb) {
-            logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
-            // no problem to continue.
         }
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         const Relation rel = getRelation(latestSnap, diff);
@@ -1663,7 +1654,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
                     << "bad meta diff relation" << (int)rel
                     << latestSnap << diff;
             }
-            logger.info() << msg << volId;
+            logger.info() << FUNC << "rejected due to" << msg << volId;
+            ul.unlock();
             pkt.writeFin(msg);
             return;
         }
@@ -1673,6 +1665,24 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         // main procedure
         StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
         ul.unlock();
+        logger.debug() << "wdiff-transfer started" << volId;
+
+        /*
+         * Lvm command may be too slow so we chose lv size check
+         * after sending accept message.
+         *
+         * TODO: getLv() must not really call 'lvs' command.
+         */
+        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+        if (selfSizeLb < sizeLb) {
+            const char *msg = msgSmallerLvSize;
+            logger.error() << msg << volId << sizeLb << selfSizeLb;
+            return;
+        }
+        if (sizeLb < selfSizeLb) {
+            logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
+            // no problem to continue.
+        }
 
         const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -1688,9 +1698,10 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         ul.lock();
         volSt.diffMgr.add(diff);
         tran.commit(aArchived);
-        packet::Ack(p.sock).sendFin();
         volSt.updateLastWdiffReceivedTime();
-        logger.info() << "wdiff-transfer succeeded" << volId;
+        ul.unlock();
+        packet::Ack(p.sock).sendFin();
+        logger.debug() << "wdiff-transfer succeeded" << volId;
     } catch (std::exception &e) {
         if (isErr) {
             logger.error() << e.what();
