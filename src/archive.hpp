@@ -1493,6 +1493,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 
     ActionCounterTransaction tran(volSt.ac, aaRestore);
     ul.unlock();
+    logger.info() << "restore started" << volId << gid;
     if (!archive_local::restore(volId, gid)) {
         logger.warn() << FUNC << "force stopped" << volId << gid;
         return;
@@ -1751,6 +1752,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.writeFin(msgAccept);
         sendErr = false;
+        logger.info() << "replication as client started" << volId;
         if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
@@ -1790,6 +1792,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
 
         StateMachineTransaction tran(volSt.sm, stFrom, stTo, FUNC);
         ul.unlock();
+        logger.info() << "replication as server started" << volId;
         if (!archive_local::runReplSyncServer(volId, isFull, p.sock, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
@@ -1829,6 +1832,7 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 
         ActionCounterTransaction tran(volSt.ac, aaApply);
         ul.unlock();
+        logger.info() << "apply started" << volId << gid;
         if (!archive_local::applyDiffsToVolume(volId, gid)) {
             logger.warn() << FUNC << "stopped force" << volId << gid;
             return;
@@ -1879,6 +1883,7 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
         ActionCounterTransaction tran(volSt.ac, aaMerge);
         ul.unlock();
+        logger.info() << "merge started" << volId << gidB << type << param3;
         if (!archive_local::mergeDiffs(volId, gidB, isSize, param3)) {
             logger.warn() << FUNC << "stopped force" << volId << gidB << type << param3;
             return;
@@ -2007,7 +2012,7 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
         pkt.write(msgOk);
         sendErr = false;
         pkt.writeFin(hash);
-        logger.info() << "bhash succeeded" << volId << hash;
+        logger.debug() << "bhash succeeded" << volId << hash;
     } catch (std::exception &e) {
         logger.error() << e.what();
         if (sendErr) pkt.write(e.what());
