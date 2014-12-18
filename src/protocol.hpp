@@ -324,6 +324,11 @@ public:
         , ps(ps)
         , handlers(handlers) {}
     void operator()() noexcept {
+// #define DEBUG_HANDLER
+#ifdef DEBUG_HANDLER
+        static std::atomic<int> ccc;
+        LOGs.info() << "SERVER_START" << nodeId << int(ccc++);
+#endif
         try {
             std::string clientId, protocolName;
             packet::Packet pkt(sock);
@@ -334,6 +339,9 @@ public:
                 ServerParams serverParams(sock, clientId, ps);
                 pkt.write(msgOk);
                 sendErr = false;
+#ifdef DEBUG_HANDLER
+                LOGs.info() << "SERVER_HANDLE" << nodeId << protocolName;
+#endif
                 handler(serverParams);
             } catch (std::exception &e) {
                 LOGs.error() << e.what();
@@ -351,6 +359,9 @@ public:
         }
         const bool dontThrow = true;
         sock.close(dontThrow);
+#ifdef DEBUG_HANDLER
+        LOGs.info() << "SERVER_END  " << nodeId << int(ccc--);
+#endif
     }
 };
 
