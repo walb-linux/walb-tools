@@ -27,6 +27,175 @@
 
 namespace walb {
 
+inline bool isArchiveLvName(const std::string &name)
+{
+    return cybozu::util::hasPrefix(name, VOLUME_PREFIX);
+}
+
+inline bool isArchiveSnapName(const std::string &name)
+{
+    return cybozu::util::hasPrefix(name, RESTORE_PREFIX) && !cybozu::util::hasSuffix(name, RESTORE_TMP_SUFFIX);
+}
+
+inline bool isArchiveTmpSnapName(const std::string &name)
+{
+    return cybozu::util::hasPrefix(name, RESTORE_PREFIX) && cybozu::util::hasSuffix(name, RESTORE_TMP_SUFFIX);
+}
+
+inline std::string getVolIdFromArchiveLvName(const std::string &name)
+{
+    assert(isArchiveLvName(name));
+    return cybozu::util::removePrefix(name, VOLUME_PREFIX);
+}
+
+inline void getVolIdFromArchiveSnapName(const std::string &name, std::string &volId, uint64_t &gid)
+{
+    assert(isArchiveSnapName(name));
+    size_t n = name.rfind('_');
+    if (n == std::string::npos) {
+        throw cybozu::Exception(__func__) << "bad archive snapshot name" << name;
+    }
+    size_t p = RESTORE_PREFIX.size();
+    volId = name.substr(p, n - p);
+    gid = cybozu::atoi(&name[n + 1]);
+}
+
+/**
+ * This is movable.
+ * Almost functions are thread-safe except for constructors and move assigner.
+ */
+class VolLvCache
+{
+public:
+    using Lv = cybozu::lvm::Lv;
+    using LvMap = std::map<uint64_t, Lv>; // key: gid, value: snapshot.
+    using MuPtr = std::unique_ptr<std::recursive_mutex>;
+
+private:
+    mutable MuPtr muPtr_;
+    bool exists_;
+    Lv lv_;
+    LvMap snapMap_;
+
+public:
+    VolLvCache() : muPtr_(new std::recursive_mutex()), exists_(false), lv_(), snapMap_() {
+    }
+    bool exists() const {
+        UniqueLock lk(*muPtr_);
+        return exists_;
+    }
+    Lv getLv() const {
+        UniqueLock lk(*muPtr_);
+        return lv_;
+    }
+    bool hasSnap(uint64_t gid) const {
+        UniqueLock lk(*muPtr_);
+        return snapMap_.find(gid) != snapMap_.cend();
+    }
+    Lv getSnap(uint64_t gid) const {
+        UniqueLock lk(*muPtr_);
+        LvMap::const_iterator it = snapMap_.find(gid);
+        if (it == snapMap_.cend()) {
+            throw cybozu::Exception(__func__)
+                << "snapshot not found" << lv_ << gid;
+        }
+        return it->second;
+    }
+    size_t getSnapNr() const {
+        UniqueLock lk(*muPtr_);
+        return snapMap_.size();
+    }
+    std::vector<uint64_t> getSnapGidList() const {
+        std::vector<uint64_t> ret;
+        {
+            UniqueLock lk(*muPtr_);
+            for (const LvMap::value_type &p : snapMap_) {
+                ret.push_back(p.first);
+            }
+        }
+        /* sorted */
+        return ret;
+    }
+    LvMap getSnapMap() const {
+        UniqueLock lk(*muPtr_);
+        return snapMap_; /* copy */
+    }
+    void add(const Lv &lv) {
+        UniqueLock lk(*muPtr_);
+        snapMap_.clear();
+        lv_ = lv;
+        exists_ = true;
+    }
+    void remove() {
+        UniqueLock lk(*muPtr_);
+        snapMap_.clear();
+        lv_ = Lv();
+        exists_ = false;
+    }
+    void addSnap(uint64_t gid, const Lv &snap) {
+        UniqueLock lk(*muPtr_);
+        snapMap_.emplace(gid, snap);
+    }
+    void removeSnap(uint64_t gid) {
+        UniqueLock lk(*muPtr_);
+        snapMap_.erase(gid);
+    }
+    void resize(uint64_t newSizeLb) {
+        UniqueLock lk(*muPtr_);
+        lv_.setSizeLb(newSizeLb);
+    }
+};
+
+using VolLvCacheMap = std::map<std::string, VolLvCache>;
+
+inline VolLvCache& insertVolLvCacheMapIfNotFound(VolLvCacheMap &map, const std::string &volId)
+{
+    VolLvCacheMap::iterator it = map.find(volId);
+    if (it == map.end()) {
+        bool inserted;
+        std::tie(it, inserted) = map.emplace(volId, VolLvCache());
+        assert(inserted);
+    }
+    return it->second;
+}
+
+inline VolLvCacheMap getVolLvCacheMap(
+    const std::string &vgName, const std::string &tpName, const StrVec &volIdV)
+{
+    VolLvCacheMap m1;
+    for (cybozu::lvm::Lv &lv : cybozu::lvm::listLv(vgName)) {
+        if (tpName.empty() == lv.isTv()) {
+            continue;
+        }
+        if (lv.isSnap()) {
+            if (isArchiveSnapName(lv.name())) {
+                std::string volId;
+                uint64_t gid;
+                getVolIdFromArchiveSnapName(lv.name(), volId, gid);
+                VolLvCache &lvC = insertVolLvCacheMapIfNotFound(m1, volId);
+                lvC.addSnap(gid, lv);
+            }
+        } else {
+            if (isArchiveLvName(lv.name())) {
+                const std::string volId = getVolIdFromArchiveLvName(lv.name());
+                VolLvCache &lvC = insertVolLvCacheMapIfNotFound(m1, volId);
+                lvC.add(lv);
+            }
+        }
+    }
+    VolLvCacheMap m2;
+    for (const std::string &volId : volIdV) {
+        VolLvCacheMap::iterator it = m1.find(volId);
+        if (it == m1.end()) {
+            m2.emplace(volId, VolLvCache());
+        } else {
+            VolLvCache &lvC = it->second;
+            m2.emplace(volId, std::move(lvC));
+        }
+    }
+    return m2;
+}
+
 /**
  * Data manager for a volume in a server.
  * This is not thread-safe.
@@ -40,6 +209,7 @@ public:
     const std::string thinpool;
 private:
     WalbDiffFiles wdiffs_;
+    VolLvCache &lvC_;
 
 public:
     /**
@@ -49,12 +219,13 @@ public:
      */
     ArchiveVolInfo(const std::string &baseDirStr, const std::string &volId,
                    const std::string &vgName, const std::string &thinpool,
-                   MetaDiffManager &diffMgr)
+                   MetaDiffManager &diffMgr, VolLvCache &lvC)
         : volDir(cybozu::FilePath(baseDirStr) + volId)
         , volId(volId)
         , vgName(vgName)
         , thinpool(thinpool)
-        , wdiffs_(diffMgr, volDir.str()) {
+        , wdiffs_(diffMgr, volDir.str())
+        , lvC_(lvC) {
         // Check of baseDirStr and vgName must have been done at startup time.
         if (volId.empty()) {
             throw cybozu::Exception("ArchiveVolInfo:volId is empty");
@@ -74,12 +245,16 @@ public:
     void clear() {
         // Delete all related lvm volumes and snapshots.
         if (lvExists()) {
-            cybozu::lvm::Lv lv = getLv();
-            if (isThinProvisioning()) {
-                // Thin provisioned snapshot will not be removed implicitly.
-                lv.removeAllSnap();
+            VolLvCache::LvMap snapM = lvC_.getSnapMap();
+            for (VolLvCache::LvMap::value_type &p : snapM) {
+                const uint64_t gid = p.first;
+                cybozu::lvm::Lv &snap = p.second;
+                snap.remove();
+                lvC_.removeSnap(gid);
             }
+            cybozu::lvm::Lv lv = lvC_.getLv();
             lv.remove();
+            lvC_.remove();
         }
         wdiffs_.clearDir();
 #if 0 // wdiffs_.clearDir() includes the following operation.
@@ -144,7 +319,7 @@ public:
             throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is zero");
         }
         if (lvExists()) {
-            cybozu::lvm::Lv lv = getLv();
+            cybozu::lvm::Lv lv = lvC_.getLv();
             uint64_t curSizeLb = lv.sizeLb();
             if (curSizeLb != sizeLb) {
                 throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is different") << curSizeLb << sizeLb;
@@ -157,22 +332,16 @@ public:
             }
             return;
         }
+        cybozu::lvm::Lv lv;
         if (isThinProvisioning()) {
-            getVg().createTv(thinpool, lvName(), sizeLb);
+            lv = getVg().createTv(thinpool, lvName(), sizeLb);
         } else {
-            getVg().createLv(lvName(), sizeLb);
+            lv = getVg().createLv(lvName(), sizeLb);
         }
+        lvC_.add(lv);
     }
-    /**
-     * Get volume data.
-     */
-    cybozu::lvm::Lv getLv() const {
-        cybozu::lvm::Lv lv = cybozu::lvm::locate(vgName, lvName());
-        if (lv.isSnap()) {
-            throw cybozu::Exception(
-                "The target must not be snapshot: " + lv.path().str());
-        }
-        return lv;
+    cybozu::lvm::Lv getLv() {
+        return lvC_.getLv();
     }
     /**
      * Grow the volume.
@@ -180,7 +349,7 @@ public:
      * @doZeroClar zero-clear the extended area if true.
      */
     void growLv(uint64_t newSizeLb, bool doZeroClear = false) {
-        cybozu::lvm::Lv lv = getLv();
+        cybozu::lvm::Lv lv = lvC_.getLv();
         const uint64_t oldSizeLb = lv.sizeLb();
         if (oldSizeLb == newSizeLb) {
             /* no need to grow. */
@@ -193,9 +362,10 @@ public:
                 "You tried to shrink the volume: " + lvPathStr);
         }
         lv.resize(newSizeLb);
+        lvC_.resize(lv.sizeLb()); // newSizeLb =< lv.sizeLb().
         device::flushBufferCache(lvPathStr);
         if (doZeroClear) {
-            cybozu::util::File f(lv.path().str(), O_RDWR | O_DIRECT);
+            cybozu::util::File f(lvPathStr, O_RDWR | O_DIRECT);
             cybozu::aio::zeroClear(f.fd(), oldSizeLb, newSizeLb - oldSizeLb);
             f.fdatasync();
         }
@@ -212,7 +382,7 @@ public:
             throw cybozu::Exception(FUNC) << "not found baseLv" << vgName << lvName();
         }
 
-        const uint64_t sizeLb = getLv().sizeLb();
+        const uint64_t sizeLb = lvC_.getLv().sizeLb();
         v.push_back(fmt("sizeLb %" PRIu64, sizeLb));
         const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         v.push_back(fmt("size %s", sizeS.c_str()));
@@ -222,7 +392,7 @@ public:
         v.push_back(fmt("base %s", metaSt.str().c_str()));
         const MetaSnap latest = wdiffs_.getMgr().getLatestSnapshot(metaSt);
         v.push_back(fmt("latest %s", latest.str().c_str()));
-        const size_t numRestored = getRestoredSnapshots().size();
+        const size_t numRestored = lvC_.getSnapNr();
         v.push_back(fmt("numRestored %zu", numRestored));
         const size_t numRestorable = getRestorableSnapshots(false).size();
         v.push_back(fmt("numRestorable %zu", numRestorable));
@@ -238,26 +408,6 @@ public:
     }
     std::string restoredSnapshotName(uint64_t gid) const {
         return restoredSnapshotNamePrefix() + cybozu::itoa(gid);
-    }
-    /**
-     * Get restored snapshots.
-     *
-     * RETURN:
-     *   gid list (sorted).
-     */
-    std::vector<uint64_t> getRestoredSnapshots() const {
-        std::vector<uint64_t> v;
-        const std::string prefix = restoredSnapshotNamePrefix();
-        for (cybozu::lvm::Lv &lv : getLv().getSnapList()) {
-            if (cybozu::util::hasPrefix(lv.snapName(), prefix)) {
-                const std::string gidStr = cybozu::util::removePrefix(lv.snapName(), prefix);
-                if (cybozu::util::isAllDigit(gidStr)) {
-                    v.push_back(cybozu::atoi(gidStr));
-                }
-            }
-        }
-        std::sort(v.begin(), v.end());
-        return v;
     }
     /**
      * Get restorable snapshots.
@@ -347,13 +497,17 @@ public:
      * Remove temporarily created volumes for restore.
      */
     size_t gcVolumes() {
-        size_t nr = 0;
         const std::string prefix = restoredSnapshotNamePrefix();
-        for (cybozu::lvm::Lv &lv : getLv().getSnapList()) {
-            if (cybozu::util::hasPrefix(lv.snapName(), prefix) &&
-                cybozu::util::hasSuffix(lv.snapName(), RESTORE_TMP_SUFFIX)) {
-                lv.remove();
-                nr++;
+        size_t nr = 0;
+        cybozu::lvm::Lv lv = lvC_.getLv();
+        for (cybozu::lvm::Lv &snap : lv.getSnapList()) {
+            if (isArchiveTmpSnapName(snap.snapName())) {
+                try {
+                    snap.remove();
+                    nr++;
+                } catch (std::exception &e) {
+                    LOGs.error() << __func__ << "remove failed" << snap << e.what();
+                }
             }
         }
         return nr;

@@ -28,6 +28,7 @@ struct ArchiveVolState
     ActionCounters ac;
 
     MetaDiffManager diffMgr;
+    VolLvCache lvCache;
 
     /**
      * Timestamp of the latest sync (full, hash).
@@ -47,6 +48,7 @@ struct ArchiveVolState
         , sm(mu)
         , ac(mu)
         , diffMgr()
+        , lvCache()
         , lastSyncTime(0)
         , lastWdiffReceivedTime(0) {
         sm.init(statePairTbl);
@@ -104,7 +106,7 @@ inline ArchiveVolState &getArchiveVolState(const std::string &volId)
 inline ArchiveVolInfo getArchiveVolInfo(const std::string &volId)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    return ArchiveVolInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, volSt.diffMgr);
+    return ArchiveVolInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, volSt.diffMgr, volSt.lvCache);
 }
 
 inline bool isThinpool()
@@ -413,25 +415,25 @@ inline bool restore(const std::string &volId, uint64_t gid)
         LOGs.info() << "restore-mergeOut" << volId << statOut;
         LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
     }
-    cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+    lvSnap = cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
+    volSt.lvCache.addSnap(gid, lvSnap);
     return true;
 }
 
-/**
- * Delete a restored snapshot.
- */
 inline void delRestored(const std::string &volId, uint64_t gid)
 {
     const char *const FUNC = __func__;
-
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    VolLvCache &lvC = volSt.lvCache;
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    cybozu::lvm::Lv lv = volInfo.getLv();
-    const std::string targetName = volInfo.restoredSnapshotName(gid);
-    if (!lv.hasSnap(targetName)) {
+
+    if (!lvC.hasSnap(gid)) {
         throw cybozu::Exception(FUNC)
             << "restored volume not found" << volId << gid;
     }
-    lv.getSnap(targetName).remove();
+    cybozu::lvm::Lv snap = lvC.getSnap(gid);
+    snap.remove();
+    lvC.removeSnap(gid);
 }
 
 /**
@@ -439,9 +441,8 @@ inline void delRestored(const std::string &volId, uint64_t gid)
  */
 inline StrVec listRestored(const std::string &volId)
 {
-    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-
-    const std::vector<uint64_t> gidV = volInfo.getRestoredSnapshots();
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    const std::vector<uint64_t> gidV = volSt.lvCache.getSnapGidList();
     StrVec ret;
     for (uint64_t gid : gidV) ret.push_back(cybozu::itoa(gid));
     return ret;
@@ -596,7 +597,8 @@ inline bool runFullReplClient(
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
 {
     const char *const FUNC = __func__;
-    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    cybozu::lvm::Lv lv = volInfo.getLv();
+    const uint64_t sizeLb = lv.sizeLb();
     const MetaState metaSt = volInfo.getMetaState();
     const cybozu::Uuid uuid = volInfo.getUuid();
     pkt.write(sizeLb);
@@ -609,7 +611,7 @@ inline bool runFullReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    const std::string lvPath = volInfo.getLv().path().str();
+    const std::string lvPath = lv.path().str();
     if (!dirtyFullSyncClient(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
         logger.warn() << "full-repl-client force-stopped" << volId;
         return false;
@@ -1217,7 +1219,7 @@ inline bool getBlockHash(
 
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
-    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, diffMgr);
+    ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, diffMgr, lvCache);
     if (volInfo.existsVolDir()) {
         sm.set(volInfo.getState());
         WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());
@@ -1267,7 +1269,7 @@ inline void gcArchiveVol(const std::string& volId)
         LOGs.info() << volId << "garbage collected wdiff files" << nrDiffs;
     }
     const size_t nrVols = volInfo.gcVolumes();
-    if (nrVols) {
+    if (nrVols > 0) {
         LOGs.info() << volId << "garbage collected incompleted restored volumes" << nrVols;
     }
 }
@@ -1474,10 +1476,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     try {
-        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-        const std::string targetName = volInfo.restoredSnapshotName(gid);
-        cybozu::lvm::Lv lv = volInfo.getLv();
-        if (lv.hasSnap(targetName)) {
+        if (volSt.lvCache.hasSnap(gid)) {
             throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
         }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
@@ -1524,6 +1523,7 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
         ul.unlock();
 
         archive_local::delRestored(volId, gid);
+
         logger.info() << "del-restored succeeded" << volId << gid;
         pkt.writeFin(msgOk);
         sendErr = false;

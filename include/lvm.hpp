@@ -66,7 +66,7 @@ Lv createTvSnap(
     const std::string &vgName, const std::string &lvName, const std::string &snapName,
     bool isWritable);
 void remove(const std::string &lvStr);
-void resize(const std::string &lvStr, uint64_t newSizeLb);
+uint64_t resize(const std::string &lvStr, uint64_t newSizeLb);
 LvList listLv(const std::string &arg);
 bool existsFile(const std::string &vgName, const std::string &name);
 bool existsLv(const std::string &vgName, const std::string &lvName);
@@ -306,6 +306,7 @@ public:
     const std::string &name() const {
         return isSnap() ? snapName() : lvName();
     }
+    void setSizeLb(uint64_t sizeLb) { sizeLb_ = sizeLb; }
     uint64_t sizeLb() const { return sizeLb_; }
     bool isSnap() const { return !snapName_.empty(); }
     bool isTv() const { return !tpName_.empty(); }
@@ -381,8 +382,7 @@ public:
         return locate(vgName_, lvName_);
     }
     void resize(uint64_t newSizeLb) {
-        cybozu::lvm::resize(lvStr(), newSizeLb);
-        sizeLb_ = newSizeLb;
+        sizeLb_ = cybozu::lvm::resize(lvStr(), newSizeLb);
     }
     void remove() {
         cybozu::lvm::remove(lvStr());
@@ -632,12 +632,13 @@ inline Lv createTvSnap(
  * Rename a volume or snapshot.
  * "lvrename vg oldlv newlv"
  */
-inline void renameLv(
+inline Lv renameLv(
     const std::string &vgName,
     const std::string &oldLvName, const std::string &newLvName)
 {
     local::putArgsDebug(__func__, StrVec{vgName, oldLvName, newLvName});
     cybozu::process::call("/sbin/lvrename", { vgName, oldLvName, newLvName });
+    return locate(vgName, newLvName);
 }
 
 /**
@@ -652,8 +653,10 @@ inline void remove(const std::string &lvStr)
 
 /**
  * Resize a volume.
+ * RETURN:
+ *   Really size [logical block].
  */
-inline void resize(const std::string &lvStr, uint64_t newSizeLb)
+inline uint64_t resize(const std::string &lvStr, uint64_t newSizeLb)
 {
     const StrVec args = {
         "-f", /* force volume shrink */
@@ -666,6 +669,7 @@ inline void resize(const std::string &lvStr, uint64_t newSizeLb)
      * It is better to use 'blockdev --flushbufs device' command.
      */
     local::sleepMs(100); /* for safety. */
+    return locate(lvStr).sizeLb();
 }
 
 /**

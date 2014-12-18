@@ -57,7 +57,7 @@ struct Option
     }
 };
 
-void verifyArchiveData()
+void initArchiveData()
 {
     const char *const FUNC = __func__;
     cybozu::FilePath baseDir(ga.baseDirStr);
@@ -70,15 +70,20 @@ void verifyArchiveData()
     if (isThinpool() && !cybozu::lvm::existsTp(ga.volumeGroup, ga.thinpool)) {
         throw cybozu::Exception(FUNC) << "thinpool does not exist" << ga.thinpool;
     }
-    for (const std::string &volId : util::getDirNameList(ga.baseDirStr)) {
-          try {
-              verifyArchiveVol(volId);
-              gcArchiveVol(volId);
-          } catch (std::exception &e) {
-              LOGs.error() << __func__ << "start failed" << volId << e.what();
-              ::exit(1);
-          }
-     }
+    const StrVec volIdV = util::getDirNameList(ga.baseDirStr);
+    VolLvCacheMap map = getVolLvCacheMap(ga.volumeGroup, ga.thinpool, volIdV);
+    for (VolLvCacheMap::value_type &p : map) {
+        const std::string &volId = p.first;
+        VolLvCache &lvC = p.second;
+        try {
+            getArchiveVolState(volId).lvCache = std::move(lvC);
+            verifyArchiveVol(volId);
+            gcArchiveVol(volId);
+        } catch (std::exception &e) {
+            LOGs.error() << __func__ << "start failed" << volId << e.what();
+            ::exit(1);
+        }
+    }
 }
 
 int main(int argc, char *argv[]) try
@@ -88,7 +93,7 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb archive server";
     LOGs.info() << opt.opt;
-    verifyArchiveData();
+    initArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     server::MultiThreadedServer server;
     const size_t concurrency = g.maxForegroundTasks + 5;
