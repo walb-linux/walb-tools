@@ -17,7 +17,7 @@ endif
 INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
 INCLUDES_WALB = -I./walb/include
 
-CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB)
+CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB) -DCYBOZU_SOCKET_USE_EPOLL
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
