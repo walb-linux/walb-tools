@@ -353,7 +353,7 @@ public:
                 continue;
             }
             if (lsidSet.prevWritten < lsid) {
-                LOGs.info() << FUNC << "take checkpoint" << volId_ << lsidSet.prevWritten << lsid;
+                LOGs.debug() << FUNC << "take checkpoint" << volId_ << lsidSet.prevWritten << lsid;
                 device::takeCheckpoint(wdevPath);
             }
 #ifdef DEBUG

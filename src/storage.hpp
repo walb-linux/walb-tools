@@ -202,6 +202,8 @@ inline StorageSingleton& getStorageGlobal()
     return StorageSingleton::getInstance();
 }
 
+const StorageSingleton& gs = getStorageGlobal();
+
 inline void pushTask(const std::string &volId, size_t delayMs=0)
 {
     LOGs.debug() << __func__ << volId << delayMs;
@@ -239,6 +241,11 @@ inline void stopMonitoring(const std::string& wdevPath, const std::string& volId
         });
 }
 
+inline bool isUnderMonitoring(const std::string& wdevPath)
+{
+    return gs.logDevMonitor.exists(device::getWdevNameFromWdevPath(wdevPath));;
+}
+
 class MonitorManager
 {
     const std::string wdevPath;
@@ -266,8 +273,6 @@ public:
 };
 
 } // namespace storage_local
-
-const StorageSingleton& gs = getStorageGlobal();
 
 inline void StorageVolState::initInner(const std::string& volId)
 {
@@ -361,8 +366,8 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
     v.push_back(fmt("state %s", state.c_str()));
     v.push_back(formatActions("action", volSt.ac, allActionVec));
     v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
-
     StorageVolInfo volInfo(gs.baseDirStr, volId);
+    v.push_back(fmt("isUnderMonitoring %d", isUnderMonitoring(volInfo.getWdevPath())));
     for (std::string& s : volInfo.getStatusAsStrVec(isVerbose)) {
 		v.push_back(std::move(s));
 	}

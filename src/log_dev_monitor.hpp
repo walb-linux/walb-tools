@@ -96,7 +96,6 @@ public:
     /**
      * DO NOT call this from multiple threads.
      * This will throw an exception if caught SIGINT.
-     *
      */
     StrVec poll(int timeoutMs = -1) {
         const char *const FUNC = __func__;
@@ -115,8 +114,13 @@ public:
                 // Reset the trigger by reading the file.
                 char buf[4096];
                 if (::lseek(fd, 0, SEEK_SET) >= 0) {
-                    const int s = ::read(fd, buf, 4096);
-                    LOGs.debug() << FUNC << "read bytes" << s;
+                    size_t size = 0;
+                    for (;;) {
+                        const int s = ::read(fd, buf, 4096);
+                        if (s <= 0) break;
+                        size += s;
+                    }
+                    LOGs.debug() << FUNC << "read bytes" << size;
                 } else {
                     // Ignore.
                 }
@@ -157,6 +161,10 @@ public:
             v.push_back(p);
         }
         return v;
+    }
+    bool exists(const std::string &wdevName) const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return fdMap_.find(wdevName) != fdMap_.cend();
     }
 private:
     bool addName(const std::string &wdevName, int fd) {
