@@ -340,9 +340,6 @@ public:
         }
         lvC_.add(lv);
     }
-    cybozu::lvm::Lv getLv() {
-        return lvC_.getLv();
-    }
     /**
      * Grow the volume.
      * @newSizeLb [logical block].

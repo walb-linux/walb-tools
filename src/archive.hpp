@@ -150,12 +150,12 @@ inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
 const bool allowEmpty = true;
 
 inline void prepareVirtualFullScanner(
-    VirtualFullScanner &virt,
+    VirtualFullScanner &virt, ArchiveVolState &volSt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
     const char *const FUNC = __func__;
 
-    cybozu::lvm::Lv lv = volInfo.getLv();
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
     if (sizeLb != lv.sizeLb()) {
         throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
     }
@@ -249,7 +249,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     const MetaState st1 = beginApplying(st0, diffV);
     volInfo.setMetaState(st1);
 
-    cybozu::lvm::Lv lv = volInfo.getLv();
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
     DiffStatistics statIn, statOut;
     std::string memUsageStr;
     if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
@@ -379,7 +379,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
-    cybozu::lvm::Lv lv = volInfo.getLv();
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
     const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
     removeSnapshot(lv, tmpLvName);
@@ -516,14 +516,14 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
     if (isFull) {
         volInfo.createLv(sizeLb);
-        const std::string lvPath = volInfo.getLv().path().str();
+        const std::string lvPath = volSt.lvCache.getLv().path().str();
         const bool skipZero = isThinpool();
         isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
-        archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, snapFrom);
+        archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, snapFrom);
         isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.ps);
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
@@ -572,14 +572,14 @@ inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const 
     return sock;
 }
 
-inline void verifyVolumeSize(ArchiveVolInfo &volInfo, uint64_t sizeLb, Logger &logger)
+inline void verifyVolumeSize(ArchiveVolState &volSt, ArchiveVolInfo &volInfo, uint64_t sizeLb, Logger &logger)
 {
     const char *const FUNC = __func__;
     if (!volInfo.lvExists()) {
         logger.debug() << FUNC << "lv does not exist" << volInfo.volId;
         return;
     }
-    const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+    const uint64_t selfSizeLb = volSt.lvCache.getLv().sizeLb();
     if (sizeLb > selfSizeLb) {
         throw cybozu::Exception(FUNC)
             << "volume size is smaller than the received size"
@@ -597,7 +597,7 @@ inline bool runFullReplClient(
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
 {
     const char *const FUNC = __func__;
-    cybozu::lvm::Lv lv = volInfo.getLv();
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
     const uint64_t sizeLb = lv.sizeLb();
     const MetaState metaSt = volInfo.getMetaState();
     const cybozu::Uuid uuid = volInfo.getUuid();
@@ -636,7 +636,7 @@ inline bool runFullReplServer(
         logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
-        verifyVolumeSize(volInfo, sizeLb, logger);
+        verifyVolumeSize(volSt, volInfo, sizeLb, logger);
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -644,7 +644,7 @@ inline bool runFullReplServer(
     }
 
     volInfo.createLv(sizeLb);
-    const std::string lvPath = volInfo.getLv().path().str();
+    const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
     if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero)) {
         logger.warn() << "full-repl-server force-stopped" << volId;
@@ -663,7 +663,7 @@ inline bool runHashReplClient(
     packet::Packet &pkt, uint64_t bulkLb, const MetaDiff &diff, Logger &logger)
 {
     const char *const FUNC = __func__;
-    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     const cybozu::Uuid uuid = volInfo.getUuid();
     const uint32_t hashSeed = diff.timestamp;
     pkt.write(sizeLb);
@@ -678,7 +678,7 @@ inline bool runHashReplClient(
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
     VirtualFullScanner virt;
-    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapE);
+    archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapE);
     if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
         return false;
@@ -708,7 +708,7 @@ inline bool runHashReplServer(
         logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
-        verifyVolumeSize(volInfo, sizeLb, logger);
+        verifyVolumeSize(volSt, volInfo, sizeLb, logger);
         pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -716,7 +716,7 @@ inline bool runHashReplServer(
     }
 
     VirtualFullScanner virt;
-    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, diff.snapB);
+    archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
                              volSt.stopState, ga.ps)) {
@@ -753,7 +753,7 @@ inline bool runDiffReplClient(
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
-    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     const DiffFileHeader &fileH = merger.header();
     const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
     const cybozu::Uuid uuid = fileH.getUuid();
@@ -795,7 +795,7 @@ inline bool runDiffReplServer(
         pkt.read(uuid);
         pkt.read(diff);
         logger.debug() << "diff-repl-server" << sizeLb << maxIoBlocks << uuid << diff;
-        verifyVolumeSize(volInfo, sizeLb, logger);
+        verifyVolumeSize(volSt, volInfo, sizeLb, logger);
         const MetaSnap snap = volInfo.getLatestSnapshot();
         if (!canApply(snap, diff)) {
             throw cybozu::Exception(FUNC) << "can not apply" << snap << diff;
@@ -936,7 +936,7 @@ inline StrVec getAllStatusAsStrVec()
         }
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         s += fmt(" latestSnapshot %s", latestSnap.str().c_str());
-        const uint64_t sizeLb = volInfo.getLv().sizeLb();
+        const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
         const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
         s += fmt(" size %s", sizeS.c_str());
 
@@ -1182,10 +1182,10 @@ inline bool getBlockHash(
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    const uint64_t sizeLb = volInfo.getLv().sizeLb();
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
 
     VirtualFullScanner virt;
-    archive_local::prepareVirtualFullScanner(virt, volInfo, sizeLb, MetaSnap(gid));
+    archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, MetaSnap(gid));
 
     std::vector<char> buf;
     buf.reserve(bulkLb * LOGICAL_BLOCK_SIZE);
@@ -1638,7 +1638,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             pkt.writeFin(msg);
             return;
         }
-        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+        const uint64_t selfSizeLb = volSt.lvCache.getLv().sizeLb();
         if (selfSizeLb < sizeLb) {
             const char *msg = msgSmallerLvSize;
             logger.error() << msg << volId << sizeLb << selfSizeLb;
