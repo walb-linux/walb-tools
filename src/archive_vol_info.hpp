@@ -80,20 +80,19 @@ private:
 public:
     VolLvCache() : muPtr_(new std::recursive_mutex()), exists_(false), lv_(), snapMap_() {
     }
-    bool exists() const {
-        UniqueLock lk(*muPtr_);
-        return exists_;
-    }
     Lv getLv() const {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         return lv_;
     }
     bool hasSnap(uint64_t gid) const {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         return snapMap_.find(gid) != snapMap_.cend();
     }
     Lv getSnap(uint64_t gid) const {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         LvMap::const_iterator it = snapMap_.find(gid);
         if (it == snapMap_.cend()) {
             throw cybozu::Exception(__func__)
@@ -103,12 +102,14 @@ public:
     }
     size_t getSnapNr() const {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         return snapMap_.size();
     }
     std::vector<uint64_t> getSnapGidList() const {
         std::vector<uint64_t> ret;
         {
             UniqueLock lk(*muPtr_);
+            verifyExistance();
             for (const LvMap::value_type &p : snapMap_) {
                 ret.push_back(p.first);
             }
@@ -118,6 +119,7 @@ public:
     }
     LvMap getSnapMap() const {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         return snapMap_; /* copy */
     }
     void add(const Lv &lv) {
@@ -128,21 +130,31 @@ public:
     }
     void remove() {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         snapMap_.clear();
         lv_ = Lv();
         exists_ = false;
     }
     void addSnap(uint64_t gid, const Lv &snap) {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         snapMap_.emplace(gid, snap);
     }
     void removeSnap(uint64_t gid) {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         snapMap_.erase(gid);
     }
     void resize(uint64_t newSizeLb) {
         UniqueLock lk(*muPtr_);
+        verifyExistance();
         lv_.setSizeLb(newSizeLb);
+    }
+private:
+    void verifyExistance() const {
+        if (!exists_) {
+            throw cybozu::Exception("VolLvCache:lv does not existance in memory");
+        }
     }
 };
 
