@@ -1638,6 +1638,17 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             pkt.writeFin(msg);
             return;
         }
+        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
+        if (selfSizeLb < sizeLb) {
+            const char *msg = msgSmallerLvSize;
+            logger.error() << msg << volId << sizeLb << selfSizeLb;
+            pkt.writeFin(msg);
+            return;
+        }
+        if (sizeLb < selfSizeLb) {
+            logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
+            // no problem to continue.
+        }
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         const Relation rel = getRelation(latestSnap, diff);
 
@@ -1667,23 +1678,6 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
         ul.unlock();
         logger.debug() << "wdiff-transfer started" << volId;
-
-        /*
-         * Lvm command may be too slow so we chose lv size check
-         * after sending accept message.
-         *
-         * TODO: getLv() must not really call 'lvs' command.
-         */
-        const uint64_t selfSizeLb = volInfo.getLv().sizeLb();
-        if (selfSizeLb < sizeLb) {
-            const char *msg = msgSmallerLvSize;
-            logger.error() << msg << volId << sizeLb << selfSizeLb;
-            return;
-        }
-        if (sizeLb < selfSizeLb) {
-            logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
-            // no problem to continue.
-        }
 
         const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
