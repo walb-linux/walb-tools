@@ -2107,6 +2107,25 @@ class Controller:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
 
+    def del_snapshot(self, sx, vol, gidL):
+        '''
+        Delete snapshots
+        sx :: Server    - storage server.
+        vol :: str      - volume name.
+        gidL :: int or [int] - list of gid
+        '''
+        verify_server_kind(sx, [K_STORAGE])
+        verify_type(vol, str)
+        gidLstr = ""
+        if isinstance(gidL, list):
+            for gid in gidL:
+                verify_u64(gid)
+                gidLstr += " " + str(gid)
+        else:
+            verify_u64(gidL)
+            gidLstr = str(gidL)
+        return self.run_ctl(sx, ['del_snapshot', vol, gidLstr])
+
     def apply(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
