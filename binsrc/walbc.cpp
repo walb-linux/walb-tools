@@ -154,7 +154,7 @@ const CommandInfo g_cmdTbl[] = {
     { getCN, c2xGetClient, setupStrVec, "" },
     { execCN, c2xGetStrVecClient, setupStrVec, "" },
     { shutdownCN, protocol::shutdownClient, setupShutdown, "" },
-    { delSnapshotCN, protocol::c2aDelSnapshot, setupDelSnapshot, "delete snapshot" },
+    { delSnapshotCN, c2aDelSnapshot, setupDelSnapshot, "delete snapshot" },
 };
 
 const CommandInfo* getCommand(const std::string& cmd)
