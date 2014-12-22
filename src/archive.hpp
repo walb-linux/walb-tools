@@ -1976,6 +1976,45 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 
 /**
  * params[0]: volId
+ * params[1]: gid0
+ * params[2]: gid1
+ * params[3]: ...
+ */
+inline void c2aDelSnapshot(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        if (v.size() < 2) {
+            throw cybozu::Exception(FUNC) << "bad param";
+        }
+        const std::string &volId = v[0];
+
+        ArchiveVolState& volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+        for (size_t i = 1; i < v.size(); i++) {
+            const uint64_t gid = cybozu::atoi(v[i]);
+            MetaDiffVec diffV = volSt.diffMgr.delSnapshot(gid);
+            volInfo.delSnapshot(diffV);
+            logger.info() << "del snapshot succeeded" << volId << v[i];
+        }
+        ul.unlock();
+        pkt.writeFin(msgOk);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
+
+/**
+ * params[0]: volId
  * params[1]: gid
  * params[2]: bulkSizeU (optional)
  */
@@ -2141,6 +2180,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { dbgSetBase, c2aSetBaseServer },
     { getCN, c2aGetServer },
     { execCN, c2aExecServer },
+    { delSnapshotCN, c2aDelSnapshot },
     // protocols.
     { dirtyFullSyncPN, x2aDirtyFullSyncServer },
     { dirtyHashSyncPN, x2aDirtyHashSyncServer },

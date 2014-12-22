@@ -191,6 +191,19 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
 }
 
 /**
+ * Delete snapshots
+ *
+ * params[0]: volId.
+ * params[1]: gid0
+ * params[2]: gid1
+ * params[3]: ...
+ */
+inline void c2aDelSnapshot(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+
+/**
  * params[0]: volId.
  *
  * !!!CAUSION!!!
@@ -287,8 +300,7 @@ inline void c2xResizeClient(protocol::ClientParams &p)
  */
 inline void c2xResetVolClient(protocol::ClientParams &p)
 {
-    const char *const FUNC = __func__;
-    protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
 /**

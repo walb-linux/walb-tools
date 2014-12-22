@@ -2110,21 +2110,19 @@ class Controller:
     def del_snapshot(self, sx, vol, gidL):
         '''
         Delete snapshots
-        sx :: Server    - storage server.
+        ax :: Server    - archive server.
         vol :: str      - volume name.
-        gidL :: int or [int] - list of gid
+        gidL :: [int] - list of gid
         '''
-        verify_server_kind(sx, [K_STORAGE])
+        verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        gidLstr = ""
-        if isinstance(gidL, list):
-            for gid in gidL:
-                verify_u64(gid)
-                gidLstr += " " + str(gid)
-        else:
-            verify_u64(gidL)
-            gidLstr = str(gidL)
-        return self.run_ctl(sx, ['del_snapshot', vol, gidLstr])
+        args = ['del_snapshot', vol]
+        if not isinstance(gidL, list):
+            raise Exception('del_snapshot', sx.name, vol, gidL)
+        for gid in gidL:
+            verify_u64(gid)
+            args.append(str(gid))
+        return self.run_ctl(ax, args)
 
     def apply(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''

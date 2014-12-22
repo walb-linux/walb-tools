@@ -116,6 +116,12 @@ void setupShutdown(cybozu::Option& opt)
     static std::string force;
     opt.appendParamOpt(&force, "", "(opt)", ": force");
 }
+
+void setupDelSnapshot(cybozu::Option& opt)
+{
+    setupVolId(opt);
+    setupStrVec(opt);
+}
 struct CommandInfo {
     std::string name;
     protocol::ClientHandler handler;
@@ -148,6 +154,7 @@ const CommandInfo g_cmdTbl[] = {
     { getCN, c2xGetClient, setupStrVec, "" },
     { execCN, c2xGetStrVecClient, setupStrVec, "" },
     { shutdownCN, protocol::shutdownClient, setupShutdown, "" },
+    { delSnapshotCN, protocol::c2aDelSnapshot, setupDelSnapshot, "delete snapshot" },
 };
 
 const CommandInfo* getCommand(const std::string& cmd)

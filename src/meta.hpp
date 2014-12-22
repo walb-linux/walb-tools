@@ -805,6 +805,23 @@ public:
             eraseNolock(diff, doesThrowError);
         }
     }
+    /*
+        return deleted snapshot diff vector
+    */
+    MetaDiffVec delSnapshot(uint64_t gid)
+    {
+        AutoLock lk(mu_);
+        auto range = mmap_.equal_range(gid);
+        MetaDiffVec diffV;
+        for (Mmap::iterator i = range.first; i != range.second; ++i) {
+            MetaDiff& diff = i->second;
+            if (!diff.isMergeable) {
+                diff.isMergeable = true;
+                diffV.push_back(diff);
+            }
+        }
+        return diffV;
+    }
     /**
      * Garbage collect.
      *

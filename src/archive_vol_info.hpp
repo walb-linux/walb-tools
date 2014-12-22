@@ -444,6 +444,18 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
+    void delSnapshot(const MetaDiffVec& diffV)
+    {
+        for (MetaDiff diff : diffV) {
+            assert(diff.isMergeable);
+            cybozu::FilePath to = getDiffPath(diff);
+            diff.isMergeable = false;
+            cybozu::FilePath from = getDiffPath(diff);
+            if (!from.rename(to)) {
+                throw cybozu::Exception("ArchiveVolInfo:delSnapshot") << from << to;
+            }
+        }
+    }
     /**
      * @snap base snapshot.
      * @size maximum total size [byte].
