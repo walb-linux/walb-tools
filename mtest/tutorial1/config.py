@@ -22,6 +22,6 @@ sLayout = ServerLayout([s0], [p0], [a0])
 walbc = Controller(walbcPath, sLayout, isDebug=False)
 
 runCommand = walbc.get_run_remote_command(s0)
-wdev0 = Device(0, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
+wdev = Device(99, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
 
 VOL = 'vol'
