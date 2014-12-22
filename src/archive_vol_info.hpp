@@ -444,7 +444,7 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
-    void delSnapshot(const MetaDiffVec& diffV)
+    void disableSnapshot(const MetaDiffVec& diffV)
     {
         for (MetaDiff diff : diffV) {
             assert(diff.isMergeable);
@@ -452,7 +452,7 @@ public:
             diff.isMergeable = false;
             cybozu::FilePath from = getDiffPath(diff);
             if (!from.rename(to)) {
-                throw cybozu::Exception("ArchiveVolInfo:delSnapshot") << from << to;
+                throw cybozu::Exception("ArchiveVolInfo:disableSnapshot") << from << to;
             }
         }
     }

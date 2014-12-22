@@ -2107,18 +2107,18 @@ class Controller:
             self.wait_for_restorable(ax, vol, gid, timeoutS)
         return gid
 
-    def del_snapshot(self, sx, vol, gidL):
+    def disable_snapshot(self, ax, vol, gidL):
         '''
-        Delete snapshots
+        Disable snapshots
         ax :: Server    - archive server.
         vol :: str      - volume name.
         gidL :: [int] - list of gid
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        args = ['del_snapshot', vol]
+        args = ['disable-snapshot', vol]
         if not isinstance(gidL, list):
-            raise Exception('del_snapshot', sx.name, vol, gidL)
+            raise Exception('disable_snapshot', ax.name, vol, gidL)
         for gid in gidL:
             verify_u64(gid)
             args.append(str(gid))

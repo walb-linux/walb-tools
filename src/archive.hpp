@@ -1980,7 +1980,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
  * params[2]: gid1
  * params[3]: ...
  */
-inline void c2aDelSnapshot(protocol::ServerParams &p)
+inline void c2aDisableSnapshot(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
@@ -2000,8 +2000,8 @@ inline void c2aDelSnapshot(protocol::ServerParams &p)
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         for (size_t i = 1; i < v.size(); i++) {
             const uint64_t gid = cybozu::atoi(v[i]);
-            MetaDiffVec diffV = volSt.diffMgr.delSnapshot(gid);
-            volInfo.delSnapshot(diffV);
+            MetaDiffVec diffV = volSt.diffMgr.disableSnapshot(gid);
+            volInfo.disableSnapshot(diffV);
             logger.info() << "del snapshot succeeded" << volId << v[i];
         }
         ul.unlock();
@@ -2180,7 +2180,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { dbgSetBase, c2aSetBaseServer },
     { getCN, c2aGetServer },
     { execCN, c2aExecServer },
-    { delSnapshotCN, c2aDelSnapshot },
+    { disableSnapshotCN, c2aDisableSnapshot },
     // protocols.
     { dirtyFullSyncPN, x2aDirtyFullSyncServer },
     { dirtyHashSyncPN, x2aDirtyHashSyncServer },

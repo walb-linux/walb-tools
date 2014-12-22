@@ -808,7 +808,7 @@ public:
     /*
         return deleted snapshot diff vector
     */
-    MetaDiffVec delSnapshot(uint64_t gid)
+    MetaDiffVec disableSnapshot(uint64_t gid)
     {
         AutoLock lk(mu_);
         auto range = mmap_.equal_range(gid);

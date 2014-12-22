@@ -198,7 +198,7 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
  * params[2]: gid1
  * params[3]: ...
  */
-inline void c2aDelSnapshot(protocol::ClientParams &p)
+inline void c2aDisableSnapshot(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
