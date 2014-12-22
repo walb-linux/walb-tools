@@ -168,7 +168,7 @@ sLayout = ServerLayout([s0], [p0], [a0])
 walbc = Controller(walbcPath, sLayout, isDebug=False)
 
 runCommand = walbc.get_run_remote_command(s0)
-wdev0 = Device(0, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
+wdev = Device(99, '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
 
 VOL = 'volm'
 ```
@@ -192,14 +192,14 @@ tutorial-config.py を walb-tools においてそのディレクトリで
 ### WalB デバイスの初期化
 
 1. /dev/tutorial/wlog の初期化
-  `wdev0.format_ldev()`
+  `wdev.format_ldev()`
 2. WalB デバイス の作成
-  `wdev0.create()`
-* これで wdev0.path (通常/dev/walb/0) ができる。
+  `wdev.create()`
+* これで wdev.path (通常/dev/walb/0) ができる。
 
 ### ボリューム(VOL) の初期化
 
-* `walbc.init_storage(s0, VOL, wdev0.path)`
+* `walbc.init_storage(s0, VOL, wdev.path)`
 
 ### 状態の確認
 
