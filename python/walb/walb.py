@@ -2093,6 +2093,7 @@ class Controller:
         return :: int   - gid of the taken snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
+        verify_type(vol, str)
         verify_type(axL, list, Server)
         for ax in axL:
             st = self.get_state(ax, vol)
