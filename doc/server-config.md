@@ -16,8 +16,6 @@ Each archive server requires a LVM volume group (`VG`).
 The volume group must exists. Archive servers will create
 logical volumes and snapshots in their volume group.
 
-**TODO**: support dm-thinp.
-
 The following is typical command-line options for each kind of servers:
 ```
 > sudo walb-archive -p PORT -b BASE_DIR -id ID -l LOG_PATH -vg VG &
@@ -27,6 +25,8 @@ The following is typical command-line options for each kind of servers:
 
 For detail options, use `-h` option of server executables,
 or see `get_server_args()` function of `python/walb/walb.py`.
+
+If you use thin provisioning (dm-thinp), add `-tp THINPOOL_NAME` option to walb-archive command line.
 
 You should start server processes in order of archives, proxies, and storages.
 Since proxy servers will connect archive servers in the background,
@@ -90,6 +90,11 @@ sLayout = ServerLayout([s0], [p0], [a0])
 walbc = Controller(walbcPath, sLayout, isDebug=True)
 ```
 
+If you use thinpools, set member `tp` of `Server` class for archive servers.
+```python
+a0.tp = 'tp0'
+```
+
 You can load the configuration in a python shell as follows:
 ```
 python> execfile('walb-config.py')
@@ -98,13 +103,9 @@ python> execfile('walb-config.py')
 For details of `Server`, `ServerLayout`, and `Controller` class,
 see [python library](python.md) document.
 
-You can get examples of each server command-line arguments as follows:
+You can get command-line arguments for servers as follows:
 ```
-python> print ' '.join(get_server_args(s0, sLayout))
-...
-python> print ' '.join(get_server_args(p0, sLayout))
-...
-python> print ' '.join(get_server_args(a0, sLayout))
+python> sLayout.to_cmd_string()
 ...
 ```
 
