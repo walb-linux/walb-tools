@@ -1259,7 +1259,7 @@ class Controller:
         state = self.get_state(sx, vol)
         if state != sSyncReady:
             raise Exception('_go_standby:bad state', sx.name, vol, state)
-        self.run_ctl(sx, ['start', vol, 'standby']) # QQQ
+        self.run_ctl(sx, ['start', vol, 'standby'])
         self._wait_for_state_change(sx, vol, [stStartStandby], [sStandby])
 
     def kick_all(self, sL):
@@ -1586,7 +1586,7 @@ class Controller:
         verify_server_kind(s, serverKinds)
         verify_type(vol, str)
         if s.kind == K_STORAGE:
-            self.run_ctl(s, ['start', vol, 'target']) # QQQ
+            self.run_ctl(s, ['start', vol, 'target'])
             self._wait_for_state_change(s, vol, [stStartTarget], [sTarget])
         elif s.kind == K_PROXY:
             self.run_ctl(s, ['start', vol])
