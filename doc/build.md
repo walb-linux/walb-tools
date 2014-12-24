@@ -79,4 +79,11 @@ Install python package if necessary:
 ```
 You can use `walb-tools.git/python/walb/walb.py` directly.
 
+
+## Environment
+
+`walb-proxy` and `walb-archive` process may open many files at once,
+especially when they have many wdiff files.
+It is recommended to enlarge nofile limit.
+
 -----
