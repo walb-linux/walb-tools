@@ -122,6 +122,20 @@ void setupDisableSnapshot(cybozu::Option& opt)
     setupVolId(opt);
     setupStrVec(opt);
 }
+
+void setupGet(cybozu::Option& opt)
+{
+    std::string usage;
+    usage += "usage: get NAME ARGUMENTS...\n";
+    usage += "NAME list:\n";
+    for (const protocol::ValueTypeMap::value_type &p : getGetCommandMap()) {
+        usage += cybozu::util::formatString("  %s\n", p.first.c_str());
+    }
+    opt.setUsage(usage);
+    static StrVec sv;
+    opt.appendParamVec(&sv, "");
+}
+
 struct CommandInfo {
     std::string name;
     protocol::ClientHandler handler;
@@ -129,32 +143,32 @@ struct CommandInfo {
     const char *help;
 };
 const CommandInfo g_cmdTbl[] = {
-    { statusCN, c2xGetStrVecClient, setupStrVec, "" },
-    { initVolCN, c2xInitVolClient, setupInitVol, "" },
-    { clearVolCN, c2xClearVolClient, setupVolId, "" },
-    { resetVolCN, c2xResetVolClient, setupResetVol, "" },
-    { fullBkpCN, c2sFullBkpClient, setupBkp, "" },
-    { hashBkpCN, c2sHashBkpClient, setupBkp, "" },
-    { restoreCN, c2aRestoreClient, setupVolIdGid, "" },
-    { delRestoredCN, c2aDelRestoredClient, setupVolIdGid, "" },
-    { startCN, c2xStartClient, setupStart, "" },
-    { stopCN, c2xStopClient, setupStop, "" },
-    { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, "" },
-    { snapshotCN, c2sSnapshotClient, setupVolId, "" },
-    { replicateCN, c2aReplicateClient, setupReplicate, "" },
-    { applyCN, c2aApplyClient, setupVolIdGid, "" },
-    { mergeCN, c2aMergeClient, setupMerge, "" },
-    { resizeCN, c2xResizeClient, setupResize, "" },
-    { kickCN, c2xKickClient, setupKick, "" },
-    { blockHashCN, c2aBlockHashClient, setupBlockHash, "" },
-    { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, "" },
-    { dbgSetUuid, c2aSetUuidClient, setupUuid, "" },
-    { dbgSetState, c2aSetStateClient, setupSetState, "" },
-    { dbgSetBase, c2aSetBaseClient, setupSetState, "" },
-    { getCN, c2xGetClient, setupStrVec, "" },
-    { execCN, c2xGetStrVecClient, setupStrVec, "" },
-    { shutdownCN, protocol::shutdownClient, setupShutdown, "" },
-    { disableSnapshotCN, c2aDisableSnapshot, setupDisableSnapshot, "disable snapshot" },
+    { statusCN, c2xGetStrVecClient, setupStrVec, "print human-readable status." },
+    { initVolCN, c2xInitVolClient, setupInitVol, "initialize a volume." },
+    { clearVolCN, c2xClearVolClient, setupVolId, "clear a volume." },
+    { resetVolCN, c2xResetVolClient, setupResetVol, "reset a volume in a server." },
+    { fullBkpCN, c2sFullBkpClient, setupBkp, "execute full-backup." },
+    { hashBkpCN, c2sHashBkpClient, setupBkp, "execute hash-backup." },
+    { restoreCN, c2aRestoreClient, setupVolIdGid, "restore a volume in an archive server." },
+    { delRestoredCN, c2aDelRestoredClient, setupVolIdGid, "delete a restored volume." },
+    { startCN, c2xStartClient, setupStart, "start a volume in a server." },
+    { stopCN, c2xStopClient, setupStop, "stop a volume in a server." },
+    { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, "control archive information in a proxy." },
+    { snapshotCN, c2sSnapshotClient, setupVolId, "take a snapshot in a storage." },
+    { disableSnapshotCN, c2aDisableSnapshot, setupDisableSnapshot, "disable a snapshot in an archive." },
+    { replicateCN, c2aReplicateClient, setupReplicate, "replicate a volume from an archive to another archive." },
+    { applyCN, c2aApplyClient, setupVolIdGid, "apply old wdiff files to the base image of a volume in an archive." },
+    { mergeCN, c2aMergeClient, setupMerge, "merge wdiff files for a volume in an archive." },
+    { resizeCN, c2xResizeClient, setupResize, "resize a volume in a storage or an archive." },
+    { kickCN, c2xKickClient, setupKick, "kick background tasks if necessary." },
+    { blockHashCN, c2aBlockHashClient, setupBlockHash, "calculate block hash of a volume in an archive." },
+    { getCN, c2xGetClient, setupGet, "get some information from a server." },
+    { execCN, c2xGetStrVecClient, setupStrVec, "execute a command-line at a server's side." },
+    { shutdownCN, protocol::shutdownClient, setupShutdown, "shutdown a server process." },
+    { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, "reload metadata of a volue in an archive (for debug)." },
+    { dbgSetUuid, c2aSetUuidClient, setupUuid, "set uuid for a volume in an archive (for debug)." },
+    { dbgSetState, c2aSetStateClient, setupSetState, "set state for a volume in an archive (for debug)." },
+    { dbgSetBase, c2aSetBaseClient, setupSetState, "set base(meta-state) for a volume in an archive (for debug)." },
 };
 
 const CommandInfo* getCommand(const std::string& cmd)

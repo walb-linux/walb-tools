@@ -338,13 +338,9 @@ inline void c2aBlockHashClient(protocol::ClientParams &p)
     std::cout << hash << std::endl;
 }
 
-inline void c2xGetClient(protocol::ClientParams &p)
+inline const protocol::ValueTypeMap& getGetCommandMap()
 {
-    const char *const FUNC = __func__;
-    if (p.params.empty()) throw cybozu::Exception(FUNC) << "target not specified";
-    const std::string &targetName = p.params[0];
-
-    const protocol::ValueTypeMap typeM = {
+    static const protocol::ValueTypeMap typeM = {
         { isOverflowTN, protocol::SizeType },
         { isWdiffSendErrorTN, protocol::SizeType },
         { numActionTN, protocol::SizeType },
@@ -360,7 +356,16 @@ inline void c2xGetClient(protocol::ClientParams &p)
         { uuidTN, protocol::StringType },
         { baseTN, protocol::StringType },
     };
-    const protocol::ValueType valType = protocol::getValueType(targetName, typeM, FUNC);
+    return typeM;
+}
+
+inline void c2xGetClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    if (p.params.empty()) throw cybozu::Exception(FUNC) << "target not specified";
+    const std::string &targetName = p.params[0];
+
+    const protocol::ValueType valType = protocol::getValueType(targetName, getGetCommandMap(), FUNC);
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
     protocol::recvValueAndPut(p.sock, valType, FUNC);
 }
