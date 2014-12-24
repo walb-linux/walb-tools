@@ -475,14 +475,13 @@ inline void c2sStartServer(protocol::ServerParams &p)
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         StorageVolInfo volInfo(gs.baseDirStr, volId);
-        {
-            const std::string wdevPath = volInfo.getWdevPath();
-            if (device::isOverflow(wdevPath)) {
-                throw cybozu::Exception(FUNC) << "overflow" << volId << wdevPath;
-            }
-        }
+        const std::string wdevPath = volInfo.getWdevPath();
+        const bool isOverflow = device::isOverflow(wdevPath);
         const std::string st = volInfo.getState();
         if (isTarget) {
+            if (isOverflow) {
+                throw cybozu::Exception(FUNC) << "overflow" << volId << wdevPath;
+            }
             StateMachineTransaction tran(volSt.sm, sStopped, stStartTarget, FUNC);
             if (st != sStopped) throw cybozu::Exception(FUNC) << "bad state" << st;
             volInfo.setState(sTarget);
@@ -492,6 +491,9 @@ inline void c2sStartServer(protocol::ServerParams &p)
             StateMachineTransaction tran(volSt.sm, sSyncReady, stStartStandby, FUNC);
             if (st != sSyncReady) throw cybozu::Exception(FUNC) << "bad state" << st;
             volInfo.setState(sStandby);
+            if (isOverflow) {
+                volInfo.resetWlog(0);
+            }
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
             tran.commit(sStandby);
         }
