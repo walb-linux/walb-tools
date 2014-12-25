@@ -637,6 +637,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
         monitorMgr.start();
 
         // (7) in storage-daemon.txt
+        logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
+                      << "started" << volId << archiveId;
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
             if (!dirtyFullSyncClient(aPkt, bdevPath, sizeLb, bulkLb, volSt.stopState, gs.ps)) {
@@ -666,12 +668,8 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     volInfo.setState(sTarget);
     tran1.commit(sTarget);
     monitorMgr.dontStop();
-
-    if (isFull) {
-        logger.info() << "full-bkp succeeded" << volId << archiveId;
-    } else {
-        logger.info() << "hash-bkp succeeded" << volId << archiveId;
-    }
+    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
+                  << "succeeded" << volId << archiveId;
 }
 
 } // storage_local

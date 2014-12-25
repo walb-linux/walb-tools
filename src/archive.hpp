@@ -512,6 +512,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     if (st != stFrom) {
         throw cybozu::Exception(FUNC) << "state is not" << stFrom << "but" << st;
     }
+    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN) << "started" << volId;
     bool isOk;
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
     if (isFull) {
