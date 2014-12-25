@@ -62,6 +62,7 @@ public:
         ssock.bind(port);
         cybozu::thread::ThreadRunnerFixedPool pool;
         pool.start(maxNumThreads);
+        LOGs.info() << FUNC << "Ready to accept connections";
         for (;;) {
             for (;;) {
                 if (!ps.isRunning()) goto quit;
