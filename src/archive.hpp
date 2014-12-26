@@ -1028,6 +1028,28 @@ inline void getDiffList(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
+inline void getApplicableDiffList(protocol::GetCommandParams &p)
+{
+    std::string volId;
+    std::string gidS;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId, &gidS});
+    uint64_t gid = UINT64_MAX;
+    if (!gidS.empty()) gid = cybozu::atoi(gidS);
+
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    const MetaState metaSt = volInfo.getMetaState();
+    const MetaDiffVec diffV = volSt.diffMgr.getDiffListToApply(metaSt, gid);
+    StrVec v;
+    for (const MetaDiff &diff : diffV) {
+        v.push_back(formatMetaDiff("", diff));
+    }
+    ul.unlock();
+    protocol::sendValueAndFin(p, v);
+}
+
 inline void getTotalDiffSize(protocol::GetCommandParams &p)
 {
     std::string volId;
@@ -2141,6 +2163,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { volTN, archive_local::getVolList },
     { pidTN, archive_local::getPid },
     { diffTN, archive_local::getDiffList },
+    { applicableDiffTN, archive_local::getApplicableDiffList },
     { totalDiffSizeTN, archive_local::getTotalDiffSize },
     { existsDiffTN, archive_local::existsDiff },
     { numActionTN, archive_local::getNumAction },

@@ -349,6 +349,7 @@ inline const protocol::ValueTypeMap& getGetCommandMap()
         { volTN, protocol::StringVecType },
         { pidTN, protocol::SizeType },
         { diffTN, protocol::StringVecType },
+        { applicableDiffTN, protocol::StringVecType },
         { totalDiffSizeTN, protocol::SizeType },
         { existsDiffTN, protocol::SizeType },
         { restoredTN, protocol::StringVecType },
