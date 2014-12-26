@@ -1155,8 +1155,8 @@ class Controller:
         Get wdiff list.
         ax :: Server    - archive server.
         vol :: str      - volume name.
-        gid0 :: int     - range begin.
-        gid1 :: int     - range end.
+        gid0 :: u64     - range begin.
+        gid1 :: u64     - range end.
         return :: [Diff] - wdiff information list managed by the archive server.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
@@ -1175,6 +1175,20 @@ class Controller:
         gid1 :: int     - range end.
         '''
         printL(self.get_diff_list(ax, vol, gid0, gid1))
+
+    def get_applicable_diff_list(self, ax, vol, gid=UINT64_MAX):
+        '''
+        Get wdiff to list to apply.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gid :: u64      - target gid.
+        return :: [Diff] - wdiff information list managed by the archive server.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_u64(gid)
+        ls = self.run_ctl(ax, ['get', 'applicable-diff', vol, str(gid)])
+        return map(create_diff_from_str, ls.split('\n'))
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
