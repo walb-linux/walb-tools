@@ -2181,8 +2181,8 @@ class Controller:
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge')
-        gidL = self.get_restorable_gid(ax, vol, 'all')
-        if gidB not in gidL or gidE not in gidL:
+        diffL = self.get_applicable_diff_list(ax, vol, gidE)
+        if gidB not in map(lambda diff: diff.B.gidB, diffL) or gidE not in map(lambda diff: diff.E.gidB, diffL):
             raise Exception("merge: specify exact ranges", ax.name, vol, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
@@ -2383,12 +2383,11 @@ class Controller:
         verify_gid_range(gidB, gidE, 'wait_for_merged')
         verify_type(timeoutS, int)
         self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
-        gidL = self.get_restorable_gid(ax, vol, 'all')
-        pos = gidL.index(gidB)
-        if gidL[pos + 1] == gidE:
-            return
+        for diff in self.get_applicable_diff_list(ax, vol, gidE):
+            if diff.B.gidB == gidB and diff.E.gidB == gidE:
+                return
         raise Exception("wait_for_merged:failed",
-                        ax.name, vol, gidB, gidE, pos, gidL)
+                        ax.name, vol, gidB, gidE)
 
     def _prepare_backup(self, sx, vol, syncOpt=None):
         '''
