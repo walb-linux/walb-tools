@@ -59,74 +59,33 @@ inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData
 class WlogSender
 {
 private:
-    cybozu::Socket &sock_;
+    packet::Packet packet_;
+    packet::StreamControl ctrl_;
     Logger &logger_;
     uint32_t pbs_;
     uint32_t salt_;
-    std::atomic<bool> isEnd_;
-    std::atomic<bool> isFailed_;
-
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
-
-    class SendWorker
-    {
-    private:
-        BoundedQ &inQ_;
-        packet::Packet packet_;
-        Logger &logger_;
-    public:
-        SendWorker(BoundedQ &inQ, cybozu::Socket &sock, Logger &logger)
-            : inQ_(inQ), packet_(sock), logger_(logger) {}
-        void operator()() try {
-            packet::StreamControl ctrl(packet_.sock());
-            CompressedData cd;
-            while (inQ_.pop(cd)) {
-                ctrl.next();
-                cd.send(packet_);
-            }
-            ctrl.end();
-        } catch (std::exception &e) {
-            handleError(e.what());
-            throw;
-        } catch (...) {
-            handleError("unknown error");
-            throw;
-        }
-    private:
-        void handleError(const char *msg) noexcept {
-            try {
-                packet::StreamControl(packet_.sock()).error();
-            } catch (...) {}
-            logger_.error() << "SendWorker" << msg;
-            inQ_.fail();
-        }
-    };
-
-    cybozu::thread::ThreadRunner compressor_;
-    cybozu::thread::ThreadRunner sender_;
-
-    BoundedQ q0_; /* input to compressor_ */
-    BoundedQ q1_; /* compressor_ to sender_. */
-
 public:
     static constexpr const char *NAME() { return "WlogSender"; }
     WlogSender(cybozu::Socket &sock, Logger &logger)
-        : sock_(sock), logger_(logger)
-        , isEnd_(false), isFailed_(false)
-        , q0_(Q_SIZE), q1_(Q_SIZE) {
-    }
-    ~WlogSender() noexcept {
-        if (!isEnd_ && !isFailed_) fail();
+        : packet_(sock), ctrl_(sock), logger_(logger) {
     }
     void setParams(uint32_t pbs, uint32_t salt) {
         pbs_ = pbs;
         salt_ = salt;
     }
+    void process(CompressedData& cd) try {
+        if (!cd.isCompressed()) {
+            cd = cd.compress(); // QQQ
+        }
+        ctrl_.next();
+        cd.send(packet_);
+    } catch (std::exception& e) {
+        try {
+            packet::StreamControl(packet_.sock()).error();
+        } catch (...) {}
+        logger_.error() << "WlogSender:process" << e.what();
+    }
     void start() {
-        compressor_.set(CompressWorker(q0_, q1_));
-        sender_.set(SendWorker(q1_, sock_, logger_));
-        compressor_.start();
-        sender_.start();
     }
     /**
      * You must call pushHeader(h) and n times of pushIo(),
@@ -134,12 +93,9 @@ public:
      */
     void pushHeader(const LogPackHeader &header) {
         verifyPbsAndSalt(header);
-#ifdef DEBUG
-        assert(header.isValid());
-#endif
         CompressedData cd;
         cd.setUncompressed(header.rawData(), pbs_);
-        q0_.push(std::move(cd));
+        process(cd);
     }
     /**
      * You must call this for discard/padding record also.
@@ -150,44 +106,16 @@ public:
         if (rec.hasDataForChecksum()) {
             CompressedData cd = convertToCompressedData(blockS, false);
             assert(0 < cd.originalSize());
-            q0_.push(std::move(cd));
+            process(cd);
         }
     }
     /**
      * Notify the end of input.
      */
     void sync() {
-        q0_.sync();
-        isEnd_ = true;
-        joinWorkers();
-    }
-    /**
-     * Notify an error.
-     */
-    void fail() noexcept {
-        isFailed_ = true;
-        q0_.fail();
-        q1_.fail();
-        joinWorkers();
+        ctrl_.end();
     }
 private:
-    /**
-     * Join workers to finish.
-     * You can this multiple times because ThreadRunner::join() supports it.
-     */
-    void joinWorkers() noexcept {
-        std::function<void()> f0 = [this]() { compressor_.join(); };
-        std::function<void()> f1 = [this]() { sender_.join(); };
-        for (auto &f : {f0, f1}) {
-            try {
-                f();
-            } catch (std::exception &e) {
-                logger_.error() << "WlogSender" << e.what();
-            } catch (...) {
-                logger_.error() << "WlogSender:unknown error";
-            }
-        }
-    }
     void verifyPbsAndSalt(const LogPackHeader &header) const {
         if (header.pbs() != pbs_) {
             throw cybozu::Exception(NAME()) << "invalid pbs" << pbs_ << header.pbs();
