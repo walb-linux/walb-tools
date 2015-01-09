@@ -67,29 +67,35 @@ void uncompressToVec(const void *data, size_t size, std::vector<CharT> &outV, si
 class CompressedData
 {
 private:
-    uint32_t cmprSize_; /* compressed size [byte]. 0 means not compressed. */
-    uint32_t origSize_; /* original size [byte]. must not be 0. */
+    uint32_t cmpSize_; /* compressed size [byte]. 0 means not compressed. */
+    uint32_t orgSize_; /* original size [byte]. must not be 0. */
     std::vector<char> data_;
 public:
     const char *rawData() const { return &data_[0]; }
     size_t rawSize() const { return data_.size(); }
-    bool isCompressed() const { return cmprSize_ != 0; }
-    size_t originalSize() const { return origSize_; }
+    bool isCompressed() const { return cmpSize_ != 0; }
+    size_t originalSize() const { return orgSize_; }
+    void swap(CompressedData& rhs) noexcept
+    {
+        std::swap(cmpSize_, rhs.cmpSize_);
+        std::swap(orgSize_, rhs.orgSize_);
+        data_.swap(rhs.data_);
+    }
     /**
      * Send data to the remote host.
      */
     void send(packet::Packet &packet) const {
         verify();
-        packet.write(cmprSize_);
-        packet.write(origSize_);
+        packet.write(cmpSize_);
+        packet.write(orgSize_);
         packet.write(&data_[0], data_.size());
     }
     /**
      * Receive data from the remote host.
      */
     void recv(packet::Packet &packet) {
-        packet.read(cmprSize_);
-        packet.read(origSize_);
+        packet.read(cmpSize_);
+        packet.read(orgSize_);
         data_.resize(dataSize());
         packet.read(&data_[0], data_.size());
         verify();
@@ -118,29 +124,27 @@ public:
     template <typename CharT>
     void getUncompressed(std::vector<CharT> &outV) const {
         if (isCompressed()) {
-            cmpr_local::uncompressToVec(&data_[0], data_.size(), outV, origSize_);
+            cmpr_local::uncompressToVec(&data_[0], data_.size(), outV, orgSize_);
         } else {
             outV.resize(data_.size());
             ::memcpy(&outV[0], &data_[0], outV.size());
         }
     }
-    CompressedData compress() const {
-        verifyUncompressed(__func__);
-        CompressedData ret;
-        ret.compressFrom(&data_[0], data_.size());
-        return ret;
+    void compress() {
+        if (isCompressed()) return;
+        CompressedData tmp;
+        tmp.compressFrom(&data_[0], data_.size());
+        swap(tmp);
     }
-    CompressedData uncompress() const {
-        verifyCompressed(__func__);
+    void uncompress() {
+        if (!isCompressed()) return;
         std::vector<char> dst;
         getUncompressed(dst);
-        CompressedData ret;
-        ret.setUncompressed(std::move(dst));
-        return ret;
+        setUncompressed(std::move(dst));
     }
 private:
     void verify() const {
-        if (origSize_ == 0) throw RT_ERR("origSize must not be 0.");
+        if (orgSize_ == 0) throw RT_ERR("orgSize must not be 0.");
         if (dataSize() != data_.size()) {
             throw RT_ERR("data size must be %zu but really %zu."
                          , dataSize(), data_.size());
@@ -152,65 +156,13 @@ private:
     void verifyUncompressed(const char *msg) const {
         if (isCompressed()) throw cybozu::Exception(msg) << "must be uncompressed";
     }
-    void setSizes(uint32_t cmprSize, uint32_t origSize) {
-        cmprSize_ = cmprSize;
-        origSize_ = origSize;
+    void setSizes(uint32_t cmpSize, uint32_t orgSize) {
+        cmpSize_ = cmpSize;
+        orgSize_ = orgSize;
         if (dataSize() == 0) throw RT_ERR("dataSize() must not be 0.");
     }
     size_t dataSize() const {
-        return cmprSize_ == 0 ? origSize_ : cmprSize_;
-    }
-};
-
-class CompressWorker
-{
-private:
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
-    BoundedQ &inQ_; /* Uncompressed data. */
-    BoundedQ &outQ_; /* Compressed data (may include uncompressed data). */
-public:
-    CompressWorker(BoundedQ &inQ, BoundedQ &outQ)
-        : inQ_(inQ), outQ_(outQ) {}
-    void operator()() try {
-        CompressedData d;
-        while (inQ_.pop(d)) {
-            if (d.isCompressed()) {
-                outQ_.push(std::move(d));
-            } else {
-                outQ_.push(d.compress());
-            }
-        }
-        outQ_.sync();
-    } catch (...) {
-        inQ_.fail();
-        outQ_.fail();
-        throw;
-    }
-};
-
-class UncompressWorker
-{
-private:
-    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
-    BoundedQ &inQ_; /* Compressed data (may include uncompressed data). */
-    BoundedQ &outQ_; /* Uncompressed data. */
-public:
-    UncompressWorker(BoundedQ &inQ, BoundedQ &outQ)
-        : inQ_(inQ), outQ_(outQ) {}
-    void operator()() try {
-        CompressedData d;
-        while (inQ_.pop(d)) {
-            if (d.isCompressed()) {
-                outQ_.push(d.uncompress());
-            } else {
-                outQ_.push(std::move(d));
-            }
-        }
-        outQ_.sync();
-    } catch (...) {
-        inQ_.fail();
-        outQ_.fail();
-        throw;
+        return cmpSize_ == 0 ? orgSize_ : cmpSize_;
     }
 };
 

@@ -29,7 +29,8 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
     }
     CompressedData cd;
     cd.setUncompressed(std::move(d));
-    return doCompress ? cd.compress() : cd;
+    if (doCompress) cd.compress();
+    return cd;
 }
 
 inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs)
@@ -70,9 +71,7 @@ public:
         : packet_(sock), ctrl_(sock), logger_(logger), pbs_(pbs), salt_(salt) {
     }
     void process(CompressedData& cd) try {
-        if (!cd.isCompressed()) {
-            cd = cd.compress(); // QQQ
-        }
+        cd.compress();
         ctrl_.next();
         cd.send(packet_);
     } catch (std::exception& e) {
@@ -145,9 +144,7 @@ public:
     bool process(CompressedData& cd) {
         if (ctrl_.isNext()) {
             cd.recv(packet_);
-            if (cd.isCompressed()) {
-                cd = cd.uncompress(); // QQQ
-            }
+            cd.uncompress();
             ctrl_.reset();
             return true;
         }
