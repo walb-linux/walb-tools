@@ -748,16 +748,14 @@ namespace proxy_local {
  */
 inline bool recvWlogAndWriteDiff(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
-    const std::atomic<int> &stopState, const ProcessStatus &ps, Logger &logger)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     DiffMemory diffMem(DEFAULT_MAX_IO_LB);
     diffMem.header().setUuid(uuid);
 
     LogPackHeader packH(pbs, salt);
 
-    WlogReceiver receiver(sock, logger);
-    receiver.setParams(pbs, salt);
-    receiver.start();
+    WlogReceiver receiver(sock, pbs, salt);
 
     while (receiver.popHeader(packH)) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
@@ -837,7 +835,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     ProxyVolInfo volInfo = getProxyVolInfo(volId);
     cybozu::TmpFile tmpFile(volInfo.getTargetDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
-                                           volSt.stopState, gp.ps, logger)) {
+                                           volSt.stopState, gp.ps)) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
         return;
     }
