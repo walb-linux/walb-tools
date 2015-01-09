@@ -66,12 +66,8 @@ private:
     uint32_t salt_;
 public:
     static constexpr const char *NAME() { return "WlogSender"; }
-    WlogSender(cybozu::Socket &sock, Logger &logger)
-        : packet_(sock), ctrl_(sock), logger_(logger) {
-    }
-    void setParams(uint32_t pbs, uint32_t salt) {
-        pbs_ = pbs;
-        salt_ = salt;
+    WlogSender(cybozu::Socket &sock, Logger &logger, uint32_t pbs, uint32_t salt)
+        : packet_(sock), ctrl_(sock), logger_(logger), pbs_(pbs), salt_(salt) {
     }
     void process(CompressedData& cd) try {
         if (!cd.isCompressed()) {
@@ -84,8 +80,6 @@ public:
             packet::StreamControl(packet_.sock()).error();
         } catch (...) {}
         logger_.error() << "WlogSender:process" << e.what();
-    }
-    void start() {
     }
     /**
      * You must call pushHeader(h) and n times of pushIo(),
