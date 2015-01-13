@@ -1164,6 +1164,8 @@ class Controller:
         verify_u64(gid0)
         verify_u64(gid1)
         ls = self.run_ctl(ax, ['get', 'diff', vol, str(gid0), str(gid1)])
+        if not ls:
+            return []
         return map(create_diff_from_str, ls.split('\n'))
 
     def print_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
@@ -1188,6 +1190,8 @@ class Controller:
         verify_type(vol, str)
         verify_u64(gid)
         ls = self.run_ctl(ax, ['get', 'applicable-diff', vol, str(gid)])
+        if not ls:
+            return []
         return map(create_diff_from_str, ls.split('\n'))
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
