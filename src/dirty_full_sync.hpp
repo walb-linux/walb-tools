@@ -73,7 +73,7 @@ inline void uncompress(const std::vector<char> &src, std::vector<char> &dst, con
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const ProcessStatus &ps, bool skipZero)
+    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb, bool skipZero)
 {
     const char *const FUNC = __func__;
     cybozu::util::File file(bdevPath, O_RDWR);
@@ -106,6 +106,7 @@ inline bool dirtyFullSyncServer(
             file.write(&buf[0], size);
         }
         remainingLb -= lb;
+        progressLb += lb;
 		writeSize += size;
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
             file.fdatasync();

@@ -30,6 +30,11 @@ struct ArchiveVolState
     MetaDiffManager diffMgr;
     VolLvCache lvCache;
 
+    /*
+     * This is meaningful during full/hash backup/replication.
+     */
+    std::atomic<uint64_t> progressLb;
+
     /**
      * Timestamp of the latest sync (full, hash).
      * Lock of mu is required to access these variables.
@@ -49,6 +54,7 @@ struct ArchiveVolState
         , ac(mu)
         , diffMgr()
         , lvCache()
+        , progressLb(0)
         , lastSyncTime(0)
         , lastWdiffReceivedTime(0) {
         sm.init(statePairTbl);
@@ -460,6 +466,16 @@ inline StrVec listRestorable(const std::string &volId, bool isAll = false)
     return ret;
 }
 
+template <typename T>
+struct ZeroResetterT
+{
+    T &t;
+    ZeroResetterT(T &t) : t(t) {}
+    ~ZeroResetterT() { t = 0; }
+};
+
+using ZeroResetter = ZeroResetterT<std::atomic<uint64_t>>;
+
 inline void backupServer(protocol::ServerParams &p, bool isFull)
 {
     const char *const FUNC = __func__;
@@ -498,6 +514,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         pkt.write(e.what());
         return;
     }
+    volSt.progressLb = 0;
+    ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgAccept);
     if (!isFull) pkt.write(snapFrom);
     cybozu::Uuid uuid;
@@ -519,13 +537,13 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         volInfo.createLv(sizeLb);
         const std::string lvPath = volSt.lvCache.getLv().path().str();
         const bool skipZero = isThinpool();
-        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero);
+        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, snapFrom);
-        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.ps);
+        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.ps, volSt.progressLb);
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
             logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
@@ -638,16 +656,18 @@ inline bool runFullReplServer(
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
-        pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
         throw;
     }
+    volSt.progressLb = 0;
+    ZeroResetter resetter(volSt.progressLb);
+    pkt.write(msgOk);
 
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
-    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, skipZero)) {
+    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero)) {
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }
@@ -710,17 +730,19 @@ inline bool runHashReplServer(
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
-        pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
         throw;
     }
+    volSt.progressLb = 0;
+    ZeroResetter resetter(volSt.progressLb);
+    pkt.write(msgOk);
 
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
-                             volSt.stopState, ga.ps)) {
+                             volSt.stopState, ga.ps, volSt.progressLb)) {
         logger.warn() << "hash-repl-server force-stopped" << volId;
         return false;
     }
@@ -963,6 +985,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
                     , util::timeToPrintable(volSt.lastSyncTime).c_str()));
     v.push_back(fmt("lastWdiffReceivedTime %s"
                     , util::timeToPrintable(volSt.lastWdiffReceivedTime).c_str()));
+    v.push_back(fmt("progressLb %" PRIu64 "", volSt.progressLb.load()));
 
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (!volInfo.lvExists()) {

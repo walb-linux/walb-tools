@@ -90,7 +90,7 @@ template <typename Reader>
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
-    int outDiffFd, const std::atomic<int> &stopState, const ProcessStatus &ps)
+    int outDiffFd, const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb)
 {
     const char *const FUNC = __func__;
 
@@ -115,6 +115,7 @@ inline bool dirtyHashSyncServer(
                 ctrl.next();
                 pkt.write(hash);
                 remaining -= lb;
+                progressLb += lb;
             }
             ctrl.end();
         } catch (std::exception& e) {
