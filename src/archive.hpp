@@ -140,7 +140,9 @@ inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
     // Try to open all wdiff files.
     for (const MetaDiff& diff : diffV) {
         cybozu::util::File op;
-        if (!op.open(volInfo.getDiffPath(diff).str(), O_RDONLY)) {
+        const std::string filePathStr = volInfo.getDiffPath(diff).str();
+        if (!op.open(filePathStr, O_RDONLY)) {
+            LOGs.warn() << FUNC << "open failed" << filePathStr;
             retryNum++;
             if (retryNum == maxRetryNum) {
                 throw cybozu::Exception(FUNC) << "exceed max retry";
