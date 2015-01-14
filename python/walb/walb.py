@@ -1150,6 +1150,60 @@ class Controller:
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
+    def _get_size_value(self, ax, vol, cmd):
+        '''
+        Get size value from an archive server.
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        cmd :: str    - command string
+        return :: u64 - size value.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(cmd, str)
+        if cmd not in ['vol-size', 'progress']:
+            raise Exception('_get_size_value: bad cmd', ax.name, vol, cmd)
+        ret = self.run_ctl(ax, ['get', cmd, vol])
+        sizeLb = int(ret)
+        verify_u64(sizeLb)
+        return sizeLb
+
+    def get_vol_size_lb(self, ax, vol):
+        '''
+        Get volume size.
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        return :: u64 - volume size [logical block].
+        '''
+        return self._get_size_value(ax, vol, 'vol-size')
+
+    def get_progress_lb(self, ax, vol):
+        '''
+        Get progress of full/hash backup/replicate command.
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        return :: u64 - progress [logical block].
+        '''
+        return self._get_size_value(ax, vol, 'progress')
+
+    def monitor_progress(self, ax, vol, timeoutS=TIMEOUT_SEC):
+        '''
+        Monitor progress.
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        timeoutS :: int - timeout [sec].
+        '''
+        verify_int(timeoutS)
+        sizeLb = self.get_vol_size_lb(ax, vol)
+        t0 = time.time()
+        while time.time() < t0 + timeoutS:
+            progressLb = self.get_progress_lb(ax, vol)
+            if progressLb == 0:
+                return
+            print progressLb / float(sizeLb)
+            time.sleep(1)
+        raise Exception('monitor_progress:timeout', ax.name, vol, timeoutS)
+
     def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get wdiff list.

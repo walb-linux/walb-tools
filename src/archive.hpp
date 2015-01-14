@@ -1261,6 +1261,33 @@ inline bool getBlockHash(
     return true;
 }
 
+inline void getVolSize(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    if (!isStateIn(st, aActive)) {
+        throw cybozu::Exception(FUNC) << "bad state" << volId << st;
+    }
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
+    ul.unlock();
+    protocol::sendValueAndFin(p, sizeLb);
+    p.logger.debug() << "get vol-size succeeded" << volId << sizeLb;
+}
+
+inline void getProgress(protocol::GetCommandParams &p)
+{
+    std::string volId;
+    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    const uint64_t progressLb = volSt.progressLb.load();
+    protocol::sendValueAndFin(p, progressLb);
+    p.logger.debug() << "get progress succeeded" << volId << progressLb;
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -2194,6 +2221,8 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { restorableTN, archive_local::getRestorable },
     { uuidTN, archive_local::getUuid },
     { baseTN, archive_local::getBase },
+    { volSizeTN, archive_local::getVolSize },
+    { progressTN, archive_local::getProgress },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

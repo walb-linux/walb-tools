@@ -356,6 +356,8 @@ inline const protocol::ValueTypeMap& getGetCommandMap()
         { restorableTN, protocol::StringVecType },
         { uuidTN, protocol::StringType },
         { baseTN, protocol::StringType },
+        { volSizeTN, protocol::SizeType },
+        { progressTN, protocol::SizeType },
     };
     return typeM;
 }

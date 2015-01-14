@@ -89,6 +89,8 @@ const char *const restoredTN = "restored";
 const char *const restorableTN = "restorable";
 const char *const uuidTN = "uuid";
 const char *const baseTN = "base";
+const char *const volSizeTN = "vol-size";
+const char *const progressTN = "progress";
 
 /**
  * Internal protocol name.
