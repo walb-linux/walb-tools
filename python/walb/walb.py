@@ -738,19 +738,37 @@ class Device:
         else:
             return exists_file(self.path, self.runCommand)
 
-    def format_ldev(self):
+    def format_ldev(self, doDiscard=True):
         '''
         Format devices for a walb device.
-        TODO: support format_ldev options.
+        doDiscard :: bool - issue discard whole area of the log device before formatting the device.
         '''
-        self.run_wdevc(['format-ldev', self.ldev, self.ddev])
+        args = ['format-ldev', self.ldev, self.ddev]
+        if not doDiscard:
+            args.append('-nd')
+        self.run_wdevc(args)
 
-    def create(self):
+    def create(self, maxl=None, maxp=None, minp=None, qp=None, fs=None, fp=None, bp=None, bi=None):
         '''
         Create a walb device.
-        TODO: support create_wdev options.
+        maxl :: int - max logpack size [KiB]
+        maxp :: int - max pending size [MiB]
+        minp :: int - min pending size [MiB]
+        qp :: int   - queue stopping period after pending data is full [ms]
+        fs :: int   - flush interval size [MiB]
+        fp :: int   - flush interval period [ms]
+        bp :: int   - number of packs processed at once.
+        bi :: int   - number of IOs processed at once.
+        None means default value for all the parameters.
         '''
-        self.run_wdevc(['create-wdev', self.ldev, self.ddev, '-n', str(self.iD)])
+        args = ['create-wdev', self.ldev, self.ddev, '-n', str(self.iD)]
+        optL = ['-maxl', '-maxp', '-minp', '-qp', '-fs', '-fp', '-bp', '-bi']
+        valL = [maxl, maxp, minp, qp, fs, fp, bp, bi]
+        for opt, val in zip(optL, valL):
+            if val:
+                verify_int(val)
+                args += [opt, str(val)]
+        self.run_wdevc(args)
 
     def delete(self):
         '''
