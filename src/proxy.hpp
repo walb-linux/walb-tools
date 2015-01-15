@@ -832,6 +832,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
     ul.unlock();
 
+    cybozu::Stopwatch stopwatch;
     ProxyVolInfo volInfo = getProxyVolInfo(volId);
     cybozu::TmpFile tmpFile(volInfo.getTargetDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
@@ -866,8 +867,8 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     }
     volSt.lastWlogReceivedTime = ::time(0);
     tran.commit(pStarted);
-
-    logger.info() << "wlog-transfer succeeded" << volId;
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.debug() << "wlog-transfer succeeded" << volId << elapsed;
 }
 
 inline void ProxyWorker::setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName)
@@ -981,9 +982,9 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
             return DONT_SEND;
         }
         packet::Ack(pkt.sock()).recv();
-        logger.info() << "mergeIn " << volId << merger.statIn();
-        logger.info() << "mergeOut" << volId << statOut;
-        logger.info() << "mergeMemUsage" << volId << merger.memUsageStr();
+        logger.debug() << "mergeIn " << volId << merger.statIn();
+        logger.debug() << "mergeOut" << volId << statOut;
+        logger.debug() << "mergeMemUsage" << volId << merger.memUsageStr();
         ul.lock();
         volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
         ul.unlock();

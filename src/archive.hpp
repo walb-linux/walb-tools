@@ -528,6 +528,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
     ul.unlock();
 
+    cybozu::Stopwatch stopwatch;
     const std::string st = volInfo.getState();
     if (st != stFrom) {
         throw cybozu::Exception(FUNC) << "state is not" << stFrom << "but" << st;
@@ -577,10 +578,11 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     volInfo.setState(aArchived);
     volSt.updateLastSyncTime();
     tran.commit(aArchived);
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
 
     packet::Ack(p.sock).sendFin();
     logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
-                  << "succeeded" << volId;
+                  << "succeeded" << volId << elapsed;
 }
 
 inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const AddrPort &addrPort)
@@ -666,6 +668,7 @@ inline bool runFullReplServer(
     ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgOk);
 
+    cybozu::Stopwatch stopwatch;
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
@@ -677,7 +680,8 @@ inline bool runFullReplServer(
     volInfo.setUuid(uuid);
     volInfo.setState(aArchived);
     volSt.updateLastSyncTime();
-    logger.info() << "full-repl-server done" << volId;
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.info() << "full-repl-server done" << volId << elapsed;
     return true;
 }
 
@@ -740,6 +744,7 @@ inline bool runHashReplServer(
     ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgOk);
 
+    cybozu::Stopwatch stopwatch;
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -756,7 +761,8 @@ inline bool runHashReplServer(
     logger.info() << "hash-repl-server-mergeIn " << volId << virt.statIn();
     logger.info() << "hash-repl-server-mergeOut" << volId << virt.statOut();
     logger.info() << "hash-repl-server-mergeMemUsage" << volId << virt.memUsageStr();
-    logger.info() << "hash-repl-server done" << volId;
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.info() << "hash-repl-server done" << volId << elapsed;
     return true;
 }
 
@@ -831,6 +837,7 @@ inline bool runDiffReplServer(
     }
     pkt.write(msgOk);
 
+    cybozu::Stopwatch stopwatch;
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
@@ -844,7 +851,8 @@ inline bool runDiffReplServer(
     volSt.diffMgr.add(diff);
     packet::Ack(pkt.sock()).send();
     volSt.updateLastWdiffReceivedTime();
-    logger.info() << "diff-repl-server done" << volId << diff;
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.info() << "diff-repl-server done" << volId << diff << elapsed;
     return true;
 }
 
@@ -1568,11 +1576,13 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     ActionCounterTransaction tran(volSt.ac, aaRestore);
     ul.unlock();
     logger.info() << "restore started" << volId << gid;
+    cybozu::Stopwatch stopwatch;
     if (!archive_local::restore(volId, gid)) {
         logger.warn() << FUNC << "force stopped" << volId << gid;
         return;
     }
-    logger.info() << "restore succeeded" << volId << gid;
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.info() << "restore succeeded" << volId << gid << elapsed;
 }
 
 /**
@@ -1753,6 +1763,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
         ul.unlock();
         logger.debug() << "wdiff-transfer started" << volId;
+        cybozu::Stopwatch stopwatch;
 
         const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -1771,7 +1782,8 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
         volSt.updateLastWdiffReceivedTime();
         ul.unlock();
         packet::Ack(p.sock).sendFin();
-        logger.debug() << "wdiff-transfer succeeded" << volId;
+        const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+        logger.debug() << "wdiff-transfer succeeded" << volId << elapsed;
     } catch (std::exception &e) {
         if (isErr) {
             logger.error() << e.what();
@@ -1862,12 +1874,14 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         StateMachineTransaction tran(volSt.sm, stFrom, stTo, FUNC);
         ul.unlock();
         logger.info() << "replication as server started" << volId;
+        cybozu::Stopwatch stopwatch;
         if (!archive_local::runReplSyncServer(volId, isFull, p.sock, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
         }
         tran.commit(aArchived);
-        logger.info() << "replication as server succeeded" << volId;
+        const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+        logger.info() << "replication as server succeeded" << volId << elapsed;
     } catch (std::exception &e) {
         logger.error() << FUNC << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1902,11 +1916,13 @@ inline void c2aApplyServer(protocol::ServerParams &p)
         ActionCounterTransaction tran(volSt.ac, aaApply);
         ul.unlock();
         logger.info() << "apply started" << volId << gid;
+        cybozu::Stopwatch stopwatch;
         if (!archive_local::applyDiffsToVolume(volId, gid)) {
             logger.warn() << FUNC << "stopped force" << volId << gid;
             return;
         }
-        logger.info() << "apply succeeded" << volId << gid;
+        const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+        logger.info() << "apply succeeded" << volId << gid << elapsed;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
         if (sendErr) pkt.write(e.what());
@@ -1953,11 +1969,13 @@ inline void c2aMergeServer(protocol::ServerParams &p)
         ActionCounterTransaction tran(volSt.ac, aaMerge);
         ul.unlock();
         logger.info() << "merge started" << volId << gidB << type << param3;
+        cybozu::Stopwatch stopwatch;
         if (!archive_local::mergeDiffs(volId, gidB, isSize, param3)) {
             logger.warn() << FUNC << "stopped force" << volId << gidB << type << param3;
             return;
         }
-        logger.info() << "merge succeeded" << volId << gidB << type << param3;
+        const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+        logger.info() << "merge succeeded" << volId << gidB << type << param3 << elapsed;
     } catch (std::exception& e) {
         logger.error() << FUNC << e.what();
         if (sendErr) pkt.write(e.what());

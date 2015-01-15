@@ -270,6 +270,11 @@ inline void verifyNotZero(const IntType &t, const char *msg)
     }
 }
 
+inline std::string getElapsedTimeStr(double elapsedSec)
+{
+    return cybozu::util::formatString("elapsed_time %.3f sec", elapsedSec);
+}
+
 }} // walb::util
 
 inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)
