@@ -2071,6 +2071,7 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        verifyActionNotRunning(volSt.ac, aDenyForChangeSnapshot, FUNC);
 
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         for (size_t i = 1; i < v.size(); i++) {
@@ -2080,7 +2081,7 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
             logger.info() << (enable ? "enable snapshot succeeded" : "disable snapshot succeeded")
                           << volId << v[i];
         }
-        ul.unlock();
+        ul.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
         pkt.writeFin(msgOk);
     } catch (std::exception &e) {
         logger.error() << e.what();
