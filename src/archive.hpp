@@ -2052,10 +2052,10 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
 /**
  * params[0]: volId
  * params[1]: gid0
- * params[2]: gid1
- * params[3]: ...
+ * ...
+ * Multiple gids can be specified.
  */
-inline void c2aDisableSnapshot(protocol::ServerParams &p)
+inline void changeSnapshot(protocol::ServerParams &p, bool enable)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
@@ -2075,9 +2075,10 @@ inline void c2aDisableSnapshot(protocol::ServerParams &p)
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         for (size_t i = 1; i < v.size(); i++) {
             const uint64_t gid = cybozu::atoi(v[i]);
-            MetaDiffVec diffV = volSt.diffMgr.disableSnapshot(gid);
-            volInfo.disableSnapshot(diffV);
-            logger.info() << "del snapshot succeeded" << volId << v[i];
+            MetaDiffVec diffV = volSt.diffMgr.changeSnapshot(gid, enable);
+            volInfo.changeSnapshot(diffV, enable);
+            logger.info() << (enable ? "enable snapshot succeeded" : "disable snapshot succeeded")
+                          << volId << v[i];
         }
         ul.unlock();
         pkt.writeFin(msgOk);
@@ -2087,6 +2088,15 @@ inline void c2aDisableSnapshot(protocol::ServerParams &p)
     }
 }
 
+inline void c2aDisableSnapshot(protocol::ServerParams &p)
+{
+    changeSnapshot(p, false);
+}
+
+inline void c2aEnableSnapshot(protocol::ServerParams &p)
+{
+    changeSnapshot(p, true);
+}
 
 /**
  * params[0]: volId
@@ -2259,6 +2269,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { getCN, c2aGetServer },
     { execCN, c2aExecServer },
     { disableSnapshotCN, c2aDisableSnapshot },
+    { enableSnapshotCN, c2aEnableSnapshot },
     // protocols.
     { dirtyFullSyncPN, x2aDirtyFullSyncServer },
     { dirtyHashSyncPN, x2aDirtyHashSyncServer },

@@ -70,6 +70,7 @@ const char *const dbgSetBase = "dbg-set-base";
 const char *const getCN = "get";
 const char *const execCN = "exec";
 const char *const disableSnapshotCN = "disable-snapshot";
+const char *const enableSnapshotCN = "enable-snapshot";
 
 /**
  * Target name of 'get' command.

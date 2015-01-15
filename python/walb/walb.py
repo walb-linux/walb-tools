@@ -2186,11 +2186,28 @@ class Controller:
         vol :: str      - volume name.
         gidL :: [int] - list of gid
         '''
+        self._change_snapshot(ax, vol, gidL, isEnable=False)
+
+    def enable_snapshot(self, ax, vol, gidL):
+        '''
+        Enable snapshots
+        ax :: Server    - archive server.
+        vol :: str      - volume name.
+        gidL :: [int] - list of gid
+        '''
+        self._change_snapshot(ax, vol, gidL, isEnable=True)
+
+    def _change_snapshot(self, ax, vol, gidL, isEnable):
+        '''
+        isEnable :: bool
+        '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        args = ['disable-snapshot', vol]
+        verify_type(bool, isEnable)
+        cmd = 'enable-snapshot' if isEnable else 'disable-snapshot'
+        args = [cmd, vol]
         if not isinstance(gidL, list):
-            raise Exception('disable_snapshot', ax.name, vol, gidL)
+            raise Exception(cmd, ax.name, vol, gidL)
         for gid in gidL:
             verify_u64(gid)
             args.append(str(gid))

@@ -123,6 +123,12 @@ void setupDisableSnapshot(cybozu::Option& opt)
     setupStrVec(opt);
 }
 
+void setupEnableSnapshot(cybozu::Option& opt)
+{
+    setupVolId(opt);
+    setupStrVec(opt);
+}
+
 void setupGet(cybozu::Option& opt)
 {
     std::string usage;
@@ -156,6 +162,7 @@ const CommandInfo g_cmdTbl[] = {
     { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, "control archive information in a proxy." },
     { snapshotCN, c2sSnapshotClient, setupVolId, "take a snapshot in a storage." },
     { disableSnapshotCN, c2aDisableSnapshot, setupDisableSnapshot, "disable a snapshot in an archive." },
+    { enableSnapshotCN, c2aEnableSnapshot, setupEnableSnapshot, "enable a snapshot in an archive." },
     { replicateCN, c2aReplicateClient, setupReplicate, "replicate a volume from an archive to another archive." },
     { applyCN, c2aApplyClient, setupVolIdGid, "apply old wdiff files to the base image of a volume in an archive." },
     { mergeCN, c2aMergeClient, setupMerge, "merge wdiff files for a volume in an archive." },

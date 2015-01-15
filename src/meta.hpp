@@ -805,19 +805,26 @@ public:
             eraseNolock(diff, doesThrowError);
         }
     }
-    /*
-        return deleted snapshot diff vector
-    */
-    MetaDiffVec disableSnapshot(uint64_t gid)
-    {
+    /**
+     * RETURN:
+     *   a diff vector corresponding to the disabled snapshots.
+     */
+    MetaDiffVec changeSnapshot(uint64_t gid, bool enable) {
         AutoLock lk(mu_);
         auto range = mmap_.equal_range(gid);
         MetaDiffVec diffV;
         for (Mmap::iterator i = range.first; i != range.second; ++i) {
             MetaDiff& diff = i->second;
-            if (!diff.isMergeable) {
-                diff.isMergeable = true;
-                diffV.push_back(diff);
+            if (enable) {
+                if (diff.isMergeable) {
+                    diff.isMergeable = false;
+                    diffV.push_back(diff);
+                }
+            } else {
+                if (!diff.isMergeable) {
+                    diff.isMergeable = true;
+                    diffV.push_back(diff);
+                }
             }
         }
         return diffV;

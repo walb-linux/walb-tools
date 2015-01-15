@@ -191,14 +191,25 @@ inline void c2sSnapshotClient(protocol::ClientParams &p)
 }
 
 /**
- * Delete snapshots
+ * Disable snapshots
  *
  * params[0]: volId.
  * params[1]: gid0
- * params[2]: gid1
- * params[3]: ...
+ * ...
  */
 inline void c2aDisableSnapshot(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+
+/**
+ * Enable snapshots
+ *
+ * params[0]: volId.
+ * params[1]: gid0
+ * ...
+ */
+inline void c2aEnableSnapshot(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }

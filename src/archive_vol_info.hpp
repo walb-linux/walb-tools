@@ -444,15 +444,16 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
-    void disableSnapshot(const MetaDiffVec& diffV)
-    {
+    void changeSnapshot(const MetaDiffVec& diffV, bool enable) {
         for (MetaDiff diff : diffV) {
-            assert(diff.isMergeable);
+            assert(diff.isMergeable == enable);
             cybozu::FilePath to = getDiffPath(diff);
-            diff.isMergeable = false;
+            diff.isMergeable = !enable;
             cybozu::FilePath from = getDiffPath(diff);
             if (!from.rename(to)) {
-                throw cybozu::Exception("ArchiveVolInfo:disableSnapshot") << from << to;
+                throw cybozu::Exception("ArchiveVolInfo")
+                    << (enable ? "enableSnapshot" : "disableSnapshot")
+                    << from << to;
             }
         }
     }
