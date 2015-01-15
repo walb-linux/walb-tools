@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <limits>
 #include <time.h>
+#include <type_traits>
 
 namespace cybozu {
 
@@ -145,5 +146,43 @@ inline std::string getHighResolutionTimeStr(const struct timespec& ts)
     ret += buf;
     return ret;
 }
+
+template <typename Clock, typename Resolution>
+class StopwatchT
+{
+    std::chrono::time_point<Clock> t0, t1;
+public:
+    StopwatchT() : t0(), t1() {
+        reset();
+    }
+    void reset() {
+        t0 = t1 = Clock::now();
+    }
+    /**
+     * RETURN:
+     *   Time period in seconds.
+     */
+    double get() {
+        t1 = Clock::now();
+        const size_t c = std::chrono::duration_cast<Resolution>(t1 - t0).count();
+        t0 = t1; // reset.
+        double divider;
+        if (std::is_same<Resolution, std::chrono::seconds>::value) {
+            divider = 1.0;
+        } else if (std::is_same<Resolution, std::chrono::milliseconds>::value) {
+            divider = 1000.0;
+        } else if (std::is_same<Resolution, std::chrono::microseconds>::value) {
+            divider = 1000000.0;
+        } else if (std::is_same<Resolution, std::chrono::nanoseconds>::value) {
+            divider = 1000000000.0;
+        } else {
+            throw std::runtime_error("unsupported Resolution type.");
+        }
+        return c / divider;
+    }
+};
+
+using Stopwatch = StopwatchT<std::chrono::steady_clock, std::chrono::milliseconds>;
+using AccurateStopwatch = StopwatchT<std::chrono::high_resolution_clock, std::chrono::microseconds>;
 
 } //namespace cybozu
