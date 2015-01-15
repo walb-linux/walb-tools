@@ -825,11 +825,11 @@ inline bool runDiffReplServer(
         if (!canApply(snap, diff)) {
             throw cybozu::Exception(FUNC) << "can not apply" << snap << diff;
         }
-        pkt.write(msgOk);
     } catch (std::exception &e) {
         pkt.write(e.what());
         throw;
     }
+    pkt.write(msgOk);
 
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
