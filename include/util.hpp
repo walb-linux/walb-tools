@@ -423,11 +423,14 @@ inline void parseStrVec(
     size_t i = 0;
     for (std::string *p : list) {
         if (pos + i >= v.size()) break;
+        if (i < numMust && v[pos + i].empty()) {
+            throw RT_ERR("required parameter is empty: %zu %zu", i, numMust);
+        }
         *p = v[pos + i];
         i++;
     }
     if (i < numMust) {
-        throw RT_ERR("missing required params %zu %zu", i, numMust);
+        throw RT_ERR("missing required params: %zu %zu", i, numMust);
     }
 }
 
