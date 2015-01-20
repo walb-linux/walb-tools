@@ -60,28 +60,9 @@ inline void c2xStopClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, "c2xStopClient", msgAccept);
 }
 
-namespace ctrl_local {
-
-inline StrVec makeBkpParams(const StrVec &v)
+inline void c2sBackupClient(protocol::ClientParams &p)
 {
-    std::string volId;
-    std::string bulkSize = cybozu::util::toUnitIntString(DEFAULT_BULK_LB * LOGICAL_BLOCK_SIZE);
-    cybozu::util::parseStrVec(v, 0, 1, {&volId, &bulkSize});
-    return {volId, bulkSize};
-}
-
-} // ctrl_local
-
-inline void c2sFullBkpClient(protocol::ClientParams &p)
-{
-    const StrVec v = ctrl_local::makeBkpParams(p.params);
-    protocol::sendStrVec(p.sock, v, 2, __func__, msgAccept);
-}
-
-inline void c2sHashBkpClient(protocol::ClientParams &p)
-{
-    const StrVec v = ctrl_local::makeBkpParams(p.params);
-    protocol::sendStrVec(p.sock, v, 2, __func__, msgAccept);
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgAccept);
 }
 
 /**
@@ -349,28 +330,28 @@ inline void c2aBlockHashClient(protocol::ClientParams &p)
     std::cout << hash << std::endl;
 }
 
-inline const protocol::ValueTypeMap& getGetCommandMap()
+inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
 {
-    static const protocol::ValueTypeMap typeM = {
-        { isOverflowTN, protocol::SizeType },
-        { isWdiffSendErrorTN, protocol::SizeType },
-        { numActionTN, protocol::SizeType },
-        { stateTN, protocol::StringType },
-        { hostTypeTN, protocol::StringType },
-        { volTN, protocol::StringVecType },
-        { pidTN, protocol::SizeType },
-        { diffTN, protocol::StringVecType },
-        { applicableDiffTN, protocol::StringVecType },
-        { totalDiffSizeTN, protocol::SizeType },
-        { existsDiffTN, protocol::SizeType },
-        { restoredTN, protocol::StringVecType },
-        { restorableTN, protocol::StringVecType },
-        { uuidTN, protocol::StringType },
-        { baseTN, protocol::StringType },
-        { volSizeTN, protocol::SizeType },
-        { progressTN, protocol::SizeType },
+    static const protocol::GetCommandInfoMap m = {
+        {isOverflowTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get is-overflow boolean value."}},
+        {isWdiffSendErrorTN, {protocol::SizeType, verifyIsWdiffSendErrorParamForGet, "[volId archiveName] get wdiff-send-error boolean value."}},
+        {numActionTN, {protocol::SizeType, verifyNumActionParamForGet, "[volId actionName] get number of running actions."}},
+        {stateTN, {protocol::StringType, verifyVolIdParamForGet, "[volId]"}},
+        {hostTypeTN, {protocol::StringType, verifyNoneParam, "get host type as a string."}},
+        {volTN, {protocol::StringVecType, verifyNoneParam, "get volume name list."}},
+        {pidTN, {protocol::SizeType, verifyNoneParam, "get pid of the server process."}},
+        {diffTN, {protocol::StringVecType, verifyVolIdAndGidRangeParamForGet, "[volId (gidB (gidE))] get diff list."}},
+        {applicableDiffTN, {protocol::StringVecType, verifyApplicableDiffParamForGet, "[volId (maxGid)]"}},
+        {totalDiffSizeTN, {protocol::SizeType, verifyVolIdAndGidRangeParamForGet, "[volId (gidB (gidE))] get total diff size in a range."}},
+        {existsDiffTN, {protocol::SizeType, verifyExistsDiffParamForGet, "[volId gid0 gid1 gid2 gid3]"}},
+        {restoredTN, {protocol::StringVecType, verifyVolIdParamForGet, "[volId] get restored clean snapshot list."}},
+        {restorableTN, {protocol::StringVecType, verifyRestorableParamForGet, "[volId (all)] get restorable clean snapshot and timestamp list."}},
+        {uuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get uuid of a volume."}},
+        {baseTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get base(meta state) of a volume."}},
+        {volSizeTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get volume size [logical block]."}},
+        {progressTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get progress of full/hash backup/replication [logical block]."}},
     };
-    return typeM;
+    return m;
 }
 
 inline void c2xGetClient(protocol::ClientParams &p)
@@ -379,9 +360,10 @@ inline void c2xGetClient(protocol::ClientParams &p)
     if (p.params.empty()) throw cybozu::Exception(FUNC) << "target not specified";
     const std::string &targetName = p.params[0];
 
-    const protocol::ValueType valType = protocol::getValueType(targetName, getGetCommandMap(), FUNC);
+    const protocol::GetCommandInfo &info = protocol::getGetCommandInfo(targetName, getGetCommandInfoMap(), FUNC);
+    info.verify(p.params);
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
-    protocol::recvValueAndPut(p.sock, valType, FUNC);
+    protocol::recvValueAndPut(p.sock, info.valueType, FUNC);
 }
 
 } // namespace walb

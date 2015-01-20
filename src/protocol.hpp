@@ -15,6 +15,7 @@
 #include "walb_logger.hpp"
 #include "walb_util.hpp"
 #include "process.hpp"
+#include "command_param_parser.hpp"
 
 namespace walb {
 
@@ -122,52 +123,6 @@ inline std::vector<cybozu::SocketAddr> parseMultiSocketAddr(const std::string &m
     return ret;
 }
 
-enum class StopType
-{
-    Graceful, Empty, Force,
-};
-
-struct StopOpt
-{
-    StopType type;
-
-    StopOpt() : type(StopType::Graceful) {
-    }
-    std::string str() const {
-        switch (type) {
-        case StopType::Graceful: return "graceful";
-        case StopType::Empty: return "empty";
-        case StopType::Force: return "force";
-        }
-        throw cybozu::Exception(__func__) << "bug" << int(type);
-    }
-    void parse(const std::string &s) {
-        type = StopType::Graceful;
-        if (s.empty()) return;
-        if (s[0] == 'f') {
-            type = StopType::Force;
-        } else if (s[0] == 'e') {
-            type = StopType::Empty;
-        }
-    }
-    bool isForce() const { return type == StopType::Force; }
-    bool isGraceful() const { return type == StopType::Graceful; }
-    bool isEmpty() const { return type == StopType::Empty; }
-    friend inline std::ostream &operator<<(std::ostream &os, const StopOpt &opt) {
-        os << opt.str();
-        return os;
-    }
-};
-
-inline std::pair<std::string, StopOpt> parseStopParams(const StrVec &v, const char *msg)
-{
-    if (v.empty()) throw cybozu::Exception(msg) << "empty";
-    if (v[0].empty()) throw cybozu::Exception(msg) << "empty volId";
-    StopOpt opt;
-    if (v.size() >= 2) opt.parse(v[1]);
-    return {v[0], opt};
-}
-
 namespace protocol {
 
 /**
@@ -266,11 +221,7 @@ struct ServerParams
 
 inline void shutdownClient(ClientParams &p)
 {
-    bool isForce = false;
-    if (!p.params.empty()) {
-        const std::string &s = p.params[0];
-        isForce = !s.empty() && s[0] == 'f';
-    }
+    const bool isForce = parseShutdownParam(p.params);
     packet::Packet pkt(p.sock);
     pkt.write(isForce);
     std::string res;
@@ -424,13 +375,20 @@ enum ValueType {
     StringVecType,
 };
 
-using ValueTypeMap = std::map<std::string, ValueType>;
-
-inline ValueType getValueType(const std::string &targetName, const ValueTypeMap &typeM, const char *msg)
+struct GetCommandInfo
 {
-    ValueTypeMap::const_iterator it = typeM.find(targetName);
-    if (it == typeM.cend()) {
-        throw cybozu::Exception(msg) << "target not found" << targetName;
+    ValueType valueType;
+    void (*verify)(const StrVec &);
+    std::string helpMsg;
+};
+
+using GetCommandInfoMap = std::map<std::string, GetCommandInfo>;
+
+inline const GetCommandInfo &getGetCommandInfo(const std::string &name, const GetCommandInfoMap &infoM, const char *msg)
+{
+    GetCommandInfoMap::const_iterator it = infoM.find(name);
+    if (it == infoM.cend()) {
+        throw cybozu::Exception(msg) << "name not found" << name;
     }
     return it->second;
 }
@@ -520,8 +478,7 @@ inline void sendValueAndFin(GetCommandParams &p, const T &t)
 template <typename VolStateGetter>
 inline void runGetStateServer(GetCommandParams &p, VolStateGetter getter)
 {
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
     const std::string state = getter(volId).sm.get();
     sendValueAndFin(p, state);
 }

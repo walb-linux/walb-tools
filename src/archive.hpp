@@ -14,6 +14,7 @@
 #include "dirty_full_sync.hpp"
 #include "dirty_hash_sync.hpp"
 #include "wdiff_transfer.hpp"
+#include "command_param_parser.hpp"
 
 namespace walb {
 
@@ -1029,30 +1030,14 @@ inline void getPid(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
 }
 
-inline void parseVolIdAndGidRange(const StrVec &v, size_t pos,
-                                  std::string &volId, uint64_t &gid0, uint64_t &gid1)
-{
-    std::string gid0S, gid1S;
-    cybozu::util::parseStrVec(v, pos, 1, {&volId, &gid0S, &gid1S});
-    gid0 = 0;
-    gid1 = -1;
-    if (!gid0S.empty()) gid0 = cybozu::atoi(gid0S);
-    if (!gid1S.empty()) gid1 = cybozu::atoi(gid1S);
-    if (gid0 >= gid1) {
-        throw cybozu::Exception(__func__) << "bad gid range" << gid0 << gid1;
-    }
-}
-
 inline void getDiffList(protocol::GetCommandParams &p)
 {
-    std::string volId;
-    uint64_t gid0, gid1;
-    parseVolIdAndGidRange(p.params, 1, volId, gid0, gid1);
+    const VolIdAndGidRangeParam param = parseVolIdAndGidRangeParamForGet(p.params);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolState &volSt = getArchiveVolState(param.volId);
     UniqueLock ul(volSt.mu);
 
-    const MetaDiffVec diffV = volSt.diffMgr.getAll(gid0, gid1);
+    const MetaDiffVec diffV = volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
     StrVec v;
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
@@ -1063,18 +1048,15 @@ inline void getDiffList(protocol::GetCommandParams &p)
 
 inline void getApplicableDiffList(protocol::GetCommandParams &p)
 {
-    std::string volId;
-    std::string gidS;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId, &gidS});
-    uint64_t gid = UINT64_MAX;
-    if (!gidS.empty()) gid = cybozu::atoi(gidS);
+    const VolIdAndGidParam param = parseVolIdAndGidParam(p.params, 1, false, UINT64_MAX);
+    const std::string &volId = param.volId;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
 
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const MetaState metaSt = volInfo.getMetaState();
-    const MetaDiffVec diffV = volSt.diffMgr.getDiffListToApply(metaSt, gid);
+    const MetaDiffVec diffV = volSt.diffMgr.getDiffListToApply(metaSt, param.gid);
     StrVec v;
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
@@ -1085,15 +1067,13 @@ inline void getApplicableDiffList(protocol::GetCommandParams &p)
 
 inline void getTotalDiffSize(protocol::GetCommandParams &p)
 {
-    std::string volId;
-    uint64_t gid0, gid1;
-    parseVolIdAndGidRange(p.params, 1, volId, gid0, gid1);
+    const VolIdAndGidRangeParam param = parseVolIdAndGidRangeParamForGet(p.params);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolState &volSt = getArchiveVolState(param.volId);
     UniqueLock ul(volSt.mu);
 
     size_t totalSize = 0;
-    const MetaDiffVec diffV = volSt.diffMgr.getAll(gid0, gid1);
+    const MetaDiffVec diffV = volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
     for (const MetaDiff &d : diffV) {
         totalSize += d.dataSize;
     }
@@ -1103,34 +1083,23 @@ inline void getTotalDiffSize(protocol::GetCommandParams &p)
 
 inline void existsDiff(protocol::GetCommandParams &p)
 {
-    std::string volId, gidS[4];
-    cybozu::util::parseStrVec(p.params, 1, 5, {&volId, &gidS[0], &gidS[1], &gidS[2], &gidS[3]});
-    uint64_t gid[4];
-    for (size_t i = 0; i < 4; i++) {
-        gid[i] = cybozu::atoi(gidS[i]);
-    }
+    const ExistsDiffParam param = parseExistsDiffParamForGet(p.params);
 
-    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolState &volSt = getArchiveVolState(param.volId);
     UniqueLock ul(volSt.mu);
     verifyStateIn(volSt.sm.get(), aActiveOrStopped, __func__);
 
-    MetaDiff d(MetaSnap(gid[0], gid[1]), MetaSnap(gid[2], gid[3]));
-    const bool s = volSt.diffMgr.exists(d);
+    const bool s = volSt.diffMgr.exists(param.diff);
     ul.unlock();
     protocol::sendValueAndFin(p, s);
 }
 
-/**
- * return whether an action is running on a volume or not.
- *
- * params[1]: volId
- * params[2]: action name.
- */
 inline void getNumAction(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId, action;
-    cybozu::util::parseStrVec(p.params, 1, 2, {&volId, &action});
+    const NumActionParam param = parseNumActionParamForGet(p.params);
+    const std::string &volId = param.volId;
+    const std::string &action = param.action;
 
     if (std::find(allActionVec.begin(), allActionVec.end(), action) == allActionVec.end()) {
         throw cybozu::Exception(FUNC) << "no such action" << action;
@@ -1150,8 +1119,7 @@ inline void getNumAction(protocol::GetCommandParams &p)
 inline void getRestored(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -1166,17 +1134,8 @@ inline void getRestored(protocol::GetCommandParams &p)
 inline void getRestorable(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId, opt[2];
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId, &opt[0], &opt[1]});
-    bool isAll = false;
-    for (const std::string &o : opt) {
-        if (o.empty()) break;
-        if (o == "all") {
-            isAll = true;
-        } else {
-            throw cybozu::Exception(FUNC) << "bad opt" << o;
-        }
-    }
+    const RestorableParam param = parseRestorableParamForGet(p.params);
+    const std::string &volId = param.volId;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -1184,7 +1143,7 @@ inline void getRestorable(protocol::GetCommandParams &p)
     const std::string st = volSt.sm.get();
     StrVec strV;
     if (isStateIn(st, aActive)) {
-        strV = archive_local::listRestorable(volId, isAll);
+        strV = archive_local::listRestorable(volId, param.isAll);
     }
     ul.unlock();
     protocol::sendValueAndFin(p, strV);
@@ -1194,8 +1153,8 @@ inline void getRestorable(protocol::GetCommandParams &p)
 inline void getUuid(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
+
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
@@ -1213,8 +1172,8 @@ inline void getUuid(protocol::GetCommandParams &p)
 inline void getBase(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
+
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
@@ -1274,8 +1233,8 @@ inline bool getBlockHash(
 inline void getVolSize(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
+
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
@@ -1290,8 +1249,7 @@ inline void getVolSize(protocol::GetCommandParams &p)
 
 inline void getProgress(protocol::GetCommandParams &p)
 {
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
     ArchiveVolState &volSt = getArchiveVolState(volId);
     const uint64_t progressLb = volSt.progressLb.load();
     protocol::sendValueAndFin(p, progressLb);
@@ -1365,13 +1323,12 @@ inline void c2aStatusServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
+        const StatusParam param = parseStatusParam(protocol::recvStrVec(p.sock, 0, FUNC));
         StrVec strV;
-        if (v.empty()) {
+        if (param.isAll) {
             strV = archive_local::getAllStatusAsStrVec();
         } else {
-            const std::string &volId = v[0];
-            strV = archive_local::getVolStatusAsStrVec(volId);
+            strV = archive_local::getVolStatusAsStrVec(param.volId);
         }
         protocol::sendValueAndFin(pkt, sendErr, strV);
     } catch (std::exception &e) {
@@ -1387,8 +1344,7 @@ inline void c2aInitVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-        const std::string &volId = v[0];
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -1411,11 +1367,10 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
 {
     const char *FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
 
@@ -1444,11 +1399,10 @@ inline void c2aStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
@@ -1484,14 +1438,12 @@ inline void c2aStopServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId;
-        StopOpt stopOpt;
-        std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
+        const StopParam param = parseStopParam(protocol::recvStrVec(p.sock, 0, FUNC), false);
+        const std::string &volId = param.volId;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         Stopper stopper(volSt.stopState);
-        if (!stopper.changeFromNotStopping(stopOpt.isForce() ? ForceStopping : Stopping)) {
+        if (!stopper.changeFromNotStopping(param.stopOpt.isForce() ? ForceStopping : Stopping)) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
         pkt.writeFin(msgAccept);
@@ -1550,10 +1502,18 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string &volId = v[0];
-    const uint64_t gid = cybozu::atoi(v[1]);
     packet::Packet pkt(p.sock);
+
+    VolIdAndGidParam param;
+    try {
+        param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 2, FUNC), 0, true, 0);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+        return;
+    }
+    const std::string &volId = param.volId;
+    const uint64_t gid = param.gid;
 
     ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1596,9 +1556,9 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const uint64_t gid = cybozu::atoi(v[1]);
+        const VolIdAndGidParam param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 2, FUNC), 0, true, 0);
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -1619,8 +1579,6 @@ inline void c2aDelRestoredServer(protocol::ServerParams &p)
 }
 
 /**
- * params[0]: volId.
- *
  * !!!CAUSION!!!
  * This is for test and debug.
  */
@@ -1628,12 +1586,10 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
-    const StrVec v =
-        protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -1805,19 +1761,11 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.size() < 3) throw cybozu::Exception(FUNC) << "volId type param2 are required";
-        const std::string &volId = v[0];
-        bool isSize;
-        if (v[1] == "size") {
-            isSize = true;
-        } else if (v[1] == "gid") {
-            isSize = false;
-        } else {
-            throw cybozu::Exception(FUNC) << "bad type" << v[1];
-        }
-        const uint64_t param2 = cybozu::atoi(v[2]);
-        const HostInfoForRepl hostInfo = parseHostInfoForRepl(v, 3);
+        const ReplicateParam param = parseReplicateParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const std::string &volId = param.volId;
+        const bool isSize = param.isSize;
+        const uint64_t param2 = param.param2;
+        const HostInfoForRepl &hostInfo = param.hostInfo;
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1896,9 +1844,9 @@ inline void c2aApplyServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const uint64_t gid = cybozu::atoi(v[1]);
+        const VolIdAndGidParam param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 2, FUNC), 0, true, 0);
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1937,20 +1885,12 @@ inline void c2aMergeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 4, FUNC);
-        const std::string& volId = v[0];
-        const uint64_t gidB = cybozu::atoi(v[1]);
-        const std::string& type = v[2];
-        const uint64_t param3 = cybozu::atoi(v[3]); // gidE or maxSizeMb
-        bool isSize;
-        if (type == "size") {
-            isSize = true;
-        } else if (type == "gid") {
-            isSize = false;
-            if (param3 <= gidB) throw cybozu::Exception(FUNC) << "bad gid range" << gidB << param3;
-        } else {
-            throw cybozu::Exception(FUNC) << "bad type" << type;
-        }
+        const MergeParam param = parseMergeParam(protocol::recvStrVec(p.sock, 4, FUNC));
+        const std::string& volId = param.volId;
+        const uint64_t gidB = param.gidB;
+        const bool isSize = param.isSize;
+        const char *type = isSize ? "size" : "gid";
+        const uint64_t param3 = param.param3; // gidE or maxSizeMb
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1982,11 +1922,6 @@ inline void c2aMergeServer(protocol::ServerParams &p)
     }
 }
 
-/**
- * params[0]: volId
- * params[1]: size [byte] suffix k/m/g/t can be used.
- * params[2]: doZeroClear. 'zeroclear'. optional.
- */
 inline void c2aResizeServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -1995,18 +1930,10 @@ inline void c2aResizeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId, newSizeLbStr, doZeroClearStr;
-        cybozu::util::parseStrVec(v, 0, 2, {&volId, &newSizeLbStr, &doZeroClearStr});
-        const uint64_t newSizeLb = util::parseSizeLb(newSizeLbStr, FUNC);
-        bool doZeroClear;
-        if (doZeroClearStr.empty()) {
-            doZeroClear = false;
-        } else if (doZeroClearStr == "zeroclear") {
-            doZeroClear = true;
-        } else {
-            throw cybozu::Exception(FUNC) << "bad param" << doZeroClearStr;
-        }
+        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 0, FUNC), true);
+        const std::string &volId = param.volId;
+        const uint64_t newSizeLb = param.newSizeLb;
+        const bool doZeroClear = param.doZeroClear;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -2033,9 +1960,6 @@ inline void c2aResizeServer(protocol::ServerParams &p)
     }
 }
 
-/**
- * params[0]: volId
- */
 inline void c2aResetVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -2043,9 +1967,7 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-        const std::string &volId = v[0];
-
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
@@ -2067,12 +1989,6 @@ inline void c2aResetVolServer(protocol::ServerParams &p)
     }
 }
 
-/**
- * params[0]: volId
- * params[1]: gid0
- * ...
- * Multiple gids can be specified.
- */
 inline void changeSnapshot(protocol::ServerParams &p, bool enable)
 {
     const char *const FUNC = __func__;
@@ -2080,11 +1996,8 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.size() < 2) {
-            throw cybozu::Exception(FUNC) << "bad param";
-        }
-        const std::string &volId = v[0];
+        const ChangeSnapshotParam param = parseChangeSnapshotParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const std::string &volId = param.volId;
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -2092,12 +2005,11 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
         verifyActionNotRunning(volSt.ac, aDenyForChangeSnapshot, FUNC);
 
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-        for (size_t i = 1; i < v.size(); i++) {
-            const uint64_t gid = cybozu::atoi(v[i]);
+        for (const uint64_t gid : param.gidL) {
             MetaDiffVec diffV = volSt.diffMgr.changeSnapshot(gid, enable);
             volInfo.changeSnapshot(diffV, enable);
             logger.info() << (enable ? "enable snapshot succeeded" : "disable snapshot succeeded")
-                          << volId << v[i];
+                          << volId << gid;
         }
         ul.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
         pkt.writeFin(msgOk);
@@ -2117,11 +2029,6 @@ inline void c2aEnableSnapshot(protocol::ServerParams &p)
     changeSnapshot(p, true);
 }
 
-/**
- * params[0]: volId
- * params[1]: gid
- * params[2]: bulkSizeU (optional)
- */
 inline void c2aBlockHashServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -2130,12 +2037,10 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
     bool sendErr = true;
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId, gidStr, bulkSizeU;
-        cybozu::util::parseStrVec(v, 0, 2, {&volId, &gidStr, &bulkSizeU});
-        const uint64_t gid = cybozu::atoi(gidStr);
-        uint64_t bulkLb = DEFAULT_BULK_LB;
-        if (!bulkSizeU.empty()) bulkLb = util::parseBulkLb(bulkSizeU, FUNC);
+        const BlockHashParam param = parseBlockHashParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
+        const uint64_t bulkLb = param.bulkLb;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         // This does not lock volSt.
@@ -2166,11 +2071,10 @@ inline void c2aSetUuidServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const std::string &uuidStr = v[1];
-        cybozu::Uuid uuid;
-        uuid.set(uuidStr);
+        const SetUuidParam param = parseSetUuidParam(protocol::recvStrVec(p.sock, 2, FUNC));
+        const std::string &volId = param.volId;
+        const cybozu::Uuid &uuid = param.uuid;
+
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
@@ -2194,9 +2098,11 @@ inline void c2aSetStateServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const std::string &state = v[1];
+        const SetStateParam param = parseSetStateParam(protocol::recvStrVec(p.sock, 2, FUNC));
+        const std::string &volId = param.volId;
+        const std::string &state = param.state;
+
+        verifyStateIn(param.state, aSteadyStates, FUNC);
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
@@ -2225,6 +2131,7 @@ inline void c2aSetBaseServer(protocol::ServerParams &p)
         const std::string &volId = v[0];
         const std::string &metaStateStr = v[1];
         MetaState metaSt = strToMetaState(metaStateStr);
+
         ArchiveVolState& volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);

@@ -16,6 +16,7 @@
 #include "dirty_hash_sync.hpp"
 #include "walb_util.hpp"
 #include "bdev_reader.hpp"
+#include "command_param_parser.hpp"
 
 namespace walb {
 
@@ -378,23 +379,19 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
 
 inline void c2sStatusServer(protocol::ServerParams &p)
 {
-    packet::Packet pkt(p.sock);
+    const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    StrVec params;
-    pkt.read(params);
+    packet::Packet pkt(p.sock);
 
-    StrVec v;
     bool sendErr = true;
     try {
-        if (params.empty()) {
+        StrVec v;
+        const StatusParam param = parseStatusParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        if (param.isAll) {
             v = storage_local::getAllStatusAsStrVec();
         } else {
-            const std::string &volId = params[0];
-            bool isVerbose = false;
-            if (params.size() >= 2) {
-                isVerbose = static_cast<int>(cybozu::atoi(params[1])) != 0;
-            }
-            v = storage_local::getVolStatusAsStrVec(volId, isVerbose);
+            const bool isVerbose = true;
+            v = storage_local::getVolStatusAsStrVec(param.volId, isVerbose);
         }
         protocol::sendValueAndFin(pkt, sendErr, v);
     } catch (std::exception &e) {
@@ -410,9 +407,9 @@ inline void c2sInitVolServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-        const std::string &volId = v[0];
-        const std::string &wdevPath = v[1];
+        const InitVolParam param = parseInitVolParam(protocol::recvStrVec(p.sock, 2, FUNC), true);
+        const std::string &volId = param.volId;
+        const std::string &wdevPath = param.wdevPath;
         StorageVolState &volSt = getStorageVolState(volId);
         StateMachineTransaction tran(volSt.sm, sClear, stInitVol, FUNC);
 
@@ -434,11 +431,10 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         StorageVolState &volSt = getStorageVolState(volId);
         StateMachineTransaction tran(volSt.sm, sSyncReady, stClearVol, FUNC);
 
@@ -453,10 +449,6 @@ inline void c2sClearVolServer(protocol::ServerParams &p)
     }
 }
 
-/**
- * params[0]: volId
- * params[1]: "target" or "standby".
- */
 inline void c2sStartServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -464,13 +456,10 @@ inline void c2sStartServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-	    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-	    const std::string &volId = v[0];
-		const std::string& role = v[1];
-		if (role != "target" && role != "standby") {
-            throw cybozu::Exception(FUNC) << "neighter target nor standby" << role;
-		}
-        const bool isTarget = role == "target";
+        const StartParam param = parseStartParam(protocol::recvStrVec(p.sock, 2, FUNC), true);
+	    const std::string &volId = param.volId;
+        const bool isTarget = param.isTarget;
+
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -506,9 +495,6 @@ inline void c2sStartServer(protocol::ServerParams &p)
 }
 
 /**
- * params[0]: volId
- * params[1]: StopOpt as string (optional)
- *
  * Target --> Stopped, or Standby --> SyncReady.
  */
 inline void c2sStopServer(protocol::ServerParams &p)
@@ -519,14 +505,12 @@ inline void c2sStopServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        std::string volId;
-        StopOpt stopOpt;
-        std::tie(volId, stopOpt) = parseStopParams(v, FUNC);
+        const StopParam param = parseStopParam(protocol::recvStrVec(p.sock, 0, FUNC), false);
+        const std::string &volId = param.volId;
 
         StorageVolState &volSt = getStorageVolState(volId);
         Stopper stopper(volSt.stopState);
-        if (!stopper.changeFromNotStopping(stopOpt.isForce() ? ForceStopping : Stopping)) {
+        if (!stopper.changeFromNotStopping(param.stopOpt.isForce() ? ForceStopping : Stopping)) {
             throw cybozu::Exception(FUNC) << "already under stopping" << volId;
         }
         pkt.writeFin(msgAccept);
@@ -575,9 +559,9 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
 
-    const StrVec v = protocol::recvStrVec(p.sock, 2, FUNC);
-    const std::string& volId = v[0];
-    const uint64_t bulkLb = util::parseBulkLb(v[1], FUNC);
+    const BackupParam param = parseBackupParam(protocol::recvStrVec(p.sock, 0, FUNC));
+    const std::string& volId = param.volId;
+    const uint64_t bulkLb = param.bulkLb;
     const uint64_t curTime = ::time(0);
     logger.debug() << FUNC << volId << bulkLb << curTime;
     std::string archiveId;
@@ -686,19 +670,16 @@ inline void c2sHashBkpServer(protocol::ServerParams &p)
     storage_local::backupClient(p, isFull);
 }
 
-/**
- * Take a snapshot to restore in archive hosts.
- */
 inline void c2sSnapshotServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(gs.nodeId, p.clientId);
-    const StrVec v = protocol::recvStrVec(p.sock, 1, FUNC);
-    const std::string &volId = v[0];
     packet::Packet pkt(p.sock);
 
     bool sendErr = true;
     try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
+
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
         const std::string st = volSt.sm.get();
@@ -1002,12 +983,6 @@ inline void startIfNecessary(const std::string &volId)
     LOGs.info() << "start monitoring" << volId;
 }
 
-/**
- * This is for test and debug.
- *
- * params[0]: volId.
- * params[1]: gid as string (optional)
- */
 inline void c2sResetVolServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -1016,10 +991,9 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.empty()) throw cybozu::Exception(FUNC) << "empty param";
-        const std::string &volId = v[0];
-        const uint64_t gid = (v.size() >= 2 ? static_cast<uint64_t>(cybozu::atoi(v[1])) : 0);
+        const VolIdAndGidParam param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 0, FUNC), 0, false, 0);
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
 
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -1041,9 +1015,6 @@ inline void c2sResetVolServer(protocol::ServerParams &p)
 /**
  * This will resize just walb device.
  * You must resize underlying devices before calling it.
- *
- * params[0]: volId
- * params[1]: size [byte] suffix k/m/g/t can be used.
  */
 inline void c2sResizeServer(protocol::ServerParams &p)
 {
@@ -1052,10 +1023,9 @@ inline void c2sResizeServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        StrVec v = protocol::recvStrVec(p.sock, 0, FUNC);
-        if (v.size() != 2) throw cybozu::Exception(FUNC) << "bad params";
-        const std::string &volId = v[0];
-        const uint64_t newSizeLb = util::parseSizeLb(v[1], FUNC);
+        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 0, FUNC), false);
+        const std::string &volId = param.volId;
+        const uint64_t newSizeLb = param.newSizeLb;
 
         StorageVolState &volSt = getStorageVolState(volId);
         UniqueLock ul(volSt.mu);
@@ -1083,7 +1053,7 @@ inline void c2sKickServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        protocol::recvStrVec(p.sock, 0, __func__);
+        protocol::recvStrVec(p.sock, 0, __func__); // ignore the received string vec.
         getStorageGlobal().proxyManager.kick();
 
         StorageSingleton& g = getStorageGlobal();
@@ -1133,8 +1103,8 @@ inline void getPid(protocol::GetCommandParams &p)
 inline void isOverflow(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
+
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
@@ -1152,8 +1122,8 @@ inline void isOverflow(protocol::GetCommandParams &p)
 inline void getUuid(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
-    std::string volId;
-    cybozu::util::parseStrVec(p.params, 1, 1, {&volId});
+    const std::string volId = parseVolIdParam(p.params, 1);
+
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
