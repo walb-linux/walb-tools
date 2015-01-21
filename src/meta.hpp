@@ -1145,12 +1145,13 @@ public:
         return mmap_.size();
     }
     std::pair<uint64_t, uint64_t> getMinMaxGid() const {
-        uint64_t min = 0, max = 0;
         AutoLock lk(mu_);
+        if (mmap_.empty()) return {0, 0};
+        uint64_t min = UINT64_MAX, max = 0;
         for (const auto &p : mmap_) {
             const MetaDiff &d = p.second;
-            if (min < d.snapB.gidB) min = d.snapB.gidB;
-            if (max < d.snapE.gidB) max = d.snapE.gidB;
+            min = std::min(min, d.snapB.gidB);
+            max = std::max(max, d.snapE.gidB);
         }
         return {min, max};
     }
