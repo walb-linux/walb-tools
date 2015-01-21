@@ -381,6 +381,13 @@ inline void pushAllTasksForVol(const std::string &volId, Logger *loggerP = nullp
     }
 }
 
+inline void removeAllTasksForVol(const std::string &volId)
+{
+    getProxyGlobal().taskQueue.remove([&](const ProxyTask &task) {
+            return task.volId == volId;
+        });
+}
+
 } // namespace proxy_local
 
 /**
@@ -476,10 +483,7 @@ inline void stopAndEmptyProxyVol(const std::string &volId)
         throw cybozu::Exception(FUNC) << "BUG : not here, already under stopping wdiff sender" << volId;
     }
 
-    // Clear all related tasks from the task queue.
-    g.taskQueue.remove([&](const ProxyTask &task) {
-            return task.volId == volId;
-        });
+    removeAllTasksForVol(volId);
     tran.commit(pStopped);
 }
 
@@ -510,11 +514,7 @@ inline void stopProxyVol(const std::string &volId, bool isForce)
     StateMachineTransaction tran(volSt.sm, stFrom, ptStop, FUNC);
     ul.unlock();
 
-    // Clear all related tasks from the task queue.
-    getProxyGlobal().taskQueue.remove([&](const ProxyTask &task) {
-            return task.volId == volId;
-        });
-
+    removeAllTasksForVol(volId);
     tran.commit(pStopped);
 }
 
