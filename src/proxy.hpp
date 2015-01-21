@@ -197,9 +197,9 @@ inline void ProxyVolState::initInner(const std::string &volId)
 
     // Retry to make hard links of wdiff files in the target directory.
     MetaDiffVec diffV = volInfo.getAllDiffsInTarget();
-    LOGs.debug() << "found diffs" << volId << diffV.size(); // debug
+    LOGs.debug() << "found diffs" << volId << diffV.size();
     for (const MetaDiff &d : diffV) {
-        LOGs.debug() << "try to make hard link" << d; // debug
+        LOGs.debug() << "try to make hard link" << d;
         volInfo.tryToMakeHardlinkInStandby(d);
     }
     volInfo.deleteDiffs(diffV);
