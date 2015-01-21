@@ -2004,12 +2004,18 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForChangeSnapshot, FUNC);
 
+        bool failed = false;
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         for (const uint64_t gid : param.gidL) {
             MetaDiffVec diffV = volSt.diffMgr.changeSnapshot(gid, enable);
-            volInfo.changeSnapshot(diffV, enable);
+            if (!volInfo.changeSnapshot(diffV, enable)) failed = true;
             logger.info() << (enable ? "enable snapshot succeeded" : "disable snapshot succeeded")
                           << volId << gid;
+        }
+        if (failed) {
+            // reload metadata.
+            WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
+            wdiffs.reload();
         }
         ul.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
         pkt.writeFin(msgOk);

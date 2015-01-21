@@ -447,7 +447,8 @@ public:
     /**
      * @diffV: diff vector to be.
      */
-    void changeSnapshot(const MetaDiffVec& diffV, bool enable) {
+    bool changeSnapshot(const MetaDiffVec& diffV, bool enable) {
+        bool success = true;
         for (MetaDiff diff : diffV) {
             assert(diff.isMergeable != enable);
             cybozu::FilePath to = getDiffPath(diff);
@@ -455,14 +456,15 @@ public:
             cybozu::FilePath from = getDiffPath(diff);
             if (!from.stat().exists()) {
                 LOGs.warn() << "ArchiveVolInfo::changeSnapshot: not found" << from;
+                success = false;
                 continue;
             }
             if (!from.rename(to)) {
-                throw cybozu::Exception("ArchiveVolInfo")
-                    << (enable ? "enableSnapshot" : "disableSnapshot")
-                    << from << to;
+                LOGs.warn() << "ArchiveVolInfo""changeSnapshot: rename failed" << from << to;
+                success = false;
             }
         }
+        return success;
     }
     /**
      * @snap base snapshot.
