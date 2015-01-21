@@ -807,7 +807,7 @@ public:
     }
     /**
      * RETURN:
-     *   a diff vector corresponding to the disabled snapshots.
+     *   a diff vector corresponding to the enabled/disabled snapshots.
      */
     MetaDiffVec changeSnapshot(uint64_t gid, bool enable) {
         AutoLock lk(mu_);

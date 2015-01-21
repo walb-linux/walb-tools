@@ -444,12 +444,19 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
+    /**
+     * @diffV: diff vector to be.
+     */
     void changeSnapshot(const MetaDiffVec& diffV, bool enable) {
         for (MetaDiff diff : diffV) {
-            assert(diff.isMergeable == enable);
+            assert(diff.isMergeable != enable);
             cybozu::FilePath to = getDiffPath(diff);
-            diff.isMergeable = !enable;
+            diff.isMergeable = enable;
             cybozu::FilePath from = getDiffPath(diff);
+            if (!from.stat().exists()) {
+                LOGs.warn() << "ArchiveVolInfo::changeSnapshot: not found" << from;
+                continue;
+            }
             if (!from.rename(to)) {
                 throw cybozu::Exception("ArchiveVolInfo")
                     << (enable ? "enableSnapshot" : "disableSnapshot")
