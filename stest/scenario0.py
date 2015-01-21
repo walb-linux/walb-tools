@@ -714,6 +714,31 @@ def test_n12():
     print 'test_n12:succeeded'
 
 
+def test_n13():
+    """
+        take snapshot n-times --> disable snapshots --> enable snapshots.
+    """
+    print '++++++++++++++++++++++++++++++++++++++ ' \
+        'test_n13:disable-enable-snapshot', g_count
+    walbc._apply_all(a0, VOL, TIMEOUT)
+    n = 5
+    gidL = []
+    for i in xrange(n):
+        gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
+        gidL.append(gid)
+    walbc.disable_snapshot(a0, VOL, gidL[:n-1])
+    restorableL = walbc.get_restorable_gid(a0, VOL)
+    if len(restorableL) != 2:
+        raise Exception('test_n13: restorable list length is not 2',
+                        len(restorableL), restorableL)
+    walbc.enable_snapshot(a0, VOL, gidL[:n-1])
+    restorableL = walbc.get_restorable_gid(a0, VOL)
+    if len(restorableL) != n + 1:
+        raise Exception('test_n13: restorable list length is not %d' % n,
+                        len(restorableL), restorableL)
+    print 'test_n13:succeeded'
+
+
 ###############################################################################
 # Misoperation scenario tests.
 ###############################################################################
@@ -1509,7 +1534,7 @@ def test_r4():
 
 
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
-        'n10', 'n11a', 'n11b', 'n12',
+        'n10', 'n11a', 'n11b', 'n12', 'n13'
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
         'e9', 'e10', 'e11', 'e12', 'e13',
