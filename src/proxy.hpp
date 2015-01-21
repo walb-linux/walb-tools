@@ -377,7 +377,7 @@ inline void pushAllTasksForVol(const std::string &volId, Logger *loggerP = nullp
     if (loggerP) loggerP->info() << "pushAllTasksForVol:volId" << volId;
     for (const std::string& archiveName : volSt.archiveSet) {
         if (loggerP) loggerP->info() << "pushAllTasksForVol:archiveName" << archiveName;
-        getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+        getProxyGlobal().taskQueue.pushForce(ProxyTask(volId, archiveName), 0);
     }
 }
 
