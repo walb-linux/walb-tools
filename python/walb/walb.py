@@ -2221,7 +2221,7 @@ class Controller:
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        verify_type(bool, isEnable)
+        verify_type(isEnable, bool)
         cmd = 'enable-snapshot' if isEnable else 'disable-snapshot'
         args = [cmd, vol]
         if not isinstance(gidL, list):
