@@ -239,7 +239,7 @@ private:
         }
         if (!oldPath.link(newPath)) {
             throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInStandby")
-                << "make hardlink failed" << oldPath.str() << newPath.str();
+                << "make hardlink failed" << oldPath.str() << newPath.str() << cybozu::ErrorNo();
         }
         diffMgrMap_.get(archiveName).add(diff);
     }
