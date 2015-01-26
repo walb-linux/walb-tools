@@ -187,6 +187,7 @@ public:
     */
     void notify()
     {
+        std::unique_lock<std::mutex> lk(m_);
         avail_.notify_one();
     }
     compressor::Buffer pop()
@@ -201,8 +202,8 @@ public:
             if (*pq_ && q_.empty()) return compressor::Buffer();
             ret = std::move(q_.front());
             q_.pop();
+            notFull_.notify_one();
         }
-        notFull_.notify_one();
         if (ret.second) std::rethrow_exception(ret.second);
         return std::move(ret.first);
     }
