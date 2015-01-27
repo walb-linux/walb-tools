@@ -18,13 +18,16 @@
 
 namespace cybozu {
 
+const std::string DEFAULT_TMP_FILE_PREFIX = "tmp";
+const std::string TMP_FILE_SUFFIX = "XXXXXX";
+
 class TmpFile
 {
 private:
     std::string path_;
     int fd_;
 public:
-    explicit TmpFile(const std::string &dirPath, int flags = 0, const std::string &prefix = "tmp")
+    explicit TmpFile(const std::string &dirPath, int flags = 0, const std::string &prefix = DEFAULT_TMP_FILE_PREFIX)
         : path_(createTmpPathStatic(dirPath, prefix)), fd_(-1) {
         fd_ = ::mkostemp(&path_[0], flags);
         if (fd_ < 0) {
@@ -70,5 +73,27 @@ private:
         return (FilePath(dirPath) + FilePath(prefix)).str() + "XXXXXX";
     }
 };
+
+inline size_t removeAllTmpFiles(const std::string &dirPath, const std::string prefix = DEFAULT_TMP_FILE_PREFIX)
+{
+    FilePath dirFp(dirPath);
+    if (!dirFp.stat().isDirectory()) {
+        throw RT_ERR("removeAllTmpFiles:directory not found: %s.", dirFp.str().c_str());
+    }
+
+    size_t nr = 0;
+    Directory dir(dirPath);
+    while (!dir.isEnd()) {
+        const std::string name = dir.next();
+        if (util::hasPrefix(name, prefix) && name.size() == prefix.size() + TMP_FILE_SUFFIX.size()) {
+            FilePath fileFp = dirFp + name;
+            if (!fileFp.unlink()) {
+                throw RT_ERR("removeAllTmpFiles:unlink failed: %s.", fileFp.str().c_str());
+            }
+            nr++;
+        }
+    }
+    return nr;
+}
 
 } //namespace cybozu
