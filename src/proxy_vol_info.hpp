@@ -158,6 +158,12 @@ public:
         }
     }
     /**
+     * Remove all temporary files in the target directory.
+     */
+    size_t gcTmpFiles() {
+        return cybozu::removeAllTmpFiles(getTargetDir().str());
+    }
+    /**
      * Delete a diff file from the target directory.
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */

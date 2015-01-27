@@ -194,21 +194,6 @@ inline void ProxyVolState::initInner(const std::string &volId)
     volInfo.loadAllArchiveInfo();
     LOGs.info() << "volume archive info" << volId << archiveSet.size()
                 << cybozu::util::concat(archiveSet, ",");
-
-    // Retry to make hard links of wdiff files in the target directory.
-    MetaDiffVec diffV = volInfo.getAllDiffsInTarget();
-    LOGs.debug() << "found diffs" << volId << diffV.size();
-    for (const MetaDiff &d : diffV) {
-        LOGs.debug() << "try to make hard link" << d;
-        volInfo.tryToMakeHardlinkInStandby(d);
-    }
-    volInfo.deleteDiffs(diffV);
-    // Here the target directory must contain no wdiff file.
-    if (!diffMgr.getAll().empty()) {
-        throw cybozu::Exception("ProxyVolState::initInner")
-            << "there are wdiff files in the target directory"
-            << volId;
-    }
 }
 
 inline ProxyVolState &getProxyVolState(const std::string &volId)
@@ -388,6 +373,34 @@ inline void removeAllTasksForVol(const std::string &volId)
         });
 }
 
+inline void gcProxyVol(const std::string &volId)
+{
+    const char * const FUNC = __func__;
+    ProxyVolState &volSt = getProxyVolState(volId);
+    ProxyVolInfo volInfo = getProxyVolInfo(volId);
+
+    // Retry to make hard links of wdiff files in the target directory.
+    MetaDiffVec diffV = volInfo.getAllDiffsInTarget();
+    LOGs.debug() << "found diffs" << volId << diffV.size();
+    for (const MetaDiff &d : diffV) {
+        LOGs.debug() << "try to make hard link" << volId << d;
+        volInfo.tryToMakeHardlinkInStandby(d);
+    }
+    volInfo.deleteDiffs(diffV);
+    // Here the target directory must contain no wdiff file.
+    if (!volSt.diffMgr.getAll().empty()) {
+        throw cybozu::Exception(FUNC)
+            << "there are wdiff files in the target directory"
+            << volId;
+    }
+
+    // Collect temporary files.
+    const size_t nr = volInfo.gcTmpFiles();
+    if (nr > 0) {
+        LOGs.info() << volId << "garbage collected tmp files" << nr;
+    }
+}
+
 } // namespace proxy_local
 
 /**
@@ -427,7 +440,7 @@ inline void startProxyVol(const std::string &volId)
     if (st != pStopped) {
         throw cybozu::Exception("bad state") << st;
     }
-
+    proxy_local::gcProxyVol(volId);
     StateMachineTransaction tran(volSt.sm, pStopped, ptStart);
     proxy_local::pushAllTasksForVol(volId);
     tran.commit(pStarted);
