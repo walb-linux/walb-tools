@@ -52,17 +52,17 @@ public:
     void init() {
         util::makeDir(volDir.str(), "ProxyVolInfo::init:makdir failed", true);
         setSizeLb(0);
-        util::makeDir(getTargetDir().str(), "ProxyVolInfo::init:makedir failed", true);
-        util::makeDir(getStandbyDir().str(), "ProxyVolInfo::init:makedir failed", true);
+        util::makeDir(getReceivedDir().str(), "ProxyVolInfo::init:makedir failed", true);
+        util::makeDir(getSendtoDir().str(), "ProxyVolInfo::init:makedir failed", true);
     }
     /**
-     * Load wdiff meta data for target and each archive directory.
+     * Load wdiff meta data for received and each sendto directory.
      */
     void loadAllArchiveInfo() {
-        reloadTarget();
+        reloadReceivedWdiffs();
         for (const std::string &name : getArchiveNameList()) {
             archiveSet_.insert(name);
-            reloadStandby(name);
+            reloadSendtoWdiffs(name);
         }
     }
     bool notExistsArchiveInfo() const {
@@ -75,20 +75,20 @@ public:
         if (!getArchiveInfoPath(name).stat().isFile()) {
             return false;
         }
-        if (!getStandbyDir(name).stat().isDirectory()) {
+        if (!getSendtoDir(name).stat().isDirectory()) {
             return false;
         }
         return true;
     }
     void addArchiveInfo(const std::string& name, const HostInfoForBkp &hi, bool ensureNotExistance) {
         util::saveFile(volDir, name + ArchiveSuffix, hi);
-        util::makeDir(getStandbyDir(name).str(),
+        util::makeDir(getSendtoDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
         archiveSet_.insert(name);
     }
     void deleteArchiveInfo(const std::string &name) {
         diffMgrMap_.get(name).clear();
-        getStandbyDir(name).rmdirRecursive();
+        getSendtoDir(name).rmdirRecursive();
         getArchiveInfoPath(name).remove();
         archiveSet_.erase(name);
     }
@@ -136,55 +136,55 @@ public:
      */
     MetaDiffVec getDiffListToSend(const std::string &archiveName, uint64_t size, size_t nr) const {
         MetaDiffManager &mgr = diffMgrMap_.get(archiveName);
-        WalbDiffFiles wdiffs(mgr, getStandbyDir(archiveName).str());
+        WalbDiffFiles wdiffs(mgr, getSendtoDir(archiveName).str());
         return wdiffs.getDiffListToSend(size, nr);
     }
-    MetaDiffVec getAllDiffsInTarget() const {
+    MetaDiffVec getAllDiffsInReceivedDir() const {
         return diffMgr_.getAll();
     }
     /**
      * Call this after settle the corresponding wdiff file.
      */
-    void addDiffToTarget(const MetaDiff &diff) {
+    void addDiffToReceivedDir(const MetaDiff &diff) {
         diffMgr_.add(diff);
     }
     /**
      * Try make a hard link of a diff file in all the archive directories.
      * If the diff file already exists in an archive directory, it will do nothing.
      */
-    void tryToMakeHardlinkInStandby(const MetaDiff &diff) {
+    void tryToMakeHardlinkInSendtoDir(const MetaDiff &diff) {
         for (const std::string &archiveName : archiveSet_) {
             tryToMakeHardlinkForArchive(diff, archiveName);
         }
     }
     /**
-     * Remove all temporary files in the target directory.
+     * Remove all temporary files in the received directory.
      */
     size_t gcTmpFiles() {
-        return cybozu::removeAllTmpFiles(getTargetDir().str());
+        return cybozu::removeAllTmpFiles(getReceivedDir().str());
     }
     /**
-     * Delete a diff file from the target directory.
+     * Delete a diff file from the received directory.
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */
     void deleteDiffs(const MetaDiffVec &diffV, const std::string& archiveName = "") {
-		const bool isTarget = archiveName.empty();
-        MetaDiffManager& mgr = isTarget ? diffMgr_ : diffMgrMap_.get(archiveName);
-        WalbDiffFiles wdiffs(mgr, isTarget ? getTargetDir().str() : getStandbyDir(archiveName).str());
+		const bool isReceived = archiveName.empty();
+        MetaDiffManager& mgr = isReceived ? diffMgr_ : diffMgrMap_.get(archiveName);
+        WalbDiffFiles wdiffs(mgr, isReceived ? getReceivedDir().str() : getSendtoDir(archiveName).str());
         wdiffs.removeDiffs(diffV);
     }
-    cybozu::FilePath getTargetDir() const {
-        return volDir + "target";
+    cybozu::FilePath getReceivedDir() const {
+        return volDir + "received";
     }
-    cybozu::FilePath getStandbyDir() const {
-        return volDir + "standby";
+    cybozu::FilePath getSendtoDir() const {
+        return volDir + "sendto";
     }
-    cybozu::FilePath getStandbyDir(const std::string &archiveName) const {
-        return getStandbyDir() + archiveName;
+    cybozu::FilePath getSendtoDir(const std::string &archiveName) const {
+        return getSendtoDir() + archiveName;
     }
     /**
      * Get total diff size.
-     * getTotalDiffFileSize() means target wdiff files.
+     * getTotalDiffFileSize() means received wdiff files.
      *
      * RETURN:
      *   [byte]
@@ -201,9 +201,9 @@ public:
     cybozu::FilePath getDiffPath(const MetaDiff &diff, const std::string &archiveName = "") const {
         const std::string fname = createDiffFileName(diff);
         if (archiveName.empty()) {
-            return getTargetDir() + fname;
+            return getReceivedDir() + fname;
         } else {
-            return getStandbyDir(archiveName) + fname;
+            return getSendtoDir(archiveName) + fname;
         }
     }
 private:
@@ -224,27 +224,27 @@ private:
     /**
      * Reload metada for the mater.
      */
-    void reloadTarget() {
-        WalbDiffFiles wdiffs(diffMgr_, getTargetDir().str());
+    void reloadReceivedWdiffs() {
+        WalbDiffFiles wdiffs(diffMgr_, getReceivedDir().str());
         wdiffs.reload();
     }
     /**
      * Reload meta data for an archive.
      */
-    void reloadStandby(const std::string &archiveName) {
-        WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getStandbyDir(archiveName).str());
+    void reloadSendtoWdiffs(const std::string &archiveName) {
+        WalbDiffFiles wdiffs(diffMgrMap_.get(archiveName), getSendtoDir(archiveName).str());
         wdiffs.reload();
     }
     void tryToMakeHardlinkForArchive(const MetaDiff &diff, const std::string &archiveName) {
         std::string fname = createDiffFileName(diff);
-        cybozu::FilePath oldPath = getTargetDir() + fname;
-        cybozu::FilePath newPath = getStandbyDir(archiveName) + fname;
+        cybozu::FilePath oldPath = getReceivedDir() + fname;
+        cybozu::FilePath newPath = getSendtoDir(archiveName) + fname;
         if (!oldPath.stat().exists()) {
             // Do nothing.
             return;
         }
         if (!oldPath.link(newPath)) {
-            throw cybozu::Exception("ProxyVolInfo::tryToMakeHardlinkInStandby")
+            throw cybozu::Exception("ProxyVolInfo")
                 << "make hardlink failed" << oldPath.str() << newPath.str() << cybozu::ErrorNo();
         }
         diffMgrMap_.get(archiveName).add(diff);
