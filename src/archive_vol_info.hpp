@@ -543,6 +543,9 @@ public:
         }
         return nr;
     }
+    size_t gcTmpFiles() {
+        return cybozu::removeAllTmpFiles(volDir.str());
+    }
     bool isThinProvisioning() const {
         return !thinpool.empty();
     }

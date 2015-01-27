@@ -1309,6 +1309,10 @@ inline void gcArchiveVol(const std::string& volId)
     if (nrDiffs > 0) {
         LOGs.info() << volId << "garbage collected wdiff files" << nrDiffs;
     }
+    const size_t nrTmps = volInfo.gcTmpFiles();
+    if (nrDiffs > 0) {
+        LOGs.info() << volId << "garbage collected tmp files" << nrTmps;
+    }
     const size_t nrVols = volInfo.gcVolumes();
     if (nrVols > 0) {
         LOGs.info() << volId << "garbage collected incompleted restored volumes" << nrVols;
