@@ -1934,7 +1934,7 @@ inline void c2aResizeServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 0, FUNC), true);
+        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 0, FUNC), true, false);
         const std::string &volId = param.volId;
         const uint64_t newSizeLb = param.newSizeLb;
         const bool doZeroClear = param.doZeroClear;

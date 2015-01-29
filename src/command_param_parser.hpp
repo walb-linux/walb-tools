@@ -174,7 +174,7 @@ struct ResizeParam
     bool doZeroClear;
 };
 
-inline ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear)
+inline ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear, bool allowZeroSize)
 {
     const char *const FUNC = __func__;
     ResizeParam param;
@@ -189,6 +189,9 @@ inline ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear)
         doZeroClear = true;
     } else {
         throw cybozu::Exception(FUNC) << "bad param" << doZeroClearStr;
+    }
+    if (!allowZeroSize && newSizeLb == 0) {
+        throw cybozu::Exception(FUNC) << "size param must not be 0";
     }
     param.newSizeLb = newSizeLb;
     param.doZeroClear = doZeroClear;
@@ -355,7 +358,7 @@ inline void verifyDelRestoredParam(const StrVec &args) { parseVolIdAndGidParam(a
 inline void verifyReplicateParam(const StrVec &args) { parseReplicateParam(args); }
 inline void verifyApplyParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
 inline void verifyMergeParam(const StrVec &args) { parseMergeParam(args); }
-inline void verifyResizeParam(const StrVec &args) { parseResizeParam(args, true); }
+inline void verifyResizeParam(const StrVec &args) { parseResizeParam(args, true, true); }
 inline void verifyBlockHashParam(const StrVec &args) { parseBlockHashParam(args); }
 inline void verifySetUuidParam(const StrVec &args) { parseSetUuidParam(args); }
 inline void verifySetStateParam(const StrVec &args) { parseSetStateParam(args); }

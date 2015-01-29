@@ -1076,7 +1076,7 @@ inline void c2pResizeServer(protocol::ServerParams &p)
     packet::Packet pkt(p.sock);
 
     try {
-        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 2, FUNC), false);
+        const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 2, FUNC), false, false);
         const std::string &volId = param.volId;
         const uint64_t newSizeLb = param.newSizeLb;
 
