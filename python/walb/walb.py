@@ -2317,13 +2317,15 @@ class Controller:
         Resize archive volume.
         ax :: Server        - archive server.
         vol :: str          - volume name.
-        sizeMb :: int       - new size [MiB].
+        sizeMb :: int       - new size [MiB]. must not be 0.
         doZeroClear :: bool - True if zero-clear extended area.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_u64(sizeMb)
         verify_type(doZeroClear, bool)
+        if sizeMb == 0:
+            raise Exception('resize_archive:sizeMb must not be zero', ax.name, vol, sizeMb)
         st = self.get_state(ax, vol)
         if st == aClear:
             return
@@ -2348,7 +2350,7 @@ class Controller:
         You must resize ddev before calling this.
         sx :: Server  - storage server.
         vol :: str    - voume name.
-        sizeMb :: int - new size [MiB].
+        sizeMb :: int - new size [MiB]. specify 0 to auto-detect its underlying ddev size.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -2364,7 +2366,7 @@ class Controller:
         Resize a volume.
         This will affect all storage servers and archive servers.
         vol :: str          - volume name.
-        sizeMb :: int       - new size [MiB].
+        sizeMb :: int       - new size [MiB]. must not be 0.
         doZeroClear :: bool - True if you want to zero-clear the extended area at the archives.
                               Storage's extended areas will not be filled by this function.
         '''
