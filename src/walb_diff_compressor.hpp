@@ -259,7 +259,7 @@ public:
             startEv_.wait();
             /*
              * case 1 (process task): set inBuf_ and outBuf_ and wakeup().
-             * case 2 (quit): just call wakeup() wihtout setting inBuf_ and outBuf_.
+             * case 2 (quit): just call wakeup() without setting inBuf_ and outBuf_.
              */
             if (inBuf_.empty()) {
                 que_->notify();
