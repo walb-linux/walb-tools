@@ -20,45 +20,76 @@ inline bool wdiffTransferClient(
 {
     const size_t maxPushedNum = cmpr.numCpu * 2 - 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
+    std::atomic<bool> failed(false);
 
     auto sendPack = [&]() {
-        statOut.clear();
-        statOut.wdiffNr = -1;
+        std::exception_ptr ep;
         packet::StreamControl ctrl(pkt.sock());
+        try {
+            statOut.clear();
+            statOut.wdiffNr = -1;
 
-        Buffer pack = conv.pop();
-        while (!pack.empty()) {
-            ctrl.next();
-            pkt.write<size_t>(pack.size());
-            pkt.write(pack.data(), pack.size());
-            statOut.update(*(const DiffPackHeader*)pack.data());
-            pack = conv.pop();
+            Buffer pack = conv.pop();
+            while (!pack.empty()) {
+                if (failed) {
+                    ctrl.error();
+                    throw cybozu::Exception(__func__) << "failed";
+                }
+                ctrl.next();
+                pkt.write<size_t>(pack.size());
+                pkt.write(pack.data(), pack.size());
+                statOut.update(*(const DiffPackHeader*)pack.data());
+                pack = conv.pop();
+            }
+            ctrl.end();
+            return;
+        } catch (...) {
+            ep = std::current_exception();
         }
-        ctrl.end();
+
+        // failure path.
+        conv.quit();
+        failed = true;
+        conv.popAll();
+        if (ep) std::rethrow_exception(ep);
     };
     cybozu::thread::ThreadRunner senderTh(sendPack);
     senderTh.start();
 
-    DiffRecIo recIo;
-    DiffPacker packer;
-    while (merger.getAndRemove(recIo)) {
-        if (stopState == ForceStopping || ps.isForceShutdown()) {
-            return false;
+    std::exception_ptr ep;
+    try {
+        DiffRecIo recIo;
+        DiffPacker packer;
+        while (merger.getAndRemove(recIo)) {
+            if (stopState == ForceStopping || ps.isForceShutdown()) {
+                failed = true;
+                conv.quit();
+                senderTh.joinNoThrow();
+                return false;
+            }
+            const DiffRecord& rec = recIo.record();
+            const DiffIo& io = recIo.io();
+            if (packer.add(rec, io.get())) {
+                continue;
+            }
+            if (!conv.push(packer.getPackAsVector())) {
+                throw cybozu::Exception(__func__) << "push failed.";
+            }
+            packer.reset();
+            packer.add(rec, io.get());
         }
-        const DiffRecord& rec = recIo.record();
-        const DiffIo& io = recIo.io();
-        if (packer.add(rec, io.get())) {
-            continue;
+        if (!packer.empty()) {
+            if (!conv.push(packer.getPackAsVector())) {
+                throw cybozu::Exception(__func__) << "push failed";
+            }
         }
-        conv.push(packer.getPackAsVector());
-        packer.reset();
-        packer.add(rec, io.get());
-    }
-    if (!packer.empty()) {
-        conv.push(packer.getPackAsVector());
+    } catch (...) {
+        ep = std::current_exception();
+        failed = true;
     }
     conv.quit();
     senderTh.join();
+    if (ep) std::rethrow_exception(ep);
     return true;
 }
 

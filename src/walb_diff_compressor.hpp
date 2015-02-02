@@ -393,6 +393,19 @@ public:
         if (quit_ && que_.empty()) return compressor::Buffer();
         return que_.pop();
     }
+    /*
+     * You must call this to notify the thread calling push()
+     * because it may not detect that quit variable becomes true when queue is full.
+     */
+    void popAll() noexcept
+    {
+        for (;;) {
+            try {
+                if (pop().empty()) break;
+            } catch (...) {
+            }
+        }
+    }
 };
 
 } // compressor_local
@@ -400,4 +413,3 @@ public:
 typedef compressor_local::ConverterQueueT<> ConverterQueue;
 
 } //namespace walb
-
