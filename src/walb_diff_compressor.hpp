@@ -221,6 +221,7 @@ private:
     std::atomic<bool> using_;
     Queue *que_;
     cybozu::Event startEv_;
+    cybozu::Event *endEv_;
     compressor::Buffer inBuf_;
     MaybeBuffer *outBuf_;
     EngineT(const EngineT&) = delete;
@@ -230,6 +231,7 @@ public:
         : e_(nullptr)
         , using_(false)
         , que_(nullptr)
+        , endEv_(nullptr)
         , outBuf_(nullptr)
     {
     }
@@ -237,7 +239,7 @@ public:
     {
         delete e_;
     }
-    void init(bool doCompress, int type, size_t para, Queue *que)
+    void init(bool doCompress, int type, size_t para, Queue *que, cybozu::Event *endEv)
     {
         assert(e_ == nullptr);
         if (doCompress) {
@@ -246,6 +248,7 @@ public:
             e_ = new UnConv(type, para);
         }
         que_ = que;
+        endEv_ = endEv;
         beginThread();
     }
     void threadEntry()
@@ -271,6 +274,7 @@ public:
             inBuf_.clear();
             outBuf_ = nullptr;
             using_ = false;
+            endEv_->wakeup();
             que_->notify();
         }
     } catch (std::exception& e) {
@@ -297,6 +301,7 @@ class ConverterQueueT {
     std::atomic<bool> quit_;
     std::atomic<bool> joined_;
     Queue que_;
+    cybozu::Event endEv_;
     std::vector<Engine> enginePool_;
     void runEngine(MaybeBuffer *outBuf, compressor::Buffer& inBuf)
     {
@@ -304,7 +309,7 @@ class ConverterQueueT {
             for (Engine& e : enginePool_) {
                 if (e.tryToRun(outBuf, inBuf)) return;
             }
-            Sleep1msec();
+            endEv_.wait();
         }
     }
     bool isFreeEngine() const
@@ -326,7 +331,7 @@ public:
         , enginePool_(threadNum)
     {
         for (Engine& e : enginePool_) {
-            e.init(doCompress, type, para, &que_);
+            e.init(doCompress, type, para, &que_, &endEv_);
         }
     }
     ~ConverterQueueT()
