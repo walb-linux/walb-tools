@@ -212,12 +212,6 @@ public:
         , pack_((DiffPackHeader *)data_.data()) {
     }
     /**
-     * @ioBlocks [logical block]
-     */
-    bool canAddLb(uint16_t ioBlocks) const {
-        return pack_->canAdd(ioBlocks * LOGICAL_BLOCK_SIZE);
-    }
-    /**
      * You must care about IO insertion order and overlap.
      *
      * RETURN:
