@@ -132,7 +132,7 @@ public:
 
     void close() {
         if (!isClosed_) {
-            flush();
+            writePack(); // if buffered data exist.
             writeEof();
             fileW_.close();
             isClosed_ = true;
@@ -197,12 +197,6 @@ public:
         compressDiffIo(rec, data, compRec, compIo.data, type, level);
         compIo.set(compRec);
         writeDiff(compRec, std::move(compIo));
-    }
-    /**
-     * Write buffered data.
-     */
-    void flush() {
-        writePack();
     }
     const DiffStatistics& getStat() const {
         return stat_;

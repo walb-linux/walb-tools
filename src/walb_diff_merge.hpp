@@ -234,7 +234,7 @@ public:
             writer.compressAndWriteDiff(d.record(), d.io().get());
         }
 
-        writer.flush();
+        writer.close();
         assert(wdiffs_.empty());
         assert(diffMem_.empty());
         statOut_.update(writer.getStat());

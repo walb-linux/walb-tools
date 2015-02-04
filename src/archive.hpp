@@ -341,7 +341,7 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
         // TODO: currently we can use snappy only.
         writer.compressAndWriteDiff(recIo.record(), recIo.io().get());
     }
-    writer.flush();
+    writer.close();
 
     mergedDiff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(diffPath.str());
