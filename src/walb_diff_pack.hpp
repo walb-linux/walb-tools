@@ -138,14 +138,14 @@ private:
     const char *p_;
     size_t size_;
 public:
-    MemoryDiffPack(const char *p, size_t size) : p_(), size_(0) {
-        reset(p, size);
+    MemoryDiffPack(const char *p, size_t size, bool doVerify) : p_(), size_(0) {
+        reset(p, size, doVerify);
     }
     MemoryDiffPack(const MemoryDiffPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
     }
     MemoryDiffPack(MemoryDiffPack &&) = delete;
     MemoryDiffPack &operator=(const MemoryDiffPack &rhs) {
-        reset(rhs.p_, rhs.size_);
+        reset(rhs.p_, rhs.size_, false);
         return *this;
     }
     MemoryDiffPack &operator=(MemoryDiffPack &&) = delete;
@@ -163,7 +163,7 @@ public:
     const char *rawPtr() const {
         return p_;
     }
-    void reset(const char *p, size_t size) {
+    void reset(const char *p, size_t size, bool doVerify) {
         if (!p) throw std::runtime_error("The pointer must not be null.");
         p_ = p;
         const size_t observed = ::WALB_DIFF_PACK_SIZE + header().total_size;
@@ -171,7 +171,7 @@ public:
             throw cybozu::Exception(__func__) << "invalid pack size" << observed << size;
         }
         size_ = size;
-        verify();
+        if (doVerify) verify();
     }
 private:
     void verify() const {
@@ -261,7 +261,7 @@ public:
     }
     void verify() const {
 #ifndef NDEBUG
-        MemoryDiffPack mpack(data_.data(), data_.size());
+        MemoryDiffPack mpack(data_.data(), data_.size(), true);
 #endif
     }
     void print(FILE *fp = ::stdout) const {
@@ -305,7 +305,7 @@ private:
 
 inline void verifyDiffPack(const std::vector<char> &buf)
 {
-    MemoryDiffPack(buf.data(), buf.size());
+    MemoryDiffPack(buf.data(), buf.size(), true);
 }
 
 inline void verifyDiffPackSize(size_t size, const char *msg)
