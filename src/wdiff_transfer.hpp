@@ -9,6 +9,43 @@
 
 namespace walb {
 
+namespace wdiff_transfer_local {
+
+inline void popAndSendPack(packet::Packet& pkt, DiffStatistics& statOut, ConverterQueue& conv, std::atomic<bool>& failed)
+{
+    std::exception_ptr ep;
+    packet::StreamControl ctrl(pkt.sock());
+    try {
+        statOut.clear();
+        statOut.wdiffNr = -1;
+
+        Buffer pack = conv.pop();
+        while (!pack.empty()) {
+            if (failed) {
+                ctrl.error();
+                throw cybozu::Exception(__func__) << "failed";
+            }
+            ctrl.next();
+            pkt.write<size_t>(pack.size());
+            pkt.write(pack.data(), pack.size());
+            statOut.update(*(const DiffPackHeader*)pack.data());
+            pack = conv.pop();
+        }
+        ctrl.end();
+        return;
+    } catch (...) {
+        ep = std::current_exception();
+    }
+
+    // failure path.
+    conv.quit();
+    failed = true;
+    conv.popAll();
+    if (ep) std::rethrow_exception(ep);
+}
+
+} // namespace wdiff_transfer_local
+
 /**
  * RETURN:
  *   false if force stopped.
@@ -22,38 +59,9 @@ inline bool wdiffTransferClient(
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     std::atomic<bool> failed(false);
 
-    auto sendPack = [&]() {
-        std::exception_ptr ep;
-        packet::StreamControl ctrl(pkt.sock());
-        try {
-            statOut.clear();
-            statOut.wdiffNr = -1;
-
-            Buffer pack = conv.pop();
-            while (!pack.empty()) {
-                if (failed) {
-                    ctrl.error();
-                    throw cybozu::Exception(__func__) << "failed";
-                }
-                ctrl.next();
-                pkt.write<size_t>(pack.size());
-                pkt.write(pack.data(), pack.size());
-                statOut.update(*(const DiffPackHeader*)pack.data());
-                pack = conv.pop();
-            }
-            ctrl.end();
-            return;
-        } catch (...) {
-            ep = std::current_exception();
-        }
-
-        // failure path.
-        conv.quit();
-        failed = true;
-        conv.popAll();
-        if (ep) std::rethrow_exception(ep);
-    };
-    cybozu::thread::ThreadRunner senderTh(sendPack);
+    cybozu::thread::ThreadRunner senderTh([&]() {
+            wdiff_transfer_local::popAndSendPack(pkt, statOut, conv, failed);
+        });
     senderTh.start();
 
     std::exception_ptr ep;
