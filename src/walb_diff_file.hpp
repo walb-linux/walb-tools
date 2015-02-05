@@ -90,7 +90,7 @@ inline void writeDiffEofPack(Writer& writer)
 {
     char buf[WALB_DIFF_PACK_SIZE];
     DiffPackHeader &pack = *(DiffPackHeader*)buf;
-    pack.reset();
+    pack.clear();
     pack.setEnd();
     pack.writeTo(writer);
 }
@@ -205,7 +205,7 @@ private:
     void init() {
         isWrittenHeader_ = false;
         isClosed_ = false;
-        pack_.reset();
+        pack_.clear();
         while (!ioQ_.empty()) ioQ_.pop();
         stat_.clear();
         stat_.wdiffNr = 1;
@@ -251,7 +251,7 @@ private:
             total += io0.getSize();
         }
         assert(total == pack_.total_size);
-        pack_.reset();
+        pack_.clear();
     }
     void writeEof() {
         writeDiffEofPack(fileW_);
@@ -420,7 +420,7 @@ private:
         return true;
     }
     void init() {
-        pack_.reset();
+        pack_.clear();
         isReadHeader_ = false;
         recIdx_ = 0;
         totalSize_ = 0;

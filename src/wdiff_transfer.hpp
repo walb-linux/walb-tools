@@ -75,7 +75,7 @@ inline bool wdiffTransferClient(
             if (!conv.push(packer.getPackAsVector())) {
                 throw cybozu::Exception(__func__) << "push failed.";
             }
-            packer.reset();
+            packer.clear();
             packer.add(rec, io.get());
         }
         if (!packer.empty()) {

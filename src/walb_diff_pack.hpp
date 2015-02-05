@@ -96,7 +96,7 @@ struct DiffPackHeader : walb_diff_pack
             (*this)[i].printOneline(fp);
         }
     }
-    void reset() {
+    void clear() {
         ::memset(data(), 0, size());
     }
     bool canAdd(uint32_t dataSize) const {
@@ -275,13 +275,13 @@ public:
         pack_->updateChecksum();
         verify();
         std::vector<char> ret = std::move(data_);
-        reset();
+        clear();
         return ret;
     }
-    void reset() {
+    void clear() {
         data_.resize(::WALB_DIFF_PACK_SIZE);
         setPackPtr();
-        pack_->reset();
+        pack_->clear();
     }
 private:
     static bool isAllZero(const char *data, size_t size) {
