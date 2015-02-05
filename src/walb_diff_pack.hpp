@@ -260,7 +260,9 @@ public:
         return ret;
     }
     void verify() const {
+#ifndef NDEBUG
         MemoryDiffPack mpack(data_.data(), data_.size());
+#endif
     }
     void print(FILE *fp = ::stdout) const {
         pack_->print(fp);
