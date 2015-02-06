@@ -1,12 +1,9 @@
 #pragma once
 /**
- * @file
- * @brief walb diff utiltities for packs.
- * @author HOSHINO Takashi
- *
- * (C) 2013 Cybozu Labs, Inc.
+ * walb diff utiltities for packs.
  */
 #include "walb_diff_base.hpp"
+#include "append_buffer.hpp"
 #include <exception>
 
 namespace walb {
@@ -203,13 +200,15 @@ private:
 class DiffPacker
 {
 private:
-    std::vector<char> data_;
+    AppendBuffer abuf_;
     DiffPackHeader *pack_;
 
 public:
     DiffPacker()
-        : data_(::WALB_DIFF_PACK_SIZE)
-        , pack_((DiffPackHeader *)data_.data()) {
+        : abuf_()
+        , pack_() {
+        abuf_.append(::WALB_DIFF_PACK_SIZE);
+        setPackPtr();
     }
     /**
      * You must care about IO insertion order and overlap.
@@ -256,17 +255,21 @@ public:
     }
     bool empty() const {
         bool ret = pack_->n_records == 0;
-        if (ret) assert(data_.size() == ::WALB_DIFF_PACK_SIZE);
+        if (ret) {
+            assert(abuf_.size() == 1);
+            assert(abuf_[0].size() == ::WALB_DIFF_PACK_SIZE);
+        }
         return ret;
     }
     void verify() const {
 #ifndef NDEBUG
-        MemoryDiffPack mpack(data_.data(), data_.size(), true);
+        const AlignedArray ary = abuf_.getAsArray();
+        MemoryDiffPack mpack(ary.data(), ary.size(), true);
 #endif
     }
     void print(FILE *fp = ::stdout) const {
         pack_->print(fp);
-        ::fprintf(fp, "pack size: %zu\n", data_.size());
+        ::fprintf(fp, "pack size: %zu\n", abuf_.totalSize());
     }
     /**
      * Get created pack image and clear buffer
@@ -274,12 +277,15 @@ public:
     std::vector<char> getPackAsVector() {
         pack_->updateChecksum();
         verify();
-        std::vector<char> ret = std::move(data_);
+        /* QQQ: This data conversion is inefficient. This should return an AlignedArray. */
+        const AlignedArray ary = abuf_.getAsArray();
+        std::vector<char> ret(ary.size());
+        ::memcpy(ret.data(), ary.data(), ary.size());
         clear();
         return ret;
     }
     void clear() {
-        data_.resize(::WALB_DIFF_PACK_SIZE);
+        abuf_.resize(1);
         setPackPtr();
         pack_->clear();
     }
@@ -292,14 +298,13 @@ private:
     }
     void extendAndCopy(const char *data, size_t size) {
         assert(data);
-        size_t s0 = data_.size();
-        size_t s1 = size;
-        data_.resize(s0 + s1);
+        abuf_.append(data, size);
         setPackPtr();
-        ::memcpy(&data_[s0], data, s1);
     }
     void setPackPtr() {
-        pack_ = (DiffPackHeader *)data_.data();
+        assert(abuf_.size() > 0);
+        assert(abuf_[0].size() == ::WALB_DIFF_PACK_SIZE);
+        pack_ = (DiffPackHeader *)abuf_[0].data();
     }
 };
 
