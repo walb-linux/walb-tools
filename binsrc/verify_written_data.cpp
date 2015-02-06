@@ -49,7 +49,7 @@ void verifyData(const Option &opt)
     const size_t bufSize = 4 * MEBI;
 
     cybozu::util::File dataFile(opt.targetPath, O_RDONLY | (opt.isDirect() ? O_DIRECT : 0));
-    AlignedArray buf(bufSize);
+    AlignedArray buf(bufSize, false);
 
     cybozu::util::File recipeFile;
     if (opt.recipePath != "-") {
@@ -62,7 +62,7 @@ void verifyData(const Option &opt)
     /* Read and verify for each IO recipe. */
     while (!recipeParser.isEnd()) {
         const util::IoRecipe r = recipeParser.get();
-        buf.resize(r.size * opt.bs);
+        buf.resize(r.size * opt.bs, false);
         dataFile.pread(buf.data(), buf.size(), r.offset * opt.bs);
         const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
         ::printf("%s %s %08x\n",

@@ -46,7 +46,7 @@ int doMain(int argc, char* argv[])
     cybozu::aio::Aio aio(file.fd(), 1);
 
     for (size_t i = 0; i < opt.nr; i++) {
-        AlignedArray buf(opt.bs);
+        AlignedArray buf(opt.bs, true);
 
         const off_t off = opt.offsetB * opt.bs;
         const uint key = aio.prepareWrite(off, opt.bs, buf.data());

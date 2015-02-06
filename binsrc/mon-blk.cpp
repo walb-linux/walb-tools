@@ -51,7 +51,7 @@ int doMain(int argc, char *argv[])
 
     const int flags = O_RDONLY | (opt.isNoDirect ? 0 : O_DIRECT);
     cybozu::util::File f(opt.bdevPath, flags);
-    AlignedArray buf(opt.blks * LBS);
+    AlignedArray buf(opt.blks * LBS, false);
     cybozu::murmurhash3::Hasher hasher(opt.seed);
     cybozu::murmurhash3::Hash prevHash;
     prevHash.clear();

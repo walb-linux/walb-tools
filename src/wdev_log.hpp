@@ -137,7 +137,7 @@ public:
     }
 
     void format(uint32_t pbs, uint64_t ddevLb, uint64_t ldevLb, const std::string &name) {
-        init(pbs);
+        init(pbs, true);
         super()->sector_type = SECTOR_TYPE_SUPER;
         super()->version = WALB_LOG_VERSION;
         super()->logical_bs = LBS;
@@ -162,7 +162,7 @@ public:
         }
     }
     void copyFrom(const SuperBlock &rhs) {
-        init(rhs.pbs());
+        init(rhs.pbs(), false);
         data_ = rhs.data_;
     }
     /**
@@ -170,7 +170,7 @@ public:
      */
     void read(int fd) {
         cybozu::util::File file(fd);
-        init(cybozu::util::getPhysicalBlockSize(fd));
+        init(cybozu::util::getPhysicalBlockSize(fd), false);
         file.pread(data_.data(), pbs_, offset_ * pbs_);
         if (!isValid()) {
             throw RT_ERR("super block is invalid.");
@@ -227,13 +227,13 @@ public:
         ::fprintf(fp, "%s", str().c_str());
     }
 private:
-    void init(uint32_t pbs) {
+    void init(uint32_t pbs, bool doZeroClear) {
         if (!::is_valid_pbs(pbs)) {
             throw cybozu::Exception(__func__) << "invalid pbs";
         }
         pbs_ = pbs;
         offset_ = get1stSuperBlockOffsetStatic(pbs);
-        data_.resize(pbs);
+        data_.resize(pbs, doZeroClear);
     }
     static uint64_t get1stSuperBlockOffsetStatic(uint32_t pbs) {
         return ::get_super_sector0_offset(pbs);

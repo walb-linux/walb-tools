@@ -115,7 +115,7 @@ private:
                     const uint32_t ioSizePb = rec.ioSizePb(pbs);
                     LogBlockShared blockS(pbs);
                     for (uint32_t j = 0; j < ioSizePb; j++) {
-                        AlignedArray b(pbs); // zero-cleared.
+                        AlignedArray b(pbs, true);
                         if (!isAllZero) {
                             if (config_.isRandom) {
                                 rand.fill(b.data(), b.size());

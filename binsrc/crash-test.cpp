@@ -229,7 +229,7 @@ private:
             setupNormalTest(id, off, size);
             diff = 1;
         }
-        AlignedArray buf(size);
+        AlignedArray buf(size, false);
         assert(size >= sizeof(size_t));
 
         while (!quit_) {
@@ -264,7 +264,7 @@ struct ReadCommand : Command
     }
     void run() override {
         const size_t size = blockSize;
-        AlignedArray buf(size);
+        AlignedArray buf(size, false);
         cybozu::util::File file(bdevPath, O_RDONLY | O_DIRECT);
 
         if (isOverlap_) nr_ = 7;

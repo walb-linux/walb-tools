@@ -42,7 +42,7 @@ private:
     void init_inner(cybozu::util::File&& reader) {
         reader_ = std::move(reader);
         isInputFdSeekable_ = reader_.seekable();
-        if (!isInputFdSeekable_) bufForSkip_.resize(LOGICAL_BLOCK_SIZE);
+        if (!isInputFdSeekable_) bufForSkip_.resize(LOGICAL_BLOCK_SIZE, false);
     }
 public:
     /**
@@ -88,7 +88,7 @@ public:
      */
     void readAndWriteTo(int outputFd, size_t bufSize) {
         cybozu::util::File writer(outputFd);
-        AlignedArray buf(bufSize);
+        AlignedArray buf(bufSize, false);
         for (;;) {
             const size_t rSize = readSome(buf.data(), buf.size());
             if (rSize == 0) break;

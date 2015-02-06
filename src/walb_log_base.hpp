@@ -131,7 +131,7 @@ public:
     }
     LogPackHeader(uint32_t pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
-        setBlock(AlignedArray(pbs));
+        setBlock(AlignedArray(pbs, true));
     }
     const walb_logpack_header &header() const { checkBlock(); return *header_; }
     walb_logpack_header &header() { checkBlock(); return *header_; }
@@ -146,7 +146,7 @@ public:
     void init(uint32_t pbs, uint32_t salt) {
         setPbs(pbs);
         setSalt(salt);
-        setBlock(AlignedArray(pbs_));
+        setBlock(AlignedArray(pbs_, true));
     }
 
     /*

@@ -166,7 +166,7 @@ private:
         for (size_t i = 0; i < ioSizePb; i++) {
             AlignedArray block;
             if (rec.isDiscard()) {
-                block.resize(pbs); // zero-cleared.
+                block.resize(pbs, true);
             } else {
                 block = std::move(blockS.getBlock(i));
             }
