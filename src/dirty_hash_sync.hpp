@@ -19,7 +19,7 @@ inline void compressAndSend(
     packet::Packet &pkt, DiffPacker &packer,
     PackCompressor &compr, packet::StreamControl &sendCtl)
 {
-    Buffer compBuf = compr.convert(packer.getPackAsVector().data());
+    compressor::Buffer compBuf = compr.convert(packer.getPackAsArray().data());
     sendCtl.next();
     pkt.write<size_t>(compBuf.size());
     pkt.write(compBuf.data(), compBuf.size());

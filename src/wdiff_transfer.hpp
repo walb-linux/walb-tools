@@ -19,7 +19,7 @@ inline void popAndSendPack(packet::Packet& pkt, DiffStatistics& statOut, Convert
         statOut.clear();
         statOut.wdiffNr = -1;
 
-        Buffer pack = conv.pop();
+        compressor::Buffer pack = conv.pop();
         while (!pack.empty()) {
             if (failed) {
                 ctrl.error();
@@ -80,14 +80,14 @@ inline bool wdiffTransferClient(
             if (packer.add(rec, io.get())) {
                 continue;
             }
-            if (!conv.push(packer.getPackAsVector())) {
+            if (!conv.push(packer.getPackAsArray())) {
                 throw cybozu::Exception(__func__) << "push failed.";
             }
             packer.clear();
             packer.add(rec, io.get());
         }
         if (!packer.empty()) {
-            if (!conv.push(packer.getPackAsVector())) {
+            if (!conv.push(packer.getPackAsArray())) {
                 throw cybozu::Exception(__func__) << "push failed";
             }
         }

@@ -25,7 +25,7 @@ namespace walb {
 
 namespace compressor {
 
-using Buffer = std::vector<char>;
+using Buffer = AlignedArray;
 
 /*
  * convert pack data
@@ -38,8 +38,9 @@ template<class Convertor>
 Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
 {
     const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
-    Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize);
+    Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize, false);
     walb_diff_pack& outPack = *(walb_diff_pack*)ret.data();
+    ::memset(ret.data(), 0, WALB_DIFF_PACK_SIZE);
     const char *in = inPackTop + WALB_DIFF_PACK_SIZE;
     char *out = &ret[WALB_DIFF_PACK_SIZE];
 
@@ -63,7 +64,7 @@ Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
     outPack.total_size = outOffset;
     outPack.checksum = 0; // necessary to the following calcChecksum
     outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
-    ret.resize(WALB_DIFF_PACK_SIZE + outPack.total_size);
+    ret.resize(WALB_DIFF_PACK_SIZE + outPack.total_size, false);
     return ret;
 }
 
@@ -284,7 +285,7 @@ public:
     {
         startEv_.wakeup();
     }
-    bool tryToRun(MaybeBuffer *outBuf, compressor::Buffer& inBuf)
+    bool tryToRun(MaybeBuffer *outBuf, compressor::Buffer&& inBuf)
     {
         if (using_.exchange(true)) return false;
         inBuf_ = std::move(inBuf);
@@ -303,11 +304,11 @@ class ConverterQueueT {
     Queue que_;
     cybozu::Event endEv_;
     std::vector<Engine> enginePool_;
-    void runEngine(MaybeBuffer *outBuf, compressor::Buffer& inBuf)
+    void runEngine(MaybeBuffer *outBuf, compressor::Buffer&& inBuf)
     {
         for (;;) {
             for (Engine& e : enginePool_) {
-                if (e.tryToRun(outBuf, inBuf)) return;
+                if (e.tryToRun(outBuf, std::move(inBuf))) return;
             }
             endEv_.wait();
         }
@@ -372,17 +373,13 @@ public:
      * return false if quit_
      * @param inBuf [in] not empty
      */
-    bool push(compressor::Buffer& inBuf)
+    bool push(compressor::Buffer&& inBuf)
     {
         if (inBuf.empty()) throw cybozu::Exception("walb:ConverterQueueT:push:inBuf is empty");
         if (quit_) return false;
         MaybeBuffer *outBuf = que_.push();
-        runEngine(outBuf, inBuf); // no throw
+        runEngine(outBuf, std::move(inBuf)); // no throw
         return true;
-    }
-    bool push(compressor::Buffer&& inBuf)
-    {
-        return push(inBuf);
     }
     /*
      * return empty buffer if quit_ and queue is empty

@@ -209,6 +209,7 @@ public:
         , pack_() {
         abuf_.append(::WALB_DIFF_PACK_SIZE);
         setPackPtr();
+        pack_->clear();
     }
     /**
      * You must care about IO insertion order and overlap.
@@ -274,15 +275,12 @@ public:
     /**
      * Get created pack image and clear buffer
      */
-    std::vector<char> getPackAsVector() {
+    AlignedArray getPackAsArray() {
         pack_->updateChecksum();
         verify();
-        /* QQQ: This data conversion is inefficient. This should return an AlignedArray. */
-        const AlignedArray ary = abuf_.getAsArray();
-        std::vector<char> ret(ary.size());
-        ::memcpy(ret.data(), ary.data(), ary.size());
+        AlignedArray ary = abuf_.getAsArray();
         clear();
-        return ret;
+        return ary;
     }
     void clear() {
         abuf_.resize(1);
