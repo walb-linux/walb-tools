@@ -13,6 +13,7 @@
 #include <limits>
 #include <time.h>
 #include <type_traits>
+#include <chrono>
 
 namespace cybozu {
 

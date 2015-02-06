@@ -6,13 +6,17 @@
 #include "thread_util.hpp"
 #include "checksum.hpp"
 
+using namespace walb;
+
 void testCompressedData(std::vector<char> &&v)
 {
-    walb::CompressedData cd0, cd1, cd2;
+    CompressedData cd0, cd1, cd2;
     cd0.setUncompressed(std::move(v));
-    cd1 = cd0.compress();
+    cd1 = cd0;
+    cd1.compress();
     if (cd1.isCompressed()) {
-        cd2 = cd1.uncompress();
+        cd2 = cd1;
+        cd2.uncompress();
     } else {
         cd2 = cd1;
     }
@@ -54,14 +58,14 @@ void throwErrorIf(std::vector<std::exception_ptr> &&ev)
     if (isError) throw std::runtime_error("Error ocurred.");
 }
 
-uint32_t calcCsum(const walb::CompressedData &data)
+uint32_t calcCsum(const CompressedData &data)
 {
     return cybozu::util::calcChecksum(data.rawData(), data.rawSize(), 0);
 }
 
 CYBOZU_TEST_AUTO(compressor)
 {
-    using BoundedQ = cybozu::thread::BoundedQueue<walb::CompressedData>;
+    using BoundedQ = cybozu::thread::BoundedQueue<CompressedData>;
     size_t qs = 10;
     BoundedQ q0(qs), q1(qs), q2(qs);
 
@@ -80,7 +84,7 @@ CYBOZU_TEST_AUTO(compressor)
                 size_t s = rand.get16() + 32;
                 std::vector<char> v(s);
                 rand.fill(&v[0], 32);
-                walb::CompressedData cd;
+                CompressedData cd;
                 cd.setUncompressed(std::move(v));
                 csumV_.push_back(calcCsum(cd));
                 outQ_.push(std::move(cd));
@@ -100,7 +104,7 @@ CYBOZU_TEST_AUTO(compressor)
         Consumer(BoundedQ &inQ, std::vector<uint32_t> &csumV)
             : inQ_(inQ), csumV_(csumV) {}
         void operator()() try {
-            walb::CompressedData cd;
+            CompressedData cd;
             while (inQ_.pop(cd)) {
                 uint32_t csum = calcCsum(cd);
                 csumV_.push_back(csum);
@@ -112,15 +116,41 @@ CYBOZU_TEST_AUTO(compressor)
     };
 
     std::vector<uint32_t> csumV0, csumV1;
-    auto w0 = std::make_shared<Producer>(q0, 100, csumV0);
-    auto w1 = std::make_shared<walb::CompressWorker>(q0, q1);
-    auto w2 = std::make_shared<walb::UncompressWorker>(q1, q2);
-    auto w3 = std::make_shared<Consumer>(q2, csumV1);
+    auto producer = std::make_shared<Producer>(q0, 100, csumV0);
+    auto compressor = [&]() {
+        try {
+            CompressedData d;
+            while (q0.pop(d)) {
+                if (!d.isCompressed()) d.compress();
+                q1.push(std::move(d));
+            }
+            q1.sync();
+        } catch (...) {
+            q0.fail();
+            q1.fail();
+            throw;
+        }
+    };
+    auto uncompressor = [&]() {
+        try {
+            CompressedData d;
+            while (q1.pop(d)) {
+                if (d.isCompressed()) d.uncompress();
+                q2.push(std::move(d));
+            }
+            q2.sync();
+        } catch (...) {
+            q1.fail();
+            q2.fail();
+            throw;
+        }
+    };
+    auto consumer = std::make_shared<Consumer>(q2, csumV1);
     cybozu::thread::ThreadRunnerSet thSet;
-    thSet.add(w0);
-    thSet.add(w1);
-    thSet.add(w2);
-    thSet.add(w3);
+    thSet.add(producer);
+    thSet.add(compressor);
+    thSet.add(uncompressor);
+    thSet.add(consumer);
     thSet.start();
     throwErrorIf(thSet.join());
 

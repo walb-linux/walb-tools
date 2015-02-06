@@ -6,8 +6,6 @@
 
 using namespace walb;
 
-using Buffer = walb::compressor::Buffer;
-
 void test(int mode)
 {
     const std::string in = "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjjaaaaaaaaaaaaabbbcccxxxxxxxxxxxxxxxxxsssssssssssssssssssssssssssssssss";
@@ -68,14 +66,14 @@ void printPackRaw(char *packRaw)
     ::printf(">>>>>>>>>>>>>>>>>>>>>\n");
 }
 
-std::vector<std::vector<char>> generateRawPacks()
+std::vector<AlignedArray> generateRawPacks()
 {
     WlogGenerator::Config cfg = createConfig();
     DiffGenerator g(cfg);
     g.generate();
     DiffMemory &diffMem0 = g.data();
 
-    std::vector<std::vector<char>> packV0;
+    std::vector<AlignedArray> packV0;
     DiffPacker packer;
 
     /* Convert memory data to raw pack list. */
@@ -83,12 +81,12 @@ std::vector<std::vector<char>> generateRawPacks()
 	for (const auto& i : map) {
 		const DiffRecIo& recIo = i.second;
         if (!packer.add(recIo.record(), recIo.io().get())) {
-            packV0.push_back(packer.getPackAsVector());
+            packV0.push_back(packer.getPackAsArray());
             packer.add(recIo.record(), recIo.io().get());
         }
 	}
     if (!packer.empty()) {
-        packV0.push_back(packer.getPackAsVector());
+        packV0.push_back(packer.getPackAsArray());
     }
     //::printf("Number of packs: %zu\n", packV0.size());
 
@@ -100,12 +98,12 @@ void testPackCompression(int type, const char *rawPack, size_t size)
     PackCompressor compr(type);
     PackUncompressor ucompr(type);
 
-    MemoryDiffPack mpack0(rawPack, size);
+    MemoryDiffPack mpack0(rawPack, size, true);
 
-    Buffer p1 = compr.convert(mpack0.rawPtr());
-    MemoryDiffPack mpack1(p1.data(), p1.size());
-    Buffer p2 = ucompr.convert(mpack1.rawPtr());
-    MemoryDiffPack mpack2(p2.data(), p2.size());
+    compressor::Buffer p1 = compr.convert(mpack0.rawPtr());
+    MemoryDiffPack mpack1(p1.data(), p1.size(), true);
+    compressor::Buffer p2 = ucompr.convert(mpack1.rawPtr());
+    MemoryDiffPack mpack2(p2.data(), p2.size(), true);
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
     int ret = ::memcmp(mpack0.rawPtr(), mpack2.rawPtr(), mpack0.size());
@@ -119,7 +117,7 @@ void testPackCompression(int type, const char *rawPack, size_t size)
 
 void testDiffCompression(int type)
 {
-    for (std::vector<char> &pk : generateRawPacks()) {
+    for (const AlignedArray &pk : generateRawPacks()) {
         testPackCompression(type, &pk[0], pk.size());
     }
 }
@@ -135,7 +133,7 @@ static const uint32_t headerSize = 4;
 std::mutex g_mu;
 static cybozu::XorShift g_rg;
 
-size_t size(const Buffer& b)
+size_t size(const compressor::Buffer& b)
 {
     uint32_t len;
     if (b.empty()) throw cybozu::Exception("size Buffer null");
@@ -143,7 +141,7 @@ size_t size(const Buffer& b)
     return len;
 }
 
-bool compare(const Buffer& lhs, const Buffer& rhs)
+bool compare(const compressor::Buffer& lhs, const compressor::Buffer& rhs)
 {
     const size_t lhsSize = size(lhs);
     const size_t rhsSize = size(rhs);
@@ -152,11 +150,11 @@ bool compare(const Buffer& lhs, const Buffer& rhs)
     return memcmp(lhs.data(), rhs.data(), lhsSize) == 0;
 }
 
-static Buffer copy(const char *buf)
+static compressor::Buffer copy(const char *buf)
 {
     uint32_t len;
     memcpy(&len, buf, headerSize);
-    Buffer ret(headerSize + len);
+    compressor::Buffer ret(headerSize + len);
     memcpy(ret.data(), buf, headerSize + len);
     return ret;
 }
@@ -177,7 +175,7 @@ static std::string create(uint32_t len, int idx)
 struct NoConverter : compressor::PackCompressorBase {
     NoConverter(int, size_t) {}
     void convertRecord(char *, size_t, walb_diff_record&, const char *, const walb_diff_record&) {}
-    Buffer convert(const char *buf)
+    compressor::Buffer convert(const char *buf)
     {
         g_mu.lock();
         int wait = g_rg() % 100;
@@ -188,6 +186,7 @@ struct NoConverter : compressor::PackCompressorBase {
 };
 
 typedef compressor_local::ConverterQueueT<NoConverter, NoConverter> ConvQ;
+using BufferVec = std::vector<compressor::Buffer>;
 
 CYBOZU_TEST_AUTO(ConverterQueue)
 {
@@ -200,7 +199,7 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     const uint32_t len = 1000;
     const size_t bufN = 300;
     StrVec inData(bufN);
-    std::vector<Buffer> inBuf(bufN);
+    BufferVec inBuf(bufN);
     puts("CREATE"); fflush(stdout);
     for (size_t i = 0; i < bufN; i++) {
         inData[i] = create(len, i);
@@ -209,13 +208,13 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     puts("PUSH"); fflush(stdout);
     std::thread pusht([&] {
         for (size_t i = 0; i < bufN; i++) {
-            cv.push(inBuf[i]);
+            cv.push(std::move(inBuf[i]));
         }
     });
     puts("POP"); fflush(stdout);
     std::thread popt([&] {
         for (size_t i = 0; i < bufN; i++) {
-            Buffer c = cv.pop();
+            compressor::Buffer c = cv.pop();
             CYBOZU_TEST_EQUAL(size(c), len);
             CYBOZU_TEST_ASSERT(memcmp(c.data(), &inData[i][0], len) == 0);
         }
@@ -225,21 +224,21 @@ CYBOZU_TEST_AUTO(ConverterQueue)
     puts("-end-"); fflush(stdout);
 }
 
-std::vector<Buffer> parallelConverter(
-    bool isCompress, std::vector<Buffer> &&packV0,
+BufferVec parallelConverter(
+    bool isCompress, BufferVec &&packV0,
     size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     const int level = 0;
     ConverterQueue cq(maxQueueSize, numThreads, isCompress, type, level);
     std::exception_ptr ep;
-    std::vector<Buffer> packV1;
+    BufferVec packV1;
 
     std::thread popper([&cq, &ep, &packV1, isFirstDelay]() {
             try {
                 if (!isFirstDelay) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
-                Buffer p = cq.pop();
+                compressor::Buffer p = cq.pop();
                 while (!p.empty()) {
                     //::printf("poped %p\n", p.get());
                     packV1.push_back(std::move(p));
@@ -261,8 +260,8 @@ std::vector<Buffer> parallelConverter(
     }
 
     //::printf("number of packes: %zu\n", packV0.size()); /* debug */
-    for (Buffer &buf : packV0) {
-        bool ret = cq.push(buf);
+    for (compressor::Buffer &buf : packV0) {
+        bool ret = cq.push(std::move(buf));
         CYBOZU_TEST_ASSERT(ret);
     }
     cq.quit();
@@ -280,7 +279,7 @@ CYBOZU_TEST_AUTO(convertNothing)
 
     std::thread popper([&cq, &ep]() {
             try {
-                Buffer p = cq.pop();
+                compressor::Buffer p = cq.pop();
                 while (!p.empty()) {
                     /* do nothing */
                     p = cq.pop();
@@ -297,39 +296,39 @@ CYBOZU_TEST_AUTO(convertNothing)
     if (ep) std::rethrow_exception(ep);
 }
 
-std::vector<Buffer> parallelCompress(
-    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
+BufferVec parallelCompress(
+    BufferVec &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     return parallelConverter(true, std::move(packV), maxQueueSize, numThreads, type, isFirstDelay);
 }
 
-std::vector<Buffer> parallelUncompress(
-    std::vector<Buffer> &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
+BufferVec parallelUncompress(
+    BufferVec &&packV, size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
     return parallelConverter(false, std::move(packV), maxQueueSize, numThreads, type, isFirstDelay);
 }
 
 void testParallelCompressNothing(size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    std::vector<Buffer> v1 = parallelCompress({}, maxQueueSize, numThreads, type, isFirstDelay);
-    std::vector<Buffer> v2 = parallelUncompress(std::move(v1), maxQueueSize, numThreads, type, isFirstDelay);
+    BufferVec v1 = parallelCompress({}, maxQueueSize, numThreads, type, isFirstDelay);
+    BufferVec v2 = parallelUncompress(std::move(v1), maxQueueSize, numThreads, type, isFirstDelay);
     CYBOZU_TEST_ASSERT(v2.empty());
 }
 
 void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type, bool isFirstDelay)
 {
-    std::vector<Buffer> packV = generateRawPacks();
+    BufferVec packV = generateRawPacks();
 
     /* Convert pack representation. */
-    std::vector<Buffer> packV0;
-    for (const Buffer &v : packV) {
+    BufferVec packV0;
+    for (const compressor::Buffer &v : packV) {
         packV0.push_back(v);
     }
 
-    std::vector<Buffer> packV1 =
+    BufferVec packV1 =
         parallelCompress(std::move(packV0), maxQueueSize, numThreads, type, isFirstDelay);
 
-    std::vector<Buffer> packV2 =
+    BufferVec packV2 =
         parallelUncompress(std::move(packV1), maxQueueSize, numThreads, type, isFirstDelay);
 
     /* Verify */
