@@ -367,7 +367,10 @@ public:
     /*
      * start to quit all thread
      */
-    void quit() { quit_ = true; }
+    void quit() {
+        quit_ = true;
+        que_.notify();
+    }
     /*
      * push buffer and return true
      * return false if quit_
@@ -387,7 +390,6 @@ public:
      */
     compressor::Buffer pop()
     {
-        if (quit_ && que_.empty()) return compressor::Buffer();
         return que_.pop();
     }
     /*
