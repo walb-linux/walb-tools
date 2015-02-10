@@ -44,6 +44,14 @@ inline void popAndSendPack(packet::Packet& pkt, DiffStatistics& statOut, Convert
     if (ep) std::rethrow_exception(ep);
 }
 
+inline void sendPack(packet::Packet& pkt, packet::StreamControl& ctrl, DiffStatistics& statOut, const compressor::Buffer& pack)
+{
+    ctrl.next();
+    pkt.write<size_t>(pack.size());
+    pkt.write(pack.data(), pack.size());
+    statOut.update(*(const DiffPackHeader*)pack.data());
+}
+
 } // namespace wdiff_transfer_local
 
 /**
@@ -57,6 +65,7 @@ inline bool wdiffTransferClient(
 {
     const size_t maxPushedNum = cmpr.numCpu * 2 + 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
+#if 0
     std::atomic<bool> failed(false);
 
     cybozu::thread::ThreadRunner senderTh([&]() {
@@ -99,6 +108,41 @@ inline bool wdiffTransferClient(
     senderTh.join();
     if (ep) std::rethrow_exception(ep);
     return true;
+#else
+    statOut.clear();
+    statOut.wdiffNr = -1;
+    packet::StreamControl ctrl(pkt.sock());
+
+    DiffRecIo recIo;
+    DiffPacker packer;
+    size_t pushedNum = 0;
+    while (merger.getAndRemove(recIo)) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
+            return false;
+        }
+        const DiffRecord& rec = recIo.record();
+        const DiffIo& io = recIo.io();
+        if (packer.add(rec, io.get())) continue;
+        const bool ret = conv.push(packer.getPackAsArray());
+        assert(ret);
+        pushedNum++;
+        packer.clear();
+        packer.add(rec, io.get());
+        if (pushedNum < maxPushedNum) continue;
+        wdiff_transfer_local::sendPack(pkt, ctrl, statOut, conv.pop());
+        pushedNum--;
+    }
+    if (!packer.empty()) {
+        const bool ret = conv.push(packer.getPackAsArray());
+        assert(ret);
+    }
+    conv.quit();
+    for (compressor::Buffer pack = conv.pop(); !pack.empty(); pack = conv.pop()) {
+        wdiff_transfer_local::sendPack(pkt, ctrl, statOut, pack);
+    }
+    ctrl.end();
+    return true;
+#endif
 }
 
 /**
