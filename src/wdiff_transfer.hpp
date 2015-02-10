@@ -11,39 +11,6 @@ namespace walb {
 
 namespace wdiff_transfer_local {
 
-inline void popAndSendPack(packet::Packet& pkt, DiffStatistics& statOut, ConverterQueue& conv, std::atomic<bool>& failed)
-{
-    std::exception_ptr ep;
-    packet::StreamControl ctrl(pkt.sock());
-    try {
-        statOut.clear();
-        statOut.wdiffNr = -1;
-
-        compressor::Buffer pack = conv.pop();
-        while (!pack.empty()) {
-            if (failed) {
-                ctrl.error();
-                throw cybozu::Exception(__func__) << "failed";
-            }
-            ctrl.next();
-            pkt.write<size_t>(pack.size());
-            pkt.write(pack.data(), pack.size());
-            statOut.update(*(const DiffPackHeader*)pack.data());
-            pack = conv.pop();
-        }
-        ctrl.end();
-        return;
-    } catch (...) {
-        ep = std::current_exception();
-    }
-
-    // failure path.
-    conv.quit();
-    failed = true;
-    conv.popAll();
-    if (ep) std::rethrow_exception(ep);
-}
-
 inline void sendPack(packet::Packet& pkt, packet::StreamControl& ctrl, DiffStatistics& statOut, const compressor::Buffer& pack)
 {
     ctrl.next();
@@ -65,50 +32,6 @@ inline bool wdiffTransferClient(
 {
     const size_t maxPushedNum = cmpr.numCpu * 2 + 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
-#if 0
-    std::atomic<bool> failed(false);
-
-    cybozu::thread::ThreadRunner senderTh([&]() {
-            wdiff_transfer_local::popAndSendPack(pkt, statOut, conv, failed);
-        });
-    senderTh.start();
-
-    std::exception_ptr ep;
-    try {
-        DiffRecIo recIo;
-        DiffPacker packer;
-        while (merger.getAndRemove(recIo)) {
-            if (stopState == ForceStopping || ps.isForceShutdown()) {
-                failed = true;
-                conv.quit();
-                senderTh.joinNoThrow();
-                return false;
-            }
-            const DiffRecord& rec = recIo.record();
-            const DiffIo& io = recIo.io();
-            if (packer.add(rec, io.get())) {
-                continue;
-            }
-            if (!conv.push(packer.getPackAsArray())) {
-                throw cybozu::Exception(__func__) << "push failed.";
-            }
-            packer.clear();
-            packer.add(rec, io.get());
-        }
-        if (!packer.empty()) {
-            if (!conv.push(packer.getPackAsArray())) {
-                throw cybozu::Exception(__func__) << "push failed";
-            }
-        }
-    } catch (...) {
-        ep = std::current_exception();
-        failed = true;
-    }
-    conv.quit();
-    senderTh.join();
-    if (ep) std::rethrow_exception(ep);
-    return true;
-#else
     statOut.clear();
     statOut.wdiffNr = -1;
     packet::StreamControl ctrl(pkt.sock());
@@ -123,8 +46,7 @@ inline bool wdiffTransferClient(
         const DiffRecord& rec = recIo.record();
         const DiffIo& io = recIo.io();
         if (packer.add(rec, io.get())) continue;
-        const bool ret = conv.push(packer.getPackAsArray());
-        assert(ret);
+        conv.push(packer.getPackAsArray());
         pushedNum++;
         packer.clear();
         packer.add(rec, io.get());
@@ -133,8 +55,7 @@ inline bool wdiffTransferClient(
         pushedNum--;
     }
     if (!packer.empty()) {
-        const bool ret = conv.push(packer.getPackAsArray());
-        assert(ret);
+        conv.push(packer.getPackAsArray());
     }
     conv.quit();
     for (compressor::Buffer pack = conv.pop(); !pack.empty(); pack = conv.pop()) {
@@ -142,7 +63,6 @@ inline bool wdiffTransferClient(
     }
     ctrl.end();
     return true;
-#endif
 }
 
 /**
