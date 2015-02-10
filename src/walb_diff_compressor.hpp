@@ -17,6 +17,7 @@
 #include <cybozu/thread.hpp>
 #include <cybozu/event.hpp>
 #include "walb_diff_base.hpp"
+#include "walb_diff_pack.hpp"
 #include "compressor.hpp"
 #include "checksum.hpp"
 #include "walb_logger.hpp"
@@ -37,22 +38,22 @@ using Buffer = AlignedArray;
 template<class Convertor>
 Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
 {
-    const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
+    const DiffPackHeader& inPack = *(const DiffPackHeader*)inPackTop;
     Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize, false);
-    walb_diff_pack& outPack = *(walb_diff_pack*)ret.data();
-    ::memset(ret.data(), 0, WALB_DIFF_PACK_SIZE);
+    DiffPackHeader& outPack = *(DiffPackHeader*)ret.data();
+    outPack.clear();
     const char *in = inPackTop + WALB_DIFF_PACK_SIZE;
     char *out = &ret[WALB_DIFF_PACK_SIZE];
 
     uint32_t outOffset = 0;
     for (int i = 0, n = inPack.n_records; i < n; i++) {
-        const walb_diff_record& inRecord = inPack.record[i];
-        walb_diff_record& outRecord = outPack.record[i];
+        const DiffRecord& inRecord = inPack[i];
+        DiffRecord& outRecord = outPack[i];
 
-        if (inRecord.flags & (WALB_DIFF_FLAG(ALLZERO) | WALB_DIFF_FLAG(DISCARD))) {
-            outRecord = inRecord;
-        } else {
+        if (inRecord.isNormal()) {
             conv.convertRecord(out, maxOutSize - outOffset, outRecord, in, inRecord);
+        } else {
+            outRecord = inRecord;
         }
         outRecord.data_offset = outOffset;
         outOffset += outRecord.data_size;
@@ -62,8 +63,7 @@ Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
     }
     outPack.n_records = inPack.n_records;
     outPack.total_size = outOffset;
-    outPack.checksum = 0; // necessary to the following calcChecksum
-    outPack.checksum = cybozu::util::calcChecksum(&outPack, WALB_DIFF_PACK_SIZE, 0);
+    outPack.updateChecksum();
     ret.resize(WALB_DIFF_PACK_SIZE + outPack.total_size, false);
     return ret;
 }
