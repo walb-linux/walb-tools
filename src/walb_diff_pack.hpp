@@ -55,8 +55,9 @@ struct DiffPackHeader : walb_diff_pack
     void updateChecksum() {
         checksum = 0;
         checksum = cybozu::util::calcChecksum(data(), size(), 0);
-        //assert(isValid());
+#ifndef NDEBUG
         verify();
+#endif
     }
     bool isValid() const {
         try {
