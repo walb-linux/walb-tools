@@ -410,8 +410,170 @@ public:
     }
 };
 
+/**
+ * push() caller must be single-thread.
+ * pop() caller must be single-thread.
+ * Any thread can call quit() and join().
+ */
+template<class Conv = PackCompressor, class UnConv = PackUncompressor>
+class ConverterQueueT2
+{
+    using LockGuard = std::lock_guard<std::mutex>;
+    using UniqueLock = std::unique_lock<std::mutex>;
+
+    struct Task {
+        compressor::Buffer inBuf;
+        compressor::Buffer outBuf;
+        std::exception_ptr ep;
+
+        bool isAvailable() const {
+            return !outBuf.empty() || ep;
+        }
+    };
+
+    struct Engine : cybozu::ThreadBase {
+        std::mutex* m_;
+        const bool* quit_;
+        std::queue<Task*>* readyQ_;
+        std::condition_variable *ready_, *avail_;
+        std::unique_ptr<compressor::PackCompressorBase> e_;
+
+        static constexpr const char* NAME() { return "ConverterQueue::Engine"; }
+        void init(bool doCompress, int type, size_t para,
+                  std::mutex* m, const bool* quit, std::queue<Task*>* readyQ,
+                  std::condition_variable* ready, std::condition_variable* avail) {
+            m_ = m;
+            quit_ = quit;
+            readyQ_ = readyQ;
+            ready_ = ready;
+            avail_ = avail;
+            if (doCompress) {
+                e_.reset(new Conv(type, para));
+            } else {
+                e_.reset(new UnConv(type, para));
+            }
+            beginThread();
+        }
+        void threadEntry() try {
+            Task *task;
+            for (;;) {
+                {
+                    UniqueLock lk(*m_);
+                    ready_->wait(lk, [this]() { return !readyQ_->empty() || (*quit_ && readyQ_->empty()); });
+                    if (*quit_ && readyQ_->empty()) break;
+                    task = readyQ_->front();
+                    readyQ_->pop();
+                }
+                try {
+                    task->outBuf = e_->convert(task->inBuf.data());
+                } catch (...) {
+                    task->ep = std::current_exception();
+                }
+                {
+                    LockGuard lk(*m_);
+                    avail_->notify_one();
+                }
+            }
+        } catch (std::exception& e) {
+            LOGs.error() << NAME() << e.what();
+            ::exit(1);
+        } catch (...) {
+            LOGs.error() << NAME() << "unknown error";
+            ::exit(1);
+        }
+    };
+
+    size_t maxQueueSize_;
+
+    mutable std::mutex m_;
+    bool quit_;
+    std::queue<Task> taskQ_;
+    std::queue<Task*> readyQ_;
+    std::condition_variable full_, ready_, avail_;
+
+    std::vector<Engine> enginePool_;
+    std::atomic<bool> joined_;
+
+public:
+    static constexpr const char* NAME() { return "ConverterQueue"; }
+    ConverterQueueT2(size_t maxQueueNum, size_t threadNum, bool doCompress, int type, size_t para = 0)
+        : maxQueueSize_(maxQueueNum)
+        , m_()
+        , quit_(false)
+        , taskQ_()
+        , readyQ_()
+        , full_()
+        , ready_()
+        , avail_()
+        , enginePool_(threadNum)
+        , joined_(false) {
+
+        for (Engine& e : enginePool_) {
+            e.init(doCompress, type, para, &m_, &quit_, &readyQ_, &ready_, &avail_);
+        }
+    }
+    ~ConverterQueueT2() noexcept {
+        join();
+    }
+    bool push(compressor::Buffer&& inBuf) {
+        if (inBuf.empty()) throw cybozu::Exception(__func__) << "inBuf is empty";
+        UniqueLock lk(m_);
+        full_.wait(lk, [this]() { return taskQ_.size() < maxQueueSize_ || quit_; });
+        if (quit_) return false;
+        taskQ_.emplace();
+        taskQ_.back().inBuf = std::move(inBuf);
+        readyQ_.push(&taskQ_.back());
+        ready_.notify_one();
+        return true;
+    }
+    compressor::Buffer pop() {
+        Task task;
+        {
+            UniqueLock lk(m_);
+            avail_.wait(lk, [this]() {
+                return (!taskQ_.empty() && taskQ_.front().isAvailable()) || (quit_ && taskQ_.empty());
+            });
+            if (quit_ && taskQ_.empty()) return compressor::Buffer();
+            task = std::move(taskQ_.front());
+            taskQ_.pop();
+            full_.notify_one();
+        }
+        if (task.ep) std::rethrow_exception(task.ep);
+        assert(!task.outBuf.empty());
+        return std::move(task.outBuf);
+    }
+    void popAll() noexcept {
+        for (;;) {
+            try {
+                if (pop().empty()) break;
+            } catch (...) {
+            }
+        }
+    }
+    void quit() {
+        LockGuard lk(m_);
+        quit_ = true;
+        full_.notify_all();
+        ready_.notify_all();
+        avail_.notify_all();
+    }
+    void join() noexcept try {
+        if (joined_.exchange(true)) return;
+        quit();
+        for (Engine& e : enginePool_) {
+            e.joinThread();
+        }
+    } catch (std::exception& e) {
+        LOGs.error() << NAME() << e.what();
+        ::exit(1);
+    } catch (...) {
+        LOGs.error() << NAME() << "unknown error.";
+        ::exit(1);
+    }
+};
+
 } // compressor_local
 
-typedef compressor_local::ConverterQueueT<> ConverterQueue;
+typedef compressor_local::ConverterQueueT2<> ConverterQueue;
 
 } //namespace walb
