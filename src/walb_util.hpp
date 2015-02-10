@@ -275,6 +275,13 @@ inline std::string getElapsedTimeStr(double elapsedSec)
     return cybozu::util::formatString("elapsed_time %.3f sec", elapsedSec);
 }
 
+inline void assignAlignedArray(AlignedArray& array, const void *data, size_t size)
+{
+    assert(data);
+    array.resize(size, false);
+    ::memcpy(array.data(), data, size);
+}
+
 }} // walb::util
 
 inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)

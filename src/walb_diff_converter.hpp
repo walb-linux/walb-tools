@@ -61,7 +61,7 @@ inline bool convertLogToDiff(
     /* Copy data from logpack data to diff io data. */
     assert(0 < rec.ioSizeLb());
     const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-    Buffer buf(ioSizeB);
+    Buffer2 buf(ioSizeB, false);
     size_t remaining = ioSizeB;
     size_t off = 0;
     const uint32_t ioSizePb = rec.ioSizePb(pbs);

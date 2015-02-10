@@ -38,7 +38,7 @@ public:
         updateChecksum();
         assert(isValid());
     }
-    DiffRecIo(const DiffRecord &rec, std::vector<char> &&data)
+    DiffRecIo(const DiffRecord &rec, Buffer2 &&data)
         : rec_(rec) {
         if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
@@ -161,14 +161,14 @@ public:
             rec0.data_size = size0;
             rec1.data_size = size1;
 
-            std::vector<char> data0(size0), data1(size1);
+            Buffer2 data0, data1;
             if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
                 const char *p = io_.get();
-                data0.assign(p, p + size0);
+                util::assignAlignedArray(data0, p, size0);
                 p += off1;
-                data1.assign(p, p + size1);
+                util::assignAlignedArray(data1, p, size1);
             }
 
             if (0 < blks0) {
@@ -198,12 +198,12 @@ public:
             if (rec_.isNormal()) {
                 size = io_.getSize() - rblks * LOGICAL_BLOCK_SIZE;
             }
-            std::vector<char> data;
+            Buffer2 data;
             if (rec_.isNormal()) {
                 assert(rec_.data_size == io_.getSize());
                 rec.data_size = size;
                 const char *p = io_.get();
-                data.assign(p, p + size);
+                util::assignAlignedArray(data, p, size);
             }
 
             v.emplace_back(rec, std::move(data));
@@ -228,12 +228,12 @@ public:
         if (isNormal) {
             size = io_.getSize() - off;
         }
-        std::vector<char> data;
+        Buffer2 data;
         if (isNormal) {
             assert(rec_.data_size == io_.getSize());
             rec.data_size = size;
             const char *p = io_.get() + off;
-            data.assign(p, p + size);
+            util::assignAlignedArray(data, p, size);
         }
         assert(rhsEndIoAddr == rec.io_address);
         v.emplace_back(rec, std::move(data));

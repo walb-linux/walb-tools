@@ -16,6 +16,7 @@
 #include "fileio.hpp"
 #include "checksum.hpp"
 #include "walb_types.hpp"
+#include "walb_util.hpp"
 #include "walb_diff.h"
 #include "walb_logger.hpp"
 #include "walb/block_size.h"
@@ -168,12 +169,15 @@ struct DiffIo
 {
     uint16_t ioBlocks; /* [logical block]. */
     int compressionType;
-    std::vector<char> data;
+    AlignedArray data;
+
     const char *get() const { return data.data(); }
     char *get() { return data.data(); }
     size_t getSize() const { return data.size(); }
 
-    explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0) : ioBlocks(ioBlocks), compressionType(compressionType), data(data, data + size) {
+    explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0)
+        : ioBlocks(ioBlocks), compressionType(compressionType), data() {
+        if (data && size > 0) util::assignAlignedArray(this->data, data, size);
     }
     DiffIo(const DiffIo &) = default;
     DiffIo(DiffIo &&) = default;
@@ -252,7 +256,7 @@ struct DiffIo
         if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
-            data.resize(rec.data_size);
+            data.resize(rec.data_size, false);
         } else {
             ioBlocks = 0;
             compressionType = ::WALB_DIFF_CMPR_NONE;
@@ -310,13 +314,13 @@ struct DiffIo
     }
 };
 
-inline uint32_t calcDiffIoChecksum(const Buffer &io)
+inline uint32_t calcDiffIoChecksum(const Buffer2 &io)
 {
     if (io.empty()) return 0;
     return cybozu::util::calcChecksum(io.data(), io.size(), 0);
 }
 
-inline bool calcDiffIoIsAllZero(const Buffer &io)
+inline bool calcDiffIoIsAllZero(const Buffer2 &io)
 {
     if (io.size() == 0) return false;
     return cybozu::util::isAllZero(io.data(), io.size());
@@ -324,7 +328,7 @@ inline bool calcDiffIoIsAllZero(const Buffer &io)
 
 inline void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, Buffer &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0)
+    DiffRecord &outRec, Buffer2 &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0)
 {
     assert(inRec.isNormal());
     assert(!inRec.isCompressed());
@@ -350,14 +354,14 @@ inline void compressDiffIo(
 
 inline void uncompressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, Buffer &outData)
+    DiffRecord &outRec, Buffer2 &outData)
 {
     assert(inRec.isNormal());
     assert(inRec.isCompressed());
     assert(inData != nullptr);
 
     const size_t size = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
-    outData.resize(size);
+    outData.resize(size, false);
     walb::Uncompressor dec(inRec.compression_type);
     size_t outSize = dec.run(outData.data(), size, inData, inRec.data_size);
     if (outSize != size) {
