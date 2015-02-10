@@ -55,7 +55,7 @@ inline bool wdiffTransferClient(
     const std::atomic<int> &stopState, const ProcessStatus &ps,
     DiffStatistics &statOut)
 {
-    const size_t maxPushedNum = cmpr.numCpu * 2 - 1;
+    const size_t maxPushedNum = cmpr.numCpu * 2 + 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     std::atomic<bool> failed(false);
 
