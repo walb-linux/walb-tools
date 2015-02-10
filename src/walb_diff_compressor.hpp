@@ -170,6 +170,10 @@ class Queue {
     mutable std::mutex m_;
     std::condition_variable avail_;
     std::condition_variable notFull_;
+
+    bool isAvailable(const MaybeBuffer &buf) const {
+        return !buf.first.empty() || buf.second;
+    }
 public:
     explicit Queue(const std::atomic<bool> *pq, size_t maxQueSize) : pq_(pq), maxQueSize_(maxQueSize) {}
     /*
@@ -197,8 +201,7 @@ public:
         {
             std::unique_lock<std::mutex> lk(m_);
             avail_.wait(lk, [this] {
-                return (!this->q_.empty() && (!this->q_.front().first.empty() || this->q_.front().second))
-                    || (*this->pq_ && this->q_.empty());
+                return (!q_.empty() && isAvailable(q_.front())) || (*pq_ && q_.empty());
             });
             if (*pq_ && q_.empty()) return compressor::Buffer();
             ret = std::move(q_.front());
