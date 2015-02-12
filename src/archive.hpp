@@ -1202,8 +1202,7 @@ inline bool getBlockHash(
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, MetaSnap(gid));
 
-    std::vector<char> buf;
-    buf.reserve(bulkLb * LOGICAL_BLOCK_SIZE);
+    AlignedArray buf;
     packet::StreamControl ctrl(pkt.sock());
     cybozu::murmurhash3::Hasher hasher(0); // seed is 0.
     hash.clear();

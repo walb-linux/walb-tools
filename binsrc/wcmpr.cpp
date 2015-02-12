@@ -12,7 +12,7 @@
 #include "compressor.hpp"
 
 using namespace walb;
-using Buffer = std::vector<char>;
+using Buffer = AlignedArray;
 
 struct Pair {
     int mode;

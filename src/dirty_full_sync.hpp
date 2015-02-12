@@ -19,7 +19,7 @@ inline bool dirtyFullSyncClient(
     uint64_t sizeLb, uint64_t bulkLb,
     const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
-    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
+    AlignedArray buf(bulkLb * LOGICAL_BLOCK_SIZE);
     AsyncBdevReader reader(bdevPath);
     std::string encBuf;
 
@@ -50,7 +50,7 @@ inline bool dirtyFullSyncClient(
 
 namespace dirty_full_sync {
 
-inline void uncompress(const std::vector<char> &src, std::vector<char> &dst, const char *msg)
+inline void uncompress(const AlignedArray &src, AlignedArray &dst, const char *msg)
 {
     size_t decSize;
     if (!snappy::GetUncompressedLength(src.data(), src.size(), &decSize)) {
@@ -77,9 +77,9 @@ inline bool dirtyFullSyncServer(
 {
     const char *const FUNC = __func__;
     cybozu::util::File file(bdevPath, O_RDWR);
-    const std::vector<char> zeroBuf(bulkLb * LOGICAL_BLOCK_SIZE);
-    std::vector<char> buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    std::vector<char> encBuf;
+    const AlignedArray zeroBuf(bulkLb * LOGICAL_BLOCK_SIZE, true);
+    AlignedArray buf(bulkLb * LOGICAL_BLOCK_SIZE);
+    AlignedArray encBuf;
 
     uint64_t c = 0;
     uint64_t remainingLb = sizeLb;
@@ -96,7 +96,7 @@ inline bool dirtyFullSyncServer(
             if (skipZero) {
                 file.lseek(size, SEEK_CUR);
             } else {
-                file.write(&zeroBuf[0], size);
+                file.write(zeroBuf.data(), size);
             }
         } else {
             encBuf.resize(encSize);

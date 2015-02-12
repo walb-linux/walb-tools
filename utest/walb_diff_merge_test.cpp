@@ -6,7 +6,6 @@
 #include <vector>
 
 using namespace walb;
-using Buffer = std::vector<char>;
 class TmpDiffFile;
 using TmpDiffFileVec = std::vector<TmpDiffFile>;
 
@@ -75,9 +74,10 @@ private:
 class TmpDisk
 {
 private:
-    Buffer buf_;
+    AlignedArray buf_;
 public:
     explicit TmpDisk(size_t len) : buf_(len * LBS) {
+        clear();
     }
     void clear() {
         ::memset(buf_.data(), 0, buf_.size());
@@ -104,7 +104,7 @@ public:
     }
     void verifyEquals(const TmpDisk &rhs) const {
         const size_t len = buf_.size() / LBS;
-        Buffer buf0(LBS), buf1(LBS);
+        AlignedArray buf0(LBS), buf1(LBS);
         size_t nr = 0;
         for (size_t i = 0; i < len; i++) {
             read(i, 1, buf0.data());

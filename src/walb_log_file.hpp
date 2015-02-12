@@ -12,13 +12,13 @@ namespace walb {
 class WlogFileHeader
 {
 private:
-    std::vector<uint8_t> data_;
+    AlignedArray data_;
 
     static_assert(WALBLOG_HEADER_SIZE >= sizeof(struct walblog_header), "WALBLOG_HEADER_SIZE too small");
 
 public:
     WlogFileHeader()
-        : data_(WALBLOG_HEADER_SIZE, 0) {}
+        : data_(WALBLOG_HEADER_SIZE, true) {}
 
     void init(uint32_t pbs, uint32_t salt, const cybozu::Uuid &uuid, uint64_t beginLsid, uint64_t endLsid) {
         ::memset(data_.data(), 0, data_.size());
@@ -387,7 +387,7 @@ public:
             lseek(size, SEEK_CUR);
             return;
         }
-        std::vector<char> buf(4096);
+        AlignedArray buf(4096);
         while (size > 0) {
             const size_t s = std::min(buf.size(), size);
             read(buf.data(), s);
