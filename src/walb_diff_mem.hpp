@@ -38,7 +38,7 @@ public:
         }
         assert(isValid());
     }
-    DiffRecIo(const DiffRecord &rec, Buffer2 &&data)
+    DiffRecIo(const DiffRecord &rec, AlignedArray &&data)
         : rec_(rec) {
         if (rec.isNormal()) {
             io_.ioBlocks = rec.io_blocks;
@@ -155,7 +155,7 @@ public:
             rec0.data_size = size0;
             rec1.data_size = size1;
 
-            Buffer2 data0, data1;
+            AlignedArray data0, data1;
             if (recIsNormal) {
                 size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
                 assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
@@ -192,7 +192,7 @@ public:
             if (rec_.isNormal()) {
                 size = io_.getSize() - rblks * LOGICAL_BLOCK_SIZE;
             }
-            Buffer2 data;
+            AlignedArray data;
             if (rec_.isNormal()) {
                 assert(rec_.data_size == io_.getSize());
                 rec.data_size = size;
@@ -222,7 +222,7 @@ public:
         if (isNormal) {
             size = io_.getSize() - off;
         }
-        Buffer2 data;
+        AlignedArray data;
         if (isNormal) {
             assert(rec_.data_size == io_.getSize());
             rec.data_size = size;

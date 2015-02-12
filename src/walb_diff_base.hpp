@@ -314,13 +314,13 @@ struct DiffIo
     }
 };
 
-inline uint32_t calcDiffIoChecksum(const Buffer2 &io)
+inline uint32_t calcDiffIoChecksum(const AlignedArray &io)
 {
     if (io.empty()) return 0;
     return cybozu::util::calcChecksum(io.data(), io.size(), 0);
 }
 
-inline bool calcDiffIoIsAllZero(const Buffer2 &io)
+inline bool calcDiffIoIsAllZero(const AlignedArray &io)
 {
     if (io.size() == 0) return false;
     return cybozu::util::isAllZero(io.data(), io.size());
@@ -328,7 +328,7 @@ inline bool calcDiffIoIsAllZero(const Buffer2 &io)
 
 inline void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, Buffer2 &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0)
+    DiffRecord &outRec, AlignedArray &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0)
 {
     assert(inRec.isNormal());
     assert(!inRec.isCompressed());
@@ -354,7 +354,7 @@ inline void compressDiffIo(
 
 inline void uncompressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, Buffer2 &outData, bool calcChecksum = true)
+    DiffRecord &outRec, AlignedArray &outData, bool calcChecksum = true)
 {
     assert(inRec.isNormal());
     assert(inRec.isCompressed());
