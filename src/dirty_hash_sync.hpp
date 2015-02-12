@@ -152,7 +152,7 @@ inline bool dirtyHashSyncServer(
         verifyDiffPackSize(size, FUNC);
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
-        verifyDiffPack(buf);
+        verifyDiffPack(buf, true);
         fileW.write(buf.data(), buf.size());
         writeSize += buf.size();
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {

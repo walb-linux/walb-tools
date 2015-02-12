@@ -39,7 +39,7 @@ private:
         const std::string wdiffPath_;
         mutable DiffReader reader_;
         DiffFileHeader header_;
-        mutable DiffRecord rec_;
+        mutable DiffRecord rec_; // checksum field may not be calculated.
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
@@ -109,7 +109,7 @@ private:
     private:
         void fill() const {
             if (isEnd_ || isFilled_) return;
-            if (reader_.readAndUncompressDiff(rec_, io_)) {
+            if (reader_.readAndUncompressDiff(rec_, io_, false)) {
                 isFilled_ = true;
             } else {
                 isEnd_ = true;

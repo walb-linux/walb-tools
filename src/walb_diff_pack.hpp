@@ -136,14 +136,14 @@ private:
     const char *p_;
     size_t size_;
 public:
-    MemoryDiffPack(const char *p, size_t size, bool doVerify) : p_(), size_(0) {
-        reset(p, size, doVerify);
+    MemoryDiffPack(const char *p, size_t size) : p_(), size_(0) {
+        reset(p, size);
     }
     MemoryDiffPack(const MemoryDiffPack &rhs) : p_(rhs.p_), size_(rhs.size_) {
     }
     MemoryDiffPack(MemoryDiffPack &&) = delete;
     MemoryDiffPack &operator=(const MemoryDiffPack &rhs) {
-        reset(rhs.p_, rhs.size_, false);
+        reset(rhs.p_, rhs.size_);
         return *this;
     }
     MemoryDiffPack &operator=(MemoryDiffPack &&) = delete;
@@ -161,7 +161,7 @@ public:
     const char *rawPtr() const {
         return p_;
     }
-    void reset(const char *p, size_t size, bool doVerify) {
+    void reset(const char *p, size_t size) {
         if (!p) throw std::runtime_error("The pointer must not be null.");
         p_ = p;
         const size_t observed = ::WALB_DIFF_PACK_SIZE + header().total_size;
@@ -169,10 +169,8 @@ public:
             throw cybozu::Exception(__func__) << "invalid pack size" << observed << size;
         }
         size_ = size;
-        if (doVerify) verify();
     }
-private:
-    void verify() const {
+    void verify(bool doChecksum) const {
         const char *const NAME = "MemoryDiffPack";
         header().verify();
         for (size_t i = 0; i < header().n_records; i++) {
@@ -181,15 +179,15 @@ private:
                 throw cybozu::Exception(NAME)
                     << "data_size out of range" << i << rec.data_size;
             }
-            if (rec.isNormal()) {
-                const uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
-                if (csum != rec.checksum) {
-                    throw cybozu::Exception(NAME)
-                        << "invalid checksum" << csum << rec.checksum;
-                }
+            if (!doChecksum || !rec.isNormal()) continue;
+            const uint32_t csum = cybozu::util::calcChecksum(data(i), rec.data_size, 0);
+            if (csum != rec.checksum) {
+                throw cybozu::Exception(NAME)
+                    << "invalid checksum" << csum << rec.checksum;
             }
         }
     }
+private:
     size_t offset(size_t i) const {
         return ::WALB_DIFF_PACK_SIZE + header()[i].data_offset;
     }
@@ -197,6 +195,7 @@ private:
 
 /**
  * Generator of a pack as a memory image.
+ * IOs' checksum will neither be set nor checked.
  */
 class DiffPacker
 {
@@ -214,6 +213,7 @@ public:
     }
     /**
      * You must care about IO insertion order and overlap.
+     * Checksum will not be calculated.
      *
      * RETURN:
      *   false: failed. You need to create another pack.
@@ -228,14 +228,13 @@ public:
         rec.io_address = ioAddr;
         rec.io_blocks = ioBlocks;
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
+        rec.checksum = 0; // not calculated.
         if (isZero) {
             rec.setAllZero();
             rec.data_size = 0;
-            rec.checksum = 0;
         } else {
             rec.setNormal();
             rec.data_size = dSize;
-            rec.checksum = cybozu::util::calcChecksum(data, dSize, 0);
         }
         return add(rec, data);
     }
@@ -245,11 +244,6 @@ public:
         if (!pack_->canAdd(dSize)) return false;
 
         bool isNormal = rec.isNormal();
-#ifdef WALB_DEBUG
-        if (isNormal) {
-            assert(rec.checksum == cybozu::util::calcChecksum(data, dSize, 0));
-        }
-#endif
         /* r must be true because we called canAdd() before. */
         bool r = pack_->add(rec);
         if (r && isNormal) extendAndCopy(data, dSize);
@@ -266,7 +260,8 @@ public:
     void verify() const {
 #ifndef NDEBUG
         const AlignedArray ary = abuf_.getAsArray();
-        MemoryDiffPack mpack(ary.data(), ary.size(), true);
+        MemoryDiffPack mpack(ary.data(), ary.size());
+        mpack.verify(false);
 #endif
     }
     void print(FILE *fp = ::stdout) const {
@@ -307,9 +302,10 @@ private:
     }
 };
 
-inline void verifyDiffPack(const std::vector<char> &buf)
+inline void verifyDiffPack(const std::vector<char> &buf, bool doChecksum)
 {
-    MemoryDiffPack(buf.data(), buf.size(), true);
+    MemoryDiffPack pack(buf.data(), buf.size());
+    pack.verify(doChecksum);
 }
 
 inline void verifyDiffPackSize(size_t size, const char *msg)

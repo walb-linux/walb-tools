@@ -354,7 +354,7 @@ inline void compressDiffIo(
 
 inline void uncompressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, Buffer2 &outData)
+    DiffRecord &outRec, Buffer2 &outData, bool calcChecksum = true)
 {
     assert(inRec.isNormal());
     assert(inRec.isCompressed());
@@ -370,7 +370,7 @@ inline void uncompressDiffIo(
     outRec = inRec;
     outRec.data_size = size;
     outRec.compression_type = ::WALB_DIFF_CMPR_NONE;
-    outRec.checksum = calcDiffIoChecksum(outData);
+    outRec.checksum = calcChecksum ? calcDiffIoChecksum(outData) : 0;
 }
 
 } //namesapce walb

@@ -93,20 +93,48 @@ std::vector<AlignedArray> generateRawPacks()
     return packV0;
 }
 
+void updateChecksumOfRawPack(char *rawPack, size_t size)
+{
+    MemoryDiffPack mpack0(rawPack, size);
+    mpack0.verify(false);
+
+    DiffPackHeader& packh = *(DiffPackHeader *)rawPack;
+    size_t off = packh.size();
+    for (size_t i = 0; i < packh.n_records; i++) {
+        DiffRecord& rec = packh[i];
+        if (rec.isNormal()) {
+            rec.checksum = cybozu::util::calcChecksum(&rawPack[off], rec.data_size, 0);
+        } else {
+            rec.checksum = 0;
+        }
+        off += rec.data_size;
+    }
+    packh.updateChecksum();
+
+    mpack0.verify(true);
+}
+
 void testPackCompression(int type, const char *rawPack, size_t size)
 {
     PackCompressor compr(type);
     PackUncompressor ucompr(type);
 
-    MemoryDiffPack mpack0(rawPack, size, true);
+    MemoryDiffPack mpack0(rawPack, size);
+    mpack0.verify(false); // IOs' checksum is not set.
 
     compressor::Buffer p1 = compr.convert(mpack0.rawPtr());
-    MemoryDiffPack mpack1(p1.data(), p1.size(), true);
+    MemoryDiffPack mpack1(p1.data(), p1.size());
+    mpack1.verify(true);
     compressor::Buffer p2 = ucompr.convert(mpack1.rawPtr());
-    MemoryDiffPack mpack2(p2.data(), p2.size(), true);
+    MemoryDiffPack mpack2(p2.data(), p2.size());
+    mpack2.verify(true);
+
 
     CYBOZU_TEST_EQUAL(mpack0.size(), mpack2.size());
-    int ret = ::memcmp(mpack0.rawPtr(), mpack2.rawPtr(), mpack0.size());
+    AlignedArray pack;
+    util::assignAlignedArray(pack, rawPack, size);
+    updateChecksumOfRawPack(pack.data(), size);
+    int ret = ::memcmp(pack.data(), mpack2.rawPtr(), size);
     CYBOZU_TEST_EQUAL(ret, 0);
 #if 0
     printPackRaw(mpack0.rawPtr());
@@ -334,7 +362,10 @@ void testParallelCompress(size_t maxQueueSize, size_t numThreads, int type, bool
     /* Verify */
     CYBOZU_TEST_EQUAL(packV.size(), packV2.size());
     for (size_t i = 0; i < packV.size(); i++) {
-        CYBOZU_TEST_ASSERT(::memcmp(&packV[i][0], packV2[i].data(), packV[i].size()) == 0);
+        AlignedArray pack;
+        util::assignAlignedArray(pack, packV[i].data(), packV[i].size());
+        updateChecksumOfRawPack(pack.data(), pack.size());
+        CYBOZU_TEST_ASSERT(::memcmp(pack.data(), packV2[i].data(), pack.size()) == 0);
     }
 }
 

@@ -39,9 +39,7 @@ public:
             rec.io_blocks = blks;
             rec.setNormal();
             rec.data_size = blks * LOGICAL_BLOCK_SIZE;
-            uint32_t csum = cybozu::util::calcChecksum(
-                buf0_.data(), blks * LOGICAL_BLOCK_SIZE, 0);
-            rec.checksum = csum;
+            rec.checksum = 0; // calculated later.
 
             writer.compressAndWriteDiff(rec, buf0_.data());
 

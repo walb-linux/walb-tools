@@ -154,6 +154,8 @@ public:
     /**
      * Write a diff data.
      *
+     * rec.checksum must be set correctly before calling this function.
+     *
      * @rec diff record
      * @io IO data.
      *    if rec is not normal, io must be empty.
@@ -177,7 +179,9 @@ public:
     }
     /**
      * Compress and write a diff data.
-     * Do not use this for already compressed IOs. It  works but inefficient.
+     * Do not use this for already compressed IOs. It works but inefficient.
+     *
+     * rec.checksum need not be set correctly before calling this function.
      *
      * @rec record.
      * @data IO data.
@@ -222,6 +226,7 @@ private:
         if (rec.isNormal()) {
             assert(!io.empty());
             assert(io.compressionType == rec.compression_type);
+            assert(rec.checksum == io.calcChecksum());
         } else {
             assert(io.empty());
         }
@@ -365,7 +370,7 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io) {
+    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum = true) {
         if (!readDiff(rec, io)) {
             return false;
         }
@@ -374,7 +379,7 @@ public:
         }
         DiffRecord outRec;
         DiffIo outIo;
-        uncompressDiffIo(rec, io.get(), outRec, outIo.data);
+        uncompressDiffIo(rec, io.get(), outRec, outIo.data, calcChecksum);
         outIo.set(outRec);
         rec = outRec;
         io = std::move(outIo);

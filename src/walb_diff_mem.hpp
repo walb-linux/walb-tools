@@ -17,6 +17,7 @@ namespace walb {
 /**
  * Diff record and its IO data.
  * Data compression is not supported.
+ * Checksum is not calculated.
  */
 class DiffRecIo /* final */
 {
@@ -35,7 +36,6 @@ public:
         } else {
             io_.clear();
         }
-        updateChecksum();
         assert(isValid());
     }
     DiffRecIo(const DiffRecord &rec, Buffer2 &&data)
@@ -47,14 +47,8 @@ public:
         } else {
             io_.clear();
         }
-        updateChecksum();
         assert(isValid());
     }
-
-    void updateChecksum() {
-        rec_.checksum = io_.calcChecksum();
-    }
-
     bool isValid(bool isChecksum = false) const {
         if (!rec_.isNormal()) {
             if (io_.ioBlocks != 0) {
@@ -120,8 +114,8 @@ public:
      * *this will not be changed.
      */
     std::vector<DiffRecIo> minus(const DiffRecIo &rhs) const {
-        assert(isValid(true));
-        assert(rhs.isValid(true));
+        assert(isValid());
+        assert(rhs.isValid());
         if (!rec_.isOverlapped(rhs.rec_)) {
             throw RT_ERR("Non-overlapped.");
         }
@@ -244,6 +238,7 @@ public:
 /**
  * Simpler implementation of in-memory walb diff data.
  * IO data compression is not supported.
+ * IO checksum is not calculated.
  */
 class DiffMemory
 {
@@ -355,7 +350,9 @@ public:
             if (isCompressed) {
                 writer.compressAndWriteDiff(r.record(), r.io().get());
             } else {
-                writer.writeDiff(r.record(), r.io().get());
+                DiffRecord rec = r.record();
+                rec.checksum = r.io().calcChecksum();
+                writer.writeDiff(rec, r.io().get());
             }
             ++it;
         }
@@ -366,7 +363,7 @@ public:
         reader.readHeader(fileH_);
         DiffRecord rec;
         DiffIo io;
-        while (reader.readAndUncompressDiff(rec, io)) {
+        while (reader.readAndUncompressDiff(rec, io, false)) {
             add(rec, std::move(io));
         }
     }

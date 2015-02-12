@@ -33,11 +33,7 @@ public:
         DiffRecord rec;
         DiffIo io;
         prepareIo(addr, len, rec, io);
-#if 1
         writer.writeDiff(rec, std::move(io));
-#else
-        writer.compressAndWriteDiff(rec, io.data.data());
-#endif
         curAddr = addr + len;
     }
     void writeEof() {
