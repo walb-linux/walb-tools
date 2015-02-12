@@ -45,7 +45,7 @@ inline bool dirtyHashSyncClient(
 
     uint64_t addr = 0;
     uint64_t remainingLb = sizeLb;
-    Buffer buf;
+    AlignedArray buf;
     for (;;) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
@@ -100,7 +100,7 @@ inline bool dirtyHashSyncServer(
         cybozu::murmurhash3::Hasher hasher(hashSeed);
         packet::StreamControl ctrl(pkt.sock());
 
-        Buffer buf;
+        AlignedArray buf;
         uint64_t remaining = sizeLb;
         try {
             while (remaining > 0) {
@@ -136,7 +136,7 @@ inline bool dirtyHashSyncServer(
     }
 
     packet::StreamControl ctrl(pkt.sock());
-    Buffer buf;
+    AlignedArray buf;
     uint64_t writeSize = 0;
     while (ctrl.isNext() || ctrl.isDummy()) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
@@ -152,7 +152,7 @@ inline bool dirtyHashSyncServer(
         verifyDiffPackSize(size, FUNC);
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
-        verifyDiffPack(buf, true);
+        verifyDiffPack(buf.data(), buf.size(), true);
         fileW.write(buf.data(), buf.size());
         writeSize += buf.size();
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {

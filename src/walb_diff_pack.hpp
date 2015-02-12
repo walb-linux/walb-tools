@@ -302,9 +302,9 @@ private:
     }
 };
 
-inline void verifyDiffPack(const std::vector<char> &buf, bool doChecksum)
+inline void verifyDiffPack(const char *data, size_t size, bool doChecksum)
 {
-    MemoryDiffPack pack(buf.data(), buf.size());
+    MemoryDiffPack pack(data, size);
     pack.verify(doChecksum);
 }
 

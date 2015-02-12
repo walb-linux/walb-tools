@@ -77,7 +77,7 @@ inline bool wdiffTransferServer(
 {
     const char *const FUNC = __func__;
     cybozu::util::File fileW(wdiffOutFd);
-    Buffer buf;
+    AlignedArray buf;
     packet::StreamControl ctrl(pkt.sock());
     uint64_t writeSize = 0;
     while (ctrl.isNext()) {
@@ -89,7 +89,7 @@ inline bool wdiffTransferServer(
         verifyDiffPackSize(size, FUNC);
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
-        verifyDiffPack(buf, true);
+        verifyDiffPack(buf.data(), buf.size(), true);
         fileW.write(buf.data(), buf.size());
         writeSize += buf.size();
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
