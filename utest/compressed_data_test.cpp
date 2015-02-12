@@ -8,7 +8,7 @@
 
 using namespace walb;
 
-void testCompressedData(std::vector<char> &&v)
+void testCompressedData(AlignedArray &&v)
 {
     CompressedData cd0, cd1, cd2;
     cd0.setUncompressed(std::move(v));
@@ -32,7 +32,7 @@ CYBOZU_TEST_AUTO(compressedData)
     cybozu::util::Random<uint32_t> rand;
     for (size_t i = 0; i < 100; i++) {
         size_t s = rand.get16() + 32;
-        std::vector<char> v(s);
+        AlignedArray v(s);
         rand.fill(&v[0], 32);
         testCompressedData(std::move(v));
     }
@@ -82,7 +82,7 @@ CYBOZU_TEST_AUTO(compressor)
             cybozu::util::Random<uint32_t> rand;
             for (size_t i = 0; i < n_; i++) {
                 size_t s = rand.get16() + 32;
-                std::vector<char> v(s);
+                AlignedArray v(s);
                 rand.fill(&v[0], 32);
                 CompressedData cd;
                 cd.setUncompressed(std::move(v));

@@ -23,7 +23,7 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
     const uint32_t pbs = blockS.pbs();
     const size_t n = blockS.nBlocks();
     assert(0 < n);
-    std::vector<char> d(n * pbs);
+    AlignedArray d(n * pbs);
     for (size_t i = 0; i < n; i++) {
         ::memcpy(&d[i * pbs], blockS.get(i), pbs);
     }
@@ -36,7 +36,7 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
 inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs)
 {
     const char *const FUNC = __func__;
-    std::vector<char> v;
+    AlignedArray v;
     cd.getUncompressed(v);
     if (sizePb * pbs != v.size()) throw cybozu::Exception(FUNC) << "invalid size" << v.size() << sizePb;
     blockS.init(pbs);

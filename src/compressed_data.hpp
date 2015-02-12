@@ -13,6 +13,7 @@
 #include "packet.hpp"
 #include "thread_util.hpp"
 #include "compressor.hpp"
+#include "walb_types.hpp"
 
 namespace walb {
 
@@ -32,8 +33,7 @@ inline Uncompressor &getSnappyUncompressor() {
  * RETURN:
  *   true when successfully compressed, false when copied.
  */
-template <typename CharT>
-bool compressToVec(const void *data, size_t size, std::vector<CharT> &outV)
+bool compressToVec(const void *data, size_t size, AlignedArray &outV)
 {
     outV.resize(size * 2); // margin to encode
     size_t outSize;
@@ -50,8 +50,7 @@ bool compressToVec(const void *data, size_t size, std::vector<CharT> &outV)
 /**
  * Assume uncompressed size must be outSize.
  */
-template <typename CharT>
-void uncompressToVec(const void *data, size_t size, std::vector<CharT> &outV, size_t outSize)
+void uncompressToVec(const void *data, size_t size, AlignedArray &outV, size_t outSize)
 {
     outV.resize(outSize);
     const size_t s = getSnappyUncompressor().run(&outV[0], outV.size(), data, size);
@@ -69,7 +68,7 @@ class CompressedData
 private:
     uint32_t cmpSize_; /* compressed size [byte]. 0 means not compressed. */
     uint32_t orgSize_; /* original size [byte]. must not be 0. */
-    std::vector<char> data_;
+    AlignedArray data_;
 public:
     const char *rawData() const { return &data_[0]; }
     size_t rawSize() const { return data_.size(); }
@@ -100,7 +99,7 @@ public:
         packet.read(&data_[0], data_.size());
         verify();
     }
-    void setUncompressed(std::vector<char> &&data) {
+    void setUncompressed(AlignedArray &&data) {
         if (data.empty()) throw cybozu::Exception(__func__) << "empty";
         setSizes(0, data.size());
         data_ = std::move(data);
@@ -121,8 +120,7 @@ public:
         }
         verify();
     }
-    template <typename CharT>
-    void getUncompressed(std::vector<CharT> &outV) const {
+    void getUncompressed(AlignedArray &outV) const {
         if (isCompressed()) {
             cmpr_local::uncompressToVec(&data_[0], data_.size(), outV, orgSize_);
         } else {
@@ -138,7 +136,7 @@ public:
     }
     void uncompress() {
         if (!isCompressed()) return;
-        std::vector<char> dst;
+        AlignedArray dst;
         getUncompressed(dst);
         setUncompressed(std::move(dst));
     }
