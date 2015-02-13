@@ -1,0 +1,129 @@
+'''
+WalB cron script for daily/hourly/per10min run.
+
+Specify config file to execute at first,
+storageL and volL variables.
+'''
+execfile('walb-config.py')
+import datetime
+import fcntl
+import os
+storageL = [s0, s_ho_labs, s_ho_hq]
+volL = ['vm4-home', 'hoshino-server-share', 'hoshino-hq-home']
+#storageL = [s_ho_hq]
+#volL = ['hoshino-hq-home']
+#storageL = [s0]
+#volL = ['vm4-home']
+###
+def take_snapshot():
+    gidL = []
+    for sx, vol in zip(storageL, volL):
+        gid = walbc.snapshot_nbk(sx, vol)
+        gidL.append(gid)
+    for vol, gid in zip(volL, gidL):
+        walbc.wait_for_restorable(a0, vol, gid, timeoutS=60)
+    print 'SNAPSHOT', gidL
+###
+def try_merge(ax, vol):
+    def get_mergeable_candidates(ax, vol):
+        ret = []
+        diffL = []
+        for diff in walbc.get_applicable_diff_list(ax, vol):
+            if diff.isCompDiff or not diff.isMergeable:
+                if len(diffL) >= 2:
+                    ret.append(diffL)
+                diffL = []
+            diffL.append(diff)
+        if len(diffL) >= 2:
+            ret.append(diffL)
+        return ret
+    diffLL = get_mergeable_candidates(ax, vol)
+    def f(diffL):
+        total = 0
+        for diff in diffL:
+            total += diff.dataSize
+        return total / len(diffL), diffL
+    diffLL = map(f, diffLL)
+    diffLL.sort(key=lambda x:x[0])
+    for c in xrange(2):
+        if len(diffLL) == 0:
+            break
+        diffL = diffLL[0][1]
+        gid0 = diffL[0].B.gidB
+        gid1 = diffL[-1].E.gidB
+        print 'MERGE', ax.name, vol, gid0, gid1
+        walbc.merge(ax, vol, gid0, gid1)
+        diffLL.pop(0)
+###
+def apply_diffs(ax, vol, ts):
+    def get_apply_gid(ts):
+        gidInfoL = walbc.get_restorable(ax, vol, 'all')
+        gid = None
+        for gidInfo in gidInfoL:
+            if gidInfo.ts > ts:
+                break
+            gid = gidInfo.gid
+        return gid
+    gid = get_apply_gid(ts)
+    if gid:
+        print 'APPLY', ax.name, vol, gid
+        walbc.apply(ax, vol, gid)
+###
+def delete_snapshots(ax, vol, before_min, cond):
+    now = datetime.datetime.utcnow()
+    ts = now - datetime.timedelta(seconds=(before_min * 60))
+    gidL = []
+    for info in walbc.get_restorable(ax, vol):
+        if info.ts < ts and cond(info.ts):
+            gidL.append(info.gid)
+    if gidL:
+        print 'DISABLE', ax.name, vol, gidL
+        walbc.disable_snapshot(ax, vol, gidL)
+###
+def run_daily():
+    print 'DAILY', datetime.datetime.utcnow()
+    take_snapshot()
+    for vol in volL:
+        def cond(ts):
+            return ts.hour != 0
+        delete_snapshots(a0, vol, 24 * 60, cond)
+    ts = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+    for vol in volL:
+        apply_diffs(a0, vol, ts)
+def run_hourly():
+    print 'HOURLY', datetime.datetime.utcnow()
+    take_snapshot()
+    for vol in volL:
+        def cond(ts):
+            return 5 < ts.minute
+        delete_snapshots(a0, vol, 60, cond)
+    for vol in volL:
+        try_merge(a0, vol)
+def run_per10min():
+    print 'PER10MIN', datetime.datetime.utcnow()
+    take_snapshot()
+    for vol in volL:
+        try_merge(a0, vol)
+###
+### main
+###
+with open('walb-cron.lock') as lock:
+    now = datetime.datetime.utcnow()
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError, e:
+        print 'locked', now
+        exit(0)
+    try:
+        print 'WALB-CRON', now
+        if now.hour == 0 and now.minute == 0:
+            run_daily() 
+        elif now.minute == 0:
+            run_hourly()
+        elif now.minute % 10 == 0:
+            run_per10min()
+        else:
+            print 'do nothing'
+    finally:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
