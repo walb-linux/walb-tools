@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 #include <atomic>
-#include <queue>
+#include <deque>
 #include <mutex>
 #include <chrono>
 #include <thread>
@@ -185,13 +185,13 @@ class ConverterQueueT
     struct Engine : cybozu::ThreadBase {
         std::mutex* m_;
         const bool* quit_;
-        std::queue<Task*>* readyQ_;
+        std::deque<Task*>* readyQ_;
         std::condition_variable *ready_, *avail_;
         std::unique_ptr<compressor::PackCompressorBase> e_;
 
         static constexpr const char* NAME() { return "ConverterQueue::Engine"; }
         void init(bool doCompress, int type, size_t para,
-                  std::mutex* m, const bool* quit, std::queue<Task*>* readyQ,
+                  std::mutex* m, const bool* quit, std::deque<Task*>* readyQ,
                   std::condition_variable* ready, std::condition_variable* avail) {
             m_ = m;
             quit_ = quit;
@@ -213,7 +213,7 @@ class ConverterQueueT
                     ready_->wait(lk, [this]() { return !readyQ_->empty() || (*quit_ && readyQ_->empty()); });
                     if (*quit_ && readyQ_->empty()) break;
                     task = readyQ_->front();
-                    readyQ_->pop();
+                    readyQ_->pop_front();
                 }
                 try {
                     task->outBuf = e_->convert(task->inBuf.data());
@@ -238,8 +238,8 @@ class ConverterQueueT
 
     mutable std::mutex m_;
     bool quit_;
-    std::queue<Task> taskQ_;
-    std::queue<Task*> readyQ_;
+    std::deque<Task> taskQ_;
+    std::deque<Task*> readyQ_;
     std::condition_variable full_, ready_, avail_;
 
     std::vector<Engine> enginePool_;
@@ -271,9 +271,9 @@ public:
         UniqueLock lk(m_);
         full_.wait(lk, [this]() { return taskQ_.size() < maxQueueSize_ || quit_; });
         if (quit_) return false;
-        taskQ_.emplace();
+        taskQ_.emplace_back();
         taskQ_.back().inBuf = std::move(inBuf);
-        readyQ_.push(&taskQ_.back());
+        readyQ_.push_back(&taskQ_.back());
         ready_.notify_one();
         return true;
     }
@@ -286,7 +286,7 @@ public:
             });
             if (quit_ && taskQ_.empty()) return compressor::Buffer();
             task = std::move(taskQ_.front());
-            taskQ_.pop();
+            taskQ_.pop_front();
             full_.notify_one();
         }
         if (task.ep) std::rethrow_exception(task.ep);
