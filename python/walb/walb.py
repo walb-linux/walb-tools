@@ -140,10 +140,11 @@ def run_local_command(args, putMsg=False):
     return s
 
 
-def run_daemon(args):
+def run_daemon(args, outPath=None):
     '''
     Run a daemon.
     args :: [str] - command line arguments for daemon.
+    outPath :: str - stdout/stderr output path. None means blackhole.
     '''
     try:
         pid = os.fork()
@@ -173,9 +174,11 @@ def run_daemon(args):
     sys.stdout.flush()
     sys.stderr.flush()
     stdin = open('/dev/null', 'r')
-    stdout = open('/dev/null', 'a+')
-    stderr = open('/dev/null', 'a+')
     os.dup2(stdin.fileno(), sys.stdin.fileno())
+    if outPath is None:
+        outPath = '/dev/null'
+    stdout = open(outPath, 'a+')
+    stderr = open(outPath, 'a+')
     os.dup2(stdout.fileno(), sys.stdout.fileno())
     os.dup2(stderr.fileno(), sys.stderr.fileno())
 

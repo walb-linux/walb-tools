@@ -24,7 +24,7 @@ def send_cmd_to_repeater(port, cmd):
 
 
 def startup_repeater(server, serverPort, recvPort, cmdPort, rateMbps=0, delayMsec=0,
-                     logPath=None, isDebug=False):
+                     logPath=None, outPath=None, isDebug=False):
     args = [
         os.getcwd() + '/binsrc/packet-repeater',
         server, str(serverPort), str(recvPort), str(cmdPort)
@@ -38,4 +38,4 @@ def startup_repeater(server, serverPort, recvPort, cmdPort, rateMbps=0, delayMse
     if isDebug:
         args += ['-v']
     print "startup_repeater:args", args
-    run_daemon(args)
+    run_daemon(args, outPath)

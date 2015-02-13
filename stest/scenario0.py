@@ -62,7 +62,8 @@ def run_repeater(port, rateMbps=0, delayMsec=0):
     """
     startup_repeater('localhost', get_orig_port(port), port, get_cmd_port(port),
                      rateMbps=rateMbps, delayMsec=delayMsec,
-                     logPath=workDir + 'repeater.log', isDebug=True)
+                     logPath=workDir + 'repeater.log',
+                     outPath=workDir + 'repeater.out', isDebug=True)
 
 
 def quit_repeater(s, doWait=True):
@@ -95,7 +96,7 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
     if useRepeater:
         run_repeater(s.port, rateMbps, delayMsec)
         wait_for_process_killed_on_port(get_orig_port(s.port))
-    run_daemon(args)
+    run_daemon(args, outPath=workDir + s.name + '.out')
     if wait:
         wait_for_server_ready(s)
 
