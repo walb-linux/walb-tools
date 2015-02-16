@@ -71,7 +71,10 @@ void initArchiveData()
         throw cybozu::Exception(FUNC) << "thinpool does not exist" << ga.thinpool;
     }
     const StrVec volIdV = util::getDirNameList(ga.baseDirStr);
-    VolLvCacheMap map = getVolLvCacheMap(ga.volumeGroup, ga.thinpool, volIdV);
+    const cybozu::lvm::LvList lvL = cybozu::lvm::listLv(ga.volumeGroup);
+    const size_t nr = removeTemporalArchiveSnapshots(lvL);
+    if (nr > 0) LOGs.info() << "remove temporal snapshots" << nr;
+    VolLvCacheMap map = getVolLvCacheMap(lvL, ga.thinpool, volIdV);
     for (VolLvCacheMap::value_type &p : map) {
         const std::string &volId = p.first;
         VolLvCache &lvC = p.second;
@@ -79,6 +82,7 @@ void initArchiveData()
             getArchiveVolState(volId).lvCache = std::move(lvC);
             verifyArchiveVol(volId);
             gcArchiveVol(volId);
+            LOGs.info() << "init" << volId;
         } catch (std::exception &e) {
             LOGs.error() << __func__ << "start failed" << volId << e.what();
             ::exit(1);

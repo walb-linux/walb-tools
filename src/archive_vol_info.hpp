@@ -171,11 +171,27 @@ inline VolLvCache& insertVolLvCacheMapIfNotFound(VolLvCacheMap &map, const std::
     return it->second;
 }
 
+inline size_t removeTemporalArchiveSnapshots(const cybozu::lvm::LvList &lvL)
+{
+    size_t nr = 0;
+    for (cybozu::lvm::Lv lv : lvL) { // copy
+        if (lv.isSnap() && isArchiveTmpSnapName(lv.snapName())) {
+            try {
+                lv.remove();
+                nr++;
+            } catch (std::exception &e) {
+                LOGs.error() << __func__ << "remove snapshot failed" << lv << e.what();
+            }
+        }
+    }
+    return nr;
+}
+
 inline VolLvCacheMap getVolLvCacheMap(
-    const std::string &vgName, const std::string &tpName, const StrVec &volIdV)
+    const cybozu::lvm::LvList &lvL, const std::string &tpName, const StrVec &volIdV)
 {
     VolLvCacheMap m1;
-    for (cybozu::lvm::Lv &lv : cybozu::lvm::listLv(vgName)) {
+    for (const cybozu::lvm::Lv &lv : lvL) {
         if (tpName.empty() == lv.isTv()) {
             continue;
         }
@@ -523,25 +539,6 @@ public:
      */
     size_t gcDiffs() {
         return wdiffs_.gc();
-    }
-    /**
-     * Remove temporarily created volumes for restore.
-     */
-    size_t gcVolumes() {
-        const std::string prefix = restoredSnapshotNamePrefix();
-        size_t nr = 0;
-        cybozu::lvm::Lv lv = lvC_.getLv();
-        for (cybozu::lvm::Lv &snap : lv.getSnapList()) {
-            if (isArchiveTmpSnapName(snap.snapName())) {
-                try {
-                    snap.remove();
-                    nr++;
-                } catch (std::exception &e) {
-                    LOGs.error() << __func__ << "remove failed" << snap << e.what();
-                }
-            }
-        }
-        return nr;
     }
     size_t gcTmpFiles() {
         return cybozu::removeAllTmpFiles(volDir.str());
