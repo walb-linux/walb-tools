@@ -71,7 +71,9 @@ void initArchiveData()
         throw cybozu::Exception(FUNC) << "thinpool does not exist" << ga.thinpool;
     }
     const StrVec volIdV = util::getDirNameList(ga.baseDirStr);
+    LOGs.info() << "run lvs command (it may take long time)";
     const cybozu::lvm::LvList lvL = cybozu::lvm::listLv(ga.volumeGroup);
+    LOGs.info() << "lvs command done.";
     const size_t nr = removeTemporalArchiveSnapshots(lvL);
     if (nr > 0) LOGs.info() << "remove temporal snapshots" << nr;
     VolLvCacheMap map = getVolLvCacheMap(lvL, ga.thinpool, volIdV);
