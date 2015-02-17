@@ -27,6 +27,7 @@ struct Option
 {
     uint16_t port;
     std::string logFileStr;
+    std::string discardTypeStr;
     bool isDebug;
     cybozu::Option opt;
 
@@ -44,6 +45,7 @@ struct Option
         opt.appendOpt(&a.nodeId, hostName, "id", "node identifier");
         opt.appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
+        opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
 
         opt.appendHelp("h");
 
@@ -54,6 +56,7 @@ struct Option
 
         util::verifyNotZero(a.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(a.maxWdiffSendNr, "maxWdiffSendNr");
+        a.discardType = parseDiscardType(discardTypeStr, __func__);
     }
 };
 

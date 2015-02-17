@@ -15,6 +15,7 @@
 #include "dirty_hash_sync.hpp"
 #include "wdiff_transfer.hpp"
 #include "command_param_parser.hpp"
+#include "discard_type.hpp"
 
 namespace walb {
 
@@ -90,6 +91,7 @@ struct ArchiveSingleton
     size_t maxForegroundTasks;
     size_t socketTimeout;
     size_t maxWdiffSendNr;
+    DiscardType discardType;
 
     /**
      * Writable and must be thread-safe.
@@ -192,6 +194,26 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
     }
 }
 
+enum IoType
+{
+    Normal, Discard, Zero, Ignore,
+};
+
+inline IoType decideIoType(const DiffRecord& rec)
+{
+    if (rec.isNormal()) return Normal;
+    if (rec.isAllZero()) return Zero;
+    assert(rec.isDiscard());
+
+    switch (ga.discardType) {
+    case DiscardType::Passdown: return Discard;
+    case DiscardType::Ignore: return Ignore;
+    case DiscardType::Zero: return Zero;
+    default:
+        assert(false);
+    }
+}
+
 inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv,
                              const std::atomic<int>& stopState,
                              DiffStatistics& statIn, DiffStatistics& statOut, std::string& memUsageStr)
@@ -221,12 +243,18 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
         const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
         const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
 
+        const int type = decideIoType(rec);
+        if (type == Ignore) continue;
+        if (type == Discard) {
+            cybozu::util::issueDiscard(file.fd(), ioAddress, ioBlocks);
+            continue;
+        }
         const char *data;
-        // Curently a discard IO is converted to an all-zero IO.
-        if (rec.isAllZero() || rec.isDiscard()) {
+        if (type == Zero) {
             if (zero.size() < ioSizeB) zero.resize(ioSizeB);
             data = zero.data();
         } else {
+            assert(type == Normal);
             data = recIo.io().get();
         }
         file.pwrite(data, ioSizeB, ioAddrB);
