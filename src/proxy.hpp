@@ -956,7 +956,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     MetaDiff mergedDiff;
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
     if (diffV.empty()) {
-        LOGs.info() << FUNC << "no need to send wdiffs" << volId << archiveName;
+        LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;
         return DONT_SEND;
     }
 
