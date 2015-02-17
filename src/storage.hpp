@@ -473,17 +473,17 @@ inline void c2sStartServer(protocol::ServerParams &p)
             }
             StateMachineTransaction tran(volSt.sm, sStopped, stStartTarget, FUNC);
             if (st != sStopped) throw cybozu::Exception(FUNC) << "bad state" << st;
-            volInfo.setState(sTarget);
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
+            volInfo.setState(sTarget);
             tran.commit(sTarget);
         } else {
             StateMachineTransaction tran(volSt.sm, sSyncReady, stStartStandby, FUNC);
             if (st != sSyncReady) throw cybozu::Exception(FUNC) << "bad state" << st;
-            volInfo.setState(sStandby);
             if (isOverflow) {
                 volInfo.resetWlog(0);
             }
             storage_local::startMonitoring(volInfo.getWdevPath(), volId);
+            volInfo.setState(sStandby);
             tran.commit(sStandby);
         }
         pkt.writeFin(msgOk);
