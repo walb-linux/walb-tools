@@ -6,6 +6,7 @@ namespace walb {
 
 /**
  * States.
+ * All the these states will be stored in files except for 'Clear'.
  */
 const char *const aClear = "Clear";
 const char *const aSyncReady = "SyncReady";

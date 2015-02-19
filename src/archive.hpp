@@ -604,8 +604,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         volSt.diffMgr.add(diff);
     }
     volInfo.setUuid(uuid);
-    volInfo.setState(aArchived);
     volSt.updateLastSyncTime();
+    volInfo.setState(aArchived);
     tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
 
@@ -707,7 +707,6 @@ inline bool runFullReplServer(
     }
     volInfo.setMetaState(metaSt);
     volInfo.setUuid(uuid);
-    volInfo.setState(aArchived);
     volSt.updateLastSyncTime();
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.info() << "full-repl-server done" << volId << elapsed;
@@ -1854,6 +1853,7 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
         }
+        if (isFull) getArchiveVolInfo(volId).setState(aArchived);
         tran.commit(aArchived);
         const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
         logger.info() << "replication as server succeeded" << volId << elapsed;

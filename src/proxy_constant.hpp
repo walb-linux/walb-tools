@@ -4,6 +4,7 @@
 namespace walb {
 
 // states.
+// There are no states stored in files.
 const char *const pClear = "Clear";
 const char *const pStopped = "Stopped";
 const char *const pStarted = "Started";
