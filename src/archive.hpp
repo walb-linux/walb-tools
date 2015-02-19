@@ -674,7 +674,7 @@ inline bool runFullReplClient(
 
 inline bool runFullReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, Logger &logger)
+    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -698,6 +698,8 @@ inline bool runFullReplServer(
     pkt.write(msgOk);
 
     cybozu::Stopwatch stopwatch;
+    StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
+    ul.unlock();
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
@@ -705,9 +707,12 @@ inline bool runFullReplServer(
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }
+    ul.lock();
     volInfo.setMetaState(metaSt);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
+    volInfo.setState(aArchived);
+    tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.info() << "full-repl-server done" << volId << elapsed;
     return true;
@@ -747,7 +752,7 @@ inline bool runHashReplClient(
 
 inline bool runHashReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, Logger &logger)
+    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -773,6 +778,8 @@ inline bool runHashReplServer(
     pkt.write(msgOk);
 
     cybozu::Stopwatch stopwatch;
+    StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
+    ul.unlock();
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -786,6 +793,8 @@ inline bool runHashReplServer(
     volSt.diffMgr.add(diff);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
+    ul.lock();
+    tran.commit(aArchived);
     logger.info() << "hash-repl-server-mergeIn " << volId << virt.statIn();
     logger.info() << "hash-repl-server-mergeOut" << volId << virt.statOut();
     logger.info() << "hash-repl-server-mergeMemUsage" << volId << virt.memUsageStr();
@@ -841,7 +850,7 @@ inline bool runDiffReplClient(
 
 inline bool runDiffReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, Logger &logger)
+    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb;
@@ -866,6 +875,8 @@ inline bool runDiffReplServer(
     pkt.write(msgOk);
 
     cybozu::Stopwatch stopwatch;
+    StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
+    ul.unlock();
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
@@ -879,6 +890,8 @@ inline bool runDiffReplServer(
     volSt.diffMgr.add(diff);
     packet::Ack(pkt.sock()).send();
     volSt.updateLastWdiffReceivedTime();
+    ul.lock();
+    tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.info() << "diff-repl-server done" << volId << diff << elapsed;
     return true;
@@ -930,7 +943,7 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
     return true;
 }
 
-inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Socket &sock, Logger &logger)
+inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Socket &sock, UniqueLock &ul, Logger &logger)
 {
     packet::Packet pkt(sock);
 
@@ -939,7 +952,7 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
 
     pkt.write(isFull);
     if (isFull) {
-        if (!runFullReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+        if (!runFullReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
     }
     for (;;) {
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
@@ -949,9 +962,9 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
         if (repl == ArchiveVolInfo::DONT_REPL) break;
 
         if (repl == ArchiveVolInfo::DO_HASH_REPL) {
-            if (!runHashReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+            if (!runHashReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
         } else {
-            if (!runDiffReplServer(volId, volSt, volInfo, pkt, logger)) return false;
+            if (!runDiffReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
         }
     }
     packet::Ack(sock).sendFin();
@@ -1840,21 +1853,17 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         const std::string stFrom = volSt.sm.get();
         verifyStateIn(stFrom, aAcceptForReplicateServer, FUNC);
         const bool isFull = stFrom == aSyncReady;
-        const std::string stTo = isFull ? atFullSync : atReplSync;
 
         pkt.write(msgAccept);
         sendErr = false;
 
-        StateMachineTransaction tran(volSt.sm, stFrom, stTo, FUNC);
-        ul.unlock();
         logger.info() << "replication as server started" << volId;
         cybozu::Stopwatch stopwatch;
-        if (!archive_local::runReplSyncServer(volId, isFull, p.sock, logger)) {
+        if (!archive_local::runReplSyncServer(volId, isFull, p.sock, ul, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
         }
-        if (isFull) getArchiveVolInfo(volId).setState(aArchived);
-        tran.commit(aArchived);
+        ul.unlock();
         const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
         logger.info() << "replication as server succeeded" << volId << elapsed;
     } catch (std::exception &e) {
