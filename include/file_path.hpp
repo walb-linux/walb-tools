@@ -256,7 +256,10 @@ public:
         return path_.c_str();
     }
     FileStat stat() const {
-        return FileStat(path_);
+        return FileStat(path_, false);
+    }
+    FileStat lstat() const {
+        return FileStat(path_, true);
     }
     FilePath toFullPath() const {
         if (isFull()) return *this;

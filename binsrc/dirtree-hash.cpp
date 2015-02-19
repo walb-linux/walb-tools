@@ -65,9 +65,10 @@ DirEntryVec getSortedListInDir(const cybozu::FilePath& dirPath)
         if (name == "." || name == "..") continue;
         const cybozu::FilePath path = dirPath + name;
         Type type;
-        if (path.stat().isDirectory()) {
+        const cybozu::FileStat st = path.lstat();
+        if (st.isDirectory() && !st.isSimlink()) {
             type = Dir;
-        } else if (path.stat().isFile()) {
+        } else if (st.isFile() && !st.isSimlink()) {
             type = File;
         } else {
             type = Other;
