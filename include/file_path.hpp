@@ -92,6 +92,7 @@ public:
     int majorId() const { return ::major(deviceId()); }
     int minorId() const { return ::minor(deviceId()); }
     ino_t getInode() const { return st_.st_ino; }
+    const struct stat& getStat() const { return st_; }
 };
 
 /**

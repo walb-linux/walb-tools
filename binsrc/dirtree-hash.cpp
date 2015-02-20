@@ -8,11 +8,19 @@
 #include <algorithm>
 #include <cstdlib>
 
+struct Flags
+{
+    bool useTime;
+    bool useOwner;
+    bool usePerm;
+    bool isEach;
+};
+
 struct Option
 {
     std::string dirStr;
     size_t ppInterval;
-    bool isEach;
+    Flags flags;
     bool isDebug;
 
     Option(int argc, char* argv[]) {
@@ -20,7 +28,10 @@ struct Option
         opt.setDescription("Calculate hash value(s) of files in a directory tree.\n"
                            "Currently only file name and contents will be scanned.\n");
         opt.appendParamOpt(&dirStr, ".", "DIR_PATH", ": directory path (default: current directory)");
-        opt.appendBoolOpt(&isEach, "each", ": put hash for each file.");
+        opt.appendBoolOpt(&flags.useTime, "time", ": use modified time stamp.");
+        opt.appendBoolOpt(&flags.useOwner, "owner", ": use uid/gid information.");
+        opt.appendBoolOpt(&flags.usePerm, "perm", ": use permission(st_mode) information.");
+        opt.appendBoolOpt(&flags.isEach, "each", ": put hash for each file.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug logs.");
         opt.appendOpt(&ppInterval, 0, "pp", ": progress printer interval (default off).");
         opt.appendHelp("h", ": put this message.");
@@ -47,7 +58,7 @@ enum Type
 struct DirEntry
 {
     std::string name;
-    Type type;
+    cybozu::FileStat st;
 
     bool operator<(const DirEntry& rhs) const {
         return this->name < rhs.name;
@@ -64,18 +75,9 @@ DirEntryVec getSortedListInDir(const cybozu::FilePath& dirPath)
         std::string name = dir.next();
         if (name == "." || name == "..") continue;
         const cybozu::FilePath path = dirPath + name;
-        Type type;
-        const cybozu::FileStat st = path.lstat();
-        if (st.isDirectory() && !st.isSimlink()) {
-            type = Dir;
-        } else if (st.isFile() && !st.isSimlink()) {
-            type = File;
-        } else {
-            type = Other;
-        }
         v.emplace_back();
         v.back().name = std::move(name);
-        v.back().type = type;
+        v.back().st = path.lstat();
     }
     std::sort(v.begin(), v.end());
     return v;
@@ -138,7 +140,7 @@ public:
 
 using NameVec = std::vector<std::string>;
 
-Hash walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, bool isEach)
+Hash walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags& flags)
 {
     cybozu::murmurhash3::Hasher hasher;
     Hash allHash;
@@ -148,21 +150,27 @@ Hash walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, bool isEach)
         NameVec nameV = dirNameV;
         nameV.push_back(ent.name);
         Hash hash;
-        hash.clear();
-        switch(ent.type) {
-        case File:
+        if (ent.st.isDirectory() && !ent.st.isSimlink()) {
+            hash = walk(path, nameV, flags);
+        } else if (ent.st.isFile() && !ent.st.isSimlink()) {
             hash = getHashOfFile(path);
-            break;
-        case Dir:
-            hash = walk(path, nameV, isEach);
-            break;
-        case Other:
-            // do nothing;
-            break;
+        } else {
+            hash.clear();
         }
         const std::string name = cybozu::util::concat(nameV, "/");
         hash.doXor(hasher(name.data(), name.size()));
-        if (isEach) {
+        const struct stat& st = ent.st.getStat();
+        if (flags.useTime) {
+            hash.doXor(hasher(&st.st_mtime, sizeof(time_t)));
+        }
+        if (flags.useOwner) {
+            hash.doXor(hasher(&st.st_uid, sizeof(uid_t)));
+            hash.doXor(hasher(&st.st_gid, sizeof(gid_t)));
+        }
+        if (flags.usePerm) {
+            hash.doXor(hasher(&st.st_mode, sizeof(mode_t)));
+        }
+        if (flags.isEach) {
             ::printf("%s %s\n", hash.str().c_str(), name.c_str());
         }
         allHash.doXor(hash);
@@ -180,8 +188,8 @@ int doMain(int argc, char* argv[])
     if (!targetDir.stat().isDirectory()) {
         throw cybozu::Exception(__func__) << "not directory" << targetDir;
     }
-    const Hash hash = walk(targetDir, {}, opt.isEach);
-    if (!opt.isEach) {
+    const Hash hash = walk(targetDir, {}, opt.flags);
+    if (!opt.flags.isEach) {
         ::printf("%s %s\n", hash.str().c_str(), opt.dirStr.c_str());
     }
     return 0;
