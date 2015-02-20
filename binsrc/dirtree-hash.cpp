@@ -42,12 +42,6 @@ struct Option
             opt.usage();
             ::exit(1);
         }
-        if (dirStr.empty()) {
-            dirStr.resize(PATH_MAX + 1);
-            if (::getcwd(&dirStr[0], PATH_MAX + 1) == nullptr) {
-                throw cybozu::Exception(__func__) << "getcwd failed" << cybozu::ErrorNo();
-            }
-            dirStr.resize(::strlen(dirStr.c_str()));
 
         if (isAll) {
             flags.useTime = true;
