@@ -108,7 +108,7 @@ Hash getHashOfFile(const cybozu::FilePath& filePath)
     cybozu::util::File file(filePath.str(), O_RDONLY);
     readBulk(file, buf);
     while (!buf.empty()) {
-        hash.doXor(hasher(buf.data(), buf.size()));
+        hash.doAdd(hasher(buf.data(), buf.size()));
         readBulk(file, buf);
     }
     return hash;
@@ -159,22 +159,22 @@ Hash walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags&
             hash.clear();
         }
         const std::string name = cybozu::util::concat(nameV, "/");
-        hash.doXor(hasher(name.data(), name.size()));
+        hash.doAdd(hasher(name.data(), name.size()));
         const struct stat& st = ent.st.getStat();
         if (flags.useTime) {
-            hash.doXor(hasher(&st.st_mtime, sizeof(time_t)));
+            hash.doAdd(hasher(&st.st_mtime, sizeof(time_t)));
         }
         if (flags.useOwner) {
-            hash.doXor(hasher(&st.st_uid, sizeof(uid_t)));
-            hash.doXor(hasher(&st.st_gid, sizeof(gid_t)));
+            hash.doAdd(hasher(&st.st_uid, sizeof(uid_t)));
+            hash.doAdd(hasher(&st.st_gid, sizeof(gid_t)));
         }
         if (flags.usePerm) {
-            hash.doXor(hasher(&st.st_mode, sizeof(mode_t)));
+            hash.doAdd(hasher(&st.st_mode, sizeof(mode_t)));
         }
         if (flags.isEach) {
             ::printf("%s %s\n", hash.str().c_str(), name.c_str());
         }
-        allHash.doXor(hash);
+        allHash.doAdd(hash);
         pp_.inc();
     }
     return allHash;
