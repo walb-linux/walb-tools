@@ -42,7 +42,7 @@ struct Hash {
         return ::memcmp(&data[0], &rhs.data[0], HASH_SIZE) == 0;
     }
     bool operator!=(const Hash& rhs) const { return !operator==(rhs); }
-    void clear() {
+    void zeroClear() {
         ::memset(data, 0, HASH_SIZE);
     }
     void doXor(const Hash& rhs) {

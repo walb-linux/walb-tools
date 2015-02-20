@@ -1245,7 +1245,7 @@ inline bool getBlockHash(
     AlignedArray buf;
     packet::StreamControl ctrl(pkt.sock());
     cybozu::murmurhash3::Hasher hasher(0); // seed is 0.
-    hash.clear();
+    hash.zeroClear();
     uint64_t remaining = sizeLb;
     double t0 = cybozu::util::getTime();
     while (remaining > 0) {

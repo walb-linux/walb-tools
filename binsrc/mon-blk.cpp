@@ -54,7 +54,7 @@ int doMain(int argc, char *argv[])
     AlignedArray buf(opt.blks * LBS, false);
     cybozu::murmurhash3::Hasher hasher(opt.seed);
     cybozu::murmurhash3::Hash prevHash;
-    prevHash.clear();
+    prevHash.zeroClear();
     const uint64_t off = opt.addr * LBS;
     for (;;) {
         f.pread(buf.data(), buf.size(), off);

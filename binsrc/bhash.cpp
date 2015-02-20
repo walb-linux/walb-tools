@@ -55,7 +55,7 @@ int doMain(int argc, char* argv[])
     uint64_t remaining = size;
     uint64_t blk = 0;
     cybozu::murmurhash3::Hash sum;
-    sum.clear();
+    sum.zeroClear();
     while (remaining > 0) {
         file.read(buf.data(), bs);
         cybozu::murmurhash3::Hash h = hasher(buf.data(), bs);
