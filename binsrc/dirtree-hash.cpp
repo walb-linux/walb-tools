@@ -2,8 +2,11 @@
  * Calculate hash value(s) of files in a directory tree.
  */
 #include "cybozu/option.hpp"
+#include "fileio.hpp"
 #include "file_path.hpp"
-#include "murmurhash3.hpp"
+#include "walb_types.hpp"
+#include "walb_util.hpp"
+#include "siphash.hpp"
 #include <vector>
 #include <algorithm>
 #include <cstdlib>
@@ -86,32 +89,15 @@ DirEntryVec getSortedListInDir(const cybozu::FilePath& dirPath)
 
 constexpr const size_t BULK_SIZE = 64 * 1024;
 
-void readBulk(cybozu::util::File& file, walb::AlignedArray& buf)
+void readFileToHasher(const cybozu::FilePath& filePath, cybozu::SipHash24& hasher)
 {
-    buf.resize(BULK_SIZE);
-    size_t off = 0;
-    while (off < BULK_SIZE) {
-        const size_t r = file.readsome(buf.data() + off, buf.size() - off);
-        if (r == 0) break;
-    }
-    if (off < BULK_SIZE) buf.resize(off);
-}
-
-using Hash = cybozu::murmurhash3::Hash;
-
-Hash getHashOfFile(const cybozu::FilePath& filePath)
-{
-    walb::AlignedArray buf;
-    cybozu::murmurhash3::Hasher hasher;
-    Hash hash;
-    hash.clear();
+    walb::AlignedArray buf(BULK_SIZE);
     cybozu::util::File file(filePath.str(), O_RDONLY);
-    readBulk(file, buf);
-    while (!buf.empty()) {
-        hash.doAdd(hasher(buf.data(), buf.size()));
-        readBulk(file, buf);
+    for (;;) {
+        const size_t r = file.readsome(buf.data(), buf.size());
+        if (r == 0) return;
+        hasher.compress(buf.data(), r);
     }
-    return hash;
 }
 
 class ProgressPrinter
@@ -141,43 +127,39 @@ public:
 
 using NameVec = std::vector<std::string>;
 
-Hash walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags& flags)
+void walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags& flags, cybozu::SipHash24& sharedHasher)
 {
-    cybozu::murmurhash3::Hasher hasher;
-    Hash allHash;
-    allHash.clear();
     for (const DirEntry& ent : getSortedListInDir(dirPath)) {
+        cybozu::SipHash24 localHasher;
+        cybozu::SipHash24& hasher = flags.isEach ? localHasher : sharedHasher;
+
         cybozu::FilePath path = dirPath + ent.name;
         NameVec nameV = dirNameV;
         nameV.push_back(ent.name);
-        Hash hash;
         if (ent.st.isDirectory() && !ent.st.isSimlink()) {
-            hash = walk(path, nameV, flags);
+            walk(path, nameV, flags, hasher);
         } else if (ent.st.isFile() && !ent.st.isSimlink()) {
-            hash = getHashOfFile(path);
-        } else {
-            hash.clear();
+            readFileToHasher(path, hasher);
         }
         const std::string name = cybozu::util::concat(nameV, "/");
-        hash.doAdd(hasher(name.data(), name.size()));
+        hasher.compress(name.data(), name.size());
         const struct stat& st = ent.st.getStat();
         if (flags.useTime) {
-            hash.doAdd(hasher(&st.st_mtime, sizeof(time_t)));
+            hasher.compress(&st.st_mtime, sizeof(time_t));
         }
         if (flags.useOwner) {
-            hash.doAdd(hasher(&st.st_uid, sizeof(uid_t)));
-            hash.doAdd(hasher(&st.st_gid, sizeof(gid_t)));
+            hasher.compress(&st.st_uid, sizeof(uid_t));
+            hasher.compress(&st.st_gid, sizeof(gid_t));
         }
         if (flags.usePerm) {
-            hash.doAdd(hasher(&st.st_mode, sizeof(mode_t)));
+            hasher.compress(&st.st_mode, sizeof(mode_t));
         }
         if (flags.isEach) {
+            const cybozu::Hash128 hash = localHasher.finalize128();
             ::printf("%s %s\n", hash.str().c_str(), name.c_str());
         }
-        allHash.doAdd(hash);
         pp_.inc();
     }
-    return allHash;
 }
 
 int doMain(int argc, char* argv[])
@@ -189,8 +171,10 @@ int doMain(int argc, char* argv[])
     if (!targetDir.stat().isDirectory()) {
         throw cybozu::Exception(__func__) << "not directory" << targetDir;
     }
-    const Hash hash = walk(targetDir, {}, opt.flags);
+    cybozu::SipHash24 hasher;
+    walk(targetDir, {}, opt.flags, hasher);
     if (!opt.flags.isEach) {
+    const cybozu::Hash128 hash = hasher.finalize128();
         ::printf("%s %s\n", hash.str().c_str(), opt.dirStr.c_str());
     }
     return 0;
