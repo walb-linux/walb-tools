@@ -50,14 +50,8 @@ struct Hash {
             data[i] ^= rhs.data[i];
         }
     }
-    void doAdd(const Hash& rhs) {
-        __uint128_t left, right;
-        ::memcpy(&left, &data[0], sizeof(left));
-        ::memcpy(&right, &rhs.data[0], sizeof(right));
-        left += right;
-        ::memcpy(&data[0], &left, sizeof(left));
-    }
 };
+
 /**
  * Hash calclator.
  */
