@@ -21,6 +21,7 @@ struct Option
     std::string dirStr;
     size_t ppInterval;
     Flags flags;
+    bool isAll;
     bool isDebug;
 
     Option(int argc, char* argv[]) {
@@ -33,6 +34,7 @@ struct Option
         opt.appendBoolOpt(&flags.usePerm, "perm", ": use permission(st_mode) information.");
         opt.appendBoolOpt(&flags.isEach, "each", ": put hash for each file.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug logs.");
+        opt.appendBoolOpt(&isAll, "all", ": the same as -time -owner -perm.");
         opt.appendOpt(&ppInterval, 0, "pp", ": progress printer interval (default off).");
         opt.appendHelp("h", ": put this message.");
 
@@ -46,6 +48,11 @@ struct Option
                 throw cybozu::Exception(__func__) << "getcwd failed" << cybozu::ErrorNo();
             }
             dirStr.resize(::strlen(dirStr.c_str()));
+
+        if (isAll) {
+            flags.useTime = true;
+            flags.useOwner = true;
+            flags.usePerm = true;
         }
     }
 };
