@@ -72,18 +72,30 @@ public:
             throw RT_ERR("The flag must have O_RDWR.");
         }
     }
-    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const void *data) {
+    bool write(uint64_t ioAddr, uint16_t ioBlocks, const void *data) {
+        assert(data);
+        return issueIo(ioAddr, ioBlocks, data);
+    }
+    bool discard(uint64_t ioAddr, uint16_t ioBlocks) {
+        return issueIo(ioAddr, ioBlocks, nullptr);
+    }
+    void sync() {
+        file_.fdatasync();
+    }
+private:
+    bool issueIo(uint64_t ioAddr, uint16_t ioBlocks, const void *data = nullptr) {
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
 
         /* boundary check. */
         if (devSize_ < oft + size) return false;
 
-        file_.pwrite(data, size, oft);
+        if (data) {
+            file_.pwrite(data, size, oft);
+        } else {
+            cybozu::util::issueDiscard(file_.fd(), ioAddr, ioBlocks);
+        }
         return true;
-    }
-    void sync() {
-        file_.fdatasync();
     }
 };
 
@@ -154,7 +166,7 @@ public:
         } else {
             /* Normal IO. */
             assert(rec.isNormal());
-            isSuccess = ioExec_.submit(ioAddr, ioBlocks, io.get());
+            isSuccess = ioExec_.write(ioAddr, ioBlocks, io.get());
             if (isSuccess) { outStat_.nIoNormal++; }
             inStat_.nIoNormal++;
         }
@@ -206,12 +218,11 @@ private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
         static AlignedArray zero;
         zero.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
-        return ioExec_.submit(ioAddr, ioBlocks, zero.data());
+        return ioExec_.write(ioAddr, ioBlocks, zero.data());
     }
 
-    bool executeDiscardIo(UNUSED uint64_t ioAddr, UNUSED uint16_t ioBlocks) {
-        /* TODO: issue discard command. */
-        return false;
+    bool executeDiscardIo(uint64_t ioAddr, uint16_t ioBlocks) {
+        return ioExec_.discard(ioAddr, ioBlocks);
     }
 };
 
