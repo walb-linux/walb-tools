@@ -207,7 +207,7 @@ public:
 private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
         DiffIo io(ioBlocks);
-        io.data.resize(ioBlocks * LOGICAL_BLOCK_SIZE);
+        io.data.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
         return ioExec_.submit(ioAddr, ioBlocks, io);
     }
 
