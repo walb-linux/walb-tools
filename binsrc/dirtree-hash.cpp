@@ -89,9 +89,7 @@ DirEntryVec getSortedListInDir(const cybozu::FilePath& dirPath)
 
 constexpr const size_t BULK_SIZE = 64 * 1024;
 
-using SipHash12 = cybozu::SipHashT<1,2>;
-
-void readFileToHasher(const cybozu::FilePath& filePath, SipHash12& hasher)
+void readFileToHasher(const cybozu::FilePath& filePath, cybozu::SipHash24& hasher)
 {
     walb::AlignedArray buf(BULK_SIZE);
     cybozu::util::File file(filePath.str(), O_RDONLY);
@@ -129,11 +127,11 @@ public:
 
 using NameVec = std::vector<std::string>;
 
-void walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags& flags, SipHash12& sharedHasher)
+void walk(const cybozu::FilePath& dirPath, const NameVec& dirNameV, const Flags& flags, cybozu::SipHash24& sharedHasher)
 {
     for (const DirEntry& ent : getSortedListInDir(dirPath)) {
-        SipHash12 localHasher;
-        SipHash12& hasher = flags.isEach ? localHasher : sharedHasher;
+        cybozu::SipHash24 localHasher;
+        cybozu::SipHash24& hasher = flags.isEach ? localHasher : sharedHasher;
 
         cybozu::FilePath path = dirPath + ent.name;
         NameVec nameV = dirNameV;
@@ -173,7 +171,7 @@ int doMain(int argc, char* argv[])
     if (!targetDir.stat().isDirectory()) {
         throw cybozu::Exception(__func__) << "not directory" << targetDir;
     }
-    SipHash12 hasher;
+    cybozu::SipHash24 hasher;
     walk(targetDir, {}, opt.flags, hasher);
     if (!opt.flags.isEach) {
         const cybozu::Hash128 hash = hasher.finalize128();
