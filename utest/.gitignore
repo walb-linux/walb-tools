@@ -27,3 +27,4 @@ walb_queue_file_test
 bdev_reader_test
 walb_diff_merge_test
 walb_diff_file_test
+siphash_test
