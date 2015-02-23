@@ -489,12 +489,26 @@ def compress_str_to_kind(s):
     return m[s]
 
 
-def str_to_datetime(s):
-    return datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S')
+DatetimeFormatPretty = '%Y-%m-%dT%H:%M:%S'
+DatetimeFormatDigits = '%Y%m%d%H%M%S'
 
 
-def datetime_to_str(ts):
-    return ts.strftime('%Y-%m-%dT%H:%M:%S')
+def str_to_datetime(s, fmt):
+    '''
+    s :: str
+    fmt :: str : DatetimeFormatXXX
+    return :: datetime
+    '''
+    return datetime.datetime.strptime(s, fmt)
+
+
+def datetime_to_str(ts, fmt):
+    '''
+    ts :: datetime
+    fmt :: str : DatetimeFormatXXX
+    return :: str
+    '''
+    return ts.strftime(fmt)
 
 
 class Snapshot:
@@ -566,7 +580,7 @@ class Diff:
             c = 'C'
         else:
             c = '-'
-        ts_str = datetime_to_str(self.ts)
+        ts_str = datetime_to_str(self.ts, DatetimeFormatPretty)
         return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
 
 
@@ -574,6 +588,7 @@ def create_diff_from_str(s):
     '''
     create diff from str
     s :: str
+    return :: Diff
     '''
     verify_type(s, str)
     p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
@@ -585,9 +600,71 @@ def create_diff_from_str(s):
     d.E = create_snapshot_from_str(m.group(2))
     d.isMergeable = m.group(3) == 'M'
     d.isCompDiff = m.group(4) == 'C'
-    d.ts = str_to_datetime(m.group(5))
+    d.ts = str_to_datetime(m.group(5), DatetimeFormatPretty)
     d.dataSize = int(m.group(6))
     return d
+
+
+class MetaState:
+    '''
+    Data stored in 'base' files for archive servers.
+    '''
+    def __init__(self, B=Snapshot(), E=None):
+        '''
+        B :: Snapshot
+        E :: Snapshot or None.
+        '''
+        verify_type(B, Snapshot)
+        if E is not None:
+            verify_type(E, Snapshot)
+        self.B = B
+        self.E = E
+        self.ts = datetime.datetime.now()
+        self.verify()
+
+    def is_applying(self):
+        '''
+        return :: bool
+        '''
+        return self.E is not None
+
+    def verify(self):
+        '''
+        verify data.
+        return :: None
+        '''
+        if self.E is None:
+            return
+        if self.B.gidB >= self.E.gidB:
+            raise Exception('bad MetaState', self.B, self.E)
+
+    def __str__(self):
+        tsStr = datetime_to_str(self.ts, DatetimeFormatDigits)
+        if self.E is None:
+            return '<%s>-%s' % (str(self.B), tsStr)
+        else:
+            return '<%s-->%s>-%s' % (str(self.B), str(self.E), tsStr)
+
+
+def create_meta_state_from_str(s):
+    '''
+    create MetaState from str.
+    s :: str
+    return :: MetaState
+    '''
+    verify_type(s, str)
+    p = re.compile(r'<(\|[^|]+\|)(?:-->(\|[^|]+\|))?>-(\d+)')
+    m = p.match(s)
+    if not m:
+        raise Exception('create_meta_state_from_str:bad format', s)
+    metaSt = MetaState()
+    metaSt.B = create_snapshot_from_str(m.group(1))
+    if m.group(2):
+        metaSt.E = create_snapshot_from_str(m.group(2))
+    else:
+        metaSt.E = None
+    metaSt.ts = str_to_datetime(m.group(3), DatetimeFormatDigits)
+    return metaSt
 
 
 class GidInfo:
@@ -603,9 +680,9 @@ class GidInfo:
         if len(p) != 2:
             raise Exception('GidInfo:bad format', s)
         self.gid = int(p[0])
-        self.ts = str_to_datetime(p[1])
+        self.ts = str_to_datetime(p[1], DatetimeFormatPretty)
     def __str__(self):
-        return str(self.gid) + " " + datetime_to_str(self.ts)
+        return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
 
 
 class CompressOpt:
@@ -1206,6 +1283,18 @@ class Controller:
         return :: u64 - progress [logical block].
         '''
         return self._get_size_value(ax, vol, 'progress')
+
+    def get_base(self, ax, vol):
+        '''
+        Get base meta state of a volume in an archive server.
+        ax :: Server        - archive server.
+        vol :: str          - volume name.
+        return :: MetaState - meta state.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        metaStStr = self.run_ctl(ax, ['get', 'base', vol])
+        return create_meta_state_from_str(metaStStr)
 
     def monitor_progress(self, ax, vol, timeoutS=TIMEOUT_SEC):
         '''
@@ -2462,6 +2551,9 @@ class Controller:
         '''
         verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaApply, timeoutS)
+        metaSt = self.get_base(ax, vol)
+        if metaSt.is_applying():
+            raise Exception('wait_for_applied:failed', ax.name, vol, gid, str(metaSt))
         gidL = self.get_restorable_gid(ax, vol)
         if gidL and gid <= gidL[0]:
             return
