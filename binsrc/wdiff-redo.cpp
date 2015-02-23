@@ -72,16 +72,14 @@ public:
             throw RT_ERR("The flag must have O_RDWR.");
         }
     }
-    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const DiffIo& io) {
-        assert(!io.isCompressed());
+    bool submit(uint64_t ioAddr, uint16_t ioBlocks, const void *data) {
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
-        assert(io.getSize() == size);
 
         /* boundary check. */
         if (devSize_ < oft + size) return false;
 
-        file_.pwrite(io.get(), size, oft);
+        file_.pwrite(data, size, oft);
         return true;
     }
     void sync() {
@@ -156,7 +154,7 @@ public:
         } else {
             /* Normal IO. */
             assert(rec.isNormal());
-            isSuccess = ioExec_.submit(ioAddr, ioBlocks, io);
+            isSuccess = ioExec_.submit(ioAddr, ioBlocks, io.get());
             if (isSuccess) { outStat_.nIoNormal++; }
             inStat_.nIoNormal++;
         }
@@ -206,9 +204,9 @@ public:
 
 private:
     bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
-        DiffIo io(ioBlocks);
-        io.data.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
-        return ioExec_.submit(ioAddr, ioBlocks, io);
+        static AlignedArray zero;
+        zero.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
+        return ioExec_.submit(ioAddr, ioBlocks, zero.data());
     }
 
     bool executeDiscardIo(UNUSED uint64_t ioAddr, UNUSED uint16_t ioBlocks) {
