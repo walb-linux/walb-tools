@@ -1,6 +1,10 @@
 #!/usr/bin/env python
-import os, socket, time
+
+import sys
+sys.path.insert(0, './python/walb')
 from walb import *
+
+import os, socket, time
 from contextlib import closing
 
 

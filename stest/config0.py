@@ -5,21 +5,21 @@ sys.path.insert(0, './python/walb')
 import os
 from walb import *
 
+
 isDebug = False
+TIMEOUT = 100
+wdevSizeMb = 12
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'
 wdevcPath = binDir + 'wdevc'
 walbcPath = binDir + 'walbc'
 
-
 def D(name):
     return workDir + name
 
-
 def L(name):
     return workDir + name + '.log'
-
 
 s0 = Server('s0', 'localhost', 10000, K_STORAGE, binDir, D('s0'), L('s0'))
 s1 = Server('s1', 'localhost', 10001, K_STORAGE, binDir, D('s1'), L('s1'))
@@ -33,6 +33,7 @@ a2 = Server('a2', 'localhost', 10202, K_ARCHIVE, binDir, D('a2'), L('a2'), 'vg2'
 
 VOL = 'vol0'
 
+
 sLayout = ServerLayout([s0, s1], [p0, p1], [a0, a1])
 sLayoutAll = ServerLayout([s0, s1, s2], [p0, p1, p2], [a0, a1, a2])
 sLayoutRepeater1 = ServerLayout([s0], [p0], [a0])
@@ -45,7 +46,12 @@ wdevL = [wdev0, wdev1, wdev2]
 
 walbc = Controller(walbcPath, sLayout, isDebug)
 
+
 def use_thinp():
     a0.tp = 'tp0'
     a1.tp = 'tp0'
     a2.tp = 'tp0'
+
+
+def get_config():
+    return globals()
