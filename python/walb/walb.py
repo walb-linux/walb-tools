@@ -8,6 +8,7 @@ import socket
 from contextlib import closing
 import errno
 import re
+import _strptime # strptime is not thread safe, so import _strptime before calling it
 import datetime
 
 ########################################
