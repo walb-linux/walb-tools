@@ -1078,17 +1078,23 @@ class ServerLayout:
 
 
 
-def get_server_args(s, sLayout, isDebug=False, useRepeater=False):
+def get_server_args(s, sLayout, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1):
     '''
     Get walb-tools server arguments.
     s :: Server     - server.
     useRepeater :: Bool - use repeater if True
+    maxFgTasks :: int or None - max number of foreground tasks.
+    maxBgTasks :: int or None - max number of background tasks.
     return :: [str] - argument list.
     '''
     verify_type(s, Server)
     verify_type(sLayout, ServerLayout)
     verify_type(isDebug, bool)
     verify_type(useRepeater, bool)
+    if maxFgTasks is not None:
+        verify_type(maxFgTasks, int)
+    if maxBgTasks is not None:
+        verify_type(maxBgTasks, int)
 
     if s.kind == K_STORAGE:
         proxies = ",".join(map(lambda p: p.get_host_port(), sLayout.proxyL))
@@ -1114,6 +1120,12 @@ def get_server_args(s, sLayout, isDebug=False, useRepeater=False):
             "-b", s.dataDir,
             "-l", logPath,
             "-id", s.name]
+
+    if maxFgTasks is not None:
+        ret += ['-fg', str(maxFgTasks)]
+    if maxBgTasks is not None and s.kind != K_ARCHIVE:
+        ret += ['-bg', str(maxBgTasks)]
+
     if isDebug:
         ret += ['-debug']
     return ret

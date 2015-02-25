@@ -101,15 +101,24 @@ utest/%.depend: utest/%.cpp
 
 
 PYTHON_SOURCES0 = python/walb/walb.py stest/config0.py stest/repeater.py stest/common.py stest/scenario0.py
+PYTHON_SOURCES1 = python/walb/walb.py stest/config1.py stest/repeater.py stest/common.py stest/scenario1.py
 
 pylint:
 	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES0)
+	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES1)
 
-stest: pylint
+stest0:
+	$(MAKE) pylint
 	python stest/scenario0.py $(OPT)
 
-stest100: pylint
+stest1:
+	$(MAKE) pylint
+	python stest/scenario1.py $(OPT)
+
+stest100:
+	$(MAKE) pylint
 	python stest/scenario0.py -c 100
+	python stest/scenario1.py -c 100
 
 archive:
 	git archive --format=tar master > walb-tools.tgz

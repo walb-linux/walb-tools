@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import time, shutil, threading
+import time, shutil, threading, os, signal
 from repeater import *
 
 '''
@@ -18,6 +18,8 @@ wdevL = None # [str]
 sLayout = None # [Server]
 sLayoutAll = None # [Server]
 walbc = None # Controller
+maxFgTasks = None # int
+maxBgTasks = None # int
 
 
 def set_config(toSymbolTbl, fromSymbolTbl):
@@ -109,7 +111,8 @@ def stop_repeater(s):
 def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
     wait_for_process_killed_on_port(s.port)
     make_dir(workDir + s.name)
-    args = get_server_args(s, sLayout, isDebug=isDebug, useRepeater=useRepeater)
+    args = get_server_args(s, sLayout, isDebug=isDebug, useRepeater=useRepeater,
+                           maxFgTasks=maxFgTasks, maxBgTasks=maxBgTasks)
     if isDebug:
         print 'cmd=', to_str(args)
     if useRepeater:
@@ -413,3 +416,13 @@ def wait_for_process_killed_on_port(port, timeoutS=10):
             return
         time.sleep(1)
     raise Exception('wait_for_process_killed_on_port: timeout', port, timeoutS)
+
+
+def print_action_info(action, info):
+    '''
+    action :: str
+    info :: str
+    '''
+    verify_type(action, str)
+    verify_type(info, str)
+    print '++++++++++++++++++++++++++++++++++++++++', action, info
