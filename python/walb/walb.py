@@ -1288,6 +1288,12 @@ class Controller:
         '''
         return self._get_size_value(ax, vol, 'vol-size')
 
+    def _get_vol_size_mb(self, ax, vol):
+        '''
+        Get volume size [Mebi].
+        '''
+        return self.get_vol_size_lb(ax, vol) * Lbs / Mebi
+
     def get_progress_lb(self, ax, vol):
         '''
         Get progress of full/hash backup/replicate command.
@@ -2433,8 +2439,7 @@ class Controller:
         elif st not in aAcceptForResize:
             raise Exception('resize_archive:bad state', ax.name, vol, sizeMb, st)
 
-        runCommand = self.get_run_remote_command(ax)
-        oldSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
+        oldSizeMb = self._get_vol_size_mb(ax, vol)
         if oldSizeMb == sizeMb:
             return
         if oldSizeMb > sizeMb:
@@ -2671,8 +2676,7 @@ class Controller:
         verify_type(vol, str)
         verify_u64(sizeMb)
         self._wait_for_no_action(ax, vol, aaResize, SHORT_TIMEOUT_SEC)
-        runCommand = self.get_run_remote_command(ax)
-        curSizeMb = get_lv_size_mb(self._get_lv_path(ax, vol), runCommand)
+        curSizeMb = self._get_vol_size_mb(ax, vol)
         if curSizeMb == oldSizeMb:
             raise Exception('wait_for_resize:size is not changed(restored vol may exist)',
                             ax.name, vol, oldSizeMb, sizeMb)
