@@ -3,6 +3,8 @@
 import time, shutil, threading, os, signal
 from repeater import *
 
+from stest_util import *
+
 '''
 These variables are defined for pylint.
 Call set_config() to set them correctly.

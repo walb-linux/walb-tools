@@ -5,6 +5,7 @@ sys.path.insert(0, './python/walb')
 from walb import *
 
 import random, traceback, signal
+from stest_util import *
 from repeater import *
 from common import *
 

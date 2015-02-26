@@ -7,6 +7,8 @@ from walb import *
 import os, socket, time
 from contextlib import closing
 
+from stest_util import *
+
 
 def send_cmd_to_repeater(port, cmd):
     # you can write a code as the following on Python 3
