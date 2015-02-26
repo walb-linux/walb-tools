@@ -21,6 +21,7 @@
 #include "action_counter.hpp"
 #include "thread_util.hpp"
 #include "time.hpp"
+#include "process.hpp"
 #include "walb/block_size.h"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
@@ -280,6 +281,11 @@ inline void assignAlignedArray(AlignedArray& array, const void *data, size_t siz
     assert(data);
     array.resize(size, false);
     ::memcpy(array.data(), data, size);
+}
+
+inline void flushBdevBufs(const std::string& path)
+{
+    cybozu::process::call("/sbin/blockdev", {"--flushbufs", path});
 }
 
 }} // walb::util

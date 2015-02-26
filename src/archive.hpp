@@ -454,6 +454,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
     }
     lvSnap = cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
     volSt.lvCache.addSnap(gid, lvSnap);
+    util::flushBdevBufs(lvSnap.path().str());
     return true;
 }
 
@@ -469,6 +470,7 @@ inline void delRestored(const std::string &volId, uint64_t gid)
             << "restored volume not found" << volId << gid;
     }
     cybozu::lvm::Lv snap = lvC.getSnap(gid);
+    util::flushBdevBufs(snap.path().str());
     snap.remove();
     lvC.removeSnap(gid);
 }

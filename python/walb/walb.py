@@ -2211,7 +2211,6 @@ class Controller:
             raise Exception('restore: alreay restored', ax.name, vol, gid)
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)
-        wait_for_lv_ready(path, runCommand)
 
     def get_restored_path(self, ax, vol, gid):
         '''
@@ -2236,9 +2235,6 @@ class Controller:
         verify_type(vol, str)
         verify_u64(gid)
 
-        runCommand = self.get_run_remote_command(ax)
-        path = self._get_lv_path(ax, vol)
-        wait_for_lv_ready(path, runCommand)
         retryTimes = 3
         for i in xrange(retryTimes):
             try:
