@@ -62,6 +62,7 @@ inline bool wdiffTransferClient(
         wdiff_transfer_local::sendPack(pkt, ctrl, statOut, pack);
     }
     ctrl.end();
+    pkt.flush();
     return true;
 }
 

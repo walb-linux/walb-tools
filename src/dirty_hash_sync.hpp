@@ -83,6 +83,7 @@ inline bool dirtyHashSyncClient(
         throw cybozu::Exception(FUNC) << "recvCtl";
     }
     sendCtl.end();
+    pkt.flush();
     return true;
 }
 
@@ -118,6 +119,7 @@ inline bool dirtyHashSyncServer(
                 progressLb += lb;
             }
             ctrl.end();
+            pkt.flush();
         } catch (std::exception& e) {
             ctrl.error();
             throw;

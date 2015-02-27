@@ -124,6 +124,7 @@ inline void c2pArchiveInfoClient(protocol::ClientParams &p)
         LOGs.debug() << hi;
         pkt.write(hi);
     }
+    pkt.flush();
 
     std::string res;
     pkt.read(res);

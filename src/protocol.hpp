@@ -138,6 +138,7 @@ inline std::string run1stNegotiateAsClient(
     pkt.write(protocolName);
     packet::Version ver(sock);
     ver.send();
+    pkt.flush();
     std::string serverId;
     pkt.read(serverId);
 
@@ -294,6 +295,7 @@ public:
                 ServerHandler handler = findServerHandler(handlers, protocolName);
                 ServerParams serverParams(sock, clientId, ps);
                 pkt.write(msgOk);
+                pkt.flush();
                 sendErr = false;
 #ifdef DEBUG_HANDLER
                 LOGs.info() << "SERVER_HANDLE" << nodeId << protocolName;
@@ -338,6 +340,7 @@ inline void sendStrVec(
         }
     }
     packet.write(v);
+    packet.flush();
 
     if (confirmMsg) {
         packet::Packet pkt(sock);

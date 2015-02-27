@@ -551,9 +551,11 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgAccept);
     if (!isFull) pkt.write(snapFrom);
+    pkt.flush();
     cybozu::Uuid uuid;
     pkt.read(uuid);
     packet::Ack(p.sock).send();
+    pkt.flush();
 
     const std::string &stPass = isFull ? atFullSync : atHashSync;
     StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
@@ -659,6 +661,7 @@ inline bool runFullReplClient(
     pkt.write(bulkLb);
     pkt.write(metaSt);
     pkt.write(uuid);
+    pkt.flush();
     logger.debug() << "full-repl-client" << sizeLb << bulkLb << metaSt << uuid;
 
     std::string res;
@@ -698,6 +701,7 @@ inline bool runFullReplServer(
     volSt.progressLb = 0;
     ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgOk);
+    pkt.flush();
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
@@ -733,6 +737,7 @@ inline bool runHashReplClient(
     pkt.write(diff);
     pkt.write(uuid);
     pkt.write(hashSeed);
+    pkt.flush();
     logger.debug() << "hash-repl-client" << sizeLb << bulkLb << diff << uuid << hashSeed;
 
     std::string res;
@@ -778,6 +783,7 @@ inline bool runHashReplServer(
     volSt.progressLb = 0;
     ZeroResetter resetter(volSt.progressLb);
     pkt.write(msgOk);
+    pkt.flush();
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
@@ -831,6 +837,7 @@ inline bool runDiffReplClient(
     pkt.write(maxIoBlocks);
     pkt.write(uuid);
     pkt.write(mergedDiff);
+    pkt.flush();
     logger.debug() << "diff-repl-client" << sizeLb << maxIoBlocks << uuid << mergedDiff;
 
     std::string res;
@@ -875,6 +882,7 @@ inline bool runDiffReplServer(
         throw;
     }
     pkt.write(msgOk);
+    pkt.flush();
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
@@ -891,6 +899,7 @@ inline bool runDiffReplServer(
     tmpFile.save(fPath.str());
     volSt.diffMgr.add(diff);
     packet::Ack(pkt.sock()).send();
+    pkt.flush();
     volSt.updateLastWdiffReceivedTime();
     ul.lock();
     tran.commit(aArchived);
@@ -922,6 +931,7 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap
                        << repl;
         pkt.write(repl);
+        pkt.flush();
         if (repl == ArchiveVolInfo::DONT_REPL) break;
         if (repl == ArchiveVolInfo::DO_HASH_REPL) {
             const MetaState metaSt = volInfo.getMetaState();
@@ -953,12 +963,14 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     pkt.write(isFull);
+    pkt.flush();
     if (isFull) {
         if (!runFullReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
     }
     for (;;) {
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         pkt.write(latestSnap);
+        pkt.flush();
         int repl;
         pkt.read(repl);
         if (repl == ArchiveVolInfo::DONT_REPL) break;
@@ -1754,6 +1766,7 @@ inline void x2aWdiffTransferServer(protocol::ServerParams &p)
             return;
         }
         pkt.write(msgAccept);
+        pkt.flush();
         sendErr = false;
 
         // main procedure
@@ -2090,6 +2103,7 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
         // This does not lock volSt.
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         pkt.write(msgAccept);
+        pkt.flush();
 
         cybozu::murmurhash3::Hash hash;
         if (!archive_local::getBlockHash(volId, gid, bulkLb, pkt, logger, hash)) {

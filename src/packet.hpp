@@ -18,6 +18,18 @@ namespace packet {
 const uint32_t VERSION = 1;
 const uint32_t ACK_MSG = 0x626c6177; /* "walb" (little endian). */
 
+
+/**
+ * Try to send written data to a socket immediately.
+ */
+inline void flushSocket(cybozu::Socket &sock, bool isCork = false)
+{
+    sock.setSocketOption(TCP_NODELAY, 1, IPPROTO_TCP);
+    if (!isCork) {
+        sock.setSocketOption(TCP_NODELAY, 0, IPPROTO_TCP);
+    }
+}
+
 /**
  * Base class for client/server communication.
  *
@@ -57,6 +69,7 @@ public:
         sock_.waitForClose();
         sock_.close();
     }
+    void flush() { flushSocket(sock_); }
 
 #ifdef PACKET_DEBUG
     void sendDebugMsg(const std::string &msg) {

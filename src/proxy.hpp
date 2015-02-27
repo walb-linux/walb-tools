@@ -836,6 +836,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
         return;
     }
     pkt.write(msgAccept);
+    pkt.flush();
 
     StateMachineTransaction tran(volSt.sm, pStarted, ptWlogRecv);
     ul.unlock();
@@ -978,6 +979,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     pkt.write(fileH.getMaxIoBlocks());
     pkt.write(volInfo.getSizeLb());
     pkt.write(mergedDiff);
+    pkt.flush();
     logger.debug() << "send" << volId << proxyHT << fileH.getUuid()
                    << fileH.getMaxIoBlocks() << volInfo.getSizeLb() << mergedDiff;
 

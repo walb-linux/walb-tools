@@ -598,6 +598,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
         aPkt.write(sizeLb);
         aPkt.write(curTime);
         aPkt.write(bulkLb);
+        aPkt.flush();
         logger.debug() << "send" << storageHT << volId << sizeLb << curTime << bulkLb;
         {
             std::string res;
@@ -617,6 +618,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
         volInfo.resetWlog(gidB);
         const cybozu::Uuid uuid = volInfo.getUuid();
         aPkt.write(uuid);
+        aPkt.flush();
         packet::Ack(aSock).recv();
         monitorMgr.start();
 
@@ -643,6 +645,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
             const uint64_t gidE = volInfo.takeSnapshot(gs.maxWlogSendMb);
             pushTask(volId);
             aPkt.write(MetaSnap(gidB, gidE));
+            aPkt.flush();
         }
         packet::Ack(aSock).recv();
     }
@@ -768,6 +771,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
             pkt.write(salt);
             pkt.write(volSizeLb);
             pkt.write(maxLogSizePb);
+            pkt.flush();
             LOGs.debug() << "send" << volId << uuid << pbs << salt << volSizeLb << maxLogSizePb;
             std::string res;
             pkt.read(res);
@@ -816,6 +820,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     const uint64_t lsidE = lsid;
     const MetaDiff diff = volInfo.getTransferDiff(rec0, rec1, lsidE);
     pkt.write(diff);
+    pkt.flush();
     packet::Ack(sock).recv();
     const bool isRemaining = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
 
