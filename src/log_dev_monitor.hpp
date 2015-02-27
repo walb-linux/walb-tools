@@ -112,8 +112,8 @@ public:
             if (!name.empty()) {
                 v.push_back(name);
                 // Reset the trigger by reading the file.
-                char buf[4096];
                 if (::lseek(fd, 0, SEEK_SET) >= 0) {
+                    char buf[4096];
                     size_t size = 0;
                     for (;;) {
                         const int s = ::read(fd, buf, 4096);

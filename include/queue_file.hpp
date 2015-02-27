@@ -87,10 +87,10 @@ struct QueueRecordHeader
 
 private:
     uintptr_t nextPtr() const {
-        return (uintptr_t)this + totalSize();
+        return ((uintptr_t)this) + totalSize();
     }
     uintptr_t prevPtr() const {
-        return (uintptr_t)this - toPrev;
+        return ((uintptr_t)this) - toPrev;
     }
 } __attribute__((packed));
 

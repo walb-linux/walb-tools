@@ -148,12 +148,6 @@ private:
                          , dataSize(), data_.size());
         }
     }
-    void verifyCompressed(const char *msg) const {
-        if (!isCompressed()) throw cybozu::Exception(msg) << "must be compressed";
-    }
-    void verifyUncompressed(const char *msg) const {
-        if (isCompressed()) throw cybozu::Exception(msg) << "must be uncompressed";
-    }
     void setSizes(uint32_t cmpSize, uint32_t orgSize) {
         cmpSize_ = cmpSize;
         orgSize_ = orgSize;

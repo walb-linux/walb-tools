@@ -252,7 +252,7 @@ using ServerHandler = void (*)(ServerParams &);
 typedef std::map<std::string, ServerHandler> Str2ServerHandler;
 
 inline ServerHandler findServerHandler(
-    const Str2ServerHandler &handlers, const std::string protocolName)
+    const Str2ServerHandler &handlers, const std::string &protocolName)
 {
     if (protocolName == shutdownCN) {
         return shutdownServer;

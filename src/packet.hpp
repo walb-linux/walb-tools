@@ -107,14 +107,13 @@ private:
 
 public:
     using Packet :: Packet;
-    Version(cybozu::Socket &sock) : Packet(sock) {}
+    Version(cybozu::Socket &sock) : Packet(sock), version_(UINT32_MAX) {}
     void send() {
         sendDebugMsg("VERSION");
         write(VERSION);
     }
     bool recv() {
         recvDebugMsg("VERSION");
-        version_ = 0;
         read(version_);
 #if 0
         if (version_ != VERSION) {

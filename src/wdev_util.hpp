@@ -205,7 +205,7 @@ inline std::string getWldevPathFromWdevName(const std::string& wdevName)
 inline std::string getWdevNameFromWdevPath(const std::string& wdevPath)
 {
     const char *const FUNC = __func__;
-    if (wdevPath.find(WDEV_PATH_PREFIX) != 0) {
+    if (wdevPath.compare(0, WDEV_PATH_PREFIX.size(), WDEV_PATH_PREFIX) != 0) {
         throw cybozu::Exception(FUNC) << "bad name" << wdevPath;
     }
     return wdevPath.substr(WDEV_PATH_PREFIX.size());

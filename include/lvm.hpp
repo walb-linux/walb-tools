@@ -77,7 +77,7 @@ Lv locate(const std::string &vgName, const std::string &name);
 VgList listVg(const std::string &vgName);
 Vg getVg(const std::string &vgName);
 bool existsVg(const std::string &vgName);
-LvAttr getLvAttr(const std::string lvPathStr);
+LvAttr getLvAttr(const std::string &lvPathStr);
 
 
 namespace local {
@@ -815,7 +815,7 @@ inline bool existsVg(const std::string &vgName)
     return true;
 }
 
-inline LvAttr getLvAttr(const std::string lvPathStr)
+inline LvAttr getLvAttr(const std::string &lvPathStr)
 {
     LvAttr attr;
     const std::string result

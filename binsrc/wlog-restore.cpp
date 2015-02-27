@@ -222,7 +222,7 @@ private:
         padH.updateChecksumAndWriteTo(ldevFile);
         return paddingPb;
     }
-    uint32_t getPaddingPb(const device::SuperBlock &super, const LogPackHeader &packH) {
+    uint32_t getPaddingPb(const device::SuperBlock &super, const LogPackHeader &packH) const {
         const uint64_t offPb = super.getOffsetFromLsid(packH.logpackLsid());
         const uint64_t endOffPb = super.getRingBufferOffset() + super.getRingBufferSize();
         if (offPb + 1 + packH.totalIoSize() <= endOffPb) return 0;

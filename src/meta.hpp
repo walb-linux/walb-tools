@@ -204,7 +204,7 @@ struct MetaDiff
     }
     MetaDiff(const MetaSnap &snapB, const MetaSnap &snapE, bool isMergeable = false, uint64_t ts = 0)
         : isMergeable(isMergeable), isCompDiff(false), timestamp(ts)
-        , snapB(snapB), snapE(snapE) {
+        , snapB(snapB), snapE(snapE), dataSize(0) {
         verify();
     }
     bool operator==(const MetaDiff &rhs) const {

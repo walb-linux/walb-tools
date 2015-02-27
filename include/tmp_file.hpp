@@ -74,7 +74,7 @@ private:
     }
 };
 
-inline size_t removeAllTmpFiles(const std::string &dirPath, const std::string prefix = DEFAULT_TMP_FILE_PREFIX)
+inline size_t removeAllTmpFiles(const std::string &dirPath, const std::string &prefix = DEFAULT_TMP_FILE_PREFIX)
 {
     FilePath dirFp(dirPath);
     if (!dirFp.stat().isDirectory()) {
