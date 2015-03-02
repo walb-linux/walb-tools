@@ -166,7 +166,8 @@ public:
 
         if (addAndPush(rec, std::move(io))) return;
         writePack();
-        UNUSED const bool ret = addAndPush(rec, std::move(io));
+        const bool ret = addAndPush(rec, std::move(io));
+        unusedVar(ret);
         assert(ret);
     }
     void writeDiff(const DiffRecord &rec, const char *data) {

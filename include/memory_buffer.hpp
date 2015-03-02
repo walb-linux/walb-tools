@@ -79,7 +79,8 @@ public:
      */
     void setAllocated(size_t off, size_t size) {
         assert(0 < size);
-        UNUSED const auto p0 = set_.emplace(off, size);
+        const auto p0 = set_.emplace(off, size);
+        unusedVar(p0);
         assert(p0.second);
         allocated_ += size;
         if (maxItemSize_ < size) { maxItemSize_ = size; }

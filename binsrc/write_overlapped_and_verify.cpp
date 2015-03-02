@@ -161,7 +161,7 @@ public:
 class RangeMutex
 {
 private:
-    UNUSED const size_t size_;
+    const size_t size_;
     std::mutex mutex_;
     std::condition_variable cv_;
 
@@ -171,6 +171,7 @@ private:
 public:
     explicit RangeMutex(size_t size)
         : size_(size), mutex_(), cv_(), bmp_(size) {
+        unusedVar(size_);
     }
     void lock(size_t idx, size_t size) noexcept {
         assert(idx + size <= size_);

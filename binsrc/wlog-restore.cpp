@@ -183,7 +183,8 @@ private:
     void clipIfNecessary(LogPackHeader &packH) {
         if (opt_.ddevLb == 0) return;
         size_t i = 0;
-        UNUSED const uint16_t totalIoSize0 = packH.totalIoSize();
+        const uint16_t totalIoSize0 = packH.totalIoSize();
+        unusedVar(totalIoSize0);
         while (i < packH.nRecords()) {
             WlogRecord &rec = packH.record(i);
             if (rec.offset + rec.ioSizeLb() <= opt_.ddevLb) {

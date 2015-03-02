@@ -104,7 +104,8 @@ public:
 #endif
 
     uint64_t get2ndSuperBlockOffset() const {
-        UNUSED uint64_t oft = ::get_super_sector1_offset_2(super());
+        const uint64_t oft = ::get_super_sector1_offset_2(super());
+        unusedVar(oft);
 #if 0
         assert(oft == getMetadataOffset() + getMetadataSize());
 #endif
