@@ -125,7 +125,7 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
         wait_for_server_ready(s)
 
 
-def startup_list(sL, rL=[], rateMbps=0, delayMsec=0):
+def startup_list(sL, rL=None, rateMbps=0, delayMsec=0):
     '''
     sL :: [Server] - server list to start up.
     rL :: [Server] - server list to run repeater with.
@@ -137,6 +137,8 @@ def startup_list(sL, rL=[], rateMbps=0, delayMsec=0):
     proxyL = [x for x in sL if x.kind == K_PROXY]
     storageL = [x for x in sL if x.kind == K_STORAGE]
     sL = archiveL + proxyL + storageL  # the order is important.
+    if rL is None:
+        rL = []
     for s in sL:
         startup(s, s in rL, rateMbps, delayMsec, wait=False)
     for s in sL:
@@ -230,7 +232,7 @@ def write_random(bdevPath, sizeLb, offset=0, fixVar=None):
     return run_local_command(args, False)
 
 
-class RandomWriter():
+class RandomWriter(object):
     '''
     Random writer using a thread.
 
@@ -360,7 +362,7 @@ def get_sha1_of_restorable(ax, vol, gid):
     verify_type(vol, str)
     verify_type(gid, int)
     walbc.restore(ax, vol, gid, TIMEOUT)
-    md = get_sha1(walbc.get_restored_path(ax, vol, gid))
+    md = get_sha1(get_restored_path(ax, vol, gid))
     walbc.del_restored(ax, vol, gid)
     return md
 

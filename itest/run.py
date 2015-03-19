@@ -1,6 +1,6 @@
 import subprocess, shlex, sys, time
 
-class ProcData:
+class ProcData(object):
     def __init__(self, proc, inFile, outFile, args):
         '''
         proc :: subprocess.Popen
@@ -64,4 +64,3 @@ def run_async(args):
 
 def check_result(msg):
     print "TEST_SUCCESS", msg
-

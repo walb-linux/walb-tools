@@ -91,6 +91,11 @@ def verify_size_unit(sizeU):
         raise Exception('bad size unit', sizeU)
 
 
+def verify_shutdown_mode(mode, msg):
+    if mode not in ['graceful', 'force']:
+        raise Exception(msg, 'bad mode', mode)
+
+
 ########################################
 # Utility functions.
 ########################################
@@ -145,6 +150,48 @@ def exists_file(path, runCommand=run_local_command):
         'else echo 0; fi' % path
     res = runCommand(['/bin/sh', '-c', cmd])
     return int(res) != 0
+
+
+def get_server(name, sL):
+    '''
+    Get only one element from L having name
+    name :: str   - server name.
+    sL :: [Server] - server list.
+    return :: Server
+    '''
+    verify_type(name, str)
+    verify_type(sL, list, Server)
+    ret = []
+    for x in sL:
+        if x.name == name:
+            ret.append(x)
+    if len(ret) != 1:
+        raise Exception('get_server:not one', ret, name, [x.name for x in sL])
+    return ret[0]
+
+
+def get_restored_path(ax, vol, gid):
+    '''
+    ax :: Server  - archive server.
+    vol :: str    - volume name.
+    gid :: int    - generation id.
+    return :: str - restored path.
+    '''
+    verify_server_kind(ax, [K_ARCHIVE])
+    verify_type(vol, str)
+    verify_u64(gid)
+    return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
+
+
+def get_lv_path(ax, vol):
+    '''
+    ax :: Server  - archive server.
+    vol :: str    - volume name.
+    return :: str - lv path.
+    '''
+    verify_server_kind(ax, [K_ARCHIVE])
+    verify_type(vol, str)
+    return '/dev/' + ax.vg + '/i_' + vol
 
 
 ########################################
@@ -310,7 +357,7 @@ def datetime_to_str(ts, fmt):
     return ts.strftime(fmt)
 
 
-class Snapshot:
+class Snapshot(object):
     '''
     Snapshot class
     '''
@@ -348,7 +395,7 @@ def create_snapshot_from_str(s):
     return Snapshot(gidB, gidE)
 
 
-class Diff:
+class Diff(object):
     '''
     DIff class
     '''
@@ -404,7 +451,7 @@ def create_diff_from_str(s):
     return d
 
 
-class MetaState:
+class MetaState(object):
     '''
     Data stored in 'base' files for archive servers.
     '''
@@ -466,7 +513,7 @@ def create_meta_state_from_str(s):
     return metaSt
 
 
-class GidInfo:
+class GidInfo(object):
     '''
     gid information
     '''
@@ -484,7 +531,7 @@ class GidInfo:
         return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
 
 
-class CompressOpt:
+class CompressOpt(object):
     '''
     Compress option for archive info and replication.
     '''
@@ -527,7 +574,7 @@ class CompressOpt:
 
 # Synchronization option.
 
-class SyncOpt:
+class SyncOpt(object):
     '''
     Synchronization option.
     This is used for optional arguments of archive-info and replicate command.
@@ -567,7 +614,7 @@ class SyncOpt:
 # Classes for walb controller.
 ########################################
 
-class Device:
+class Device(object):
     '''
     Walb device.
 
@@ -728,7 +775,7 @@ class Device:
         return '/sys/block/walb!%d/' % self.iD
 
 
-class Server:
+class Server(object):
     '''
     Server configuration.
     '''
@@ -803,7 +850,7 @@ def verify_server_kind(s, kindL):
         raise Exception('invalid server type', s.name, s.kind, kindL)
 
 
-class ServerLayout:
+class ServerLayout(object):
     '''
     Server layout of a backup group.
     '''
@@ -835,7 +882,7 @@ class ServerLayout:
         self.archiveL = archiveL
 
     def __str__(self):
-        return ', '.join(map(lambda s: s.name, self.get_all()))
+        return ', '.join([s.name for s in self.get_all()])
 
     def get_primary_archive(self):
         '''
@@ -877,17 +924,19 @@ class ServerLayout:
 
 
 
-def get_server_args(s, sLayout, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1):
+def get_server_args(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1):
     '''
     Get walb-tools server arguments.
     s :: Server     - server.
+    sLayout :: ServerLayout - required for storage server.
     useRepeater :: Bool - use repeater if True
     maxFgTasks :: int or None - max number of foreground tasks.
     maxBgTasks :: int or None - max number of background tasks.
     return :: [str] - argument list.
     '''
     verify_type(s, Server)
-    verify_type(sLayout, ServerLayout)
+    if s.kind == K_STORAGE:
+        verify_type(sLayout, ServerLayout)
     verify_type(isDebug, bool)
     verify_type(useRepeater, bool)
     if maxFgTasks is not None:
@@ -896,7 +945,7 @@ def get_server_args(s, sLayout, isDebug=False, useRepeater=False, maxFgTasks=2, 
         verify_type(maxBgTasks, int)
 
     if s.kind == K_STORAGE:
-        proxies = ",".join(map(lambda p: p.get_host_port(), sLayout.proxyL))
+        proxies = ",".join([p.get_host_port() for p in sLayout.proxyL])
         ret = [s.binDir + 'walb-storage',
                "-archive", sLayout.get_primary_archive().get_host_port(),
                "-proxy", proxies]
@@ -930,7 +979,7 @@ def get_server_args(s, sLayout, isDebug=False, useRepeater=False, maxFgTasks=2, 
     return ret
 
 
-class Controller:
+class Controller(object):
     '''
     To handle all walb servers in a backup group.
 
@@ -1043,9 +1092,9 @@ class Controller:
         for s in self.sLayout.get_all():
             msg = "%s %s:%d %s" % (s.name, s.address, s.port, server_kind_to_str(s.kind))
             try:
-                st= self.get_state(s, vol)
+                st = self.get_state(s, vol)
             except:
-                st= "err"
+                st = "err"
             print msg, st
 
     def verify_state(self, s, vol, state):
@@ -1319,17 +1368,17 @@ class Controller:
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'uuid', vol])
 
-    def status(self, sL=[], vol=None, timeoutS=SHORT_TIMEOUT_SEC):
+    def status(self, sL=None, vol=None, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         print server status.
         sL :: Server|[Server] - server or server list.
         vol :: str or None - volume name. None means all.
         '''
+        if not sL:
+            sL = self.sLayout.get_all()
         if isinstance(sL, Server):
             sL = [sL]
         verify_type(sL, list, Server)
-        if not sL:
-            sL = self.sLayout.get_all()
         for s in sL:
             args = ['status']
             if vol:
@@ -1345,7 +1394,7 @@ class Controller:
         '''
         verify_type(s, Server)
         verify_type(mode, str)
-        self._verify_shutdown_mode(mode, 'shutdown')
+        verify_shutdown_mode(mode, 'shutdown')
         self.run_ctl(s, ["shutdown", mode])
 
     def shutdown_list(self, sL, mode='graceful'):
@@ -1353,7 +1402,7 @@ class Controller:
         Shutdown listed servers.
         '''
         verify_type(sL, list, Server)
-        self._verify_shutdown_mode(mode, 'shutdown_list')
+        verify_shutdown_mode(mode, 'shutdown_list')
         for s in sL:
             try:
                 self.run_ctl(s, ["shutdown", mode])
@@ -1643,23 +1692,6 @@ class Controller:
         if st == pStopped and doStart:
             self.start(px, vol)
 
-    def get_server(self, name, sL):
-        '''
-        Get only one element from L having name
-        name :: str   - server name.
-        sL :: [Server] - server list.
-        return :: Server
-        '''
-        verify_type(name, str)
-        verify_type(sL, list, Server)
-        ret = []
-        for x in sL:
-            if x.name == name:
-                ret.append(x)
-        if len(ret) != 1:
-            raise Exception('get_server:not one', ret, name, map(lambda x:x.name, sL))
-        return ret[0]
-
     def copy_archive_info(self, pSrc, vol, pDst):
         '''
         Copy archive info from a proxy to another proxy.
@@ -1671,7 +1703,7 @@ class Controller:
         verify_type(vol, str)
         verify_server_kind(pDst, [K_PROXY])
         for axName in self.get_archive_info_list(pSrc, vol):
-            ax = self.get_server(axName, self.sLayout.archiveL)
+            ax = get_server(axName, self.sLayout.archiveL)
             _, syncOpt = self.get_archive_info(pSrc, vol, ax)
             self.add_archive_to_proxy(pDst, vol, ax, doStart=False, syncOpt=syncOpt)
         self.start(pDst, vol)
@@ -1733,7 +1765,7 @@ class Controller:
         opt :: str   - you can specify 'all'.
         return :: [int] - gid list.
         '''
-        return map(lambda x : x.gid, self.get_restorable(ax, vol, opt))
+        return [x.gid for x in self.get_restorable(ax, vol, opt)]
 
     def print_restorable(self, ax, vol, opt=''):
         '''
@@ -2009,24 +2041,12 @@ class Controller:
         verify_type(vol, str)
         verify_u64(gid)
 
-        path = self.get_restored_path(ax, vol, gid)
+        path = get_restored_path(ax, vol, gid)
         runCommand = self.get_run_remote_command(ax)
         if exists_file(path, runCommand):
             raise Exception('restore: alreay restored', ax.name, vol, gid)
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)
-
-    def get_restored_path(self, ax, vol, gid):
-        '''
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid :: int    - generation id.
-        return :: str - restored path.
-        '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid)
-        return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
 
     def del_restored(self, ax, vol, gid):
         '''
@@ -2180,7 +2200,7 @@ class Controller:
         verify_type(vol, str)
         verify_gid_range(gidB, gidE, 'merge')
         diffL = self.get_applicable_diff_list(ax, vol, gidE)
-        if gidB not in map(lambda diff: diff.B.gidB, diffL) or gidE not in map(lambda diff: diff.E.gidB, diffL):
+        if gidB not in [d.B.gidB for d in diffL] or gidE not in [d.E.gidB for d in diffL]:
             raise Exception("merge: specify exact ranges", ax.name, vol, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
@@ -2317,9 +2337,9 @@ class Controller:
 
     def _make_get_int_list(self, cmd, ax, vol):
         if cmd == 'restorable':
-            return lambda : self.get_restorable_gid(ax, vol)
+            return lambda: self.get_restorable_gid(ax, vol)
         elif cmd == 'restored':
-            return lambda : self.get_restored(ax, vol)
+            return lambda: self.get_restored(ax, vol)
         else:
             raise Exception('bad cmd', cmd, ax.name, vol)
 
@@ -2433,16 +2453,6 @@ class Controller:
 
         self.start_synchronizing(a0, vol, syncOpt)
 
-    def _get_lv_path(self, ax, vol):
-        '''
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        return :: str - lv path.
-        '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        return '/dev/' + ax.vg + '/i_' + vol
-
     def _wait_for_no_action(self, s, vol, action, timeoutS=TIMEOUT_SEC):
         '''
         s :: Server     - server.
@@ -2481,7 +2491,3 @@ class Controller:
         if curSizeMb != sizeMb:
             raise Exception('wait_for_resize:failed',
                             ax.name, vol, oldSizeMb, sizeMb, curSizeMb)
-
-    def _verify_shutdown_mode(self, mode, msg):
-        if mode not in ['graceful', 'force']:
-            raise Exception(msg, 'bad mode', mode)

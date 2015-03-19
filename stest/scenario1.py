@@ -163,7 +163,7 @@ targetVolL = [VOL0, VOL1, VOL2]
 targetWdevL = [wdev0, wdev1, wdev2]
 
 
-class TestWorker:
+class TestWorker(object):
     '''
     Test worker for concurrent running.
     '''
@@ -231,7 +231,6 @@ def main():
     i = 0
     for vol, wdev in zip(targetVolL, targetWdevL)[:nrThreads]:
         worker = TestWorker(i, count, vol, wdev)
-        worker.run
         th = threading.Thread(target=worker.run)
         th.setDaemon(True)
         th.start()

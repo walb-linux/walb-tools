@@ -419,7 +419,7 @@ def test_n13():
         walbc._apply_all(a0, VOL, TIMEOUT)
         n = 5
         gidL = []
-        for i in xrange(n):
+        for _ in xrange(n):
             gid = walbc.snapshot(s0, VOL, [a0], TIMEOUT)
             gidL.append(gid)
         walbc.disable_snapshot(a0, VOL, gidL[:n-1])
@@ -734,7 +734,7 @@ def test_e8():
         raise
 
 
-def init_repeater_test(sLayoutRepeater, rL=[], rateMbps=0, delayMsec=0):
+def init_repeater_test(sLayoutRepeater, rL, rateMbps=0, delayMsec=0):
     shutdown_all('force')
     walbc.set_server_layout(sLayoutRepeater)
     startup_list(sLayoutRepeater.get_all(), rL, rateMbps, delayMsec)
@@ -788,7 +788,6 @@ def test_e10():
             raise Exception('test_e10:expect wlog overflow')
         except:
             print 'test_e10:wlog overflow ok'
-            pass
         start_repeater(p0)
         walbc.stop(s0, VOL)
         gid = walbc.hash_backup(s0, VOL, TIMEOUT)
@@ -804,8 +803,8 @@ def test_e10():
 
 
 def get_original_server(s):
-	return Server(s.name, s.address, get_orig_port(s.port),
-                      s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
+    return Server(s.name, s.address, get_orig_port(s.port),
+                  s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
 
 
 def test_e11():
