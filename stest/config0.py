@@ -39,9 +39,9 @@ sLayoutAll = ServerLayout([s0, s1, s2], [p0, p1, p2], [a0, a1, a2])
 sLayoutRepeater1 = ServerLayout([s0], [p0], [a0])
 sLayoutRepeater2 = ServerLayout([s0], [p0], [a0, a1])
 
-wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  wdevcPath)
-wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', wdevcPath)
-wdev2 = Device(2, '/dev/test/log3', '/dev/test/data3', wdevcPath)
+wdev0 = Device('0', '/dev/test/log',  '/dev/test/data',  wdevcPath)
+wdev1 = Device('1', '/dev/test/log2', '/dev/test/data2', wdevcPath)
+wdev2 = Device('2', '/dev/test/log3', '/dev/test/data3', wdevcPath)
 wdevL = [wdev0, wdev1, wdev2]
 
 walbc = Controller(walbcPath, sLayout, isDebug)

@@ -619,20 +619,20 @@ class Device(object):
     Walb device.
 
     '''
-    def __init__(self, iD, ldev, ddev, wdevcPath, runCommand=run_local_command):
+    def __init__(self, name, ldev, ddev, wdevcPath, runCommand=run_local_command):
         '''
-        iD :: int               - walb device id.
+        name :: str             - walb device name.
         ldev :: str             - underlying log block device path.
         ddev :: str             - underlying data block device path.
         wdevcPath :: str        - wdevc path.
         runCommand:: RunCommand - function that run commands.
         '''
-        verify_type(iD, int)
+        verify_type(name, str)
         verify_type(ldev, str)
         verify_type(ddev, str)
         verify_type(wdevcPath, str)
         verify_function(runCommand)
-        self.iD = iD
+        self.name = name
         self.ldev = ldev
         self.ddev = ddev
         self.wdevcPath = wdevcPath
@@ -640,10 +640,10 @@ class Device(object):
 
     @property
     def path(self):
-        return '/dev/walb/' + str(self.iD)
+        return '/dev/walb/' + self.name
 
     def __str__(self):
-        return ', '.join([str(self.iD), self.ldev, self.ddev, self.wdevcPath])
+        return ', '.join([self.name, self.ldev, self.ddev, self.wdevcPath])
 
     def run_wdevc(self, cmdArgs):
         '''
@@ -687,7 +687,7 @@ class Device(object):
         bi :: int   - number of IOs processed at once.
         None means default value for all the parameters.
         '''
-        args = ['create-wdev', self.ldev, self.ddev, '-n', str(self.iD)]
+        args = ['create-wdev', self.ldev, self.ddev, '-n', self.name]
         optL = ['-maxl', '-maxp', '-minp', '-qp', '-fs', '-fp', '-bp', '-bi']
         valL = [maxl, maxp, minp, qp, fs, fp, bp, bi]
         for opt, val in zip(optL, valL):
@@ -772,7 +772,7 @@ class Device(object):
     private member functions.
     '''
     def _get_sys_path(self):
-        return '/sys/block/walb!%d/' % self.iD
+        return '/sys/block/walb!{}/'.format(self.name)
 
 
 class Server(object):

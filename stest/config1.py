@@ -34,9 +34,9 @@ VOL0 = 'vol0'
 VOL1 = 'vol1'
 VOL2 = 'vol2'
 
-wdev0 = Device(0, '/dev/test/log',  '/dev/test/data',  wdevcPath)
-wdev1 = Device(1, '/dev/test/log2', '/dev/test/data2', wdevcPath)
-wdev2 = Device(2, '/dev/test/log3', '/dev/test/data3', wdevcPath)
+wdev0 = Device('0', '/dev/test/log',  '/dev/test/data',  wdevcPath)
+wdev1 = Device('1', '/dev/test/log2', '/dev/test/data2', wdevcPath)
+wdev2 = Device('2', '/dev/test/log3', '/dev/test/data3', wdevcPath)
 wdevL = [wdev0, wdev1, wdev2]
 
 
