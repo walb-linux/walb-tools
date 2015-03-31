@@ -1472,7 +1472,7 @@ class Controller(object):
             if st == sClear:
                 return
             if st in [sTarget, sStandby]:
-                self.stop(s, vol)
+                self.stop(s, vol, 'force')
                 st = self.get_state(s, vol)
             if st == sStopped:
                 self.reset(s, vol)
@@ -1483,7 +1483,7 @@ class Controller(object):
             if st == pClear:
                 return
             if st in pActive:
-                self.stop(s, vol)
+                self.stop(s, vol, 'force')
                 st = self.get_state(s, vol)
             if st != pStopped:
                 raise Exception('clear', s.name, vol, st)
@@ -1492,7 +1492,7 @@ class Controller(object):
             if st == aClear:
                 return
             if st == aArchived:
-                self.stop(s, vol)
+                self.stop(s, vol, 'force')
                 st = self.get_state(s, vol)
             if st not in aAcceptForClearVol:
                 raise Exception('clear', s.name, vol, st)
