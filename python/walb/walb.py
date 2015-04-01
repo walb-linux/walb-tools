@@ -1108,6 +1108,15 @@ class Controller(object):
         if st != state:
             raise Exception('verify_state: differ', s.name, st, state)
 
+    def get_vol_list(self, s):
+        '''
+        Get volume list.
+        s :: Server
+        return :: [str] - volume name list.
+        '''
+        verify_server_kind(s, serverKinds)
+        return self.run_ctl(s, ['get', 'vol']).split()
+
     def _get_size_value(self, ax, vol, cmd):
         '''
         Get size value from an archive server.
