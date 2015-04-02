@@ -1297,7 +1297,7 @@ class Controller(object):
             self._go_standby(sx, vol)
             return
         if state == sTarget:
-            self.stop(sx, vol)
+            self.stop(sx, vol, 'force')
             self.stop_synchronizing(self.sLayout.get_primary_archive(), vol)
             self.reset(sx, vol)
             self._go_standby(sx, vol)
@@ -1665,7 +1665,7 @@ class Controller(object):
         verify_server_kind(ax, [K_ARCHIVE])
         st = self.get_state(px, vol)
         if st in pActive:
-            self.stop(px, vol)
+            self.stop(px, vol, 'force')
         aL = self.get_archive_info_list(px, vol)
         if ax.name in aL:
             self.run_ctl(px, ['archive-info', 'delete', vol, ax.name])
@@ -1690,7 +1690,7 @@ class Controller(object):
             verify_type(syncOpt, SyncOpt)
         st = self.get_state(px, vol)
         if st in pActive:
-            self.stop(px, vol)
+            self.stop(px, vol, 'force')
         aL = self.get_archive_info_list(px, vol)
         cmd = 'update' if ax.name in aL else 'add'
         args = ['archive-info', cmd, vol, ax.name, ax.get_host_port()]
