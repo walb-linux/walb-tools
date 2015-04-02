@@ -2190,10 +2190,11 @@ class Controller(object):
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        gidL = self.get_restorable_gid(ax, vol)
-        if not gidL:
-            raise Exception('_apply_all: there are no diffs to apply', ax.name, vol, timeoutS)
-        gid = gidL[-1]
+        diffL = self.get_applicable_diff_list(ax, vol)
+        if len(diffL) == 0:
+            # There are no diffs to apply.
+            return
+        gid = diffL[-1].E.gidB
         self.apply(ax, vol, gid, timeoutS=timeoutS)
         return gid
 
