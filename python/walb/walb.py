@@ -1083,13 +1083,17 @@ class Controller(object):
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol])
 
-    def get_state_all(self, vol):
+    def get_state_all(self, vol, sL=None):
         '''
         Get all state fo a volume.
         vol :: str - volume name
+        sL :: [Server] or None - None means all servers in the layout.
         '''
         verify_type(vol, str)
-        for s in self.sLayout.get_all():
+        if sL is None:
+            sL = self.sLayout.get_all()
+        verify_type(sL, list, Server)
+        for s in sL:
             msg = "%s %s:%d %s" % (s.name, s.address, s.port, server_kind_to_str(s.kind))
             try:
                 st = self.get_state(s, vol)
