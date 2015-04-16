@@ -273,7 +273,7 @@ public:
      * You can call this multiple times.
      */
     void close() {
-        if (!isClosed_) {
+        if (!isClosed_ && isWrittenHeader_) {
             writeEof();
             fileW_.close();
             isClosed_ = true;
