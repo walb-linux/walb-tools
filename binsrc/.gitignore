@@ -40,3 +40,4 @@ bhash
 mon-blk
 trim
 dirtree-hash
+wlog-show-raw
