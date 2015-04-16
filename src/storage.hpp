@@ -727,6 +727,24 @@ inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
     return remainingPb == 0;
 }
 
+/**
+ * Nothing will be checked. Just read.
+ */
+inline LogPackHeader readLogPackHeaderOnce(const std::string &volId, uint64_t lsid)
+{
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
+    const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
+    device::SimpleWldevReader reader(wldevPath);
+    const uint32_t pbs = reader.super().getPhysicalBlockSize();
+    const uint32_t salt = reader.super().getLogChecksumSalt();
+    reader.reset(lsid);
+    LogPackHeader packH(pbs, salt);
+    packH.rawReadFrom(reader);
+    return packH;
+}
+
 inline void dumpLogPackHeader(const std::string &volId, uint64_t lsid, const LogPackHeader &packH) noexcept
 {
     try {
@@ -1099,6 +1117,34 @@ inline void c2sKickServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2sDumpLogpackHeaderServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const VolIdAndLsidParam param = parseVolIdAndLsidParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const std::string &volId = param.volId;
+        const uint64_t lsid = param.lsid;
+
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+        const std::string st = volSt.sm.get();
+        if (st == sClear) throw cybozu::Exception(FUNC) << "not found" << volId;
+
+        LogPackHeader packH = storage_local::readLogPackHeaderOnce(volId, lsid);
+        storage_local::dumpLogPackHeader(volId, lsid, packH);
+
+        ul.unlock();
+        pkt.writeFin(msgOk);
+        logger.info() << "dump-logpack-header" << volId << lsid;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
 namespace storage_local {
 
 inline void getState(protocol::GetCommandParams &p)
@@ -1193,6 +1239,7 @@ const protocol::Str2ServerHandler storageHandlerMap = {
     { resizeCN, c2sResizeServer },
     { snapshotCN, c2sSnapshotServer },
     { kickCN, c2sKickServer },
+    { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderServer },
     { getCN, c2sGetServer },
     { execCN, c2sExecServer },
 };

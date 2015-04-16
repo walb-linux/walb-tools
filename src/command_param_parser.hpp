@@ -69,6 +69,21 @@ inline VolIdAndGidParam parseVolIdAndGidParam(const StrVec &args, size_t pos, bo
     return param;
 }
 
+struct VolIdAndLsidParam
+{
+    std::string volId;
+    uint64_t lsid;
+};
+
+inline VolIdAndLsidParam parseVolIdAndLsidParam(const StrVec &args)
+{
+    VolIdAndLsidParam param;
+    std::string lsidStr;
+    cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &lsidStr});
+    param.lsid = cybozu::atoi(lsidStr);
+    return param;
+}
+
 struct StartParam
 {
     std::string volId;
@@ -368,6 +383,7 @@ inline void verifyArchiveInfoParam(const StrVec &args) { parseArchiveInfoParam(a
 inline void verifyKickParam(const StrVec &args) { parseKickParam(args); }
 inline void verifyBackupParam(const StrVec &args) { parseBackupParam(args); }
 inline void verifyShutdownParam(const StrVec &args) { parseShutdownParam(args); }
+inline void verifyDumpLogpackHeader(const StrVec &args) { parseVolIdAndLsidParam(args); }
 
 
 struct VolIdAndGidRangeParam

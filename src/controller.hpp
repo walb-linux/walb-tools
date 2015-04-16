@@ -331,6 +331,11 @@ inline void c2aBlockHashClient(protocol::ClientParams &p)
     std::cout << hash << std::endl;
 }
 
+inline void c2sDumpLogpackHeaderClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+}
+
 inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
 {
     static const protocol::GetCommandInfoMap m = {

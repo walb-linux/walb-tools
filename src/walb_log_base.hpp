@@ -276,6 +276,10 @@ public:
         header_->checksum = ::checksum((const uint8_t*)header_, pbs(), salt());
     }
 
+    template <typename Reader>
+    void rawReadFrom(Reader &reader) {
+        reader.read(header_, pbs_);
+    }
     /**
      * RETURN:
      *   false if read failed or invalid.
@@ -283,7 +287,7 @@ public:
     template <typename Reader>
     bool readFrom(Reader &reader) {
         try {
-            reader.read(header_, pbs_);
+            rawReadFrom<Reader>(reader);
         } catch (std::exception &e) {
             LOGs.debug() << NAME() << e.what();
             return false;

@@ -51,6 +51,12 @@ void setupVolIdGid(cybozu::Option& opt)
     static uint64_t gid;
     opt.appendParam(&gid, "gid");
 }
+void setupVolIdLsid(cybozu::Option& opt)
+{
+    setupVolId(opt);
+    static uint64_t lsid;
+    opt.appendParam(&lsid, "lsid");
+}
 void setupStart(cybozu::Option& opt)
 {
     setupVolId(opt);
@@ -183,6 +189,7 @@ const CommandInfo g_cmdTbl[] = {
     { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
     { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },
     { dbgSetBaseCN, c2aSetBaseClient, setupSetState, verifySetBaseParam, "set base(meta-state) for a volume in an archive (for debug)." },
+    { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderClient, setupVolIdLsid, verifyDumpLogpackHeader, "dump a logpack header block(for debug)." },
 };
 
 const CommandInfo* getCommand(const std::string& cmd)
