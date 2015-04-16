@@ -288,6 +288,27 @@ inline void flushBdevBufs(const std::string& path)
     cybozu::process::call("/sbin/blockdev", {"--flushbufs", path});
 }
 
+/*
+ * Parse integer from a string.
+ * Empty strings mean 0.
+ * Prefix "0x" means hex value.
+ */
+template <typename Int>
+inline void parseDecOrHexInt(const std::string& s, Int& v)
+{
+    if (s.empty()) {
+        v = 0;
+        return;
+    }
+    if (s.substr(0, 2) != "0x") {
+        v = cybozu::atoi(s);
+        return;
+    }
+    if (!cybozu::util::hexStrToInt(s.substr(2), v)) {
+        throw cybozu::Exception("hex string parse error") << s;
+    }
+}
+
 }} // walb::util
 
 inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)

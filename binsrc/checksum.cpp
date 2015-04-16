@@ -30,17 +30,7 @@ struct Option
             ::exit(1);
         }
 
-        if (saltStr.empty()) {
-            salt = 0;
-        } else {
-            if (saltStr.substr(0, 2) == "0x") {
-                if (!cybozu::util::hexStrToInt(saltStr.substr(2), salt)) {
-                    throw cybozu::Exception("hex string parse error") << saltStr;
-                }
-            } else {
-                salt = cybozu::atoi(saltStr);
-            }
-        }
+        util::parseDecOrHexInt(saltStr, salt);
         LOGs.debug() << "salt" << saltStr << salt
                      << cybozu::util::intToHexStr(salt);
     }
