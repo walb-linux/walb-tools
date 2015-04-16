@@ -180,9 +180,9 @@ const CommandInfo g_cmdTbl[] = {
     { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
     { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
     { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, "reload metadata of a volue in an archive (for debug)." },
-    { dbgSetUuid, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
-    { dbgSetState, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },
-    { dbgSetBase, c2aSetBaseClient, setupSetState, verifySetBaseParam, "set base(meta-state) for a volume in an archive (for debug)." },
+    { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
+    { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },
+    { dbgSetBaseCN, c2aSetBaseClient, setupSetState, verifySetBaseParam, "set base(meta-state) for a volume in an archive (for debug)." },
 };
 
 const CommandInfo* getCommand(const std::string& cmd)
