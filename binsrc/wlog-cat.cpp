@@ -22,6 +22,7 @@ struct Option
     bool dontShrink;
     bool isVerbose;
     bool isDebug;
+    bool doForce;
 
     Option(int argc, char* argv[])
         : wldevPath()
@@ -41,6 +42,7 @@ struct Option
         opt.appendBoolOpt(&dontShrink, "s", ": do not shrink logpack (ignoring log IO invalidness).");
         opt.appendBoolOpt(&isVerbose, "v", ": verbose output to stderr.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
+        opt.appendBoolOpt(&doForce, "f", ": ignore oldest lsid in the superblock.");
 
         opt.appendParam(&wldevPath, "LOG_DEVICE_PATH");
         opt.appendHelp("h", ": show this message.");
@@ -72,8 +74,11 @@ void catWldev(const Option& opt)
     device::SuperBlock &super = reader.super();
     const uint32_t pbs = super.pbs();
     const uint32_t salt = super.salt();
-    const uint64_t bgnLsid = std::max(opt.bgnLsid, super.getOldestLsid());
-
+    uint64_t bgnLsid = opt.bgnLsid;
+    const uint64_t oldestLsid = super.getOldestLsid();
+    if (!opt.doForce && bgnLsid < oldestLsid) {
+        bgnLsid = oldestLsid;
+    }
     cybozu::util::File fileW;
     setupOutputFile(fileW, opt);
     WlogWriter writer(std::move(fileW));
