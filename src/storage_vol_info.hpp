@@ -85,6 +85,9 @@ public:
     bool existsVolDir() const {
         return volDir_.stat().isDirectory();
     }
+    const cybozu::FilePath& getVolDir() const {
+        return volDir_;
+    }
     /**
      * get status as a string vector.
      */

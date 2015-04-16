@@ -727,6 +727,22 @@ inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
     return remainingPb == 0;
 }
 
+inline void dumpLogPackHeader(const std::string &volId, uint64_t lsid, const LogPackHeader &packH) noexcept
+{
+    try {
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        const cybozu::FilePath& volDir = volInfo.getVolDir();
+        cybozu::TmpFile tmpFile(volDir.str());
+        cybozu::util::File file(tmpFile.fd());
+        file.write(packH.rawData(), packH.pbs());
+        cybozu::FilePath outPath(volDir);
+        outPath += cybozu::util::formatString("logpackheader-%" PRIu64 "", lsid);
+        tmpFile.save(outPath.str());
+    } catch (std::exception &e) {
+        LOGs.error() << __func__ << volId << lsid << e.what();
+    }
+}
+
 /**
  * RETURN:
  *   true if there is remaining to send.
@@ -802,6 +818,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
         }
         if (lsid == lsidLimit) break;
         if (!readLogPackHeader(reader, packH, lsid)) {
+            dumpLogPackHeader(volId, lsid, packH); // for analysis.
             throw cybozu::Exception(FUNC) << "invalid logpack header" << volId << lsid;
         }
         verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);
