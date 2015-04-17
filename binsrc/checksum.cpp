@@ -53,7 +53,7 @@ int doMain(int argc, char* argv[])
     const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), opt.salt);
 
     if (opt.isHex) {
-        ::printf("%s\n", cybozu::util::intToHexStr(csum).c_str());
+        ::printf("%08x\n", csum);
     } else {
         ::printf("%u\n", csum);
     }
