@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/statvfs.h>
 #include <linux/fs.h>
 #include "util.hpp"
 
@@ -108,6 +109,19 @@ inline void issueDiscard(int fd, uint64_t offsetLb, uint64_t sizeLb)
     if (::ioctl(fd, BLKDISCARD, &range) < 0) {
         throw LibcError(errno, __func__);
     }
+}
+
+/**
+ * RETURN:
+ *   available disk space [byte].
+ */
+inline uint64_t getAvailableDiskSpace(const std::string& path)
+{
+    struct statvfs stvfs;
+    if (::statvfs(path.c_str(), &stvfs) < 0) {
+        throw LibcError(errno, __func__);
+    }
+    return stvfs.f_bavail * stvfs.f_bsize;
 }
 
 }} // namespace cybozu::util
