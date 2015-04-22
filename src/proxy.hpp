@@ -17,6 +17,7 @@
 #include "walb_log_net.hpp"
 #include "wdiff_transfer.hpp"
 #include "command_param_parser.hpp"
+#include "bdev_util.hpp"
 
 namespace walb {
 
@@ -228,6 +229,15 @@ inline void verifyMaxConversionMemory(const char *msg)
     if (gp.conversionUsageMb > gp.maxConversionMb) {
         throw cybozu::Exception(msg)
             << "exceeds max conversion memory size in MB" << gp.maxConversionMb;
+    }
+}
+
+inline void verifyDiskSpaceAvailable(uint64_t maxLogSizeMb, const char *msg)
+{
+    const uint64_t availMb = cybozu::util::getAvailableDiskSpace(gp.baseDirStr) / MEBI;
+    if (availMb < maxLogSizeMb) {
+        throw cybozu::Exception(msg)
+            << "Not enough available disk space" << availMb << maxLogSizeMb;
     }
 }
 
@@ -824,10 +834,12 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     UniqueLock ul(volSt.mu);
 
     ForegroundCounterTransaction foregroundTasksTran;
-    proxy_local::ConversionMemoryTransaction convTran(maxLogSizePb * pbs / MEBI);
+    const uint64_t maxLogSizeMb = maxLogSizePb * pbs / MEBI;
+    proxy_local::ConversionMemoryTransaction convTran(maxLogSizeMb);
     try {
         verifyMaxForegroundTasks(gp.maxForegroundTasks, FUNC);
         proxy_local::verifyMaxConversionMemory(FUNC);
+        proxy_local::verifyDiskSpaceAvailable(maxLogSizeMb, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
     } catch (std::exception &e) {
