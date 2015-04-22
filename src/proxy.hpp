@@ -834,7 +834,7 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     UniqueLock ul(volSt.mu);
 
     ForegroundCounterTransaction foregroundTasksTran;
-    const uint64_t maxLogSizeMb = maxLogSizePb * pbs / MEBI;
+    const uint64_t maxLogSizeMb = maxLogSizePb * pbs / MEBI + 1;
     proxy_local::ConversionMemoryTransaction convTran(maxLogSizeMb);
     try {
         verifyMaxForegroundTasks(gp.maxForegroundTasks, FUNC);
