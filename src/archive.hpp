@@ -16,6 +16,7 @@
 #include "wdiff_transfer.hpp"
 #include "command_param_parser.hpp"
 #include "discard_type.hpp"
+#include "walb_diff_io.hpp"
 
 namespace walb {
 
@@ -160,16 +161,23 @@ inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
 
 const bool allowEmpty = true;
 
+inline void prepareRawFullScanner(
+    cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb)
+{
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
+    if (sizeLb != lv.sizeLb()) {
+        throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
+    }
+    file.open(lv.path().str(), O_RDONLY);
+}
+
 inline void prepareVirtualFullScanner(
     VirtualFullScanner &virt, ArchiveVolState &volSt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
-    const char *const FUNC = __func__;
+    cybozu::util::File fileR;
+    prepareRawFullScanner(fileR, volSt, sizeLb);
 
-    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
-    if (sizeLb != lv.sizeLb()) {
-        throw cybozu::Exception(FUNC) << "bad sizeLb" << sizeLb << lv.sizeLb();
-    }
     std::vector<cybozu::util::File> fileV;
     MetaState st0;
     MetaDiffVec diffV;
@@ -178,7 +186,7 @@ inline void prepareVirtualFullScanner(
                 return volInfo.getDiffMgr().getDiffListToSync(st, snap);
             });
     LOGs.debug() << "virtual-full-scan-diffs" << st0 << diffV;
-    cybozu::util::File fileR(lv.path().str(), O_RDONLY);
+
     virt.init(std::move(fileR), std::move(fileV));
 }
 
@@ -191,26 +199,6 @@ inline void verifyApplicable(const std::string& volId, uint64_t gid)
     const MetaState st = volInfo.getMetaState();
     if (volSt.diffMgr.getDiffListToApply(st, gid).empty()) {
         throw cybozu::Exception(__func__) << "There is no diff to apply" << volId;
-    }
-}
-
-enum IoType
-{
-    Normal, Discard, Zero, Ignore,
-};
-
-inline IoType decideIoType(const DiffRecord& rec)
-{
-    if (rec.isNormal()) return Normal;
-    if (rec.isAllZero()) return Zero;
-    assert(rec.isDiscard());
-
-    switch (ga.discardType) {
-    case DiscardType::Passdown: return Discard;
-    case DiscardType::Ignore: return Ignore;
-    case DiscardType::Zero: return Zero;
-    default:
-        assert(false);
     }
 }
 
@@ -240,24 +228,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
 		if (ioAddress + ioBlocks > lvSnapSizeLb) {
 			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
 		}
-        const uint64_t ioAddrB = ioAddress * LOGICAL_BLOCK_SIZE;
-        const uint64_t ioSizeB = ioBlocks * LOGICAL_BLOCK_SIZE;
-
-        const int type = decideIoType(rec);
-        if (type == Ignore) continue;
-        if (type == Discard) {
-            cybozu::util::issueDiscard(file.fd(), ioAddress, ioBlocks);
-            continue;
-        }
-        const char *data;
-        if (type == Zero) {
-            if (zero.size() < ioSizeB) zero.resize(ioSizeB);
-            data = zero.data();
-        } else {
-            assert(type == Normal);
-            data = recIo.io().get();
-        }
-        file.pwrite(data, ioSizeB, ioAddrB);
+        issueIo(file, ga.discardType, rec, recIo.io(), zero);
     }
     file.fdatasync();
     file.close();
@@ -579,7 +550,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, snapFrom);
-        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFileP->fd(), volSt.stopState, ga.ps, volSt.progressLb);
+        isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, true, tmpFileP->fd(),
+                                   ga.discardType, volSt.stopState, ga.ps, volSt.progressLb);
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
             logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
@@ -794,8 +766,8 @@ inline bool runHashReplServer(
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
-    if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, tmpFile.fd(),
-                             volSt.stopState, ga.ps, volSt.progressLb)) {
+    if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, true, tmpFile.fd(),
+                             ga.discardType, volSt.stopState, ga.ps, volSt.progressLb)) {
         logger.warn() << "hash-repl-server force-stopped" << volId;
         return false;
     }
@@ -911,8 +883,120 @@ inline bool runDiffReplServer(
     return true;
 }
 
+inline bool runResyncReplClient(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
+{
+    const char *const FUNC = __func__;
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
+    const MetaState metaSt = volInfo.getOldestMetaState();
+    const cybozu::Uuid uuid = volInfo.getUuid();
+    const uint32_t hashSeed = uint32_t(metaSt.timestamp);
+    const cybozu::Uuid archiveUuid = volInfo.getArchiveUuid();
+
+    pkt.write(sizeLb);
+    pkt.write(bulkLb);
+    pkt.write(metaSt);
+    pkt.write(uuid);
+    pkt.write(archiveUuid);
+    pkt.write(hashSeed);
+    pkt.flush();
+    logger.debug() << "resync-repl-client" << sizeLb << bulkLb << metaSt << uuid << archiveUuid << hashSeed;
+
+    std::string res;
+    pkt.read(res);
+    if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
+
+    VirtualFullScanner virt;
+    archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, metaSt.snapB);
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps)) {
+        logger.warn() << "resync-repl-client force-stopped" << volId;
+        return false;
+    }
+    logger.info() << "resync-repl-client-mergeIn " << volId << virt.statIn();
+    logger.info() << "resync-repl-client-mergeOut" << volId << virt.statOut();
+    logger.info() << "resync-repl-client-mergeMemUsage" << volId << virt.memUsageStr();
+    logger.info() << "resync-repl-client done" << volId;
+    return true;
+}
+
+inline bool runResyncReplServer(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
+{
+    const char *const FUNC = __func__;
+    uint64_t sizeLb, bulkLb;
+    MetaState metaSt;
+    cybozu::Uuid uuid, archiveUuid;
+    uint32_t hashSeed;
+    try {
+        pkt.read(sizeLb);
+        pkt.read(bulkLb);
+        pkt.read(metaSt);
+        pkt.read(uuid);
+        pkt.read(archiveUuid);
+        pkt.read(hashSeed);
+        logger.debug() << "resync-repl-server" << sizeLb << bulkLb << metaSt << uuid << hashSeed;
+        if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
+        if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        verifyVolumeSize(volSt, volInfo, sizeLb, logger);
+    } catch (std::exception &e) {
+        pkt.write(e.what());
+        throw;
+    }
+    volSt.progressLb = 0;
+    ZeroResetter resetter(volSt.progressLb);
+    pkt.write(msgOk);
+    pkt.flush();
+
+    cybozu::Stopwatch stopwatch;
+
+    if (volSt.sm.get() == aArchived) {
+        StateMachineTransaction tran0(volSt.sm, aArchived, atStop, FUNC);
+        tran0.commit(aStopped);
+        StateMachineTransaction tran1(volSt.sm, aStopped, atResetVol, FUNC);
+        volInfo.setState(aSyncReady);
+        tran1.commit(aSyncReady);
+    }
+    StateMachineTransaction tran2(volSt.sm, aSyncReady, atResync, FUNC);
+    ul.unlock();
+
+    {
+        WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
+        wdiffs.clear();
+    }
+    {
+        cybozu::util::File reader;
+        prepareRawFullScanner(reader, volSt, sizeLb);
+        cybozu::util::File writer(volSt.lvCache.getLv().path().str(), O_RDWR);
+        /* Reader and writer indicates the same block device.
+           We must have independent file descriptors for them. */
+        if (!dirtyHashSyncServer(pkt, reader, sizeLb, bulkLb, uuid, hashSeed, false, writer.fd(),
+                                 ga.discardType, volSt.stopState, ga.ps, volSt.progressLb)) {
+            logger.warn() << "resync-repl-server force-stopped" << volId;
+            return false;
+        }
+    }
+    volInfo.setMetaState(metaSt);
+    volInfo.setUuid(uuid);
+    volInfo.setArchiveUuid(archiveUuid);
+    volSt.updateLastSyncTime();
+    volInfo.setState(aArchived);
+    tran2.commit(aArchived);
+    const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
+    logger.info() << "resync-repl-server done" << volId << elapsed;
+    return true;
+}
+
+enum {
+    DO_FULL_SYNC = 0,
+    DO_RESYNC = 1,
+    DO_HASH_OR_DIFF_SYNC = 2,
+};
+
 inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, bool isSize, uint64_t param, Logger &logger)
 {
+    const char *const FUNC = __func__;
     packet::Packet pkt(sock);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -920,21 +1004,31 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
 
     cybozu::Uuid archiveUuid = volInfo.getArchiveUuid();
     pkt.write(archiveUuid);
+    pkt.write(hostInfo.doResync);
     pkt.flush();
 
-    bool isFull;
-    pkt.read(isFull);
-    if (isFull) {
-        if (!runFullReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
-            return false;
-        }
-    }
-
-    // The server will verify archive uuid.
     std::string res;
     pkt.read(res);
     if (res != msgAccept) {
-        throw cybozu::Exception(__func__) << "not accept" << res;
+        throw cybozu::Exception(FUNC) << "not accept" << volId << res;
+    }
+
+    int kind;
+    pkt.read(kind);
+    if (kind == DO_FULL_SYNC) {
+        if (!runFullReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
+            return false;
+        }
+    } else if (kind == DO_RESYNC) {
+        if (!hostInfo.doResync) {
+            throw cybozu::Exception(FUNC)
+                << "bad response: resync is not allowed" << volId;
+        }
+        if (!runResyncReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
+            return false;
+        }
+    } else if (kind != DO_HASH_OR_DIFF_SYNC) {
+        throw cybozu::Exception(FUNC) << "bad resonse" << volId << kind;
     }
 
     for (;;) {
@@ -969,30 +1063,56 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
     return true;
 }
 
-inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Socket &sock, UniqueLock &ul, Logger &logger)
+/**
+ * ul is locked at the function beginning.
+ */
+inline bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLock &ul, Logger &logger)
 {
+    const char *const FUNC = __func__;
     packet::Packet pkt(sock);
-
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     cybozu::Uuid archiveUuid;
     pkt.read(archiveUuid);
+    bool canResync;
+    pkt.read(canResync);
 
-    pkt.write(isFull);
-    pkt.flush();
-    if (isFull) {
-        if (!runFullReplServer(volId, volSt, volInfo, pkt, archiveUuid, ul, logger)) return false;
+    int kind = DO_HASH_OR_DIFF_SYNC;
+    const std::string state = volSt.sm.get();
+    if (state == aSyncReady) {
+        if (canResync && volInfo.lvExists()) {
+            kind = DO_RESYNC;
+        } else {
+            kind = DO_FULL_SYNC;
+        }
+    } else {
+        // aArchived
+        if (volInfo.getArchiveUuid() != archiveUuid) {
+            kind = DO_RESYNC;
+        }
     }
-
-    try {
-        volInfo.verifyArchiveUuid(archiveUuid);
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        pkt.write(e.what());
+    if (!canResync && kind == DO_RESYNC) {
+        const char *msg = "resync is required but not allowed";
+        pkt.write(msg);
+        pkt.flush();
+        throw cybozu::Exception(FUNC) << msg << volId;
     }
     pkt.write(msgAccept);
+    pkt.write(kind);
     pkt.flush();
+
+    if (kind == DO_FULL_SYNC) {
+        if (!runFullReplServer(volId, volSt, volInfo, pkt, archiveUuid, ul, logger)) {
+            return false;
+        }
+    } else if (kind == DO_RESYNC) {
+        if (!runResyncReplServer(volId, volSt, volInfo, pkt, ul, logger)) {
+            return false;
+        }
+    } else {
+        assert(kind == DO_HASH_OR_DIFF_SYNC);
+    }
 
     for (;;) {
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
@@ -1892,14 +2012,13 @@ inline void a2aReplSyncServer(protocol::ServerParams &p)
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         const std::string stFrom = volSt.sm.get();
         verifyStateIn(stFrom, aAcceptForReplicateServer, FUNC);
-        const bool isFull = stFrom == aSyncReady;
 
         pkt.write(msgAccept);
         sendErr = false;
 
         logger.info() << "replication as server started" << volId;
         cybozu::Stopwatch stopwatch;
-        if (!archive_local::runReplSyncServer(volId, isFull, p.sock, ul, logger)) {
+        if (!archive_local::runReplSyncServer(volId, p.sock, ul, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
         }

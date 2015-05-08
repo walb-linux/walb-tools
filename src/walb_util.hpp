@@ -100,6 +100,10 @@ void makeDir(const std::string &dirStr, const char *msg,
 
 namespace walb_util_local {
 
+/**
+ * isDir: if true, get directories only.
+ *        othwerwise, get files only.
+ */
 inline StrVec getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "")
 {
     StrVec ret;

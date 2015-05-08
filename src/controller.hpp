@@ -243,14 +243,6 @@ inline void  c2aSetBaseClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
-/**
- * params[0] volId
- * params[1] sizeMbStr. allowed size of remaining wdiffs [MiB].
- * params[2] archiveAddrPortStr like "192.168.1.1:10000".
- * params[3] archiveCompressionOptStr like "snappy:0:1" (optional)
- * params[4] archiveMaxWdiffMergeSizeStr like "100M" (optional)
- * params[5] archiveBulkSizeStr like "1M" (optional)
- */
 inline void c2aReplicateClient(protocol::ClientParams &p)
 {
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgAccept);

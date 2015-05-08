@@ -22,6 +22,7 @@ const char *const atClearVol = "ClearVol";
 const char *const atResetVol = "ResetVol";
 const char *const atFullSync = "FullSync";
 const char *const atHashSync = "HashSync";
+const char *const atResync = "Resync";
 const char *const atWdiffRecv = "WdiffRecv";
 const char *const atReplSync = "ReplSyncAsServer";
 const char *const atStop = "Stop";
@@ -35,6 +36,8 @@ const struct StateMachine::Pair statePairTbl[] = {
 
     { aSyncReady, atFullSync },
     { atFullSync, aArchived },
+    { aSyncReady, atResync },
+    { atResync, aArchived },
 
     { aArchived, atHashSync },
     { atHashSync, aArchived },
@@ -83,6 +86,7 @@ const std::string RESTORE_TMP_SUFFIX = "_tmp";
 const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};
 const StrVec aActive = {aArchived, atHashSync, atWdiffRecv, atReplSync};
 const StrVec aActiveOrStopped = {aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped};
-const StrVec& aAcceptForResize = aActiveOrStopped;
+const StrVec aAcceptForResize = {aSyncReady, aArchived, atHashSync, atWdiffRecv, atReplSync, aStopped};
+
 
 } // namespace walb

@@ -31,6 +31,17 @@ inline MetaDiffVec loadWdiffMetadata(const std::string &dirStr)
     return ret;
 }
 
+inline void clearWdiffFiles(const std::string &dirStr)
+{
+    cybozu::FilePath dir(dirStr);
+    for (const std::string &fname : util::getFileNameList(dirStr, "wdiff")) {
+        cybozu::FilePath p = dir + fname;
+        if (!p.unlink()) {
+            LOGs.error() << "clearWdiffFiles:unlink failed" << p.str() << cybozu::ErrorNo();
+        }
+    }
+}
+
 /**
  * Manager for walb diff files.
  *
@@ -50,11 +61,17 @@ public:
     }
     /**
      * CAUSION:
-     *   All data inside the directory will be removed.
+     *   All wdiff files inside the directory will be removed.
      */
     void clear() {
         /* remove all wdiff files. */
+#if 0
         removeBeforeGid(uint64_t(-1));
+#else
+        // more robust.
+        clearWdiffFiles(dir_.str());
+        mgr_.clear();
+#endif
     }
     /**
      * CAUSION:

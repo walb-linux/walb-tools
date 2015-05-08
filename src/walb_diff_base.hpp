@@ -252,11 +252,12 @@ struct DiffIo
     }
 
 
-    void set(const DiffRecord &rec) {
+    void set(const DiffRecord &rec, const char *data0 = nullptr) {
         if (rec.isNormal()) {
             ioBlocks = rec.io_blocks;
             compressionType = rec.compression_type;
             data.resize(rec.data_size, false);
+            if (data0) ::memcpy(data.data(), data0, data.size());
         } else {
             ioBlocks = 0;
             compressionType = ::WALB_DIFF_CMPR_NONE;

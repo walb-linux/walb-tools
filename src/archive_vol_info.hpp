@@ -487,6 +487,13 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);
     }
+    MetaState getOldestMetaState() const {
+        MetaState metaSt = getMetaState();
+        const MetaDiffVec diffV = getDiffMgr().getMinimumApplicableDiffList(metaSt);
+        if (!diffV.empty()) metaSt = apply(metaSt, diffV);
+        assert(!metaSt.isApplying);
+        return metaSt;
+    }
     /**
      * @diffV: diff vector to be.
      */

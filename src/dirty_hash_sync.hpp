@@ -5,6 +5,8 @@
 #include "walb_diff_virt.hpp"
 #include "walb_diff_file.hpp"
 #include "walb_diff_compressor.hpp"
+#include "walb_diff_io.hpp"
+#include "discard_type.hpp"
 #include "fileio.hpp"
 #include "uuid.hpp"
 #include "murmurhash3.hpp"
@@ -87,11 +89,16 @@ inline bool dirtyHashSyncClient(
     return true;
 }
 
+/**
+ * doWriteDiff is true, outFd means oupput wdiff fd.
+ * otherwise, outFd means block device fd of full image store.
+ */
 template <typename Reader>
 inline bool dirtyHashSyncServer(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
-    int outDiffFd, const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb)
+    bool doWriteDiff, int outFd, DiscardType discardType,
+    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb)
 {
     const char *const FUNC = __func__;
 
@@ -128,9 +135,10 @@ inline bool dirtyHashSyncServer(
     cybozu::thread::ThreadRunner readerTh(readVirtualFullImageAndSendHash);
     readerTh.start();
 
-    cybozu::util::File fileW(outDiffFd);
+    cybozu::util::File fileW(outFd);
+    std::vector<char> zero;
 
-    {
+    if (doWriteDiff) {
         DiffFileHeader wdiffH;
         wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
         wdiffH.setUuid(uuid);
@@ -155,7 +163,12 @@ inline bool dirtyHashSyncServer(
         buf.resize(size);
         pkt.read(buf.data(), buf.size());
         verifyDiffPack(buf.data(), buf.size(), true);
-        fileW.write(buf.data(), buf.size());
+        if (doWriteDiff) {
+            fileW.write(buf.data(), buf.size());
+        } else {
+            MemoryDiffPack pack(buf.data(), buf.size());
+            issueDiffPack(fileW, discardType, pack, zero);
+        }
         writeSize += buf.size();
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
             fileW.fdatasync();
@@ -167,7 +180,11 @@ inline bool dirtyHashSyncServer(
         throw cybozu::Exception(FUNC) << "client sent an error";
     }
     assert(ctrl.isEnd());
-    writeDiffEofPack(fileW);
+    if (doWriteDiff) {
+        writeDiffEofPack(fileW);
+    } else {
+        fileW.fdatasync();
+    }
 
     readerTh.join();
     return !quit;

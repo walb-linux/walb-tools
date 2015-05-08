@@ -1849,7 +1849,7 @@ class Controller(object):
         if e:
             raise Exception(msg, 'gid must not be restorable', ax.name, vol, gid)
 
-    def replicate_once_nbk(self, aSrc, vol, aDst, syncOpt=None):
+    def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
@@ -1857,12 +1857,14 @@ class Controller(object):
         aSrc :: Server - source archive (as a client).
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
+        doResync :: bool - resync if necessary.
         syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - latest gid to replicate
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
+        verify_type(doResync, bool)
         if syncOpt:
             verify_type(syncOpt, SyncOpt)
 
@@ -1871,7 +1873,7 @@ class Controller(object):
             self._init(aDst, vol)
 
         gid = self.get_restorable_gid(aSrc, vol)[-1]
-        args = ['replicate', vol, "gid", str(gid), aDst.get_host_port()]
+        args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(), '1' if doResync else '0']
         if syncOpt:
             args += syncOpt.getReplicateArgs()
         self.run_ctl(aSrc, args)
@@ -1894,7 +1896,7 @@ class Controller(object):
         raise Exception("wait_for_replicated:replicate failed",
                         ax.name, vol, gid, gidL)
 
-    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, syncOpt=None):
+    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
@@ -1902,10 +1904,11 @@ class Controller(object):
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
         timeoutS :: int - timeout [sec].
+        doResync :: bool - resync if necessary.
         syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - replicated gid.
         '''
-        gid = self.replicate_once_nbk(aSrc, vol, aDst, syncOpt)
+        gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, syncOpt)
         self.wait_for_replicated(aDst, vol, gid, timeoutS)
         return gid
 
@@ -1939,7 +1942,7 @@ class Controller(object):
                 args += syncOpt.getArchiveInfoArgs()
             self.run_ctl(px, args)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS, syncOpt)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, False, syncOpt)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
@@ -2219,7 +2222,7 @@ class Controller(object):
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
-    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, syncOpt=None):
+    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, doResync=False, syncOpt=None):
         '''
         Replicate archive data by copying a volume from one archive to another.
         aSrc :: Server        - source archive server (as client).
@@ -2227,6 +2230,7 @@ class Controller(object):
         aDst :: Server        - destination archive server (as server).
         synchronizing :: bool - True if you want to make aDst synchronizing.
         timeoutS :: int       - timeout [sec].
+        doResync :: bool      - resync if necessary.
         syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
@@ -2234,7 +2238,7 @@ class Controller(object):
         verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(synchronizing, bool)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS, syncOpt)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, doResync, syncOpt)
         if synchronizing:
             self.synchronize(aSrc, vol, aDst, timeoutS, syncOpt)
 
