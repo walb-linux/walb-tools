@@ -24,6 +24,7 @@
 #include "walb_diff_merge.hpp"
 #include "wdev_util.hpp"
 #include "archive_constant.hpp"
+#include "random.hpp"
 
 namespace walb {
 
@@ -261,7 +262,10 @@ public:
     }
     void init() {
         util::makeDir(volDir.str(), "ArchiveVolInfo::init", true);
-        setUuid(cybozu::Uuid());
+        cybozu::Uuid uuid;
+        ::memset(uuid.rawData(), 0, uuid.rawSize());
+        setUuid(uuid);
+        setArchiveUuid(uuid);
         setMetaState(MetaState());
         setState(aSyncReady);
     }
@@ -305,6 +309,27 @@ public:
     }
     void setUuid(const cybozu::Uuid &uuid) {
         util::saveFile(volDir, "uuid", uuid);
+    }
+    cybozu::Uuid getArchiveUuid() const {
+        cybozu::Uuid uuid;
+        util::loadFile(volDir, "archive_uuid", uuid);
+        return uuid;
+    }
+    void setArchiveUuid(const cybozu::Uuid &uuid) {
+        util::saveFile(volDir, "archive_uuid", uuid);
+    }
+    cybozu::Uuid generateArchiveUuid() {
+        cybozu::Uuid uuid;
+        cybozu::util::Random<size_t> rand;
+        rand.fill(uuid.rawData(), uuid.rawSize());
+        setArchiveUuid(uuid);
+        return uuid;
+    }
+    void verifyArchiveUuid(const cybozu::Uuid &uuid) const {
+        const cybozu::Uuid archiveUuid = getArchiveUuid();
+        if (uuid == archiveUuid) return;
+        throw cybozu::Exception("ArchiveVolInfo::verifyArchiveUuid:invalid archive uuid")
+            << volId << uuid << archiveUuid;
     }
     void setMetaState(const MetaState &st) {
         util::saveFile(volDir, "base", st);
@@ -413,6 +438,8 @@ public:
         v.push_back(fmt("size %s", sizeS.c_str()));
         const cybozu::Uuid uuid = getUuid();
         v.push_back(fmt("uuid %s", uuid.str().c_str()));
+        const cybozu::Uuid archiveUuid = getArchiveUuid();
+        v.push_back(fmt("archiveUuid %s", archiveUuid.str().c_str()));
         const MetaState metaSt = getMetaState();
         v.push_back(fmt("base %s", metaSt.str().c_str()));
         const MetaSnap latest = wdiffs_.getMgr().getLatestSnapshot(metaSt);

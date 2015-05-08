@@ -533,7 +533,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     const std::string &stFrom = isFull ? aSyncReady : aArchived;
     MetaSnap snapFrom;
     try {
-        if (hostType != storageHT && hostType != archiveHT) {
+        if (hostType != storageHT) {
             throw cybozu::Exception(FUNC) << "invalid hostType" << hostType;
         }
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb is zero";
@@ -596,6 +596,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     if (isFull) {
         MetaState state(snapTo, curTime);
         volInfo.setMetaState(state);
+        volInfo.generateArchiveUuid();
     } else {
         /*
             if snapFrom is clean, then the snapshot must be restorable,
@@ -679,7 +680,7 @@ inline bool runFullReplClient(
 
 inline bool runFullReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
+    packet::Packet &pkt, const cybozu::Uuid &archiveUuid, UniqueLock &ul, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -703,9 +704,11 @@ inline bool runFullReplServer(
     pkt.write(msgOk);
     pkt.flush();
 
+
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
     ul.unlock();
+    volInfo.setArchiveUuid(archiveUuid);
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
@@ -915,12 +918,23 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
+    cybozu::Uuid archiveUuid = volInfo.getArchiveUuid();
+    pkt.write(archiveUuid);
+    pkt.flush();
+
     bool isFull;
     pkt.read(isFull);
     if (isFull) {
         if (!runFullReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
             return false;
         }
+    }
+
+    // The server will verify archive uuid.
+    std::string res;
+    pkt.read(res);
+    if (res != msgAccept) {
+        throw cybozu::Exception(__func__) << "not accept" << res;
     }
 
     for (;;) {
@@ -962,11 +976,24 @@ inline bool runReplSyncServer(const std::string &volId, bool isFull, cybozu::Soc
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
+    cybozu::Uuid archiveUuid;
+    pkt.read(archiveUuid);
+
     pkt.write(isFull);
     pkt.flush();
     if (isFull) {
-        if (!runFullReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
+        if (!runFullReplServer(volId, volSt, volInfo, pkt, archiveUuid, ul, logger)) return false;
     }
+
+    try {
+        volInfo.verifyArchiveUuid(archiveUuid);
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+    pkt.write(msgAccept);
+    pkt.flush();
+
     for (;;) {
         const MetaSnap latestSnap = volInfo.getLatestSnapshot();
         pkt.write(latestSnap);
@@ -1530,9 +1557,8 @@ inline void c2aStopServer(protocol::ServerParams &p)
 
 /**
  * Execute dirty full sync protocol as server.
- * Client is storage server or another archive server.
  */
-inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
+inline void s2aDirtyFullSyncServer(protocol::ServerParams &p)
 {
     const bool isFull = true;
     archive_local::backupServer(p, isFull);
@@ -1540,9 +1566,8 @@ inline void x2aDirtyFullSyncServer(protocol::ServerParams &p)
 
 /**
  * Execute dirty hash sync protocol as server.
- * Client is storage server or another archive server.
  */
-inline void x2aDirtyHashSyncServer(protocol::ServerParams &p)
+inline void s2aDirtyHashSyncServer(protocol::ServerParams &p)
 {
     const bool isFull = false;
     archive_local::backupServer(p, isFull);
@@ -1658,7 +1683,7 @@ inline void c2aReloadMetadataServer(protocol::ServerParams &p)
     }
 }
 
-inline void x2aWdiffTransferServer(protocol::ServerParams &p)
+inline void p2aWdiffTransferServer(protocol::ServerParams &p)
 {
     const char * const FUNC = __func__;
     ProtocolLogger logger(ga.nodeId, p.clientId);
@@ -2255,9 +2280,9 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { disableSnapshotCN, c2aDisableSnapshot },
     { enableSnapshotCN, c2aEnableSnapshot },
     // protocols.
-    { dirtyFullSyncPN, x2aDirtyFullSyncServer },
-    { dirtyHashSyncPN, x2aDirtyHashSyncServer },
-    { wdiffTransferPN, x2aWdiffTransferServer },
+    { dirtyFullSyncPN, s2aDirtyFullSyncServer },
+    { dirtyHashSyncPN, s2aDirtyHashSyncServer },
+    { wdiffTransferPN, p2aWdiffTransferServer },
     { replSyncPN, a2aReplSyncServer },
 };
 
