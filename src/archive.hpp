@@ -1296,6 +1296,17 @@ inline void existsDiff(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, s);
 }
 
+inline void existsBaseImage(protocol::GetCommandParams &p)
+{
+    const std::string volId = parseVolIdParam(p.params, 1);
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    const bool s = volInfo.lvExists();
+    ul.unlock();
+    protocol::sendValueAndFin(p, s);
+}
+
 inline void getNumAction(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -2369,6 +2380,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { applicableDiffTN, archive_local::getApplicableDiffList },
     { totalDiffSizeTN, archive_local::getTotalDiffSize },
     { existsDiffTN, archive_local::existsDiff },
+    { existsBaseImageTN, archive_local::existsBaseImage },
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },
     { restorableTN, archive_local::getRestorable },

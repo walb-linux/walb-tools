@@ -342,6 +342,7 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {applicableDiffTN, {protocol::StringVecType, verifyApplicableDiffParamForGet, "[volId (maxGid)]"}},
         {totalDiffSizeTN, {protocol::SizeType, verifyVolIdAndGidRangeParamForGet, "[volId (gidB (gidE))] get total diff size in a range."}},
         {existsDiffTN, {protocol::SizeType, verifyExistsDiffParamForGet, "[volId gid0 gid1 gid2 gid3]"}},
+        {existsBaseImageTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] 1 if base image exists, else 0."}},
         {restoredTN, {protocol::StringVecType, verifyVolIdParamForGet, "[volId] get restored clean snapshot list."}},
         {restorableTN, {protocol::StringVecType, verifyRestorableParamForGet, "[volId (all)] get restorable clean snapshot and timestamp list."}},
         {uuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get uuid of a volume."}},
