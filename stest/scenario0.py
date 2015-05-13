@@ -439,6 +439,40 @@ def test_n13():
         raise
 
 
+def test_n14():
+    '''
+        replicate a0 to a1
+        --> delete archive in a0
+        --> full backup to a0
+        --> confirm to fail normal replication a0 to a1
+        --> resync a0 to a1
+    '''
+    info = 'test_n14:resync: count:{}'.format(g_count)
+    try:
+        print_action_info('START', info)
+        walbc.replicate_once(a0, VOL, a1)
+        walbc.stop(a0, VOL)
+        walbc.clear(a0, VOL)
+        walbc.stop(s0, VOL)
+        write_random(wdev0.path, 1)
+        md0 = get_sha1(wdev0.path)
+        gid = walbc.full_backup(s0, VOL)
+        try:
+            walbc.replicate_once(a0, VOL, a1, doResync=False)
+            testFailed = True
+        except:
+            testFailed = False
+        if testFailed:
+            raise Exception('test_n14: must fail with doResync=False')
+        walbc.replicate_once(a0, VOL, a1, doResync=True)
+        restore_and_verify_sha1('test_n14:a0', md0, a0, VOL, gid)
+        restore_and_verify_sha1('test_n14:a1', md0, a1, VOL, gid)
+        print_action_info('SUCCESS', info)
+    except Exception:
+        print_action_info('FAILURE', info)
+        raise
+
+
 ###############################################################################
 # Misoperation scenario tests.
 ###############################################################################
@@ -1306,15 +1340,6 @@ def test_r3():
         raise
 
 
-'''
-QQQ
-    info = 'test_r: count:%d' % g_count
-    print_action_info('START', info)
-    print_action_info('SUCCESS', info)
-except Exception:
-    print_action_info('FAILURE', info)
-    raise
-'''
 def test_r4():
     """
         replace a1 by a2
@@ -1343,7 +1368,7 @@ def test_r4():
 
 
 allL = ['n1', 'n2', 'n3', 'n4b', 'n5', 'n6', 'n7', 'n8', 'n9',
-        'n10', 'n11a', 'n11b', 'n12', 'n13',
+        'n10', 'n11a', 'n11b', 'n12', 'n13', 'n14',
         'm1', 'm2', 'm3',
         'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8',
         'e9', 'e10', 'e11', 'e12', 'e13',
