@@ -454,7 +454,8 @@ def test_n14():
         walbc.stop(a0, VOL)
         walbc.clear(a0, VOL)
         walbc.stop(s0, VOL)
-        write_random(wdev0.path, 1)
+        write_random(wdev0.path, 1, offset=0)
+        write_random(wdev0.path, 2, offset=1)
         md0 = get_sha1(wdev0.path)
         gid = walbc.full_backup(s0, VOL)
         try:
