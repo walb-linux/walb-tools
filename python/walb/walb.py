@@ -262,6 +262,7 @@ aStopped = "Stopped"
 atInitVol = "InitVol"
 atClearVol = "ClearVol"
 atResetVol = "ResetVol"
+atResync = "Resync"
 atFullSync = "FullSync"
 atHashSync = "HashSync"
 atWdiffRecv = "WdiffRecv"
@@ -283,9 +284,9 @@ sDuringStopForStandby = [sStandby, stStopStandby]
 pActive = [pStarted, ptWlogRecv]
 pDuringStop = [pStarted, ptWlogRecv, ptStop, ptWaitForEmpty]
 aActive = [aArchived, atWdiffRecv, atHashSync, atReplSync]
-aAcceptForResize = aActive + [aStopped]
+aAcceptForResize = aActive + [aStopped, aSyncReady]
 aAcceptForClearVol = [aStopped, aSyncReady]
-aDuringReplicate = [atReplSync, atFullSync]
+aDuringReplicate = [atReplSync, atFullSync, atResync]
 aDuringStop = aActive + [atStop]
 aDuringFullSync = [atFullSync]
 aDuringHashSync = [atHashSync]
@@ -1901,22 +1902,25 @@ class Controller(object):
         self.run_ctl(aSrc, args)
         return gid
 
-    def wait_for_replicated(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
+    def wait_for_replicated(self, aSrc, vol, aDst, gid, timeoutS=TIMEOUT_SEC):
         '''
-        Wait for a snapshot is restorable at an archive server.
-        ax :: Server    - archive server as a replication server (not client).
-        vol :: str      - volume name.
+        Wait for replication action done.
+        aSrc :: Server    - archive server as a replication client.
+        vol :: str        - volume name.
+        aDst :: Server    - archive server as a replication server.
         gid :: int      - generation id.
         timeoutS :: int - timeout [sec].
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
+        verify_server_kind(aSrc, [K_ARCHIVE])
+        verify_server_kind(aDst, [K_ARCHIVE])
         verify_u64(gid)
-        self._wait_for_not_state(ax, vol, aDuringReplicate, timeoutS)
-        gidL = self.get_restorable_gid(ax, vol, 'all')
+        self._wait_for_no_action(aSrc, vol, aaReplSync, timeoutS)
+        self._wait_for_not_state(aDst, vol, aDuringReplicate, timeoutS)
+        gidL = self.get_restorable_gid(aDst, vol, 'all')
         if gidL and gid <= gidL[-1]:
             return
         raise Exception("wait_for_replicated:replicate failed",
-                        ax.name, vol, gid, gidL)
+                        aSrc.name, aDst.name, vol, gid, gidL)
 
     def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, syncOpt=None):
         '''
@@ -1931,7 +1935,7 @@ class Controller(object):
         return :: int  - replicated gid.
         '''
         gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, syncOpt)
-        self.wait_for_replicated(aDst, vol, gid, timeoutS)
+        self.wait_for_replicated(aSrc, vol, aDst, gid, timeoutS)
         return gid
 
     def synchronize(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, syncOpt=None):
