@@ -1461,9 +1461,9 @@ inline void getVolSize(protocol::GetCommandParams &p)
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
-    const std::string st = volSt.sm.get();
-    if (!isStateIn(st, aActive)) {
-        throw cybozu::Exception(FUNC) << "bad state" << volId << st;
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    if (!volInfo.lvExists()) {
+        throw cybozu::Exception(FUNC) << "base image does not exist" << volId;
     }
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     ul.unlock();
