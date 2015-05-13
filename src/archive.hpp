@@ -916,7 +916,7 @@ inline bool runResyncReplClient(
     logger.info() << "resync-repl-client-mergeIn " << volId << virt.statIn();
     logger.info() << "resync-repl-client-mergeOut" << volId << virt.statOut();
     logger.info() << "resync-repl-client-mergeMemUsage" << volId << virt.memUsageStr();
-    logger.info() << "resync-repl-client done" << volId;
+    logger.info() << "resync-repl-client done" << volId << metaSt;
     return true;
 }
 
@@ -982,9 +982,10 @@ inline bool runResyncReplServer(
     volInfo.setArchiveUuid(archiveUuid);
     volSt.updateLastSyncTime();
     volInfo.setState(aArchived);
+    ul.lock();
     tran2.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
-    logger.info() << "resync-repl-server done" << volId << elapsed;
+    logger.info() << "resync-repl-server done" << volId << metaSt << elapsed;
     return true;
 }
 
@@ -1351,7 +1352,7 @@ inline void getRestorable(protocol::GetCommandParams &p)
     p.logger.debug() << "get restorable succeeded" << volId;
 }
 
-inline void getUuid(protocol::GetCommandParams &p)
+inline void getUuidDetail(protocol::GetCommandParams &p, bool isArchive)
 {
     const char *const FUNC = __func__;
     const std::string volId = parseVolIdParam(p.params, 1);
@@ -1363,11 +1364,23 @@ inline void getUuid(protocol::GetCommandParams &p)
         throw cybozu::Exception(FUNC) << "bad state" << volId << st;
     }
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    const cybozu::Uuid uuid = volInfo.getUuid();
+    const cybozu::Uuid uuid = isArchive ? volInfo.getArchiveUuid() : volInfo.getUuid();
     ul.unlock();
     const std::string uuidStr = uuid.str();
     protocol::sendValueAndFin(p, uuidStr);
-    p.logger.debug() << "get uuid succeeded" << volId << uuidStr;
+    p.logger.debug()
+        << (isArchive ? "get archive-uuid succeeded" : "get uuid succeeded")
+        << volId << uuidStr;
+}
+
+inline void getUuid(protocol::GetCommandParams &p)
+{
+    getUuidDetail(p, false);
+}
+
+inline void getArchiveUuid(protocol::GetCommandParams &p)
+{
+    getUuidDetail(p, true);
 }
 
 inline void getBase(protocol::GetCommandParams &p)
@@ -2360,6 +2373,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { restoredTN, archive_local::getRestored },
     { restorableTN, archive_local::getRestorable },
     { uuidTN, archive_local::getUuid },
+    { archiveUuidTN, archive_local::getArchiveUuid },
     { baseTN, archive_local::getBase },
     { volSizeTN, archive_local::getVolSize },
     { progressTN, archive_local::getProgress },
