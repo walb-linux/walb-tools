@@ -1870,6 +1870,22 @@ class Controller(object):
             raise Exception('Archive uuids differ. Try call this with doResync=True',
                             ax.name, uuid0, ay.name, uuid1)
 
+    def _exists_base_image(self, ax, vol):
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        return int(self.run_ctl(ax, ['get', 'exists-base-image', vol])) != 0
+
+    def _grow_if_necessary_for_replicate(self, aSrc, vol, aDst):
+        if not self._exists_base_image(aDst, vol):
+            return
+        sizeSrc = self._get_vol_size_mb(aSrc, vol)
+        sizeDst = self._get_vol_size_mb(aDst, vol)
+        if sizeSrc < sizeDst:
+            raise Exception('Volume size of aDst is larger than that of aSrc',
+                            aSrc.name, sizeSrc, aDst.name, sizeDst)
+        elif sizeSrc > sizeDst:
+            self.resize_archive(aDst, vol, sizeSrc, False)
+
     def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
@@ -1895,13 +1911,7 @@ class Controller(object):
         elif st == aArchived and not doResync:
             self._verify_having_same_archive_uuid(aSrc, aDst, vol)
 
-        sizeSrc = self._get_vol_size_mb(aSrc, vol)
-        sizeDst = self._get_vol_size_mb(aDst, vol)
-        if sizeSrc < sizeDst:
-            raise Exception('Volume size of aDst is larger than that of aSrc',
-                            aSrc.name, sizeSrc, aDst.name, sizeDst)
-        elif sizeSrc > sizeDst:
-            self.resize_archive(aDst, vol, sizeSrc, False)
+        self._grow_if_necessary_for_replicate(aSrc, vol, aDst)
 
         gid = self.get_restorable_gid(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(), '1' if doResync else '0']
