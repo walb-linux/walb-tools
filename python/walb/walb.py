@@ -1381,6 +1381,16 @@ class Controller(object):
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'uuid', vol])
 
+    def get_archive_uuid(self, ax, vol):
+        '''
+        Get archive uuid string.
+        ax :: Server - archive.
+        return :: str - uuid string that regex pattern [0-9a-f]{32}.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        return self.run_ctl(ax, ['get', 'archive-uuid', vol])
+
     def status(self, sL=None, vol=None, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         print server status.
@@ -1849,6 +1859,16 @@ class Controller(object):
         if e:
             raise Exception(msg, 'gid must not be restorable', ax.name, vol, gid)
 
+    def _verify_having_same_archive_uuid(self, ax, ay, vol):
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_server_kind(ay, [K_ARCHIVE])
+        verify_type(vol, str)
+        uuid0 = self.get_archive_uuid(ax, vol)
+        uuid1 = self.get_archive_uuid(ay, vol)
+        if uuid0 != uuid1:
+            raise Exception('Archive uuids differ. Try call this with doResync=True',
+                            ax.name, uuid0, ay.name, uuid1)
+
     def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
@@ -1871,6 +1891,8 @@ class Controller(object):
         st = self.get_state(aDst, vol)
         if st == aClear:
             self._init(aDst, vol)
+        elif st == aArchived and not doResync:
+            self._verify_having_same_archive_uuid(aSrc, aDst, vol)
 
         gid = self.get_restorable_gid(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(), '1' if doResync else '0']
