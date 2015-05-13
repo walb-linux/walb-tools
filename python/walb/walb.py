@@ -1895,6 +1895,14 @@ class Controller(object):
         elif st == aArchived and not doResync:
             self._verify_having_same_archive_uuid(aSrc, aDst, vol)
 
+        sizeSrc = self._get_vol_size_mb(aSrc, vol)
+        sizeDst = self._get_vol_size_mb(aDst, vol)
+        if sizeSrc < sizeDst:
+            raise Exception('Volume size of aDst is larger than that of aSrc',
+                            aSrc.name, sizeSrc, aDst.name, sizeDst)
+        elif sizeSrc > sizeDst:
+            self.resize_archive(aDst, vol, sizeSrc, False)
+
         gid = self.get_restorable_gid(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(), '1' if doResync else '0']
         if syncOpt:
