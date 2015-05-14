@@ -228,7 +228,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
 		if (ioAddress + ioBlocks > lvSnapSizeLb) {
 			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
 		}
-        issueIo(file, ga.discardType, rec, recIo.io(), zero);
+        issueIo(file, ga.discardType, rec, recIo.io().get(), zero);
     }
     file.fdatasync();
     file.close();

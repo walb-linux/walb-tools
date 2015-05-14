@@ -32,11 +32,11 @@ inline IoType decideIoType(const DiffRecord& rec, DiscardType discardType)
 
 /**
  * It's allowed that rec's checksum may not valid.
+ * @zero is used as zero-filled buffer. It may be resized.
  */
-inline void issueIo(cybozu::util::File& file, DiscardType discardType, const DiffRecord& rec, const DiffIo& io, std::vector<char>& zero)
+inline void issueIo(cybozu::util::File& file, DiscardType discardType, const DiffRecord& rec, const char *iodata, std::vector<char>& zero)
 {
     assert(!rec.isCompressed());
-    assert(!io.isCompressed());
     const int type = decideIoType(rec, discardType);
     if (type == Ignore) return;
     if (type == Discard) {
@@ -50,30 +50,35 @@ inline void issueIo(cybozu::util::File& file, DiscardType discardType, const Dif
         data = zero.data();
     } else {
         assert(type == Normal);
-        data = io.get();
+        assert(iodata != nullptr);
+        data = iodata;
     }
     file.pwrite(data, ioSizeB, rec.io_address * LOGICAL_BLOCK_SIZE);
 }
 
+/*
+ * @zero is used as zero-filled buffer. It may be resized.
+ */
 inline void issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiffPack& pack, std::vector<char>& zero)
 {
     const DiffPackHeader& head = pack.header();
     DiffRecord rec;
-    DiffIo io;
+    AlignedArray array; // buffer for uncompressed data.
     for (size_t i = 0; i < head.n_records; i++) {
         const DiffRecord& inRec = head[i];
+        const char *iodata = nullptr;
         if (inRec.isNormal()) {
             if (inRec.isCompressed()) {
-                uncompressDiffIo(inRec, pack.data(i), rec, io.data, false);
-                io.set(rec);
+                uncompressDiffIo(inRec, pack.data(i), rec, array, false);
+                iodata = array.data();
             } else {
                 rec = inRec;
-                io.set(rec, pack.data(i));
+                iodata = pack.data(i);
             }
         } else {
             rec = inRec;
         }
-        issueIo(file, discardType, rec, io, zero);
+        issueIo(file, discardType, rec, iodata, zero);
     }
 }
 
