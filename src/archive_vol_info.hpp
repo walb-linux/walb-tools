@@ -25,6 +25,7 @@
 #include "wdev_util.hpp"
 #include "archive_constant.hpp"
 #include "random.hpp"
+#include "full_repl_state.hpp"
 
 namespace walb {
 
@@ -357,6 +358,45 @@ public:
         util::loadFile(volDir, "state", st);
         return st;
     }
+    const char *getFullReplStateFileName() const {
+        static const char name[] = "full_repl_state";
+        return name;
+    }
+    cybozu::FilePath getFullReplStateFilePath() const {
+        return volDir + cybozu::FilePath(getFullReplStateFileName());
+    }
+    bool getFullReplState(FullReplState& fullReplSt) const {
+        const cybozu::FilePath path = getFullReplStateFilePath();
+        if (!path.stat().exists()) return false;
+        util::loadFile(volDir, getFullReplStateFileName(), fullReplSt);
+        return true;
+    }
+    void removeFullReplState() {
+        const cybozu::FilePath path = getFullReplStateFilePath();
+        if (!path.stat().exists()) return;
+        if (!path.unlink()) {
+            throw cybozu::Exception("ArchiveVolInfo::removeFullReplState:unlink failed")
+                << cybozu::ErrorNo();
+        }
+    }
+    void setFullReplState(const FullReplState& fullReplSt) {
+        util::saveFile(volDir, getFullReplStateFileName(), fullReplSt);
+    }
+    uint64_t initFullReplResume(uint64_t sizeLb, const cybozu::Uuid& archiveUuid, const MetaState& metaSt, FullReplState& fullReplSt) {
+        uint64_t startLb;
+        if (getFullReplState(fullReplSt) && archiveUuid == getArchiveUuid()
+            && metaSt == fullReplSt.metaSt && fullReplSt.progressLb <= sizeLb) {
+            // resume.
+            startLb = fullReplSt.progressLb;
+        } else {
+            // restart.
+            startLb = 0;
+            fullReplSt.progressLb = 0;
+            fullReplSt.metaSt = metaSt;
+        }
+        fullReplSt.timestamp = ::time(0);
+        return startLb;
+    }
     bool existsVolDir() const {
         return volDir.stat().isDirectory();
     }
@@ -456,6 +496,13 @@ public:
         uint64_t totalSize = 0;
         for (const MetaDiff &d : dv) totalSize += d.dataSize;
         v.push_back(fmt("wdiffTotalSize %" PRIu64 "", totalSize));
+
+        FullReplState fullReplSt;
+        if (getFullReplState(fullReplSt)) {
+            v.push_back(fmt("fullReplState %s", fullReplSt.str().c_str()));
+        } else {
+            v.push_back(fmt("fullReplState None"));
+        }
         return v;
     }
     std::string restoredSnapshotName(uint64_t gid) const {

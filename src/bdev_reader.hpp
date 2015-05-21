@@ -144,16 +144,18 @@ public:
     static constexpr const char * NAME() { return "AsyncBdevReader"; }
     /**
      * @bdevPath block device path.
+     * @offsetLb start offset [logical block]
      * @bufferSize buffer size to read ahead [byte].
      * @maxIoSize max IO size [byte].
      *   maxioSize <= bufferSize must be satisfied.
      */
     AsyncBdevReader(const std::string &bdevPath,
+                    uint64_t offsetLb = 0,
                     size_t bufferSize = DEFAULT_BUFFER_SIZE,
                     size_t maxIoSize = DEFAULT_MAX_IO_SIZE)
         : file_(bdevPath, O_RDONLY | O_DIRECT)
         , pbs_(cybozu::util::getPhysicalBlockSize(file_.fd()))
-        , devOffset_(0)
+        , devOffset_(offsetLb * LOGICAL_BLOCK_SIZE)
         , devTotal_(cybozu::util::getBlockDeviceSize(file_.fd()))
         , maxIoSize_(maxIoSize)
         , ringBuf_()

@@ -627,7 +627,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
                       << "started" << volId << archiveId;
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
-            if (!dirtyFullSyncClient(aPkt, bdevPath, sizeLb, bulkLb, volSt.stopState, gs.ps)) {
+            if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, volSt.stopState, gs.ps)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }

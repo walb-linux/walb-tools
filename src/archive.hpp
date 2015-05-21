@@ -544,7 +544,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         volInfo.createLv(sizeLb);
         const std::string lvPath = volSt.lvCache.getLv().path().str();
         const bool skipZero = isThinpool();
-        isOk = dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero);
+        isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
@@ -640,9 +640,12 @@ inline bool runFullReplClient(
     std::string res;
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
+    uint64_t startLb;
+    pkt.read(startLb);
+    logger.info() << "full-repl-client startLb" << startLb;
 
     const std::string lvPath = lv.path().str();
-    if (!dirtyFullSyncClient(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
+    if (!dirtyFullSyncClient(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
         logger.warn() << "full-repl-client force-stopped" << volId;
         return false;
     }
@@ -671,11 +674,15 @@ inline bool runFullReplServer(
         pkt.write(e.what());
         throw;
     }
-    volSt.progressLb = 0;
+    FullReplState fullReplSt;
+    const uint64_t startLb = volInfo.initFullReplResume(sizeLb, archiveUuid, metaSt, fullReplSt);
+    logger.info() << "full-repl-server startLb" << startLb;
+    volSt.progressLb = startLb;
     ZeroResetter resetter(volSt.progressLb);
-    pkt.write(msgOk);
-    pkt.flush();
 
+    pkt.write(msgOk);
+    pkt.write(startLb);
+    pkt.flush();
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
@@ -684,7 +691,8 @@ inline bool runFullReplServer(
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
-    if (!dirtyFullSyncServer(pkt, lvPath, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero)) {
+    if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero,
+                             &fullReplSt, volInfo.volDir, volInfo.getFullReplStateFileName())) {
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }
@@ -692,6 +700,7 @@ inline bool runFullReplServer(
     volInfo.setMetaState(metaSt);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
+    volInfo.removeFullReplState();
     volInfo.setState(aArchived);
     tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());

@@ -6,25 +6,29 @@
 #include "fileio.hpp"
 #include "walb_logger.hpp"
 #include "bdev_reader.hpp"
+#include "full_repl_state.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {
 
 /**
+ * sizeLb is total size.
+ *
  * RETURN:
  *   false if force stopped.
  */
 inline bool dirtyFullSyncClient(
     packet::Packet &pkt, const std::string &bdevPath,
-    uint64_t sizeLb, uint64_t bulkLb,
+    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb,
     const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
+    assert(startLb <= sizeLb);
     AlignedArray buf(bulkLb * LOGICAL_BLOCK_SIZE);
-    AsyncBdevReader reader(bdevPath);
+    AsyncBdevReader reader(bdevPath, startLb);
     std::string encBuf;
 
     uint64_t c = 0;
-    uint64_t remainingLb = sizeLb;
+    uint64_t remainingLb = sizeLb - startLb;
     while (0 < remainingLb) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
@@ -68,23 +72,37 @@ inline void uncompress(const AlignedArray &src, AlignedArray &dst, const char *m
 } // namespace dirty_full_sync
 
 /**
+ * sizeLb is total size.
+ * fullReplSt, fullReplStDir, and fullREplStFileName must be specified together.
+ *
  * RETURN:
  *   false if force stopped.
  */
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
-    uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb, bool skipZero)
+    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb,
+    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb, bool skipZero,
+    FullReplState *fullReplSt = nullptr, const cybozu::FilePath &fullReplStDir = cybozu::FilePath(),
+    const std::string &fullReplStFileName = "")
 {
     const char *const FUNC = __func__;
+    assert(startLb <= sizeLb);
+    if (fullReplSt) {
+        assert(fullReplStDir.stat().isDirectory());
+        assert(!fullReplStFileName.empty());
+    }
     cybozu::util::File file(bdevPath, O_RDWR);
+    if (startLb != 0) {
+        file.lseek(startLb * LOGICAL_BLOCK_SIZE);
+    }
     const AlignedArray zeroBuf(bulkLb * LOGICAL_BLOCK_SIZE, true);
     AlignedArray buf(bulkLb * LOGICAL_BLOCK_SIZE);
     AlignedArray encBuf;
 
+    progressLb = startLb;
     uint64_t c = 0;
-    uint64_t remainingLb = sizeLb;
-	uint64_t writeSize = 0;
+    uint64_t remainingLb = sizeLb - startLb;
+    uint64_t writeSize = 0;
     while (0 < remainingLb) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
@@ -112,6 +130,10 @@ inline bool dirtyFullSyncServer(
 		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
             file.fdatasync();
             writeSize = 0;
+            if (fullReplSt) {
+                fullReplSt->progressLb = progressLb;
+                util::saveFile(fullReplStDir, fullReplStFileName, *fullReplSt);
+            }
 		}
         c++;
     }
