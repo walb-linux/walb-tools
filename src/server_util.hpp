@@ -71,7 +71,7 @@ public:
                 if (ret == 0) continue; // timeout
                 if (ret == -EINTR) {
                     LOGs.info() << FUNC << "queryAccept:interrupted";
-                    goto quit;
+                    continue;
                 }
                 throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
             }
