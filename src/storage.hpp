@@ -166,33 +166,33 @@ struct StorageSingleton
     using Str2Str = std::map<std::string, std::string>;
     using AutoLock = std::lock_guard<std::mutex>;
     void addWdevName(const std::string& wdevName, const std::string& volId)
-    {
-        AutoLock al(wdevName2VolIdMutex);
-        Str2Str::iterator i;
-        bool maked;
-        std::tie(i, maked) = wdevName2volId.insert(std::make_pair(wdevName, volId));
-        if (!maked) throw cybozu::Exception("StorageSingleton:addWdevName:already exists") << wdevName << volId;
-    }
+        {
+            AutoLock al(wdevName2VolIdMutex);
+            Str2Str::iterator i;
+            bool maked;
+            std::tie(i, maked) = wdevName2volId.insert(std::make_pair(wdevName, volId));
+            if (!maked) throw cybozu::Exception("StorageSingleton:addWdevName:already exists") << wdevName << volId;
+        }
     void delWdevName(const std::string& wdevName)
-    {
-        AutoLock al(wdevName2VolIdMutex);
-        Str2Str::iterator i = wdevName2volId.find(wdevName);
-        if (i == wdevName2volId.end()) throw cybozu::Exception("StorageSingleton:delWdevName:not found") << wdevName;
-        wdevName2volId.erase(i);
-    }
+        {
+            AutoLock al(wdevName2VolIdMutex);
+            Str2Str::iterator i = wdevName2volId.find(wdevName);
+            if (i == wdevName2volId.end()) throw cybozu::Exception("StorageSingleton:delWdevName:not found") << wdevName;
+            wdevName2volId.erase(i);
+        }
     std::string getVolIdFromWdevName(const std::string& wdevName) const
-    {
-        AutoLock al(wdevName2VolIdMutex);
-        Str2Str::const_iterator i = wdevName2volId.find(wdevName);
-        if (i == wdevName2volId.cend()) throw cybozu::Exception("StorageSingleton:getWvolIdFromWdevName:not found") << wdevName;
-        return i->second;
-    }
+        {
+            AutoLock al(wdevName2VolIdMutex);
+            Str2Str::const_iterator i = wdevName2volId.find(wdevName);
+            if (i == wdevName2volId.cend()) throw cybozu::Exception("StorageSingleton:getWvolIdFromWdevName:not found") << wdevName;
+            return i->second;
+        }
     bool existsWdevName(const std::string& wdevName) const
-    {
-        AutoLock al(wdevName2VolIdMutex);
-        Str2Str::const_iterator i = wdevName2volId.find(wdevName);
-        return i != wdevName2volId.end();
-    }
+        {
+            AutoLock al(wdevName2VolIdMutex);
+            Str2Str::const_iterator i = wdevName2volId.find(wdevName);
+            return i != wdevName2volId.end();
+        }
 private:
     mutable std::mutex wdevName2VolIdMutex;
     Str2Str wdevName2volId;
@@ -370,8 +370,8 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     v.push_back(fmt("isUnderMonitoring %d", isUnderMonitoring(volInfo.getWdevPath())));
     for (std::string& s : volInfo.getStatusAsStrVec(isVerbose)) {
-		v.push_back(std::move(s));
-	}
+        v.push_back(std::move(s));
+    }
     return v;
 }
 
@@ -457,7 +457,7 @@ inline void c2sStartServer(protocol::ServerParams &p)
 
     try {
         const StartParam param = parseStartParam(protocol::recvStrVec(p.sock, 2, FUNC), true);
-	    const std::string &volId = param.volId;
+        const std::string &volId = param.volId;
         const bool isTarget = param.isTarget;
 
         StorageVolState &volSt = getStorageVolState(volId);

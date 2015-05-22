@@ -129,15 +129,15 @@ inline bool dirtyFullSyncServer(
         }
         remainingLb -= lb;
         progressLb += lb;
-		writeSize += size;
-		if (writeSize >= fsyncIntervalSize) {
+        writeSize += size;
+        if (writeSize >= fsyncIntervalSize) {
             file.fdatasync();
             writeSize = 0;
             if (fullReplSt) {
                 fullReplSt->progressLb = progressLb;
                 util::saveFile(fullReplStDir, fullReplStFileName, *fullReplSt);
             }
-		}
+        }
         c++;
     }
     LOGs.debug() << "fdatasync start";

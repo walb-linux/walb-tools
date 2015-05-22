@@ -168,7 +168,7 @@ public:
      * Before that, delete the corresponding MetaDidf from diffMgr.
      */
     void deleteDiffs(const MetaDiffVec &diffV, const std::string& archiveName = "") {
-		const bool isReceived = archiveName.empty();
+        const bool isReceived = archiveName.empty();
         MetaDiffManager& mgr = isReceived ? diffMgr_ : diffMgrMap_.get(archiveName);
         WalbDiffFiles wdiffs(mgr, isReceived ? getReceivedDir().str() : getSendtoDir(archiveName).str());
         wdiffs.removeDiffs(diffV);

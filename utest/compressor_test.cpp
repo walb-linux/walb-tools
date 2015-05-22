@@ -78,13 +78,13 @@ std::vector<AlignedArray> generateRawPacks()
 
     /* Convert memory data to raw pack list. */
     const DiffMemory::Map& map = diffMem0.getMap();
-	for (const auto& i : map) {
-		const DiffRecIo& recIo = i.second;
+    for (const auto& i : map) {
+        const DiffRecIo& recIo = i.second;
         if (!packer.add(recIo.record(), recIo.io().get())) {
             packV0.push_back(packer.getPackAsArray());
             packer.add(recIo.record(), recIo.io().get());
         }
-	}
+    }
     if (!packer.empty()) {
         packV0.push_back(packer.getPackAsArray());
     }

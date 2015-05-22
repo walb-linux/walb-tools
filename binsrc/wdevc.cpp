@@ -167,7 +167,7 @@ struct CreateWdev : CommandBase {
         struct walb_ctl ctl;
         memset(&ctl, 0, sizeof(ctl));
         ctl.command = WALB_IOCTL_START_DEV,
-        ctl.u2k.wminor = WALB_DYNAMIC_MINOR;
+            ctl.u2k.wminor = WALB_DYNAMIC_MINOR;
         ctl.u2k.buf_size = sizeof(struct walb_start_param);
         ctl.u2k.buf = (void *)&u2k;
         ctl.k2u.buf_size = sizeof(struct walb_start_param);
@@ -198,9 +198,9 @@ struct CreateWdev : CommandBase {
         assert(::strnlen(k2u.name, DISK_NAME_LEN) < DISK_NAME_LEN);
 
         ::printf("name %s\n"
-             "major %u\n"
-             "minor %u\n"
-             , k2u.name, ctl.k2u.wmajor, ctl.k2u.wminor);
+                 "major %u\n"
+                 "minor %u\n"
+                 , k2u.name, ctl.k2u.wmajor, ctl.k2u.wminor);
         LOGs.debug() << "create-wdev done";
         return 0;
     }
@@ -333,9 +333,9 @@ struct GetLsid : CommandBase {
         return 0;
     }
 } g_getOldestLsid(WALB_IOCTL_GET_OLDEST_LSID),
-  g_getWrittenLsid(WALB_IOCTL_GET_WRITTEN_LSID),
-  g_getPermanentLsid(WALB_IOCTL_GET_PERMANENT_LSID),
-  g_getCompletedLsid(WALB_IOCTL_GET_COMPLETED_LSID);
+                     g_getWrittenLsid(WALB_IOCTL_GET_WRITTEN_LSID),
+                     g_getPermanentLsid(WALB_IOCTL_GET_PERMANENT_LSID),
+                     g_getCompletedLsid(WALB_IOCTL_GET_COMPLETED_LSID);
 
 template<class R>
 struct GetWdevVal : CommandBase {
@@ -476,9 +476,9 @@ struct GetVersion : CommandBase {
         }
         file.close();
         ::printf("%u.%u.%u\n"
-             , (version & 0x00ff0000) >> 16
-             , (version & 0x0000ff00) >> 8
-             , (version & 0x000000ff));
+                 , (version & 0x00ff0000) >> 16
+                 , (version & 0x0000ff00) >> 8
+                 , (version & 0x000000ff));
         return 0;
     }
 } g_getVersion;
@@ -562,26 +562,26 @@ class Dispatcher {
     }
 public:
     int run(int argc, char *argv[])
-    {
-        const int cmdPos = parse1(argc, argv);
-        if (cmdPos == 0) {
-            opt1.usage();
-            return 1;
+        {
+            const int cmdPos = parse1(argc, argv);
+            if (cmdPos == 0) {
+                opt1.usage();
+                return 1;
+            }
+            const char *cmdName = argv[cmdPos - 1];
+            if (!opt2.parse(argc, argv, cmdPos)) {
+                opt2.usage();
+                return 1;
+            }
+            if (isDebug) {
+                std::cerr << "common options" << std::endl;
+                std::cerr << opt1 << std::endl;
+                std::cerr << "options for " << cmdName << std::endl;
+                std::cerr << opt2;
+            }
+            walb::util::setLogSetting("-", isDebug);
+            return ci->cmd->run();
         }
-        const char *cmdName = argv[cmdPos - 1];
-        if (!opt2.parse(argc, argv, cmdPos)) {
-            opt2.usage();
-            return 1;
-        }
-        if (isDebug) {
-			std::cerr << "common options" << std::endl;
-            std::cerr << opt1 << std::endl;
-            std::cerr << "options for " << cmdName << std::endl;
-            std::cerr << opt2;
-        }
-        walb::util::setLogSetting("-", isDebug);
-        return ci->cmd->run();
-    }
 };
 
 int doMain(int argc, char* argv[])

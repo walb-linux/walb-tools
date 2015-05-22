@@ -210,7 +210,7 @@ inline void run1stNegotiateAsServer(
 struct ServerParams
 {
     cybozu::Socket &sock;
-	const std::string& clientId;
+    const std::string& clientId;
     walb::ProcessStatus &ps;
 
     ServerParams(
@@ -218,7 +218,7 @@ struct ServerParams
         const std::string &clientId,
         walb::ProcessStatus &ps)
         : sock(sock)
-		, clientId(clientId)
+        , clientId(clientId)
         , ps(ps) {
     }
 };

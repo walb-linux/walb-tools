@@ -147,7 +147,7 @@ public:
 
             size_t size0 = 0;
             size_t size1 = 0;
-			const bool recIsNormal = rec_.isNormal();
+            const bool recIsNormal = rec_.isNormal();
             if (recIsNormal) {
                 size0 = blks0 * LOGICAL_BLOCK_SIZE;
                 size1 = blks1 * LOGICAL_BLOCK_SIZE;
@@ -287,7 +287,7 @@ public:
         while (!q.empty()) {
             std::vector<DiffRecIo> v = q.front().minus(r0);
             for (DiffRecIo &r : v) {
-				const DiffRecord& dr = r.record();
+                const DiffRecord& dr = r.record();
                 nIos_++;
                 nBlocks_ += dr.io_blocks;
                 map_.emplace(dr.io_address, std::move(r));
@@ -395,15 +395,15 @@ public:
     }
     const Map& getMap() const { return map_; }
     Map& getMap() { return map_; }
-	void eraseFromMap(Map::iterator& i)
-	{
+    void eraseFromMap(Map::iterator& i)
+    {
         nIos_--;
         nBlocks_ -= i->second.record().io_blocks;
         i = map_.erase(i);
         if (map_.empty()) {
             fileH_.resetMaxIoBlocks();
         }
-	}
+    }
 };
 
 } //namespace walb

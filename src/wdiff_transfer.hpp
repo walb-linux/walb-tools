@@ -93,10 +93,10 @@ inline bool wdiffTransferServer(
         verifyDiffPack(buf.data(), buf.size(), true);
         fileW.write(buf.data(), buf.size());
         writeSize += buf.size();
-		if (writeSize >= fsyncIntervalSize) {
+        if (writeSize >= fsyncIntervalSize) {
             fileW.fdatasync();
             writeSize = 0;
-		}
+        }
         ctrl.reset();
     }
     if (!ctrl.isEnd()) {

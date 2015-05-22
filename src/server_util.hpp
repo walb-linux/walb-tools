@@ -47,10 +47,10 @@ private:
             && (sigaction(SIGQUIT, &sa, NULL) == 0)
             && (sigaction(SIGABRT, &sa, NULL) == 0)
             && (sigaction(SIGTERM, &sa, NULL) == 0);
-		if (!isOK) {
+        if (!isOK) {
             LOGs.error() << "can't set sigaction";
-			exit(1);
-		}
+            exit(1);
+        }
     }
 
 public:

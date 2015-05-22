@@ -215,7 +215,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     DiffRecIo recIo;
     cybozu::util::File file(lv.path().str(), O_RDWR);
     std::vector<char> zero;
-	const uint64_t lvSnapSizeLb = lv.sizeLb();
+    const uint64_t lvSnapSizeLb = lv.sizeLb();
     while (merger.getAndRemove(recIo)) {
         if (stopState == ForceStopping || ga.ps.isForceShutdown()) {
             return false;
@@ -225,10 +225,10 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
         assert(!rec.isCompressed());
         const uint64_t ioAddress = rec.io_address;
         const uint64_t ioBlocks = rec.io_blocks;
-		//LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
-		if (ioAddress + ioBlocks > lvSnapSizeLb) {
-			throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
-		}
+        //LOGs.debug() << "ioAddress" << ioAddress << "ioBlocks" << ioBlocks;
+        if (ioAddress + ioBlocks > lvSnapSizeLb) {
+            throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
+        }
         issueIo(file, ga.discardType, rec, recIo.io().get(), zero);
     }
     file.fdatasync();
@@ -1220,9 +1220,9 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
         v.push_back("baseLv NOT FOUND");
         return v;
     }
-	for (std::string& s : volInfo.getStatusAsStrVec()) {
-		v.push_back(std::move(s));
-	}
+    for (std::string& s : volInfo.getStatusAsStrVec()) {
+        v.push_back(std::move(s));
+    }
     return v;
 }
 

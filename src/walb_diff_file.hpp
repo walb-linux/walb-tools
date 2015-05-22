@@ -30,7 +30,7 @@ struct DiffFileHeader : walb_diff_file_header
 
     void resetMaxIoBlocks() { max_io_blocks = 0; }
 
-	size_t getSize() const { return sizeof(walb_diff_file_header); }
+    size_t getSize() const { return sizeof(walb_diff_file_header); }
 
     bool isValid() const {
         return cybozu::util::calcChecksum(this, getSize(), 0) == 0;

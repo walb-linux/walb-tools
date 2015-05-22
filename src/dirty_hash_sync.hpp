@@ -173,10 +173,10 @@ inline bool dirtyHashSyncServer(
             issueDiffPack(fileW, discardType, pack, zero);
         }
         writeSize += buf.size();
-		if (writeSize >= fsyncIntervalSize) {
+        if (writeSize >= fsyncIntervalSize) {
             fileW.fdatasync();
             writeSize = 0;
-		}
+        }
         ctrl.reset();
     }
     if (ctrl.isError()) {

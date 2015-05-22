@@ -118,7 +118,7 @@ struct DiffRecord : public walb_diff_record {
         flags &= ~WALB_DIFF_FLAG(ALLZERO);
         flags |= WALB_DIFF_FLAG(DISCARD);
     }
-	bool isOverwrittenBy(const DiffRecord &rhs) const {
+    bool isOverwrittenBy(const DiffRecord &rhs) const {
         return rhs.io_address <= io_address &&
             io_address + io_blocks <= rhs.io_address + rhs.io_blocks;
     }
@@ -182,7 +182,7 @@ struct DiffIo
     DiffIo(const DiffIo &) = default;
     DiffIo(DiffIo &&) = default;
     DiffIo& operator=(const DiffIo&) = default;
-	DiffIo& operator=(DiffIo&&) = default;
+    DiffIo& operator=(DiffIo&&) = default;
 
     void clear() {
         ioBlocks = 0;
