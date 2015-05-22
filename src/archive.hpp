@@ -93,6 +93,7 @@ struct ArchiveSingleton
     size_t socketTimeout;
     size_t maxWdiffSendNr;
     DiscardType discardType;
+    uint64_t fsyncIntervalSize;
 
     /**
      * Writable and must be thread-safe.
@@ -544,14 +545,16 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         volInfo.createLv(sizeLb);
         const std::string lvPath = volSt.lvCache.getLv().path().str();
         const bool skipZero = isThinpool();
-        isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero);
+        isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb,
+                                   skipZero, ga.fsyncIntervalSize);
     } else {
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
         archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, snapFrom);
         isOk = dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, true, tmpFileP->fd(),
-                                   ga.discardType, volSt.stopState, ga.ps, volSt.progressLb);
+                                   ga.discardType, volSt.stopState, ga.ps, volSt.progressLb,
+                                   ga.fsyncIntervalSize);
         if (isOk) {
             logger.info() << "hash-backup-mergeIn " << volId << virt.statIn();
             logger.info() << "hash-backup-mergeOut" << volId << virt.statOut();
@@ -691,7 +694,8 @@ inline bool runFullReplServer(
     volInfo.createLv(sizeLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
-    if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb, skipZero,
+    if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps,
+                             volSt.progressLb, skipZero, ga.fsyncIntervalSize,
                              &fullReplSt, volInfo.volDir, volInfo.getFullReplStateFileName())) {
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
@@ -776,7 +780,8 @@ inline bool runHashReplServer(
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     if (!dirtyHashSyncServer(pkt, virt, sizeLb, bulkLb, uuid, hashSeed, true, tmpFile.fd(),
-                             ga.discardType, volSt.stopState, ga.ps, volSt.progressLb)) {
+                             ga.discardType, volSt.stopState, ga.ps, volSt.progressLb,
+                             ga.fsyncIntervalSize)) {
         logger.warn() << "hash-repl-server force-stopped" << volId;
         return false;
     }
@@ -875,7 +880,7 @@ inline bool runDiffReplServer(
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
     writeDiffFileHeader(fileW, maxIoBlocks, uuid);
-    if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps)) {
+    if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps, ga.fsyncIntervalSize)) {
         logger.warn() << "diff-repl-server force-stopped" << volId;
         return false;
     }
@@ -981,7 +986,8 @@ inline bool runResyncReplServer(
         /* Reader and writer indicates the same block device.
            We must have independent file descriptors for them. */
         if (!dirtyHashSyncServer(pkt, reader, sizeLb, bulkLb, uuid, hashSeed, false, writer.fd(),
-                                 ga.discardType, volSt.stopState, ga.ps, volSt.progressLb)) {
+                                 ga.discardType, volSt.stopState, ga.ps, volSt.progressLb,
+                                 ga.fsyncIntervalSize)) {
             logger.warn() << "resync-repl-server force-stopped" << volId;
             return false;
         }
@@ -1957,7 +1963,7 @@ inline void p2aWdiffTransferServer(protocol::ServerParams &p)
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
         cybozu::util::File fileW(tmpFile.fd());
         writeDiffFileHeader(fileW, maxIoBlocks, uuid);
-        if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps)) {
+        if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps, ga.fsyncIntervalSize)) {
             logger.warn() << FUNC << "force stopped" << volId;
             return;
         }

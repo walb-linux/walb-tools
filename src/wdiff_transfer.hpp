@@ -74,7 +74,7 @@ inline bool wdiffTransferClient(
  */
 inline bool wdiffTransferServer(
     packet::Packet &pkt, int wdiffOutFd,
-    const std::atomic<int> &stopState, const ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps, uint64_t fsyncIntervalSize)
 {
     const char *const FUNC = __func__;
     cybozu::util::File fileW(wdiffOutFd);
@@ -93,7 +93,7 @@ inline bool wdiffTransferServer(
         verifyDiffPack(buf.data(), buf.size(), true);
         fileW.write(buf.data(), buf.size());
         writeSize += buf.size();
-		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
+		if (writeSize >= fsyncIntervalSize) {
             fileW.fdatasync();
             writeSize = 0;
 		}

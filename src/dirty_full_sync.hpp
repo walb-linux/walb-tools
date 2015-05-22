@@ -75,13 +75,16 @@ inline void uncompress(const AlignedArray &src, AlignedArray &dst, const char *m
  * sizeLb is total size.
  * fullReplSt, fullReplStDir, and fullREplStFileName must be specified together.
  *
+ * fsyncIntervalSize [bytes]
+ *
  * RETURN:
  *   false if force stopped.
  */
 inline bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
     uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb,
-    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb, bool skipZero,
+    const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb,
+    bool skipZero, uint64_t fsyncIntervalSize,
     FullReplState *fullReplSt = nullptr, const cybozu::FilePath &fullReplStDir = cybozu::FilePath(),
     const std::string &fullReplStFileName = "")
 {
@@ -127,7 +130,7 @@ inline bool dirtyFullSyncServer(
         remainingLb -= lb;
         progressLb += lb;
 		writeSize += size;
-		if (writeSize >= MAX_FSYNC_DATA_SIZE) {
+		if (writeSize >= fsyncIntervalSize) {
             file.fdatasync();
             writeSize = 0;
             if (fullReplSt) {

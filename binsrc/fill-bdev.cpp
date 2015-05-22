@@ -19,6 +19,7 @@ struct Option
     uint64_t size;
     size_t diffPml;
     size_t randPml;
+    uint64_t fsyncIntervalSize;
     bool isDebug;
     std::string bdevPath;
 
@@ -30,6 +31,7 @@ struct Option
         opt.appendOpt(&bs, 64 << 10, "b", "SIZE: block size [byte] (default: 64K).");
         opt.appendOpt(&diffPml, 10, "dp", "PERMILLAGE: what permillage of blocks will be written [0,1000].");
         opt.appendOpt(&randPml, 0, "rp", "PERMILLAGE: random data permillage in each written block [0, 1000].");
+        opt.appendOpt(&fsyncIntervalSize, 128 * MEBI, "fi", "fsync interval size [bytes].");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendParam(&bdevPath, "DEVICE_PATH");
         opt.appendHelp("h", ": show this message.");
@@ -53,6 +55,9 @@ struct Option
         }
         if (size > 0 && size % 512 != 0) {
             throw cybozu::Exception("bad size") << size;
+        }
+        if (fsyncIntervalSize == 0) {
+            throw cybozu::Exception("bad fsyncIntervalSize") << fsyncIntervalSize;
         }
     }
 };
@@ -149,7 +154,7 @@ int doMain(int argc, char* argv[])
         }
         remaining -= bs;
         pp.progress(bs);
-        if (written >= MAX_FSYNC_DATA_SIZE) {
+        if (written >= opt.fsyncIntervalSize) {
             file.fdatasync();
             written = 0;
         }

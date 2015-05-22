@@ -46,6 +46,7 @@ struct Option
         opt.appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
         opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
+        opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "fsync interval size [bytes].");
 
         opt.appendHelp("h");
 
@@ -56,6 +57,7 @@ struct Option
 
         util::verifyNotZero(a.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(a.maxWdiffSendNr, "maxWdiffSendNr");
+        util::verifyNotZero(a.fsyncIntervalSize, "fsyncIntervalSize");
         a.discardType = parseDiscardType(discardTypeStr, __func__);
     }
 };
