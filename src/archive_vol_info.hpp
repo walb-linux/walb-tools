@@ -264,7 +264,6 @@ public:
     void init() {
         util::makeDir(volDir.str(), "ArchiveVolInfo::init", true);
         cybozu::Uuid uuid;
-        ::memset(uuid.rawData(), 0, uuid.rawSize());
         setUuid(uuid);
         setArchiveUuid(uuid);
         setMetaState(MetaState());
