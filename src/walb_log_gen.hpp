@@ -81,8 +81,7 @@ private:
         uint64_t writtenPb = 0;
         WlogFileHeader wlHead;
         cybozu::Uuid uuid;
-        rand.fill(uuid.rawData(), uuid.rawSize());
-
+		uuid.setRand(rand);
         const uint32_t salt = rand.get32();
         const uint32_t pbs = config_.pbs;
         uint64_t lsid = config_.lsid;

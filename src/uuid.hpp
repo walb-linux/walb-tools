@@ -28,7 +28,6 @@ public:
     bool operator==(const Uuid &rhs) const { return cmp(rhs) == 0; }
     bool operator!=(const Uuid &rhs) const { return cmp(rhs) != 0; }
     const void *rawData() const { return data_; }
-    void *rawData() { return data_; }
     static size_t rawSize() { return UUID_SIZE; }
     std::string str() const {
         return walb::util::binaryToStr(&data_[0], UUID_SIZE);
@@ -38,6 +37,12 @@ public:
     }
     void set(const void *data) {
         ::memcpy(data_, data, UUID_SIZE);
+    }
+    template<class RG>
+    void setRand(RG& rg) {
+        for (size_t i = 0; i < UUID_SIZE; i++) {
+            data_[i] = static_cast<uint8_t>(rg());
+        }
     }
     void copyTo(void *data) const {
         ::memcpy(data, data_, UUID_SIZE);

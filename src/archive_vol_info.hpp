@@ -321,7 +321,7 @@ public:
     cybozu::Uuid generateArchiveUuid() {
         cybozu::Uuid uuid;
         cybozu::util::Random<size_t> rand;
-        rand.fill(uuid.rawData(), uuid.rawSize());
+        uuid.setRand(rand);
         setArchiveUuid(uuid);
         return uuid;
     }

@@ -146,7 +146,7 @@ public:
         super()->metadata_size = 0; // deprecated.
         cybozu::util::Random<uint32_t> rand;
         cybozu::Uuid uuid;
-        rand.fill(uuid.rawData(), uuid.rawSize());
+        uuid.setRand(rand);
         setUuid(uuid);
         super()->log_checksum_salt = rand.get32();
         super()->ring_buffer_size = ::addr_pb(pbs, ldevLb) - ::get_ring_buffer_offset(pbs);
