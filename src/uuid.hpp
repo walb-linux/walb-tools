@@ -40,9 +40,7 @@ public:
     }
     template<class RG>
     void setRand(RG& rg) {
-        for (size_t i = 0; i < UUID_SIZE; i++) {
-            data_[i] = static_cast<uint8_t>(rg());
-        }
+        rg.fill(data_, UUID_SIZE);
     }
     void copyTo(void *data) const {
         ::memcpy(data, data_, UUID_SIZE);
