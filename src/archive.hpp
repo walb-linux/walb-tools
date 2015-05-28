@@ -1247,20 +1247,37 @@ inline void getPid(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, static_cast<size_t>(::getpid()));
 }
 
-inline void getDiffList(protocol::GetCommandParams &p)
+inline MetaDiffVec getAllWdiffDetail(protocol::GetCommandParams &p)
 {
     const VolIdAndGidRangeParam param = parseVolIdAndGidRangeParamForGet(p.params);
 
     ArchiveVolState &volSt = getArchiveVolState(param.volId);
     UniqueLock ul(volSt.mu);
+    return volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
+}
 
-    const MetaDiffVec diffV = volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
+inline void getDiffList(protocol::GetCommandParams &p)
+{
+    const MetaDiffVec diffV = getAllWdiffDetail(p);
     StrVec v;
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
     }
-    ul.unlock();
     protocol::sendValueAndFin(p, v);
+}
+
+inline void getTotalDiffSize(protocol::GetCommandParams &p)
+{
+    const MetaDiffVec diffV = getAllWdiffDetail(p);
+    size_t totalSize = 0;
+    for (const MetaDiff &d : diffV) totalSize += d.dataSize;
+    protocol::sendValueAndFin(p, totalSize);
+}
+
+inline void getNumDiff(protocol::GetCommandParams &p)
+{
+    const MetaDiffVec diffV = getAllWdiffDetail(p);
+    protocol::sendValueAndFin(p, diffV.size());
 }
 
 inline void getApplicableDiffList(protocol::GetCommandParams &p)
@@ -1280,22 +1297,6 @@ inline void getApplicableDiffList(protocol::GetCommandParams &p)
     }
     ul.unlock();
     protocol::sendValueAndFin(p, v);
-}
-
-inline void getTotalDiffSize(protocol::GetCommandParams &p)
-{
-    const VolIdAndGidRangeParam param = parseVolIdAndGidRangeParamForGet(p.params);
-
-    ArchiveVolState &volSt = getArchiveVolState(param.volId);
-    UniqueLock ul(volSt.mu);
-
-    size_t totalSize = 0;
-    const MetaDiffVec diffV = volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
-    for (const MetaDiff &d : diffV) {
-        totalSize += d.dataSize;
-    }
-    ul.unlock();
-    protocol::sendValueAndFin(p, totalSize);
 }
 
 inline void existsDiff(protocol::GetCommandParams &p)
@@ -2394,6 +2395,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { diffTN, archive_local::getDiffList },
     { applicableDiffTN, archive_local::getApplicableDiffList },
     { totalDiffSizeTN, archive_local::getTotalDiffSize },
+    { numDiffTN, archive_local::getNumDiff },
     { existsDiffTN, archive_local::existsDiff },
     { existsBaseImageTN, archive_local::existsBaseImage },
     { numActionTN, archive_local::getNumAction },

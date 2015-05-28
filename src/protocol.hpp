@@ -87,6 +87,7 @@ const char *const pidTN = "pid";
 const char *const diffTN = "diff";
 const char *const applicableDiffTN = "applicable-diff";
 const char *const totalDiffSizeTN = "total-diff-size";
+const char *const numDiffTN = "num-diff";
 const char *const existsDiffTN = "exists-diff";
 const char *const existsBaseImageTN = "exists-base-image";
 const char *const restoredTN = "restored";
