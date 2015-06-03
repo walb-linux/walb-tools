@@ -225,6 +225,7 @@ def test_n7():
     info = 'test_n7:replicate-full count:%d' % g_count
     try:
         print_action_info('START', info)
+        walbc.snapshot(s0, VOL, [a0], TIMEOUT)
         walbc.replicate(a0, VOL, a1, False, TIMEOUT)
         verify_equal_restorable_list('test_n7', a0, a1, VOL)
         gid = walbc.get_latest_clean_snapshot(a0, VOL)
