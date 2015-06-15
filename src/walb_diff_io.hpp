@@ -25,9 +25,8 @@ inline IoType decideIoType(const DiffRecord& rec, DiscardType discardType)
     case DiscardType::Passdown: return Discard;
     case DiscardType::Ignore: return Ignore;
     case DiscardType::Zero: return Zero;
-    default:
-        assert(false);
     }
+    throw cybozu::Exception("decideIoType:invalid discard type") << (int)discardType;
 }
 
 /**
