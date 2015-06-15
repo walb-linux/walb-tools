@@ -14,6 +14,7 @@
 #include "server_util.hpp"
 #include "walb_util.hpp"
 #include "archive.hpp"
+#include "version.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -32,6 +33,8 @@ struct Option
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
+        opt.setDescription(cybozu::util::formatString("walb archive server version %s", getWalbToolsVersion()));
+
         opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
@@ -104,6 +107,7 @@ int main(int argc, char *argv[]) try
     ArchiveSingleton &g = getArchiveGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb archive server";
+    LOGs.info() << "version" << getWalbToolsVersion();
     LOGs.info() << opt.opt;
     initArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);

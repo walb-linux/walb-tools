@@ -9,6 +9,7 @@
 #include "controller.hpp"
 #include "walb_util.hpp"
 #include "command_param_parser.hpp"
+#include "version.hpp"
 
 using namespace walb;
 
@@ -213,6 +214,8 @@ struct Option
     bool isDebug;
     size_t socketTimeout;
     void setup1stOption() {
+        const std::string desc = cybozu::util::formatString("walb controller version %s", getWalbToolsVersion());
+        opt1.setDescription(desc);
         size_t maxLen = 0;
         for (const CommandInfo& ci : g_cmdTbl) {
             maxLen = std::max(maxLen, ci.name.size());

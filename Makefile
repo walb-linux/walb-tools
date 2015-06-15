@@ -72,14 +72,14 @@ echo_binaries:
 $(LOCAL_LIB): $(LOCAL_LIB_OBJ)
 	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)
 
-binsrc/%: binsrc/%.o $(LOCAL_LIB)
+binsrc/%: binsrc/%.o $(LOCAL_LIB) src/version.hpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 utest/%: utest/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 clean: cleanobj cleandep
-	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB)
+	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.hpp
 cleanobj:
 	rm -f src/*.o binsrc/*.o utest/*.o
 cleandep:
@@ -92,7 +92,10 @@ rebuild:
 install:
 	@echo not yet implemented
 
-binsrc/%.depend: binsrc/%.cpp
+src/version.hpp: src/version.hpp.template
+	cat src/version.hpp.template |sed "s/VERSION/`cat VERSION`/g" > src/version.hpp
+
+binsrc/%.depend: binsrc/%.cpp src/version.hpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > $@
 src/%.depend: src/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > $@
