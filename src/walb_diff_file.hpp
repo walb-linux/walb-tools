@@ -10,6 +10,11 @@
 
 namespace walb {
 
+union ExtendedDiffPackHeader {
+    DiffPackHeader header;
+    char buf[WALB_DIFF_PACK_SIZE];
+};
+
 /**
  * Walb diff header data.
  */
@@ -88,8 +93,8 @@ inline void writeDiffFileHeader(Writer& writer, uint16_t maxIoBlocks, const cybo
 template<class Writer>
 inline void writeDiffEofPack(Writer& writer)
 {
-    char buf[WALB_DIFF_PACK_SIZE];
-    DiffPackHeader &pack = *(DiffPackHeader*)buf;
+    ExtendedDiffPackHeader edp;
+    DiffPackHeader &pack = edp.header;
     pack.clear();
     pack.setEnd();
     pack.writeTo(writer);
@@ -106,7 +111,7 @@ private:
     bool isClosed_;
 
     /* Buffers. */
-    char buf_[WALB_DIFF_PACK_SIZE];
+    ExtendedDiffPackHeader edp_;
     DiffPackHeader &pack_;
 
     std::queue<DiffIo> ioQ_;
@@ -114,7 +119,7 @@ private:
     DiffStatistics stat_;
 
 public:
-    DiffWriter() : pack_(*(DiffPackHeader *)buf_) {
+    DiffWriter() : pack_(edp_.header) {
         init();
     }
     explicit DiffWriter(int fd) : DiffWriter() {
@@ -287,7 +292,7 @@ private:
     bool isReadHeader_;
 
     /* Buffers. */
-    char buf_[WALB_DIFF_PACK_SIZE];
+    ExtendedDiffPackHeader edp_;
     DiffPackHeader &pack_;
     uint16_t recIdx_;
     uint32_t totalSize_;
@@ -295,7 +300,7 @@ private:
     DiffStatistics stat_;
 
 public:
-    DiffReader() : pack_(*(DiffPackHeader *)buf_) {
+    DiffReader() : pack_(edp_.header) {
         init();
     }
     explicit DiffReader(int fd) : DiffReader() {
