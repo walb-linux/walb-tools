@@ -8,7 +8,7 @@
 #include "walb_log_base.hpp"
 #include "walb_log_file.hpp"
 #include "walb_log_gen.hpp"
-#include "walb/walb.h"
+#include "linux/walb/walb.h"
 #include "walb_util.hpp"
 
 using namespace walb;

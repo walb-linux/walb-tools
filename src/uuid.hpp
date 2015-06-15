@@ -6,7 +6,7 @@
  *
  * (C) 2013 Cybozu Labs, Inc.
  */
-#include "walb/util.h"
+#include "linux/walb/util.h"
 #include "cybozu/serializer.hpp"
 #include "walb_util.hpp"
 

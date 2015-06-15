@@ -8,8 +8,8 @@
 #include "fileio.hpp"
 #include "walb_log_file.hpp"
 #include "io_recipe.hpp"
-#include "walb/common.h"
-#include "walb/block_size.h"
+#include "linux/walb/common.h"
+#include "linux/walb/block_size.h"
 #include "walb_util.hpp"
 #include "walb_log_verify.hpp"
 

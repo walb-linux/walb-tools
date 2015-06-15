@@ -19,7 +19,7 @@
 #include "walb_util.hpp"
 #include "walb_diff.h"
 #include "walb_logger.hpp"
-#include "walb/block_size.h"
+#include "linux/walb/block_size.h"
 #include "backtrace.hpp"
 #include "compressor.hpp"
 #include "compression_type.hpp"

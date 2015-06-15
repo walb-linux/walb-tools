@@ -7,7 +7,7 @@
  * (C) 2013 Cybozu Labs, Inc.
  */
 #include <cstdint>
-#include "walb/util.h"
+#include "linux/walb/util.h"
 
 #ifdef __cplusplus
 extern "C" {

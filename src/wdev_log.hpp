@@ -19,9 +19,9 @@
 #include "bdev_util.hpp"
 #include "bdev_reader.hpp"
 #include "random.hpp"
-#include "walb/super.h"
-#include "walb/log_device.h"
-#include "walb/log_record.h"
+#include "linux/walb/super.h"
+#include "linux/walb/log_device.h"
+#include "linux/walb/log_record.h"
 #include "walb_log.h"
 
 namespace walb {

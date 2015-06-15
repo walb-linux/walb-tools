@@ -10,7 +10,7 @@
 #include "util.hpp"
 #include "wdev_log.hpp"
 #include "aio_util.hpp"
-#include "walb/walb.h"
+#include "linux/walb/walb.h"
 #include "walb_util.hpp"
 
 /**

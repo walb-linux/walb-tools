@@ -6,7 +6,7 @@
 #include "util.hpp"
 #include "fileio.hpp"
 #include "aio_util.hpp"
-#include "walb/walb.h"
+#include "linux/walb/walb.h"
 #include "walb_logger.hpp"
 #include "walb_util.hpp"
 #include "walb_log_file.hpp"

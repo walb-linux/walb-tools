@@ -8,7 +8,7 @@
 #include "wdev_util.hpp"
 #include "wdev_log.hpp"
 #include "walb_logger.hpp"
-#include "walb/ioctl.h"
+#include "linux/walb/ioctl.h"
 
 using namespace walb;
 

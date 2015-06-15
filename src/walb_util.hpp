@@ -22,7 +22,7 @@
 #include "thread_util.hpp"
 #include "time.hpp"
 #include "process.hpp"
-#include "walb/block_size.h"
+#include "linux/walb/block_size.h"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
 #include "cybozu/socket.hpp"

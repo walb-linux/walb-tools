@@ -3,7 +3,7 @@
 #include "archive_vol_info.hpp"
 #include <algorithm>
 #include <snappy.h>
-#include "walb/block_size.h"
+#include "linux/walb/block_size.h"
 #include "walb_diff_virt.hpp"
 #include "murmurhash3.hpp"
 #include "state_machine.hpp"

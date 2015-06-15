@@ -13,8 +13,8 @@
 #include "fileio.hpp"
 #include "bdev_util.hpp"
 #include "io_recipe.hpp"
-#include "walb/common.h"
-#include "walb/block_size.h"
+#include "linux/walb/common.h"
+#include "linux/walb/block_size.h"
 #include "walb_util.hpp"
 #include "aio_util.hpp"
 

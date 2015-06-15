@@ -30,7 +30,7 @@
 #include <linux/fs.h>
 #include <libaio.h>
 
-#include "walb/common.h"
+#include "linux/walb/common.h"
 #include "util.hpp"
 #include "fileio.hpp"
 #include "memory_buffer.hpp"
