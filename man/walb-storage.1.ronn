@@ -1,0 +1,63 @@
+walb-storage(1) -- WalB storage server.
+===========================================================
+
+## SYNOPSIS
+
+`walb-storage` [<opt>] -archive <ADDR:PORT> -proxy <ADDR:PORT>[,<ADDR:PORT>...]
+
+## DESCRIPTION
+
+**walb-storage** works as a server process and does several tasks:
+monitoring WalB devices and extract wlogs to send to walb-proxy servers,
+initiating full/hash backup, and so on.
+
+You can controll the server processes by `walbc` command.
+
+
+## OPTIONS
+
+* `-h`:
+  show help message
+
+* `-p`:
+  listen port
+
+* `-l` <PATH>:
+  log file path. `-` means stderr.
+
+* `-archive` <ADDR:PORT>:
+  walb-archive server information. (must)
+  It is primary archive server.
+
+* `-proxy` <ADDR:PORT>[,<ADDR:PORT>...]:
+  walb-proxy servers information. (must)
+  Multiple proxy servers can be specified.
+
+* `-debug`:
+  put debug messages.
+
+* `-bg` <NUM>:
+  num of max concurrent background tasks.
+
+* `-fg` <NUM>:
+  num of max concurrent foregroud tasks.
+
+* `-b` <PATH>:
+  base directory (full path)
+
+* `-id` <ID>:
+  server node identifier
+
+* `-wl` <SIZE_MB>:
+  max wlog size to send at once [MiB].
+
+* `-delay` <DELAY>:
+  waiting time for next retry [sec].
+
+* `-to` <TIMEOUT>:
+  socket timeout [sec].
+
+
+## SEE ALSO
+
+walbc(1), wdevc(1), walb-proxy(1), walb-archive(1)

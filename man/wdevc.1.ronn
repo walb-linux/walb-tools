@@ -1,0 +1,171 @@
+wdevc(1) -- control WalB block devices
+===========================================================
+
+## SYNOPSIS
+
+`wdevc` [<opt>] <command> [<args>] [<opt>]
+
+
+## DESCRIPTION
+
+**wdevc** controlls WalB block devices; create, delete, resize, etc.
+
+
+## COMMAND LIST
+
+* `format-ldev` [<opt>] <LDEV> <DDEV>:
+  Format a log device.
+
+* `create-wdev` [<opt>] <LDEV> <DDEV>:
+  Create a walb device.
+
+* `delete-wdev` [<opt>] <WDEV>:
+  Delete a walb device.
+
+* `list`:
+  List all walb device in the system.
+
+* `set-checkpoint-interval` <WDEV> <INTERVAL>:
+  Set checkpoint interval.
+
+* `get-checkpoint-interval` <WDEV>:
+  Get checkpoint interval.
+
+* `force-checkpoint` <WDEV>:
+  Execute checkpointing immediately.
+
+* `set-oldest-lsid` <WDEV> <LSID>:
+  Set oldest lsid (to clear wlogs)
+
+* `get-oldest-lsid` <WDEV>:
+  Get oldest lsid.
+
+* `get-written-lsid` <WDEV>:
+  Get written lsid.
+
+* `get-permanent-lsid` <WDEV>:
+  Get permanent lsid.
+
+* `get-completed-lsid` <WDEV>:
+  Get completed lsid.
+
+* `get-log-usage` <WDEV>:
+  Get log usage [physical block].
+
+* `get-log-capacity` <WDEV>:
+  Get log capacity [physical block].
+
+* `is-flush-capable` <WDEV>:
+  Check flush request capability.
+
+* `resize` <WDEV> <SIZE>:
+  Resize a walb device (only growing is supported).
+
+* `is-log-overflow` <WDEV>:
+  Check log overflow.
+
+* `reset-wal` <WDEV>:
+  Reset log device to recover from wlog overflow.
+
+* `clear-wal` <WDEV>:
+  Clear all wlogs.
+
+* `freeze` <WDEV> <TIMEOUT>:
+  Freeze temporarily a walb device.
+
+* `is-flozen` <WDEV>:
+  Check a walb device is frozen or not.
+
+* `melt` <WDEV>:
+  Melt a freezed walb device.
+
+* `get-version`:
+  Get version of the walb kernel device driver.
+
+
+## COMMON ARGUMENTS
+
+* <LDEV>:
+  underlying log device path.
+
+* <DDEV>:
+  underlying data device path.
+
+* <WDEV>:
+  WalB device path.
+
+## COMMON OPTIONS
+
+* `-h`:
+  Show help messages.
+  Specify this after command name to show command-specifid help.
+
+* `-debug`:
+  Show debug mssages to stderr.
+
+
+## OPTIONS for format-ldev
+
+* `-n` <NAME>:
+  walb device name (default: decided automatically)
+* `-nd`:
+  disable discard IOs
+
+
+## OPTIONS for create-wdev
+
+* `-n` <NAME>:
+  walb device name (default: decided automatically)
+* `-maxl` <SIZE>:
+  max logpack size [KiB]
+* `-maxp` <SIZE>:
+  max pending size [MiB]
+* `-minp` <SIZE>:
+  min pending size [MiB]
+  recommended to set 1/2 of the `maxp` value.
+* `-qp` <PERIOD>:
+  queue stopping period [ms]
+  for HDD, 100-1000 range is recommended.
+  for SSD, 1-10 range is recommended.
+* `-fs` <SIZE>:
+  flush interval size [MiB]
+  recommended to set the same as the `minp` value.
+* `-fp` <PERIOD>:
+  flush interval period [ms]
+  recommended to the same to the `qp` value.
+* `-bp` <SIZE>:
+  number of packs in bulk
+  the same or the half of the `bi` value is recommended.
+* `-bi` <SIZE>:
+  numer of IOs in bulk
+  512-4096 range is recommended.
+    
+## OPTIONS for delete-wdev
+
+* `-f`:
+  force to delete.
+
+## OPTIONS for set-checkpoint-interval
+
+* <INTERVAL>:
+  new interval [ms]
+
+## OPTIONS for set-oldest-lsid
+
+* <LSID>:
+  new lsid to set
+
+## OPTIONS for resize
+
+* <SIZE>:
+  new size [logical block]
+
+## OPTIONS for freeze
+
+* <TIMEOUT>:
+  timeout to melt [sec]. 0 means no timeout. (default: 0)
+
+
+## SEE ALSO
+
+walbc(1), walb-storage(1), walb-proxy(1), walb-archive(1)

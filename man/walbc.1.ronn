@@ -1,0 +1,336 @@
+walbc(1) -- control WalB server processes
+===========================================================
+
+## SYNOPSIS
+
+`walbc` [<opt1>] <command> [<args>] [<opt2>]
+
+
+## DESCRIPTION
+
+**walbc** controlls WalB server processes.
+
+walbc uses TCP connections and talks with server processes
+by its original protocols based on cybozulib serializer.
+
+
+## COMMON OPTIONS (opt1)
+
+* `-a` <ADDR>:
+   host name or address (must)
+* `-p` <PORT>:
+   port number (must)
+* `-debug`:
+   put debug message.
+* `-to` <TIMEOUT>:
+   socket timeout [sec].
+* `-id` <ID>:
+   controller identfier
+* `-h`:
+   show help message
+
+
+## COMMAND LIST
+
+* `status` [<VOLUME>]:
+  print human-readable status.
+
+* `init-vol` <VOLUME> [<WDEV_PATH>]:
+  initialize a volume.
+
+* `clear-vol` <VOLUME>:
+  clear a volume.
+
+* `reset-vol` <VOLUME> [<GID>]:
+  reset a volume in a server.
+
+* `full-bkp` <VOLUME> [<BULK_LB>]:
+  execute full-backup.
+
+* `hash-bkp` <VOLUME> [<BULK_LB>]:
+  execute hash-backup.
+
+* `restore` <VOLUME> <GID>:
+  restore a volume in an archive server.
+
+* `del-restored` <VOLUME> <GID>:
+  delete a restored volume.
+
+* `start` <VOLUME> [<ROLE>]:
+  start a volume in a server.
+
+* `stop` <VOLUME> [<MODE>]:
+  stop a volume in a server.
+
+* `archive-info` <CMD> <VOLUME> [<PARAM>...]:
+  control archive information in a proxy.
+
+* `snapshot` <VOLUME>:
+  take a snapshot in a storage.
+
+* `disable-snapshot` <VOLUME> <GID> [<GID>...]:
+  disable a snapshot in an archive.
+
+* `enable-snapshot` <VOLUME> <GID> [<GID>...]:
+   enable a snapshot in an archive.
+
+* `replicate` <VOLUME> <TYPE> <PARAM> <HOST_INFO_REPL>:
+  replicate a volume from an archive to another archive.
+
+* `apply` <VOLUME> <GID>:
+  apply old wdiff files to the base image of a volume in an archive.
+
+* `merge` <VOLUME> <GID0> <GID1>:
+  merge wdiff files for a volume in an archive.
+
+* `resize` <VOLUME> <SIZE_LB> [zeroclear]:
+  resize a volume in a storage or an archive.
+
+* `kick` [<VOLUME>] [<ARCHIVE_ID>]:
+  kick background tasks if necessary.
+
+* `bhash` <VOLUME> <GID> [<BULK_LB>]:
+  calculate block hash of a volume in an archive.
+
+* `exec` [<ARGUMENT>...]:
+  execute a command-line at a server's side.
+
+* `shutdown` [<MODE>]:
+  shutdown a server process.
+
+* `get` <TYPE> [<PARAM>...]:
+  get some information from a server.
+
+
+
+## COMMON ARGUMENTS
+
+* <VOLUME>:
+  volume identifier.
+
+* <WDEV_PATH>:
+  WalB block device path.
+
+* <GID>:
+  Generation ID. This is clean snapshot identifier.
+
+
+## COMMAND init-vol
+
+Parameter <WDEV_PATH> is required only for `walb-storage` server processes.
+
+## COMMAND reset-vol
+
+Default value of parameter <GID> is 0.
+
+## COMMAND full-bkp/hash-bkp
+
+This is effective for `walb-storage` only.
+Parameter <BULK_LB> is bulk size [logical block]. Default value is `DEFAULT_BULK_LB`.
+
+## COMMAND start
+
+<ROLE> is required for `walb-storage` server process.
+Specify `target` or `standby` for <ROLE>.
+
+## COMMAND stop
+
+<MODE> is one of `graceful`, `force`, and `empty`.
+`empty` is available only for `walb-proxy` server processes.
+
+`empty` mode will wait for all wdiff files being transferred and empty for the volume.
+
+## COMMAND archive-info
+
+This is effective for `walb-proxy` only.
+<CMD> is one of `add`, `update`, `get`, `delete`, and `list`.
+
+* `list` <VOLUME>:
+  get archive id list.
+
+* `add` <VOLUME> <ARCHIVE_ID> <HOST_INFO_BKP>:
+  add an archive info.
+
+* `update` <VOLUME> <ARCHIVE_ID> <HOST_INFO_BKP>:
+  update an archive info.
+
+* `get` <VOLUME> <ARCHIVE_ID>:
+  get an archive info.
+
+* `delete` <VOLUME> <ARCHIVE_ID>:
+  delete an archive info.
+
+
+<ARCHIVE_ID> is identifier of an archive server.
+<HOST_INFO_BKP> is `ADDR:PORT COMPRESS_OPT DELAY` string.
+<ADDR> is hostname or IP address.
+<PORT> is listen port.
+<COMPRESS_OPT> is `TYPE:LEVEL:NR_CPU` string.
+<TYPE> is `snappy`, `gzip`, `lzma`, or `none`.
+<LEVEL> is compression level from 0 to 9.
+<NR_CPU> is number of CPU cores to use for wdiff compression.
+<DELAY> is wdiff transfer delay in seconds: from wlog received to wdiff transferring.
+
+<COMPRESS_OPT> and <DELAY> can be omitted.
+
+
+## COMMAND snapshot
+
+This is available for `walb-storage` only.
+
+## COMMAND disable-snapshot/enable-snapshot
+
+This is available for `walb-archive` only.
+You can specify multiple GIDs.
+
+## COMMAND replicate
+
+<TYPE> is `size` or `gid` string.
+If <TYPE> is `size`, <PARAM> is wdiff amount [MiB] that is allowed to remain.
+Otherwise, <PARAM> is gid that is replication target.
+
+<HOST_INFO_REPL> is `ADDR:PORT DO_RESYNC COMPRESS_OPT MAX_WDIFF_MERGE_SIZE BULK_LB` string.
+See `archive-info` command section for <ADDR:PORT>, <COMPRESS_OPT>,
+and `full-bkp` command section for <BULK_LB> arguments.
+<DO_RESYNC> is 0 or 1. 1 will enable to execute resync-replication.
+<MAX_WDIFF_MERGE_SIZE> is maximum size of wdiff files to merge at once [bytes].
+Size suffix `K`, `M`, `G` are available.
+
+<DO_RESYNC> and succeeding arguments can be omitted.
+
+## COMMAND resize
+
+This is available for `walb-storage` and `walb-archive`.
+
+<SIZE_LB> is new size [logical block].
+You can specify 0 for `walb-storage` to auto-detect the underlying data device.
+You must resize the underlying data device by yourself before.
+
+Specify `zeroclear` to zero-clear the extended area.
+This is available for `walb-archive` only.
+
+## COMMAND kick
+
+For `walb-storage`, any parameter is not required.
+This kicks wlog-transfer tasks.
+
+For `walb-proxy`, you can specify <VOLUME> or <VOLUME>, <ARCHIVE_ID> pair.
+No parameter is also accepted.
+This kicks wdiff-transfer tasks.
+
+## COMMAND exec
+
+Specify full path of the executable, files and directories
+because the server process's current directory is unkown.
+
+## COMMAND shutdown
+
+<MODE> is `graceful` or `force`.
+Default value is `gracefull`.
+
+There is another method to shutdown server processes forcely
+by sending `SIGTERM` signal.
+It works as the command `shutdown force`.
+
+
+## COMMAND get
+
+For any server processes,
+
+* `get state` <VOLUME>:
+  get state string of a volume.
+
+* `get host-type`:
+  get host type of the server process.
+  The command will put one of `storage`, `proxy`, or `archive`.
+
+* `get vol`:
+  get volume list.
+
+* `get pid`:
+  get server process process id.
+
+
+============================================
+
+For `walb-storage`,
+
+* `get is-overflow` <VOLUME>:
+  check a volume is overflow or not. It will put 0 or 1 string.
+  1 means overflow.
+
+* `get uuid`:
+  get storage (wdev) uuid.
+
+============================================
+
+For `walb-proxy`,
+
+* `get is-wdiff-send-error` <VOLUME> <ARCHIVE_ID>:
+  check wdiff-transfer is stopped due to error. It will put 0 or 1 string.
+  1 means stopped.
+
+============================================
+
+For `walb-archive`,
+
+* `get diff` <VOLUME> [<GID0> [<GID1>]]:
+  get diff list.
+  <GID0> and <GID1> means target gid range.
+
+* `get applicable-diff` <VOLUME> [<GID>]:
+  get applicable diff list (slower than `get diff` command).
+  <GID> means upper limit.
+
+* `get total-diff-size` <VOLUME> [<GID0> [<GID1>]]:
+  get total wdiff size [byte].
+  This is sum of size of target wdiff files.
+  You can specify gid range.
+
+* `get num-diff` <VOLUME> [<GID0> [<GID1>]]:
+  get number of wdiff files.
+  You can specify gid range.
+
+* `get exists-diff` <VOLUME> <GID0B> <GID0E> <GID1B> <GID1E>:
+  <GID0B>, <GID0E> is dirty snapshot specifier of wdiff startpoint.
+  <GID1B>, <GID1E> is dirty snapshot specifier of wdiff endpoint.
+
+* `get exists-base-image` <VOLUME>:
+  check existance of the base image a volume. It will put 0 or 1.
+  1 means existance.
+
+* `get num-action` <VOLUME> <ACTION>:
+  get number of running actions.
+  <ACTION> is one of `Merge`, `Apply`, `Restore`, `ReplSyncAsClient`, `Resize`.
+
+* `get restored` <VOLUME>:
+  get restored snapshots.
+
+* `get restorable` <VOLUME> [all]:
+  get restorable snapshots.
+  Specify `all` to get implicit snapshots also.
+
+* `get uuid` <VOLUME>:
+  get storage uuid got from `walb-storage` at full-bkp/hash-bkp.
+
+* `get archive-uuid` <VOLUME>:
+  get archive uuid. This is identifier of archive data.
+  Two `walb-archive` servers must have the same archive uuid to execute
+  hash/diff replication.
+
+* `get base` <VOLUME>:
+  get base state (MetaState) of a volume.
+
+* `get vol-size` <VOLUME>:
+  get volume size [logical block].
+
+* `get progress` <VOLUME>:
+  get progress size of the running task for a volume [logical block].
+  The task is one of full backup server, hash backup server,
+  full replication server, resync replication server, hash replication server.
+  There is at most one task concurrently.
+
+
+## SEE ALSO
+
+wdevc(1), walb-storage(1), walb-proxy(1), walb-archive(1)
