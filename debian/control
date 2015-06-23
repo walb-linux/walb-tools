@@ -1,0 +1,58 @@
+Source: walb-tools
+Section: utils
+Priority: optional
+Maintainer: Takashi HOSHINO <starpos@gmail.com>
+Build-Depends: debhelper (>= 9), libaio-dev, libsnappy-dev, zlib1g-dev, liblzma-dev, ruby-ronn, python-all(>=2.7), python-setuptools, dh-python, python-docutils
+Standards-Version: 3.9.5
+Homepage: https://github.com/starpos/walb-tools/
+#Vcs-Git: git://git.debian.org/collab-maint/walb-tools.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/walb-tools.git;a=summary
+
+Package: walb-tools-core
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: core binaries of walb-tools
+ walb-tools is backup/replication system for WalB block
+ devices. This package contains core binaries of
+ walb-tools: walbc, wdevc, walb-storage, walb-proxy,
+ and walb-archive.
+
+Package: walb-tools-extra
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: extra binaries of walb-tools
+ This package contians extra binaries of walb-tools.
+ They are useful to analyze walb block devices
+ and their generated data.
+
+Package: walb-tools-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Description: documentation for walb-tools
+ This package contains documentation for walb-tools
+
+Package: walb-tools-python
+Architecture: all
+Section: python
+Depends: ${python:Depends}, ${misc:Depends}
+Description: python library to control walb-tools
+ This package contains python library to control walb-tools.
+
+Package: walb-tools-core-dbg
+Architecture: amd64
+Section: debug
+Priority: extra
+Depends: walb-tools-core (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: debugging symbols for walb-tools-core
+ This package contains debugging symbols for
+ walb-tools-core package.
+
+Package: walb-tools-extra-dbg
+Architecture: amd64
+Section: debug
+Priority: extra
+Depends: walb-tools-extra (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: debugging symbols for walb-tools-extra
+ This package contains debugging symbols for
+ walb-tools-extra package.
