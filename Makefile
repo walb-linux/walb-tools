@@ -1,4 +1,4 @@
-.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint
+.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages
 
 CXX = clang++
 CC = clang
@@ -47,6 +47,7 @@ BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 LOCAL_LIB = src/libwalb-tools.a
 LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
+MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 
 all: build
 build: $(BINARIES)
@@ -56,7 +57,7 @@ utest_all: $(TEST_BINARIES)
 	@for t in $(TEST_BINARIES); do \
 	    ./$$t; \
 	done 2>&1 |tee test.log |grep ^ctest:name
-	grep ctest:name test.log | grep -v "ng=0, exception=0" || echo "all unit tests succeed"
+	@grep ctest:name test.log | grep -v "ng=0, exception=0" || echo "all unit tests succeed"
 itest: $(BINARIES)
 	$(MAKE) -C itest/wdiff
 	$(MAKE) -C itest/wlog
@@ -78,12 +79,14 @@ binsrc/%: binsrc/%.o $(LOCAL_LIB) src/version.hpp
 utest/%: utest/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-clean: cleanobj cleandep
+clean: cleanobj cleandep cleanman
 	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.hpp
 cleanobj:
 	rm -f src/*.o binsrc/*.o utest/*.o
 cleandep:
 	rm -f src/*.depend binsrc/*.depend utest/*.depend
+cleanman:
+	rm -f $(MANPAGES)
 
 rebuild:
 	$(MAKE) clean
@@ -91,6 +94,11 @@ rebuild:
 
 install:
 	@echo not yet implemented
+
+manpages: $(MANPAGES)
+
+man/%: man/%.ronn
+	ronn -r $<
 
 src/version.hpp: src/version.hpp.template
 	cat src/version.hpp.template |sed "s/VERSION/`cat VERSION`/g" > src/version.hpp
@@ -126,6 +134,6 @@ stest100:
 archive:
 	git archive --format=tar master > walb-tools.tgz
 
-ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint)" ""
+ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""
 -include $(DEPENDS)
 endif
