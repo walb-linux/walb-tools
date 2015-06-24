@@ -31,23 +31,23 @@ namespace walb {
 
 inline bool isArchiveLvName(const std::string &name)
 {
-    return cybozu::util::hasPrefix(name, VOLUME_PREFIX);
+    return cybozu::util::hasPrefix(name, BASE_VOLUME_PREFIX);
 }
 
 inline bool isArchiveSnapName(const std::string &name)
 {
-    return cybozu::util::hasPrefix(name, RESTORE_PREFIX) && !cybozu::util::hasSuffix(name, RESTORE_TMP_SUFFIX);
+    return cybozu::util::hasPrefix(name, RESTORED_VOLUME_PREFIX) && !cybozu::util::hasSuffix(name, RESTORED_VOLUME_TMP_SUFFIX);
 }
 
 inline bool isArchiveTmpSnapName(const std::string &name)
 {
-    return cybozu::util::hasPrefix(name, RESTORE_PREFIX) && cybozu::util::hasSuffix(name, RESTORE_TMP_SUFFIX);
+    return cybozu::util::hasPrefix(name, RESTORED_VOLUME_PREFIX) && cybozu::util::hasSuffix(name, RESTORED_VOLUME_TMP_SUFFIX);
 }
 
 inline std::string getVolIdFromArchiveLvName(const std::string &name)
 {
     assert(isArchiveLvName(name));
-    return cybozu::util::removePrefix(name, VOLUME_PREFIX);
+    return cybozu::util::removePrefix(name, BASE_VOLUME_PREFIX);
 }
 
 inline void getVolIdFromArchiveSnapName(const std::string &name, std::string &volId, uint64_t &gid)
@@ -57,7 +57,7 @@ inline void getVolIdFromArchiveSnapName(const std::string &name, std::string &vo
     if (n == std::string::npos) {
         throw cybozu::Exception(__func__) << "bad archive snapshot name" << name;
     }
-    size_t p = RESTORE_PREFIX.size();
+    size_t p = RESTORED_VOLUME_PREFIX.size();
     volId = name.substr(p, n - p);
     gid = cybozu::atoi(&name[n + 1]);
 }
@@ -631,10 +631,10 @@ private:
         return cybozu::lvm::getVg(vgName);
     }
     std::string lvName() const {
-        return VOLUME_PREFIX + volId;
+        return BASE_VOLUME_PREFIX + volId;
     }
     std::string restoredSnapshotNamePrefix() const {
-        return RESTORE_PREFIX + volId + "_";
+        return RESTORED_VOLUME_PREFIX + volId + "_";
     }
 };
 

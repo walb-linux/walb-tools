@@ -390,7 +390,7 @@ inline bool restore(const std::string &volId, uint64_t gid)
 
     cybozu::lvm::Lv lv = volSt.lvCache.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
-    const std::string tmpLvName = targetName + RESTORE_TMP_SUFFIX;
+    const std::string tmpLvName = targetName + RESTORED_VOLUME_TMP_SUFFIX;
     removeSnapshot(lv, tmpLvName);
 
     cybozu::lvm::Lv lvSnap;
