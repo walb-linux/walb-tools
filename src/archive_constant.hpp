@@ -79,8 +79,8 @@ const StrVec aDenyForChangeSnapshot = {aaApply, aaMerge};
 
 const StrVec aActionOnLvm = {aaRestore, aaResize};
 
-const std::string BASE_VOLUME_PREFIX = "i_";
-const std::string RESTORED_VOLUME_PREFIX = "r_";
+const std::string BASE_VOLUME_PREFIX = "wb_";
+const std::string RESTORED_VOLUME_PREFIX = "wr_";
 const std::string RESTORED_VOLUME_TMP_SUFFIX = "_tmp";
 
 const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};

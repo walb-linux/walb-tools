@@ -20,8 +20,8 @@ Lbs = (1 << 9)  # logical block size
 
 UINT64_MAX = (1 << 64) - 1
 
-BASE_VOLUME_PREFIX = 'i_'
-RESTORED_VOLUME_PREFIX = 'r_'
+BASE_VOLUME_PREFIX = 'wb_'
+RESTORED_VOLUME_PREFIX = 'wr_'
 
 
 ########################################
