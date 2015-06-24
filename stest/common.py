@@ -22,6 +22,7 @@ sLayoutAll = None # [Server]
 walbc = None # Controller
 maxFgTasks = None # int
 maxBgTasks = None # int
+BASE_VOLUME_PREFIX = None # str
 
 
 def set_config(toSymbolTbl, fromSymbolTbl):
@@ -47,7 +48,7 @@ def setup_test(useTp):
             vgPath = '/dev/' + ax.vg + '/'
             if os.path.isdir(vgPath):
                 for f in os.listdir(vgPath):
-                    if f[0] == 'i':
+                    if f.startswith(BASE_VOLUME_PREFIX):
                         run_local_command(['/sbin/lvremove', '-f', vgPath + f])
     make_dir(workDir)
     for wdev in wdevL:
@@ -208,7 +209,7 @@ def remove_persistent_data(s):
     shutil.rmtree(workDir + s.name)
     if s in sLayoutAll.archiveL:
         for f in os.listdir('/dev/' + s.vg):
-            if f[0:2] == 'i_':
+            if f.startswith(BASE_VOLUME_PREFIX):
                 remove_lv('/dev/' + s.vg + '/' + f)
 
 

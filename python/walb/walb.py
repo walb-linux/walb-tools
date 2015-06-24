@@ -20,6 +20,9 @@ Lbs = (1 << 9)  # logical block size
 
 UINT64_MAX = (1 << 64) - 1
 
+BASE_VOLUME_PREFIX = 'i_'
+RESTORED_VOLUME_PREFIX = 'r_'
+
 
 ########################################
 # Verification functions.
@@ -180,7 +183,7 @@ def get_restored_path(ax, vol, gid):
     verify_server_kind(ax, [K_ARCHIVE])
     verify_type(vol, str)
     verify_u64(gid)
-    return '/dev/' + ax.vg + '/r_' + vol + '_' + str(gid)
+    return '/dev/' + ax.vg + '/' + RESTORED_VOLUME_PREFIX + vol + '_' + str(gid)
 
 
 def get_lv_path(ax, vol):
@@ -191,7 +194,7 @@ def get_lv_path(ax, vol):
     '''
     verify_server_kind(ax, [K_ARCHIVE])
     verify_type(vol, str)
-    return '/dev/' + ax.vg + '/i_' + vol
+    return '/dev/' + ax.vg + '/' + BASE_VOLUME_PREFIX + vol
 
 
 ########################################
