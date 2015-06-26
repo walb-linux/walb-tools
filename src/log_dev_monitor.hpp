@@ -102,7 +102,7 @@ public:
         StrVec v;
         int nfds = ::epoll_wait(efd_(), &ev_[0], ev_.size(), timeoutMs);
         if (nfds < 0) {
-            LOGs.error() << FUNC << cybozu::ErrorNo();
+            LOGs.error() << FUNC << "epoll_wait failed" << cybozu::ErrorNo();
             return v;
         }
         std::lock_guard<std::mutex> lk(mutex_);
@@ -111,19 +111,10 @@ public:
             std::string name = getName(fd);
             if (!name.empty()) {
                 v.push_back(name);
-                // Reset the trigger by reading the file.
-                if (::lseek(fd, 0, SEEK_SET) >= 0) {
-                    char buf[4096];
-                    size_t size = 0;
-                    for (;;) {
-                        const int s = ::read(fd, buf, 4096);
-                        if (s <= 0) break;
-                        size += s;
-                    }
-                    LOGs.debug() << FUNC << "read bytes" << size;
-                } else {
-                    // Ignore.
-                }
+#if 0
+                printEvent(ev_[i]);
+#endif
+                resetTrigger(fd);
             }
         }
         return v;
@@ -222,9 +213,11 @@ private:
 
         if (!addName(wdevName, fd())) return false;
 
+        resetTrigger(fd());
+
         struct epoll_event ev;
         ::memset(&ev, 0, sizeof(ev));
-        ev.events = EPOLLIN | EPOLLET;
+        ev.events = EPOLLPRI;
         ev.data.fd = fd();
         if (::epoll_ctl(efd_(), EPOLL_CTL_ADD, fd(), &ev) < 0) {
             delName(wdevName, fd());
@@ -245,6 +238,30 @@ private:
             throw std::runtime_error("epoll_ctl failed.");
         }
         fd.close();
+    }
+    void resetTrigger(int fd) {
+        const char *const FUNC = __func__;
+        if (::lseek(fd, 0, SEEK_SET) < 0) {
+            // ignore.
+            return;
+        }
+        char buf[4096];
+        size_t size = 0;
+        for (;;) {
+            const int s = ::read(fd, buf, 4096);
+            if (s <= 0) break;
+            size += s;
+        }
+        LOGs.debug() << FUNC << "read bytes" << size;
+    }
+    /* debug */
+    void printEvent(const struct epoll_event &ev) const {
+        ::printf("%u %u %u %u\n"
+            , (ev.events & EPOLLIN) != 0
+            , (ev.events & EPOLLERR) != 0
+            , (ev.events & EPOLLPRI) != 0
+            , (ev.events & EPOLLHUP) != 0
+            );
     }
 };
 

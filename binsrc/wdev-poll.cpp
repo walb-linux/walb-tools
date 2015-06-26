@@ -28,10 +28,11 @@ void pollWorker(std::atomic<bool> &flag, walb::LogDevMonitor &monitor)
     try {
         while (!flag.load()) {
             auto v = monitor.poll(1000);
-            ::printf("got %zu\n", v.size());
+            ::printf("got %zu ", v.size());
             for (std::string &s : v) {
-                ::printf("wdev %s\n", s.c_str());
+                ::printf("wdev %s ", s.c_str());
             }
+            ::printf("\n");
         }
     } catch (...) {
     }
@@ -110,7 +111,7 @@ int doMain(int argc, char *argv[])
 {
     Option opt;
     if (!opt.parse(argc, argv)) return 1;
-    walb::LogDevMonitor monitor;
+    walb::LogDevMonitor monitor(10);
     std::atomic<bool> flag(false);
     std::thread th(pollWorker, std::ref(flag), std::ref(monitor));
     while (true) {
