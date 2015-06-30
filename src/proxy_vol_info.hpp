@@ -146,7 +146,18 @@ public:
      * Call this after settle the corresponding wdiff file.
      */
     void addDiffToReceivedDir(const MetaDiff &diff) {
-        diffMgr_.add(diff);
+        if (!diffMgr_.exists(diff)) {
+            diffMgr_.add(diff);
+        }
+    }
+    MetaDiffVec tryToMakeHardlinkInSendtoDir() {
+        MetaDiffVec diffV = getAllDiffsInReceivedDir();
+        LOGs.debug() << "found diffs" << volId << diffV.size();
+        for (const MetaDiff &d : diffV) {
+            LOGs.debug() << "try to make hard link" << volId << d;
+            tryToMakeHardlinkInSendtoDir(d);
+        }
+        return diffV;
     }
     /**
      * Try make a hard link of a diff file in all the archive directories.

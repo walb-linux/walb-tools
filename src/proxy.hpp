@@ -390,13 +390,9 @@ inline void gcProxyVol(const std::string &volId)
     ProxyVolInfo volInfo = getProxyVolInfo(volId);
 
     // Retry to make hard links of wdiff files in the target directory.
-    MetaDiffVec diffV = volInfo.getAllDiffsInReceivedDir();
-    LOGs.debug() << "found diffs" << volId << diffV.size();
-    for (const MetaDiff &d : diffV) {
-        LOGs.debug() << "try to make hard link" << volId << d;
-        volInfo.tryToMakeHardlinkInSendtoDir(d);
-    }
+    const MetaDiffVec diffV = volInfo.tryToMakeHardlinkInSendtoDir();
     volInfo.deleteDiffs(diffV);
+
     // Here the target directory must contain no wdiff file.
     if (!volSt.diffMgr.getAll().empty()) {
         throw cybozu::Exception(FUNC)
@@ -868,13 +864,17 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     }
     diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
+    // You must register the diff before trying to send ack.
+    // When ack failed, next wlog-transfer will do the remaining procedures.
+    ul.lock();
+    volInfo.addDiffToReceivedDir(diff);
+    ul.unlock();
     packet::Ack(p.sock).sendFin();
 
     ul.lock();
     volSt.actionState.clearAll();
-    volInfo.addDiffToReceivedDir(diff);
-    volInfo.tryToMakeHardlinkInSendtoDir(diff);
-    volInfo.deleteDiffs({diff});
+    const MetaDiffVec diffV = volInfo.tryToMakeHardlinkInSendtoDir();
+    volInfo.deleteDiffs(diffV);
     for (const std::string &archiveName : volSt.archiveSet) {
         ProxyTask task(volId, archiveName);
         HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
