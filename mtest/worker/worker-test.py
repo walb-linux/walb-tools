@@ -26,7 +26,7 @@ class TestParseSIZE_UNIT(unittest.TestCase):
             '8G':8 * 1024 * 1024 * 1024,
         }
         for (s, expect) in d.items():
-            v = parsePERIOD(s)
+            v = parseSIZE_UNIT(s)
             self.assertEqual(v, expect)
 
 if __name__ == '__main__':
