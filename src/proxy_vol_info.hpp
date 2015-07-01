@@ -250,7 +250,7 @@ private:
         std::string fname = createDiffFileName(diff);
         cybozu::FilePath oldPath = getReceivedDir() + fname;
         cybozu::FilePath newPath = getSendtoDir(archiveName) + fname;
-        if (!oldPath.stat().exists()) {
+        if (!oldPath.stat().exists() || newPath.stat().exists()) {
             // Do nothing.
             return;
         }
