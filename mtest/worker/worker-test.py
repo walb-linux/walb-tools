@@ -64,19 +64,44 @@ repl_servers:
   repl1:
     addr: 192.168.0.3
     port: 10002
-    interval: 2d
+    interval: 2h
     compress: gzip
-    max_merge_size: 2K
+    max_merge_size: 2M
     bulk_size: 400
 """
 
 class TestLoadConfig(unittest.TestCase):
     def test(self):
         d = yaml.load(configStr)
-        print d
         cfg = Config()
         cfg.set(d)
-        print cfg
+        general = cfg.general
+        self.assertEqual(general.addr, '192.168.0.1')
+        self.assertEqual(general.port, 10000)
+        self.assertEqual(general.max_concurrent_tasks, 10)
+        apply_ = cfg.apply_
+        self.assertEqual(apply_.keep_days, 14 * 86400)
+        merge = cfg.merge
+        self.assertEqual(merge.interval, 10)
+        self.assertEqual(merge.max_nr, 10)
+        self.assertEqual(merge.max_size, 1024 * 1024)
+        self.assertEqual(merge.threshold_nr, 5)
+        repl_servers = cfg.repl_servers
+        r = repl_servers['repl0']
+        self.assertEqual(r.addr, '192.168.0.2')
+        self.assertEqual(r.port, 10001)
+        self.assertEqual(r.interval, 3 * 86400)
+        self.assertEqual(r.compress, ('snappy', 3, 4))
+        self.assertEqual(r.max_merge_size, 5 * 1024)
+        self.assertEqual(r.bulk_size, 40)
+
+        r = repl_servers['repl1']
+        self.assertEqual(r.addr, '192.168.0.3')
+        self.assertEqual(r.port, 10002)
+        self.assertEqual(r.interval, 2 * 3600)
+        self.assertEqual(r.compress, ('gzip', 0, 0))
+        self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
+        self.assertEqual(r.bulk_size, 400)
 
 if __name__ == '__main__':
     unittest.main()

@@ -216,7 +216,6 @@ def main():
         print "set -f option"
         usage()
     cfg = loadConfig(configName)
-    print cfg
 
 if __name__ == "__main__":
     main()
