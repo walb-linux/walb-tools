@@ -208,6 +208,8 @@ K_PROXY = 1
 K_ARCHIVE = 2
 
 serverKinds = [K_STORAGE, K_PROXY, K_ARCHIVE]
+serverKindMap = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
+serverKindRmap = {v:k for k, v in serverKindMap.items()}
 
 
 def server_kind_to_str(kind):
@@ -215,8 +217,19 @@ def server_kind_to_str(kind):
     kind :: int   - K_XXX.
     return :: str - server kind representation.
     '''
-    m = {K_STORAGE: 'storage', K_PROXY: 'proxy', K_ARCHIVE: 'archive'}
-    return m[kind]
+    if kind not in serverKindMap.keys():
+        raise ValueError('bad server kind', kind)
+    return serverKindMap[kind]
+
+
+def str_to_server_kind(s):
+    '''
+    s :: int - string.
+    return :: int - server kind.
+    '''
+    if s not in serverKindRmap.keys():
+        raise ValueError('bad server kind string', s)
+    return serverKindRmap[s]
 
 
 # storage steady states
