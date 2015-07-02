@@ -147,6 +147,9 @@ stest100:
 archive:
 	git archive --format=tar master > walb-tools.tgz
 
+worktest:
+	cd mtest/worker && python worker-test.py
+
 ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""
 -include $(DEPENDS)
 endif

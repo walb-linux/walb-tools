@@ -29,6 +29,18 @@ class TestParseSIZE_UNIT(unittest.TestCase):
             v = parseSIZE_UNIT(s)
             self.assertEqual(v, expect)
 
+class TestParseCOMPRESS_OPT(unittest.TestCase):
+    def test(self):
+        d = {
+            "none":('none', 0, 0),
+            "snappy:3":('snappy', 3, 0),
+            "gzip:9:4":('gzip', 9, 4),
+            "lzma:0:123":('lzma', 0, 123),
+        }
+        for (s, expect) in d.items():
+            v = parseCOMPRESS_OPT(s)
+            self.assertEqual(v, expect)
+
+
 if __name__ == '__main__':
     unittest.main()
-
