@@ -99,13 +99,8 @@ class Apply:
     def set(self, d):
         verify_type(d, dict)
         self.keep_days = parsePERIOD(d['keep_days'])
-        s = d['time_window']
-        ss = s.split(',')
-        if len(ss) != 2:
-            raise Exception('Apply:bad time_window', s)
-        self.time_window = (int(ss[0]), int(ss[1]))
     def __str__(self):
-        return "keep_days=%d, time_window=(%d, %d)" % (self.keep_days, self.time_window[0], self.time_window[1])
+        return "keep_days=%d" % self.keep_days
 
 class Merge:
     def __init__(self):
