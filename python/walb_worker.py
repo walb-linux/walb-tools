@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys
+import sys, signal
 sys.path.insert(0, '../python/walb/')
 from walb import *
 
@@ -193,6 +193,12 @@ def loadConfig(configName):
         cfg.set(d)
         return d
 
+def handler(signum, frame):
+    print "catch SIGHUP"
+
+def setupSignal():
+    signal.signal(signal.SIGHUP, handler)
+
 def usage():
     print "walb-worker [-f configName]"
     exit(1)
@@ -215,6 +221,8 @@ def main():
     if not configName:
         print "set -f option"
         usage()
+
+    setupSignal()
     cfg = loadConfig(configName)
 
 if __name__ == "__main__":
