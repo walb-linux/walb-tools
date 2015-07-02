@@ -42,17 +42,21 @@ def parseCOMPRESS_OPT(s):
     return (mode, level, numCpu)
 
 def parseSuffix(s, suf):
-    s = str(s)
-    verify_type(suf, dict)
-    suffix = 1
-    c = s[-1]
-    if c in suf:
-        suffix = suf[c]
-        s = s[0:-1]
-    n = int(s)
+    if type(s) == int:
+        n = s
+    else:
+        verify_type(s, str)
+        verify_type(suf, dict)
+        suffix = 1
+        c = s[-1]
+        if c in suf:
+            suffix = suf[c]
+            s = s[0:-1]
+        n = int(s)
+        n *= suffix
     if n < 0:
         raise Exception('parseSuffix:negative value', s)
-    return n * suffix
+    return n
 
 def parsePERIOD(s):
     """
