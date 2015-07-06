@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import sys, signal
-sys.path.insert(0, '../python/walb/')
-from walb import *
+from walb.walb import *
 
 import yaml
 

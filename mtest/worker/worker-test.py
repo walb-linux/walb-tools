@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 import unittest, yaml
 import sys
-sys.path.insert(0, '../../python/walb/')
-from walb import *
-sys.path.insert(0, '../../python/')
+from walb.walb import *
 from walb_worker import *
 
 class TestParsePERIOD(unittest.TestCase):
