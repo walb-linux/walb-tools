@@ -666,9 +666,10 @@ class Device(object):
         '''
         Run wdevc command.
         cmdArgs :: [str] - command line arguments.
+        return :: str - command stdout.
         '''
         verify_type(cmdArgs, list, str)
-        self.runCommand([self.wdevcPath] + cmdArgs)
+        return self.runCommand([self.wdevcPath] + cmdArgs)
 
     def exists(self):
         '''
