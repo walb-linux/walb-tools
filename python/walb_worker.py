@@ -152,7 +152,7 @@ class ReplServer:
     def __str__(self):
         return "addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
 
-class ConfigParam:
+class Config:
     def __init__(self):
         self.general = General()
         self.apply_ = Apply()
@@ -182,13 +182,13 @@ class ConfigParam:
             s += name + ':' + str(rs) + '\n'
         return s
 
-def loadConfigParam(configName):
+def loadConfig(configName):
     verify_type(configName, str)
     with open(configName) as f:
         s = f.read().decode('utf8')
         d = yaml.load(s)
-        cfgParam = ConfigParam()
-        cfgParam.set(d)
+        cfg = Config()
+        cfg.set(d)
         return d
 
 def handler(signum, frame):
@@ -196,6 +196,21 @@ def handler(signum, frame):
 
 def setupSignal():
     signal.signal(signal.SIGHUP, handler)
+
+class Param:
+    def _setupServerLayout(self, cfg):
+        binDir = ''
+        dirName = ''
+        logName = ''
+        a0 = Server('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE, binDir, dirName, logName)
+        pass
+
+
+    def init(self, configName):
+        setupSignal()
+        self.cfg = loadConfig(configName)
+        self.serverLayout = _setupServerLayout(self.cfg)
+
 
 def usage():
     print "walb-worker [-f configName]"
@@ -220,8 +235,7 @@ def main():
         print "set -f option"
         usage()
 
-    setupSignal()
-    cfgParam = loadConfigParam(configName)
+    p = Param()
 
 if __name__ == "__main__":
     main()
