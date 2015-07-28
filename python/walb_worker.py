@@ -152,7 +152,7 @@ class ReplServer:
     def __str__(self):
         return "addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
 
-class Config:
+class ConfigParam:
     def __init__(self):
         self.general = General()
         self.apply_ = Apply()
@@ -182,14 +182,13 @@ class Config:
             s += name + ':' + str(rs) + '\n'
         return s
 
-
-def loadConfig(configName):
+def loadConfigParam(configName):
     verify_type(configName, str)
     with open(configName) as f:
         s = f.read().decode('utf8')
         d = yaml.load(s)
-        cfg = Config()
-        cfg.set(d)
+        cfgParam = ConfigParam()
+        cfgParam.set(d)
         return d
 
 def handler(signum, frame):
@@ -222,7 +221,7 @@ def main():
         usage()
 
     setupSignal()
-    cfg = loadConfig(configName)
+    cfgParam = loadConfigParam(configName)
 
 if __name__ == "__main__":
     main()

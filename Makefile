@@ -147,7 +147,7 @@ stest100:
 archive:
 	git archive --format=tar master > walb-tools.tgz
 
-worktest:
+worker-test:
 	env PYTHONPATH=./python python mtest/worker/worker-test.py
 
 ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""

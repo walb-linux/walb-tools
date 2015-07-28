@@ -68,23 +68,23 @@ repl_servers:
     bulk_size: 400
 """
 
-class TestLoadConfig(unittest.TestCase):
+class TestLoadConfigParam(unittest.TestCase):
     def test(self):
         d = yaml.load(configStr)
-        cfg = Config()
-        cfg.set(d)
-        general = cfg.general
+        cfgParam = ConfigParam()
+        cfgParam.set(d)
+        general = cfgParam.general
         self.assertEqual(general.addr, '192.168.0.1')
         self.assertEqual(general.port, 10000)
         self.assertEqual(general.max_concurrent_tasks, 10)
-        apply_ = cfg.apply_
+        apply_ = cfgParam.apply_
         self.assertEqual(apply_.keep_days, 14 * 86400)
-        merge = cfg.merge
+        merge = cfgParam.merge
         self.assertEqual(merge.interval, 10)
         self.assertEqual(merge.max_nr, 10)
         self.assertEqual(merge.max_size, 1024 * 1024)
         self.assertEqual(merge.threshold_nr, 5)
-        repl_servers = cfg.repl_servers
+        repl_servers = cfgParam.repl_servers
         r = repl_servers['repl0']
         self.assertEqual(r.addr, '192.168.0.2')
         self.assertEqual(r.port, 10001)
