@@ -1,8 +1,14 @@
 #!/usr/bin/env python
-import sys, signal
+import sys, signal, time, yaml, datetime
 from walb.walb import *
 
-import yaml
+isDebug = True
+
+def getCurrentTime():
+    return datetime.datetime.utcnow()
+
+def addTime(t, sec):
+    return t + datetime.timedelta(seconds=sec)
 
 def parseFLAG(s):
     verify_type(s, str)
@@ -107,13 +113,13 @@ class General:
 
 class Apply:
     def __init__(self):
-        self.keep_days = 0
+        self.keep_period = 0
         self.time_window = (0, 0)
     def set(self, d):
         verify_type(d, dict)
-        self.keep_days = parsePERIOD(d['keep_days'])
+        self.keep_period = parsePERIOD(d['keep_period'])
     def __str__(self):
-        return "keep_days=%d" % self.keep_days
+        return "keep_period=%d" % self.keep_period
 
 class Merge:
     def __init__(self):
@@ -204,6 +210,16 @@ def handler(signum, frame):
 def setupSignal():
     signal.signal(signal.SIGHUP, handler)
 
+def getLatestGidInfoBefore(curTime, infoL):
+    verify_type(curTime, datetime.datetime)
+    verify_type(infoL, list, GidInfo)
+    prev = None
+    for info in infoL[1:]:
+        if info.ts > curTime:
+            break
+        prev = info
+    return prev
+
 class Worker:
     def _createSeverLayout(self, cfg):
         binDir = ''
@@ -219,19 +235,28 @@ class Worker:
         setupSignal()
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
-        isDebug = True
         self.walbc = Controller(self.cfg.general.walbc_path, self.serverLayout, isDebug)
+
+    def _getVolGidHavingMaxDiff(self, volL, curTime):
+        ls = []
+        for vol in volL:
+            infoL = self.walbc.get_restorable(self.a0, vol, 'all')
+            gidInfo = getLatestGidInfoBefore(addTime(curTime,  -self.cfg.apply_.keep_period), infoL)
+            if not gidInfo:
+                continue
+            size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gidInfo.gid)
+            ls.append((size, vol, gid))
+        ls.sort(key=lambda x : x[0])
+        if ls:
+            return ls[-1]
+        else:
+            return None
 
     def execOne(self):
         volL = self.walbc.get_vol_list(self.a0)
-        for vol in volL:
-            infoL = self.walbc.get_restorable(self.a0, vol, 'all')
-            print vol
-            for info in infoL:
-                print info
-#            size = self.walbc.get_vol_size_lb(self.a0, vol)
-#            ts = self.walbc.get_total_diff_size(self.a0, vol)
-#            print vol, size, ts
+        curTime = getCurrentTime()
+        t = self._getVolGidHavingMaxDiff(volL, curTime)
+        print 't', t
 
 
 def usage():

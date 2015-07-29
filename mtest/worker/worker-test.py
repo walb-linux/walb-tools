@@ -46,7 +46,7 @@ general:
   walbc_path: binsrc/walbc
   max_concurrent_tasks: 10
 apply:
-  keep_days: 14d
+  keep_period: 14d
 merge:
   interval: 10
   max_nr: 10
@@ -79,7 +79,7 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(general.port, 10000)
         self.assertEqual(general.max_concurrent_tasks, 10)
         apply_ = cfg.apply_
-        self.assertEqual(apply_.keep_days, 14 * 86400)
+        self.assertEqual(apply_.keep_period, 14 * 86400)
         merge = cfg.merge
         self.assertEqual(merge.interval, 10)
         self.assertEqual(merge.max_nr, 10)
