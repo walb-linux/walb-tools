@@ -211,11 +211,18 @@ class Worker:
         return ServerLayout([s0], [p0], [self.a0])
 
     def __init__(self, configName):
+        verify_type(configName, str)
         setupSignal()
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
         isDebug = True
         self.walbc = Controller(walbcPath, self.serverLayout, isDebug)
+
+    def execOne(self):
+        ls = self.walbc.get_vol_list(self.a0)
+        for s in ls:
+            size = self.walbc.get_vol_size_lb(self.a0, s)
+            print s, size
 
 
 def usage():
@@ -242,9 +249,7 @@ def main():
         usage()
 
     w = Worker(configName)
-    ls = w.walbc.get_vol_list(w.a0)
-    for s in ls:
-        print s
+    w.execOne()
 
 if __name__ == "__main__":
     main()
