@@ -358,6 +358,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
     UniqueLock ul(volSt.mu);
 
     const std::string state = volSt.sm.get();
+    v.push_back(fmt("hostType storage"));
     v.push_back(fmt("volId %s", volId.c_str()));
     v.push_back(fmt("state %s", state.c_str()));
     if (state == sClear) return v;

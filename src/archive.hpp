@@ -1204,6 +1204,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     UniqueLock ul(volSt.mu);
 
     const std::string &state = volSt.sm.get();
+    v.push_back(fmt("hostType archive"));
     v.push_back(fmt("volume %s", volId.c_str()));
     v.push_back(fmt("state %s", state.c_str()));
     if (state == aClear) return v;
