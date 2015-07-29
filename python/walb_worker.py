@@ -4,6 +4,9 @@ from walb.walb import *
 
 import yaml
 
+binDir = os.getcwd() + '/binsrc/'
+walbcPath = binDir + 'walbc'
+
 def parseFLAG(s):
     verify_type(s, str)
     if s == '0':
@@ -189,7 +192,7 @@ def loadConfig(configName):
         d = yaml.load(s)
         cfg = Config()
         cfg.set(d)
-        return d
+        return cfg
 
 def handler(signum, frame):
     print "catch SIGHUP"
@@ -198,18 +201,21 @@ def setupSignal():
     signal.signal(signal.SIGHUP, handler)
 
 class Param:
-    def _setupServerLayout(self, cfg):
+    def _createSeverLayout(self, cfg):
         binDir = ''
         dirName = ''
         logName = ''
-        a0 = Server('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE, binDir, dirName, logName)
-        pass
-
+        self.a0 = Server('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE, binDir, dirName, logName, '')
+        s0 = Server('s0', '', 0, K_STORAGE, binDir, dirName, logName)
+        p0 = Server('p0', '', 0, K_PROXY, binDir, dirName, logName)
+        return ServerLayout([s0], [p0], [self.a0])
 
     def init(self, configName):
         setupSignal()
         self.cfg = loadConfig(configName)
-        self.serverLayout = _setupServerLayout(self.cfg)
+        self.serverLayout = self._createSeverLayout(self.cfg)
+        isDebug = True
+        self.walbc = Controller(walbcPath, self.serverLayout, isDebug)
 
 
 def usage():
@@ -236,6 +242,10 @@ def main():
         usage()
 
     p = Param()
+    p.init(configName)
+    ls = p.walbc.get_vol_list(p.a0)
+    for s in ls:
+        print s
 
 if __name__ == "__main__":
     main()
