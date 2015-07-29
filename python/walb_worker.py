@@ -200,7 +200,7 @@ def handler(signum, frame):
 def setupSignal():
     signal.signal(signal.SIGHUP, handler)
 
-class Param:
+class Worker:
     def _createSeverLayout(self, cfg):
         binDir = ''
         dirName = ''
@@ -210,7 +210,7 @@ class Param:
         p0 = Server('p0', '', 0, K_PROXY, binDir, dirName, logName)
         return ServerLayout([s0], [p0], [self.a0])
 
-    def init(self, configName):
+    def __init__(self, configName):
         setupSignal()
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
@@ -241,9 +241,8 @@ def main():
         print "set -f option"
         usage()
 
-    p = Param()
-    p.init(configName)
-    ls = p.walbc.get_vol_list(p.a0)
+    w = Worker(configName)
+    ls = w.walbc.get_vol_list(w.a0)
     for s in ls:
         print s
 
