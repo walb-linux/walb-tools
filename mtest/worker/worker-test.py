@@ -43,6 +43,7 @@ configStr = """
 general:
   addr: 192.168.0.1
   port: 10000
+  walbc_path: binsrc/walbc
   max_concurrent_tasks: 10
 apply:
   keep_days: 14d

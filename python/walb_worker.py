@@ -4,9 +4,6 @@ from walb.walb import *
 
 import yaml
 
-binDir = os.getcwd() + '/binsrc/'
-walbcPath = binDir + 'walbc'
-
 def parseFLAG(s):
     verify_type(s, str)
     if s == '0':
@@ -91,6 +88,7 @@ class General:
     def __init__(self):
         self.addr = ""
         self.port = 0
+        self.walbc_path = ''
         self.max_concurrent_tasks = 0
 
     def set(self, d):
@@ -98,6 +96,10 @@ class General:
         self.addr = d['addr']
         verify_type(self.addr, str)
         self.port = parsePort(d['port'])
+        self.walbc_path = d['walbc_path']
+        verify_type(self.walbc_path, str)
+        if not os.path.exists(self.walbc_path):
+            raise Exception('walbc_path is not found', self.walbc_path)
         self.max_concurrent_tasks = parsePositive(d['max_concurrent_tasks'])
 
     def __str__(self):
@@ -139,8 +141,10 @@ class ReplServer:
         self.compress = ('none', 0, 0)
         self.max_merge_size = 0
         self.bulk_size = 0
-    def set(self, d):
+    def set(self, name, d):
+        verify_type(name, str)
         verify_type(d, dict)
+        self.name = name
         self.addr = d['addr']
         verify_type(self.addr, str)
         self.port = parsePort(d['port'])
@@ -153,7 +157,7 @@ class ReplServer:
             s = d['bulk_size']
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
-        return "addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+        return "name=%s, addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
 
 class Config:
     def __init__(self):
@@ -170,7 +174,7 @@ class Config:
         ss = d['repl_servers']
         for (name, v) in ss.items():
             rs = ReplServer()
-            rs.set(v)
+            rs.set(name, v)
             self.repl_servers[name] = rs
 
     def __str__(self):
@@ -216,13 +220,18 @@ class Worker:
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
         isDebug = True
-        self.walbc = Controller(walbcPath, self.serverLayout, isDebug)
+        self.walbc = Controller(self.cfg.general.walbc_path, self.serverLayout, isDebug)
 
     def execOne(self):
-        ls = self.walbc.get_vol_list(self.a0)
-        for s in ls:
-            size = self.walbc.get_vol_size_lb(self.a0, s)
-            print s, size
+        volL = self.walbc.get_vol_list(self.a0)
+        for vol in volL:
+            infoL = self.walbc.get_restorable(self.a0, vol, 'all')
+            print vol
+            for info in infoL:
+                print info
+#            size = self.walbc.get_vol_size_lb(self.a0, vol)
+#            ts = self.walbc.get_total_diff_size(self.a0, vol)
+#            print vol, size, ts
 
 
 def usage():
