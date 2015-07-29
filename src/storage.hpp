@@ -352,19 +352,16 @@ inline StrVec getAllStatusAsStrVec()
 
 inline StrVec getVolStatusAsStrVec(const std::string &volId, bool isVerbose)
 {
-    const char *const FUNC = __func__;
     auto fmt = cybozu::util::formatString;
     StrVec v;
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
 
     const std::string state = volSt.sm.get();
-    if (state == sClear) {
-        throw cybozu::Exception(FUNC) << "not found" << volId;
-    }
-
     v.push_back(fmt("volId %s", volId.c_str()));
     v.push_back(fmt("state %s", state.c_str()));
+    if (state == sClear) return v;
+
     v.push_back(formatActions("action", volSt.ac, allActionVec));
     v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
     StorageVolInfo volInfo(gs.baseDirStr, volId);

@@ -1207,6 +1207,7 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     v.push_back(fmt("volume %s", volId.c_str()));
     v.push_back(fmt("state %s", state.c_str()));
     if (state == aClear) return v;
+
     v.push_back(formatActions("action", volSt.ac, allActionVec));
     v.push_back(fmt("stopState %s", stopStateToStr(StopState(volSt.stopState.load()))));
     v.push_back(fmt("lastSyncTime %s"

@@ -312,9 +312,13 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
 
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
-    const ProxyVolInfo volInfo = getProxyVolInfo(volId);
 
     const std::string state = volSt.sm.get();
+    ret.push_back(fmt("volume %s", volId.c_str()));
+    ret.push_back(fmt("state %s", state.c_str()));
+    if (state == pClear) return ret;
+
+    const ProxyVolInfo volInfo = getProxyVolInfo(volId);
     const size_t numDiff = volSt.diffMgr.size();
     const uint64_t sizeLb = volInfo.getSizeLb();
     const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
@@ -323,8 +327,6 @@ inline StrVec getVolStatusAsStrVec(const std::string &volId)
     const std::string tsStr = util::timeToPrintable(volSt.lastWlogReceivedTime);
     const int totalNumAction = getTotalNumActions(volSt.ac, volSt.archiveSet);
 
-    ret.push_back(fmt("volume %s", volId.c_str()));
-    ret.push_back(fmt("state %s", state.c_str()));
     ret.push_back(fmt("sizeLb %" PRIu64, sizeLb));
     ret.push_back(fmt("size %s", sizeS.c_str()));
     ret.push_back(fmt("numDiff %zu", numDiff));
