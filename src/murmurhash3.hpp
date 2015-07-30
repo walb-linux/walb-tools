@@ -70,4 +70,33 @@ public:
     }
 };
 
+/**
+ * Stream hasher.
+ */
+class StreamHasher
+{
+private:
+    uint32_t initSeed_;
+    uint32_t seed_;
+    Hash hash_;
+public:
+    explicit StreamHasher(uint32_t initSeed = 0)
+        : initSeed_(initSeed) {
+        reset();
+    }
+    void reset() {
+        seed_ = initSeed_;
+        hash_.zeroClear();
+    }
+    void push(const void *key, size_t len) {
+        Hash h;
+        ::MurmurHash3_x64_128(key, len, seed_, &h.data[0]);
+        hash_.doXor(h);
+        seed_++;
+    }
+    const Hash& get() const {
+        return hash_;
+    }
+};
+
 }} //namespace cybozu::murmurhash3
