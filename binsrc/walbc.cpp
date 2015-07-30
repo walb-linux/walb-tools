@@ -104,8 +104,7 @@ void setupKick(cybozu::Option& opt)
 void setupBlockHash(cybozu::Option& opt)
 {
     setupVolIdGid(opt);
-    static uint64_t size;
-    opt.appendParamOpt(&size, 0, "(opt)", ": bulk size");
+    setupOpt(opt, "(bulk size) (scanning size)");
 }
 void setupUuid(cybozu::Option& opt)
 {

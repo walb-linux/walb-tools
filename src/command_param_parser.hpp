@@ -218,18 +218,24 @@ struct BlockHashParam
     std::string volId;
     uint64_t gid;
     uint64_t bulkLb;
+    uint64_t sizeLb; // 0 means whole device size.
 };
 
 inline BlockHashParam parseBlockHashParam(const StrVec &args)
 {
     BlockHashParam param;
-    std::string gidStr, bulkSizeU;
-    cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU});
+    std::string gidStr, bulkSizeU, sizeU;
+    cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU, &sizeU});
     param.gid = cybozu::atoi(gidStr);
     if (bulkSizeU.empty()) {
         param.bulkLb = DEFAULT_BULK_LB;
     } else {
         param.bulkLb = util::parseBulkLb(bulkSizeU, __func__);
+    }
+    if (sizeU.empty()) {
+        param.sizeLb = 0;
+    } else {
+        param.sizeLb = util::parseSizeLb(sizeU, __func__);
     }
     return param;
 };

@@ -166,7 +166,7 @@ inline void prepareRawFullScanner(
     cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb)
 {
     cybozu::lvm::Lv lv = volSt.lvCache.getLv();
-    if (sizeLb != lv.sizeLb()) {
+    if (sizeLb > lv.sizeLb()) {
         throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
     }
     file.open(lv.path().str(), O_RDONLY);
@@ -1432,15 +1432,21 @@ inline void getBase(protocol::GetCommandParams &p)
 }
 
 /**
- * For test use only.
+ * Get block hash to verify block devices.
+ * sizeLb: 0 means whole device size.
  */
 inline bool getBlockHash(
-    const std::string &volId, uint64_t gid, uint64_t bulkLb,
+    const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
     packet::Packet &pkt, Logger &, cybozu::murmurhash3::Hash &hash)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
+    const uint64_t devSizeLb = volSt.lvCache.getLv().sizeLb();
+    if (sizeLb == 0) {
+        sizeLb = devSizeLb;
+    } else if (sizeLb > devSizeLb) {
+        throw cybozu::Exception(__func__) << "Specified device size is too large" << sizeLb << devSizeLb;
+    }
 
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, MetaSnap(gid));
@@ -2284,6 +2290,7 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
         const std::string &volId = param.volId;
         const uint64_t gid = param.gid;
         const uint64_t bulkLb = param.bulkLb;
+        const uint64_t sizeLb = param.sizeLb;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
         // This does not lock volSt.
@@ -2292,7 +2299,7 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
         pkt.flush();
 
         cybozu::murmurhash3::Hash hash;
-        if (!archive_local::getBlockHash(volId, gid, bulkLb, pkt, logger, hash)) {
+        if (!archive_local::getBlockHash(volId, gid, bulkLb, sizeLb, pkt, logger, hash)) {
             throw cybozu::Exception(FUNC) << "force stopped" << volId;
         }
         pkt.write(msgOk);

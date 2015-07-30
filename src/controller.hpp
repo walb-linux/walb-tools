@@ -304,6 +304,7 @@ inline void c2xKickClient(protocol::ClientParams &p)
  * params[0]: volId
  * params[1]: gidStr
  * params[2]: blkSizeU (optional)
+ * params[3]: scanSizeU (optional)
  */
 inline void c2aBlockHashClient(protocol::ClientParams &p)
 {
