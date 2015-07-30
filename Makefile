@@ -100,7 +100,7 @@ manpages: $(MANPAGES)
 man/%: man/%.ronn
 	ronn -r $<
 
-src/version.hpp: src/version.hpp.template
+src/version.hpp: src/version.hpp.template VERSION
 	cat src/version.hpp.template |sed "s/VERSION/`cat VERSION`/g" > src/version.hpp
 
 binsrc/%.depend: binsrc/%.cpp src/version.hpp
