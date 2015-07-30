@@ -1453,8 +1453,7 @@ inline bool getBlockHash(
 
     AlignedArray buf;
     packet::StreamControl ctrl(pkt.sock());
-    cybozu::murmurhash3::Hasher hasher(0); // seed is 0.
-    hash.zeroClear();
+    cybozu::murmurhash3::StreamHasher hasher(0); // seed is 0.
     uint64_t remaining = sizeLb;
     double t0 = cybozu::util::getTime();
     while (remaining > 0) {
@@ -1465,8 +1464,7 @@ inline bool getBlockHash(
         const uint64_t lb = std::min(remaining, bulkLb);
         buf.resize(lb * LOGICAL_BLOCK_SIZE);
         virt.read(buf.data(), buf.size());
-        const cybozu::murmurhash3::Hash h = hasher(buf.data(), buf.size());
-        hash.doXor(h);
+        hasher.push(buf.data(), buf.size());
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > 1.0) { // to avoid timeout.
             ctrl.dummy();
@@ -1475,6 +1473,7 @@ inline bool getBlockHash(
         remaining -= bulkLb;
     }
     ctrl.end();
+    hash = hasher.get();
     return true;
 }
 
