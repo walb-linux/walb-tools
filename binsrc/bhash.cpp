@@ -52,23 +52,23 @@ int doMain(int argc, char* argv[])
 
     std::vector<char> buf(bs);
     cybozu::murmurhash3::Hasher hasher(opt.seed);
+    cybozu::murmurhash3::StreamHasher sHasher(opt.seed);
     uint64_t remaining = size;
     uint64_t blk = 0;
-    cybozu::murmurhash3::Hash sum;
-    sum.zeroClear();
+
     while (remaining > 0) {
         file.read(buf.data(), bs);
-        cybozu::murmurhash3::Hash h = hasher(buf.data(), bs);
         if (opt.isEach) {
+            cybozu::murmurhash3::Hash h = hasher(buf.data(), bs);
             ::printf("%10" PRIu64 " %s\n", blk, h.str().c_str());
         } else {
-            sum.doXor(h);
+            sHasher.push(buf.data(), bs);
         }
         blk++;
         remaining -= bs;
     }
     if (!opt.isEach) {
-        ::printf("%s\n", sum.str().c_str());
+        ::printf("%s\n", sHasher.get().str().c_str());
     }
     return 0;
 }
