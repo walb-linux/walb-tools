@@ -2,7 +2,7 @@
 import sys, signal, time, yaml, datetime
 from walb.walb import *
 
-isDebug = True
+isDebug = False # True
 
 def getCurrentTime():
     return datetime.datetime.utcnow()
@@ -252,8 +252,14 @@ class Worker:
         else:
             return None
 
-    def execOne(self):
+    def _isApplying(self, vol):
+        ms = self.walbc.get_base(self.a0, vol)
+        return ms.is_applying()
+
+    def selectTask(self):
         volL = self.walbc.get_vol_list(self.a0)
+        for vol in volL:
+            print vol, self._isApplying(vol)
         curTime = getCurrentTime()
         t = self._getVolGidHavingMaxDiff(volL, curTime)
         print 't', t
@@ -283,7 +289,7 @@ def main():
         usage()
 
     w = Worker(configName)
-    w.execOne()
+    w.selectTask()
 
 if __name__ == "__main__":
     main()
