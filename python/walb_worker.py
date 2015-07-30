@@ -220,6 +220,39 @@ def getLatestGidInfoBefore(curTime, infoL):
         prev = info
     return prev
 
+class Task:
+    def __init__(self, name, vol, tpl):
+        verify_type(name, str)
+        verify_type(vol, str)
+        self.name = name
+        self.vol = vol
+        if name == "apply":
+            (ax, gid) = tpl
+            verify_server_kind(ax, [K_ARCHIVE])
+            self.ax = ax
+            self.gid = gid
+        elif name == "merge":
+            (ax, gidB, gidE) = tpl
+            verify_server_kind(ax, [K_ARCHIVE])
+            verify_gid_range(gidB, gidE, 'merge')
+            self.ax = ax
+            self.gidB = gidB
+            self.gidE = gidE
+        elif name == "repl":
+            (src, dst) = tpl
+            self.src = src
+            self.dst = dst
+        else:
+            raise Exception("Task bad name", name, vol, tpl)
+
+    def __str__(self):
+        if self.name == "apply":
+            return "Task apply ax=%s vol=%s gid=%s" % (self.ax, self.vol, self.gid)
+        if self.name == "merge":
+            return "Task merge ax=%s vol=%s gid=(%d, %d)" % (self.ax, self.vol, self.gidB, self.gidE)
+        if self.name == "repl":
+            return "Task repl vol=%s src=%s dst=%s" % (self.vol, self.src, self.dst)
+
 class Worker:
     def _createSeverLayout(self, cfg):
         binDir = ''
@@ -259,11 +292,13 @@ class Worker:
     def selectTask(self):
         volL = self.walbc.get_vol_list(self.a0)
         for vol in volL:
-            print vol, self._isApplying(vol)
+            if self._isApplying(vol):
+                return Task("apply", vol, self.a0, (gid,))
         curTime = getCurrentTime()
         t = self._getVolGidHavingMaxDiff(volL, curTime)
-        print 't', t
-
+        if t:
+            (size, vol, gid) = t
+            return Task("apply", vol, self.a0, (gid,))
 
 def usage():
     print "walb-worker [-f configName]"
@@ -289,7 +324,8 @@ def main():
         usage()
 
     w = Worker(configName)
-    w.selectTask()
+    task = w.selectTask()
+    print task
 
 if __name__ == "__main__":
     main()
