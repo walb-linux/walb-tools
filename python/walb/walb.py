@@ -2600,3 +2600,24 @@ class Controller(object):
         if curSizeMb != sizeMb:
             raise Exception('wait_for_resize:failed',
                             ax.name, vol, oldSizeMb, sizeMb, curSizeMb)
+
+    def get_block_hash(self, ax, vol, gid, bulkSizeU='64K', scanSizeU=None):
+        '''
+        Get block hash for virtual
+        ax :: Server - archive server.
+        vol :: str - volume name.
+        gid :: int - generaion id.
+        bulkSizeU :: str - bulk size hash calculation (with unit suffix)
+        scanSizeU :: str - scanning size (with unit suffix).
+                           It must not exceeds the device size.
+        return :: str - hash value as a string.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_u64(gid)
+        verify_type(vol, str)
+        verify_size_unit(bulkSizeU)
+        args = ['bhash', vol, str(gid), bulkSizeU]
+        if scanSizeU is not None:
+            verify_size_unit(scanSizeU)
+            args.append(scanSizeU)
+        return self.run_ctl(ax, args)
