@@ -1,14 +1,12 @@
 #!/usr/bin/env python
-import sys, signal, time, yaml, datetime
+import sys, signal, time, yaml, datetime, collections
 from walb.walb import *
 
 isDebug = False # True
+OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
 
 def getCurrentTime():
     return datetime.datetime.utcnow()
-
-def addTime(t, sec):
-    return t + datetime.timedelta(seconds=sec)
 
 def parseFLAG(s):
     verify_type(s, str)
@@ -69,7 +67,8 @@ def parsePERIOD(s):
         digits = [0-9]+
         suffix = (m|h|d)
     """
-    return parseSuffix(s, {'m':60, 'h':3600, 'd':86400})
+    v = parseSuffix(s, {'m':60, 'h':3600, 'd':86400})
+    return datetime.timedelta(seconds=v)
 
 def parseSIZE_UNIT(s):
     """
@@ -113,7 +112,7 @@ class General:
 
 class Apply:
     def __init__(self):
-        self.keep_period = 0
+        self.keep_period = datetime.timedelta()
         self.time_window = (0, 0)
     def set(self, d):
         verify_type(d, dict)
@@ -123,13 +122,13 @@ class Apply:
 
 class Merge:
     def __init__(self):
-        self.interval = 0
+        self.interval = datetime.timedelta()
         self.max_nr = 0
         self.max_size = 0
         self.threshold_nr = 0
     def set(self, d):
         verify_type(d, dict)
-        self.interval = parsePositive(d['interval'])
+        self.interval = parsePERIOD(d['interval'])
         if d.has_key('max_nr'):
             self.max_nr = parsePositive(d['max_nr'])
         if d.has_key('max_size'):
@@ -164,6 +163,8 @@ class ReplServer:
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
         return "name=%s, addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+    def getWalbServer(self):
+        return makeArchiveServer(self.name, self.addr, self.port)
 
 class Config:
     def __init__(self):
@@ -204,6 +205,17 @@ def loadConfig(configName):
         cfg.set(d)
         return cfg
 
+class ExecedRepl:
+    def __init__(self, vol, rs, ts):
+        verify_type(vol, str)
+        verify_type(rs, ReplServer)
+        verify_type(ts, datetime.datetime)
+        self.vol = vol
+        self.rs = rs
+        self.ts = ts
+    def __str__(self):
+        return "vol=%s rs=%s ts=%s" % (self.vol, self.rs, self.ts)
+
 def handler(signum, frame):
     print "catch SIGHUP"
 
@@ -220,10 +232,36 @@ def getLatestGidInfoBefore(curTime, infoL):
         prev = info
     return prev
 
+def sumDiffSize(diffL):
+    return sum([d.dataSize for d in diffL])
+
+def getMergeGidRange(diffL):
+    diffLL = []
+    t = []
+    for diff in diffL:
+        if diff.isCompDiff or not diff.isMergeable:
+            if len(t) >= 2:
+                diffLL.append(t)
+            t = []
+        t.append(diff)
+    if len(t) >= 2:
+        diffLL.append(t)
+
+    def f(diffL):
+        return (sumDiffSize(diffL) / len(diffL), diffL[0].B.gidB, diffL[-1].E.gidB)
+    tL = map(f, diffLL)
+    if tL:
+        tL.sort(key=lambda x:x[0])
+        (_, gidB, gidE) = tL[0]
+        return (gidB, gidE)
+    else:
+        return None
+
 class Task:
     def __init__(self, name, vol, tpl):
         verify_type(name, str)
         verify_type(vol, str)
+        verify_type(tpl, tuple)
         self.name = name
         self.vol = vol
         if name == "apply":
@@ -253,14 +291,17 @@ class Task:
         if self.name == "repl":
             return "Task repl vol=%s src=%s dst=%s" % (self.vol, self.src, self.dst)
 
+g_binDir = ''
+g_dirName = ''
+g_logName = ''
+def makeArchiveServer(name, addr, port):
+    return Server(name, addr, port, K_ARCHIVE, g_binDir, g_dirName, g_logName, '')
+
 class Worker:
     def _createSeverLayout(self, cfg):
-        binDir = ''
-        dirName = ''
-        logName = ''
-        self.a0 = Server('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE, binDir, dirName, logName, '')
-        s0 = Server('s0', '', 0, K_STORAGE, binDir, dirName, logName)
-        p0 = Server('p0', '', 0, K_PROXY, binDir, dirName, logName)
+        self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
+        s0 = Server('s0', '', 0, K_STORAGE, g_binDir, g_dirName, g_logName)
+        p0 = Server('p0', '', 0, K_PROXY, g_binDir, g_dirName, g_logName)
         return ServerLayout([s0], [p0], [self.a0])
 
     def __init__(self, configName):
@@ -269,36 +310,86 @@ class Worker:
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
         self.walbc = Controller(self.cfg.general.walbc_path, self.serverLayout, isDebug)
+        self.execedReplServerList = collections.defaultdict()
 
     def _getVolGidHavingMaxDiff(self, volL, curTime):
         ls = []
         for vol in volL:
             infoL = self.walbc.get_restorable(self.a0, vol, 'all')
-            gidInfo = getLatestGidInfoBefore(addTime(curTime,  -self.cfg.apply_.keep_period), infoL)
+            gidInfo = getLatestGidInfoBefore(curTime - self.cfg.apply_.keep_period, infoL)
             if not gidInfo:
                 continue
             size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gidInfo.gid)
             ls.append((size, vol, gid))
-        ls.sort(key=lambda x : x[0])
         if ls:
+            ls.sort(key=lambda x : x[0])
             return ls[-1]
         else:
             return None
 
-    def _isApplying(self, vol):
-        ms = self.walbc.get_base(self.a0, vol)
-        return ms.is_applying()
+    def _selectMergeTask(self, volL):
+        ls = []
+        for vol in volL:
+            diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
+            n = len(diffL)
+            if n >= self.cfg.merge.threshold_nr:
+                ls.append((n, vol, diffL))
+        if ls:
+            ls.sort(key=lambda x : x[0], reverse=True)
+            for t in ls:
+                (n, vol, diffL) = t
+                r = getMergeGidRange(diffL)
+                if r:
+                    return Task("merge", vol, self.a0, r)
+        return None
+
+    def _selectReplTask(self, volL, curTime):
+        tL = []
+        rsL = self.cfg.repl_servers.values()
+        for vol in volL:
+            a0State = self.walbc.get_state(self.a0, vol)
+            if a0State not in aActive:
+                continue
+            for rs in rsL:
+                a1 = rs.getWalbServer()
+                a1State = self.walbc.get_state(a1, vol)
+                if a1State not in aActive:
+                    continue
+                ts = self.execedReplServerList[(vol, rs)]
+                if ts and ts + rs.interval < curTime:
+                    continue
+                if not ts:
+                    ts = OLDEST_TIME
+                tL.append((ts, vol, rs))
+        if tL:
+            tL.sort(key=lambda x:x[0])
+            (_, vol, rs) = tL[0]
+            return Task("repl", vol, (self.a0, rs))
+        else:
+            return None
 
     def selectTask(self):
+        curTime = getCurrentTime()
+        # stelp 1
         volL = self.walbc.get_vol_list(self.a0)
         for vol in volL:
-            if self._isApplying(vol):
-                return Task("apply", vol, self.a0, (gid,))
-        curTime = getCurrentTime()
+            ms = self.walbc.get_base(self.a0, vol)
+            if ms.is_applying():
+                return Task("apply", vol, self.a0, (ms.B.gidB,))
+        # step 2
         t = self._getVolGidHavingMaxDiff(volL, curTime)
         if t:
             (size, vol, gid) = t
             return Task("apply", vol, self.a0, (gid,))
+        # step 3
+        t = self._selectMergeTask(volL)
+        if t:
+            return t
+        # step 4
+        t = self._selectReplTask(volL, curTime)
+        if t:
+            return t
+
 
 def usage():
     print "walb-worker [-f configName]"
