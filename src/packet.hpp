@@ -185,4 +185,31 @@ private:
     }
 };
 
+class StreamControl2
+{
+private:
+    enum class Msg : uint8_t {
+        Next = 0, End = 1, Error = 2, Dummy = 3,
+    };
+    Packet pkt_;
+    Msg msg_;
+
+public:
+    explicit StreamControl2(cybozu::Socket &sock)
+        : pkt_(sock), msg_(Msg::Error) {}
+
+    /* Send */
+    void sendNext() { pkt_.write(uint8_t(Msg::Next));}
+    void sendEnd() { pkt_.write(uint8_t(Msg::End)); }
+    void sendError() { pkt_.write(uint8_t(Msg::Error)); }
+    void sendDummy() { pkt_.write(uint8_t(Msg::Dummy)); }
+
+    /* Receive and check */
+    void recv() { uint8_t u; pkt_.read(u); msg_ = static_cast<Msg>(u); }
+    bool isNext() { return msg_ == Msg::Next; }
+    bool isEnd() { return msg_ == Msg::End; }
+    bool isError() { return msg_ == Msg::Error; }
+    bool isDummy() { return msg_ == Msg::Dummy; }
+};
+
 }} //namespace walb::packet

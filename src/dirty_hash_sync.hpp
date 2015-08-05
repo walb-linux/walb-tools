@@ -19,10 +19,10 @@ namespace dirty_hash_sync_local {
 
 inline void compressAndSend(
     packet::Packet &pkt, DiffPacker &packer,
-    PackCompressor &compr, packet::StreamControl &sendCtl)
+    PackCompressor &compr, packet::StreamControl2 &sendCtl)
 {
     compressor::Buffer compBuf = compr.convert(packer.getPackAsArray().data());
-    sendCtl.next();
+    sendCtl.sendNext();
     pkt.write<size_t>(compBuf.size());
     pkt.write(compBuf.data(), compBuf.size());
 }
@@ -39,8 +39,8 @@ inline bool dirtyHashSyncClient(
     const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const char *const FUNC = __func__;
-    packet::StreamControl recvCtl(pkt.sock());
-    packet::StreamControl sendCtl(pkt.sock());
+    packet::StreamControl2 recvCtl(pkt.sock());
+    packet::StreamControl2 sendCtl(pkt.sock());
     DiffPacker packer;
     walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
     cybozu::murmurhash3::Hasher hasher(hashSeed);
@@ -52,8 +52,8 @@ inline bool dirtyHashSyncClient(
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
-        const bool hasNext = recvCtl.isNext();
-        if (hasNext) {
+        recvCtl.recv();
+        if (recvCtl.isNext()) {
             if (remainingLb == 0) throw cybozu::Exception(FUNC) << "has next but remainingLb is zero";
         } else {
             if (remainingLb == 0) break;
@@ -71,9 +71,8 @@ inline bool dirtyHashSyncClient(
             dirty_hash_sync_local::compressAndSend(pkt, packer, compr, sendCtl);
             packer.add(addr, lb, buf.data());
         } else {
-            sendCtl.dummy(); // to avoid socket timeout.
+            sendCtl.sendDummy(); // to avoid socket timeout.
         }
-        recvCtl.reset();
 
         remainingLb -= lb;
         addr += lb;
@@ -84,7 +83,7 @@ inline bool dirtyHashSyncClient(
     if (recvCtl.isError()) {
         throw cybozu::Exception(FUNC) << "recvCtl";
     }
-    sendCtl.end();
+    sendCtl.sendEnd();
     pkt.flush();
     return true;
 }
@@ -109,7 +108,7 @@ inline bool dirtyHashSyncServer(
 
     auto readVirtualFullImageAndSendHash = [&]() {
         cybozu::murmurhash3::Hasher hasher(hashSeed);
-        packet::StreamControl ctrl(pkt.sock());
+        packet::StreamControl2 ctrl(pkt.sock());
 
         AlignedArray buf;
         uint64_t remaining = sizeLb;
@@ -123,15 +122,15 @@ inline bool dirtyHashSyncServer(
                 buf.resize(lb * LOGICAL_BLOCK_SIZE);
                 reader.read(buf.data(), buf.size());
                 const cybozu::murmurhash3::Hash hash = hasher(buf.data(), buf.size());
-                ctrl.next();
+                ctrl.sendNext();
                 pkt.write(hash);
                 remaining -= lb;
                 progressLb += lb;
             }
-            ctrl.end();
+            ctrl.sendEnd();
             pkt.flush();
         } catch (std::exception& e) {
-            ctrl.error();
+            ctrl.sendError();
             throw;
         }
     };
@@ -148,18 +147,19 @@ inline bool dirtyHashSyncServer(
         wdiffH.writeTo(fileW);
     }
 
-    packet::StreamControl ctrl(pkt.sock());
+    packet::StreamControl2 ctrl(pkt.sock());
     AlignedArray buf;
     uint64_t writeSize = 0;
-    while (ctrl.isNext() || ctrl.isDummy()) {
+    for (;;) {
+        ctrl.recv();
+        if (!ctrl.isNext() && !ctrl.isDummy()) {
+            break;
+        }
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             readerTh.join();
             return false;
         }
-        if (ctrl.isDummy()) {
-            ctrl.reset();
-            continue;
-        }
+        if (ctrl.isDummy()) continue;
         size_t size;
         pkt.read(size);
         verifyDiffPackSize(size, FUNC);
@@ -177,7 +177,6 @@ inline bool dirtyHashSyncServer(
             fileW.fdatasync();
             writeSize = 0;
         }
-        ctrl.reset();
     }
     if (ctrl.isError()) {
         throw cybozu::Exception(FUNC) << "client sent an error";
