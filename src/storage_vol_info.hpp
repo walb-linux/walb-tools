@@ -309,7 +309,7 @@ public:
             recS.gid = recE.gid;
             recS.isMergeable = recE.isMergeable;
         } else {
-            assert(recB.gid + 1 < recB.gid);
+            assert(recB.gid + 1 < recE.gid);
             recS.gid = recB.gid + 1;
             recS.isMergeable = true;
         }
