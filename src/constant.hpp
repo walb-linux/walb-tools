@@ -34,4 +34,7 @@ const size_t DEFAULT_MERGE_BUFFER_LB = 4 * MEBI / LBS;
 
 const char DEFAULT_DISCARD_TYPE_STR[] = "ignore";
 
+const uint64_t DIRTY_HASH_SYNC_READ_AHEAD_LB = 256 * MEBI / LBS;
+const uint64_t DIRTY_HASH_SYNC_MAX_PACK_AREA_LB = 256 * MEBI / LBS;
+
 } // walb

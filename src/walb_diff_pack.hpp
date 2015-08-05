@@ -81,7 +81,7 @@ struct DiffPackHeader : walb_diff_pack
     }
     void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp,
-                  "checksum %08x\n"
+                  "checksum: %08x\n"
                   "n_records: %u\n"
                   "total_size: %u\n"
                   "isEnd: %d\n"
@@ -93,6 +93,20 @@ struct DiffPackHeader : walb_diff_pack
             ::fprintf(fp, "record %zu: ", i);
             (*this)[i].printOneline(fp);
         }
+    }
+    std::string toStr() const {
+        std::stringstream ss;
+        ss << cybozu::util::formatString(
+            "checksum: %08x\n" "n_records: %u\n" "total_size: %u\n" "isEnd: %d\n"
+            , checksum, n_records, total_size, isEnd());
+        for (size_t i = 0; i < n_records; i++) {
+            ss << (*this)[i] << "\n";
+        }
+        return ss.str();
+    }
+    friend std::ostream& operator<<(std::ostream& os, const DiffPackHeader& rhs) {
+        os << rhs.toStr();
+        return os;
     }
     void clear() {
         ::memset(data(), 0, size());
@@ -282,6 +296,15 @@ public:
         abuf_.resize(1);
         setPackPtr();
         pack_->clear();
+    }
+    const DiffPackHeader& header() const {
+        return *(const DiffPackHeader *)abuf_[0].data();
+    }
+    /**
+     * This is for debug.
+     */
+    size_t size() const {
+        return abuf_.totalSize();
     }
 private:
     static bool isAllZero(const char *data, size_t size) {

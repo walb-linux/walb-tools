@@ -206,10 +206,20 @@ public:
 
     /* Receive and check */
     void recv() { uint8_t u; pkt_.read(u); msg_ = static_cast<Msg>(u); }
-    bool isNext() { return msg_ == Msg::Next; }
-    bool isEnd() { return msg_ == Msg::End; }
-    bool isError() { return msg_ == Msg::Error; }
-    bool isDummy() { return msg_ == Msg::Dummy; }
+    bool isNext() const { return msg_ == Msg::Next; }
+    bool isEnd() const { return msg_ == Msg::End; }
+    bool isError() const { return msg_ == Msg::Error; }
+    bool isDummy() const { return msg_ == Msg::Dummy; }
+    const char *toStr() const {
+        if (msg_ == Msg::Next) return "Next";
+        else if (msg_ == Msg::End) return "End";
+        else if (msg_ == Msg::Error) return "Error";
+        else if (msg_ == Msg::Dummy) return "Dummy";
+        else {
+            throw cybozu::Exception("StreamControl2:bad message")
+                << uint8_t(msg_);
+        }
+    }
 };
 
 }} //namespace walb::packet
