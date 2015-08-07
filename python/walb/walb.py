@@ -1656,7 +1656,7 @@ class Controller(object):
             if not prevSt:
                 raise Exception('wait_for_stopped: '
                                 'prevSt not specified', s.name, vol)
-            if prevSt == sStandby:
+            if prevSt in [sStandby, stHashSync, stFullSync]:
                 tmpStL = sDuringStopForStandby
                 goalSt = sSyncReady
             else:
