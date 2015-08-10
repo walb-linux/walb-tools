@@ -53,6 +53,35 @@ public:
     void setForceShutdown() noexcept { status_ = FORCE_SHUTDOWN; }
 };
 
+struct KeepAliveParams
+{
+    bool enabled;
+    int idle;
+    int intvl;
+    int cnt;
+
+    std::string toStr() const {
+        auto fmt = cybozu::util::formatString;
+        if (enabled) {
+            return fmt("ON (idle %d intvl %d cnt %d)", idle, intvl, cnt);
+        } else {
+            return fmt("OFF");
+        }
+    }
+    void verify() const {
+        if (!enabled) return;
+        if (idle < 0 || idle > MAX_TCP_KEEPIDLE) {
+            throw cybozu::Exception("bad TCP keep-alive idle") << idle;
+        }
+        if (intvl < 0 || intvl > MAX_TCP_KEEPINTVL) {
+            throw cybozu::Exception("bad TCP keep-alive interval") << intvl;
+        }
+        if (cnt < 0 || cnt > MAX_TCP_KEEPCNT) {
+            throw cybozu::Exception("bad TCP keep-alive count") << cnt;
+        }
+    }
+};
+
 namespace util {
 
 inline void saveMap(const std::string& file)
@@ -222,6 +251,40 @@ inline void connectWithTimeout(cybozu::Socket &sock, const cybozu::SocketAddr &s
     sock.connect(sockAddr, timeoutMs);
     sock.setSendTimeout(timeoutMs);
     sock.setReceiveTimeout(timeoutMs);
+}
+
+/**
+ * @sock socket to use.
+ * @idle TCP keep-alive idle time [sec].
+ * @intvl TCP keep-alive interval period [sec].
+ * @cnt TCP keep-alive the number of probes.
+ */
+inline void enableKeepAlive(cybozu::Socket &sock, int idle, int intvl, int cnt)
+{
+    sock.setSocketOption(SO_KEEPALIVE, 1, SOL_SOCKET);
+    sock.setSocketOption(TCP_KEEPIDLE, idle, IPPROTO_TCP);
+    sock.setSocketOption(TCP_KEEPINTVL, intvl, IPPROTO_TCP);
+    sock.setSocketOption(TCP_KEEPCNT, cnt, IPPROTO_TCP);
+}
+
+inline void setSocketParams(cybozu::Socket& sock, const KeepAliveParams& params, size_t timeoutS)
+{
+    if (params.enabled) {
+        sock.setSendTimeout(0);
+        sock.setReceiveTimeout(0);
+        util::enableKeepAlive(sock, params.idle, params.intvl, params.cnt);
+    } else {
+        sock.setSendTimeout(timeoutS * 1000);
+        sock.setReceiveTimeout(timeoutS * 1000);
+    }
+}
+
+inline void setKeepAliveOptions(cybozu::Option& opt, KeepAliveParams& params)
+{
+    opt.appendBoolOpt(&params.enabled, "ka", "enable TCP keep-alive.");
+    opt.appendOpt(&params.idle, DEFAULT_TCP_KEEPIDLE, "kaidle", "TCP keep-alive idle time [sec].");
+    opt.appendOpt(&params.intvl, DEFAULT_TCP_KEEPINTVL, "kaintvl", "TCP keep-alive interval time [sec].");
+    opt.appendOpt(&params.cnt, DEFAULT_TCP_KEEPCNT, "kacnt", "TCP keep-alive count.");
 }
 
 /**

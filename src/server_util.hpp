@@ -54,7 +54,8 @@ private:
     }
 
 public:
-    void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& handlers, size_t maxNumThreads = 0, size_t socketTimeout = 10) {
+    void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& handlers,
+             size_t maxNumThreads, const KeepAliveParams& keepAliveParams, size_t timeoutS) {
         const char *const FUNC = __func__;
         pps_ = &ps;
         setQuitHandler();
@@ -77,8 +78,7 @@ public:
             }
             cybozu::Socket sock;
             ssock.accept(sock);
-            sock.setSendTimeout(socketTimeout * 1000);
-            sock.setReceiveTimeout(socketTimeout * 1000);
+            util::setSocketParams(sock, keepAliveParams, timeoutS);
             logErrors(pool.gc());
             if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads;

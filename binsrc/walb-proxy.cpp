@@ -52,6 +52,7 @@ struct Option
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&p.nodeId, hostName, "id", "node identifier");
         opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        util::setKeepAliveOptions(opt, p.keepAliveParams);
 
         opt.appendHelp("h");
 
@@ -65,6 +66,7 @@ struct Option
         util::verifyNotZero(p.maxWdiffSendMb, "maxWdiffSendMb");
         util::verifyNotZero(p.maxWdiffSendNr, "maxWdiffSendNr");
         util::verifyNotZero(p.maxConversionMb, "maxConversionMb");
+        p.keepAliveParams.verify();
     }
 };
 
@@ -113,7 +115,7 @@ int main(int argc, char *argv[]) try
         ProxyThreads threads(opt);
         server::MultiThreadedServer server;
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, concurrency);
+        server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, concurrency, g.keepAliveParams, g.socketTimeout);
     }
     LOGs.info() << "shutdown walb proxy server";
 

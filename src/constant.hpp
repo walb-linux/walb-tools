@@ -37,4 +37,11 @@ const char DEFAULT_DISCARD_TYPE_STR[] = "ignore";
 const uint64_t DIRTY_HASH_SYNC_READ_AHEAD_LB = 256 * MEBI / LBS;
 const uint64_t DIRTY_HASH_SYNC_MAX_PACK_AREA_LB = 256 * MEBI / LBS;
 
+const int DEFAULT_TCP_KEEPIDLE = 60 * 30;
+const int DEFAULT_TCP_KEEPINTVL = 60;
+const int DEFAULT_TCP_KEEPCNT = 10;
+const int MAX_TCP_KEEPIDLE = 60 * 60 * 24;
+const int MAX_TCP_KEEPINTVL = 60 * 60;
+const int MAX_TCP_KEEPCNT = 100;
+
 } // walb

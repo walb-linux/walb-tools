@@ -158,6 +158,7 @@ struct ProxySingleton
     size_t maxForegroundTasks;
     size_t maxConversionMb;
     size_t socketTimeout;
+    KeepAliveParams keepAliveParams;
 
     /**
      * Writable and must be thread-safe.
@@ -167,6 +168,10 @@ struct ProxySingleton
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
     std::atomic<uint64_t> conversionUsageMb;
+
+    void setSocketParams(cybozu::Socket& sock) const {
+        util::setSocketParams(sock, keepAliveParams, socketTimeout);
+    }
 };
 
 inline ProxySingleton& getProxyGlobal()
@@ -255,6 +260,7 @@ inline StrVec getAllStatusAsStrVec()
     ret.push_back(fmt("maxForegroundTasks %zu", gp.maxForegroundTasks));
     ret.push_back(fmt("maxConversionMb %zu", gp.maxConversionMb));
     ret.push_back(fmt("socketTimeout %zu", gp.socketTimeout));
+    ret.push_back(fmt("keepAlive %s", gp.keepAliveParams.toStr().c_str()));
 
     const std::vector<std::pair<ProxyTask, int64_t> > tqv = gp.taskQueue.getAll();
     ret.push_back(fmt("-----TaskQueue %zu-----", tqv.size()));
@@ -981,6 +987,7 @@ inline int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     ActionCounterTransaction trans(volSt.ac, archiveName);
     ul.unlock();
     util::connectWithTimeout(sock, hi.addrPort.getSocketAddr(), gp.socketTimeout);
+    gp.setSocketParams(sock);
     const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
     ProtocolLogger logger(gp.nodeId, serverId);
 

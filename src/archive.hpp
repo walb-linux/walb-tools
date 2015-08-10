@@ -94,12 +94,17 @@ struct ArchiveSingleton
     size_t maxWdiffSendNr;
     DiscardType discardType;
     uint64_t fsyncIntervalSize;
+    KeepAliveParams keepAliveParams;
 
     /**
      * Writable and must be thread-safe.
      */
     ProcessStatus ps;
     AtomicMap<ArchiveVolState> stMap;
+
+    void setSocketParams(cybozu::Socket& sock) const {
+        util::setSocketParams(sock, keepAliveParams, socketTimeout);
+    }
 };
 
 inline ArchiveSingleton& getArchiveGlobal()
@@ -599,6 +604,7 @@ inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const 
     cybozu::Socket sock;
     const cybozu::SocketAddr server = addrPort.getSocketAddr();
     util::connectWithTimeout(sock, server, ga.socketTimeout);
+    ga.setSocketParams(sock);
     protocol::run1stNegotiateAsClient(sock, ga.nodeId, replSyncPN);
     protocol::sendStrVec(sock, {volId}, 1, __func__, msgAccept);
     return sock;
@@ -1159,6 +1165,7 @@ inline StrVec getAllStatusAsStrVec()
     v.push_back(fmt("volumeGroup %s", ga.volumeGroup.c_str()));
     v.push_back(fmt("maxForegroundTasks %zu", ga.maxForegroundTasks));
     v.push_back(fmt("socketTimeout %zu", ga.socketTimeout));
+    v.push_back(fmt("keepAlive %s", ga.keepAliveParams.toStr().c_str()));
 
     v.push_back("-----Volume-----");
     for (const std::string &volId : ga.stMap.getKeyList()) {

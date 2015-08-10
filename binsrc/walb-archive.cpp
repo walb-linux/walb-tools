@@ -50,6 +50,7 @@ struct Option
         opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
         opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
         opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "fsync interval size [bytes].");
+        util::setKeepAliveOptions(opt, a.keepAliveParams);
 
         opt.appendHelp("h");
 
@@ -62,6 +63,7 @@ struct Option
         util::verifyNotZero(a.maxWdiffSendNr, "maxWdiffSendNr");
         util::verifyNotZero(a.fsyncIntervalSize, "fsyncIntervalSize");
         a.discardType = parseDiscardType(discardTypeStr, __func__);
+        a.keepAliveParams.verify();
     }
 };
 
@@ -113,7 +115,7 @@ int main(int argc, char *argv[]) try
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     server::MultiThreadedServer server;
     const size_t concurrency = g.maxForegroundTasks + 5;
-    server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, concurrency);
+    server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, concurrency, g.keepAliveParams, g.socketTimeout);
     LOGs.info() << "shutdown walb archive server";
 
 } catch (std::exception &e) {

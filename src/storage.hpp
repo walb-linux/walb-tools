@@ -148,6 +148,7 @@ struct StorageSingleton
     size_t delaySecForRetry;
     size_t maxForegroundTasks;
     size_t socketTimeout;
+    KeepAliveParams keepAliveParams;
 
     /**
      * Writable and must be thread-safe.
@@ -193,6 +194,9 @@ struct StorageSingleton
             Str2Str::const_iterator i = wdevName2volId.find(wdevName);
             return i != wdevName2volId.end();
         }
+    void setSocketParams(cybozu::Socket& sock) const {
+        util::setSocketParams(sock, keepAliveParams, socketTimeout);
+    }
 private:
     mutable std::mutex wdevName2VolIdMutex;
     Str2Str wdevName2volId;
@@ -305,6 +309,7 @@ inline StrVec getAllStatusAsStrVec()
     v.push_back(fmt("delaySecForRetry %zu", gs.delaySecForRetry));
     v.push_back(fmt("maxForegroundTasks %zu", gs.maxForegroundTasks));
     v.push_back(fmt("socketTimeout %zu", gs.socketTimeout));
+    v.push_back(fmt("keepAlive %s", gs.keepAliveParams.toStr().c_str()));
 
     v.push_back("-----Archive-----");
     v.push_back(fmt("host %s:%u", gs.archive.toStr().c_str(), gs.archive.getPort()));
@@ -588,6 +593,7 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
     {
         cybozu::Socket aSock;
         util::connectWithTimeout(aSock, archive, gs.socketTimeout);
+        gs.setSocketParams(aSock);
         const std::string &protocolName = isFull ? dirtyFullSyncPN : dirtyHashSyncPN;
         archiveId = protocol::run1stNegotiateAsClient(aSock, gs.nodeId, protocolName);
         packet::Packet aPkt(aSock);
@@ -796,6 +802,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     for (const cybozu::SocketAddr &proxy : gs.proxyManager.getAvailableList()) {
         try {
             util::connectWithTimeout(sock, proxy, gs.socketTimeout);
+            gs.setSocketParams(sock);
             serverId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, wlogTransferPN);
             pkt.write(volId);
             pkt.write(uuid);

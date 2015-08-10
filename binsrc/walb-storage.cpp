@@ -54,6 +54,7 @@ struct Option
         opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
         opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        util::setKeepAliveOptions(opt, s.keepAliveParams);
 
         opt.appendHelp("h");
 
@@ -65,6 +66,7 @@ struct Option
         util::verifyNotZero(maxBackgroundTasks, "maxBackgroundTasks");
         util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
+        s.keepAliveParams.verify();
     }
 };
 
@@ -123,7 +125,7 @@ int main(int argc, char *argv[]) try
         StorageThreads threads(opt);
         server::MultiThreadedServer server;
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, concurrency);
+        server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, concurrency, g.keepAliveParams, g.socketTimeout);
     }
     LOGs.info() << "shutdown walb storage server";
 
