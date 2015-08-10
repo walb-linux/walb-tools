@@ -2273,7 +2273,7 @@ class Controller(object):
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_u64(gid)
-        gidL = self.get_restorable_gid(ax, vol, 'all')
+        gidL = [d.E.gidB for d in self.get_applicable_diff_list(ax, vol)]
         if gid not in gidL:
             raise Exception('apply: gid is not restorable', ax.name, vol, gid)
         self.run_ctl(ax, ["apply", vol, str(gid)])
