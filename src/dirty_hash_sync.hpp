@@ -196,8 +196,6 @@ inline bool dirtyHashSyncServer(
     const char *const FUNC = __func__;
 
     std::atomic<bool> quit(false);
-    std::mutex mu;
-    using AutoLock = std::lock_guard<std::mutex>;
 
     std::atomic<uint64_t> recvLb(0);
     auto abortCondition = [&]() {
