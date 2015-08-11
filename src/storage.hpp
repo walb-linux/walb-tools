@@ -895,20 +895,18 @@ inline void StorageWorker::operator()()
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
     verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
-    {
-        StorageVolInfo volInfo(gs.baseDirStr, volId);
-        const std::string wdevPath = volInfo.getWdevPath();
-        if (device::isOverflow(wdevPath)) {
-            LOGs.error() << FUNC << "overflow" << volId << wdevPath;
-            // stop to push the task and change state to stop if target
-            if (st != sTarget) return;
-            StateMachineTransaction tran(volSt.sm, sTarget, stStopTarget, FUNC);
-            ul.unlock();
-            storage_local::stopMonitoring(wdevPath, volId);
-            volInfo.setState(sStopped);
-            tran.commit(sStopped);
-            return;
-        }
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    if (device::isOverflow(wdevPath)) {
+        LOGs.error() << FUNC << "overflow" << volId << wdevPath;
+        // stop to push the task and change state to stop if target
+        if (st != sTarget) return;
+        StateMachineTransaction tran(volSt.sm, sTarget, stStopTarget, FUNC);
+        ul.unlock();
+        storage_local::stopMonitoring(wdevPath, volId);
+        volInfo.setState(sStopped);
+        tran.commit(sStopped);
+        return;
     }
 
     if (st == sStandby) {
@@ -922,7 +920,14 @@ inline void StorageWorker::operator()()
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
-        if (isRemaining) pushTask(volId);
+        /*
+         * isRemaining is true when oldest_lsid == permanent_lsid.
+         * In the condition that oldest_lsid == permanent_lsid < latest_lsid,
+         * the next task is required.
+         */
+        if (isRemaining || volInfo.isRequiredWlogTransferLater()) {
+            pushTask(volId);
+        }
     } catch (...) {
         pushTaskForce(volId, gs.delaySecForRetry * 1000);
         throw;

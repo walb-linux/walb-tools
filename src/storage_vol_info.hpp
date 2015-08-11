@@ -194,6 +194,15 @@ public:
         return takeSnapshotDetail(maxWlogSendPb, false, qf);
     }
     /**
+     * This is required to decide pushing task or not.
+     */
+    bool isRequiredWlogTransferLater() {
+        const std::string wdevPath = getWdevPath();
+        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
+        const uint64_t lsid1 = device::getLatestLsid(wdevPath);
+        return lsid0 < lsid1;
+    }
+    /**
      * Calling order:
      *   (0) isRequiredWlogTransfer()
      *   (1) prepareWlogTransfer()
