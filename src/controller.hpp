@@ -3,6 +3,8 @@
 #include "constant.hpp"
 #include "host_info.hpp"
 #include "murmurhash3.hpp"
+#include "bdev_util.hpp"
+#include "snappy_util.hpp"
 
 namespace walb {
 
@@ -322,6 +324,92 @@ inline void c2aBlockHashClient(protocol::ClientParams &p)
     cybozu::murmurhash3::Hash hash;
     pkt.read(hash);
     std::cout << hash << std::endl;
+}
+
+
+inline void virtualFullScanClient(
+    const std::string &devPath, packet::Packet& pkt, size_t bulkLb, uint64_t fsyncIntervalSize)
+{
+    const char *const FUNC = __func__;
+
+    uint64_t sizeLb;
+    pkt.read(sizeLb);
+
+    cybozu::util::File file;
+    if (devPath == "stdout") {
+        file.setFd(1);
+    } else {
+        const cybozu::FileStat stat = cybozu::FilePath(devPath).stat();
+        if (stat.exists() && stat.isBlock()) {
+            file.open(devPath, O_RDWR);
+            const uint64_t devSizeLb = cybozu::util::getBlockDeviceSize(file.fd()) / LOGICAL_BLOCK_SIZE;
+            if (devSizeLb < sizeLb) {
+                throw cybozu::Exception(FUNC) << "too small device size" << sizeLb << devSizeLb;
+            }
+        } else {
+            file.open(devPath, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+        }
+    }
+
+    const size_t bulkSize = bulkLb * LOGICAL_BLOCK_SIZE;
+    AlignedArray buf(bulkSize);
+    AlignedArray encBuf(bulkSize);
+    const AlignedArray zeroBuf(bulkSize, true);
+    packet::StreamControl2 ctrl(pkt.sock());
+    size_t writtenSize = 0;
+    uint64_t remaining = sizeLb;
+    for (;;) {
+        ctrl.recv();
+        if (ctrl.isEnd()) break;
+        if (!ctrl.isNext()) throw cybozu::Exception(FUNC) << ctrl.toStr();
+        const uint64_t lb = std::min(remaining, bulkLb);
+        const size_t bytes = lb * LOGICAL_BLOCK_SIZE;
+        size_t encSize;
+        pkt.read(encSize);
+        if (encSize == 0) {
+            file.write(zeroBuf.data(), bytes);
+        } else {
+            encBuf.resize(encSize);
+            buf.resize(bytes);
+            pkt.read(encBuf.data(), encSize);
+            uncompressSnappy(encBuf, buf, FUNC);
+            file.write(buf.data(), bytes);
+        }
+        writtenSize += bytes;
+        if (writtenSize >= fsyncIntervalSize) {
+            file.fdatasync();
+            writtenSize = 0;
+        }
+        remaining -= lb;
+    }
+    if (remaining != 0) throw cybozu::Exception(FUNC) << "remaining must be 0" << remaining;
+    file.fsync();
+    file.close();
+
+    packet::Ack(pkt.sock()).send();
+    pkt.flush();
+}
+
+/**
+ * params[0]: device path or '-' for stdout.
+ * params[1]: volId
+ * params[2]: gidStr
+ * params[3] blkSizeU (optional)
+ * params[4]: scanSizeU (optional)
+ */
+inline void c2aVirtualFullScanClient(protocol::ClientParams &p)
+{
+    const char *const FUNC = __func__;
+    const VirtualFullScanCmdParam cmdParam = parseVirtualFullScanCmdParam(p.params);
+    const StrVec args(++p.params.begin(), p.params.end());
+    protocol::sendStrVec(p.sock, args, 0, __func__, msgAccept);
+    packet::Packet pkt(p.sock);
+
+    virtualFullScanClient(cmdParam.devPath, pkt, cmdParam.param.bulkLb, DEFAULT_FSYNC_INTERVAL_SIZE);
+
+    std::string msg;
+    pkt.read(msg);
+    if (msg != msgOk) throw cybozu::Exception(FUNC) << "not ok";
 }
 
 inline void c2sDumpLogpackHeaderClient(protocol::ClientParams &p)

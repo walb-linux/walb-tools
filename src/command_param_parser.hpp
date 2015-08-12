@@ -213,7 +213,7 @@ inline ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear, boo
     return param;
 }
 
-struct BlockHashParam
+struct VirtualFullScanParam
 {
     std::string volId;
     uint64_t gid;
@@ -221,9 +221,9 @@ struct BlockHashParam
     uint64_t sizeLb; // 0 means whole device size.
 };
 
-inline BlockHashParam parseBlockHashParam(const StrVec &args)
+inline VirtualFullScanParam parseVirtualFullScanParam(const StrVec &args)
 {
-    BlockHashParam param;
+    VirtualFullScanParam param;
     std::string gidStr, bulkSizeU, sizeU;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU, &sizeU});
     param.gid = cybozu::atoi(gidStr);
@@ -239,6 +239,25 @@ inline BlockHashParam parseBlockHashParam(const StrVec &args)
     }
     return param;
 };
+
+struct VirtualFullScanCmdParam
+{
+    std::string devPath;
+    VirtualFullScanParam param;
+};
+
+inline VirtualFullScanCmdParam parseVirtualFullScanCmdParam(const StrVec &args)
+{
+    const char *const FUNC = __func__;
+    VirtualFullScanCmdParam param;
+    cybozu::util::parseStrVec(args, 0, 1, {&param.devPath});
+    if (param.devPath.empty()) {
+        throw cybozu::Exception(FUNC) << "devPath is empty";
+    }
+    StrVec args1(++args.begin(), args.end());
+    param.param = parseVirtualFullScanParam(args1);
+    return param;
+}
 
 struct SetUuidParam
 {
@@ -380,7 +399,8 @@ inline void verifyReplicateParam(const StrVec &args) { parseReplicateParam(args)
 inline void verifyApplyParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
 inline void verifyMergeParam(const StrVec &args) { parseMergeParam(args); }
 inline void verifyResizeParam(const StrVec &args) { parseResizeParam(args, true, true); }
-inline void verifyBlockHashParam(const StrVec &args) { parseBlockHashParam(args); }
+inline void verifyVirtualFullScanParam(const StrVec &args) { parseVirtualFullScanParam(args); }
+inline void verifyVirtualFullScanCmdParam(const StrVec &args) { parseVirtualFullScanCmdParam(args); }
 inline void verifySetUuidParam(const StrVec &args) { parseSetUuidParam(args); }
 inline void verifySetStateParam(const StrVec &args) { parseSetStateParam(args); }
 inline void verifySetBaseParam(const StrVec &args) { parseSetBaseParam(args); }

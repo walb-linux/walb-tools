@@ -64,6 +64,7 @@ const char *const resizeCN = "resize";
 const char *const shutdownCN = "shutdown";
 const char *const kickCN = "kick";
 const char *const blockHashCN = "bhash";
+const char *const virtualFullScanCN = "virt-full-scan";
 const char *const dbgReloadMetadataCN = "dbg-reload-metadata";
 const char *const dbgSetUuidCN = "dbg-set-uuid";
 const char *const dbgSetStateCN = "dbg-set-state";

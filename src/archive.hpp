@@ -1484,6 +1484,59 @@ inline bool getBlockHash(
     return true;
 }
 
+/**
+ * Do virtual full scan.
+ * sizeLb: 0 means whole device size.
+ */
+inline bool virtualFullScanServer(
+    const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
+    packet::Packet &pkt, Logger &)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    const uint64_t devSizeLb = volSt.lvCache.getLv().sizeLb();
+    if (sizeLb == 0) {
+        sizeLb = devSizeLb;
+    } else if (sizeLb > devSizeLb) {
+        throw cybozu::Exception(__func__) << "Specified size is too large" << sizeLb << devSizeLb;
+    }
+    pkt.write(sizeLb);
+    pkt.flush();
+
+    VirtualFullScanner virt;
+    archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, MetaSnap(gid));
+
+    packet::StreamControl2 ctrl(pkt.sock());
+    AlignedArray buf;
+    std::string encBuf;
+    uint64_t c = 0;
+    uint64_t remaining = sizeLb;
+    while (remaining > 0) {
+        if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
+            ctrl.sendError();
+            return false;
+        }
+        const uint64_t lb = std::min(remaining, bulkLb);
+        buf.resize(lb * LOGICAL_BLOCK_SIZE);
+        virt.read(buf.data(), buf.size());
+        ctrl.sendNext();
+        if (cybozu::util::isAllZero(buf.data(), buf.size())) {
+            pkt.write(0);
+        } else {
+            compressSnappy(buf, encBuf);
+            pkt.write(encBuf.size());
+            pkt.write(encBuf.data(), encBuf.size());
+        }
+        remaining -= lb;
+        c++;
+    }
+    ctrl.sendEnd();
+    pkt.flush();
+    packet::Ack(pkt.sock()).recv();
+    LOGs.debug() << "number of sent bulks" << c;
+    return true;
+}
+
 inline void getVolSize(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -2284,6 +2337,37 @@ inline void c2aEnableSnapshot(protocol::ServerParams &p)
     changeSnapshot(p, true);
 }
 
+inline void c2aVirtualFullScan(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+    bool sendErr = true;
+
+    try {
+        const VirtualFullScanParam param = parseVirtualFullScanParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
+        const uint64_t bulkLb = param.bulkLb;
+        const uint64_t sizeLb = param.sizeLb;
+
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        verifyStateIn(volSt.sm.get(), aActive, FUNC);
+        pkt.write(msgAccept);
+        pkt.flush();
+        sendErr = false;
+
+        if (!archive_local::virtualFullScanServer(volId, gid, bulkLb, sizeLb, pkt, logger)) {
+            throw cybozu::Exception(FUNC) << "force stopped" << volId;
+        }
+        pkt.writeFin(msgOk);
+        logger.debug() << "virtual-full-scan succeeded" << volId;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
 inline void c2aBlockHashServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -2292,7 +2376,7 @@ inline void c2aBlockHashServer(protocol::ServerParams &p)
     bool sendErr = true;
 
     try {
-        const BlockHashParam param = parseBlockHashParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const VirtualFullScanParam param = parseVirtualFullScanParam(protocol::recvStrVec(p.sock, 0, FUNC));
         const std::string &volId = param.volId;
         const uint64_t gid = param.gid;
         const uint64_t bulkLb = param.bulkLb;
@@ -2456,6 +2540,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { execCN, c2aExecServer },
     { disableSnapshotCN, c2aDisableSnapshot },
     { enableSnapshotCN, c2aEnableSnapshot },
+    { virtualFullScanCN, c2aVirtualFullScan },
     // protocols.
     { dirtyFullSyncPN, s2aDirtyFullSyncServer },
     { dirtyHashSyncPN, s2aDirtyHashSyncServer },

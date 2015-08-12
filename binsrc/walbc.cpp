@@ -101,10 +101,16 @@ void setupKick(cybozu::Option& opt)
 {
     setupOpt(opt, "(volId) (archiveName)");
 }
-void setupBlockHash(cybozu::Option& opt)
+void setupVirtualFullScan(cybozu::Option& opt)
 {
     setupVolIdGid(opt);
     setupOpt(opt, "(bulk size) (scanning size)");
+}
+void setupVirtualFullScanCmd(cybozu::Option& opt)
+{
+    static std::string devPath;
+    opt.appendParam(&devPath, "devPath", ": specify 'stdout' to put image to stdout.");
+    setupVirtualFullScan(opt);
 }
 void setupUuid(cybozu::Option& opt)
 {
@@ -181,7 +187,8 @@ const CommandInfo g_cmdTbl[] = {
     { mergeCN, c2aMergeClient, setupMerge, verifyMergeParam, "merge wdiff files for a volume in an archive." },
     { resizeCN, c2xResizeClient, setupResize, verifyResizeParam, "resize a volume in a storage or an archive." },
     { kickCN, c2xKickClient, setupKick, verifyKickParam, "kick background tasks if necessary." },
-    { blockHashCN, c2aBlockHashClient, setupBlockHash, verifyBlockHashParam, "calculate block hash of a volume in an archive." },
+    { blockHashCN, c2aBlockHashClient, setupVirtualFullScan, verifyVirtualFullScanParam, "calculate block hash of a volume in an archive." },
+    { virtualFullScanCN, c2aVirtualFullScanClient, setupVirtualFullScanCmd, verifyVirtualFullScanCmdParam, "virtual full scan of a volume in an archive." },
     { getCN, c2xGetClient, setupGet, verifyNoneParam, "get some information from a server." },
     { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
     { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
