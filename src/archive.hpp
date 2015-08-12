@@ -1490,7 +1490,7 @@ inline bool getBlockHash(
  */
 inline bool virtualFullScanServer(
     const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
-    packet::Packet &pkt, Logger &)
+    packet::Packet &pkt, Logger &logger)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
@@ -1533,7 +1533,11 @@ inline bool virtualFullScanServer(
     ctrl.sendEnd();
     pkt.flush();
     packet::Ack(pkt.sock()).recv();
-    LOGs.debug() << "number of sent bulks" << c;
+    logger.debug() << "number of sent bulks" << c;
+    logger.info() << "virt-full-scan sizeLb devSizeLb" << sizeLb << devSizeLb;
+    logger.info() << "virt-full-scan-mergeIn " << volId << virt.statIn();
+    logger.info() << "virt-full-scan-mergeOut" << volId << virt.statOut();
+    logger.info() << "virt-full-scan-mergeMemUsage" << volId << virt.memUsageStr();
     return true;
 }
 
