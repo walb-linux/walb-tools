@@ -7,6 +7,7 @@
 #include "walb_logger.hpp"
 #include "bdev_reader.hpp"
 #include "full_repl_state.hpp"
+#include "snappy_util.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {
@@ -39,10 +40,9 @@ inline bool dirtyFullSyncClient(
         if (cybozu::util::isAllZero(buf.data(), buf.size())) {
             pkt.write(0);
         } else {
-            const size_t encSize = snappy::Compress(&buf[0], size, &encBuf);
-            assert(encSize > 0);
-            pkt.write(encSize);
-            pkt.write(&encBuf[0], encSize);
+            compressSnappy(buf, encBuf);
+            pkt.write(encBuf.size());
+            pkt.write(encBuf.data(), encBuf.size());
         }
         remainingLb -= lb;
         c++;
@@ -52,24 +52,6 @@ inline bool dirtyFullSyncClient(
     LOGs.debug() << "number of sent packets" << c;
     return true;
 }
-
-namespace dirty_full_sync {
-
-inline void uncompress(const AlignedArray &src, AlignedArray &dst, const char *msg)
-{
-    size_t decSize;
-    if (!snappy::GetUncompressedLength(src.data(), src.size(), &decSize)) {
-        throw cybozu::Exception(msg) << "GetUncompressedLength" << src.size();
-    }
-    if (decSize != dst.size()) {
-        throw cybozu::Exception(msg) << "decSize differs" << decSize << dst.size();
-    }
-    if (!snappy::RawUncompress(src.data(), src.size(), dst.data())) {
-        throw cybozu::Exception(msg) << "RawUncompress";
-    }
-}
-
-} // namespace dirty_full_sync
 
 /**
  * sizeLb is total size.
@@ -124,7 +106,7 @@ inline bool dirtyFullSyncServer(
             encBuf.resize(encSize);
             pkt.read(&encBuf[0], encSize);
             buf.resize(size);
-            dirty_full_sync::uncompress(encBuf, buf, FUNC);
+            uncompressSnappy(encBuf, buf, FUNC);
             file.write(&buf[0], size);
         }
         remainingLb -= lb;
