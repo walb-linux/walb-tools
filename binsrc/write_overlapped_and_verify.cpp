@@ -298,7 +298,7 @@ private:
 
 
 void verify(
-    const Option &opt, size_t sizeB, const std::vector<size_t> &threadIdV,
+    const Option &opt, uint64_t sizeB, const std::vector<size_t> &threadIdV,
     cybozu::util::File &file, const std::vector<AlignedArray> &blksV)
 {
     const uint32_t bs = opt.bs;
@@ -309,7 +309,7 @@ void verify(
     }
     for (uint64_t i = 0; i < sizeB; i++) {
         const size_t thId = threadIdV[i];
-        if (thId == uint64_t(-1)) continue;
+        if (thId == size_t(-1)) continue;
         nWritten++;
         file.pread(blk.data(), bs, (opt.offsetB() + i) * bs);
         const char *data = blksV[thId].data() + (i * bs);
@@ -344,8 +344,8 @@ void writeConcurrentlyAndVerify(const Option &opt)
     cybozu::util::File file(opt.targetPath, O_RDWR | O_DIRECT);
 
     /* Decide target area size. */
-    const size_t sizeB = opt.sizeB();
-    const size_t devSizeB = cybozu::util::getBlockDeviceSize(file.fd()) / bs;
+    const uint64_t sizeB = opt.sizeB();
+    const uint64_t devSizeB = cybozu::util::getBlockDeviceSize(file.fd()) / bs;
     if (devSizeB < opt.offsetB() + sizeB) {
         throw cybozu::Exception(__func__)
             << "specified area is out of range" << devSizeB << opt.offsetB() << sizeB;
@@ -415,7 +415,7 @@ void writeConcurrentlyAndVerify(const Option &opt)
     std::cout << "done" << std::endl;
 
     /* Determine who writes each block finally. */
-    std::vector<size_t> threadIdV(sizeB, -1); // -1 means no one writes.
+    std::vector<size_t> threadIdV(sizeB, size_t(-1)); // -1 means no one writes.
     for (size_t i = 0; i < sizeB; i++) {
         uint64_t maxIoId = 0;
         size_t thId = 0;

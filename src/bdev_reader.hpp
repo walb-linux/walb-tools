@@ -237,14 +237,15 @@ private:
             /* There is not enough buffer size. */
             return 0;
         }
-        size_t s = maxIoSize_;
+        uint64_t s = maxIoSize_;
         /* Available size in ring buffer. */
-        s = std::min(s, ringBuf_.getAvailableSize());
+        s = std::min<uint64_t>(s, ringBuf_.getAvailableSize());
         /* Block device remaining size. */
         s = std::min(s, devTotal_ - devOffset_);
         /* Here, 0 means the file offset reached the end of the device. */
         assert(s % pbs_ == 0);
-        return s;
+        assert(s <= SIZE_MAX);
+        return size_t(s);
     }
 };
 

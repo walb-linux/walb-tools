@@ -362,7 +362,7 @@ inline void virtualFullScanClient(
         ctrl.recv();
         if (ctrl.isEnd()) break;
         if (!ctrl.isNext()) throw cybozu::Exception(FUNC) << ctrl.toStr();
-        const uint64_t lb = std::min(remaining, bulkLb);
+        const uint64_t lb = std::min<uint64_t>(remaining, bulkLb);
         const size_t bytes = lb * LOGICAL_BLOCK_SIZE;
         size_t encSize;
         pkt.read(encSize);

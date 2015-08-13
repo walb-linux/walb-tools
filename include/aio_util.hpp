@@ -490,7 +490,7 @@ inline void zeroClear(int fd, uint64_t startLb, uint64_t sizeLb)
     size_t pending = 0;
     uint64_t offLb = startLb;
     while (pending < maxQueueSize && offLb < startLb + sizeLb) {
-        const size_t blks = std::min(startLb + sizeLb - offLb, bufSizeLb);
+        const size_t blks = size_t(std::min<uint64_t>(startLb + sizeLb - offLb, bufSizeLb));
         const uint32_t key = aio.prepareWrite(offLb * lbs, blks * lbs, buf.get());
         if (key == 0) throw std::runtime_error("zeroClear: prepare failed.");
         aio.submit();
@@ -500,7 +500,7 @@ inline void zeroClear(int fd, uint64_t startLb, uint64_t sizeLb)
     while (offLb < startLb + sizeLb) {
         aio.waitOne();
         pending--;
-        const size_t blks = std::min(startLb + sizeLb - offLb, bufSizeLb);
+        const size_t blks = size_t(std::min<uint64_t>(startLb + sizeLb - offLb, bufSizeLb));
         const uint32_t key = aio.prepareWrite(offLb * lbs, blks * lbs, buf.get());
         if (key == 0) throw std::runtime_error("zeroClear: prepare failed.");
         aio.submit();

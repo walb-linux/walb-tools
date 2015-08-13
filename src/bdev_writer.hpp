@@ -49,7 +49,7 @@ public:
         blocks_.push_back(std::move(b));
     }
     void print(::FILE *p = ::stdout) const {
-        ::fprintf(p, "IO offset: %zu size: %zu aioKey: %u "
+        ::fprintf(p, "IO offset: %" PRIu64 " size: %zu aioKey: %u "
                   "state: %d\n",
                   offset_, size_, aioKey, state);
         for (auto &b : blocks_) {
