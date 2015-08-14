@@ -13,7 +13,7 @@ class TestParsePERIOD(unittest.TestCase):
         }
         for (s, expect) in d.items():
             v = parsePERIOD(s)
-            self.assertEqual(v, expect)
+            self.assertEqual(v, datetime.timedelta(seconds=expect))
 
 class TestParseSIZE_UNIT(unittest.TestCase):
     def test(self):
@@ -79,9 +79,9 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(general.port, 10000)
         self.assertEqual(general.max_concurrent_tasks, 10)
         apply_ = cfg.apply_
-        self.assertEqual(apply_.keep_period, 14 * 86400)
+        self.assertEqual(apply_.keep_period, datetime.timedelta(days=14))
         merge = cfg.merge
-        self.assertEqual(merge.interval, 10)
+        self.assertEqual(merge.interval, datetime.timedelta(seconds=10))
         self.assertEqual(merge.max_nr, 10)
         self.assertEqual(merge.max_size, 1024 * 1024)
         self.assertEqual(merge.threshold_nr, 5)
@@ -89,7 +89,7 @@ class TestLoadConfigParam(unittest.TestCase):
         r = repl_servers['repl0']
         self.assertEqual(r.addr, '192.168.0.2')
         self.assertEqual(r.port, 10001)
-        self.assertEqual(r.interval, 3 * 86400)
+        self.assertEqual(r.interval, datetime.timedelta(days=3))
         self.assertEqual(r.compress, ('snappy', 3, 4))
         self.assertEqual(r.max_merge_size, 5 * 1024)
         self.assertEqual(r.bulk_size, 40)
@@ -97,7 +97,7 @@ class TestLoadConfigParam(unittest.TestCase):
         r = repl_servers['repl1']
         self.assertEqual(r.addr, '192.168.0.3')
         self.assertEqual(r.port, 10002)
-        self.assertEqual(r.interval, 2 * 3600)
+        self.assertEqual(r.interval, datetime.timedelta(hours=2))
         self.assertEqual(r.compress, ('gzip', 0, 0))
         self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
         self.assertEqual(r.bulk_size, 400)
