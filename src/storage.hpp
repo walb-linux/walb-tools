@@ -833,6 +833,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     LogPackHeader packH(pbs, salt);
     reader.reset(lsidB);
 
+    LOGs.info() << FUNC << "start" << volId << lsidB << lsidLimit;
     LogBlockShared blockS;
     uint64_t lsid = lsidB;
     for (;;) {
@@ -869,6 +870,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
         volInfo.waitForWrittenAndFlushed(lsidE);
         isEmpty = storage_local::deleteWlogs(volId, lsidE);
     }
+    LOGs.info() << FUNC << "end  " << volId << lsidB << lsidE;
 
     return !isEmpty || isRemaining;
 }

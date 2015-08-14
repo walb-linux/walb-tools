@@ -1285,21 +1285,40 @@ class Controller(object):
             return []
         return map(create_diff_from_str, ls.split('\n'))
 
+    def _get_with_gid_range(self, ax, vol, cmd, gid0=0, gid1=UINT64_MAX):
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(cmd, str)
+        if cmd not in ['num-diff', 'total-diff-size']:
+            raise Exception('invalid command', cmd)
+        verify_u64(gid0)
+        verify_u64(gid1)
+        if gid0 > gid1:
+            raise Exception('bad gid range', gid0, gid1)
+        ret = self.run_ctl(ax, ['get', cmd, vol, str(gid0), str(gid1)])
+        return int(ret)
+
+    def get_num_diff(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Get number of wdiff files for a volume.
+        ax :: Server  - archive server.
+        vol :: str    - volume name.
+        gid0 :: int   - gid range begin.
+        gid1 :: int   - gid range end.
+        return :: int - number of wdiffs in the gid range.
+        '''
+        return self._get_with_gid_range(ax, vol, 'num-diff', gid0, gid1)
+
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get total wdiff size.
         ax :: Server    - archive server.
         vol :: str      - volume name.
-        gid0 :: int     - range begin.
-        gid1 :: int     - range end.
-        return :: int - total size [byte].
+        gid0 :: int     - gid range begin.
+        gid1 :: int     - gid range end.
+        return :: int   - total size in the gid range [byte].
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid0)
-        verify_u64(gid1)
-        ret = self.run_ctl(ax, ['get', 'total-diff-size', vol, str(gid0), str(gid1)])
-        return int(ret)
+        return self._get_with_gid_range(ax, vol, 'total-diff-size', gid0, gid1)
 
     def get_num_action(self, s, vol, action):
         '''
