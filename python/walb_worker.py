@@ -310,7 +310,8 @@ class Worker:
         self.cfg = loadConfig(configName)
         self.serverLayout = self._createSeverLayout(self.cfg)
         self.walbc = Controller(self.cfg.general.walbc_path, self.serverLayout, isDebug)
-        self.execedReplServerList = collections.defaultdict()
+        self.doneReplServerList = collections.defaultdict()
+        self.mergeVol2ts = collections.defaultdict()
 
     def _getVolGidHavingMaxDiff(self, volL, curTime):
         ls = []
@@ -327,21 +328,37 @@ class Worker:
         else:
             return None
 
-    def _selectMergeTask(self, volL):
-        ls = []
-        for vol in volL:
-            diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
-            n = len(diffL)
-            if n >= self.cfg.merge.threshold_nr:
-                ls.append((n, vol, diffL))
+    def _selectMaxDiffNumMergeTask(self, ls):
+        """
+            ls = [(n, vol)]
+        """
+        verify_type(ls, list, tuple)
         if ls:
+            verify_type(ls[0][0], int)
+            verify_type(ls[0][1], str)
             ls.sort(key=lambda x : x[0], reverse=True)
-            for t in ls:
-                (n, vol, diffL) = t
-                r = getMergeGidRange(diffL)
-                if r:
-                    return Task("merge", vol, self.a0, r)
+            (_, vol) = ls[0]
+            diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
+            r = getMergeGidRange(diffL)
+            if r:
+                return Task("merge", vol, self.a0, r)
         return None
+
+    def _selectMerge1Task(self, volL, numDiffL):
+        ls = []
+        for (vol, n) in zip(volL, numDiffL):
+            if n >= self.cfg.merge.threshold_nr:
+                ls.append((n, vol))
+        return self._selectMaxDiffNumMergeTask(ls)
+
+    def _selectMerge2Task(self, volL, numDiffL, curTime):
+        ls = []
+        for (vol, n) in zip(volL, numDiffL):
+            ts = self.mergeVol2ts[vol]
+            if ts and ts + self.cfg.merge.interval < curTime:
+                continue
+            ls.append((n, vol))
+        return self._selectMaxDiffNumMergeTask(ls)
 
     def _selectReplTask(self, volL, curTime):
         tL = []
@@ -355,7 +372,7 @@ class Worker:
                 a1State = self.walbc.get_state(a1, vol)
                 if a1State not in aActive:
                     continue
-                ts = self.execedReplServerList[(vol, rs)]
+                ts = self.doneReplServerList[(vol, rs)]
                 if ts and ts + rs.interval < curTime:
                     continue
                 if not ts:
@@ -382,13 +399,19 @@ class Worker:
             (size, vol, gid) = t
             return Task("apply", vol, self.a0, (gid,))
         # step 3
-        t = self._selectMergeTask(volL)
+        numDiffL = []
+        for vol in volL:
+            n = self.walbc.get_num_diff(self.a0, vol)
+            numDiffL.append(n)
+        t = self._selectMerge1Task(volL, numDiffL)
         if t:
             return t
         # step 4
         t = self._selectReplTask(volL, curTime)
         if t:
             return t
+        # step 5
+        t = self._selectMerge2Task(volL, numDiffL, curTime)
 
 
 def usage():
