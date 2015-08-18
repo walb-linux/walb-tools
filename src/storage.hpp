@@ -833,29 +833,34 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     LogPackHeader packH(pbs, salt);
     reader.reset(lsidB);
 
-    LOGs.info() << FUNC << "start" << volId << lsidB << lsidLimit;
+    LOGs.debug() << FUNC << "start" << volId << lsidB << lsidLimit;
     LogBlockShared blockS;
     uint64_t lsid = lsidB;
-    for (;;) {
-        if (volSt.stopState == ForceStopping || gs.ps.isForceShutdown()) {
-            throw cybozu::Exception(FUNC) << "force stopped" << volId;
-        }
-        if (lsid == lsidLimit) break;
-        if (!readLogPackHeader(reader, packH, lsid)) {
-            dumpLogPackHeader(volId, lsid, packH); // for analysis.
-            throw cybozu::Exception(FUNC) << "invalid logpack header" << volId << lsid;
-        }
-        verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);
-        const uint64_t nextLsid =  packH.nextLogpackLsid();
-        if (lsidLimit < nextLsid) break;
-        sender.pushHeader(packH);
-        for (size_t i = 0; i < packH.header().n_records; i++) {
-            if (!readLogIo(reader, packH, i, blockS)) {
-                throw cybozu::Exception(FUNC) << "invalid logpack IO" << volId << lsid << i;
+    try {
+        for (;;) {
+            if (volSt.stopState == ForceStopping || gs.ps.isForceShutdown()) {
+                throw cybozu::Exception(FUNC) << "force stopped" << volId;
             }
-            sender.pushIo(packH, i, blockS);
+            if (lsid == lsidLimit) break;
+            if (!readLogPackHeader(reader, packH, lsid)) {
+                dumpLogPackHeader(volId, lsid, packH); // for analysis.
+                throw cybozu::Exception(FUNC) << "invalid logpack header" << volId << lsid;
+            }
+            verifyMaxWlogSendPbIsNotTooSmall(maxWlogSendPb, packH.header().total_io_size + 1, FUNC);
+            const uint64_t nextLsid =  packH.nextLogpackLsid();
+            if (lsidLimit < nextLsid) break;
+            sender.pushHeader(packH);
+            for (size_t i = 0; i < packH.header().n_records; i++) {
+                if (!readLogIo(reader, packH, i, blockS)) {
+                    throw cybozu::Exception(FUNC) << "invalid logpack IO" << volId << lsid << i;
+                }
+                sender.pushIo(packH, i, blockS);
+            }
+            lsid = nextLsid;
         }
-        lsid = nextLsid;
+    } catch (...) {
+        LOGs.info() << FUNC << volId << lsidB << lsid << lsidLimit;
+        throw;
     }
     sender.sync();
     const uint64_t lsidE = lsid;
@@ -870,7 +875,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
         volInfo.waitForWrittenAndFlushed(lsidE);
         isEmpty = storage_local::deleteWlogs(volId, lsidE);
     }
-    LOGs.info() << FUNC << "end  " << volId << lsidB << lsidE;
+    LOGs.debug() << FUNC << "end  " << volId << lsidB << lsidE;
 
     return !isEmpty || isRemaining;
 }
