@@ -221,6 +221,7 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     cybozu::util::File file(lv.path().str(), O_RDWR);
     std::vector<char> zero;
     const uint64_t lvSnapSizeLb = lv.sizeLb();
+    double t0 = cybozu::util::getTime();
     while (merger.getAndRemove(recIo)) {
         if (stopState == ForceStopping || ga.ps.isForceShutdown()) {
             return false;
@@ -235,6 +236,12 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
             throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
         }
         issueIo(file, ga.discardType, rec, recIo.io().get(), zero);
+
+        const double t1 = cybozu::util::getTime();
+        if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
+            LOGs.info() << FUNC << "progress" << ioAddress;
+            t0 = t1;
+        }
     }
     file.fdatasync();
     file.close();
@@ -1446,13 +1453,14 @@ inline bool getBlockHash(
     const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
     packet::Packet &pkt, Logger &, cybozu::murmurhash3::Hash &hash)
 {
+    const char *const FUNC = __func__;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const uint64_t devSizeLb = volSt.lvCache.getLv().sizeLb();
     if (sizeLb == 0) {
         sizeLb = devSizeLb;
     } else if (sizeLb > devSizeLb) {
-        throw cybozu::Exception(__func__) << "Specified device size is too large" << sizeLb << devSizeLb;
+        throw cybozu::Exception(FUNC) << "Specified device size is too large" << sizeLb << devSizeLb;
     }
 
     VirtualFullScanner virt;
@@ -1463,6 +1471,7 @@ inline bool getBlockHash(
     cybozu::murmurhash3::StreamHasher hasher(0); // seed is 0.
     uint64_t remaining = sizeLb;
     double t0 = cybozu::util::getTime();
+    double tx0 = t0;
     while (remaining > 0) {
         if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
             ctrl.end();
@@ -1478,6 +1487,11 @@ inline bool getBlockHash(
             t0 = t1;
         }
         remaining -= bulkLb;
+        const double tx1 = t1;
+        if (tx1 - tx0 > PROGRESS_INTERVAL_SEC) {
+            LOGs.info() << FUNC << "progress" << sizeLb - remaining;
+            tx0 = tx1;
+        }
     }
     ctrl.end();
     hash = hasher.get();
@@ -1492,13 +1506,14 @@ inline bool virtualFullScanServer(
     const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
     packet::Packet &pkt, Logger &logger)
 {
+    const char *const FUNC = __func__;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const uint64_t devSizeLb = volSt.lvCache.getLv().sizeLb();
     if (sizeLb == 0) {
         sizeLb = devSizeLb;
     } else if (sizeLb > devSizeLb) {
-        throw cybozu::Exception(__func__) << "Specified size is too large" << sizeLb << devSizeLb;
+        throw cybozu::Exception(FUNC) << "Specified size is too large" << sizeLb << devSizeLb;
     }
     pkt.write(sizeLb);
     pkt.flush();
@@ -1511,6 +1526,7 @@ inline bool virtualFullScanServer(
     std::string encBuf;
     uint64_t c = 0;
     uint64_t remaining = sizeLb;
+    double t0 = cybozu::util::getTime();
     while (remaining > 0) {
         if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
             ctrl.sendError();
@@ -1529,6 +1545,11 @@ inline bool virtualFullScanServer(
         }
         remaining -= lb;
         c++;
+        const double t1 = cybozu::util::getTime();
+        if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
+            LOGs.info() << FUNC << "progress" << sizeLb - remaining;
+            t0 = t1;
+        }
     }
     ctrl.sendEnd();
     pkt.flush();
