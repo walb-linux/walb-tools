@@ -1486,7 +1486,7 @@ inline bool getBlockHash(
             ctrl.dummy();
             t0 = t1;
         }
-        remaining -= bulkLb;
+        remaining -= lb;
         const double tx1 = t1;
         if (tx1 - tx0 > PROGRESS_INTERVAL_SEC) {
             LOGs.info() << FUNC << "progress" << sizeLb - remaining;
