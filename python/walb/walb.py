@@ -393,6 +393,8 @@ class Snapshot(object):
             return "|%d|" % self.gidB
         else:
             return "|%d,%d|" % (self.gidB, self.gidE)
+    def isDirty(self):
+        return self.gidB != self.gidE
 
 
 def create_snapshot_from_str(s):
@@ -445,6 +447,8 @@ class Diff(object):
             c = '-'
         ts_str = datetime_to_str(self.ts, DatetimeFormatPretty)
         return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
+    def isDirty(self):
+        return self.B.isDirty() or self.E.isDirty()
 
 
 def create_diff_from_str(s):
