@@ -35,15 +35,6 @@ struct Option
     }
 };
 
-inline std::string getNowStr()
-{
-    struct timespec ts;
-    if (::clock_gettime(CLOCK_REALTIME, &ts) < 0) {
-        throw cybozu::Exception("getNowStr: clock_gettime failed.");
-    }
-    return cybozu::getHighResolutionTimeStr(ts);
-}
-
 int doMain(int argc, char *argv[])
 {
     Option opt(argc, argv);
@@ -60,7 +51,7 @@ int doMain(int argc, char *argv[])
         f.pread(buf.data(), buf.size(), off);
         cybozu::murmurhash3::Hash h = hasher(buf.data(), buf.size());
         if (h != prevHash) {
-           ::printf("%s\t%s\n", getNowStr().c_str(), h.str().c_str());
+           ::printf("%s\t%s\n", util::getNowStr().c_str(), h.str().c_str());
         }
         prevHash = h;
         if (opt.sleepMs > 0) util::sleepMs(opt.sleepMs);

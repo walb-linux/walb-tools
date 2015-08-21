@@ -203,6 +203,15 @@ inline void sleepMs(size_t ms)
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
+inline std::string getNowStr()
+{
+    struct timespec ts;
+    if (::clock_gettime(CLOCK_REALTIME, &ts) < 0) {
+        throw cybozu::Exception("getNowStr: clock_gettime failed.");
+    }
+    return cybozu::getHighResolutionTimeStr(ts);
+}
+
 /**
  * Convert binary data to hex string.
  */
