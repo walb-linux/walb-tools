@@ -98,6 +98,7 @@ void checkWldev(const Option &opt)
         }
     }
     reader.reset(lsid);
+    LOGs.info() << super;
     LOGs.info() << "start lsid" << wdevName << lsid;
 
     double t0 = cybozu::util::getTime();
