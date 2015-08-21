@@ -38,3 +38,4 @@ binsrc/write_overlapped_and_verify usr/lib/walb/bin
 binsrc/write_random_data usr/lib/walb/bin
 binsrc/search-lsid usr/lib/walb/bin
 binsrc/search-invalid-logpack usr/lib/walb/bin
+binsrc/wldev-checker usr/lib/walb/bin
