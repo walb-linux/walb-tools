@@ -401,13 +401,11 @@ private:
             /* Read i'th header data. */
             ::memcpy(&header_, ptr<uint8_t>() + sizeof(header_) * i, sizeof(header_));
             if (isValidFileHeader()) {
-                break;
+                sync();
+                return;
             }
         }
-        if (!isValidFileHeader()) {
-            std::runtime_error("Both header data broken.");
-        }
-        sync();
+        std::runtime_error("Both header data broken.");
     }
     bool isValidFileHeader() const {
         if (header_.preamble != QUEUE_PREAMBLE) {
