@@ -153,8 +153,7 @@ void checkWldev(const Option &opt)
             }
             lsid = packH.nextLogpackLsid();
         }
-        if (!opt.isDeleteWlog) continue;
-        if (!device::isOverflow(wdevPath) && lsidSet.oldest < lsid && lsidSet.oldest < lsidSet.prevWritten) {
+        if (opt.isDeleteWlog && !device::isOverflow(wdevPath) && lsidSet.oldest < lsid && lsidSet.oldest < lsidSet.prevWritten) {
             const uint64_t newOldestLsid = std::min(lsid, lsidSet.prevWritten);
             device::eraseWal(wdevName, newOldestLsid);
         }
