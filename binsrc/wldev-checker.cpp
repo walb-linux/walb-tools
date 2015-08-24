@@ -29,6 +29,7 @@ struct Option
     uint64_t readStepSize;
     bool isDeleteWlog;
     bool isDebug;
+    bool checkMem;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -42,6 +43,8 @@ struct Option
         opt.appendOpt(&logIntervalS, 60, "logintvl", "interval for normal log [sec]. (default 60)");
         opt.appendBoolOpt(&isDeleteWlog, "delete", "delete wlogs after verify.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
+        opt.appendBoolOpt(&checkMem, "mem", ": use /dev/walb/Xxxx instead of /dev/walb/Lxxx.");
+
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
@@ -81,7 +84,8 @@ void checkWldev(const Option &opt)
 {
     const std::string& wdevName = opt.wdevName;
     const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
-    const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
+    const std::string wldevPath =
+        opt.checkMem ? (device::WDEV_PATH_PREFIX + "X" + wdevName) : device::getWldevPathFromWdevName(wdevName);
     Reader reader(wldevPath);
     device::SuperBlock &super = reader.super();
     const uint32_t pbs = super.pbs();
