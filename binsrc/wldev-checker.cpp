@@ -79,6 +79,11 @@ void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t i, const L
     tmpFile.save(outPath.str());
 }
 
+void wait(const Option &opt)
+{
+    if (opt.pollIntervalMs > 0) util::sleepMs(opt.pollIntervalMs);
+}
+
 template <typename Reader>
 void checkWldev(const Option &opt)
 {
@@ -117,7 +122,7 @@ void checkWldev(const Option &opt)
         device::LsidSet lsidSet;
         device::getLsidSet(wdevName, lsidSet);
         if (lsid >= lsidSet.permanent) {
-            util::sleepMs(opt.pollIntervalMs);
+            wait(opt);
             overRead = true;
             continue;
         }
@@ -131,7 +136,7 @@ void checkWldev(const Option &opt)
                 const std::string ts = util::getNowStr();
                 LOGs.error() << "invalid logpack header" << wdevName << lsid << ts;
                 dumpLogPackHeader(wdevName, lsid, packH, ts);
-                util::sleepMs(opt.pollIntervalMs);
+                wait(opt);
                 reader.reset(lsid);
                 continue;
             }
@@ -145,7 +150,7 @@ void checkWldev(const Option &opt)
                     LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts;
                     dumpLogPackHeader(wdevName, lsid, packH, ts);
                     dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts);
-                    util::sleepMs(opt.pollIntervalMs);
+                    wait(opt);
                     reader.reset(packH.record(i).lsid);
                     blockS.clear();
                     goto retry;
