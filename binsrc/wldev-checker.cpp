@@ -107,6 +107,7 @@ void checkWldev(const Option &opt)
 
     double t0 = cybozu::util::getTime();
     LogPackHeader packH(pbs, salt);
+    bool overRead = false;
     for (;;) { // Infinite loop.
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > opt.logIntervalS) {
@@ -117,8 +118,12 @@ void checkWldev(const Option &opt)
         device::getLsidSet(wdevName, lsidSet);
         if (lsid >= lsidSet.permanent) {
             util::sleepMs(opt.pollIntervalMs);
-            reader.reset(lsid);
+            overRead = true;
             continue;
+        }
+        if (overRead) {
+            reader.reset(lsid);
+            overRead = false;
         }
         const uint64_t lsidEnd = std::min(lsid + readStepPb, lsidSet.permanent);
         while (lsid < lsidEnd) {
@@ -130,24 +135,21 @@ void checkWldev(const Option &opt)
                 reader.reset(lsid);
                 continue;
             }
-            bool invalid = false;
             for (size_t i = 0; i < packH.nRecords(); i++) {
                 const WlogRecord &rec = packH.record(i);
                 if (!rec.hasData()) continue;
                 LogBlockShared blockS;
+              retry:
                 if (!readLogIo(reader, packH, i, blockS)) {
                     const std::string ts = util::getNowStr();
                     LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts;
                     dumpLogPackHeader(wdevName, lsid, packH, ts);
                     dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts);
-                    invalid = true;
-                    break;
+                    util::sleepMs(opt.pollIntervalMs);
+                    reader.reset(packH.record(i).lsid);
+                    blockS.clear();
+                    goto retry;
                 }
-            }
-            if (invalid) {
-                util::sleepMs(opt.pollIntervalMs);
-                reader.reset(lsid);
-                continue;
             }
             lsid = packH.nextLogpackLsid();
         }
