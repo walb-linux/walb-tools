@@ -234,9 +234,10 @@ struct LsidSet
 {
     static constexpr const uint64_t invalid = uint64_t(-1);
     union {
-        uint64_t array[7];
+        uint64_t array[8];
         struct {
             uint64_t latest;
+            uint64_t submitted;
             uint64_t flush;
             uint64_t completed;
             uint64_t permanent;
@@ -252,8 +253,10 @@ struct LsidSet
         for (uint64_t &v : array) v = invalid;
     }
     bool isValid() const {
-        for (const uint64_t &v : array) {
-            if (v == invalid) return false;
+        const size_t n = sizeof(array) / sizeof(uint64_t);
+        for (size_t i = 0; i < n; i++) {
+            if (i == 1) continue; // submitted may be missing.
+            if (array[i] == invalid) return false;
         }
         return true;
     }
@@ -268,6 +271,7 @@ inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
         std::function<void(uint64_t)> set;
     } tbl[] = {
         {"latest", [&](uint64_t lsid) { lsidSet.latest = lsid; } },
+        {"submitted", [&](uint64_t lsid) { lsidSet.submitted = lsid; } },
         {"flush", [&](uint64_t lsid) { lsidSet.flush = lsid; } },
         {"completed", [&](uint64_t lsid) { lsidSet.completed = lsid; } },
         {"permanent", [&](uint64_t lsid) { lsidSet.permanent = lsid; } },
@@ -295,7 +299,11 @@ inline void getLsidSet(const std::string &wdevName, LsidSet &lsidSet)
                 break;
             }
         }
+#if 0
         if (!found) throw cybozu::Exception(FUNC) << "bad data" << line;
+#else
+        if (!found) LOGs.warn() << FUNC << "could not parse line" << line;
+#endif
     }
     if (!lsidSet.isValid()) {
         throw cybozu::Exception(FUNC) << "invalid data" << readStr;
