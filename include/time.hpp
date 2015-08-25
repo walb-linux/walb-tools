@@ -148,6 +148,117 @@ inline std::string getHighResolutionTimeStr(const struct timespec& ts)
     return ret;
 }
 
+
+struct TimespecBase : timespec
+{
+    bool operator==(const TimespecBase& rhs) const {
+        return this->tv_sec == rhs.tv_sec && this->tv_nsec == rhs.tv_nsec;
+    }
+    bool operator!=(const TimespecBase& rhs) const { return !(*this == rhs); }
+    bool operator<(const TimespecBase& rhs) const {
+        if (this->tv_sec < rhs.tv_sec) return true;
+        if (this->tv_sec == rhs.tv_sec && this->tv_nsec < rhs.tv_nsec) return true;
+        return false;
+    }
+    bool operator>=(const TimespecBase& rhs) const { return !(*this < rhs); }
+    bool operator<=(const TimespecBase& rhs) const { return *this < rhs || *this == rhs; }
+    bool operator>(const TimespecBase& rhs) const { return !(*this <= rhs); }
+
+    void add(const TimespecBase& rhs) {
+        this->tv_sec += rhs.tv_sec;
+        this->tv_nsec += rhs.tv_nsec;
+        if (this->tv_nsec >= 1000000000L) {
+            this->tv_sec++;
+            this->tv_nsec -= 1000000000L;
+        }
+    }
+    void sub(const TimespecBase& rhs) {
+        assert(*this >= rhs);
+        this->tv_sec -= rhs.tv_sec;
+        if (this->tv_nsec < rhs.tv_nsec) {
+            this->tv_sec--;
+            this->tv_nsec += 1000000000L - rhs.tv_nsec;
+        } else {
+            this->tv_nsec -= rhs.tv_nsec;
+        }
+    }
+};
+
+struct TimespecDiff : TimespecBase
+{
+    void operator+=(const TimespecDiff& rhs) {
+        add(rhs);
+    }
+    TimespecDiff operator+(const TimespecDiff& rhs) const {
+        TimespecDiff ret = *this;
+        ret += rhs;
+        return ret;
+    }
+    void operator-=(const TimespecDiff& rhs) {
+        sub(rhs);
+    }
+    TimespecDiff operator-(const TimespecDiff& rhs) const {
+        TimespecDiff ret = *this;
+        ret -= rhs;
+        return ret;
+    }
+
+    std::string str() const {
+        const int len = 21 + 1 + 9 + 1; // 20 bytes for time_t
+        char buf[len];
+        if (::snprintf(buf, len, "%llu.%09ld", (unsigned long long)this->tv_sec, this->tv_nsec) >= len) {
+            buf[0] = '\0';
+        }
+        return std::string(buf);
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const TimespecDiff& ts) {
+        os << ts.str();
+        return os;
+    }
+};
+
+struct Timespec : TimespecBase
+{
+    TimespecDiff operator-(const Timespec& rhs) const {
+        TimespecDiff ret = *(TimespecDiff*)this;
+        ret.sub(rhs);
+        return ret;
+    }
+    void operator+=(const TimespecDiff& rhs) {
+        add(rhs);
+    }
+    void operator-=(const TimespecDiff& rhs) {
+        sub(rhs);
+    }
+    Timespec operator+(const TimespecDiff& rhs) const {
+        Timespec ret = *this;
+        ret.add(rhs);
+        return ret;
+    }
+    Timespec operator-(const TimespecDiff& rhs) const {
+        Timespec ret = *this;
+        ret.sub(rhs);
+        return ret;
+    }
+
+    std::string str() const {
+        return getHighResolutionTimeStr(*this);
+    }
+    friend inline std::ostream& operator<<(std::ostream& os, const Timespec& ts) {
+        os << ts.str();
+        return os;
+    }
+};
+
+inline Timespec getNowAsTimespec()
+{
+    Timespec ts;
+    if (::clock_gettime(CLOCK_REALTIME, &ts) < 0) {
+        throw std::runtime_error("clock_gettime failed");
+    }
+    return ts;
+}
+
 template <typename Clock, typename Resolution>
 class StopwatchT
 {

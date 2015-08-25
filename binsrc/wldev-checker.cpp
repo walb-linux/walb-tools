@@ -30,6 +30,7 @@ struct Option
     bool isDeleteWlog;
     bool isDebug;
     bool checkMem;
+    bool skipLogIos;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -44,6 +45,7 @@ struct Option
         opt.appendBoolOpt(&isDeleteWlog, "delete", "delete wlogs after verify.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendBoolOpt(&checkMem, "mem", ": use /dev/walb/Xxxx instead of /dev/walb/Lxxx.");
+        opt.appendBoolOpt(&skipLogIos, "skipio", ": skip logpack IOs.");
 
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -53,17 +55,17 @@ struct Option
     }
 };
 
-void dumpLogPackHeader(const std::string& wdevName, uint64_t lsid, const LogPackHeader& packH, const std::string& ts)
+void dumpLogPackHeader(const std::string& wdevName, uint64_t lsid, const LogPackHeader& packH, const cybozu::Timespec& ts)
 {
     cybozu::TmpFile tmpFile(".");
     cybozu::util::File file(tmpFile.fd());
     file.write(packH.rawData(), packH.pbs());
     cybozu::FilePath outPath(".");
-    outPath += cybozu::util::formatString("logpackheader-%s-%" PRIu64 "-%s", wdevName.c_str(), lsid, ts.c_str());
+    outPath += cybozu::util::formatString("logpackheader-%s-%" PRIu64 "-%s", wdevName.c_str(), lsid, ts.str().c_str());
     tmpFile.save(outPath.str());
 }
 
-void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t i, const LogPackHeader& packH, const LogBlockShared& blockS, const std::string& ts)
+void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t i, const LogPackHeader& packH, const LogBlockShared& blockS, const cybozu::Timespec& ts)
 {
     cybozu::TmpFile tmpFile(".");
     cybozu::util::File file(tmpFile.fd());
@@ -75,7 +77,7 @@ void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t i, const L
         remaining -= s;
     }
     cybozu::FilePath outPath(".");
-    outPath += cybozu::util::formatString("logpackio-%s-%" PRIu64 "-%zu-%s", wdevName.c_str(), lsid, i, ts.c_str());
+    outPath += cybozu::util::formatString("logpackio-%s-%" PRIu64 "-%zu-%s", wdevName.c_str(), lsid, i, ts.str().c_str());
     tmpFile.save(outPath.str());
 }
 
@@ -110,6 +112,8 @@ void checkWldev(const Option &opt)
     LOGs.info() << super;
     LOGs.info() << "start lsid" << wdevName << lsid;
 
+    device::SimpleWldevReader sReader(wldevPath); // QQQ
+
     double t0 = cybozu::util::getTime();
     LogPackHeader packH(pbs, salt);
     bool overRead = false;
@@ -133,27 +137,47 @@ void checkWldev(const Option &opt)
         const uint64_t lsidEnd = std::min(lsid + readStepPb, lsidSet.permanent);
         while (lsid < lsidEnd) {
             if (!readLogPackHeader(reader, packH, lsid)) {
-                const std::string ts = util::getNowStr();
-                LOGs.error() << "invalid logpack header" << wdevName << lsid << ts;
-                dumpLogPackHeader(wdevName, lsid, packH, ts);
+                const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
+#if 0
+                LOGs.error() << "invalid logpack header" << wdevName << lsid << ts0;
+                dumpLogPackHeader(wdevName, lsid, packH, ts0);
+#endif
+
+                int c = 0;
+              retry2:
+                c++;
+                sReader.reset(lsid);
+                if (!readLogPackHeader(sReader, packH, lsid)) {
+                    goto retry2;
+                }
+                const cybozu::Timespec ts1 = cybozu::getNowAsTimespec();
+                const cybozu::TimespecDiff td = ts1 - ts0;
+                LOGs.info() << "retry succeeded" << wdevName << lsid << ts0 << ts1 << td << c;
+                reader.reset(lsid + 1);
+#if 0
                 wait(opt);
                 reader.reset(lsid);
                 continue;
+#endif
             }
-            for (size_t i = 0; i < packH.nRecords(); i++) {
-                const WlogRecord &rec = packH.record(i);
-                if (!rec.hasData()) continue;
-                LogBlockShared blockS;
-              retry:
-                if (!readLogIo(reader, packH, i, blockS)) {
-                    const std::string ts = util::getNowStr();
-                    LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts;
-                    dumpLogPackHeader(wdevName, lsid, packH, ts);
-                    dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts);
-                    wait(opt);
-                    reader.reset(packH.record(i).lsid);
-                    blockS.clear();
-                    goto retry;
+            if (opt.skipLogIos) {
+                skipAllLogIos(reader, packH);
+            } else {
+                for (size_t i = 0; i < packH.nRecords(); i++) {
+                    const WlogRecord &rec = packH.record(i);
+                    if (!rec.hasData()) continue;
+                    LogBlockShared blockS;
+                  retry:
+                    if (!readLogIo(reader, packH, i, blockS)) {
+                        const cybozu::Timespec ts = cybozu::getNowAsTimespec();
+                        LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts;
+                        dumpLogPackHeader(wdevName, lsid, packH, ts);
+                        dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts);
+                        wait(opt);
+                        reader.reset(packH.record(i).lsid);
+                        blockS.clear();
+                        goto retry;
+                    }
                 }
             }
             lsid = packH.nextLogpackLsid();
