@@ -112,11 +112,10 @@ void checkWldev(const Option &opt)
     LOGs.info() << super;
     LOGs.info() << "start lsid" << wdevName << lsid;
 
-    device::SimpleWldevReader sReader(wldevPath); // QQQ
+    device::SimpleWldevReader sReader(wldevPath);
 
     double t0 = cybozu::util::getTime();
     LogPackHeader packH(pbs, salt);
-    bool overRead = false;
     for (;;) { // Infinite loop.
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > opt.logIntervalS) {
@@ -127,14 +126,10 @@ void checkWldev(const Option &opt)
         device::getLsidSet(wdevName, lsidSet);
         if (lsid >= lsidSet.permanent) {
             wait(opt);
-            overRead = true;
             continue;
         }
-        if (overRead) {
-            reader.reset(lsid);
-            overRead = false;
-        }
         const uint64_t lsidEnd = std::min(lsid + readStepPb, lsidSet.permanent);
+        reader.reset(lsid);
         while (lsid < lsidEnd) {
             if (!readLogPackHeader(reader, packH, lsid)) {
                 const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
