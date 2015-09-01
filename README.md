@@ -24,6 +24,10 @@ For details, see [doc/REAMDE.md].
 - Header files of WalB kernel driver.
 - cybozulib. [GitHub repository](https://github.com/herumi/cybozulib/)
 
+## Copyright
+
+(C) 2013 Cybozu Labs, Inc.
+
 ## License
 
 GPLv2 or 3
