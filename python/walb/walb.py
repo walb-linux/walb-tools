@@ -762,6 +762,15 @@ class Device(object):
             raise Exception('get_size_mb: not multiple of MiB.', sizeB)
         return sizeB / Mebi
 
+    def get_log_size_lb(self):
+        '''
+        Get walb log device size.
+        This will read sysfs to get size.
+        return :: int -- log device size [logical block].
+        '''
+        path = self._get_wldev_sys_path() + 'size'
+        return int(self.runCommand(['/bin/cat', path]).strip())
+
     def wait_for_log_empty(self, timeoutS=TIMEOUT_SEC):
         '''
         Wait for log device becomes empty.
@@ -795,6 +804,9 @@ class Device(object):
     '''
     def _get_sys_path(self):
         return '/sys/block/walb!{}/'.format(self.name)
+
+    def _get_wldev_sys_path(self):
+        return '/sys/block/walb!L{}/'.format(self.name)
 
 
 class Server(object):
