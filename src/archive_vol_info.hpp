@@ -82,6 +82,10 @@ private:
 public:
     VolLvCache() : muPtr_(new std::recursive_mutex()), exists_(false), lv_(), snapMap_() {
     }
+    bool exists() const {
+        UniqueLock lk(*muPtr_);
+        return exists_;
+    }
     Lv getLv() const {
         UniqueLock lk(*muPtr_);
         verifyExistance();
@@ -411,7 +415,13 @@ public:
             throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is zero");
         }
         if (lvExists()) {
-            cybozu::lvm::Lv lv = lvC_.getLv();
+            cybozu::lvm::Lv lv;
+            if (lvC_.exists()) {
+                lv = lvC_.getLv();
+            } else {
+                lv = cybozu::lvm::locate(getVg().name(), lvName());
+                lvC_.add(lv);
+            }
             uint64_t curSizeLb = lv.sizeLb();
             if (curSizeLb != sizeLb) {
                 throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is different") << curSizeLb << sizeLb;
