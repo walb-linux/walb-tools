@@ -1,0 +1,7 @@
+#pragma once
+
+inline const char *getWalbToolsBuildDate()
+{
+    static const char *v = "BUILD_DATE";
+    return v;
+}

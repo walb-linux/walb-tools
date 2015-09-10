@@ -9,6 +9,7 @@
 #include "wdev_log.hpp"
 #include "walb_logger.hpp"
 #include "version.hpp"
+#include "build_date.hpp"
 #include "linux/walb/ioctl.h"
 
 using namespace walb;
@@ -528,7 +529,9 @@ class Dispatcher {
     bool isDebug;
     CommandInfo *ci;
     void setup1stOption() {
-        const std::string desc = cybozu::util::formatString("walb device controller version %s\n", getWalbToolsVersion());
+        const std::string desc = cybozu::util::formatString(
+            "walb device controller version %s build at %s\n",
+            getWalbToolsVersion(), getWalbToolsBuildDate());
         opt1.setDescription(desc);
         std::string usage =
             "usage: wdevc [<opt>] <command> [<args>] [<opt>]\n\n"

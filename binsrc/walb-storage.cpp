@@ -18,6 +18,7 @@
 #include "fileio_serializer.hpp"
 #include "storage.hpp"
 #include "version.hpp"
+#include "build_date.hpp"
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -120,6 +121,7 @@ int main(int argc, char *argv[]) try
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
     LOGs.info() << "starting walb storage server";
     LOGs.info() << "version" << getWalbToolsVersion();
+    LOGs.info() << "build date" << getWalbToolsBuildDate();
     LOGs.info() << opt.opt;
     {
         StorageThreads threads(opt);
