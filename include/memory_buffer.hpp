@@ -11,6 +11,7 @@
 #include <set>
 
 #include "util.hpp"
+#include "range_util.hpp"
 
 /**
  * Block (aligned memory) allocators using posix_memalign().
@@ -66,7 +67,7 @@ public:
         SetIterator it =
             set_.lower_bound({off0, 0});
         while (it != set_.end() && it->first < off1) {
-            if (isOverlapped(it->first, it->second, off, size)) {
+            if (cybozu::isOverlapped(it->first, it->second, off, size)) {
                 return false;
             }
             ++it;
@@ -113,11 +114,6 @@ public:
             ::printf("%zu %zu\n", it->first, it->second);
             ++it;
         }
-    }
-private:
-    bool isOverlapped(size_t off0, size_t size0,
-                      size_t off1, size_t size1) const {
-        return off0 < off1 + size1 && off1 < off0 + size0;
     }
 };
 

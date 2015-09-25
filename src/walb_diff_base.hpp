@@ -13,6 +13,7 @@
 #include <snappy.h>
 
 #include "util.hpp"
+#include "range_util.hpp"
 #include "fileio.hpp"
 #include "checksum.hpp"
 #include "walb_types.hpp"
@@ -119,12 +120,10 @@ struct DiffRecord : public walb_diff_record {
         flags |= WALB_DIFF_FLAG(DISCARD);
     }
     bool isOverwrittenBy(const DiffRecord &rhs) const {
-        return rhs.io_address <= io_address &&
-            io_address + io_blocks <= rhs.io_address + rhs.io_blocks;
+        return cybozu::isOverwritten(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
     }
     bool isOverlapped(const DiffRecord &rhs) const {
-        return io_address < rhs.io_address + rhs.io_blocks &&
-            rhs.io_address < io_address + io_blocks;
+        return cybozu::isOverlapped(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
     }
     /**
      * Split a record into several records

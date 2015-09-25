@@ -4,6 +4,7 @@
 #include <cstdio>
 #include "walb_types.hpp"
 #include "aio_util.hpp"
+#include "range_util.hpp"
 
 //#define USE_DEBUG_TRACE
 
@@ -101,11 +102,7 @@ public:
      *   true if overlapped.
      */
     bool isOverlapped(const Io& rhs) const {
-        const size_t off0 = offset_;
-        const size_t off1 = rhs.offset_;
-        const size_t size0 = size_;
-        const size_t size1 = rhs.size_;
-        return off0 < off1 + size1 && off1 < off0 + size0;
+        return cybozu::isOverlapped(offset_, size_, rhs.offset_, rhs.size_);
     }
 
     /**
@@ -113,11 +110,7 @@ public:
      *   true if the IO is fully overwritten by rhs.
      */
     bool isOverwrittenBy(const Io& rhs) const {
-        const size_t off0 = offset_;
-        const size_t off1 = rhs.offset_;
-        const size_t size0 = size_;
-        const size_t size1 = rhs.size_;
-        return off1 <= off0 && off0 + size0 <= off1 + size1;
+        return cybozu::isOverwritten(offset_, size_, rhs.offset_, rhs.size_);
     }
 };
 
