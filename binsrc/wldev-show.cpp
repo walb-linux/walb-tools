@@ -5,6 +5,7 @@
 #include "cybozu/option.hpp"
 #include "util.hpp"
 #include "fileio.hpp"
+#include "range_util.hpp"
 #include "aio_util.hpp"
 #include "linux/walb/walb.h"
 #include "walb_logger.hpp"
@@ -25,6 +26,7 @@ struct Option
     bool showSuper, showHead, showPack, showStat;
     bool doSearch;
     uint64_t addr; // for doSearch
+    uint16_t iosize; // for doSearch
     bool dontUseAio;
     bool doForce;
     bool isDebug;
@@ -42,7 +44,8 @@ struct Option
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio");
         opt.appendBoolOpt(&doForce, "f", ": ignore oldest lsid in the super block.");
         opt.appendBoolOpt(&doSearch, "search", ": search IOs with a specified address.");
-        opt.appendOpt(&addr, 0, "addr", ": address to search [logical block].");
+        opt.appendOpt(&addr, 0, "addr", "ADDRESS: address to search [logical block].");
+        opt.appendOpt(&iosize, 1, "iosize", "SIZE: io size to search [logical block].");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -61,13 +64,13 @@ struct Option
     }
 };
 
-inline bool matchAddress(uint64_t addr, const LogPackHeader& pack)
+inline bool matchAddress(uint64_t addr, uint16_t iosize, const LogPackHeader& pack)
 {
     const size_t nr = pack.nRecords();
     for (size_t i = 0; i < nr; i++) {
         const WlogRecord &rec = pack.record(i);
         if (!rec.isExist()) continue;
-        if (rec.offset <= addr && addr < rec.offset + rec.io_size) {
+        if (cybozu::isOverlapped(addr, iosize, rec.offset, rec.io_size)) {
             return true;
         }
     }
@@ -101,7 +104,7 @@ void showWldev(const Option &opt)
     while (lsid < opt.endLsid) {
         if (!readLogPackHeader(reader, packH, lsid)) break;
         if (opt.showPack) {
-            if (!opt.doSearch || matchAddress(opt.addr, packH)) {
+            if (!opt.doSearch || matchAddress(opt.addr, opt.iosize, packH)) {
                 std::cout << packH << std::endl;
             }
         }
