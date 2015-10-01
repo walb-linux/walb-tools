@@ -1,4 +1,4 @@
-.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages
+.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages build_date
 
 CXX = clang++
 CC = clang
@@ -51,7 +51,6 @@ MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 
 all: build
 build:
-	$(MAKE) clean_build_date
 	$(MAKE) $(BINARIES)
 
 utest: $(TEST_BINARIES)
@@ -63,6 +62,10 @@ utest_all: $(TEST_BINARIES)
 itest: $(BINARIES)
 	$(MAKE) -C itest/wdiff
 	$(MAKE) -C itest/wlog
+
+build_date:
+	$(MAKE) clean_build_date
+	$(MAKE) src/build_date.hpp
 
 echo_binaries:
 	@echo $(BINARIES)
