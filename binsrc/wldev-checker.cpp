@@ -32,6 +32,7 @@ struct Option
     bool isDebug;
     bool checkMem;
     bool skipLogIos;
+    bool isZeroDelete;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -48,6 +49,7 @@ struct Option
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
         opt.appendBoolOpt(&checkMem, "mem", ": use /dev/walb/Xxxx instead of /dev/walb/Lxxx.");
         opt.appendBoolOpt(&skipLogIos, "skipio", ": skip logpack IOs.");
+        opt.appendBoolOpt(&isZeroDelete, "zero", ": delete wlogs with filling zero data.");
 
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -202,6 +204,7 @@ void checkWldev(const Option &opt)
     const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const std::string wldevPath =
         opt.checkMem ? (device::WDEV_PATH_PREFIX + "X" + wdevName) : device::getWldevPathFromWdevName(wdevName);
+    const std::string ldevPath = device::getUnderlyingLogDevPath(wdevName);
     Reader reader(wldevPath);
     device::SuperBlock &super = reader.super();
     const uint32_t pbs = super.pbs();
@@ -262,9 +265,13 @@ void checkWldev(const Option &opt)
         if (opt.isDeleteWlog && !device::isOverflow(wdevPath) && lsidSet.oldest < lsid && lsidSet.oldest < lsidSet.prevWritten) {
             const uint64_t newOldestLsid = std::min(lsid, lsidSet.prevWritten);
             device::eraseWal(wdevName, newOldestLsid);
+            if (opt.isZeroDelete) {
+                device::fillZeroToLdev(ldevPath, lsidSet.oldest, newOldestLsid);
+            }
         }
     }
 }
+
 
 int doMain(int argc, char* argv[])
 {

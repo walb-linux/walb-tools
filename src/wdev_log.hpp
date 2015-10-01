@@ -503,4 +503,38 @@ inline void initWalbMetadata(
     super.write(fd);
 }
 
+inline void fillZeroToLdev(const std::string& ldevPath, uint64_t bgnLsid, uint64_t endLsid)
+{
+    assert(bgnLsid < endLsid);
+    cybozu::util::File file(ldevPath, O_RDWR | O_DIRECT);
+    SuperBlock super;
+    super.read(file.fd());
+    const uint32_t pbs = super.pbs();
+    const uint64_t rbOff = super.getRingBufferOffset();
+    const uint64_t rbSize = super.getRingBufferSize();
+    const uint64_t oldestLsid = super.getOldestLsid();
+    if (endLsid > oldestLsid) {
+        throw cybozu::Exception("bad endLsid") << endLsid << oldestLsid;
+    }
+    const uint64_t writtenLsid = super.getWrittenLsid();
+    if (rbSize < writtenLsid && bgnLsid < writtenLsid - rbSize) {
+        throw cybozu::Exception("bad bgnLsid") << bgnLsid << writtenLsid;
+    }
+
+    size_t bufPb = MEBI / pbs;
+    AlignedArray buf(bufPb * pbs);
+    ::memset(buf.data(), 0, buf.size());
+
+    uint64_t lsid = bgnLsid;
+    while (lsid < endLsid) {
+        const uint64_t tmpPb0 = endLsid - lsid;
+        const uint64_t tmpPb1 = rbSize - (lsid % rbSize); // ring buffer end.
+        const uint64_t tmpPb2 = std::min<uint64_t>(tmpPb0, tmpPb1);
+        const size_t minPb = std::min<uint64_t>(bufPb, tmpPb2);
+        const uint64_t offPb = lsid % rbSize + rbOff;
+        file.pwrite(buf.data(), minPb * pbs, offPb * pbs);
+        lsid += minPb;
+    }
+}
+
 }} //namespace walb::device
