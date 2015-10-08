@@ -23,6 +23,7 @@
 #include "linux/walb/log_device.h"
 #include "linux/walb/log_record.h"
 #include "walb_log.h"
+#include "wdev_util.hpp"
 
 namespace walb {
 namespace device {
@@ -503,22 +504,27 @@ inline void initWalbMetadata(
     super.write(fd);
 }
 
-inline void fillZeroToLdev(const std::string& ldevPath, uint64_t bgnLsid, uint64_t endLsid)
+/**
+ * Wlogs area for the range [bgnLsid, endLsid] will be zero-filled in ldev.
+ * buffer size is 1MiB (hard-coded).
+ */
+inline void fillZeroToLdev(const std::string& wdevName, uint64_t bgnLsid, uint64_t endLsid)
 {
     assert(bgnLsid < endLsid);
+    const std::string ldevPath = getUnderlyingLogDevPath(wdevName);
     cybozu::util::File file(ldevPath, O_RDWR | O_DIRECT);
     SuperBlock super;
     super.read(file.fd());
     const uint32_t pbs = super.pbs();
     const uint64_t rbOff = super.getRingBufferOffset();
     const uint64_t rbSize = super.getRingBufferSize();
-    const uint64_t oldestLsid = super.getOldestLsid();
-    if (endLsid > oldestLsid) {
-        throw cybozu::Exception("bad endLsid") << endLsid << oldestLsid;
+    LsidSet lsids;
+    getLsidSet(wdevName, lsids);
+    if (endLsid > lsids.oldest) {
+        throw cybozu::Exception("bad endLsid") << endLsid << lsids.oldest;
     }
-    const uint64_t writtenLsid = super.getWrittenLsid();
-    if (rbSize < writtenLsid && bgnLsid < writtenLsid - rbSize) {
-        throw cybozu::Exception("bad bgnLsid") << bgnLsid << writtenLsid;
+    if (rbSize < lsids.latest && bgnLsid < lsids.latest - rbSize) {
+        throw cybozu::Exception("bad bgnLsid") << bgnLsid << lsids.latest;
     }
 
     size_t bufPb = MEBI / pbs;
