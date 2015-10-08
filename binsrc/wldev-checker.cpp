@@ -99,6 +99,7 @@ void retryForeverReadLogPackHeader(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
     LogPackHeader& packH, uint64_t lsid, size_t retryMs)
 {
+    const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
     LOGs.error() << "invalid logpack header" << wdevName << lsid << ts0;
     dumpLogPackHeader(wdevName, lsid, packH, ts0);
@@ -112,6 +113,9 @@ void retryForeverReadLogPackHeader(
     sReader.reset(lsid);
     if (!readLogPackHeader(sReader, packH, lsid)) {
         if (!isEqualLogPackHeaderImage(packH, prevImg)) {
+            if (device::isOverflow(wdevPath)) {
+                throw cybozu::Exception("overflow") << wdevPath;
+            }
             const cybozu::Timespec ts1 = cybozu::getNowAsTimespec();
             LOGs.info() << "invalid logpack header changed" << wdevName << lsid << ts1 << c;
             dumpLogPackHeader(wdevName, lsid, packH, ts1);
@@ -164,6 +168,7 @@ void retryForeverReadLogPackIo(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
     const LogPackHeader& packH, size_t i, LogBlockShared& blockS, size_t retryMs)
 {
+    const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
     const uint64_t lsid = packH.logpackLsid();
     LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts0;
@@ -181,6 +186,9 @@ retry:
     blockS.clear();
     if (!readLogIo(sReader, packH, i, blockS)) {
         if (!isEqualLogPackIoImage(blockS, prevImg)) {
+            if (device::isOverflow(wdevPath)) {
+                throw cybozu::Exception("overflow") << wdevPath;
+            }
             const cybozu::Timespec ts1 = cybozu::getNowAsTimespec();
             LOGs.info() << "invalid logpack IO changed" << wdevName << lsid << i << ts1 << c;
             dumpLogPackHeader(wdevName, lsid, packH, ts1);
