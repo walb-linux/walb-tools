@@ -33,6 +33,7 @@ struct Option
     bool checkMem;
     bool skipLogIos;
     bool isZeroDelete;
+    bool keepCsum;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -50,11 +51,16 @@ struct Option
         opt.appendBoolOpt(&checkMem, "mem", ": use /dev/walb/Xxxx instead of /dev/walb/Lxxx.");
         opt.appendBoolOpt(&skipLogIos, "skipio", ": skip logpack IOs.");
         opt.appendBoolOpt(&isZeroDelete, "zero", ": delete wlogs with filling zero data.");
+        opt.appendBoolOpt(&keepCsum, "csum", ": keep checksum of each logical block. (enabled only if skipio is disabled.)");
 
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
             opt.usage();
             ::exit(1);
+        }
+        if (keepCsum && skipLogIos) {
+            keepCsum = false;
+            LOGs.warn() << "disable keepCsum option due to skipio is enabled.";
         }
     }
 };
@@ -95,7 +101,29 @@ bool isEqualLogPackHeaderImage(const LogPackHeader& packH, const AlignedArray& p
     return ::memcmp(packH.rawData(), prevImg.data(), prevImg.size()) == 0;
 }
 
-void retryForeverReadLogPackHeader(
+std::atomic<bool> signal_(false);
+
+void signalHandler(int)
+{
+    signal_ = true;
+}
+
+void setSignalHandler()
+{
+    struct sigaction sa;
+    sa.sa_handler = signalHandler;
+    ::sigfillset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    const bool ok =
+        (::sigaction(SIGINT, &sa, NULL) == 0) &&
+        (::sigaction(SIGQUIT, &sa, NULL) == 0) &&
+        (::sigaction(SIGTERM, &sa, NULL) == 0);
+    if (!ok) {
+        throw cybozu::Exception("register signal handler failed.");
+    }
+}
+
+bool retryForeverReadLogPackHeader(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
     LogPackHeader& packH, uint64_t lsid, size_t retryMs)
 {
@@ -108,6 +136,7 @@ void retryForeverReadLogPackHeader(
 
     size_t c = 0;
   retry:
+    if (signal_) return false;
     waitMs(retryMs);
     c++;
     sReader.reset(lsid);
@@ -127,6 +156,7 @@ void retryForeverReadLogPackHeader(
     const cybozu::TimespecDiff td = ts1 - ts0;
     LOGs.info() << "retry succeeded" << wdevName << lsid << ts0 << ts1 << td << c;
     dumpLogPackHeader(wdevName, lsid, packH, ts1);
+    return true;
 }
 
 void copyLogPackIo(AlignedArray& dst, const LogBlockShared& src)
@@ -164,7 +194,7 @@ bool isEqualLogPackIoImage(const LogBlockShared& blockS, const AlignedArray& pre
     return true;
 }
 
-void retryForeverReadLogPackIo(
+bool retryForeverReadLogPackIo(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
     const LogPackHeader& packH, size_t i, LogBlockShared& blockS, size_t retryMs)
 {
@@ -180,6 +210,7 @@ void retryForeverReadLogPackIo(
 
     size_t c = 0;
 retry:
+    if (signal_) return false;
     waitMs(retryMs);
     c++;
     sReader.reset(rec.lsid);
@@ -202,7 +233,7 @@ retry:
     LOGs.info() << "retry succeeded" << wdevName << lsid << i << ts0 << ts1 << td << c;
     dumpLogPackHeader(wdevName, lsid, packH, ts1);
     dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts1);
-    blockS.clear();
+    return true;
 }
 
 template <typename Reader>
@@ -231,11 +262,15 @@ void checkWldev(const Option &opt)
     LOGs.info() << super;
     LOGs.info() << "start lsid" << wdevName << lsid;
 
+    uint64_t csumLsid;
+    std::deque<uint32_t> csumDeq;
+
     device::SimpleWldevReader sReader(wldevPath);
 
     double t0 = cybozu::util::getTime();
     LogPackHeader packH(pbs, salt);
-    for (;;) { // Infinite loop.
+    for (;;) {
+        if (signal_) goto fin;
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > opt.logIntervalS) {
             LOGs.info() << "current lsid" << wdevName << lsid;
@@ -251,8 +286,15 @@ void checkWldev(const Option &opt)
         reader.reset(lsid);
         while (lsid < lsidEnd) {
             if (!readLogPackHeader(reader, packH, lsid)) {
-                retryForeverReadLogPackHeader(wdevName, sReader, packH, lsid, opt.retryMs);
+                if (!retryForeverReadLogPackHeader(wdevName, sReader, packH, lsid, opt.retryMs)) {
+                    goto fin;
+                }
                 reader.reset(lsid + 1); // for next read.
+            }
+            if (opt.keepCsum) {
+                const uint32_t csum = cybozu::util::calcChecksum(packH.rawData(), pbs, 0);
+                csumDeq.push_back(csum);
+                csumLsid = lsid + 1;
             }
             if (opt.skipLogIos) {
                 skipAllLogIos(reader, packH);
@@ -261,9 +303,19 @@ void checkWldev(const Option &opt)
                     const WlogRecord &rec = packH.record(i);
                     if (!rec.hasData()) continue;
                     LogBlockShared blockS;
+                    const uint64_t nextLsid = rec.lsid + rec.ioSizePb(pbs);
                     if (!readLogIo(reader, packH, i, blockS)) {
-                        retryForeverReadLogPackIo(wdevName, sReader, packH, i, blockS, opt.retryMs);
-                        reader.reset(rec.lsid + rec.ioSizePb(packH.pbs())); // for next read.
+                        if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, blockS, opt.retryMs)) {
+                            goto fin;
+                        }
+                        reader.reset(nextLsid); // for next read.
+                    }
+                    if (opt.keepCsum) {
+                        for (size_t i = 0; i < blockS.nBlocks(); i++) {
+                            const uint32_t csum = cybozu::util::calcChecksum(blockS.get(i), pbs, 0);
+                            csumDeq.push_back(csum);
+                        }
+                        csumLsid = nextLsid;
                     }
                 }
             }
@@ -276,14 +328,36 @@ void checkWldev(const Option &opt)
                 device::fillZeroToLdev(wdevName, lsidSet.oldest, newOldestLsid);
             }
         }
+        if (opt.keepCsum) {
+            // Remove old records.
+            const uint64_t rbSize = super.getRingBufferSize();
+            if (rbSize * 2 < csumDeq.size()) {
+                const size_t nr = csumDeq.size() - (rbSize * 2);
+                csumDeq.erase(csumDeq.begin(), csumDeq.begin() + nr);
+            }
+        }
+    }
+  fin:
+    if (opt.keepCsum) {
+        cybozu::util::File file(wdevName + ".csum", O_CREAT | O_TRUNC | O_WRONLY, 0644);
+        uint64_t lsid = csumLsid - csumDeq.size();
+        auto it = csumDeq.cbegin();
+        while (it != csumDeq.cend()) {
+            std::string s = cybozu::util::formatString("%" PRIu64 "\t%08x\n", lsid, *it);
+            file.write(s.data(), s.size());
+            ++it;
+            lsid++;
+        }
+        file.fsync();
+        file.close();
     }
 }
-
 
 int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting(opt.logPath, opt.isDebug);
+    setSignalHandler();
 
     if (opt.dontUseAio) {
         checkWldev<device::SimpleWldevReader>(opt);
