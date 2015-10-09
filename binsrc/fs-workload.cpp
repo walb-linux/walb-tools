@@ -9,6 +9,41 @@
 
 using namespace walb;
 
+enum {
+    CREATE = 0, DELETE = 1, UPDATE = 2, APPEND = 3, READ = 4, TYPE_MAX = 5,
+};
+
+struct IoRatio
+{
+    std::vector<size_t> ratio; // cumulative.
+    size_t totalRatio;
+
+    IoRatio() : ratio(TYPE_MAX), totalRatio(0) {
+    }
+    void parse(const std::string& s) {
+        std::vector<std::string> ss = cybozu::util::splitString(s, ":");
+        if (ss.size() != 5) {
+            throw cybozu::Exception("bad IoRation representation") << s;
+        }
+        totalRatio = 0;
+        for (size_t i = 0; i < TYPE_MAX; i++) {
+            ratio[i] = totalRatio + static_cast<size_t>(cybozu::atoi(ss[i]));
+            totalRatio = ratio[i];
+        }
+        if (totalRatio == 0) {
+            throw cybozu::Exception("totalRatio must not be 0");
+        }
+    }
+    template <typename Rand>
+    int choose(Rand& rand) const {
+        const size_t v = rand.get(totalRatio);
+        for (size_t i = 0; i < TYPE_MAX; i++) {
+            if (v < ratio[i]) return i;
+        }
+        throw cybozu::Exception("must not reach here.");
+    }
+};
+
 struct Params
 {
     std::string workDir;
@@ -16,6 +51,8 @@ struct Params
     size_t minFileSize;
     size_t maxFileSize;
     size_t sleepMs;
+
+    IoRatio ioRatio;
 };
 
 struct Option
@@ -23,6 +60,7 @@ struct Option
     size_t nrThreads;
     Params params;
     bool isDebug;
+    std::string ratioStr;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -34,6 +72,7 @@ struct Option
         opt.appendOpt(&params.minFileSize, 0, "minfs", ": minimum file size [byte]. (default 0)");
         opt.appendOpt(&params.maxFileSize, 1 * MEBI, "maxfs", ": maximum file size [byte]. (default 1M)");
         opt.appendOpt(&params.sleepMs, 0, "sleep", ": sleep time between operations [ms] (default 0)");
+        opt.appendOpt(&ratioStr, "30:20:10:10:30", "ratio", ": create:delete:update:append:read ratio (default: 30:20:10:10:30)");
 
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -43,6 +82,7 @@ struct Option
         if (params.minFileSize > params.maxFileSize) {
             cybozu::Exception("bad file size params") << params.minFileSize << params.maxFileSize;
         }
+        params.ioRatio.parse(ratioStr);
     }
 };
 
@@ -86,16 +126,13 @@ std::atomic<size_t> totalSize_(0);
 
 struct Stat
 {
-    enum {
-        CREATE = 0, DELETE = 1, UPDATE = 2, APPEND = 3, MAX = 4,
-    };
     std::vector<size_t> nrV;
     std::vector<size_t> sizeV;
 
-    Stat() : nrV(MAX), sizeV(MAX) {
+    Stat() : nrV(TYPE_MAX), sizeV(TYPE_MAX) {
     }
-    void update(int type, size_t oldSize, size_t newSize, size_t writeSize) {
-        assert(type < MAX);
+    void update(int type, size_t oldSize, size_t newSize, size_t accessSize) {
+        assert(type < TYPE_MAX);
         if (oldSize < newSize) {
             const size_t delta = newSize - oldSize;;
             totalSize_ += delta;
@@ -104,7 +141,7 @@ struct Stat
             totalSize_ -= delta;
         }
         nrV[type]++;
-        sizeV[type] += writeSize;
+        sizeV[type] += accessSize;
     }
     std::string str() const {
         std::stringstream ss;
@@ -112,6 +149,7 @@ struct Stat
         ss << cybozu::util::formatString("DELETE %zu %zu\n", nrV[DELETE], sizeV[DELETE]);
         ss << cybozu::util::formatString("UPDATE %zu %zu\n", nrV[UPDATE], sizeV[UPDATE]);
         ss << cybozu::util::formatString("APPEND %zu %zu\n", nrV[APPEND], sizeV[APPEND]);
+        ss << cybozu::util::formatString("READ   %zu %zu\n", nrV[READ], sizeV[READ]);
         return ss.str();
     }
     friend inline std::ostream& operator<<(std::ostream& os, const Stat& stat) {
@@ -120,7 +158,7 @@ struct Stat
     }
 
     void merge(const Stat& rhs) {
-        for (size_t i = 0; i < MAX; i++) {
+        for (size_t i = 0; i < TYPE_MAX; i++) {
             nrV[i] += rhs.nrV[i];
             sizeV[i] += rhs.sizeV[i];
         }
@@ -157,15 +195,19 @@ public:
             create();
             return;
         }
-        const size_t val = rand_() % 100;
-        if (totalSize_ > params_.workdataSize || val < 20) {
+        if (totalSize_ > params_.workdataSize) {
             remove();
-        } else if (val < 40) {
-            update();
-        } else if (val < 60) {
-            append();
-        } else {
-            create();
+            return;
+        }
+        const int type = params_.ioRatio.choose(rand_);
+        switch (type) {
+        case CREATE: create(); break;
+        case DELETE: remove(); break;
+        case UPDATE: update(); break;
+        case APPEND: append(); break;
+        case READ:   read();   break;
+        default:
+            throw cybozu::Exception("must not reach here");
         }
     }
 
@@ -208,7 +250,7 @@ private:
         fsyncRandomly(file);
         file.close();
         map_.emplace(id, fileSize);
-        stat_.update(Stat::CREATE, 0, fileSize, fileSize);
+        stat_.update(CREATE, 0, fileSize, fileSize);
         LOGs.debug() << "create" << id << idToStr(id) << fileSize;
     }
     void remove() {
@@ -225,7 +267,7 @@ private:
         assert(it != map_.end());
         assert(it->second == fileSize);
         map_.erase(it);
-        stat_.update(Stat::DELETE, fileSize, 0, 0);
+        stat_.update(DELETE, fileSize, 0, 0);
         LOGs.debug() << "remove" << id << idToStr(id) << fileSize;
     }
     void update() {
@@ -236,8 +278,8 @@ private:
         fp += idToStr(id);
         cybozu::util::File file(fp.str(), O_RDWR);
         const size_t newFileSize = rand_.get(params_.minFileSize, params_.maxFileSize + 1);
-        const size_t offset = newFileSize <= 1 ? 0 : rand_.get(newFileSize - 1);
-        const size_t size = newFileSize == 0 ? 0 : rand_.get(0, newFileSize - offset);
+        const size_t offset = newFileSize == 0 ? 0 : rand_.get(newFileSize);
+        const size_t size = newFileSize == 0 ? 0 : rand_.get(0, newFileSize - offset + 1);
         AlignedArray buf(size);
         setRandomData(buf, rand_);
         if (newFileSize < fileSize) file.ftruncate(newFileSize);
@@ -247,7 +289,7 @@ private:
         file.close();
         auto it = map_.find(id);
         it->second = newFileSize;
-        stat_.update(Stat::UPDATE, fileSize, newFileSize, size);
+        stat_.update(UPDATE, fileSize, newFileSize, size);
         LOGs.debug() << "update" << id << idToStr(id) << fileSize << newFileSize << size;
     }
     void append() {
@@ -265,8 +307,24 @@ private:
         file.close();
         auto it = map_.find(id);
         it->second = fileSize + deltaSize;
-        stat_.update(Stat::APPEND, fileSize, fileSize + deltaSize, deltaSize);
+        stat_.update(APPEND, fileSize, fileSize + deltaSize, deltaSize);
         LOGs.debug() << "append" << id << idToStr(id) << fileSize << deltaSize;
+    }
+    void read() {
+        assert(!map_.empty());
+        size_t fileSize;
+        const uint32_t id = getIdRandomlyInMap(&fileSize);
+        cybozu::FilePath fp(workDir_);
+        fp += idToStr(id);
+        cybozu::util::File file(fp.str(), O_RDONLY);
+        const size_t offset = fileSize == 0 ? 0 : rand_.get(fileSize);
+        const size_t size = fileSize == 0 ? 0 : rand_.get(0, fileSize - offset + 1);
+        AlignedArray buf(size);
+        file.lseek(offset);
+        file.read(buf.data(), buf.size());
+        file.close();
+        stat_.update(READ, fileSize, fileSize, size);
+        LOGs.debug() << "read" << id << idToStr(id) << fileSize << size;
     }
 };
 
