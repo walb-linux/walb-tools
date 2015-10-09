@@ -12,6 +12,7 @@
 #include "walb_log_file.hpp"
 #include "wdev_log.hpp"
 #include "wdev_util.hpp"
+#include "easy_signal.hpp"
 
 using namespace walb;
 
@@ -101,28 +102,6 @@ bool isEqualLogPackHeaderImage(const LogPackHeader& packH, const AlignedArray& p
     return ::memcmp(packH.rawData(), prevImg.data(), prevImg.size()) == 0;
 }
 
-std::atomic<bool> signal_(false);
-
-void signalHandler(int)
-{
-    signal_ = true;
-}
-
-void setSignalHandler()
-{
-    struct sigaction sa;
-    sa.sa_handler = signalHandler;
-    ::sigfillset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    const bool ok =
-        (::sigaction(SIGINT, &sa, NULL) == 0) &&
-        (::sigaction(SIGQUIT, &sa, NULL) == 0) &&
-        (::sigaction(SIGTERM, &sa, NULL) == 0);
-    if (!ok) {
-        throw cybozu::Exception("register signal handler failed.");
-    }
-}
-
 bool retryForeverReadLogPackHeader(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
     LogPackHeader& packH, uint64_t lsid, size_t retryMs)
@@ -136,7 +115,7 @@ bool retryForeverReadLogPackHeader(
 
     size_t c = 0;
   retry:
-    if (signal_) return false;
+    if (cybozu::signal::gotSignal()) return false;
     waitMs(retryMs);
     c++;
     sReader.reset(lsid);
@@ -210,7 +189,7 @@ bool retryForeverReadLogPackIo(
 
     size_t c = 0;
 retry:
-    if (signal_) return false;
+    if (cybozu::signal::gotSignal()) return false;
     waitMs(retryMs);
     c++;
     sReader.reset(rec.lsid);
@@ -270,7 +249,7 @@ void checkWldev(const Option &opt)
     double t0 = cybozu::util::getTime();
     LogPackHeader packH(pbs, salt);
     for (;;) {
-        if (signal_) goto fin;
+        if (cybozu::signal::gotSignal()) goto fin;
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > opt.logIntervalS) {
             LOGs.info() << "current lsid" << wdevName << lsid;
@@ -357,7 +336,7 @@ int doMain(int argc, char* argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting(opt.logPath, opt.isDebug);
-    setSignalHandler();
+    cybozu::signal::setSignalHandler({SIGINT, SIGQUIT, SIGTERM});
 
     if (opt.dontUseAio) {
         checkWldev<device::SimpleWldevReader>(opt);

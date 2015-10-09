@@ -20,6 +20,7 @@
 #include "counter.hpp"
 #include "meta.hpp"
 #include "protocol.hpp"
+#include "easy_signal.hpp"
 
 namespace walb {
 namespace server {
@@ -39,17 +40,9 @@ private:
     }
     void setQuitHandler()
     {
-        struct sigaction sa;
-        sa.sa_handler = &quitHandler;
-        sigfillset(&sa.sa_mask);
-        sa.sa_flags = 0;
-        bool isOK = (sigaction(SIGINT, &sa, NULL) == 0)
-            && (sigaction(SIGQUIT, &sa, NULL) == 0)
-            && (sigaction(SIGABRT, &sa, NULL) == 0)
-            && (sigaction(SIGTERM, &sa, NULL) == 0);
-        if (!isOK) {
+        if (!cybozu::signal::setSignalHandler(quitHandler, {SIGINT, SIGQUIT, SIGABRT, SIGTERM}, false)) {
             LOGs.error() << "can't set sigaction";
-            exit(1);
+            ::exit(1);
         }
     }
 
