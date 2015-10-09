@@ -224,7 +224,7 @@ inline void printByteArray(const void *data, size_t size, size_t lineSize = 64)
  * "0x" prefix will not be put.
  */
 template <typename IntType>
-std::string intToHexStr(IntType i)
+std::string intToHexStr(IntType i, bool paddingZero = false)
 {
     if (i == 0) return "0";
     std::string s;
@@ -236,6 +236,11 @@ std::string intToHexStr(IntType i)
             s.push_back(m - 10 + 'a');
         }
         i /= 16;
+    }
+    if (paddingZero) {
+        while (s.size() < sizeof(i) * 2) {
+            s.push_back('0');
+        }
     }
     std::reverse(s.begin(), s.end());
     return s;
