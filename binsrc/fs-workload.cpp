@@ -252,6 +252,9 @@ private:
         map_.emplace(id, fileSize);
         stat_.update(CREATE, 0, fileSize, fileSize);
         LOGs.debug() << "create" << id << idToStr(id) << fileSize;
+#if 0
+        verifyFileSize("create", fileSize, fp.stat().size());
+#endif
     }
     void remove() {
         assert(!map_.empty());
@@ -278,11 +281,19 @@ private:
         fp += idToStr(id);
         cybozu::util::File file(fp.str(), O_RDWR);
         const size_t newFileSize = rand_.get(params_.minFileSize, params_.maxFileSize + 1);
-        const size_t offset = newFileSize == 0 ? 0 : rand_.get(newFileSize);
-        const size_t size = newFileSize == 0 ? 0 : rand_.get(0, newFileSize - offset + 1);
+        if (newFileSize < fileSize) {
+            file.ftruncate(newFileSize);
+        }
+        size_t offset, size;
+        if (newFileSize > fileSize) {
+            offset = fileSize;
+            size = newFileSize - fileSize;
+        } else {
+            offset = newFileSize == 0 ? 0 : rand_.get(newFileSize);
+            size = newFileSize == 0 ? 0 : rand_.get(0, newFileSize - offset + 1);
+        }
         AlignedArray buf(size);
         setRandomData(buf, rand_);
-        if (newFileSize < fileSize) file.ftruncate(newFileSize);
         file.lseek(offset);
         file.write(buf.data(), buf.size());
         fsyncRandomly(file);
@@ -291,6 +302,9 @@ private:
         it->second = newFileSize;
         stat_.update(UPDATE, fileSize, newFileSize, size);
         LOGs.debug() << "update" << id << idToStr(id) << fileSize << newFileSize << size;
+#if 0
+        verifyFileSize("update", newFileSize, fp.stat().size());
+#endif
     }
     void append() {
         assert(!map_.empty());
@@ -309,6 +323,9 @@ private:
         it->second = fileSize + deltaSize;
         stat_.update(APPEND, fileSize, fileSize + deltaSize, deltaSize);
         LOGs.debug() << "append" << id << idToStr(id) << fileSize << deltaSize;
+#if 0
+        verifyFileSize("append", fileSize + deltaSize, fp.stat().size());
+#endif
     }
     void read() {
         assert(!map_.empty());
@@ -317,6 +334,9 @@ private:
         cybozu::FilePath fp(workDir_);
         fp += idToStr(id);
         cybozu::util::File file(fp.str(), O_RDONLY);
+#if 0
+        verifyFileSize("read", fileSize, fp.stat().size());
+#endif
         const size_t offset = fileSize == 0 ? 0 : rand_.get(fileSize);
         const size_t size = fileSize == 0 ? 0 : rand_.get(0, fileSize - offset + 1);
         AlignedArray buf(size);
@@ -325,6 +345,11 @@ private:
         file.close();
         stat_.update(READ, fileSize, fileSize, size);
         LOGs.debug() << "read" << id << idToStr(id) << fileSize << size;
+    }
+    static void verifyFileSize(const char* type, size_t size, size_t realSize) {
+        if (size != realSize) {
+            LOGs.warn() << "file size differ" << type << size << realSize;
+        }
     }
 };
 
