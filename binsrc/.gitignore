@@ -45,3 +45,4 @@ search-lsid
 search-invalid-logpack
 wldev-checker
 fs-workload
+wldev-dump

@@ -40,3 +40,4 @@ binsrc/search-lsid usr/lib/walb/bin
 binsrc/search-invalid-logpack usr/lib/walb/bin
 binsrc/wldev-checker usr/lib/walb/bin
 binsrc/fs-workload usr/lib/walb/bin
+binsrc/wldev-dump usr/lib/walb/bin
