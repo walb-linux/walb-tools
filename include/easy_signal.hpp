@@ -43,7 +43,7 @@ void setSignalHandler(std::initializer_list<int> signals, bool throwError = true
 
 bool gotSignal(int* val = nullptr)
 {
-    const sig_atomic_t& signal = local::getSignalVariable();
+    const int signal = local::getSignalVariable();
     if (val != nullptr) *val = signal;
     return signal != 0;
 }
