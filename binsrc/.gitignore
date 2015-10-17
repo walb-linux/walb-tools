@@ -46,3 +46,4 @@ search-invalid-logpack
 wldev-checker
 fs-workload
 wldev-dump
+writer-verifier
