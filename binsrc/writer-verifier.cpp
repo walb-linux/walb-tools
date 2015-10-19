@@ -54,7 +54,7 @@ std::string csum2str(uint32_t csum)
 class Aio2
 {
     struct AioData {
-        uint key;
+        uint32_t key;
         int type;
         struct iocb iocb;
         off_t oft;
@@ -62,7 +62,7 @@ class Aio2
         AlignedArray buf;
         int err;
 
-        void init(uint key, int type, off_t oft, AlignedArray&& buf) {
+        void init(uint32_t key, int type, off_t oft, AlignedArray&& buf) {
             this->key = key;
             this->type = type;
             ::memset(&iocb, 0, sizeof(iocb));
@@ -127,30 +127,30 @@ public:
         }
     } catch (...) {
     }
-    uint prepareRead(off_t oft, size_t size) {
+    uint32_t prepareRead(off_t oft, size_t size) {
         if (++nrIOs_ > queueSize_) {
             --nrIOs_;
             throw cybozu::Exception("prepareRead: queue is full");
         }
-        const uint key = key_++;
+        const uint32_t key = key_++;
         AioDataPtr iop(new AioData());
         iop->init(key, 0, oft, AlignedArray(size));
         ::io_prep_pread(&iop->iocb, fd_, iop->buf.data(), size, oft);
-        iop->iocb.data = reinterpret_cast<void *>(key);
+        ::memcpy(&iop->iocb.data, &key, sizeof(key));
         pushToSubmitQ(std::move(iop));
         return key;
     }
-    uint prepareWrite(off_t oft, AlignedArray&& buf) {
+    uint32_t prepareWrite(off_t oft, AlignedArray&& buf) {
         if (++nrIOs_ > queueSize_) {
             --nrIOs_;
             throw cybozu::Exception("prepareWrite: queue is full");
         }
-        const uint key = key_++;
+        const uint32_t key = key_++;
         AioDataPtr iop(new AioData());
         const size_t size = buf.size();
         iop->init(key, 1, oft, std::move(buf));
         ::io_prep_pwrite(&iop->iocb, fd_, iop->buf.data(), size, oft);
-        iop->iocb.data = reinterpret_cast<void *>(key);
+        ::memcpy(&iop->iocb.data, &key, sizeof(key));
         pushToSubmitQ(std::move(iop));
         return key;
     }
@@ -170,7 +170,7 @@ public:
             AutoLock lk(mutex_);
             for (size_t i = 0; i < nr; i++) {
                 AioDataPtr iop = std::move(submitQ[i]);
-                const uint key = iop->key;
+                const uint32_t key = iop->key;
                 pendingIOs_.emplace(key, std::move(iop));
             }
         }
@@ -183,7 +183,7 @@ public:
             done += err;
         }
     }
-    AlignedArray waitFor(uint key) {
+    AlignedArray waitFor(uint32_t key) {
         {
             AutoLock lk(mutex_);
             if (completedIOs_.find(key) == completedIOs_.cend() &&
@@ -196,9 +196,8 @@ public:
             waitDetail();
         }
         verifyNoError(*iop);
-        AlignedArray buf = iop->buf;
         --nrIOs_;
-        return buf;
+        return std::move(iop->buf);
     }
 private:
     void release() {
@@ -212,7 +211,7 @@ private:
         AutoLock lk(mutex_);
         submitQ_.push_back(std::move(iop));
     }
-    bool popCompleted(uint key, AioDataPtr& iop) {
+    bool popCompleted(uint32_t key, AioDataPtr& iop) {
         AutoLock lk(mutex_);
         Umap::iterator it = completedIOs_.find(key);
         if (it == completedIOs_.end()) return false;
@@ -231,7 +230,7 @@ private:
         }
         AutoLock lk(mutex_);
         for (int i = 0; i < nr; i++) {
-            const uint key = getKeyFromEvent(ioEvents[i]);
+            const uint32_t key = getKeyFromEvent(ioEvents[i]);
             Umap::iterator it = pendingIOs_.find(key);
             assert(it != pendingIOs_.end());
             AioDataPtr& iop = it->second;
@@ -242,9 +241,10 @@ private:
         }
         return nr;
     }
-    static uint getKeyFromEvent(struct io_event &event) {
-        struct iocb &iocb = *static_cast<struct iocb *>(event.obj);
-        return static_cast<uint>(reinterpret_cast<uintptr_t>(iocb.data));
+    static uint32_t getKeyFromEvent(struct io_event &event) {
+        uint32_t key;
+        ::memcpy(&key, &event.obj->data, sizeof(key));
+        return key;
     }
     void verifyNoError(const AioData& io) const {
         if (io.err == 0) {
@@ -296,7 +296,7 @@ class SyncWriter
     uint64_t aheadLsid_; // lsid_ % devPb_ = offsetPb.
     uint64_t doneLsid_;
     std::list<AlignedArray> queue_;
-    uint key_;
+    uint32_t key_;
 
 public:
     void open(const std::string& bdevPath, size_t /* queueSize */) {
@@ -319,7 +319,7 @@ public:
         uint64_t offsetPb = aheadLsid_ % devPb_;
         return devPb_ - offsetPb;
     }
-    uint prepare(AlignedArray&& buf) {
+    uint32_t prepare(AlignedArray&& buf) {
         assert(buf.size() % pbs_ == 0);
         const uint64_t pb = buf.size() / pbs_;
         assert(pb <= tailPb());
@@ -363,7 +363,6 @@ class AsyncWriter
     uint32_t pbs_;
     uint64_t devPb_;
     uint64_t aheadLsid_; // lsid_ % devPb_ = offsetPb.
-    std::list<AlignedArray> queue_;
     Aio2 aio_;
 
 public:
@@ -377,19 +376,18 @@ public:
         aio_.init(file_.fd(), queueSize * 2);
     }
     void reset(uint64_t lsid) {
-        assert(queue_.empty());
         aheadLsid_ = lsid;
     }
     uint64_t tailPb() const {
         const uint64_t offsetPb = aheadLsid_ % devPb_;
         return devPb_ - offsetPb;
     }
-    uint prepare(AlignedArray&& buf) {
+    uint32_t prepare(AlignedArray&& buf) {
         assert(buf.size() % pbs_ == 0);
         const uint64_t givenPb = buf.size() / pbs_;
         assert(givenPb <= tailPb());
         const uint64_t offset = aheadLsid_ % devPb_ * pbs_;
-        const uint aioKey = aio_.prepareWrite(offset, std::move(buf));
+        const uint32_t aioKey = aio_.prepareWrite(offset, std::move(buf));
         aheadLsid_ += givenPb;
         return aioKey;
     }
@@ -399,7 +397,7 @@ public:
     /**
      * This will be called from another thread.
      */
-    void wait(uint aioKey) {
+    void wait(uint32_t aioKey) {
         aio_.waitFor(aioKey);
     }
     void sync() {
