@@ -21,6 +21,8 @@ struct Option
     bool isDebug;
     size_t aheadSize;
     std::string logPath;
+    size_t sleepMs;
+    size_t intervalS;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -29,6 +31,8 @@ struct Option
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
         opt.appendOpt(&aheadSize, 16 * MEBI, "ahead", ": ahead size of write position to read position [bytes]");
+        opt.appendOpt(&sleepMs, 0, "s", ": sleep milliseconds for each read. (default: 0)");
+        opt.appendOpt(&intervalS, 60, "i", ": interval seconds between monitoring messages. (default: 60)");
         opt.appendOpt(&logPath, "-", "l", ": log output path. (default: stderr)");
 
         opt.appendHelp("h", ": show this message.");
@@ -268,14 +272,17 @@ private:
     }
 };
 
-struct Record
+/**
+ * Record for each IO management.
+ */
+struct IoRecord
 {
     uint64_t lsid; // lsid % devPb = offsetPb.
     uint32_t sizePb;
     uint32_t csum;
     uint32_t aioKey;
 
-    friend inline std::ostream& operator<<(std::ostream& os, const Record& rec) {
+    friend inline std::ostream& operator<<(std::ostream& os, const IoRecord& rec) {
         os << rec.lsid << "\t" << rec.sizePb << "\t" << csum2str(rec.csum);
         return os;
     }
@@ -429,9 +436,6 @@ public:
         lsid_ = lsid;
         file_.lseek(lsid % devPb_ * pbs_);
     }
-    void readAhead(size_t) {
-        // Do nothing.
-    }
     void read(void *data, size_t size) {
         assert(size % pbs_);
         uint64_t pb = size / pbs_;
@@ -445,104 +449,44 @@ public:
     }
 };
 
-class AsyncReader
+/**
+ * Record for the first 64 bytes in each physical block.
+ */
+struct PbRecord
 {
-    cybozu::util::File file_;
-    uint32_t pbs_;
-    uint64_t devPb_;
-    uint64_t lsid_;
-    size_t aheadPb_;
-    Aio2 aio_;
+    char data[64];
 
-    size_t queueSize_;
-    std::deque<uint> aioKeyQ_;
+    static uint64_t exprId;
 
-public:
-    void open(const std::string& bdevPath, size_t queueSize) {
-        file_.open(bdevPath, O_RDONLY | O_DIRECT);
-        pbs_ = cybozu::util::getPhysicalBlockSize(file_.fd());
-        devPb_ = cybozu::util::getBlockDeviceSize(file_.fd()) / pbs_;
-        cybozu::util::flushBufferCache(file_.fd());
-        aio_.init(file_.fd(), queueSize * 2);
-        queueSize_ = queueSize;
-        lsid_ = 0;
-        aheadPb_ = 0;
+
+    void clear() {
+        ::memset(&data[0], 0, 64);
     }
-    /**
-     * You must call this before read().
-     */
-    void reset(uint64_t lsid) {
-        lsid_ = lsid;
-        aheadPb_ = 0;
-        waitAll();
+    uint64_t getLsid() const {
+        return cybozu::atoi(&data[0], 32);
     }
-    /**
-     * Read ahead with specified size.
-     */
-    void readAhead(size_t size) {
-        assert(size % pbs_ == 0);
-        aheadPb_ += size / pbs_;
-        readAheadDetail();
+    void setLsid(uint64_t lsid) {
+        ::snprintf(&data[0], 32, "%" PRIu64 "", lsid);
     }
-    void read(void* data, size_t size) {
-        assert(size % pbs_ == 0);
-        char *c = (char *)data;
-        size_t pb = size / pbs_;
-        while (pb > 0) {
-            if (aioKeyQ_.empty()) {
-                throw cybozu::Exception("there is no data allowed to read ahead.");
-            }
-            const uint aioKey = aioKeyQ_.front();
-            aioKeyQ_.pop_front();
-            AlignedArray buf = aio_.waitFor(aioKey);
-            assert(buf.size() == pbs_);
-            ::memcpy(c, buf.data(), pbs_);
-            c += pbs_;
-            pb--;
-            if (aioKeyQ_.size() < queueSize_ / 2) {
-                readAheadDetail();
-            }
-        }
-        readAheadDetail();
-    }
-    uint32_t pbs() const {
-        return pbs_;
-    }
-    uint64_t devPb() const {
-        return devPb_;
-    }
-private:
-    void readAheadDetail() {
-        while (aioKeyQ_.size() < queueSize_ && aheadPb_ > 0) {
-            uint64_t offsetPb = lsid_ % devPb_;
-            uint aioKey = aio_.prepareRead(offsetPb * pbs_, pbs_);
-            aioKeyQ_.push_back(aioKey);
-            lsid_++;
-            aheadPb_--;
-        }
-        aio_.submit();
-    }
-    void waitAll() {
-        while (!aioKeyQ_.empty()) {
-            const uint aioKey = aioKeyQ_.front();
-            aio_.waitFor(aioKey);
-            aioKeyQ_.pop_front();
-        }
+    template <typename Rand>
+    void fillRand(Rand& rand) {
+        rand.fill(&data[32], 32);
     }
 };
 
-using Queue = cybozu::thread::BoundedQueue<Record>;
+using Queue = cybozu::thread::BoundedQueue<IoRecord>;
 
 template <typename Writer>
 void doWrite(Writer& writer, uint64_t aheadPb, const std::atomic<uint64_t>& readPb, Queue& outQ)
 try {
     const uint32_t pbs = writer.pbs();
-    const size_t maxIoPb = 256 * KIBI / pbs;
+    const size_t maxIoPb = 32 * KIBI / pbs;
     uint64_t lsid = 0;
     writer.reset(lsid % writer.devPb());
     cybozu::util::Random<uint64_t> rand;
     AlignedArray buf;
     uint64_t writtenPb = 0;
+    std::queue<IoRecord> tmpQ;
 
     while (!cybozu::signal::gotSignal()) {
         if (readPb + aheadPb < writtenPb) {
@@ -550,22 +494,38 @@ try {
             continue;
         }
         const uint64_t pb = std::min(writer.tailPb(), 1 + rand() % maxIoPb);
-        buf.resize(pb * pbs);
+        buf.resize(pb * pbs, true);
         for (size_t i = 0; i < pb; i++) {
-            char *p = buf.data() + i * pbs;
-            ::memset(p, 0, 64);
-            ::snprintf(p, 32, "%" PRIu64 "", lsid + i);
-            rand.fill(p + 32, 32);
+            PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
+            rec->clear();
+            rec->setLsid(lsid + i);
+            rec->fillRand(rand);
         }
         const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
         const uint32_t aioKey = writer.prepare(std::move(buf));
-        writer.submit();
+        tmpQ.push(IoRecord{lsid, uint32_t(pb), csum, aioKey});
+        if (tmpQ.size() >= 8 || rand() % 10 == 0) {
+            writer.submit();
+            while (!tmpQ.empty()) {
+                const IoRecord& rec = tmpQ.front();
+                LOGs.debug() << "write" << rec;
+                outQ.push(rec);
+                tmpQ.pop();
+            }
+            if (rand() % 1000 == 0) writer.sync();
+        }
         buf.clear();
-        Record rec{lsid, uint32_t(pb), csum, aioKey};
-        LOGs.debug() << "write" << rec;
-        outQ.push(rec);
         lsid += pb;
         writtenPb += pb;
+    }
+    if (!tmpQ.empty()) {
+        writer.submit();
+            while (!tmpQ.empty()) {
+                const IoRecord& rec = tmpQ.front();
+                LOGs.debug() << "write" << rec;
+                outQ.push(rec);
+                tmpQ.pop();
+            }
     }
     outQ.sync();
 } catch (...) {
@@ -574,27 +534,50 @@ try {
 }
 
 template <typename Writer, typename Reader>
-void doReadAndVerify(Writer& writer, Reader& reader, std::atomic<uint64_t>& readPb, Queue& inQ)
+void doVerify(Writer& writer, Reader& reader, std::atomic<uint64_t>& readPb, size_t sleepMs, Queue& inQ)
 try {
     const uint32_t pbs = reader.pbs();
     AlignedArray buf;
-    Record rec;
+    IoRecord ioRec;
     reader.reset(0);
-    while (inQ.pop(rec)) {
-        buf.resize(rec.sizePb * pbs);
-        writer.wait(rec.aioKey);
-        reader.readAhead(buf.size());
+    while (inQ.pop(ioRec)) {
+        buf.resize(ioRec.sizePb * pbs);
+        writer.wait(ioRec.aioKey);
         reader.read(buf.data(), buf.size());
         const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
-        LOGs.debug() << "read " << rec;
-        if (rec.csum != csum) {
-            LOGs.error() << "invalid" << rec << csum2str(csum);
+        for (size_t i = 0; i < ioRec.sizePb; i++) {
+            const PbRecord *pbRec = (PbRecord *)(buf.data() + i * pbs);
+            if (pbRec->getLsid() != ioRec.lsid + i) {
+                LOGs.error() << "invalid record" << ioRec.lsid + i << pbRec->getLsid();
+            }
         }
-        readPb += rec.sizePb;
+        LOGs.debug() << "read " << ioRec;
+        if (ioRec.csum != csum) {
+            LOGs.error() << "invalid csum" << ioRec << csum2str(csum);
+        }
+        readPb += ioRec.sizePb;
+        if (sleepMs > 0) util::sleepMs(sleepMs);
     }
 } catch (...) {
     inQ.fail();
     throw;
+}
+
+void doMonitor(std::atomic<uint64_t>& readPb, size_t intervalS, uint64_t devPb)
+{
+    LOGs.info() << "starting..." << intervalS;
+    const double interval = double(intervalS);
+    double t0 = cybozu::util::getTime();
+    while (!cybozu::signal::gotSignal()) {
+        util::sleepMs(100);
+        double t1 = cybozu::util::getTime();
+        if (t1 - t0 > interval) {
+            const uint64_t pb = readPb.load();
+            LOGs.info() << "progress" << pb << pb / devPb;
+            t0 = t1;
+        }
+    }
+    LOGs.info() << "terminate...";
 }
 
 template <typename Writer, typename Reader>
@@ -613,10 +596,14 @@ void writeAndVerify(const Option& opt)
     reader.open(opt.bdevPath, queueSize);
     std::atomic<uint64_t> readPb(0);
     const uint64_t aheadPb = opt.aheadSize / pbs;
+    const uint64_t devPb = writer.devPb();
+    LOGs.info() << "devPb" << devPb;
+    LOGs.info() << "pbs" << pbs;
 
     cybozu::thread::ThreadRunnerSet thS;
     thS.add([&]() { doWrite<Writer>(writer, aheadPb, readPb, queue); });
-    thS.add([&]() { doReadAndVerify<Writer, Reader>(writer, reader, readPb, queue); });
+    thS.add([&]() { doVerify<Writer, Reader>(writer, reader, readPb, opt.sleepMs, queue); });
+    thS.add([&]() { doMonitor(readPb, opt.intervalS, devPb); } );
     thS.start();
 
     std::vector<std::exception_ptr> epV = thS.join();
@@ -633,7 +620,7 @@ int doMain(int argc, char* argv[])
     if (opt.dontUseAio) {
         writeAndVerify<SyncWriter, SyncReader>(opt);
     } else {
-        writeAndVerify<AsyncWriter, AsyncReader>(opt);
+        writeAndVerify<AsyncWriter, SyncReader>(opt);
     }
     return 0;
 }
