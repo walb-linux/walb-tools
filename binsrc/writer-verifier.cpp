@@ -461,7 +461,11 @@ struct PbRecord
         ::memset(&data[0], 0, 64);
     }
     uint64_t getLsid() const {
-        return cybozu::atoi(&data[0], 32);
+        try {
+            return cybozu::atoi(&data[0], 32);
+        } catch (...) {
+            return uint64_t(-1);
+        }
     }
     void setLsid(uint64_t lsid) {
         ::snprintf(&data[0], 32, "%" PRIu64 "", lsid);
@@ -473,6 +477,7 @@ struct PbRecord
 };
 
 using Queue = cybozu::thread::BoundedQueue<IoRecord>;
+std::atomic<bool> failed_(false);
 
 template <typename Writer>
 void doWrite(Writer& writer, uint64_t aheadPb, const std::atomic<uint64_t>& readPb, Queue& outQ)
@@ -487,6 +492,7 @@ try {
     std::queue<IoRecord> tmpQ;
 
     while (!cybozu::signal::gotSignal()) {
+        if (failed_) return;
         if (readPb + aheadPb < writtenPb) {
             util::sleepMs(1); // backpressure.
             continue;
@@ -528,6 +534,7 @@ try {
     outQ.sync();
 } catch (...) {
     outQ.fail();
+    failed_ = true;
     throw;
 }
 
@@ -539,6 +546,7 @@ try {
     IoRecord ioRec;
     reader.reset(0);
     while (inQ.pop(ioRec)) {
+        if (failed_) return;
         buf.resize(ioRec.sizePb * pbs);
         writer.wait(ioRec.aioKey);
         reader.read(buf.data(), buf.size());
@@ -558,15 +566,16 @@ try {
     }
 } catch (...) {
     inQ.fail();
+    failed_ = true;
     throw;
 }
 
 void doMonitor(std::atomic<uint64_t>& readPb, size_t intervalS, uint64_t devPb)
-{
+try {
     LOGs.info() << "starting..." << intervalS;
     const double interval = double(intervalS);
     double t0 = cybozu::util::getTime();
-    while (!cybozu::signal::gotSignal()) {
+    while (!cybozu::signal::gotSignal() && !failed_) {
         util::sleepMs(100);
         double t1 = cybozu::util::getTime();
         if (t1 - t0 > interval) {
@@ -576,6 +585,9 @@ void doMonitor(std::atomic<uint64_t>& readPb, size_t intervalS, uint64_t devPb)
         }
     }
     LOGs.info() << "terminate...";
+} catch (...) {
+    failed_ = true;
+    throw;
 }
 
 template <typename Writer, typename Reader>
