@@ -51,6 +51,7 @@ struct Option
         opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
         opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
         opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "fsync interval size [bytes].");
+        opt.appendBoolOpt(&a.doAutoResize, "autoresize", "resize base image automatically if necessary");
         util::setKeepAliveOptions(opt, a.keepAliveParams);
 
         opt.appendHelp("h");

@@ -95,6 +95,7 @@ struct ArchiveSingleton
     DiscardType discardType;
     uint64_t fsyncIntervalSize;
     KeepAliveParams keepAliveParams;
+    bool doAutoResize;
 
     /**
      * Writable and must be thread-safe.
@@ -483,6 +484,23 @@ inline StrVec listRestorable(const std::string &volId, bool isAll = false)
     return ret;
 }
 
+/**
+ * Do auto-resize base image if necessary.
+ */
+inline void doAutoResizeIfNecessary(ArchiveVolState& volSt, ArchiveVolInfo& volInfo, uint64_t sizeLb)
+{
+    if (!ga.doAutoResize) return;
+    if (!volSt.lvCache.exists()) return;
+    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
+    if (sizeLb <= lv.sizeLb()) return;
+
+    const std::string& volId = volInfo.volId;
+    LOGs.info() << "try to auto-resize" << volId << lv.sizeLb() << sizeLb;
+    // Currently zero-fill is not supported cause it will take a long time.
+    volInfo.growLv(sizeLb, false);
+    LOGs.info() << "auto-resize succeeded" << volId << lv.sizeLb() << sizeLb;
+}
+
 template <typename T>
 struct ZeroResetterT
 {
@@ -560,6 +578,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb,
                                    skipZero, ga.fsyncIntervalSize);
     } else {
+        doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         const uint32_t hashSeed = curTime;
         tmpFileP.reset(new cybozu::TmpFile(volInfo.volDir.str()));
         VirtualFullScanner virt;
@@ -685,6 +704,7 @@ inline bool runFullReplServer(
         logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -776,6 +796,7 @@ inline bool runHashReplServer(
         logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -874,6 +895,7 @@ inline bool runDiffReplServer(
         pkt.read(uuid);
         pkt.read(diff);
         logger.debug() << "diff-repl-server" << sizeLb << maxIoBlocks << uuid << diff;
+        doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
         const MetaSnap snap = volInfo.getLatestSnapshot();
         if (!canApply(snap, diff)) {
@@ -966,6 +988,7 @@ inline bool runResyncReplServer(
         logger.debug() << "resync-repl-server" << sizeLb << bulkLb << metaSt << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -2009,6 +2032,7 @@ inline void p2aWdiffTransferServer(protocol::ServerParams &p)
             pkt.writeFin(msg);
             return;
         }
+        archive_local::doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         const uint64_t selfSizeLb = volSt.lvCache.getLv().sizeLb();
         if (selfSizeLb < sizeLb) {
             const char *msg = msgSmallerLvSize;
