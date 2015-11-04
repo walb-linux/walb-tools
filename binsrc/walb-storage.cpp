@@ -35,6 +35,7 @@ struct Option
     std::string multiProxyDStr;
     bool isDebug;
     size_t maxBackgroundTasks;
+    uint64_t defaultFullScanBytesPerSec;
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
@@ -55,6 +56,7 @@ struct Option
         opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
         opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "Default full scan throughput [bytes/s]");
         util::setKeepAliveOptions(opt, s.keepAliveParams);
 
         opt.appendHelp("h");
@@ -68,6 +70,7 @@ struct Option
         util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
         s.keepAliveParams.verify();
+        s.fullScanLbPerSec = defaultFullScanBytesPerSec / LOGICAL_BLOCK_SIZE;
     }
 };
 

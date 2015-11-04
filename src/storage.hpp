@@ -163,6 +163,7 @@ struct StorageSingleton
     std::unique_ptr<std::thread> proxyMonitor;
     std::atomic<bool> quitProxyMonitor;
     storage_local::ProxyManager proxyManager;
+    std::atomic<uint64_t> fullScanLbPerSec; // 0 means unlimited.
 
     using Str2Str = std::map<std::string, std::string>;
     using AutoLock = std::lock_guard<std::mutex>;
@@ -631,14 +632,14 @@ inline void backupClient(protocol::ServerParams &p, bool isFull)
                       << "started" << volId << archiveId;
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
-            if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, volSt.stopState, gs.ps)) {
+            if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
         } else {
             const uint32_t hashSeed = curTime;
             AsyncBdevReader reader(volInfo.getWdevPath());
-            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.ps)) {
+            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }

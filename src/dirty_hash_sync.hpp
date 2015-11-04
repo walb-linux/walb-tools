@@ -14,6 +14,7 @@
 #include "murmurhash3.hpp"
 #include "server_util.hpp"
 #include "thread_util.hpp"
+#include "throughput_util.hpp"
 
 namespace walb {
 
@@ -106,7 +107,8 @@ template <typename Reader>
 inline bool dirtyHashSyncClient(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed,
-    const std::atomic<int> &stopState, const ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps,
+    const std::atomic<uint64_t>& maxLbPerSec)
 {
     const char *const FUNC = __func__;
     packet::StreamControl2 recvCtl(pkt.sock());
@@ -114,6 +116,7 @@ inline bool dirtyHashSyncClient(
     DiffPacker packer;
     walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
     cybozu::murmurhash3::Hasher hasher(hashSeed);
+    ThroughputStabilizer thStab;
 
     uint64_t addr = 0;
     uint64_t remainingLb = sizeLb;
@@ -159,6 +162,8 @@ inline bool dirtyHashSyncClient(
         pkt.flush();
         remainingLb -= lb;
         addr += lb;
+        thStab.setMaxLbPerSec(maxLbPerSec.load());
+        thStab.addAndSleepIfNecessary(lb, 10, 100);
     }
     } catch (...) {
         LOGs.warn() << "SEND_CTL" << cHash << cSend << cDummy;

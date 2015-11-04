@@ -29,6 +29,8 @@ const size_t DEFAULT_MAX_IO_LB = MEBI / LBS; // used as max diff IO size.
 
 const size_t DEFAULT_SOCKET_TIMEOUT_SEC = 10;
 
+const uint64_t DEFAULT_FULL_SCAN_BYTES_PER_SEC = 0; // unlimited.
+
 const uint64_t DEFAULT_FSYNC_INTERVAL_SIZE = 128 * MEBI;
 const size_t DEFAULT_MERGE_BUFFER_LB = 4 * MEBI / LBS;
 

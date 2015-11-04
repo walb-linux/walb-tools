@@ -680,7 +680,8 @@ inline bool runFullReplClient(
     logger.info() << "full-repl-client startLb" << startLb;
 
     const std::string lvPath = lv.path().str();
-    if (!dirtyFullSyncClient(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps)) {
+    const std::atomic<uint64_t> fullScanLbPerSec(0);
+    if (!dirtyFullSyncClient(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "full-repl-client force-stopped" << volId;
         return false;
     }
@@ -767,7 +768,8 @@ inline bool runHashReplClient(
 
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapE);
-    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps)) {
+    const std::atomic<uint64_t> fullScanLbPerSec(0);
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
         return false;
     }
@@ -958,7 +960,8 @@ inline bool runResyncReplClient(
 
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, metaSt.snapB);
-    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps)) {
+    const std::atomic<uint64_t> fullScanLbPerSec(0);
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "resync-repl-client force-stopped" << volId;
         return false;
     }
