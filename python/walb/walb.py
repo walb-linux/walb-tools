@@ -1421,6 +1421,18 @@ class Controller(object):
         ''' Kick all storage servers. '''
         self.kick_all(self.sLayout.storageL)
 
+    def set_full_scan_bps(self, sx, throughputU):
+        '''
+        sx :: Server - storage server.
+        throughputU :: str - throughput [bytes/sec]
+            0 means unlimited.
+            Unit suffix like '100M' is allowed.
+        '''
+        verify_server_kind(sx, [K_STORAGE])
+        verify_size_unit(throughputU)
+        args = ['set-full-scan-bps', throughputU]
+        self.run_ctl(sx, args)
+
     def is_overflow(self, sx, vol):
         '''
         Check a storage is overflow or not.
