@@ -836,6 +836,52 @@ inline bool runHashReplServer(
     return true;
 }
 
+inline bool runNoMergeDiffReplClient(
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
+{
+    const char *const FUNC = __func__;
+    MetaState st0;
+    MetaDiffVec diffV;
+    std::vector<cybozu::util::File> fileV;
+    std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
+            MetaDiff diff;
+            if (volSt.diffMgr.getApplicableDiff(srvLatestSnap, diff)) {
+                return MetaDiffVec{diff};
+            } else {
+                return MetaDiffVec{};
+            }
+        });
+    assert(diffV.size() == 1);
+    assert(fileV.size() == 1);
+    MetaDiff diff = diffV[0];
+    cybozu::util::File &fileR = fileV[0];
+
+    const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
+    DiffFileHeader fileH;
+    fileH.readFrom(fileR);
+    const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const cybozu::Uuid uuid = fileH.getUuid();
+    pkt.write(sizeLb);
+    pkt.write(maxIoBlocks);
+    pkt.write(uuid);
+    pkt.write(diff);
+    pkt.flush();
+    logger.debug() << "diff-repl-client" << sizeLb << maxIoBlocks << uuid << diff;
+
+    std::string res;
+    pkt.read(res);
+    if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
+
+    if (!wdiffTransferNoMergeClient(pkt, fileR, volSt.stopState, ga.ps)) {
+        logger.warn() << "diff-repl-nomerge-client force-stopped" << volId;
+        return false;
+    }
+    packet::Ack(pkt.sock()).recv();
+    logger.info() << "diff-repl-nomerge-client done" << volId << diff;
+    return true;
+}
+
 inline bool runDiffReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, const CompressOpt &cmpr, uint64_t wdiffMergeSize, Logger &logger)
@@ -1109,9 +1155,14 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
                 return false;
             }
         } else {
-            if (!runDiffReplClient(
-                    volId, volSt, volInfo, pkt, srvLatestSnap,
-                    hostInfo.cmpr, hostInfo.maxWdiffMergeSize, logger)) return false;
+            if (hostInfo.dontMerge) {
+                if (!runNoMergeDiffReplClient(
+                        volId, volSt, volInfo, pkt, srvLatestSnap, logger)) return false;
+            } else {
+                if (!runDiffReplClient(
+                        volId, volSt, volInfo, pkt, srvLatestSnap,
+                        hostInfo.cmpr, hostInfo.maxWdiffMergeSize, logger)) return false;
+            }
         }
     }
     packet::Ack(sock).recv();

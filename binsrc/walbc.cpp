@@ -83,7 +83,7 @@ void setupArchiveInfo(cybozu::Option& opt)
 void setupReplicate(cybozu::Option& opt)
 {
     setupVolId(opt);
-    setupOpt(opt, "(opt)", ": (sizeMb) (addr:port) (doResync) (compression) (max diff size) (bulk size)");
+    setupOpt(opt, "(opt)", ": (sizeMb) (addr:port) (doResync) (dontMerge) (compression) (max diff size) (bulk size)");
 }
 void setupMerge(cybozu::Option& opt)
 {

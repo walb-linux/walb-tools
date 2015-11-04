@@ -248,16 +248,19 @@ struct HostInfoForRepl
 {
     AddrPort addrPort; // archive host info.
     bool doResync; // do resync if necessary.
+    bool dontMerge; // do not merge diffs.
     CompressOpt cmpr; // compression parameters for diff-repl.
     uint64_t maxWdiffMergeSize; // max wdiff size in bytes to merge for diff-repl.
     uint64_t bulkLb; // bulk size in logical block for full-repl/hash-repl. [logical block]
 
-    HostInfoForRepl() : addrPort(), doResync(false), cmpr(), maxWdiffMergeSize(0), bulkLb(0) {
+    HostInfoForRepl() : addrPort(), doResync(false), dontMerge(false), cmpr(), maxWdiffMergeSize(0), bulkLb(0) {
     }
-    HostInfoForRepl(const std::string &addr, uint64_t port, bool doResync = false, const CompressOpt &cmpr = CompressOpt(),
+    HostInfoForRepl(const std::string &addr, uint64_t port, bool doResync = false, bool dontMerge = false,
+                    const CompressOpt &cmpr = CompressOpt(),
                     uint64_t maxWdiffMergeSize = DEFAULT_MAX_WDIFF_MERGE_MB * MEBI,
                     uint64_t bulkLb = DEFAULT_BULK_LB)
-        : addrPort(addr, port), doResync(doResync), cmpr(cmpr)
+        : addrPort(addr, port), doResync(doResync), dontMerge(dontMerge)
+        , cmpr(cmpr)
         , maxWdiffMergeSize(maxWdiffMergeSize)
         , bulkLb(bulkLb) {
         verify();
@@ -265,16 +268,13 @@ struct HostInfoForRepl
     bool operator==(const HostInfoForRepl &rhs) const {
         return addrPort == rhs.addrPort
             && doResync == rhs.doResync
+            && dontMerge == rhs.dontMerge
             && cmpr == rhs.cmpr
             && maxWdiffMergeSize == rhs.maxWdiffMergeSize
             && bulkLb == rhs.bulkLb;
     }
     bool operator!=(const HostInfoForRepl &rhs) const {
-        return addrPort != rhs.addrPort
-            || doResync != rhs.doResync
-            || cmpr != rhs.cmpr
-            || maxWdiffMergeSize != rhs.maxWdiffMergeSize
-            || bulkLb != rhs.bulkLb;
+        return !(*this == rhs);
     }
     void verify() const {
         const char *const msg = "HostInfoForRepl::verify";
@@ -287,6 +287,7 @@ struct HostInfoForRepl
     void save(OutputStream &os) const {
         cybozu::save(os, addrPort);
         cybozu::save(os, doResync);
+        cybozu::save(os, dontMerge);
         cybozu::save(os, cmpr);
         cybozu::save(os, maxWdiffMergeSize);
         cybozu::save(os, bulkLb);
@@ -295,6 +296,7 @@ struct HostInfoForRepl
     void load(InputStream &is) {
         cybozu::load(addrPort, is);
         cybozu::load(doResync, is);
+        cybozu::load(dontMerge, is);
         cybozu::load(cmpr, is);
         cybozu::load(maxWdiffMergeSize, is);
         cybozu::load(bulkLb, is);
@@ -312,15 +314,17 @@ inline HostInfoForRepl parseHostInfoForRepl(const StrVec &v, size_t pos = 0)
 {
     std::string addrPortStr;
     std::string doResyncStr = "0";
+    std::string dontMergeStr = "0";
     std::string cmprStr = CompressOpt().str();
     std::string maxWdiffMergeSizeStr = cybozu::util::toUnitIntString(DEFAULT_MAX_WDIFF_MERGE_MB * MEBI);
     std::string bulkSizeStr = cybozu::util::toUnitIntString(DEFAULT_BULK_LB * LOGICAL_BLOCK_SIZE);
     cybozu::util::parseStrVec(
-        v, pos, 1, {&addrPortStr, &doResyncStr, &cmprStr, &maxWdiffMergeSizeStr, &bulkSizeStr});
+        v, pos, 1, {&addrPortStr, &doResyncStr, &dontMergeStr, &cmprStr, &maxWdiffMergeSizeStr, &bulkSizeStr});
 
     HostInfoForRepl hi;
     hi.addrPort = parseAddrPort(addrPortStr);
     hi.doResync = static_cast<int>(cybozu::atoi(doResyncStr)) != 0;
+    hi.dontMerge = static_cast<int>(cybozu::atoi(dontMergeStr)) != 0;
     hi.cmpr = parseCompressOpt(cmprStr);
     hi.maxWdiffMergeSize = cybozu::util::fromUnitIntString(maxWdiffMergeSizeStr);
     hi.bulkLb = util::parseBulkLb(bulkSizeStr, __func__);
@@ -336,9 +340,10 @@ inline void HostInfoForRepl::parse(const StrVec &v, size_t pos = 0)
 inline std::string HostInfoForRepl::str() const
 {
     return cybozu::util::formatString(
-        "%s %d %s %s %s"
+        "%s %d %d %s %s %s"
         , addrPort.str().c_str()
         , doResync ? 1 : 0
+        , dontMerge ? 1 : 0
         , cmpr.str().c_str()
         , cybozu::util::toUnitIntString(maxWdiffMergeSize).c_str()
         , cybozu::util::toUnitIntString(bulkLb * LOGICAL_BLOCK_SIZE).c_str());

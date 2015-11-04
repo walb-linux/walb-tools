@@ -11,7 +11,8 @@ namespace walb {
 
 namespace wdiff_transfer_local {
 
-inline void sendPack(packet::Packet& pkt, packet::StreamControl& ctrl, DiffStatistics& statOut, const compressor::Buffer& pack)
+template <typename Buffer>
+inline void sendPack(packet::Packet& pkt, packet::StreamControl& ctrl, DiffStatistics& statOut, const Buffer& pack)
 {
     ctrl.next();
     pkt.write<size_t>(pack.size());
@@ -59,6 +60,39 @@ inline bool wdiffTransferClient(
     }
     conv.quit();
     for (compressor::Buffer pack = conv.pop(); !pack.empty(); pack = conv.pop()) {
+        wdiff_transfer_local::sendPack(pkt, ctrl, statOut, pack);
+    }
+    ctrl.end();
+    pkt.flush();
+    return true;
+}
+
+/**
+ * fileH: the position must be the first pack header.
+ */
+inline bool wdiffTransferNoMergeClient(
+    packet::Packet &pkt, cybozu::util::File &fileR,
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
+{
+    packet::StreamControl ctrl(pkt.sock());
+    AlignedArray packHBuf(WALB_DIFF_PACK_SIZE);
+    DiffPackHeader &packH = *(DiffPackHeader *)packHBuf.data();
+    DiffStatistics statOut;
+    AlignedArray pack;
+    for (;;) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
+            return false;
+        }
+        try {
+            packH.readFrom(fileR);
+        } catch (cybozu::util::EofError &) {
+            packH.setEnd();
+        }
+        if (packH.isEnd()) break;
+        pack.resize(WALB_DIFF_PACK_SIZE + packH.total_size);
+        ::memcpy(pack.data(), packHBuf.data(), packHBuf.size());
+        fileR.read(pack.data() + WALB_DIFF_PACK_SIZE, packH.total_size);
+        verifyDiffPack(pack.data(), pack.size(), true);
         wdiff_transfer_local::sendPack(pkt, ctrl, statOut, pack);
     }
     ctrl.end();

@@ -941,6 +941,12 @@ public:
         auto pred = [](const MetaDiff &) { return true; };
         return getMergeableDiffList(gid, pred);
     }
+    bool getApplicableDiff(const MetaSnap &snap, MetaDiff& diff) const {
+        MetaDiffVec u = getApplicableCandidates(snap);
+        if (u.empty()) return false;
+        diff = getMaxProgressDiff(u);
+        return true;
+    }
     /**
      * Get applicable diff list to a specified snapshot
      * where all the diffs and applied snapshot satisfy a specified predicate.
@@ -950,9 +956,8 @@ public:
         MetaSnap s = snap;
         MetaDiffVec v;
         for (;;) {
-            MetaDiffVec u = getApplicableCandidates(s);
-            if (u.empty()) break;
-            MetaDiff d = getMaxProgressDiff(u);
+            MetaDiff d;
+            if (!getApplicableDiff(s, d)) break;
             s = apply(s, d);
             if (!pred(d, s)) break;
             v.push_back(d);
