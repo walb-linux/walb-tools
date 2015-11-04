@@ -241,7 +241,7 @@ void checkWldev(const Option &opt)
     LOGs.info() << super;
     LOGs.info() << "start lsid" << wdevName << lsid;
 
-    uint64_t csumLsid;
+    uint64_t csumLsid = lsid;
     std::deque<uint32_t> csumDeq;
 
     device::SimpleWldevReader sReader(wldevPath);
