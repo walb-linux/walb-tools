@@ -709,7 +709,7 @@ def test_e6():
         md0 = get_sha1(wdev0.path)
         md1 = get_sha1_of_restorable(a0, VOL, gid1)
         verify_equal_sha1('test_e6', md0, md1)
-        walbc.replicate_once(a0, VOL, a1, TIMEOUT, True) # copy archive uuid.
+        walbc.replicate_once(a0, VOL, a1, TIMEOUT, doResync=True) # copy archive uuid.
         print_action_info('SUCCESS', info)
     except Exception:
         print_action_info('FAILURE', info)
