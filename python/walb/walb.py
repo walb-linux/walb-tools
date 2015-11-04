@@ -1980,7 +1980,7 @@ class Controller(object):
         elif sizeSrc > sizeDst:
             self.resize_archive(aDst, vol, sizeSrc, False)
 
-    def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, syncOpt=None):
+    def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, dontMerge=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
@@ -1989,6 +1989,7 @@ class Controller(object):
         vol :: str     - volume name.
         aDst :: Server - destination archive (as a server).
         doResync :: bool - resync if necessary.
+        dontMerge :: bool - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - latest gid to replicate
         '''
@@ -1996,6 +1997,7 @@ class Controller(object):
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(doResync, bool)
+        verify_type(dontMerge, bool)
         if syncOpt:
             verify_type(syncOpt, SyncOpt)
 
@@ -2008,7 +2010,9 @@ class Controller(object):
         self._grow_if_necessary_for_replicate(aSrc, vol, aDst)
 
         gid = self.get_restorable_gid(aSrc, vol)[-1]
-        args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(), '1' if doResync else '0']
+        args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(),
+                '1' if doResync else '0',
+                '1' if dontMerge else '0']
         if syncOpt:
             args += syncOpt.getReplicateArgs()
         self.run_ctl(aSrc, args)
@@ -2034,7 +2038,7 @@ class Controller(object):
         raise Exception("wait_for_replicated:replicate failed",
                         aSrc.name, aDst.name, vol, gid, gidL)
 
-    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, syncOpt=None):
+    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, dontMerge=False, syncOpt=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
@@ -2043,10 +2047,11 @@ class Controller(object):
         aDst :: Server - destination archive (as a server).
         timeoutS :: int - timeout [sec].
         doResync :: bool - resync if necessary.
+        dontMerge :: bool - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
         return :: int  - replicated gid.
         '''
-        gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, syncOpt)
+        gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, dontMerge, syncOpt)
         self.wait_for_replicated(aSrc, vol, aDst, gid, timeoutS)
         return gid
 
@@ -2080,7 +2085,7 @@ class Controller(object):
                 args += syncOpt.getArchiveInfoArgs()
             self.run_ctl(px, args)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS, False, syncOpt)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, False, False, syncOpt)
 
         for px in self.sLayout.proxyL:
             self.start(px, vol)
@@ -2360,7 +2365,7 @@ class Controller(object):
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
-    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, doResync=False, syncOpt=None):
+    def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, doResync=False, dontMerge=False, syncOpt=None):
         '''
         Replicate archive data by copying a volume from one archive to another.
         aSrc :: Server        - source archive server (as client).
@@ -2369,6 +2374,7 @@ class Controller(object):
         synchronizing :: bool - True if you want to make aDst synchronizing.
         timeoutS :: int       - timeout [sec].
         doResync :: bool      - resync if necessary.
+        dontMerge :: bool - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
@@ -2376,7 +2382,7 @@ class Controller(object):
         verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(synchronizing, bool)
 
-        self.replicate_once(aSrc, vol, aDst, timeoutS, doResync, syncOpt)
+        self.replicate_once(aSrc, vol, aDst, timeoutS, doResync, dontMerge, syncOpt)
         if synchronizing:
             self.synchronize(aSrc, vol, aDst, timeoutS, syncOpt)
 
