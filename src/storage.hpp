@@ -1135,6 +1135,24 @@ inline void c2sKickServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2sSetFullScanBpsServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(gs.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const uint64_t size = parseSetFullScanBps(protocol::recvStrVec(p.sock, 0, FUNC));
+        StorageSingleton& g = getStorageGlobal();
+        g.fullScanLbPerSec = size / LOGICAL_BLOCK_SIZE;
+        pkt.writeFin(msgOk);
+        logger.info() << "set-full-scan-bps" << size;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
 inline void c2sDumpLogpackHeaderServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;
@@ -1257,6 +1275,7 @@ const protocol::Str2ServerHandler storageHandlerMap = {
     { resizeCN, c2sResizeServer },
     { snapshotCN, c2sSnapshotServer },
     { kickCN, c2sKickServer },
+    { setFullScanBpsCN, c2sSetFullScanBpsServer },
     { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderServer },
     { getCN, c2sGetServer },
     { execCN, c2sExecServer },

@@ -350,6 +350,13 @@ inline KickParam parseKickParam(const StrVec &args)
     return param;
 }
 
+inline uint64_t parseSetFullScanBps(const StrVec &args)
+{
+    std::string sizeStr;
+    cybozu::util::parseStrVec(args, 0, 1, {&sizeStr});
+    return cybozu::util::fromUnitIntString(sizeStr);
+}
+
 struct BackupParam
 {
     std::string volId;
@@ -407,6 +414,7 @@ inline void verifySetBaseParam(const StrVec &args) { parseSetBaseParam(args); }
 inline void verifyChangeSnapshotParam(const StrVec &args) { parseChangeSnapshotParam(args); }
 inline void verifyArchiveInfoParam(const StrVec &args) { parseArchiveInfoParam(args); }
 inline void verifyKickParam(const StrVec &args) { parseKickParam(args); }
+inline void verifySetFullScanBps(const StrVec &args) { parseSetFullScanBps(args); }
 inline void verifyBackupParam(const StrVec &args) { parseBackupParam(args); }
 inline void verifyShutdownParam(const StrVec &args) { parseShutdownParam(args); }
 inline void verifyDumpLogpackHeader(const StrVec &args) { parseVolIdAndLsidParam(args); }

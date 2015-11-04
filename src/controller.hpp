@@ -302,6 +302,11 @@ inline void c2xKickClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
 }
 
+inline void c2sSetFullScanBpsClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+
 /**
  * params[0]: volId
  * params[1]: gidStr

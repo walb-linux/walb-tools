@@ -102,6 +102,11 @@ void setupKick(cybozu::Option& opt)
 {
     setupOpt(opt, "(volId) (archiveName)");
 }
+void setupSetFullScanBps(cybozu::Option& opt)
+{
+    static uint64_t size;
+    opt.appendParam(&size, "maxFullScanBps", "max full-scan throughput [bytes/sec] (0 means unlimited)");
+}
 void setupVirtualFullScan(cybozu::Option& opt)
 {
     setupVolIdGid(opt);
@@ -188,6 +193,7 @@ const CommandInfo g_cmdTbl[] = {
     { mergeCN, c2aMergeClient, setupMerge, verifyMergeParam, "merge wdiff files for a volume in an archive." },
     { resizeCN, c2xResizeClient, setupResize, verifyResizeParam, "resize a volume in a storage or an archive." },
     { kickCN, c2xKickClient, setupKick, verifyKickParam, "kick background tasks if necessary." },
+    { setFullScanBpsCN, c2sSetFullScanBpsClient, setupSetFullScanBps, verifySetFullScanBps, "set max full scan bytes per second parameter." },
     { blockHashCN, c2aBlockHashClient, setupVirtualFullScan, verifyVirtualFullScanParam, "calculate block hash of a volume in an archive." },
     { virtualFullScanCN, c2aVirtualFullScanClient, setupVirtualFullScanCmd, verifyVirtualFullScanCmdParam, "virtual full scan of a volume in an archive." },
     { getCN, c2xGetClient, setupGet, verifyNoneParam, "get some information from a server." },
