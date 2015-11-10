@@ -899,13 +899,6 @@ class ServerLayout(object):
         verify_type(proxyL, list, Server)
         verify_type(archiveL, list, Server)
 
-        if len(storageL) == 0:
-            raise Exception('server_layout: no storage server')
-        if len(proxyL) == 0:
-            raise Exception('server_layout: no proxy server')
-        if len(archiveL) == 0:
-            raise Exception('server_layout: no archive server')
-
         for kind, sL in [(K_STORAGE, storageL), (K_PROXY, proxyL), (K_ARCHIVE, archiveL)]:
             for s in sL:
                 if s.kind != kind:
@@ -922,6 +915,7 @@ class ServerLayout(object):
         '''
         return :: Server
         '''
+        self.verify(0, 0, 1)
         return self.archiveL[0]
 
     def get_all(self):
@@ -955,6 +949,19 @@ class ServerLayout(object):
         '''
         for s in self.get_all():
             print ' '.join(get_server_args(s, self))
+
+    def verify(self, minNrStorage, minNrProxy, minNrArchive):
+        '''
+        Verify the number of storage/proxy/archive servers.
+        '''
+        verify_int(minNrStorage)
+        verify_int(minNrProxy)
+        verify_int(minNrArchive)
+        for kind, minNr, nr in [('storage', minNrStorage, len(self.storageL)),
+                                ('proxy', minNrProxy, len(self.proxyL)),
+                                ('archive', minNrArchive, len(self.archiveL))]:
+            if nr < minNr:
+                raise Exception('ServerLayout: more servers required', kind, nr, minNr)
 
 
 def dict2args(d):
