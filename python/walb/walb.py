@@ -29,17 +29,29 @@ RESTORED_VOLUME_PREFIX = 'wr_'
 ########################################
 
 def verify_type(obj, typeValue, elemType=None):
-    '''
-    obj       - object.
-    typeValue - type like int, str, list.
-    elemType  - specify type of elements if typeValue is sequence.
+    '''Verify type of an object.
 
+    It raises a TypeError when none of typeValue(s) did match obj.
+
+    obj       - object.
+    typeValue - type like int, str, list. or a list of them.
+    elemType  - specify type of elements if typeValue is sequence. or a list of them.
     '''
-    if not isinstance(obj, typeValue):
-        raise Exception('invalid type', type(obj), typeValue)
-    if isinstance(obj, list) and elemType:
-        if not all(isinstance(e, elemType) for e in obj):
-            raise Exception('invalid list type', type(obj), typeValue, elemType)
+    if obj is None:
+        raise TypeError('None type')
+    if not isinstance(typeValue, list):
+        typeValue = [typeValue]
+    if all([not isinstance(obj, t) for t in typeValue]):
+        raise TypeError('Invalid object type: {} must be one of [{}]'
+                        .format(str(type(obj)), ','.join([str(t) for t in typeValue])))
+    if elemType is None:
+        return
+    if not isinstance(elemType, list):
+        elemType = [elemType]
+    for elem in obj:
+        if all([not isinstance(elem, t) for t in elemType]):
+            raise TypeError('Invalid element type: {} must be one of [{}]'
+                            .format(str(type(elem)), ','.join([str(t) for t in elemType])))
 
 
 def verify_int(obj):
