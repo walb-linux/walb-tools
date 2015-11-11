@@ -171,11 +171,11 @@ def get_server(name, sL):
     '''
     Get only one element from L having name
     name :: str   - server name.
-    sL :: [Server] - server list.
-    return :: Server
+    sL :: [ServerParams] - server list.
+    return :: ServerParams
     '''
     verify_type(name, str)
-    verify_type(sL, list, Server)
+    verify_type(sL, list, ServerParams)
     ret = []
     for x in sL:
         if x.name == name:
@@ -821,25 +821,14 @@ class Device(object):
         return '/sys/block/walb!L{}/'.format(self.name)
 
 
-class Server(object):
-    '''
-    Server configuration.
-    '''
-    def __init__(self, name, address, port, kind, binDir, dataDir,
-                 logPath=None, vg=None, tp=None):
+class ServerConnectionParam(object):
+    '''Server connection parameters.'''
+    def __init__(self, name, address, port, kind):
         '''
         name :: str            - daemon identifier in the system.
         address :: str         - host name
         port :: int            - port number.
         kind :: int            - K_STORAGE, K_PROXY, or K_ARCHIVE.
-        binDir :: str          - directory path containing server executable
-                                 at the host.
-        dataDir :: str         - persistent data directory path.
-        logPath :: str or None - log path. None means default.
-        vg :: str              - volume group name.
-                                 This is required by archive server only.
-        tp :: str              - thinpool name.
-                                 This is optional and required by archive server only.
         '''
         verify_type(name, str)
         verify_type(address, str)
@@ -847,35 +836,18 @@ class Server(object):
         verify_type(kind, int)
         if kind not in serverKinds:
             raise Exception('Server: wrong server kind', kind)
-        verify_type(binDir, str)
-        verify_type(dataDir, str)
-        if logPath is not None:
-            verify_type(logPath, str)
-        if kind == K_ARCHIVE or vg is not None:
-            verify_type(vg, str)
-        if kind == K_ARCHIVE and tp is not None:
-            verify_type(tp, str)
 
         self.name = name
         self.address = address
         self.port = port
         self.kind = kind
-        self.binDir = binDir
-        self.dataDir = dataDir
-        self.logPath = logPath
-        if kind == K_ARCHIVE:
-            self.vg = vg
-            self.tp = tp
+
+    def _get_as_str_list(self):
+        return [self.name, self.address, str(self.port),
+             server_kind_to_str(self.kind)]
 
     def __str__(self):
-        L = [self.name, self.address, str(self.port),
-             server_kind_to_str(self.kind), self.binDir, self.dataDir,
-             self.logPath]
-        if self.kind == K_ARCHIVE:
-            L.append(self.vg)
-            if self.tp:
-                L.append(self.tp)
-        return ', '.join(L)
+        return ', '.join(self._get_as_str_list())
 
     def get_host_port(self):
         '''
@@ -885,12 +857,80 @@ class Server(object):
         return self.address + ":" + str(self.port)
 
 
+class ServerStartupParam(object):
+    '''Server startup parameters.'''
+    def __init__(self, connParam, binDir, dataDir, logPath=None, vg=None, tp=None):
+        '''
+        connParam :: ServerConnectionParam - server connection parameters.
+        binDir :: str          - directory path containing server executable
+                                 at the host.
+        dataDir :: str         - persistent data directory path.
+        logPath :: str or None - log path. None means default.
+        vg :: str              - volume group name.
+                                 This is required by archive server only.
+        tp :: str              - thinpool name.
+                                 This is optional and required by archive server only.
+        '''
+        verify_type(connParam, ServerConnectionParam)
+        self._connParam = connParam
+        verify_type(binDir, str)
+        verify_type(dataDir, str)
+        if logPath is not None:
+            verify_type(logPath, str)
+        if self.kind == K_ARCHIVE or vg is not None:
+            verify_type(vg, str)
+        if self.kind == K_ARCHIVE and tp is not None:
+            verify_type(tp, str)
+
+        self.binDir = binDir
+        self.dataDir = dataDir
+        self.logPath = logPath
+        if self.kind == K_ARCHIVE:
+            self.vg = vg
+            self.tp = tp
+
+    @property
+    def name(self):
+        return self._connParam.name
+
+    @property
+    def address(self):
+        return self._connParam.address
+
+    @property
+    def port(self):
+        return self._connParam.port
+
+    @property
+    def kind(self):
+        return self._connParam.kind
+
+    def get_host_port(self):
+        return self._connParam.get_host_port()
+
+    def _get_as_str_list(self):
+        L = self._connParam._get_as_str_list()
+        L += [self.binDir, self.dataDir, self.logPath]
+        if self.kind == K_ARCHIVE:
+            L.append(self.vg)
+            if self.tp:
+                L.append(self.tp)
+        return L
+
+    def __str__(self):
+        return ', '.join(self._get_as_str_list())
+
+
+# Use ServerParams as vaiant type to verify.
+ServerParams = [ServerConnectionParam, ServerStartupParam]
+
+
 def verify_server_kind(s, kindL):
     '''
-    s :: Server
+    s :: ServerParams
     kindL :: [int]
     '''
-    verify_type(s, Server)
+    verify_type(s, ServerParams)
     verify_type(kindL, list, int)
     if s.kind not in kindL:
         raise Exception('invalid server type', s.name, s.kind, kindL)
@@ -902,14 +942,14 @@ class ServerLayout(object):
     '''
     def __init__(self, storageL, proxyL, archiveL):
         '''
-        storageL :: [Server] - storage server list.
-        proxyL :: [Server]   - proxy server list.
+        storageL :: [ServerParams] - storage server list.
+        proxyL :: [ServerParams]   - proxy server list.
                                Before items have high priority.
-        archiveL :: [Server] - archive server list. The head is primary server.
+        archiveL :: [ServerParams] - archive server list. The head is primary server.
         '''
-        verify_type(storageL, list, Server)
-        verify_type(proxyL, list, Server)
-        verify_type(archiveL, list, Server)
+        verify_type(storageL, list, ServerParams)
+        verify_type(proxyL, list, ServerParams)
+        verify_type(archiveL, list, ServerParams)
 
         for kind, sL in [(K_STORAGE, storageL), (K_PROXY, proxyL), (K_ARCHIVE, archiveL)]:
             for s in sL:
@@ -925,23 +965,23 @@ class ServerLayout(object):
 
     def get_primary_archive(self):
         '''
-        return :: Server
+        return :: ServerParams
         '''
         self.verify(0, 0, 1)
         return self.archiveL[0]
 
     def get_all(self):
         '''
-        return :: [Server]
+        return :: [ServerParams]
         '''
         return self.storageL + self.proxyL + self.archiveL
 
     def replace(self, storageL=None, proxyL=None, archiveL=None):
         '''
         Make a copy replacing arguments which are not None.
-        storageL :: [Server] or None - if None, storageL will not unchange.
-        proxyL :: [Server] or None - if None, archiveL will not unchange.
-        archiveL :: [Server] or None - if None, archiveL will not unchange.
+        storageL :: [ServerParams] or None - if None, storageL will not unchange.
+        proxyL :: [ServerParams] or None - if None, archiveL will not unchange.
+        archiveL :: [ServerParams] or None - if None, archiveL will not unchange.
         return :: ServerLayout
         '''
         sL = self.storageL
@@ -955,13 +995,6 @@ class ServerLayout(object):
             aL = archiveL
         return ServerLayout(sL, pL, aL)
 
-    def to_cmd_string(self):
-        '''
-        Make command strings to run server
-        '''
-        for s in self.get_all():
-            print ' '.join(get_server_args(s, self))
-
     def verify(self, minNrStorage, minNrProxy, minNrArchive):
         '''
         Verify the number of storage/proxy/archive servers.
@@ -974,6 +1007,14 @@ class ServerLayout(object):
                                 ('archive', minNrArchive, len(self.archiveL))]:
             if nr < minNr:
                 raise Exception('ServerLayout: more servers required', kind, nr, minNr)
+
+    def to_cmd_string(self):
+        '''Make command strings to run server.
+        All items must be ServerStartupParam.
+        '''
+        for s in self.get_all():
+            verify_type(s, ServerStartupParam)
+            print ' '.join(get_server_args(s, self))
 
 
 def dict2args(d):
@@ -997,14 +1038,14 @@ def dict2args(d):
 def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1):
     '''
     Get walb-tools server parameters as a dictionary.
-    s :: Server     - server.
+    s :: ServerStartupParam - server.
     sLayout :: ServerLayout - required for storage server.
     useRepeater :: Bool - use repeater if True
     maxFgTasks :: int or None - max number of foreground tasks.
     maxBgTasks :: int or None - max number of background tasks.
     return :: {str: *} - key: option string, value: option argument(s).
     '''
-    verify_type(s, Server)
+    verify_type(s, ServerStartupParam)
     if s.kind == K_STORAGE:
         verify_type(sLayout, ServerLayout)
     verify_type(isDebug, bool)
@@ -1050,7 +1091,7 @@ def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTa
 def get_server_args(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1):
     '''
     Get walb-tools server arguments.
-    s :: Server     - server.
+    s :: ServerStartupParam - server startup param.
     sLayout :: ServerLayout - required for storage server.
     useRepeater :: Bool - use repeater if True
     maxFgTasks :: int or None - max number of foreground tasks.
@@ -1093,13 +1134,13 @@ class Controller(object):
     def run_ctl(self, s, cmdArgs, putMsg=False, timeoutS=0):
         '''
         Run walb-tools controller.
-        s :: Server      - a server.
+        s :: ServerParams  - a server.
         cmdArgs :: [str] - command arguments.
         putMsg :: bool   - put debug message if True.
         timeoutS :: int  - timeout in sec. 0 means default.
         return :: str    - stdout of the control command.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(cmdArgs, list, str)
         verify_type(putMsg, bool)
         ctlArgs = [self.controllerPath,
@@ -1117,14 +1158,14 @@ class Controller(object):
         Run arbitrary executable at a remote server running walb daemon.
         This will use walb-tools daemons to run commands.
 
-        s :: Server    - server where you want to run command.
-        args :: [str]  - command line arguments.
-                         The head item must be a full-path executable.
-        putMsg :: bool - put debug message if True.
+        s :: ServerParams - server where you want to run command.
+        args :: [str]   - command line arguments.
+                          The head item must be a full-path executable.
+        putMsg :: bool  - put debug message if True.
         timeoutS :: int - set timeout sec.
-        return :: str  - stdout of the command if the command returned 0.
+        return :: str   - stdout of the command if the command returned 0.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(args, list, str)
         verify_type(putMsg, bool)
         verify_type(timeoutS, int)
@@ -1135,11 +1176,11 @@ class Controller(object):
         '''
         Get run_command function for RPC.
         walbc :: Controller
-        s :: Server
+        s :: ServerParams
         return :: ([str],bool -> str)
 
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
 
         def func(args, putMsg=False):
             return self.run_remote_command(s, args, putMsg or self.isDebug)
@@ -1149,20 +1190,20 @@ class Controller(object):
     def get_host_type(self, s):
         '''
         Get host type.
-        s :: Server
+        s :: ServerParams
         return :: str - 'storage', 'proxy', or 'archive'.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         return self.run_ctl(s, ['get', 'host-type'])
 
     def get_state(self, s, vol):
         '''
         Get state of a volume.
-        s :: Server
+        s :: ServerParams
         vol :: str    - volume name.
         return :: str - state.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(vol, str)
         return self.run_ctl(s, ['get', 'state', vol])
 
@@ -1170,12 +1211,12 @@ class Controller(object):
         '''
         Get all state fo a volume.
         vol :: str - volume name
-        sL :: [Server] or None - None means all servers in the layout.
+        sL :: [ServerParams] or None - None means all servers in the layout.
         '''
         verify_type(vol, str)
         if sL is None:
             sL = self.sLayout.get_all()
-        verify_type(sL, list, Server)
+        verify_type(sL, list, ServerParams)
         for s in sL:
             msg = "%s %s:%d %s" % (s.name, s.address, s.port, server_kind_to_str(s.kind))
             try:
@@ -1186,7 +1227,7 @@ class Controller(object):
 
     def verify_state(self, s, vol, state):
         '''
-        s :: Server
+        s :: ServerParams
         vol :: str
         state :: str
         '''
@@ -1198,7 +1239,7 @@ class Controller(object):
     def get_vol_list(self, s):
         '''
         Get volume list.
-        s :: Server
+        s :: ServerParams
         return :: [str] - volume name list.
         '''
         verify_server_kind(s, serverKinds)
@@ -1207,10 +1248,10 @@ class Controller(object):
     def _get_size_value(self, ax, vol, cmd):
         '''
         Get size value from an archive server.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        cmd :: str    - command string
-        return :: u64 - size value.
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        cmd :: str        - command string
+        return :: u64     - size value.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -1225,9 +1266,9 @@ class Controller(object):
     def get_vol_size_lb(self, ax, vol):
         '''
         Get volume size.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        return :: u64 - volume size [logical block].
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        return :: u64     - volume size [logical block].
         '''
         return self._get_size_value(ax, vol, 'vol-size')
 
@@ -1240,16 +1281,16 @@ class Controller(object):
     def get_progress_lb(self, ax, vol):
         '''
         Get progress of full/hash backup/replicate command.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        return :: u64 - progress [logical block].
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        return :: u64     - progress [logical block].
         '''
         return self._get_size_value(ax, vol, 'progress')
 
     def get_base(self, ax, vol):
         '''
         Get base meta state of a volume in an archive server.
-        ax :: Server        - archive server.
+        ax :: ServerParams    - archive server.
         vol :: str          - volume name.
         return :: MetaState - meta state.
         '''
@@ -1261,9 +1302,9 @@ class Controller(object):
     def monitor_progress(self, ax, vol, timeoutS=TIMEOUT_SEC):
         '''
         Monitor progress.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        timeoutS :: int  - timeout [sec].
         '''
         verify_int(timeoutS)
         sizeLb = self.get_vol_size_lb(ax, vol)
@@ -1279,10 +1320,10 @@ class Controller(object):
     def get_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get wdiff list.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid0 :: u64     - range begin.
-        gid1 :: u64     - range end.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: u64      - range begin.
+        gid1 :: u64      - range end.
         return :: [Diff] - wdiff information list managed by the archive server.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
@@ -1297,19 +1338,19 @@ class Controller(object):
     def print_diff_list(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Print wdiff list.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid0 :: int     - range begin.
-        gid1 :: int     - range end.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: int      - range begin.
+        gid1 :: int      - range end.
         '''
         printL(self.get_diff_list(ax, vol, gid0, gid1))
 
     def get_applicable_diff_list(self, ax, vol, gid=UINT64_MAX):
         '''
         Get wdiff to list to apply.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: u64      - target gid.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: u64       - target gid.
         return :: [Diff] - wdiff information list managed by the archive server.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
@@ -1336,35 +1377,35 @@ class Controller(object):
     def get_num_diff(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get number of wdiff files for a volume.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid0 :: int   - gid range begin.
-        gid1 :: int   - gid range end.
-        return :: int - number of wdiffs in the gid range.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: int      - gid range begin.
+        gid1 :: int      - gid range end.
+        return :: int    - number of wdiffs in the gid range.
         '''
         return self._get_with_gid_range(ax, vol, 'num-diff', gid0, gid1)
 
     def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
         '''
         Get total wdiff size.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid0 :: int     - gid range begin.
-        gid1 :: int     - gid range end.
-        return :: int   - total size in the gid range [byte].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: int      - gid range begin.
+        gid1 :: int      - gid range end.
+        return :: int    - total size in the gid range [byte].
         '''
         return self._get_with_gid_range(ax, vol, 'total-diff-size', gid0, gid1)
 
     def get_num_action(self, s, vol, action):
         '''
         Get number of an action running for a volume.
-        s :: Server    - server.
-        vol :: str     - volume name.
-        action :: str  - action name.
-        return :: int  - the number of running
-                         the specified action on the volume.
+        s :: ServerParams - server.
+        vol :: str      - volume name.
+        action :: str   - action name.
+        return :: int   - the number of running
+                          the specified action on the volume.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(vol, str)
         verify_type(action, str)
         num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
@@ -1373,11 +1414,11 @@ class Controller(object):
     def reset(self, s, vol, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         Reset a volume.
-        s :: Server - storage or archive.
+        s :: ServerParams - storage or archive.
         timeoutS :: int - timeout in sec. 0 means default.
         vol :: str  - volume name.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(vol, str)
         verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
         if s.kind == K_STORAGE:
@@ -1391,8 +1432,8 @@ class Controller(object):
     def go_standby(self, sx, vol):
         '''
         change state in sx to Standby from anywhere
-        sx :: Server - storage server.
-        vol :: str   - volume name.
+        sx :: ServerParams - storage server.
+        vol :: str       - volume name.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -1414,8 +1455,8 @@ class Controller(object):
         '''
         change state in sx from SyncReady to Standby
 
-        sx :: Server - storage server.
-        vol :: str   - volume name.
+        sx :: ServerParams - storage server.
+        vol :: str       - volume name.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -1428,10 +1469,10 @@ class Controller(object):
     def kick_all(self, sL):
         '''
         Kick all servers.
-        sL :: [Server] - list of servers each of which
-                         must be storage or proxy.
+        sL :: [ServerParams] - list of servers each of which
+                              must be storage or proxy.
         '''
-        verify_type(sL, list, Server)
+        verify_type(sL, list, ServerParams)
         for s in sL:
             verify_server_kind(s, [K_STORAGE, K_PROXY])
             self.run_ctl(s, ["kick"])
@@ -1442,7 +1483,7 @@ class Controller(object):
 
     def set_full_scan_bps(self, sx, throughputU):
         '''
-        sx :: Server - storage server.
+        sx :: ServerParams - storage server.
         throughputU :: str - throughput [bytes/sec]
             0 means unlimited.
             Unit suffix like '100M' is allowed.
@@ -1455,9 +1496,9 @@ class Controller(object):
     def is_overflow(self, sx, vol):
         '''
         Check a storage is overflow or not.
-        sx :: Server   - storage server.
-        vol :: str     - volume name.
-        return :: bool - True if the storage overflows.
+        sx :: ServerParams - storage server.
+        vol :: str       - volume name.
+        return :: bool   - True if the storage overflows.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -1473,9 +1514,9 @@ class Controller(object):
     def is_wdiff_send_error(self, px, vol, ax):
         '''
         Get wdiff-send-error value.
-        px :: Server   - proxy.
-        vol :: str     - volume name.
-        ax :: Server   - archive.
+        px :: ServerParams - proxy.
+        vol :: str       - volume name.
+        ax :: ServerParams - archive.
         return :: bool
         '''
         verify_server_kind(px, [K_PROXY])
@@ -1488,8 +1529,8 @@ class Controller(object):
     def get_uuid(self, s, vol):
         '''
         Get uuid string.
-        s :: Server   - storage or archive.
-        return :: str - uuid string that regex pattern [0-9a-f]{32}.
+        s :: ServerParams - storage or archive.
+        return :: str   - uuid string that regex pattern [0-9a-f]{32}.
         '''
         verify_server_kind(s, [K_STORAGE, K_ARCHIVE])
         verify_type(vol, str)
@@ -1498,8 +1539,8 @@ class Controller(object):
     def get_archive_uuid(self, ax, vol):
         '''
         Get archive uuid string.
-        ax :: Server - archive.
-        return :: str - uuid string that regex pattern [0-9a-f]{32}.
+        ax :: ServerParams - archive.
+        return :: str    - uuid string that regex pattern [0-9a-f]{32}.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -1508,14 +1549,14 @@ class Controller(object):
     def status(self, sL=None, vol=None, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         print server status.
-        sL :: Server|[Server] - server or server list.
+        sL :: ServerParams | [ServerParams] - server or server list.
         vol :: str or None - volume name. None means all.
         '''
         if not sL:
             sL = self.sLayout.get_all()
-        if isinstance(sL, Server):
+        if isinstance(sL, ServerConnectionParam) or isinstance(sL, ServerStartupParam):
             sL = [sL]
-        verify_type(sL, list, Server)
+        verify_type(sL, list, ServerParams)
         for s in sL:
             args = ['status']
             if vol:
@@ -1526,10 +1567,10 @@ class Controller(object):
     def shutdown(self, s, mode="graceful"):
         '''
         Shutdown a server.
-        s :: Server
+        s :: ServerParams
         mode :: str - 'graceful' or 'force'.
         '''
-        verify_type(s, Server)
+        verify_type(s, ServerParams)
         verify_type(mode, str)
         verify_shutdown_mode(mode, 'shutdown')
         self.run_ctl(s, ["shutdown", mode])
@@ -1538,7 +1579,7 @@ class Controller(object):
         '''
         Shutdown listed servers.
         '''
-        verify_type(sL, list, Server)
+        verify_type(sL, list, ServerParams)
         verify_shutdown_mode(mode, 'shutdown_list')
         for s in sL:
             try:
@@ -1570,7 +1611,7 @@ class Controller(object):
     def init_storage(self, sx, vol, wdevPath):
         '''
         Initialize a volume at storage.
-        sx :: Server
+        sx :: ServerParams
         vol :: str
         wdevPath :: str
         '''
@@ -1583,7 +1624,7 @@ class Controller(object):
     def _init(self, s, vol, wdevPath=None):
         '''
         Call walb init-vol command.
-        s :: Server             - storage or archive
+        s :: ServerParams         - storage or archive
         vol :: str              - volume name.
         wdevPath :: str or None - specify if s is storage.
 
@@ -1599,7 +1640,7 @@ class Controller(object):
     def clear(self, s, vol):
         '''
         Clear a volume.
-        s :: Server
+        s :: ServerParams
         vol :: str
         '''
         verify_server_kind(s, serverKinds)
@@ -1690,7 +1731,7 @@ class Controller(object):
     def is_synchronizing(self, ax, vol):
         '''
         Check whether a volume is synchronizing with an archive server or not.
-        ax :: Server - archive server.
+        ax :: ServerParams - archive server.
         vol :: str
         return :: bool
         '''
@@ -1710,7 +1751,7 @@ class Controller(object):
     def wait_for_stopped(self, s, vol, prevSt=None):
         '''
         Wait for a volue of a server stopped.
-        s :: Server
+        s :: ServerParams
         vol :: str
         prevSt :: None or str - specify if s is storage server.
         '''
@@ -1741,7 +1782,7 @@ class Controller(object):
         '''
         Stop a volume at a server.
         This is nonblocking command. See stop().
-        s :: Server
+        s :: ServerParams
         vol :: str
         mode :: str - 'graceful' or 'force' or 'empty'.
             'empty' is valid only if s is proxy.
@@ -1765,7 +1806,7 @@ class Controller(object):
     def start(self, s, vol):
         '''
         Start a volume at a server and wait for it started.
-        s :: Server
+        s :: ServerParams
         vol :: str
         '''
         verify_server_kind(s, serverKinds)
@@ -1784,9 +1825,9 @@ class Controller(object):
     def del_archive_from_proxy(self, px, vol, ax):
         '''
         Delete an archive from a proxy.
-        px :: Server - proxy server.
-        vol :: str   - voume name.
-        ax :: Server - archive server.
+        px :: ServerParams - proxy server.
+        vol :: str       - voume name.
+        ax :: ServerParams - archive server.
         '''
         verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
@@ -1804,10 +1845,10 @@ class Controller(object):
     def add_archive_to_proxy(self, px, vol, ax, doStart=True, syncOpt=None):
         '''
         Add an archive to a proxy.
-        px :: Server    - proxy server.
-        vol :: str      - volume name.
-        ax :: server    - archive server.
-        doStart :: bool - False if not to start proxy after adding.
+        px :: ServerParams           - proxy server.
+        vol :: str                 - volume name.
+        ax :: serverInfo           - archive server.
+        doStart :: bool            - False if not to start proxy after adding.
         syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(px, [K_PROXY])
@@ -1832,9 +1873,9 @@ class Controller(object):
     def copy_archive_info(self, pSrc, vol, pDst):
         '''
         Copy archive info from a proxy to another proxy.
-        pSrc :: Server - srouce proxy.
+        pSrc :: ServerParams - srouce proxy.
         vol :: str
-        pDst :: Server - destination proxy. It must be stopped.
+        pDst :: ServerParams - destination proxy. It must be stopped.
         '''
         verify_server_kind(pSrc, [K_PROXY])
         verify_type(vol, str)
@@ -1848,8 +1889,8 @@ class Controller(object):
     def stop_synchronizing(self, ax, vol):
         '''
         Stop synchronization of a volume with an archive.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -1860,8 +1901,8 @@ class Controller(object):
     def start_synchronizing(self, ax, vol, syncOpt=None):
         '''
         Start synchronization of a volume with an archive.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
+        ax :: ServerParams           - archive server.
+        vol :: str                 - volume name.
         syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
@@ -1875,9 +1916,9 @@ class Controller(object):
     def get_restorable(self, ax, vol, opt=''):
         '''
         Get restorable gid list.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        opt :: str   - you can specify 'all'.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        opt :: str       - you can specify 'all'.
         return :: [GidInfo] - gid info list.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
@@ -1897,28 +1938,28 @@ class Controller(object):
     def get_restorable_gid(self, ax, vol, opt=''):
         '''
         Get restorable gid list.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        opt :: str   - you can specify 'all'.
-        return :: [int] - gid list.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        opt :: str       - you can specify 'all'.
+        return :: [int]  - gid list.
         '''
         return [x.gid for x in self.get_restorable(ax, vol, opt)]
 
     def print_restorable(self, ax, vol, opt=''):
         '''
         Print restorable gid list.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        opt :: str   - you can specify 'all'.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        opt :: str       - you can specify 'all'.
         '''
         printL(self.get_restorable(ax, vol, opt))
 
     def get_restored(self, ax, vol):
         '''
         Get restored gid list.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        return :: [int] - gid list.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        return :: [int]  - gid list.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -1930,20 +1971,20 @@ class Controller(object):
     def wait_for_restorable(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Wait for a snapshot specified of a gid to be restorable.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        timeoutS :: int  - timeout [sec].
         '''
         self._wait_for_gid(ax, vol, gid, 'restorable', timeoutS)
 
     def wait_for_restored(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Wait for a snapshot specified of a gid to be restored.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        timeoutS :: int  - timeout [sec].
         '''
         verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaRestore, timeoutS)
@@ -1956,11 +1997,11 @@ class Controller(object):
         '''
         Verify a snapshot does not become restorable
         at an archive server in a period.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        waitS :: int    - wait period [sec].
-        msg :: str      - message for error.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        waitS :: int     - wait period [sec].
+        msg :: str       - message for error.
         '''
         verify_type(msg, str)
         e = False
@@ -2004,9 +2045,9 @@ class Controller(object):
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
         Use wait_for_replicated() or replicate_once() to wait for it.
-        aSrc :: Server - source archive (as a client).
-        vol :: str     - volume name.
-        aDst :: Server - destination archive (as a server).
+        aSrc :: ServerParams - source archive (as a client).
+        vol :: str         - volume name.
+        aDst :: ServerParams - destination archive (as a server).
         doResync :: bool - resync if necessary.
         dontMerge :: bool - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
@@ -2040,11 +2081,11 @@ class Controller(object):
     def wait_for_replicated(self, aSrc, vol, aDst, gid, timeoutS=TIMEOUT_SEC):
         '''
         Wait for replication action done.
-        aSrc :: Server    - archive server as a replication client.
-        vol :: str        - volume name.
-        aDst :: Server    - archive server as a replication server.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
+        aSrc :: ServerParams    - archive server as a replication client.
+        vol :: str            - volume name.
+        aDst :: ServerParams    - archive server as a replication server.
+        gid :: int            - generation id.
+        timeoutS :: int       - timeout [sec].
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_server_kind(aDst, [K_ARCHIVE])
@@ -2061,14 +2102,14 @@ class Controller(object):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
-        aSrc :: Server - source archive (as a client).
-        vol :: str     - volume name.
-        aDst :: Server - destination archive (as a server).
-        timeoutS :: int - timeout [sec].
-        doResync :: bool - resync if necessary.
-        dontMerge :: bool - do not merge diffs (to avoid recompress).
+        aSrc :: ServerParams         - source archive (as a client).
+        vol :: str                 - volume name.
+        aDst :: ServerParams         - destination archive (as a server).
+        timeoutS :: int            - timeout [sec].
+        doResync :: bool           - resync if necessary.
+        dontMerge :: bool          - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
-        return :: int  - replicated gid.
+        return :: int              - replicated gid.
         '''
         gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, dontMerge, syncOpt)
         self.wait_for_replicated(aSrc, vol, aDst, gid, timeoutS)
@@ -2078,10 +2119,10 @@ class Controller(object):
         '''
         Synchronize aDst with (aSrc, vol).
         To reduce proxies stopped period, replicate nosync before calling this.
-        aSrc :: Server  - source archive (as a client).
-        vol :: str      - volume name.
-        aDst :: Server  - destination archive (as a server).
-        timeoutS :: int - timeout [sec].
+        aSrc :: ServerParams         - source archive (as a client).
+        vol :: str                 - volume name.
+        aDst :: ServerParams         - destination archive (as a server).
+        timeoutS :: int            - timeout [sec].
         syncOpt :: SyncOpt or None - synchronization option.
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
@@ -2115,7 +2156,7 @@ class Controller(object):
         Run full backup a volume of a storage server.
         Log transfer to the primary archive server will start automatically.
         This function will return when a clean snapshot is
-        sx :: Server     - storage server.
+        sx :: ServerParams - storage server.
         vol :: str       - volume name.
         timeoutS :: int  - timeout [sec].
                            Counter will start after dirty full backup done.
@@ -2162,7 +2203,7 @@ class Controller(object):
         This function will return a gid of a clean snapshot that is
         restorable at the primary archive server.
 
-        sx :: Server     - storage server.
+        sx :: ServerParams - storage server.
         vol :: str       - volume name.
         timeoutS :: int  - timeout [sec].
                            Counter will start after dirty hash backup done.
@@ -2210,10 +2251,10 @@ class Controller(object):
     def restore(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Restore a volume.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec]
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        timeoutS :: int  - timeout [sec]
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2229,9 +2270,9 @@ class Controller(object):
     def del_restored(self, ax, vol, gid):
         '''
         Delete a restored volume.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        gid :: int    - generation id.
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        gid :: int        - generation id.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2254,9 +2295,9 @@ class Controller(object):
     def _del_restored_all(self, ax, vol):
         '''
         Delete all restored volumes of a volume.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        return :: [int] - gid list of deleted snapshots.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        return :: [int]  - gid list of deleted snapshots.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2268,9 +2309,9 @@ class Controller(object):
     def snapshot_nbk(self, sx, vol):
         '''
         Take a snaphsot. This is nonblocking.
-        sx :: Server  - storage server.
-        vol :: str    - volume name.
-        return :: int - gid of the taken snapshot.
+        sx :: ServerParams  - storage server.
+        vol :: str        - volume name.
+        return :: int     - gid of the taken snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -2280,14 +2321,14 @@ class Controller(object):
     def snapshot(self, sx, vol, axL, timeoutS=TIMEOUT_SEC):
         '''
         Take a snapshot and wait for it to be restorable in archive servers.
-        sx :: Server    - storage server.
-        vol :: str      - volume name.
-        axL :: [Server] - archive server list.
-        return :: int   - gid of the taken snapshot.
+        sx :: ServerParams    - storage server.
+        vol :: str          - volume name.
+        axL :: [ServerParams] - archive server list.
+        return :: int       - gid of the taken snapshot.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
-        verify_type(axL, list, Server)
+        verify_type(axL, list, ServerParams)
         for ax in axL:
             st = self.get_state(ax, vol)
             if st not in aActive:
@@ -2303,18 +2344,18 @@ class Controller(object):
     def disable_snapshot(self, ax, vol, gidL):
         '''
         Disable snapshots
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gidL :: [int] - list of gid
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gidL :: [int]    - list of gid
         '''
         self._change_snapshot(ax, vol, gidL, isEnable=False)
 
     def enable_snapshot(self, ax, vol, gidL):
         '''
         Enable snapshots
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gidL :: [int] - list of gid
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gidL :: [int]    - list of gid
         '''
         self._change_snapshot(ax, vol, gidL, isEnable=True)
 
@@ -2337,9 +2378,9 @@ class Controller(object):
     def apply(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
-        ax :: Server - archive server
-        vol :: str   - volume name.
-        gid :: int   - generation id.
+        ax :: ServerParams - archive server
+        vol :: str       - volume name.
+        gid :: int       - generation id.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2353,9 +2394,9 @@ class Controller(object):
     def _apply_all(self, ax, vol, timeoutS=TIMEOUT_SEC):
         '''
         Apply diffs older than a gid the base lv.
-        ax :: Server - archive server
-        vol :: str   - volume name.
-        return :: int - gid which all previous diffs were applied.
+        ax :: ServerParams - archive server
+        vol :: str       - volume name.
+        return :: int    - gid which all previous diffs were applied.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2370,10 +2411,10 @@ class Controller(object):
     def merge(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Merge diffs in gid ranges.
-        ax :: Server - archive server.
-        vol :: str   - volume name.
-        gidB :: int  - begin gid.
-        gidE :: int  - end gid.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gidB :: int      - begin gid.
+        gidE :: int      - end gid.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2387,9 +2428,9 @@ class Controller(object):
     def replicate(self, aSrc, vol, aDst, synchronizing, timeoutS=TIMEOUT_SEC, doResync=False, dontMerge=False, syncOpt=None):
         '''
         Replicate archive data by copying a volume from one archive to another.
-        aSrc :: Server        - source archive server (as client).
+        aSrc :: ServerParams    - source archive server (as client).
         vol :: str            - volume name.
-        aDst :: Server        - destination archive server (as server).
+        aDst :: ServerParams    - destination archive server (as server).
         synchronizing :: bool - True if you want to make aDst synchronizing.
         timeoutS :: int       - timeout [sec].
         doResync :: bool      - resync if necessary.
@@ -2407,8 +2448,8 @@ class Controller(object):
 
     def get_latest_clean_snapshot(self, ax, vol):
         '''
-        ax :: Server - archive server.
-        vol :: str   - volume name.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2421,7 +2462,7 @@ class Controller(object):
     def resize_archive(self, ax, vol, sizeMb, doZeroClear):
         '''
         Resize archive volume.
-        ax :: Server        - archive server.
+        ax :: ServerParams    - archive server.
         vol :: str          - volume name.
         sizeMb :: int       - new size [MiB]. must not be 0.
         doZeroClear :: bool - True if zero-clear extended area.
@@ -2453,9 +2494,9 @@ class Controller(object):
         '''
         Resize storage volume.
         You must resize ddev before calling this.
-        sx :: Server  - storage server.
-        vol :: str    - voume name.
-        sizeMb :: int - new size [MiB]. specify 0 to auto-detect its underlying ddev size.
+        sx :: ServerParams  - storage server.
+        vol :: str        - voume name.
+        sizeMb :: int     - new size [MiB]. specify 0 to auto-detect its underlying ddev size.
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -2547,20 +2588,20 @@ class Controller(object):
     def _wait_for_not_restored(self, ax, vol, gid, timeoutS=SHORT_TIMEOUT_SEC):
         '''
         Wait for a restored snapshot specified of a gid to be removed
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        timeoutS :: int  - timeout [sec].
         '''
         self._wait_for_not_gid(ax, vol, gid, 'restored', timeoutS)
 
     def _wait_for_applied(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
         Wait for diffs older than a gid to be applied.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gid :: int      - generation id.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generation id.
+        timeoutS :: int  - timeout [sec].
         '''
         verify_u64(gid)
         self._wait_for_no_action(ax, vol, aaApply, timeoutS)
@@ -2575,11 +2616,11 @@ class Controller(object):
     def _wait_for_merged(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Wait for diffs in a gid range to be merged.
-        ax :: Server    - archive server.
-        vol :: str      - volume name.
-        gidB :: int     - begin generation id.
-        gidE :: int     - end generation id.
-        timeoutS :: int - timeout [sec].
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gidB :: int      - begin generation id.
+        gidE :: int      - end generation id.
+        timeoutS :: int  - timeout [sec].
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2595,7 +2636,7 @@ class Controller(object):
     def _prepare_backup(self, sx, vol, syncOpt=None):
         '''
         Prepare backup.
-        sx :: Server               - storage server.
+        sx :: ServerParams           - storage server.
         vol :: str                 - volume name.
         syncOpt :: SyncOpt or None - synchronization option.
         '''
@@ -2636,7 +2677,7 @@ class Controller(object):
 
     def _wait_for_no_action(self, s, vol, action, timeoutS=TIMEOUT_SEC):
         '''
-        s :: Server     - server.
+        s :: ServerParams - server.
         vol :: str      - volume name.
         action :: str   - action name.
         timeoutS :: int - timeout [sec].
@@ -2656,10 +2697,10 @@ class Controller(object):
     def _wait_for_resize(self, ax, vol, oldSizeMb, sizeMb):
         '''
         Wait for resize done.
-        ax :: Server  - archive server.
-        vol :: str    - volume name.
-        oldSizeMb :: int - old size [MiB].
-        sizeMb :: int - new size [MiB].
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        oldSizeMb :: int  - old size [MiB].
+        sizeMb :: int     - new size [MiB].
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
@@ -2676,9 +2717,9 @@ class Controller(object):
     def get_block_hash(self, ax, vol, gid, bulkSizeU='64K', scanSizeU=None):
         '''
         Get block hash for virtual
-        ax :: Server - archive server.
-        vol :: str - volume name.
-        gid :: int - generaion id.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: int       - generaion id.
         bulkSizeU :: str - bulk size hash calculation (with unit suffix)
         scanSizeU :: str - scanning size (with unit suffix).
                            It must not exceeds the device size.

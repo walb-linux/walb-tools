@@ -22,10 +22,13 @@ def D(name):
 def L(name):
     return workDir + name + '.log'
 
+s0c = ServerConnectionParam('s0', 'localhost', 10000, K_STORAGE)
+p0c = ServerConnectionParam('p0', 'localhost', 10100, K_PROXY)
+a0c = ServerConnectionParam('a0', 'localhost', 10200, K_ARCHIVE)
 
-s0 = Server('s0', 'localhost', 10000, K_STORAGE, binDir, D('s0'), L('s0'))
-p0 = Server('p0', 'localhost', 10100, K_PROXY,   binDir, D('p0'), L('p0'))
-a0 = Server('a0', 'localhost', 10200, K_ARCHIVE, binDir, D('a0'), L('a0'), 'vg0')
+s0 = ServerStartupParam(s0c, binDir, D('s0'), L('s0'))
+p0 = ServerStartupParam(p0c, binDir, D('p0'), L('p0'))
+a0 = ServerStartupParam(a0c, binDir, D('a0'), L('a0'), 'vg0')
 
 sLayout = ServerLayout([s0], [p0], [a0])
 sLayoutAll = ServerLayout([s0], [p0], [a0])

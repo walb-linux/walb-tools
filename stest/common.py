@@ -17,8 +17,8 @@ isDebug = None # bool
 TIMEOUT = None # int
 wdevSizeMb = None # int
 wdevL = None # [str]
-sLayout = None # [Server]
-sLayoutAll = None # [Server]
+sLayout = None # ServerLayout
+sLayoutAll = None # ServerLayout
 walbc = None # Controller
 maxFgTasks = None # int
 maxBgTasks = None # int
@@ -56,7 +56,7 @@ def setup_test(useTp):
 
 
 def wait_for_server_ready(s, timeoutS=10):
-    verify_type(s, Server)
+    verify_type(s, ServerParams)
     verify_type(timeoutS, int)
     t0 = time.time()
     while time.time() < t0 + timeoutS:
@@ -112,6 +112,7 @@ def stop_repeater(s):
 
 
 def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
+    verify_type(s, ServerStartupParam)
     wait_for_process_killed_on_port(s.port)
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, isDebug=isDebug, useRepeater=useRepeater,
@@ -128,8 +129,8 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
 
 def startup_list(sL, rL=None, rateMbps=0, delayMsec=0):
     '''
-    sL :: [Server] - server list to start up.
-    rL :: [Server] - server list to run repeater with.
+    sL :: [ServerStartupParam] - server list to start up.
+    rL :: [ServerStartupParam] - server list to run repeater with.
     rateMbps :: int
     delayMsec :: int
 
@@ -151,7 +152,7 @@ def startup_all():
 
 
 def get_pid(s):
-    verify_type(s, Server)
+    verify_type(s, ServerParams)
     return int(walbc.run_ctl(s, ['get', 'pid']))
 
 
@@ -204,7 +205,7 @@ def remove_persistent_data(s):
     '''
     Remove persistent data for scenario test.
     call shutdown() before calling this.
-    s :: Server
+    s :: ServerStartupParam
     '''
     shutil.rmtree(workDir + s.name)
     if s in sLayoutAll.archiveL:
@@ -354,12 +355,12 @@ def get_sha1_of_restorable(ax, vol, gid):
     '''
     Get sha1sum of restorable snapshot.
     This is for test.
-    ax :: Server  - archive server.
+    ax :: ServerParams  - archive server.
     vol :: str    - volume name.
     gid :: int    - generation id.
     return :: str - sha1sum.
     '''
-    verify_type(ax, Server)
+    verify_type(ax, ServerParams)
     verify_type(vol, str)
     verify_type(gid, int)
     walbc.restore(ax, vol, gid, TIMEOUT)
@@ -374,13 +375,13 @@ def restore_and_verify_sha1(msg, md0, ax, vol, gid):
     This is for test.
     msg :: str   - message for error.
     md0 :: str   - sha1sum.
-    ax :: Server - archive server.
+    ax :: ServerParams - archive server.
     vol :: str   - volume name.
     gid :: int   - generation id.
     '''
     verify_type(msg, str)
     verify_type(md0, str)
-    verify_type(ax, Server)
+    verify_type(ax, ServerParams)
     verify_type(vol, str)
     verify_type(gid, int)
     md1 = get_sha1_of_restorable(ax, vol, gid)
@@ -391,13 +392,13 @@ def verify_equal_restorable_list(msg, ax, ay, vol):
     '''
     Verify two restorable lists are the same.
     msg :: str   - message for error.
-    ax :: Server - first archive server.
-    ay :: Server - second archive server.
+    ax :: ServerParams - first archive server.
+    ay :: ServerParams - second archive server.
     vol :: str   - volume name.
     '''
     verify_type(msg, str)
-    verify_type(ax, Server)
-    verify_type(ay, Server)
+    verify_type(ax, ServerParams)
+    verify_type(ay, ServerParams)
     verify_type(vol, str)
 
     xL = walbc.get_restorable_gid(ax, vol)

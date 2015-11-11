@@ -840,8 +840,9 @@ def test_e10():
 
 
 def get_original_server(s):
-    return Server(s.name, s.address, get_orig_port(s.port),
-                  s.kind, s.binDir, s.dataDir, s.logPath, s.vg)
+    verify_type(s, ServerStartupParam)
+    sc = ServerConnectionParam(s.name, s.address, get_orig_port(s.port), s.kind)
+    return ServerStartupParam(sc, s.binDir, s.dataDir, s.logPath, s.vg, s.tp)
 
 
 def test_e11():
@@ -1128,7 +1129,7 @@ def try_to_send_dummy_diff_and_verify(
     verifyMsg - message to verify.
 
     '''
-    verify_type(ax, Server)
+    verify_type(ax, ServerParams)
     verify_server_kind(ax, [K_ARCHIVE])
     verify_type(vol, str)
     verify_type(sizeB, int)
@@ -1295,8 +1296,8 @@ def replace_archive(aDel, aAdd, volL, newServerLayout):
 def test_replace_archive_synchronizing(ax, ay, newServerLayout):
     '''
     Replace ax by ay.
-    ax :: Server        - must be synchronizing.
-    ay :: Server        - must not be started.
+    ax :: ServerParams   - must be synchronizing.
+    ay :: ServerParams   - must not be started.
     newServerLayout :: ServerLayout
     '''
     if not walbc.is_synchronizing(ax, VOL):
