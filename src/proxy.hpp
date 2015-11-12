@@ -159,6 +159,7 @@ struct ProxySingleton
     size_t maxConversionMb;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;
+    bool allowExec;
 
     /**
      * Writable and must be thread-safe.
@@ -1235,7 +1236,7 @@ inline void c2pGetServer(protocol::ServerParams &p)
 
 inline void c2pExecServer(protocol::ServerParams &p)
 {
-    protocol::runExecServer(p, gp.nodeId);
+    protocol::runExecServer(p, gp.nodeId, gp.allowExec);
 }
 
 const protocol::Str2ServerHandler proxyHandlerMap = {

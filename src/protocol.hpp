@@ -501,7 +501,7 @@ inline std::string runGetHostTypeClient(cybozu::Socket &sock, const std::string 
     return local::recvValue<std::string>(sock);
 }
 
-inline void runExecServer(ServerParams &p, const std::string &nodeId)
+inline void runExecServer(ServerParams &p, const std::string &nodeId, bool allowExec)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(nodeId, p.clientId);
@@ -510,6 +510,10 @@ inline void runExecServer(ServerParams &p, const std::string &nodeId)
     bool sendErr = true;
     try {
         const StrVec v = recvStrVec(p.sock, 0, FUNC);
+        if (!allowExec) {
+            pkt.write("exec command is not allowed");
+            return;
+        }
         const std::string res = cybozu::process::call(v);
         StrVec ret = cybozu::util::splitString(res, "\r\n");
         cybozu::util::removeEmptyItemFromVec(ret);

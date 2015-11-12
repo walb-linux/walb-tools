@@ -149,6 +149,7 @@ struct StorageSingleton
     size_t maxForegroundTasks;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;
+    bool allowExec;
 
     /**
      * Writable and must be thread-safe.
@@ -1260,7 +1261,7 @@ inline void c2sGetServer(protocol::ServerParams &p)
 
 inline void c2sExecServer(protocol::ServerParams &p)
 {
-    protocol::runExecServer(p, gs.nodeId);
+    protocol::runExecServer(p, gs.nodeId, gs.allowExec);
 }
 
 const protocol::Str2ServerHandler storageHandlerMap = {

@@ -53,6 +53,7 @@ struct Option
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&p.nodeId, hostName, "id", "node identifier");
         opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendBoolOpt(&p.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
         util::setKeepAliveOptions(opt, p.keepAliveParams);
 
         opt.appendHelp("h");

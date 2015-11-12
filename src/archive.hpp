@@ -96,6 +96,7 @@ struct ArchiveSingleton
     uint64_t fsyncIntervalSize;
     KeepAliveParams keepAliveParams;
     bool doAutoResize;
+    bool allowExec;
 
     /**
      * Writable and must be thread-safe.
@@ -2634,7 +2635,7 @@ inline void c2aGetServer(protocol::ServerParams &p)
 
 inline void c2aExecServer(protocol::ServerParams &p)
 {
-    protocol::runExecServer(p, ga.nodeId);
+    protocol::runExecServer(p, ga.nodeId, ga.allowExec);
 }
 
 const protocol::Str2ServerHandler archiveHandlerMap = {

@@ -117,6 +117,7 @@ def startup(s, useRepeater=False, rateMbps=0, delayMsec=0, wait=True):
     make_dir(workDir + s.name)
     args = get_server_args(s, sLayout, isDebug=isDebug, useRepeater=useRepeater,
                            maxFgTasks=maxFgTasks, maxBgTasks=maxBgTasks)
+    args.append('-allow-exec')
     if isDebug:
         print 'cmd=', to_str(args)
     if useRepeater:
