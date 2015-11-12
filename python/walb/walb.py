@@ -1930,6 +1930,17 @@ class Controller(object):
         '''
         printL(self.get_restorable(ax, vol, opt))
 
+    def get_restored_path(self, ax, vol, gid):
+        '''
+        Get restored volume path.
+        This function does not confirm existance of the volume.
+        ax :: ServerParams - archive server.
+        vol :: str         - volume name.
+        gid :: int         - generation id.
+        '''
+        vgName = self.run_ctl(ax, ['get', 'volume-group'])
+        return '/dev/' + vgName + '/' + RESTORED_VOLUME_PREFIX + vol + '_' + str(gid)
+
     def get_restored(self, ax, vol):
         '''
         Get restored gid list.
