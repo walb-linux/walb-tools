@@ -185,30 +185,6 @@ def get_server(name, sL):
     return ret[0]
 
 
-def get_restored_path(ax, vol, gid):
-    '''
-    ax :: Server  - archive server.
-    vol :: str    - volume name.
-    gid :: int    - generation id.
-    return :: str - restored path.
-    '''
-    verify_server_kind(ax, [K_ARCHIVE])
-    verify_type(vol, str)
-    verify_u64(gid)
-    return '/dev/' + ax.vg + '/' + RESTORED_VOLUME_PREFIX + vol + '_' + str(gid)
-
-
-def get_lv_path(ax, vol):
-    '''
-    ax :: Server  - archive server.
-    vol :: str    - volume name.
-    return :: str - lv path.
-    '''
-    verify_server_kind(ax, [K_ARCHIVE])
-    verify_type(vol, str)
-    return '/dev/' + ax.vg + '/' + BASE_VOLUME_PREFIX + vol
-
-
 ########################################
 # Constants for walb.
 ########################################
@@ -2259,10 +2235,7 @@ class Controller(object):
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
         verify_u64(gid)
-
-        path = get_restored_path(ax, vol, gid)
-        runCommand = self.get_run_remote_command(ax)
-        if exists_file(path, runCommand):
+        if gid in self.get_restored(ax, vol):
             raise Exception('restore: alreay restored', ax.name, vol, gid)
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)

@@ -432,3 +432,29 @@ def print_action_info(action, info):
     verify_type(action, str)
     verify_type(info, str)
     print '++++++++++++++++++++++++++++++++++++++++', action, info
+
+
+def get_restored_path(ax, vol, gid):
+    '''
+    ax :: Server  - archive server.
+    vol :: str    - volume name.
+    gid :: int    - generation id.
+    return :: str - restored path.
+    '''
+    verify_type(ax, ServerStartupParam)
+    verify_server_kind(ax, [K_ARCHIVE])
+    verify_type(vol, str)
+    verify_u64(gid)
+    return '/dev/' + ax.vg + '/' + RESTORED_VOLUME_PREFIX + vol + '_' + str(gid)
+
+
+def get_lv_path(ax, vol):
+    '''
+    ax :: Server  - archive server.
+    vol :: str    - volume name.
+    return :: str - lv path.
+    '''
+    verify_type(ax, ServerStartupParam)
+    verify_server_kind(ax, [K_ARCHIVE])
+    verify_type(vol, str)
+    return '/dev/' + ax.vg + '/' + BASE_VOLUME_PREFIX + vol
