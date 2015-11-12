@@ -445,6 +445,8 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {baseTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get base(meta state) of a volume."}},
         {volSizeTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get volume size [logical block]."}},
         {progressTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get progress of full/hash backup/replication [logical block]."}},
+        {volumeGroupTN, {protocol::StringType, verifyNoneParam, "get volume group name"}},
+        {thinpoolTN, {protocol::StringType, verifyNoneParam, "get thinpool name (may be emtpy string)"}},
     };
     return m;
 }

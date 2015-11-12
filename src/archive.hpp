@@ -1668,6 +1668,18 @@ inline void getProgress(protocol::GetCommandParams &p)
     p.logger.debug() << "get progress succeeded" << volId << progressLb;
 }
 
+inline void getVolumeGroup(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, ga.volumeGroup);
+    p.logger.debug() << "get volume-group succeeded";
+}
+
+inline void getThinpool(protocol::GetCommandParams &p)
+{
+    protocol::sendValueAndFin(p, ga.thinpool);
+    p.logger.debug() << "get thinpool succeeded";
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -2611,6 +2623,8 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { baseTN, archive_local::getBase },
     { volSizeTN, archive_local::getVolSize },
     { progressTN, archive_local::getProgress },
+    { volumeGroupTN, archive_local::getVolumeGroup },
+    { thinpoolTN, archive_local::getThinpool },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)
