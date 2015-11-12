@@ -501,6 +501,16 @@ inline std::string runGetHostTypeClient(cybozu::Socket &sock, const std::string 
     return local::recvValue<std::string>(sock);
 }
 
+#ifdef DISABLE_EXEC_PROTOCOL
+inline void runExecServer(ServerParams &p, const std::string &, bool)
+{
+    const char *const FUNC = __func__;
+    packet::Packet pkt(p.sock);
+
+    recvStrVec(p.sock, 0, FUNC);
+    pkt.writeFin("exec command is not allowed");
+}
+#else
 inline void runExecServer(ServerParams &p, const std::string &nodeId, bool allowExec)
 {
     const char *const FUNC = __func__;
@@ -524,5 +534,6 @@ inline void runExecServer(ServerParams &p, const std::string &nodeId, bool allow
         if (sendErr) pkt.write(e.what());
     }
 }
+#endif
 
 }} // namespace walb::protocol
