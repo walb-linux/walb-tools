@@ -1247,6 +1247,9 @@ inline StrVec getAllStatusAsStrVec()
     v.push_back(fmt("nodeId %s", ga.nodeId.c_str()));
     v.push_back(fmt("baseDir %s", ga.baseDirStr.c_str()));
     v.push_back(fmt("volumeGroup %s", ga.volumeGroup.c_str()));
+    if (!ga.thinpool.empty()) {
+        v.push_back(fmt("thinpool %s", ga.thinpool.c_str()));
+    }
     v.push_back(fmt("maxForegroundTasks %zu", ga.maxForegroundTasks));
     v.push_back(fmt("socketTimeout %zu", ga.socketTimeout));
     v.push_back(fmt("keepAlive %s", ga.keepAliveParams.toStr().c_str()));
