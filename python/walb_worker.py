@@ -320,7 +320,8 @@ class Worker:
             gidInfo = getLatestGidInfoBefore(curTime - self.cfg.apply_.keep_period, infoL)
             if not gidInfo:
                 continue
-            size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gidInfo.gid)
+            gid = gidInfo.gid
+            size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gid)
             ls.append((size, vol, gid))
         if ls:
             ls.sort(key=lambda x : x[0])
