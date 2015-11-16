@@ -13,8 +13,8 @@ ifeq ($(PROF),1)
 OPT_FLAGS += -pg
 else
 endif
-ifeq ($(DISABLE_EXEC_PROTOCOL),1)
-OPT_FLAGS += -DDISABLE_EXEC_PROTOCOL
+ifeq ($(ENABLE_EXEC_PROTOCOL),1)
+OPT_FLAGS += -DENABLE_EXEC_PROTOCOL
 endif
 
 INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src

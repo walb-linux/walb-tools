@@ -57,7 +57,9 @@ struct Option
         opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "Default full scan throughput [bytes/s]");
+#ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&s.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
+#endif
         util::setKeepAliveOptions(opt, s.keepAliveParams);
 
         opt.appendHelp("h");
