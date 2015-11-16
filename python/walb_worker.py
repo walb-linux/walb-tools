@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, signal, time, yaml, datetime, collections
+import sys, signal, time, yaml, datetime, collections, os
 from walb.walb import *
 
 isDebug = False # True
@@ -295,13 +295,13 @@ g_binDir = ''
 g_dirName = ''
 g_logName = ''
 def makeArchiveServer(name, addr, port):
-    return Server(name, addr, port, K_ARCHIVE, g_binDir, g_dirName, g_logName, '')
+    return ServerConnectionParam(name, addr, port, K_ARCHIVE, g_binDir, g_dirName, g_logName, '')
 
 class Worker:
     def _createSeverLayout(self, cfg):
         self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
-        s0 = Server('s0', '', 0, K_STORAGE, g_binDir, g_dirName, g_logName)
-        p0 = Server('p0', '', 0, K_PROXY, g_binDir, g_dirName, g_logName)
+        s0 = ServerConnectionParam('s0', '', 0, K_STORAGE, g_binDir, g_dirName, g_logName)
+        p0 = ServerConnectionParam('p0', '', 0, K_PROXY, g_binDir, g_dirName, g_logName)
         return ServerLayout([s0], [p0], [self.a0])
 
     def __init__(self, configName):
