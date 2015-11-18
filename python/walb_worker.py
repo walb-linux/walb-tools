@@ -295,13 +295,13 @@ g_binDir = ''
 g_dirName = ''
 g_logName = ''
 def makeArchiveServer(name, addr, port):
-    return ServerConnectionParam(name, addr, port, K_ARCHIVE, g_binDir, g_dirName, g_logName, '')
+    return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
     def _createSeverLayout(self, cfg):
         self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
-        s0 = ServerConnectionParam('s0', '', 0, K_STORAGE, g_binDir, g_dirName, g_logName)
-        p0 = ServerConnectionParam('p0', '', 0, K_PROXY, g_binDir, g_dirName, g_logName)
+        s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
+        p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
         return ServerLayout([s0], [p0], [self.a0])
 
     def __init__(self, configName):
@@ -342,7 +342,7 @@ class Worker:
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
             r = getMergeGidRange(diffL)
             if r:
-                return Task("merge", vol, self.a0, r)
+                return Task("merge", vol, (self.a0, r[0], r[1]))
         return None
 
     def _selectMerge1Task(self, volL, numDiffL):
