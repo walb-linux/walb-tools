@@ -304,12 +304,12 @@ class Worker:
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
         return ServerLayout([s0], [p0], [self.a0])
 
-    def __init__(self, configName):
-        verify_type(configName, str)
+    def __init__(self, cfg, Ctl=Controller):
+        verify_type(cfg, Config)
         setupSignal()
-        self.cfg = loadConfig(configName)
+        self.cfg = cfg
         self.serverLayout = self._createSeverLayout(self.cfg)
-        self.walbc = Controller(self.cfg.general.walbc_path, self.serverLayout, isDebug)
+        self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
         self.doneReplServerList = collections.defaultdict()
         self.mergeVol2ts = collections.defaultdict()
 
@@ -438,7 +438,8 @@ def main():
         print "set -f option"
         usage()
 
-    w = Worker(configName)
+    cfg = loadConfig(configName)
+    w = Worker(cfg)
     task = w.selectTask()
     print task
 

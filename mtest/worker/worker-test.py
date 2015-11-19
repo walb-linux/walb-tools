@@ -4,6 +4,76 @@ import sys
 from walb.walb import *
 from walb_worker import *
 
+class ControllerMock:
+    def __init__(self, path, layout, isDebug=False):
+        '''
+            mock of walb.Controller
+        '''
+        self.path = path
+        self.layout = layout
+        self.isDebug = isDebug
+    def get_restorable(self, ax, vol, opt=''):
+        '''
+        Get restorable gid list.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        opt :: str       - you can specify 'all'.
+        return :: [GidInfo] - gid info list.
+        '''
+        return []
+    def get_total_diff_size(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Get total wdiff size.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: int      - gid range begin.
+        gid1 :: int      - gid range end.
+        return :: int    - total size in the gid range [byte].
+        '''
+        return 0
+    def get_applicable_diff_list(self, ax, vol, gid=UINT64_MAX):
+        '''
+        Get wdiff to list to apply.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid :: u64       - target gid.
+        return :: [Diff] - wdiff information list managed by the archive server.
+        '''
+        return []
+    def get_state(self, s, vol):
+        '''
+        Get state of a volume.
+        s :: ServerParams
+        vol :: str    - volume name.
+        return :: str - state.
+        '''
+        return ""
+    def get_vol_list(self, s):
+        '''
+        Get volume list.
+        s :: ServerParams
+        return :: [str] - volume name list.
+        '''
+        return []
+    def get_base(self, ax, vol):
+        '''
+        Get base meta state of a volume in an archive server.
+        ax :: ServerParams    - archive server.
+        vol :: str          - volume name.
+        return :: MetaState - meta state.
+        '''
+        return ""
+    def get_num_diff(self, ax, vol, gid0=0, gid1=UINT64_MAX):
+        '''
+        Get number of wdiff files for a volume.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        gid0 :: int      - gid range begin.
+        gid1 :: int      - gid range end.
+        return :: int    - number of wdiffs in the gid range.
+        '''
+        return 0
+
 class TestParsePERIOD(unittest.TestCase):
     def test(self):
         d = {
@@ -101,6 +171,15 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.compress, ('gzip', 0, 0))
         self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
         self.assertEqual(r.bulk_size, 400)
+
+class TestWoker(unittest.TestCase):
+    def test(self):
+        d = yaml.load(configStr)
+        cfg = Config()
+        cfg.set(d)
+        w = Worker(cfg, ControllerMock)
+        task = w.selectTask()
+        print task
 
 if __name__ == '__main__':
     unittest.main()
