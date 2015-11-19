@@ -313,7 +313,17 @@ class Worker:
         self.doneReplServerList = collections.defaultdict()
         self.mergeVol2ts = collections.defaultdict()
 
-    def _getVolGidHavingMaxDiff(self, volL, curTime):
+    def _selectApplyTask1(self, volL):
+        for vol in volL:
+            ms = self.walbc.get_base(self.a0, vol)
+            if ms.is_applying():
+                return Task("apply", vol, self.a0, (ms.B.gidB,))
+        return None
+
+    def _selectApplyTask2(self, volL, curTime):
+        '''
+            get (vol, gid) having max diff
+        '''
         ls = []
         for vol in volL:
             infoL = self.walbc.get_restorable(self.a0, vol, 'all')
@@ -325,9 +335,17 @@ class Worker:
             ls.append((size, vol, gid))
         if ls:
             ls.sort(key=lambda x : x[0])
-            return ls[-1]
+            (size, vol, gid) = ls[-1]
+            return Task("apply", vol, self.a0, (gid,))
         else:
             return None
+
+    def getNumDiffList(self, volL):
+        numDiffL = []
+        for vol in volL:
+            n = self.walbc.get_num_diff(self.a0, vol)
+            numDiffL.append(n)
+        return numDiffL
 
     def _selectMaxDiffNumMergeTask(self, ls):
         """
@@ -345,14 +363,14 @@ class Worker:
                 return Task("merge", vol, (self.a0, r[0], r[1]))
         return None
 
-    def _selectMerge1Task(self, volL, numDiffL):
+    def _selectMergeTask1(self, volL, numDiffL):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             if n >= self.cfg.merge.threshold_nr:
                 ls.append((n, vol))
         return self._selectMaxDiffNumMergeTask(ls)
 
-    def _selectMerge2Task(self, volL, numDiffL, curTime):
+    def _selectMergeTask2(self, volL, numDiffL, curTime):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             ts = self.mergeVol2ts[vol]
@@ -388,23 +406,18 @@ class Worker:
 
     def selectTask(self):
         curTime = getCurrentTime()
-        # stelp 1
         volL = self.walbc.get_vol_list(self.a0)
-        for vol in volL:
-            ms = self.walbc.get_base(self.a0, vol)
-            if ms.is_applying():
-                return Task("apply", vol, self.a0, (ms.B.gidB,))
-        # step 2
-        t = self._getVolGidHavingMaxDiff(volL, curTime)
+        # stelp 1
+        t = self._selectApplyTask1(volL)
         if t:
-            (size, vol, gid) = t
-            return Task("apply", vol, self.a0, (gid,))
+            return t
+        # step 2
+        t = self._selectApplyTask2(volL, curTime)
+        if t:
+            return t
         # step 3
-        numDiffL = []
-        for vol in volL:
-            n = self.walbc.get_num_diff(self.a0, vol)
-            numDiffL.append(n)
-        t = self._selectMerge1Task(volL, numDiffL)
+        numDiffL = self.getNumDiffList(volL)
+        t = self._selectMergeTask1(volL, numDiffL)
         if t:
             return t
         # step 4
@@ -412,7 +425,8 @@ class Worker:
         if t:
             return t
         # step 5
-        t = self._selectMerge2Task(volL, numDiffL, curTime)
+        t = self._selectMergeTask2(volL, numDiffL, curTime)
+        return t
 
 
 def usage():
