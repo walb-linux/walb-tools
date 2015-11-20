@@ -124,12 +124,12 @@ utest/%.depend: utest/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 
-PYTHON_SOURCES0 = python/walb/walb.py stest/config0.py stest/stest_util.py stest/repeater.py stest/common.py stest/scenario0.py
-PYTHON_SOURCES1 = python/walb/walb.py stest/config1.py stest/stest_util.py stest/repeater.py stest/common.py stest/scenario1.py
+PYTHON_SOURCES0 = python/walblib/__init__.py stest/config0.py stest/stest_util.py stest/repeater.py stest/common.py stest/scenario0.py
+PYTHON_SOURCES1 = python/walblib/__init__.py stest/config1.py stest/stest_util.py stest/repeater.py stest/common.py stest/scenario1.py
 
 pylint:
-	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES0)
-	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python/walb')" $(PYTHON_SOURCES1)
+	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python')" $(PYTHON_SOURCES0)
+	pylint -E --rcfile=/dev/null -f colorized --init-hook="sys.path.insert(0, 'python')" $(PYTHON_SOURCES1)
 
 stest0:
 	$(MAKE) pylint

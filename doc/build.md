@@ -77,7 +77,7 @@ Install python package if necessary:
 > cd walb-tools.git/python
 > sudo python setup.py install
 ```
-You can use `walb-tools.git/python/walb/walb.py` directly.
+You can use `walb-tools.git/python/walblib/__init__.py` directly.
 
 
 ## Environment

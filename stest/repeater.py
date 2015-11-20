@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.insert(0, './python/walb')
-from walb import *
+sys.path.insert(0, './python')
+from walblib import *
 
 import os, socket, time
 from contextlib import closing

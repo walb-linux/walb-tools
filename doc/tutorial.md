@@ -39,7 +39,7 @@ wdiff は archive に転送される。
 * PC 1台で walb-storage, walb-proxy, walb-archive を動かす。
   * これらは単なる exeなので デーモンとして起動するときは別途設定が必要。
   * walbc コマンドを使ってこれらのプロセスと通信し操作を行う。
-  * 更に python/walb/walb.py を使うとより抽象度の高い操作ができる。
+  * 更に python/walblib/__init__.py を使うとより抽象度の高い操作ができる。
 * サービス構成
   * s0(storage) : port 10000
   * p0(proxy) : port 10100
@@ -147,8 +147,8 @@ wdiff は archive に転送される。
 ```
 #!/usr/bin/env python
 import sys
-sys.path.append('./python/walb/')
-from walb import *
+sys.path.append('./python')
+from walblib import *
 
 binDir = '/home/shigeo/Program/walb-tools/binsrc/'
 wdevcPath = binDir + 'wdevc'

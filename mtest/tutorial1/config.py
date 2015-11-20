@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.append('./python/walb/')
-from walb import *
+sys.path.append('./python')
+from walblib import *
 
 binDir = './binsrc/'
 wdevcPath = binDir + 'wdevc'

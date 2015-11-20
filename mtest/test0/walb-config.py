@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.insert(0, os.getcwd() + '/../walb-tools/python')
 
-from walb.walb import *
+from walblib import *
 
 binDir = '/home/hoshino/walb-tools/binsrc/'
 wdevcPath = binDir + 'wdevc'

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.insert(0, './python/walb')
+sys.path.insert(0, './python')
 import os
-from walb import *
+from walblib import *
 
 
 isDebug = False

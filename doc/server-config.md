@@ -24,7 +24,7 @@ The following is typical command-line options for each kind of servers:
 ```
 
 For detail options, use `-h` option of server executables,
-or see `get_server_args()` function of `python/walb/walb.py`.
+or see `get_server_args()` function of `python/walblib/__init__.py`.
 
 If you use thin provisioning (dm-thinp), add `-tp THINPOOL_NAME` option to walb-archive command line.
 
@@ -70,7 +70,7 @@ This will be used to control your backup group also.
 ```python
 #!/usr/bin/env python
 
-from walb.walb import *
+from walblib import *
 
 binDir = '/usr/local/bin/'
 wdevcPath = binDir + 'wdevc'
