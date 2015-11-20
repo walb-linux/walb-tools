@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import unittest, yaml
 import sys
-from walb.walb import *
+from walblib import *
 from walb_worker import *
 
 class ControllerMock:

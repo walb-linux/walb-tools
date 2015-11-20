@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys, signal, time, yaml, datetime, collections, os
-from walb.walb import *
+from walblib import *
 
 isDebug = False # True
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
