@@ -290,6 +290,17 @@ class Task:
             return "Task merge ax=%s vol=%s gid=(%d, %d)" % (self.ax, self.vol, self.gidB, self.gidE)
         if self.name == "repl":
             return "Task repl vol=%s src=%s dst=%s" % (self.vol, self.src, self.dst)
+    def __eq__(self, rhs):
+        if self.name != rhs.name:
+            return false
+        if self.name == "apply":
+            return (self.ax, self.vol, self.gid) == (rhs.ax, rhs.vol, rhs.gid)
+        if self.name == "merge":
+            return (self.ax, self.vol, self.gidB, self.gidE) == (rhs.ax, rhs.vol, rhs.gidB, rhs.gidE)
+        if self.name == "repl":
+            return (self.vol, self.src, self.dst) == (rhs.vol, rhs.src, rhs.dst)
+    def __ne__(self, rhs):
+        return not self.__eq__(rhs)
 
 g_binDir = ''
 g_dirName = ''
@@ -317,7 +328,7 @@ class Worker:
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
             if ms.is_applying():
-                return Task("apply", vol, self.a0, (ms.B.gidB,))
+                return Task("apply", vol, (self.a0, ms.B.gidB))
         return None
 
     def _selectApplyTask2(self, volL, curTime):

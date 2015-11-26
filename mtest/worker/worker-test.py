@@ -4,6 +4,8 @@ import sys
 from walblib import *
 from walb_worker import *
 
+VOL = 'vol0'
+
 class ControllerMock:
     def __init__(self, path, layout, isDebug=False):
         '''
@@ -54,7 +56,7 @@ class ControllerMock:
         s :: ServerParams
         return :: [str] - volume name list.
         '''
-        return []
+        return [VOL]
     def get_base(self, ax, vol):
         '''
         Get base meta state of a volume in an archive server.
@@ -172,14 +174,51 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
         self.assertEqual(r.bulk_size, 400)
 
+class TestSnapshot(unittest.TestCase):
+    def test(self):
+        self.assertEqual(Snapshot(2, 3), Snapshot(2, 3))
+        self.assertTrue(Snapshot(2, 3) < Snapshot(3, 3))
+        self.assertTrue(Snapshot(2, 3) < Snapshot(2, 4))
+        self.assertFalse(Snapshot(2, 3) < Snapshot(1, 3))
+
+class TestMetaState(unittest.TestCase):
+    def test(self):
+        self.assertEqual(MetaState(Snapshot(2, 3)), MetaState(Snapshot(2, 3)))
+        self.assertTrue(MetaState(Snapshot(2, 3), Snapshot(4, 5)) > MetaState(Snapshot(2, 3)))
+        self.assertTrue(MetaState(Snapshot(2, 3)) < MetaState(Snapshot(2, 3), Snapshot(4, 5)))
+        self.assertTrue(MetaState(Snapshot(2, 3)) < MetaState(Snapshot(2, 4)))
+        self.assertTrue(MetaState(Snapshot(2, 3), Snapshot(3, 4)) < MetaState(Snapshot(2, 3), Snapshot(3, 5)))
+
+
 class TestWoker(unittest.TestCase):
     def test(self):
         d = yaml.load(configStr)
         cfg = Config()
         cfg.set(d)
         w = Worker(cfg, ControllerMock)
-        task = w.selectTask()
-        print task
+#        task = w.selectTask()
+        volL = w.walbc.get_vol_list(w.a0)
+        self.assertEqual(Snapshot(2, 3), Snapshot(2, 3))
+
+        def test_selectApplyTask1():
+            pf = w.walbc.get_base
+            i = 0
+            tbl = [
+                (MetaState(Snapshot()), None),
+                (MetaState(Snapshot(2, 2)), None),
+                (MetaState(Snapshot(2, 4)), None),
+                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), Task("apply", VOL, (w.a0, 2))),
+            ]
+            def get_base(a0, vol):
+                return tbl[i][0]
+            w.walbc.get_base = get_base
+            for t in tbl:
+                self.assertEqual(w._selectApplyTask1(volL), tbl[i][1])
+                i = i + 1
+            w.walbc.get_base = pf
+
+        test_selectApplyTask1()
+
 
 if __name__ == '__main__':
     unittest.main()
