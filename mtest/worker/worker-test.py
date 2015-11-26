@@ -198,10 +198,9 @@ class TestWoker(unittest.TestCase):
         w = Worker(cfg, ControllerMock)
 #        task = w.selectTask()
         volL = w.walbc.get_vol_list(w.a0)
-        self.assertEqual(Snapshot(2, 3), Snapshot(2, 3))
 
         def test_selectApplyTask1():
-            pf = w.walbc.get_base
+            keep = w.walbc.get_base
             i = 0
             tbl = [
                 (MetaState(Snapshot()), None),
@@ -215,7 +214,7 @@ class TestWoker(unittest.TestCase):
             for t in tbl:
                 self.assertEqual(w._selectApplyTask1(volL), tbl[i][1])
                 i = i + 1
-            w.walbc.get_base = pf
+            w.walbc.get_base = keep
 
         test_selectApplyTask1()
 
