@@ -189,6 +189,27 @@ class TestMetaState(unittest.TestCase):
         self.assertTrue(MetaState(Snapshot(2, 3)) != MetaState(Snapshot(2, 4)))
 
 
+class TestGetLatestGidInfoBefore(unittest.TestCase):
+    def test(self):
+        tbl = [
+            '1 2015-11-16T07:32:04',
+            '2 2015-11-16T07:32:08',
+            '3 2015-11-16T07:32:11',
+        ]
+        expectedTbl = [
+            ('2015-11-16T07:32:00', None),
+            ('2015-11-16T07:32:04', None),
+            ('2015-11-16T07:32:05', None),
+            ('2015-11-16T07:32:08', GidInfo('2 2015-11-16T07:32:08')),
+            ('2015-11-16T07:32:11', GidInfo('3 2015-11-16T07:32:11')),
+            ('2015-11-16T07:32:12', GidInfo('3 2015-11-16T07:32:11')),
+        ]
+        infoL = map(GidInfo, tbl)
+        for (ts, expected) in expectedTbl:
+            t = str_to_datetime(ts, DatetimeFormatPretty)
+            r = getLatestGidInfoBefore(t, infoL)
+            self.assertEqual(r, expected)
+
 class TestWoker(unittest.TestCase):
     def test(self):
         d = yaml.load(configStr)

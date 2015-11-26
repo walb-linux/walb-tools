@@ -386,7 +386,7 @@ class Snapshot(object):
     def __eq__(self, rhs):
         return self.gidB == rhs.gidB and self.gidE == rhs.gidE
     def __neq__(self, rhs):
-        return not self.__eq__(rhs)
+        return not(self == rhs)
 
 
 def create_snapshot_from_str(s):
@@ -547,6 +547,10 @@ class GidInfo(object):
         self.ts = str_to_datetime(p[1], DatetimeFormatPretty)
     def __str__(self):
         return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
+    def __eq__(self, rhs):
+        return self.gid == rhs.gid and self.ts == rhs.ts
+    def __neq__(self, rhs):
+        return not(self == rhs)
 
 
 class CompressOpt(object):
