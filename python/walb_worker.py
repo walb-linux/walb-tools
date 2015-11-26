@@ -418,7 +418,7 @@ class Worker:
     def selectTask(self):
         curTime = getCurrentTime()
         volL = self.walbc.get_vol_list(self.a0)
-        # stelp 1
+        # step 1
         t = self._selectApplyTask1(volL)
         if t:
             return t
