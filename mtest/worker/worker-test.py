@@ -179,15 +179,14 @@ class TestSnapshot(unittest.TestCase):
         self.assertEqual(Snapshot(2, 3), Snapshot(2, 3))
         self.assertTrue(Snapshot(2, 3) != Snapshot(3, 3))
         self.assertTrue(Snapshot(2, 3) != Snapshot(2, 4))
-        self.assertTrue(Snapshot(2, 3) != Snapshot(1, 3))
 
 class TestMetaState(unittest.TestCase):
     def test(self):
         self.assertEqual(MetaState(Snapshot(2, 3)), MetaState(Snapshot(2, 3)))
+        self.assertEqual(MetaState(Snapshot(2, 3), Snapshot(3, 4)), MetaState(Snapshot(2, 3), Snapshot(3, 4)))
         self.assertTrue(MetaState(Snapshot(2, 3), Snapshot(4, 5)) != MetaState(Snapshot(2, 3)))
         self.assertTrue(MetaState(Snapshot(2, 3)) != MetaState(Snapshot(2, 3), Snapshot(4, 5)))
         self.assertTrue(MetaState(Snapshot(2, 3)) != MetaState(Snapshot(2, 4)))
-        self.assertTrue(MetaState(Snapshot(2, 3), Snapshot(3, 4)) != MetaState(Snapshot(2, 3), Snapshot(3, 5)))
 
 
 class TestWoker(unittest.TestCase):
