@@ -116,18 +116,6 @@ struct MetaSnap
     bool operator!=(const MetaSnap &rhs) const {
         return gidB != rhs.gidB || gidE != rhs.gidE;
     }
-    bool operator<(const MetaSnap &rhs) const {
-        return std::make_pair(gidB, gidE) < std::make_pair(rhs.gidB, rhs.gidE);
-    }
-    bool operator<=(const MetaSnap &rhs) const {
-        return std::make_pair(gidB, gidE) <= std::make_pair(rhs.gidB, rhs.gidE);
-    }
-    bool operator>(const MetaSnap &rhs) const {
-        return std::make_pair(gidB, gidE) > std::make_pair(rhs.gidB, rhs.gidE);
-    }
-    bool operator>=(const MetaSnap &rhs) const {
-        return std::make_pair(gidB, gidE) >= std::make_pair(rhs.gidB, rhs.gidE);
-    }
     void set(uint64_t gid) {
         gidB = gid;
         gidE = gid;
@@ -212,18 +200,6 @@ struct MetaDiff
     }
     bool operator!=(const MetaDiff &rhs) const {
         return snapB != rhs.snapB || snapE != rhs.snapE;
-    }
-    bool operator<(const MetaDiff &rhs) const {
-        return std::make_pair(snapB, snapE) < std::make_pair(rhs.snapB, rhs.snapE);
-    }
-    bool operator<=(const MetaDiff &rhs) const {
-        return std::make_pair(snapB, snapE) <= std::make_pair(rhs.snapB, rhs.snapE);
-    }
-    bool operator>(const MetaDiff &rhs) const {
-        return std::make_pair(snapB, snapE) > std::make_pair(rhs.snapB, rhs.snapE);
-    }
-    bool operator>=(const MetaDiff &rhs) const {
-        return std::make_pair(snapB, snapE) >= std::make_pair(rhs.snapB, rhs.snapE);
     }
     bool isClean() const {
         return snapB.isClean() && snapE.isClean();
