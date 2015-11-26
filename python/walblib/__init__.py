@@ -383,6 +383,12 @@ class Snapshot(object):
             return "|%d,%d|" % (self.gidB, self.gidE)
     def isDirty(self):
         return self.gidB != self.gidE
+    def __cmp__(self, rhs):
+        if self.gidB < rhs.gidB:
+            return -1
+        if self.gidB > rhs.gidB:
+            return 1
+        return self.gidE - rhs.gidE
 
 
 def create_snapshot_from_str(s):
@@ -499,6 +505,18 @@ class MetaState(object):
             return '<%s>-%s' % (str(self.B), tsStr)
         else:
             return '<%s-->%s>-%s' % (str(self.B), str(self.E), tsStr)
+
+    def __cmp__(self, rhs):
+        c = self.B.__cmp__(rhs.B)
+        if c != 0:
+            return c
+        if self.E is None:
+            if rhs.E is None:
+                return 0
+            return -1
+        if rhs.E is None:
+            return 1
+        return self.E.__cmp__(rhs.E)
 
 
 def create_meta_state_from_str(s):
