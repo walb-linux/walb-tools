@@ -408,24 +408,10 @@ def create_snapshot_from_str(s):
     create snapshot from str
     s :: str such as |num| or |num1,num2|
     '''
-    '''
     snap = Snapshot()
     snap.fromStr(s)
     return snap
-    '''
-    snap = Snapshot()
-    verify_type(s, str)
-    if s[0] != '|' or s[-1] != '|':
-        raise Exception('Snapshot:bad format', s)
-    sp = s[1:-1].split(',')
-    if len(sp) == 1:
-        snap.gidB = snap.gidE = int(sp[0])
-    elif len(sp) == 2:
-        snap.gidB = int(sp[0])
-        snap.gidE = int(sp[1])
-    else:
-        raise Exception('Snapshot:bad range', s)
-    return snap
+
 
 class Diff(object):
     '''
@@ -496,27 +482,9 @@ def create_diff_from_str(s):
     s :: str
     return :: Diff
     '''
-    verify_type(s, str)
-    d = Diff()
-    (ss, mc, tsStr, sizeStr) = s.split(' ')
-    (bStr, eStr) = ss.split('-->')
-    d.B = create_snapshot_from_str(bStr)
-    d.E = create_snapshot_from_str(eStr)
-    if mc[0] == 'M':
-        d.isMergeable = True
-    elif mc[0] == '-':
-        d.isMergeable = False
-    else:
-        raise Exception('Diff:bad isMergeable', s)
-    if mc[1] == 'C':
-        d.isCompDiff = True
-    elif mc[1] == '-':
-        d.isCompDiff = False
-    else:
-        raise Exception('Diff:bad isCompDiff', s)
-    d.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
-    d.dataSize = int(sizeStr)
-    return d
+    di = Diff()
+    di.fromStr(s)
+    return di
 
 
 class MetaState(object):
