@@ -381,6 +381,21 @@ class Snapshot(object):
             return "|%d|" % self.gidB
         else:
             return "|%d,%d|" % (self.gidB, self.gidE)
+    def fromStr(self, s):
+        '''
+        s :: str
+        '''
+        verify_type(s, str)
+        if s[0] != '|' or s[-1] != '|':
+            raise Exception('Snapshot:bad format', s)
+        sp = s[1:-1].split(',')
+        if len(sp) == 1:
+            self.gidB = self.gidE = int(sp[0])
+        elif len(sp) == 2:
+            self.gidB = int(sp[0])
+            self.gidE = int(sp[1])
+        else:
+            raise Exception('Snapshot:bad range', s)
     def isDirty(self):
         return self.gidB != self.gidE
     def __eq__(self, rhs):
@@ -441,6 +456,30 @@ class Diff(object):
         return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
     def isDirty(self):
         return self.B.isDirty() or self.E.isDirty()
+
+    def fromStr(self, s):
+        '''
+        s :: str
+        '''
+        verify_type(s, str)
+        (ss, mc, tsStr, sizeStr) = s.split(' ')
+        (bStr, eStr) = ss.split('-->')
+        self.B.fromStr(bStr)
+        self.E.fromStr(eStr)
+        if mc[0] == 'M':
+            self.isMergeable = True
+        elif mc[0] == '-':
+            self.isMergeable = False
+        else:
+            raise Exception('Diff:bad isMergeable', s)
+        if mc[1] == 'C':
+            self.isCompDiff = True
+        elif mc[1] == '-':
+            self.isCompDiff = False
+        else:
+            raise Exception('Diff:bad isCompDiff', s)
+        self.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
+        self.dataSize = int(sizeStr)
 
 
 def create_diff_from_str(s):
