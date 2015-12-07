@@ -408,8 +408,23 @@ def create_snapshot_from_str(s):
     create snapshot from str
     s :: str such as |num| or |num1,num2|
     '''
+    '''
     snap = Snapshot()
     snap.fromStr(s)
+    return snap
+    '''
+    snap = Snapshot()
+    verify_type(s, str)
+    if s[0] != '|' or s[-1] != '|':
+        raise Exception('Snapshot:bad format', s)
+    sp = s[1:-1].split(',')
+    if len(sp) == 1:
+        snap.gidB = snap.gidE = int(sp[0])
+    elif len(sp) == 2:
+        snap.gidB = int(sp[0])
+        snap.gidE = int(sp[1])
+    else:
+        raise Exception('Snapshot:bad range', s)
     return snap
 
 class Diff(object):
@@ -451,6 +466,7 @@ class Diff(object):
         return self.B == rhs.B and self.E == rhs.E and self.isMergeable == rhs.isMergeable and self.isCompDiff == rhs.isCompDiff and self.ts == rhs.ts and self.dataSize == rhs.dataSize
     def __ne__(self, rhs):
         return not(self == rhs)
+    '''
     def fromStr(self, s):
         verify_type(s, str)
         (ss, mc, tsStr, sizeStr) = s.split(' ')
@@ -484,8 +500,8 @@ def create_diff_from_str(s):
     d = Diff()
     (ss, mc, tsStr, sizeStr) = s.split(' ')
     (bStr, eStr) = ss.split('-->')
-    d.B.fromStr(bStr)
-    d.E.fromStr(eStr)
+    d.B = create_snapshot_from_str(bStr)
+    d.E = create_snapshot_from_str(eStr)
     if mc[0] == 'M':
         d.isMergeable = True
     elif mc[0] == '-':
@@ -500,26 +516,6 @@ def create_diff_from_str(s):
         raise Exception('Diff:bad isCompDiff', s)
     d.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
     d.dataSize = int(sizeStr)
-
-    dd = create_diff_from_str_ok(s)
-    if str(d) != str(dd):
-        print "ERR1", dd
-        print "ERR2", d
-
-    return dd
-
-def create_diff_from_str_ok(s):
-    p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
-    m = p.match(s)
-    if not m:
-        raise Exception('create_diff_from_str:bad format', s)
-    d = Diff()
-    d.B = create_snapshot_from_str(m.group(1))
-    d.E = create_snapshot_from_str(m.group(2))
-    d.isMergeable = m.group(3) == 'M'
-    d.isCompDiff = m.group(4) == 'C'
-    d.ts = str_to_datetime(m.group(5), DatetimeFormatPretty)
-    d.dataSize = int(m.group(6))
     return d
 
 
