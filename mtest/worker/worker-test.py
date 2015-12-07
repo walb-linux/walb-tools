@@ -247,51 +247,54 @@ class TestWoker(unittest.TestCase):
             keep_keep_period = w.cfg.apply_.keep_period
 
             def get_restorable(a0, vol, opt):
-                return map(GidInfo, [
-                    '24 2015-11-16T07:32:04',
-                    '25 2015-11-16T07:32:08',
-                    '26 2015-11-16T07:32:11',
-                    '27 2015-11-16T07:32:14',
-                    '28 2015-11-16T07:32:16',
-                    '29 2015-11-16T07:32:18',
-                    '30 2015-11-16T07:32:21',
-                    '31 2015-11-16T07:32:21',
-                    '32 2015-11-16T07:32:24',
-                    '33 2015-11-16T07:32:26',
-                    '34 2015-11-16T07:32:28',
-                    '35 2015-11-16T07:32:31',
-                    '36 2015-11-16T07:32:32',
-                ])
-            def get_total_diff_size(a0, vol, gid1):
-                d = {
-                    24:105248,
-                    25:96520,
-                    26:87792,
-                    27:79064,
-                    28:70336,
-                    29:61608,
-                    30:52880,
-                    31:44152,
-                    32:35424,
-                    33:26696,
-                    34:17968,
-                    35:9240,
-                    36:0,
+                tbl = {
+                    'vol0': map(GidInfo, [
+                        '24 2015-11-16T07:32:00',
+                        '25 2015-11-16T07:32:02',
+                        '26 2015-11-16T07:32:04',
+                        '27 2015-11-16T07:32:06'
+                    ]),
+                    'vol1': map(GidInfo, [
+                        '28 2015-11-16T07:32:01',
+                        '29 2015-11-16T07:32:02',
+                        '30 2015-11-16T07:32:05',
+                        '31 2015-11-16T07:32:07',
+                    ])
                 }
-                return d[gid1]
+                return tbl[vol]
+            def get_total_diff_size(a0, vol, gid1):
+                tbl = {
+                    'vol0': {
+                        24:105248,
+                        25:96520,
+                        26:87792,
+                        27:79064,
+                    },
+                    'vol1': {
+                        28:70336,
+                        29:91608,
+                        30:52880,
+                        31:134152,
+                    }
+                }
+                return tbl[vol][gid1]
 
             w.walbc.get_restorable = get_restorable
             w.walbc.get_total_diff_size = get_total_diff_size
 
             tbl = [
-                ('2015-11-16T07:32:04', '0', None),
-                ('2015-11-16T07:32:08', '0', Task("apply", VOL, (w.a0, 25))),
+                ('2015-11-16T07:32:00', '0', None),
+                ('2015-11-16T07:32:02', '0', Task("apply", 'vol0', (w.a0, 25))),
+                ('2015-11-16T07:32:03', '0', Task("apply", 'vol0', (w.a0, 25))),
+                ('2015-11-16T07:32:04', '0', Task("apply", 'vol1', (w.a0, 29))),
+                ('2015-11-16T07:32:10', '0', Task("apply", 'vol1', (w.a0, 31))),
+                ('2015-11-16T07:32:10', '8', Task("apply", 'vol0', (w.a0, 25))),
             ]
             for t in tbl:
                 curTime = toDatetime(t[0])
                 period = parsePERIOD(t[1])
                 w.cfg.apply_.keep_period = period
-                r = w._selectApplyTask2([VOL], curTime)
+                r = w._selectApplyTask2(['vol0', 'vol1'], curTime)
                 self.assertEqual(r, t[2])
 
             w.walbc.get_restorable = keep_get_restorable
