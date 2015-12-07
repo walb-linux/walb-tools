@@ -381,8 +381,27 @@ class Snapshot(object):
             return "|%d|" % self.gidB
         else:
             return "|%d,%d|" % (self.gidB, self.gidE)
+    def fromStr(self, s):
+        '''
+        s :: str
+        '''
+        verify_type(s, str)
+        if s[0] != '|' or s[-1] != '|':
+            raise Exception('Snapshot:bad format', s)
+        sp = s[1:-1].split(',')
+        if len(sp) == 1:
+            self.gidB = self.gidE = int(sp[0])
+        elif len(sp) == 2:
+            self.gidB = int(sp[0])
+            self.gidE = int(sp[1])
+        else:
+            raise Exception('Snapshot:bad range', s)
     def isDirty(self):
         return self.gidB != self.gidE
+    def __eq__(self, rhs):
+        return self.gidB == rhs.gidB and self.gidE == rhs.gidE
+    def __neq__(self, rhs):
+        return not(self == rhs)
 
 
 def create_snapshot_from_str(s):
@@ -390,17 +409,9 @@ def create_snapshot_from_str(s):
     create snapshot from str
     s :: str such as |num| or |num1,num2|
     '''
-    verify_type(s, str)
-    if s[0] != '|' or s[-1] != '|':
-        raise Exception('create_snapshot_from_str:bad format', s)
-    pos = s.find(',')
-    if pos >= 0:
-        gidB = int(s[1:pos])
-        gidE = int(s[pos+1:-1])
-    else:
-        gidB = gidE = int(s[1:-1])
-    return Snapshot(gidB, gidE)
-
+    snap = Snapshot()
+    snap.fromStr(s)
+    return snap
 
 class Diff(object):
     '''
@@ -438,6 +449,30 @@ class Diff(object):
     def isDirty(self):
         return self.B.isDirty() or self.E.isDirty()
 
+    def fromStr(self, s):
+        '''
+        s :: str
+        '''
+        verify_type(s, str)
+        (ss, mc, tsStr, sizeStr) = s.split(' ')
+        (bStr, eStr) = ss.split('-->')
+        self.B.fromStr(bStr)
+        self.E.fromStr(eStr)
+        if mc[0] == 'M':
+            self.isMergeable = True
+        elif mc[0] == '-':
+            self.isMergeable = False
+        else:
+            raise Exception('Diff:bad isMergeable', s)
+        if mc[1] == 'C':
+            self.isCompDiff = True
+        elif mc[1] == '-':
+            self.isCompDiff = False
+        else:
+            raise Exception('Diff:bad isCompDiff', s)
+        self.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
+        self.dataSize = int(sizeStr)
+
 
 def create_diff_from_str(s):
     '''
@@ -445,19 +480,9 @@ def create_diff_from_str(s):
     s :: str
     return :: Diff
     '''
-    verify_type(s, str)
-    p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
-    m = p.match(s)
-    if not m:
-        raise Exception('create_diff_from_str:bad format', s)
-    d = Diff()
-    d.B = create_snapshot_from_str(m.group(1))
-    d.E = create_snapshot_from_str(m.group(2))
-    d.isMergeable = m.group(3) == 'M'
-    d.isCompDiff = m.group(4) == 'C'
-    d.ts = str_to_datetime(m.group(5), DatetimeFormatPretty)
-    d.dataSize = int(m.group(6))
-    return d
+    di = Diff()
+    di.fromStr(s)
+    return di
 
 
 class MetaState(object):
@@ -500,6 +525,11 @@ class MetaState(object):
         else:
             return '<%s-->%s>-%s' % (str(self.B), str(self.E), tsStr)
 
+    def __eq__(self, rhs):
+        return self.B == rhs.B and self.E == rhs.E
+    def __neq__(self, rhs):
+        return not self.__eq__(rhs)
+
 
 def create_meta_state_from_str(s):
     '''
@@ -538,6 +568,10 @@ class GidInfo(object):
         self.ts = str_to_datetime(p[1], DatetimeFormatPretty)
     def __str__(self):
         return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
+    def __eq__(self, rhs):
+        return self.gid == rhs.gid and self.ts == rhs.ts
+    def __neq__(self, rhs):
+        return not(self == rhs)
 
 
 class CompressOpt(object):
