@@ -400,7 +400,7 @@ class Snapshot(object):
         return self.gidB != self.gidE
     def __eq__(self, rhs):
         return self.gidB == rhs.gidB and self.gidE == rhs.gidE
-    def __neq__(self, rhs):
+    def __ne__(self, rhs):
         return not(self == rhs)
 
 
@@ -448,7 +448,10 @@ class Diff(object):
         return "%s-->%s %s%s %s %d" % (self.B, self.E, m, c, ts_str, self.dataSize)
     def isDirty(self):
         return self.B.isDirty() or self.E.isDirty()
-
+    def __eq__(self, rhs):
+        return self.B == rhs.B and self.E == rhs.E and self.isMergeable == rhs.isMergeable and self.isCompDiff == rhs.isCompDiff and self.ts == rhs.ts and self.dataSize == rhs.dataSize
+    def __ne__(self, rhs):
+        return not(self == rhs)
     def fromStr(self, s):
         '''
         s :: str
@@ -480,9 +483,47 @@ def create_diff_from_str(s):
     s :: str
     return :: Diff
     '''
-    di = Diff()
-    di.fromStr(s)
-    return di
+    verify_type(s, str)
+    d = Diff()
+    (ss, mc, tsStr, sizeStr) = s.split(' ')
+    (bStr, eStr) = ss.split('-->')
+    d.B.fromStr(bStr)
+    d.E.fromStr(eStr)
+    if mc[0] == 'M':
+        d.isMergeable = True
+    elif mc[0] == '-':
+        d.isMergeable = False
+    else:
+        raise Exception('Diff:bad isMergeable', s)
+    if mc[1] == 'C':
+        d.isCompDiff = True
+    elif mc[1] == '-':
+        d.isCompDiff = False
+    else:
+        raise Exception('Diff:bad isCompDiff', s)
+    d.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
+    d.dataSize = int(sizeStr)
+
+    dd = create_diff_from_str_ok(s)
+    if str(d) != str(dd):
+        print "ERR1", dd
+        print "ERR2", d
+
+    return dd
+
+def create_diff_from_str_ok(s):
+    p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
+    m = p.match(s)
+    if not m:
+        raise Exception('create_diff_from_str:bad format', s)
+    d = Diff()
+    d.B = create_snapshot_from_str(m.group(1))
+    d.E = create_snapshot_from_str(m.group(2))
+    d.isMergeable = m.group(3) == 'M'
+    d.isCompDiff = m.group(4) == 'C'
+    d.ts = str_to_datetime(m.group(5), DatetimeFormatPretty)
+    d.dataSize = int(m.group(6))
+    return d
 
 
 class MetaState(object):
@@ -526,9 +567,20 @@ class MetaState(object):
             return '<%s-->%s>-%s' % (str(self.B), str(self.E), tsStr)
 
     def __eq__(self, rhs):
-        return self.B == rhs.B and self.E == rhs.E
-    def __neq__(self, rhs):
-        return not self.__eq__(rhs)
+        if self.B != rhs.B:
+            return False
+        # E may be None
+        if self.E:
+            if rhs.E:
+                return self.E == rhs.E
+            else:
+                return False
+        else:
+            if rhs.E:
+                return False
+            return True
+    def __ne__(self, rhs):
+        return not(self == rhs)
 
 
 def create_meta_state_from_str(s):
@@ -570,7 +622,7 @@ class GidInfo(object):
         return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
     def __eq__(self, rhs):
         return self.gid == rhs.gid and self.ts == rhs.ts
-    def __neq__(self, rhs):
+    def __ne__(self, rhs):
         return not(self == rhs)
 
 
