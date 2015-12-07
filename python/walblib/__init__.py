@@ -409,17 +409,9 @@ def create_snapshot_from_str(s):
     create snapshot from str
     s :: str such as |num| or |num1,num2|
     '''
-    verify_type(s, str)
-    if s[0] != '|' or s[-1] != '|':
-        raise Exception('create_snapshot_from_str:bad format', s)
-    pos = s.find(',')
-    if pos >= 0:
-        gidB = int(s[1:pos])
-        gidE = int(s[pos+1:-1])
-    else:
-        gidB = gidE = int(s[1:-1])
-    return Snapshot(gidB, gidE)
-
+    snap = Snapshot()
+    snap.fromStr(s)
+    return snap
 
 class Diff(object):
     '''
@@ -488,19 +480,9 @@ def create_diff_from_str(s):
     s :: str
     return :: Diff
     '''
-    verify_type(s, str)
-    p = re.compile(r'(\|[^|]+\|)-->(\|[^|]+\|) ([M-])([C-]) ([^ ]+) (\d+)')
-    m = p.match(s)
-    if not m:
-        raise Exception('create_diff_from_str:bad format', s)
-    d = Diff()
-    d.B = create_snapshot_from_str(m.group(1))
-    d.E = create_snapshot_from_str(m.group(2))
-    d.isMergeable = m.group(3) == 'M'
-    d.isCompDiff = m.group(4) == 'C'
-    d.ts = str_to_datetime(m.group(5), DatetimeFormatPretty)
-    d.dataSize = int(m.group(6))
-    return d
+    di = Diff()
+    di.fromStr(s)
+    return di
 
 
 class MetaState(object):
