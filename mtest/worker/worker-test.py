@@ -303,6 +303,27 @@ class TestWoker(unittest.TestCase):
 
         test_selectApplyTask2()
 
+        def test_getNumDiffList():
+            keep_get_num_diff = w.walbc.get_num_diff
+            def get_num_diff(ax, vol):
+                tbl = {
+                    'vol0': 3,
+                    'vol1': 5,
+                    'vol2': 8,
+                }
+                return tbl[vol]
+            tbl = [
+                (['vol0'], [3]),
+                (['vol0', 'vol1'], [3, 5]),
+                (['vol0', 'vol2'], [3, 8]),
+            ]
+            w.walbc.get_num_diff = get_num_diff
+            for t in tbl:
+                self.assertEqual(w.getNumDiffList(t[0]), t[1])
+
+            w.walbc.get_num_diff = keep_get_num_diff
+
+        test_getNumDiffList()
 
 
 if __name__ == '__main__':
