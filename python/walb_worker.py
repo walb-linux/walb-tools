@@ -347,7 +347,7 @@ class Worker:
         if ls:
             ls.sort(key=lambda x : x[0])
             (size, vol, gid) = ls[-1]
-            return Task("apply", vol, self.a0, (gid,))
+            return Task("apply", vol, (self.a0, gid))
         else:
             return None
 
