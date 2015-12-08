@@ -235,6 +235,23 @@ class TestGetLatestGidInfoBefore(unittest.TestCase):
             r = getLatestGidInfoBefore(t, infoL)
             self.assertEqual(r, expected)
 
+class TestGetMergeGidRange(unittest.TestCase):
+    def test(self):
+        tbl = [
+            ([
+            '|0|-->|1| -- 2015-12-08T07:10:15 4120',
+            '|1|-->|2| -- 2015-12-08T07:10:18 8728',
+            '|2|-->|5| -- 2015-12-08T07:10:25 8728',
+            '|5|-->|6| -- 2015-12-08T07:10:26 8728',
+            '|6|-->|7| M- 2015-12-08T07:10:28 8728',
+            ], (5, 7)),
+        ]
+        for t in tbl:
+            diffL = map(create_diff_from_str, t[0])
+            r = getMergeGidRange(diffL)
+            self.assertEqual(r, t[1])
+
+
 class TestWoker(unittest.TestCase):
     def test(self):
         d = yaml.load(configStr)
