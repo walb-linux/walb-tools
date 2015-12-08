@@ -188,9 +188,8 @@ class TestSnapshot(unittest.TestCase):
             ("|5|", Snapshot(5, 5)),
             ("|7,%d|" % UINT64_MAX, Snapshot(7)),
         ]
-        s = Snapshot()
         for t in tbl:
-            s.fromStr(t[0])
+            s = create_snapshot_from_str(t[0])
             self.assertEqual(s, t[1])
             self.assertEqual(str(s), t[0])
 
@@ -210,9 +209,8 @@ class TestDiff(unittest.TestCase):
             "|1,5|-->|25| -C 2015-11-16T07:32:10 4567",
             "|24|-->|25| MC 2015-11-16T07:32:11 89101",
         ]
-        d = Diff()
         for s in tbl:
-            d.fromStr(s)
+            d = create_diff_from_str(s)
             ss = str(d)
             self.assertEqual(s, ss)
 
