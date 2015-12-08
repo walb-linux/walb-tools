@@ -640,15 +640,17 @@ class SyncOpt(object):
     Synchronization option.
     This is used for optional arguments of archive-info and replicate command.
     '''
-    def __init__(self, cmprOpt=CompressOpt(), delayS=0, maxWdiffMergeSizeU='1G', bulkSizeU='64K'):
+    def __init__(self, cmprOpt=None, delayS=0, maxWdiffMergeSizeU='1G', bulkSizeU='64K'):
         '''
-        cmprOpt :: CompressOpt    - compression option.
+        cmprOpt :: CompressOpt or None - compression option.
         delayS :: int             - delay to forward diffs from proxy to archive [sec].
         maxWdiffMergeSizeU :: str - max wdiff merge size [byte].
                                     Unit suffix like '1G' is allowed.
         bulkSizeU :: str          - bulk size [byte]. can be like '64K'.
                                     Unit suffix like '64K' is allowed.
         '''
+        if cmprOpt is None:
+            cmprOpt = CompressOpt()
         verify_type(cmprOpt, CompressOpt)
         verify_type(delayS, int)
         verify_size_unit(maxWdiffMergeSizeU)
