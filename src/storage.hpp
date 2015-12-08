@@ -786,6 +786,10 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     uint64_t lsidLimit;
     std::tie(rec0, rec1, lsidLimit) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
     const std::string wdevPath = volInfo.getWdevPath();
+    if (device::getPermanentLsid(wdevPath) < lsidLimit) {
+        LOGs.debug() << FUNC << "should wait a bit for wlogs to be permanent" << volId;
+        return true;
+    }
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
     const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
     device::AsyncWldevReader reader(wldevPath);
