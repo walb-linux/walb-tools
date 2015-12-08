@@ -419,9 +419,9 @@ class Diff(object):
         B :: Snapshot
         E :: Snapshot
         '''
-        if B == None:
+        if B is None:
             B = Snapshot()
-        if E == None:
+        if E is None:
             E = Snapshot()
         verify_type(B, Snapshot)
         verify_type(E, Snapshot)
@@ -494,11 +494,13 @@ class MetaState(object):
     '''
     Data stored in 'base' files for archive servers.
     '''
-    def __init__(self, B=Snapshot(), E=None):
+    def __init__(self, B=None, E=None):
         '''
         B :: Snapshot
         E :: Snapshot or None.
         '''
+        if B is None:
+            B = Snapshot()
         verify_type(B, Snapshot)
         if E is not None:
             verify_type(E, Snapshot)
