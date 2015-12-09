@@ -1,4 +1,4 @@
-.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages build_date core
+.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages core version_cpp
 
 CXX = clang++
 CC = clang
@@ -15,6 +15,9 @@ else
 endif
 ifeq ($(ENABLE_EXEC_PROTOCOL),1)
 OPT_FLAGS += -DENABLE_EXEC_PROTOCOL
+endif
+ifeq ($(DISABLE_COMMIT_ID),1)
+OPT_FLAGS += -DDISABLE_COMMIT_ID
 endif
 
 INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
@@ -54,9 +57,12 @@ MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 
 all: build
 build:
+	$(MAKE) version_cpp
 	$(MAKE) $(BINARIES)
 
-core: binsrc/walb-storage binsrc/walb-proxy binsrc/walb-archive binsrc/walbc binsrc/wdevc
+core:
+	$(MAKE) version_cpp
+	$(MAKE) binsrc/walb-storage binsrc/walb-proxy binsrc/walb-archive binsrc/walbc binsrc/wdevc
 
 utest: $(TEST_BINARIES)
 utest_all: $(TEST_BINARIES)
@@ -67,10 +73,6 @@ utest_all: $(TEST_BINARIES)
 itest: $(BINARIES)
 	$(MAKE) -C itest/wdiff
 	$(MAKE) -C itest/wlog
-
-build_date:
-	$(MAKE) clean_build_date
-	$(MAKE) src/build_date.hpp
 
 echo_binaries:
 	@echo $(BINARIES)
@@ -83,22 +85,20 @@ echo_binaries:
 $(LOCAL_LIB): $(LOCAL_LIB_OBJ)
 	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)
 
-binsrc/%: binsrc/%.o $(LOCAL_LIB) src/version.hpp src/build_date.hpp
+binsrc/%: binsrc/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 utest/%: utest/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-clean: cleanobj cleandep cleanman clean_build_date
-	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.hpp
+clean: cleanobj cleandep cleanman
+	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.cpp
 cleanobj:
 	rm -f src/*.o binsrc/*.o utest/*.o
 cleandep:
 	rm -f src/*.depend binsrc/*.depend utest/*.depend
 cleanman:
 	rm -f $(MANPAGES)
-clean_build_date:
-	rm -f src/build_date.hpp
 
 rebuild:
 	$(MAKE) clean
@@ -112,13 +112,19 @@ manpages: $(MANPAGES)
 man/%: man/%.ronn
 	ronn -r $<
 
-src/version.hpp: src/version.hpp.template VERSION
-	cat src/version.hpp.template |sed "s/VERSION/`cat VERSION`/g" > src/version.hpp
+version_cpp:
+	cat src/version.cpp.template |sed "s/VERSION/`cat VERSION`/g" \
+|sed "s/BUILD_DATE/`date +%Y%m%dT%H%M%S`/g" \
+> src/version.cpp.tmp
+ifeq ($(DISABLE_COMMIT_ID),1)
+	mv src/version.cpp.tmp src/version.cpp
+else
+	cat src/version.cpp.tmp \
+|sed "s/COMMIT_ID/`git show-ref --head HEAD |cut -f 1 -d ' '`/g" \
+> src/version.cpp
+endif
 
-src/build_date.hpp: src/build_date.hpp.template
-	cat src/build_date.hpp.template |sed "s/BUILD_DATE/`date +%Y%m%dT%H%M%S`/g" > src/build_date.hpp
-
-binsrc/%.depend: binsrc/%.cpp src/version.hpp src/build_date.hpp
+binsrc/%.depend: binsrc/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > $@
 src/%.depend: src/%.cpp
 	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > $@

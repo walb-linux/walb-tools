@@ -35,6 +35,7 @@
 #include "cybozu/array.hpp"
 #include "walb_logger.hpp"
 #include "walb_types.hpp"
+#include "version.hpp"
 
 namespace walb {
 
@@ -383,6 +384,22 @@ inline void parseDecOrHexInt(const std::string& s, Int& v)
     if (!cybozu::util::hexStrToInt(s.substr(2), v)) {
         throw cybozu::Exception("hex string parse error") << s;
     }
+}
+
+inline std::string getDescription(const char *prefix)
+{
+    return cybozu::util::formatString(
+        "%s version %s build at %s\n"
+#ifndef DISABLE_COMMIT_ID
+        "commit %s\n"
+#endif
+        , prefix
+        , getWalbToolsVersion()
+        , getWalbToolsBuildDate()
+#ifndef DISABLE_COMMIT_ID
+        , getWalbToolsCommitId()
+#endif
+        );
 }
 
 }} // walb::util

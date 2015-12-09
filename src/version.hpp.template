@@ -1,7 +1,0 @@
-#pragma once
-
-inline const char *getWalbToolsVersion()
-{
-    static const char *v = "VERSION";
-    return v;
-}

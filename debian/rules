@@ -11,7 +11,7 @@ export DH_OPTIONS
 	dh $@ --with=python2
 
 override_dh_auto_build:
-	dh_auto_build --parallel -- CXX=g++ CC=gcc DEBUG=0 build manpages
+	dh_auto_build --parallel -- CXX=g++ CC=gcc DEBUG=0 DISABLE_COMMIT_ID=1 build manpages
 
 override_dh_python2:
 	dh_python2 -pwalb-tools-python python

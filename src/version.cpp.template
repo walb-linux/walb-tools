@@ -1,0 +1,19 @@
+#include "version.hpp"
+
+const char *getWalbToolsVersion()
+{
+    static const char *v = "VERSION";
+    return v;
+}
+
+const char *getWalbToolsCommitId()
+{
+    static const char *c = "COMMIT_ID";
+    return c;
+}
+
+const char *getWalbToolsBuildDate()
+{
+    static const char *d = "BUILD_DATE";
+    return d;
+}
