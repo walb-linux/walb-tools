@@ -1,4 +1,4 @@
-.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages build_date
+.PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages build_date core
 
 CXX = clang++
 CC = clang
@@ -55,6 +55,8 @@ MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 all: build
 build:
 	$(MAKE) $(BINARIES)
+
+core: binsrc/walb-storage binsrc/walb-proxy binsrc/walb-archive binsrc/walbc binsrc/wdevc
 
 utest: $(TEST_BINARIES)
 utest_all: $(TEST_BINARIES)
