@@ -449,7 +449,12 @@ private:
         device::LsidSet lsids;
         device::getLsidSet(wdevName, lsids);
         const uint64_t targetLsid = isLater ? lsids.latest : lsids.permanent;
-        return doneLsid < targetLsid;
+        bool isQueueEmpty;
+        {
+            QFile qf(queuePath().str(), O_RDWR);
+            isQueueEmpty = qf.empty();
+        }
+        return doneLsid < targetLsid || !isQueueEmpty;
     }
 };
 
