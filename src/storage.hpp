@@ -719,21 +719,6 @@ inline void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t lo
 }
 
 /**
- * Delete all wlogs which lsid is less than a specifeid lsid.
- * Given INVALID_LSID, all existing wlogs will be deleted.
- *
- * RETURN:
- *   true if all the wlogs have been deleted.
- */
-inline bool deleteWlogs(const std::string &volId, uint64_t lsid = INVALID_LSID)
-{
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    const std::string wdevName = volInfo.getWdevName();
-    const uint64_t remainingPb = device::eraseWal(wdevName, lsid);
-    return remainingPb == 0;
-}
-
-/**
  * Nothing will be checked. Just read.
  */
 inline LogPackHeader readLogPackHeaderOnce(const std::string &volId, uint64_t lsid)
@@ -769,7 +754,7 @@ inline void dumpLogPackHeader(const std::string &volId, uint64_t lsid, const Log
 
 /**
  * RETURN:
- *   true if there is remaining to send.
+ *   true if there is remaining to send or delete.
  */
 inline bool extractAndSendAndDeleteWlog(const std::string &volId)
 {
@@ -777,19 +762,21 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     StorageVolState &volSt = getStorageVolState(volId);
     StorageVolInfo volInfo(gs.baseDirStr, volId);
 
-    if (!volInfo.isRequiredWlogTransfer()) {
-        LOGs.debug() << FUNC << "not required to wlog-transfer";
-        return false;
+    bool isRemainingGarbage = volInfo.deleteGarbageWlogs();
+    if (!volInfo.mayWlogTransferBeRequiredNow()) {
+        LOGs.debug() << FUNC << "no need to run wlog-transfer now" << volId;
+        return isRemainingGarbage || volInfo.isWlogTransferRequiredLater();
     }
 
     MetaLsidGid rec0, rec1;
     uint64_t lsidLimit;
-    std::tie(rec0, rec1, lsidLimit) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
-    const std::string wdevPath = volInfo.getWdevPath();
-    if (device::getPermanentLsid(wdevPath) < lsidLimit) {
-        LOGs.debug() << FUNC << "should wait a bit for wlogs to be permanent" << volId;
+    bool doLater;
+    std::tie(rec0, rec1, lsidLimit, doLater) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
+    if (doLater) {
+        LOGs.debug() << FUNC << "wait a bit for wlogs to be permanent" << volId;
         return true;
     }
+    const std::string wdevPath = volInfo.getWdevPath();
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
     const std::string wldevPath = device::getWldevPathFromWdevName(wdevName);
     device::AsyncWldevReader reader(wldevPath);
@@ -874,16 +861,10 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     pkt.write(diff);
     pkt.flush();
     packet::Ack(sock).recv();
-    const bool isRemaining = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
-
-    bool isEmpty = true;
-    if (lsidB < lsidE) {
-        volInfo.waitForWrittenAndFlushed(lsidE);
-        isEmpty = storage_local::deleteWlogs(volId, lsidE);
-    }
+    const bool isRemainingData = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
+    isRemainingGarbage = volInfo.deleteGarbageWlogs();
     LOGs.debug() << FUNC << "end  " << volId << lsidB << lsidE;
-
-    return !isEmpty || isRemaining;
+    return isRemainingData || isRemainingGarbage || volInfo.isWlogTransferRequiredLater();
 }
 
 } // storage_local
@@ -925,7 +906,7 @@ inline void StorageWorker::operator()()
     if (st == sStandby) {
         ActionCounterTransaction tran(volSt.ac, saWlogRemove);
         ul.unlock();
-        storage_local::deleteWlogs(volId);
+        volInfo.deleteAllWlogs();
         return;
     }
 
@@ -933,14 +914,7 @@ inline void StorageWorker::operator()()
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
-        /*
-         * isRemaining is true when oldest_lsid == permanent_lsid.
-         * In the condition that oldest_lsid == permanent_lsid < latest_lsid,
-         * the next task is required.
-         */
-        if (isRemaining || volInfo.isRequiredWlogTransferLater()) {
-            pushTask(volId);
-        }
+        if (isRemaining) pushTask(volId);
     } catch (...) {
         pushTaskForce(volId, gs.delaySecForRetry * 1000);
         throw;

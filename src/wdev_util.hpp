@@ -366,13 +366,12 @@ inline bool isFlushCapable(const std::string& wdevPath)
 }
 
 /**
- * @lsid this must satisfy oldestLsid < lsid <= permanentLsid,
- *   or INVALID_LSID to erase all existing wlogs.
+ * @lsid this must satisfy lsid <= prevWrittenLsid,
  *
  * RETURN:
  *   remaining amount of wlogs after deletion [physical block]
  */
-inline uint64_t eraseWal(const std::string& wdevName, uint64_t lsid = INVALID_LSID)
+inline void eraseWal(const std::string& wdevName, uint64_t lsid)
 {
     const char *const FUNC = __func__;
     const std::string wdevPath = getWdevPathFromWdevName(wdevName);
@@ -381,17 +380,15 @@ inline uint64_t eraseWal(const std::string& wdevName, uint64_t lsid = INVALID_LS
     }
     LsidSet lsidSet;
     getLsidSet(wdevName, lsidSet);
-    if (lsid == INVALID_LSID) lsid = lsidSet.prevWritten;
-    if (lsidSet.oldest == lsid) {
+    if (lsid <= lsidSet.oldest) {
         /* There is no wlogs. */
-        return 0;
+        return;
     }
-    if (!(lsidSet.oldest < lsid && lsid <= lsidSet.prevWritten)) {
+    if (lsid > lsidSet.prevWritten) {
         throw cybozu::Exception(FUNC)
-            << "invalid lsid" << lsidSet.oldest << lsid << lsidSet.prevWritten;
+            << "invalid lsid" << lsid << lsidSet.prevWritten;
     }
     setOldestLsid(wdevPath, lsid);
-    return lsidSet.permanent - lsid;
 }
 
 /**

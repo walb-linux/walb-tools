@@ -195,57 +195,63 @@ public:
         return takeSnapshotDetail(maxWlogSendPb, false, qf);
     }
     /**
-     * This is required to decide pushing task or not.
-     */
-    bool isRequiredWlogTransferLater() {
-        const std::string wdevPath = getWdevPath();
-        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
-        const uint64_t lsid1 = device::getLatestLsid(wdevPath);
-        return lsid0 < lsid1;
-    }
-    /**
-     * Calling order:
-     *   (0) isRequiredWlogTransfer()
-     *   (1) prepareWlogTransfer()
-     *   (2) getTransferDiff()
-     *   (3) finishWlogTransfer()
+     * Delete garbage wlogs if necessary.
      *
      * RETURN:
-     *   false if wlogTransfer is not required.
+     *   true if there are wlogs to be deleted later.
      */
-    bool isRequiredWlogTransfer() {
-        const char *const FUNC = __func__;
-        const std::string wdevPath = getWdevPath();
-        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
-        const uint64_t lsid1 = device::getPermanentLsid(wdevPath);
-        if (lsid0 < lsid1) return true;
-        if (lsid0 != lsid1) {
-            throw cybozu::Exception(FUNC) << "must be equal" << lsid0 << lsid1;
+    bool deleteGarbageWlogs() {
+        const uint64_t doneLsid = getDoneLsid();
+        const std::string wdevName = getWdevName();
+        device::LsidSet lsids;
+        device::getLsidSet(wdevName, lsids);
+        const uint64_t targetLsid = std::min(doneLsid, lsids.prevWritten);
+        if (lsids.oldest < targetLsid) {
+            device::eraseWal(wdevName, targetLsid);
+            lsids.oldest = targetLsid;
         }
-        QFile qf(queuePath().str(), O_RDWR);
-        return !qf.empty();
+        return lsids.oldest < doneLsid;
+    }
+    /**
+     * Delete all the wlogs.
+     */
+    void deleteAllWlogs() {
+        const std::string wdevName = getWdevName();
+        device::LsidSet lsids;
+        device::getLsidSet(wdevName, lsids);
+        if (lsids.oldest < lsids.prevWritten) {
+            device::eraseWal(wdevName, lsids.prevWritten);
+        }
+    }
+
+    /**
+     * Calling order:
+     *   (1) deleteGarbageWlogs()
+     *   (2) mayWlogTransferBeRequiredNow()
+     *   (3) prepareWlogTransfer()
+     *   (4) getTransferDiff()
+     *   (5) finishWlogTransfer()
+     *   (6) deleteGarbageWlogs()
+     *
+     */
+    bool mayWlogTransferBeRequiredNow() {
+        return isWlogTransferRequiredDetail(false);
+    }
+    bool isWlogTransferRequiredLater() {
+        return isWlogTransferRequiredDetail(true);
     }
     /**
      *
      * RETURN:
      *   target lsid/gid range by two MetaLsidGids: recB and recE,
-     *   and lsidLimit as uint64_t value.
+     *   and lsidLimit as uint64_t value,
+     *   and boolean value which is true if we must pospone the wlog-transfer.
      *   Do not transfer logpacks which lsid >= lsidLimit.
      */
-    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t> prepareWlogTransfer(uint64_t maxWlogSendMb) {
+    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> prepareWlogTransfer(uint64_t maxWlogSendMb) {
         const char *const FUNC = __func__;
         QFile qf(queuePath().str(), O_RDWR);
         MetaLsidGid recB = getDoneRecord();
-        const std::string wdevPath = getWdevPath();
-        const std::string wdevName = getWdevName();
-        const uint64_t lsid0 = device::getOldestLsid(wdevPath);
-        if (recB.lsid == INVALID_LSID) {
-            throw cybozu::Exception(FUNC) << "recB.lsid is invalid";
-        }
-        if (lsid0 < recB.lsid) {
-            waitForWrittenAndFlushed(recB.lsid);
-            device::eraseWal(wdevName, recB.lsid);
-        }
         MetaLsidGid recE;
         for (;;) {
             if (qf.empty()) break;
@@ -273,7 +279,8 @@ public:
         } else {
             lsidLimit = std::min(recB.lsid + maxWlogSendPb, recE.lsid);
         }
-        return std::make_tuple(recB, recE, lsidLimit);
+        const bool doLater = (device::getPermanentLsid(getWdevPath()) < lsidLimit);
+        return std::make_tuple(recB, recE, lsidLimit, doLater);
     }
     /**
      * RETURN:
@@ -349,37 +356,6 @@ public:
         }
         device::resize(path, sizeLb);
     }
-    void waitForWrittenAndFlushed(uint64_t lsid) {
-        assert(lsid != INVALID_LSID);
-        const char *const FUNC = __func__;
-        const std::string wdevName = getWdevName();
-        const std::string wdevPath = getWdevPath();
-        for (;;) {
-            device::LsidSet lsidSet;
-            device::getLsidSet(wdevName, lsidSet);
-            if (lsidSet.written < lsid) {
-                LOGs.info()
-                    << FUNC
-                    << "wait 1000ms for the wlogs written and flushed to data device"
-                    << volId_ << wdevName << lsidSet.written << lsid;
-                util::sleepMs(1000);
-                continue;
-            }
-            if (lsidSet.prevWritten < lsid) {
-                LOGs.debug() << FUNC << "take checkpoint" << volId_ << lsidSet.prevWritten << lsid;
-                device::takeCheckpoint(wdevPath);
-            }
-#ifdef DEBUG
-            device::getLsidSet(wdevName, lsidSet);
-            if (lsidSet.prevWritten < lsid) {
-                throw cybozu::Exception(FUNC)
-                    << "BUG" << volId_ << wdevName
-                    << lsidSet.prevWritten << lsid;
-            }
-#endif
-            break;
-        }
-    }
 private:
     void loadWdevPath() {
         std::string s;
@@ -408,6 +384,13 @@ private:
         MetaLsidGid rec;
         util::loadFile(volDir_, "done", rec);
         return rec;
+    }
+    uint64_t getDoneLsid() const {
+        const uint64_t doneLsid = getDoneRecord().lsid;
+        if (doneLsid == INVALID_LSID) {
+            throw cybozu::Exception("StorageVolInfo:doneLsid is invalid");
+        }
+        return doneLsid;
     }
     cybozu::FilePath queuePath() const {
         return volDir_ + "queue";
@@ -459,6 +442,14 @@ private:
         device::SuperBlock super;
         super.read(file.fd());
         return super;
+    }
+    bool isWlogTransferRequiredDetail(bool isLater) {
+        const uint64_t doneLsid = getDoneLsid();
+        const std::string wdevName = getWdevName();
+        device::LsidSet lsids;
+        device::getLsidSet(wdevName, lsids);
+        const uint64_t targetLsid = isLater ? lsids.latest : lsids.permanent;
+        return doneLsid < targetLsid;
     }
 };
 
