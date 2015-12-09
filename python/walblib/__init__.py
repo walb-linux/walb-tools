@@ -381,8 +381,7 @@ class Snapshot(object):
             return "|%d|" % self.gidB
         else:
             return "|%d,%d|" % (self.gidB, self.gidE)
-    '''
-    def fromStr(self, s):
+    def parse(self, s):
         verify_type(s, str)
         if s[0] != '|' or s[-1] != '|':
             raise Exception('Snapshot:bad format', s)
@@ -394,7 +393,6 @@ class Snapshot(object):
             self.gidE = int(sp[1])
         else:
             raise Exception('Snapshot:bad range', s)
-    '''
     def isDirty(self):
         return self.gidB != self.gidE
     def __eq__(self, rhs):
@@ -408,34 +406,23 @@ def create_snapshot_from_str(s):
     create snapshot from str
     s :: str such as |num| or |num1,num2|
     '''
-    '''
     snap = Snapshot()
-    snap.fromStr(s)
-    return snap
-    '''
-    snap = Snapshot()
-    verify_type(s, str)
-    if s[0] != '|' or s[-1] != '|':
-        raise Exception('Snapshot:bad format', s)
-    sp = s[1:-1].split(',')
-    if len(sp) == 1:
-        snap.gidB = snap.gidE = int(sp[0])
-    elif len(sp) == 2:
-        snap.gidB = int(sp[0])
-        snap.gidE = int(sp[1])
-    else:
-        raise Exception('Snapshot:bad range', s)
+    snap.parse(s)
     return snap
 
 class Diff(object):
     '''
     DIff class
     '''
-    def __init__(self, B=Snapshot(), E=Snapshot()):
+    def __init__(self, B=None, E=None):
         '''
         B :: Snapshot
         E :: Snapshot
         '''
+        if B is None:
+            B = Snapshot()
+        if E is None:
+            E = Snapshot()
         verify_type(B, Snapshot)
         verify_type(E, Snapshot)
         self.B = B
@@ -466,13 +453,16 @@ class Diff(object):
         return self.B == rhs.B and self.E == rhs.E and self.isMergeable == rhs.isMergeable and self.isCompDiff == rhs.isCompDiff and self.ts == rhs.ts and self.dataSize == rhs.dataSize
     def __ne__(self, rhs):
         return not(self == rhs)
-    '''
-    def fromStr(self, s):
+    def parse(self, s):
+        '''
+        set by s
+        s :: str
+        '''
         verify_type(s, str)
         (ss, mc, tsStr, sizeStr) = s.split(' ')
         (bStr, eStr) = ss.split('-->')
-        self.B = create_snapshot_from_str(bStr)
-        self.E = create_snapshot_from_str(eStr)
+        self.B.parse(bStr)
+        self.E.parse(eStr)
         if mc[0] == 'M':
             self.isMergeable = True
         elif mc[0] == '-':
@@ -487,7 +477,6 @@ class Diff(object):
             raise Exception('Diff:bad isCompDiff', s)
         self.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
         self.dataSize = int(sizeStr)
-    '''
 
 
 def create_diff_from_str(s):
@@ -496,26 +485,8 @@ def create_diff_from_str(s):
     s :: str
     return :: Diff
     '''
-    verify_type(s, str)
     d = Diff()
-    (ss, mc, tsStr, sizeStr) = s.split(' ')
-    (bStr, eStr) = ss.split('-->')
-    d.B = create_snapshot_from_str(bStr)
-    d.E = create_snapshot_from_str(eStr)
-    if mc[0] == 'M':
-        d.isMergeable = True
-    elif mc[0] == '-':
-        d.isMergeable = False
-    else:
-        raise Exception('Diff:bad isMergeable', s)
-    if mc[1] == 'C':
-        d.isCompDiff = True
-    elif mc[1] == '-':
-        d.isCompDiff = False
-    else:
-        raise Exception('Diff:bad isCompDiff', s)
-    d.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
-    d.dataSize = int(sizeStr)
+    d.parse(s)
     return d
 
 
@@ -523,11 +494,13 @@ class MetaState(object):
     '''
     Data stored in 'base' files for archive servers.
     '''
-    def __init__(self, B=Snapshot(), E=None):
+    def __init__(self, B=None, E=None):
         '''
         B :: Snapshot
         E :: Snapshot or None.
         '''
+        if B is None:
+            B = Snapshot()
         verify_type(B, Snapshot)
         if E is not None:
             verify_type(E, Snapshot)
