@@ -120,7 +120,7 @@ ifeq ($(DISABLE_COMMIT_ID),1)
 	mv src/version.cpp.tmp src/version.cpp
 else
 	cat src/version.cpp.tmp \
-|sed "s/COMMIT_ID/`git show-ref --head HEAD |cut -f 1 -d ' '`/g" \
+|sed "s/COMMIT_ID/`git show-ref --head HEAD |cut -f 1 -d ' '|head -n1`/g" \
 > src/version.cpp
 endif
 
