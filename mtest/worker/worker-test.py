@@ -352,6 +352,43 @@ class TestWoker(unittest.TestCase):
 
         test_getNumDiffList()
 
+        def test_selectMaxDiffNumMergeTask():
+            keep_get_applicable_diff_list = w.walbc.get_applicable_diff_list
+            tbl = [
+                ([
+                '|0|-->|1| -- 2015-12-09T09:54:20 4120',
+                '|1|-->|2| -- 2015-12-09T09:54:23 8728',
+                '|2|-->|5| -- 2015-12-09T09:54:29 8728',
+                '|5|-->|6| -- 2015-12-09T09:54:31 8728',
+                '|6|-->|7| M- 2015-12-09T09:54:33 8728',
+                ],
+                [(3, 'sss'), (5, VOL), (4, 'ttt')],
+                Task("merge", VOL, (w.a0, 5, 7))),
+                ([
+                '|0|-->|1| -- 2015-12-09T09:54:20 4120',
+                '|1|-->|2| -- 2015-12-09T09:54:23 8728',
+                '|2|-->|5| -- 2015-12-09T09:54:29 8728',
+                '|5|-->|6| -- 2015-12-09T09:54:31 8728',
+                '|6|-->|7| M- 2015-12-09T09:54:33 8728',
+                ],
+                [(3, 'sss'), (5, VOL), (9, 'ttt')],
+                Task("merge", 'ttt', (w.a0, 5, 7))),
+
+            ]
+            i = 0
+            def get_applicable_diff_list(a0, vol):
+                return map(create_diff_from_str, tbl[i][0])
+            w.walbc.get_applicable_diff_list = get_applicable_diff_list
+
+            for t in tbl:
+                ls = t[1]
+                r = w.selectMaxDiffNumMergeTask(ls)
+                self.assertEqual(r, t[2])
+                i = i + 1
+
+            w.walbc.get_applicable_diff_list = keep_get_applicable_diff_list
+
+        test_selectMaxDiffNumMergeTask()
 
 if __name__ == '__main__':
     unittest.main()
