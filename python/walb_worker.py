@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, signal, time, yaml, datetime, collections, os
+import sys, signal, time, yaml, datetime, collections, os, threading
 from walblib import *
 
 isDebug = False # True
@@ -438,6 +438,52 @@ class Worker:
         # step 5
         t = self._selectMergeTask2(volL, numDiffL, curTime)
         return t
+
+def removeThreadHandle(kwargs):
+    info = kwargs['threadInfo'][0]
+    info[0].remove(info[1])
+
+class ThreadManager:
+    def __init__(self, limit):
+        """
+            create ThreadManager
+            example of limit
+            limit = {
+                'merge':3,
+                'apply':2,
+            }
+        """
+        verify_type(limit, dict)
+        self.limit = limit
+        self.threadTbl = {}
+        for k in self.limit.keys():
+            self.threadTbl[k] = []
+
+    def tryRun(self, name, worker, args):
+        """
+            run worker(args, kwargs)
+        """
+        verify_type(name, str)
+        verify_type(args, tuple)
+        if name not in self.limit:
+            print 'ERR tryRun not found', name
+            return False
+        threads = self.threadTbl[name]
+        if len(threads) >= self.limit[name]:
+            print 'ERR tryRun limit', len(threads), self.limit[name]
+            return False
+        info = []
+        kwargs = {'threadInfo':info}
+        th = threading.Thread(target=worker, args=args, kwargs=kwargs)
+        threads.append(th)
+        info.append((threads,th))
+        th.start()
+        return True
+
+    def join(self):
+        for threads in self.threadTbl.values():
+            for th in threads:
+                th.join()
 
 
 def usage():

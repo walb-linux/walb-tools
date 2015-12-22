@@ -251,6 +251,24 @@ class TestGetMergeGidRange(unittest.TestCase):
             r = getMergeGidRange(diffL)
             self.assertEqual(r, t[1])
 
+"""
+    worker must call removeThreadHandle(kwargs) when it finishes
+"""
+def testWorker(*args, **kwargs):
+    time.sleep(1)
+    removeThreadHandle(kwargs)
+
+class TestThreadManager(unittest.TestCase):
+    def test(self):
+        name = 'test'
+        limit = {
+            name:1
+        }
+        tm = ThreadManager(limit)
+        b = tm.tryRun(name, testWorker, args=())
+        self.assertTrue(b)
+        time.sleep(1)
+        tm.join()
 
 class TestWoker(unittest.TestCase):
     def test(self):
