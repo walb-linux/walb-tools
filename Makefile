@@ -155,6 +155,9 @@ stest100:
 archive:
 	git archive --format=tar master > walb-tools.tgz
 
+utest-py:
+	env PYTHONPATH=./python python utest/test.py
+
 worker-test:
 	env PYTHONPATH=./python python mtest/worker/worker-test.py
 
