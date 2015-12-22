@@ -255,17 +255,26 @@ class TestThreadManager(unittest.TestCase):
     def test(self):
         name = 'test'
         limit = {
-            name:1
+            name:2
         }
         tm = ThreadManager(limit)
 
-        def testWorker():
-            print "testWorker"
-            time.sleep(1)
+        def worker():
+            time.sleep(0.1)
 
-        b = tm.tryRun(name, testWorker)
+        # run two workers
+        b = tm.tryRun(name, worker)
         self.assertTrue(b)
-        time.sleep(1)
+        b = tm.tryRun(name, worker)
+        self.assertTrue(b)
+        # to run thrird worker fails
+        b = tm.tryRun(name, worker)
+        self.assertFalse(b)
+        # wait to finish first worker
+        time.sleep(0.3)
+        # to run third worker successes
+        b = tm.tryRun(name, worker)
+        self.assertTrue(b)
         tm.join()
 
 class TestWoker(unittest.TestCase):

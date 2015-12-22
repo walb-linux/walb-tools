@@ -462,11 +462,10 @@ class ThreadManager:
         verify_type(name, str)
         verify_type(args, tuple)
         if name not in self.limit:
-            print 'ERR tryRun not found', name
+            print 'ERR ThreadManager:tryRun not found', name
             return False
         threads = self.threadTbl[name]
         if len(threads) >= self.limit[name]:
-            print 'ERR tryRun limit', len(threads), self.limit[name]
             return False
 
         def wrapperTarget(*args, **kwargs):
