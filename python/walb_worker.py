@@ -439,10 +439,6 @@ class Worker:
         t = self._selectMergeTask2(volL, numDiffL, curTime)
         return t
 
-def removeThreadHandle(kwargs):
-    info = kwargs['threadInfo'][0]
-    info[0].remove(info[1])
-
 class ThreadManager:
     def __init__(self, limit):
         """
@@ -459,9 +455,9 @@ class ThreadManager:
         for k in self.limit.keys():
             self.threadTbl[k] = []
 
-    def tryRun(self, name, worker, args):
+    def tryRun(self, name, target, args=()):
         """
-            run worker(args, kwargs)
+            run worker(args)
         """
         verify_type(name, str)
         verify_type(args, tuple)
@@ -472,9 +468,25 @@ class ThreadManager:
         if len(threads) >= self.limit[name]:
             print 'ERR tryRun limit', len(threads), self.limit[name]
             return False
+
+        def wrapperTarget(*args, **kwargs):
+            """
+                call target(args) and remove own handle in threads
+            """
+            target = kwargs['target']
+            if args:
+                target(args)
+            else:
+                target()
+            info = kwargs['threadInfo'][0]
+            info[0].remove(info[1])
         info = []
-        kwargs = {'threadInfo':info}
-        th = threading.Thread(target=worker, args=args, kwargs=kwargs)
+        kwargs = {
+            'threadInfo':info,
+            'target':target
+        }
+
+        th = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
         threads.append(th)
         info.append((threads,th))
         th.start()
