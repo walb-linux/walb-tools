@@ -309,7 +309,7 @@ def makeArchiveServer(name, addr, port):
     return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
-    def _createSeverLayout(self, cfg):
+    def createSeverLayout(self, cfg):
         self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
         s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
@@ -319,19 +319,19 @@ class Worker:
         verify_type(cfg, Config)
         setupSignal()
         self.cfg = cfg
-        self.serverLayout = self._createSeverLayout(self.cfg)
+        self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
         self.doneReplServerList = collections.defaultdict()
         self.mergeVol2ts = collections.defaultdict()
 
-    def _selectApplyTask1(self, volL):
+    def selectApplyTask1(self, volL):
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
             if ms.is_applying():
                 return Task("apply", vol, (self.a0, ms.B.gidB))
         return None
 
-    def _selectApplyTask2(self, volL, curTime):
+    def selectApplyTask2(self, volL, curTime):
         '''
             get (vol, gid) having max diff
         '''
@@ -358,7 +358,7 @@ class Worker:
             numDiffL.append(n)
         return numDiffL
 
-    def _selectMaxDiffNumMergeTask(self, ls):
+    def selectMaxDiffNumMergeTask(self, ls):
         """
             ls = [(n, vol)]
         """
@@ -374,23 +374,23 @@ class Worker:
                 return Task("merge", vol, (self.a0, r[0], r[1]))
         return None
 
-    def _selectMergeTask1(self, volL, numDiffL):
+    def selectMergeTask1(self, volL, numDiffL):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             if n >= self.cfg.merge.threshold_nr:
                 ls.append((n, vol))
-        return self._selectMaxDiffNumMergeTask(ls)
+        return self.selectMaxDiffNumMergeTask(ls)
 
-    def _selectMergeTask2(self, volL, numDiffL, curTime):
+    def selectMergeTask2(self, volL, numDiffL, curTime):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             ts = self.mergeVol2ts[vol]
             if ts and ts + self.cfg.merge.interval < curTime:
                 continue
             ls.append((n, vol))
-        return self._selectMaxDiffNumMergeTask(ls)
+        return self.selectMaxDiffNumMergeTask(ls)
 
-    def _selectReplTask(self, volL, curTime):
+    def selectReplTask(self, volL, curTime):
         tL = []
         rsL = self.cfg.repl_servers.values()
         for vol in volL:
@@ -419,24 +419,24 @@ class Worker:
         curTime = getCurrentTime()
         volL = self.walbc.get_vol_list(self.a0)
         # step 1
-        t = self._selectApplyTask1(volL)
+        t = self.selectApplyTask1(volL)
         if t:
             return t
         # step 2
-        t = self._selectApplyTask2(volL, curTime)
+        t = self.selectApplyTask2(volL, curTime)
         if t:
             return t
         # step 3
         numDiffL = self.getNumDiffList(volL)
-        t = self._selectMergeTask1(volL, numDiffL)
+        t = self.selectMergeTask1(volL, numDiffL)
         if t:
             return t
         # step 4
-        t = self._selectReplTask(volL, curTime)
+        t = self.selectReplTask(volL, curTime)
         if t:
             return t
         # step 5
-        t = self._selectMergeTask2(volL, numDiffL, curTime)
+        t = self.selectMergeTask2(volL, numDiffL, curTime)
         return t
 
 class ThreadManager:

@@ -262,7 +262,7 @@ class TestWoker(unittest.TestCase):
                 return tbl[i][0]
             w.walbc.get_base = get_base
             for t in tbl:
-                self.assertEqual(w._selectApplyTask1(volL), tbl[i][1])
+                self.assertEqual(w.selectApplyTask1(volL), tbl[i][1])
                 i = i + 1
             w.walbc.get_base = keep
 
@@ -321,7 +321,7 @@ class TestWoker(unittest.TestCase):
                 curTime = toDatetime(t[0])
                 period = parsePERIOD(t[1])
                 w.cfg.apply_.keep_period = period
-                r = w._selectApplyTask2(['vol0', 'vol1'], curTime)
+                r = w.selectApplyTask2(['vol0', 'vol1'], curTime)
                 self.assertEqual(r, t[2])
 
             w.walbc.get_restorable = keep_get_restorable
