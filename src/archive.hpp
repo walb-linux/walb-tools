@@ -134,6 +134,11 @@ inline bool isThinpool()
 
 namespace archive_local {
 
+inline StrVec getVolIdList()
+{
+    return util::getDirNameList(ga.baseDirStr);
+}
+
 template <typename F>
 inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
     std::vector<cybozu::util::File>& fileV, ArchiveVolInfo& volInfo,
@@ -1335,8 +1340,7 @@ inline void getHostType(protocol::GetCommandParams &p)
 
 inline void getVolList(protocol::GetCommandParams &p)
 {
-    StrVec v = util::getDirNameList(ga.baseDirStr);
-    protocol::sendValueAndFin(p, v);
+    protocol::sendValueAndFin(p, getVolIdList());
 }
 
 inline void getPid(protocol::GetCommandParams &p)
@@ -1440,6 +1444,18 @@ inline void getNumAction(protocol::GetCommandParams &p)
     ul.unlock();
     protocol::sendValueAndFin(p, num);
     p.logger.debug() << "get num-action succeeded" << volId;
+}
+
+inline void getAllActions(protocol::GetCommandParams &p)
+{
+    StrVec v;
+    for (const std::string& volId : getVolIdList()) {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        if (volSt.sm.get() == aClear) continue;
+        v.push_back(formatActions(volId.c_str(), volSt.ac, allActionVec));
+    }
+    protocol::sendValueAndFin(p, v);
 }
 
 inline void getRestored(protocol::GetCommandParams &p)
@@ -2626,6 +2642,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { progressTN, archive_local::getProgress },
     { volumeGroupTN, archive_local::getVolumeGroup },
     { thinpoolTN, archive_local::getThinpool },
+    { allActionsTN, archive_local::getAllActions },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

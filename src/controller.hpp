@@ -447,6 +447,7 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {progressTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get progress of full/hash backup/replication [logical block]."}},
         {volumeGroupTN, {protocol::StringType, verifyNoneParam, "get volume group name"}},
         {thinpoolTN, {protocol::StringType, verifyNoneParam, "get thinpool name (may be emtpy string)"}},
+        {allActionsTN, {protocol::StringVecType, verifyNoneParam, "get running action information for all the volumes."}},
     };
     return m;
 }

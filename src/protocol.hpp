@@ -101,6 +101,8 @@ const char *const volSizeTN = "vol-size";
 const char *const progressTN = "progress";
 const char *const volumeGroupTN = "volume-group";
 const char *const thinpoolTN = "thinpool";
+const char *const allActionsTN = "all-actions";
+
 
 /**
  * Internal protocol name.
