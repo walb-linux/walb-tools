@@ -442,7 +442,7 @@ class Worker:
 class TaskManager:
     def __init__(self, max_task, max_repl_task):
         """
-            exec one task('mege', 'apply', 'repl')  for each vol
+            exec one task(name='merge', 'apply', 'repl')  for each vol
             total num <= max_task
             total repl num <= max_replication_task
         """
@@ -452,6 +452,8 @@ class TaskManager:
         self.max_repl_task = max_repl_task
         self.tasks = {} # map<vol, name>
         self.handles = {} # map<hdl, vol>
+        self.mutex = threading.Lock()
+        self.repl_task_num = 0 # current repl task num
 
     def tryRun(self, vol, name, target, args=()):
         """
@@ -460,53 +462,68 @@ class TaskManager:
         verify_type(vol, str)
         verify_type(name, str)
         verify_type(args, tuple)
-        if self.tasks.has_key(vol):
-            return False
-        if len(self.tasks) >= self.max_task:
-            return False
-        if len([x for x in self.tasks.values() if x == 'repl']) >= self.max_repl_task:
-            return False
 
-        def wrapperTarget(*args, **kwargs):
-            """
-                call target(args) and remove own handle in tasks
-            """
-            target = kwargs['target']
-            try:
-                if args:
-                    target(args)
-                else:
-                    target()
-            except Exception, e:
-                print "task error", e
-            finally:
-                ref_hdl = kwargs['ref_hdl']
-                tasks = kwargs['tasks']
-                handles = kwargs['handles']
+        with self.mutex:
+            if self.tasks.has_key(vol):
+                return False
+            if len(self.tasks) >= self.max_task:
+                return False
+            if self.repl_task_num >= self.max_repl_task:
+                return False
+            if name == 'repl':
+                self.repl_task_num += 1
 
-                hdl = ref_hdl[0]
-                vol = handles[hdl]
-                tasks.pop(vol)
-                handles.pop(hdl)
+            def wrapperTarget(*args, **kwargs):
+                """
+                    call target(args) and remove own handle in tasks
+                """
+                target = kwargs['target']
+                try:
+                    if args:
+                        target(args)
+                    else:
+                        target()
+                except Exception, e:
+                    print "TaskManager.wrapperTarget err", e
+                finally:
+                    ref_hdl = kwargs['ref_hdl']
+                    tasks = kwargs['tasks']
+                    handles = kwargs['handles']
 
-        ref_hdl = [] # use [] to set the value later
-        kwargs = {
-            'ref_hdl':ref_hdl,
-            'tasks':self.tasks,
-            'handles':self.handles,
-            'target':target
-        }
-        hdl = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
-        ref_hdl.append(hdl)
-        self.tasks[vol] = name
-        self.handles[hdl] = vol
+                    with self.mutex:
+                        hdl = ref_hdl[0]
+                        vol = handles[hdl]
+                        name = tasks.pop(vol)
+                        if name == 'repl':
+                            self.repl_task_num -= 1
+                        handles.pop(hdl)
 
+            ref_hdl = [] # use [] to set the value later
+            kwargs = {
+                'ref_hdl':ref_hdl,
+                'tasks':self.tasks,
+                'handles':self.handles,
+                'target':target
+            }
+            hdl = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
+            ref_hdl.append(hdl)
+            self.tasks[vol] = name
+            self.handles[hdl] = vol
+
+        # lock is unnecessary
         hdl.start()
         return True
 
     def join(self):
-        for th in self.handles.keys():
-            th.join()
+        cur = threading.current_thread()
+        for th in threading.enumerate():
+            if th != cur:
+                th.join()
+        with self.mutex:
+            if len(self.handles) > 0:
+                print "TaskManager.join err handle", len(self.handles)
+            if self.repl_task_num != 0:
+                print "TaskManager.join err repl_task_num", self.repl_task_num
 
 
 def usage():
