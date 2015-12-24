@@ -214,29 +214,39 @@ class TestGetMergeGidRange(unittest.TestCase):
             r = getMergeGidRange(diffL)
             self.assertEqual(r, t[1])
 
-class TestThreadManager(unittest.TestCase):
+class TestTaskManager(unittest.TestCase):
     def test(self):
-        name = 'test'
-        limit = {
-            name:2
-        }
-        tm = ThreadManager(limit)
+        tm = TaskManager(max_task=2, max_repl_task=1)
 
         def worker():
             time.sleep(0.1)
 
-        # run two workers
-        b = tm.tryRun(name, worker)
+        # run first task
+        b = tm.tryRun('vol0', 'merge', worker)
         self.assertTrue(b)
-        b = tm.tryRun(name, worker)
-        self.assertTrue(b)
-        # to run thrird worker fails
-        b = tm.tryRun(name, worker)
+        # fail if same vol
+        b = tm.tryRun('vol0', 'merge', worker)
         self.assertFalse(b)
-        # wait to finish first worker
-        time.sleep(0.3)
-        # to run third worker successes
-        b = tm.tryRun(name, worker)
+        # add second task
+        b = tm.tryRun('vol1', 'merge', worker)
+        self.assertTrue(b)
+        # limit max_task = 2
+        b = tm.tryRun('vol2', 'merge', worker)
+        self.assertFalse(b)
+        # wait to finish first task
+        time.sleep(0.2)
+        # to run third task
+        b = tm.tryRun('vol2', 'merge', worker)
+        self.assertTrue(b)
+        time.sleep(0.1)
+
+        b = tm.tryRun('vol5', 'repl', worker)
+        self.assertTrue(b)
+        # limit max_repl_task = 1
+        b = tm.tryRun('vol8', 'repl', worker)
+        self.assertFalse(b)
+        time.sleep(0.2)
+        b = tm.tryRun('vol8', 'repl', worker)
         self.assertTrue(b)
         tm.join()
 

@@ -439,62 +439,74 @@ class Worker:
         t = self.selectMergeTask2(volL, numDiffL, curTime)
         return t
 
-class ThreadManager:
-    def __init__(self, limit):
+class TaskManager:
+    def __init__(self, max_task, max_repl_task):
         """
-            create ThreadManager
-            example of limit
-            limit = {
-                'merge':3,
-                'apply':2,
-            }
+            exec one task('mege', 'apply', 'repl')  for each vol
+            total num <= max_task
+            total repl num <= max_replication_task
         """
-        verify_type(limit, dict)
-        self.limit = limit
-        self.threadTbl = {}
-        for k in self.limit.keys():
-            self.threadTbl[k] = []
+        verify_type(max_task, int)
+        verify_type(max_repl_task, int)
+        self.max_task = max_task
+        self.max_repl_task = max_repl_task
+        self.tasks = {} # map<vol, name>
+        self.handles = {} # map<hdl, vol>
 
-    def tryRun(self, name, target, args=()):
+    def tryRun(self, vol, name, target, args=()):
         """
             run worker(args)
         """
+        verify_type(vol, str)
         verify_type(name, str)
         verify_type(args, tuple)
-        if name not in self.limit:
-            print 'ERR ThreadManager:tryRun not found', name
+        if self.tasks.has_key(vol):
             return False
-        threads = self.threadTbl[name]
-        if len(threads) >= self.limit[name]:
+        if len(self.tasks) >= self.max_task:
+            return False
+        if len([x for x in self.tasks.values() if x == 'repl']) >= self.max_repl_task:
             return False
 
         def wrapperTarget(*args, **kwargs):
             """
-                call target(args) and remove own handle in threads
+                call target(args) and remove own handle in tasks
             """
             target = kwargs['target']
-            if args:
-                target(args)
-            else:
-                target()
-            info = kwargs['threadInfo'][0]
-            info[0].remove(info[1])
-        info = []
+            try:
+                if args:
+                    target(args)
+                else:
+                    target()
+            except Exception, e:
+                print "task error", e
+            finally:
+                ref_hdl = kwargs['ref_hdl']
+                tasks = kwargs['tasks']
+                handles = kwargs['handles']
+
+                hdl = ref_hdl[0]
+                vol = handles[hdl]
+                tasks.pop(vol)
+                handles.pop(hdl)
+
+        ref_hdl = [] # use [] to set the value later
         kwargs = {
-            'threadInfo':info,
+            'ref_hdl':ref_hdl,
+            'tasks':self.tasks,
+            'handles':self.handles,
             'target':target
         }
+        hdl = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
+        ref_hdl.append(hdl)
+        self.tasks[vol] = name
+        self.handles[hdl] = vol
 
-        th = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
-        threads.append(th)
-        info.append((threads,th))
-        th.start()
+        hdl.start()
         return True
 
     def join(self):
-        for threads in self.threadTbl.values():
-            for th in threads:
-                th.join()
+        for th in self.handles.keys():
+            th.join()
 
 
 def usage():
