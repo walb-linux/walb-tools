@@ -1391,6 +1391,12 @@ class Controller(object):
             return []
         return map(create_diff_from_str, ls.split('\n'))
 
+    def print_applicable_diff_list(self, ax, vol, gid=UINT64_MAX):
+        '''
+        Print applicable wdiff list.
+        '''
+        printL(self.get_applicable_diff_list(ax, vol, gid))
+
     def _get_with_gid_range(self, ax, vol, cmd, gid0=0, gid1=UINT64_MAX):
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
