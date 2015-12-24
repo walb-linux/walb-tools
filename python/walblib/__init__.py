@@ -7,6 +7,7 @@ import sys
 import re
 import _strptime # strptime is not thread safe, so import _strptime before calling it
 import datetime
+from collections import defaultdict
 
 ########################################
 # Constants for general purpose.
@@ -1446,6 +1447,47 @@ class Controller(object):
         verify_type(action, str)
         num = int(self.run_ctl(s, ['get', 'num-action', vol, action]))
         return num
+
+    def get_all_actions(self, ax):
+        '''
+        Get all action state for all the volumes.
+        ax :: ServerParams - an archive server.
+        return :: {str: {str: int}} - volId, actionName, number of running actions.
+        '''
+        verify_type(ax, ServerParams)
+        sL = self.run_ctl(ax, ['get', 'all-actions'])
+        def parse(s):
+            L = s.split()
+            if len(L) == 0 or len(L) % 2 == 0:
+                raise Exception('parse all-actions response failed:', s)
+            vol = L.pop(0)
+            tL = []
+            while len(L) > 0:
+                action = L.pop(0)
+                num = L.pop(0)
+                tL.append((action, int(num)))
+            return (vol, tL)
+        d = defaultdict(lambda: defaultdict(int))
+        for vol, tL in map(parse, sL.split('\n')):
+            for action, nr in tL:
+                d[vol][action] = nr
+        return d
+
+    def get_vol_list_without_action_running(self, ax):
+        '''
+        Get volume list whose actions are not running at all.
+        ax :: ServerParams - an archive server.
+        return :: [str] - volume list.
+        '''
+        volL = []
+        d = self.get_all_actions(ax)
+        for vol, d2 in d.iteritems():
+            total = 0
+            for nr in d2.itervalues():
+                total += nr
+            if total == 0:
+                volL.append(vol)
+        return volL
 
     def reset(self, s, vol, timeoutS=SHORT_TIMEOUT_SEC):
         '''
