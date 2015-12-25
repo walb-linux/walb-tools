@@ -5,6 +5,8 @@ from walblib import *
 isDebug = False # True
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
 
+g_signaled = None
+
 def getCurrentTime():
     return datetime.datetime.utcnow()
 
@@ -94,7 +96,9 @@ class General:
         self.addr = ""
         self.port = 0
         self.walbc_path = ''
-        self.max_concurrent_tasks = 0
+        self.max_task = 1
+        self.max_replication_task = 1
+        self.kick_period = 1
 
     def set(self, d):
         verify_type(d, dict)
@@ -105,10 +109,14 @@ class General:
         verify_type(self.walbc_path, str)
         if not os.path.exists(self.walbc_path):
             raise Exception('walbc_path is not found', self.walbc_path)
-        self.max_concurrent_tasks = parsePositive(d['max_concurrent_tasks'])
+        self.max_task = parsePositive(d['max_task'])
+        if d.has_key('max_replication_task'):
+            self.max_replication_task = parsePositive(d['max_replication_task'])
+        if d.has_key('kick_period'):
+            self.kick_period = parsePositive(d['kick_period'])
 
     def __str__(self):
-        return "addr=%s, port=%d, max_concurrent_tasks=%d" % (self.addr, self.port, self.max_concurrent_tasks)
+        return "addr=%s, port=%d, max_task=%d max_replication_task=%d kick_period=%d" % (self.addr, self.port, self.max_task, self.max_replication_task, self.kick_period)
 
 class Apply:
     def __init__(self):
@@ -218,6 +226,7 @@ class ExecedRepl:
 
 def handler(signum, frame):
     print "catch SIGHUP"
+    g_signaled = True
 
 def setupSignal():
     signal.signal(signal.SIGHUP, handler)
@@ -301,6 +310,16 @@ class Task:
             return (self.vol, self.src, self.dst) == (rhs.vol, rhs.src, rhs.dst)
     def __ne__(self, rhs):
         return not self.__eq__(rhs)
+
+def execTask(walbc, task):
+    if task.name == 'apply':
+        walbc.apply(task.ax, task.vol, task.gid)
+    elif task.name == 'merge':
+        walbc.merge(task.ax, task.vol, task.gidB, task.gidE)
+    elif task.name == 'repl':
+        walbc.replicate(task.src, task.vol, task.dsk)
+    else:
+        raise Exception('execTask bad name', task)
 
 g_binDir = ''
 g_dirName = ''
@@ -415,9 +434,8 @@ class Worker:
         else:
             return None
 
-    def selectTask(self):
-        curTime = getCurrentTime()
-        volL = self.walbc.get_vol_list(self.a0)
+    def selectTask(self, volTimeL, curTime):
+        volL = map(lambda x:x[0], volTimeL)
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -549,10 +567,25 @@ def main():
         print "set -f option"
         usage()
 
-    cfg = loadConfig(configName)
-    w = Worker(cfg)
-    task = w.selectTask()
-    print task
+    manager = None
+    g_signaled = True
+    while True:
+        if g_signaled:
+            cfg = loadConfig(configName)
+            w = Worker(cfg)
+            if manager:
+                manager.join()
+            manager = TaskManager(cfg.max_task, cfg.max_replication_task)
+            g_signaled = False
+#        volL = self.get_vol_list_without_action_running(self.a0)
+        volTimeL = [('vol0', '0')]
+        curTime = getCurrentTime()
+        task = w.selectTask(volTimeL, curTime)
+        print "select task", task, "from", volL, "at", curTime
+        b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
+        if not b:
+            print "fail task", task
+        time.sleep(cfg.kick_period)
 
 if __name__ == "__main__":
     main()

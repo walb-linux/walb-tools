@@ -119,7 +119,8 @@ general:
   addr: 192.168.0.1
   port: 10000
   walbc_path: binsrc/walbc
-  max_concurrent_tasks: 10
+  max_task: 10
+  max_replication_task: 5
 apply:
   keep_period: 14d
 merge:
@@ -152,7 +153,7 @@ class TestLoadConfigParam(unittest.TestCase):
         general = cfg.general
         self.assertEqual(general.addr, '192.168.0.1')
         self.assertEqual(general.port, 10000)
-        self.assertEqual(general.max_concurrent_tasks, 10)
+        self.assertEqual(general.max_task, 10)
         apply_ = cfg.apply_
         self.assertEqual(apply_.keep_period, datetime.timedelta(days=14))
         merge = cfg.merge
