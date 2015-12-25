@@ -59,6 +59,9 @@ all: build
 build:
 	$(MAKE) version_cpp
 	$(MAKE) $(BINARIES)
+build-exec:
+	$(MAKE) version_cpp
+	$(MAKE) $(BINARIES) ENABLE_EXEC_PROTOCOL=1
 
 core:
 	$(MAKE) version_cpp
