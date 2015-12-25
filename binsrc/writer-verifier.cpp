@@ -104,10 +104,12 @@ public:
         , submitQ_()
         , pendingIOs_()
         , completedIOs_()
-        , isInitialized_(ATOMIC_FLAG_INIT)
-        , isReleased_(ATOMIC_FLAG_INIT)
+        , isInitialized_()
+        , isReleased_()
         , key_(0)
         , nrIOs_(0) {
+        isInitialized_.clear();
+        isReleased_.clear();
     }
     /**
      * You must call this in the thread which will run the destructor.
