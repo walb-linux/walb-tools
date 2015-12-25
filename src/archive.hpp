@@ -140,17 +140,16 @@ inline StrVec getVolIdList()
 }
 
 template <typename F>
-inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
+inline MetaDiffVec tryOpenDiffs(
     std::vector<cybozu::util::File>& fileV, ArchiveVolInfo& volInfo,
-    bool allowEmpty, F getDiffList)
+    bool allowEmpty, const MetaState& baseSt, F getDiffList)
 {
     const char *const FUNC = __func__;
 
     const int maxRetryNum = 10;
     int retryNum = 0;
   retry:
-    const MetaState st = volInfo.getMetaState();
-    const MetaDiffVec diffV = getDiffList(st);
+    const MetaDiffVec diffV = getDiffList(baseSt);
     if (!allowEmpty && diffV.empty()) {
         throw cybozu::Exception(FUNC) << "diffV empty" << volInfo.volId;
     }
@@ -169,17 +168,29 @@ inline std::pair<MetaState, MetaDiffVec> tryOpenDiffs(
         }
         fileV.push_back(std::move(op));
     }
-    return {st, diffV};
+    return diffV;
 }
 
 const bool allowEmpty = true;
 
+/**
+ * @gid UINT64_MAX --> use base image.
+ *      other --> use cold snapshot with the gid.
+ */
 inline void prepareRawFullScanner(
-    cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb)
+    cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb, uint64_t gid = UINT64_MAX)
 {
-    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
+    const bool useCold = (gid != UINT64_MAX);
+    VolLvCache& lvC = volSt.lvCache;
+    cybozu::lvm::Lv baseLv = lvC.getLv();
+    cybozu::lvm::Lv lv = (useCold ? lvC.getCold(gid) : baseLv);
     if (sizeLb > lv.sizeLb()) {
-        throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
+        if (useCold && sizeLb == baseLv.sizeLb()) {
+            lv.resize(sizeLb);
+            lvC.resizeCold(gid, sizeLb);
+        } else {
+            throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
+        }
     }
     file.open(lv.path().str(), O_RDONLY);
 }
@@ -188,16 +199,23 @@ inline void prepareVirtualFullScanner(
     VirtualFullScanner &virt, ArchiveVolState &volSt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap)
 {
+    MetaState st0;
+    bool isCold = false;
+    if (snap.isClean()) {
+        st0 = volInfo.getMetaStateForRestore(snap.gidB, isCold);
+    } else {
+        st0 = volInfo.getMetaState();
+    }
+
     cybozu::util::File fileR;
-    prepareRawFullScanner(fileR, volSt, sizeLb);
+    const uint64_t gid = (isCold ? st0.snapB.gidB : UINT64_MAX);
+    prepareRawFullScanner(fileR, volSt, sizeLb, gid);
 
     std::vector<cybozu::util::File> fileV;
-    MetaState st0;
-    MetaDiffVec diffV;
-    std::tie(st0, diffV) =
-        tryOpenDiffs(fileV, volInfo, allowEmpty, [&](const MetaState &st) {
-                return volInfo.getDiffMgr().getDiffListToSync(st, snap);
-            });
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
+            return volInfo.getDiffMgr().getDiffListToSync(st, snap);
+        });
     LOGs.debug() << "virtual-full-scan-diffs" << st0 << diffV;
 
     virt.init(std::move(fileR), std::move(fileV));
@@ -264,12 +282,32 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    VolLvCache &lvC = volSt.lvCache;
+
+    {
+        UniqueLock ul(volSt.mu);
+        volInfo.recoverColdToBaseIfNecessary();
+    }
 
     std::vector<cybozu::util::File> fileV;
-    MetaState st0;
-    MetaDiffVec diffV;
-    std::tie(st0, diffV) = tryOpenDiffs(
-        fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
+    bool useCold;
+    MetaState st0 = volInfo.getMetaStateForApply(gid, useCold);
+
+    if (useCold) {
+        UniqueLock ul(volSt.mu);
+        const uint64_t coldGid = st0.snapB.gidB;
+        LOGs.info() << "make cold image to base: start" << volId << coldGid;
+        volInfo.makeColdToBase(coldGid);
+        LOGs.info() << "make cold image to base: end" << volId << coldGid;
+
+        if (coldGid == gid) {
+            LOGs.info() << "no need to apply-diffs." << volId << coldGid;
+            return true;
+        }
+    }
+
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, !allowEmpty, st0, [&](const MetaState &st) {
             return mgr.getDiffListToApply(st, gid);
         });
 
@@ -277,7 +315,7 @@ inline bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     const MetaState st1 = beginApplying(st0, diffV);
     volInfo.setMetaState(st1);
 
-    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
+    cybozu::lvm::Lv lv = lvC.getLv(); // base image.
     DiffStatistics statIn, statOut;
     std::string memUsageStr;
     if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
@@ -325,10 +363,9 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     std::vector<cybozu::util::File> fileV;
-    MetaState st0;
-    MetaDiffVec diffV;
-    std::tie(st0, diffV) = tryOpenDiffs(
-        fileV, volInfo, allowEmpty, [&](const MetaState &) {
+    MetaState st0 = volInfo.getMetaState();
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, allowEmpty, st0, [&](const MetaState &) {
             if (isSize) {
                 const uint64_t maxSize = param3 * MEBI;
                 return volInfo.getDiffListToMerge(gidB, maxSize);
@@ -374,28 +411,30 @@ inline bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uin
     return true;
 }
 
-inline void removeSnapshot(cybozu::lvm::Lv& lv, const std::string& name)
+inline void removeLv(const std::string& vgName, const std::string& name)
 {
-    if (lv.hasSnap(name)) {
-        lv.getSnap(name).remove();
+    if (!cybozu::lvm::existsFile(vgName, name)) {
+        // Do nothing.
+        return;
     }
+    cybozu::lvm::remove(cybozu::lvm::getLvStr(vgName, name));
 }
 
 struct TmpSnapshotDeleter
 {
-    cybozu::lvm::Lv& lv;
+    std::string vgName;
     std::string name;
     ~TmpSnapshotDeleter()
         try
     {
-        removeSnapshot(lv, name);
+        removeLv(vgName, name);
     } catch (...) {
     }
 };
 
 /**
  * Restore a snapshot.
- * (1) create lvm snapshot of base lv. (with temporal lv name)
+ * (1) create lvm snapshot of base lv. (with temporary lv name)
  * (2) apply appropriate wdiff files.
  * (3) rename the lvm snapshot.
  *
@@ -407,72 +446,101 @@ inline bool restore(const std::string &volId, uint64_t gid)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
-    cybozu::lvm::Lv lv = volSt.lvCache.getLv();
+    VolLvCache& lvC = volSt.lvCache;
+    cybozu::lvm::Lv baseLv = lvC.getLv();
     const std::string targetName = volInfo.restoredSnapshotName(gid);
-    const std::string tmpLvName = targetName + RESTORED_VOLUME_TMP_SUFFIX;
-    removeSnapshot(lv, tmpLvName);
+    const std::string tmpLvName = volInfo.tmpRestoredSnapshotName(gid);
+    removeLv(baseLv.vgName(), tmpLvName);
 
-    cybozu::lvm::Lv lvSnap;
+    bool useCold;
+    MetaState baseSt = volInfo.getMetaStateForRestore(gid, useCold);
+
+    cybozu::lvm::Lv tmpLv;
     if (isThinpool()) {
-        lvSnap = lv.createTvSnap(tmpLvName, true);
+        if (useCold) {
+            /* Here the cold lv must exist. */
+            cybozu::lvm::Lv coldLv = lvC.getCold(baseSt.snapB.gidB);
+            tmpLv = coldLv.createTvSnap(tmpLvName, true);
+            if (tmpLv.sizeLb() < baseLv.sizeLb()) {
+                tmpLv.resize(baseLv.sizeLb());
+            }
+        } else {
+            /* Use base image for snapshot origin. */
+            tmpLv = baseLv.createTvSnap(tmpLvName, true);
+        }
     } else {
-        const uint64_t snapSizeLb = uint64_t((double)(lv.sizeLb()) * 1.2);
-        lvSnap = lv.createLvSnap(tmpLvName, true, snapSizeLb);
+        assert(!useCold);
+        const uint64_t snapSizeLb = uint64_t((double)(baseLv.sizeLb()) * 1.2);
+        tmpLv = baseLv.createLvSnap(tmpLvName, true, snapSizeLb);
     }
-    TmpSnapshotDeleter deleter{lv, tmpLvName};
+    TmpSnapshotDeleter deleter{baseLv.vgName(), tmpLvName};
 
-    const MetaState baseSt = volInfo.getMetaState();
     const bool noNeedToApply =
         !baseSt.isApplying && baseSt.snapB.isClean() && baseSt.snapB.gidB == gid;
 
+    MetaState goalSt = baseSt;
     if (!noNeedToApply) {
         std::vector<cybozu::util::File> fileV;
-        MetaState st0;
-        MetaDiffVec diffV;
-        std::tie(st0, diffV) =
-            tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &st) {
-                    return volSt.diffMgr.getDiffListToRestore(st, gid);
-                });
-        LOGs.debug() << "restore-diffs" << st0 << diffV;
+        MetaDiffVec diffV = tryOpenDiffs(
+            fileV, volInfo, !allowEmpty, baseSt, [&](const MetaState &st) {
+                return volSt.diffMgr.getDiffListToRestore(st, gid);
+            });
+        LOGs.debug() << "restore-diffs" << baseSt << diffV;
         DiffStatistics statIn, statOut;
         std::string memUsageStr;
-        if (!applyOpenedDiffs(std::move(fileV), lvSnap, volSt.stopState, statIn, statOut, memUsageStr)) {
+        if (!applyOpenedDiffs(std::move(fileV), tmpLv, volSt.stopState, statIn, statOut, memUsageStr)) {
             return false;
         }
         LOGs.info() << "restore-mergeIn " << volId << statIn;
         LOGs.info() << "restore-mergeOut" << volId << statOut;
         LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
+        goalSt = apply(baseSt, diffV);
     }
-    lvSnap = cybozu::lvm::renameLv(lv.vgName(), tmpLvName, targetName);
-    volSt.lvCache.addSnap(gid, lvSnap);
-    util::flushBdevBufs(lvSnap.path().str());
+    if (isThinpool()) {
+        util::flushBdevBufs(tmpLv.path().str());
+        const std::string coldLvName = volInfo.coldSnapshotName(gid);
+        if (!cybozu::lvm::existsFile(baseLv.vgName(), coldLvName)) {
+            cybozu::lvm::Lv coldLv = tmpLv.createTvSnap(coldLvName, false);
+            lvC.addCold(gid, coldLv);
+            volInfo.setColdTimestamp(gid, goalSt.timestamp);
+        }
+    }
+    cybozu::lvm::Lv snapLv = cybozu::lvm::renameLv(baseLv.vgName(), tmpLvName, targetName);
+    lvC.addRestored(gid, snapLv);
+    util::flushBdevBufs(snapLv.path().str());
     return true;
 }
 
-inline void delRestored(const std::string &volId, uint64_t gid)
+inline void delSnapshot(const std::string &volId, uint64_t gid, bool isCold)
 {
     const char *const FUNC = __func__;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     VolLvCache &lvC = volSt.lvCache;
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
-    if (!lvC.hasSnap(gid)) {
+    if ((isCold && !lvC.hasCold(gid)) || (!isCold && !lvC.hasRestored(gid))) {
         throw cybozu::Exception(FUNC)
-            << "restored volume not found" << volId << gid;
+            << "volume not found" << volId << gid << (isCold ? "cold" : "restored");
     }
-    cybozu::lvm::Lv snap = lvC.getSnap(gid);
-    util::flushBdevBufs(snap.path().str());
-    snap.remove();
-    lvC.removeSnap(gid);
+    cybozu::lvm::Lv snap = isCold ? lvC.getCold(gid) : lvC.getRestored(gid);
+    if (snap.exists()) {
+        util::flushBdevBufs(snap.path().str());
+        snap.remove();
+    }
+    if (isCold) {
+        lvC.removeCold(gid);
+    } else {
+        lvC.removeRestored(gid);
+    }
 }
 
 /**
- * Get list of all restored volumes.
+ * Get list of all restored/cold volumes.
  */
-inline StrVec listRestored(const std::string &volId)
+inline StrVec listSnapshot(const std::string &volId, bool isCold)
 {
-    ArchiveVolState &volSt = getArchiveVolState(volId);
-    const std::vector<uint64_t> gidV = volSt.lvCache.getSnapGidList();
+    VolLvCache &lvC = getArchiveVolState(volId).lvCache;
+    const std::vector<uint64_t> gidV = isCold ? lvC.getColdGidList() : lvC.getRestoredGidList();
     StrVec ret;
     for (uint64_t gid : gidV) ret.push_back(cybozu::itoa(gid));
     return ret;
@@ -629,6 +697,37 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
     packet::Ack(p.sock).sendFin();
     logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
                   << "succeeded" << volId << elapsed;
+}
+
+inline void delSnapshotServer(protocol::ServerParams &p, bool isCold)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    bool sendErr = true;
+    try {
+        const VolIdAndGidParam param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 2, FUNC), 0, true, 0);
+        const std::string &volId = param.volId;
+        const uint64_t gid = param.gid;
+
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        verifyNotStopping(volSt.stopState, volId, FUNC);
+        verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
+        verifyActionNotRunning(volSt.ac, aActionOnLvm, FUNC);
+        ul.unlock();
+
+        delSnapshot(volId, gid, isCold);
+
+        logger.info() << cybozu::util::formatString("del-%s succeeded", isCold ? "cold" : "restored")
+                      << volId << gid;
+        pkt.writeFin(msgOk);
+        sendErr = false;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
 }
 
 inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const AddrPort &addrPort)
@@ -847,10 +946,10 @@ inline bool runNoMergeDiffReplClient(
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
 {
     const char *const FUNC = __func__;
-    MetaState st0;
-    MetaDiffVec diffV;
+    MetaState st0 = volInfo.getMetaState();
     std::vector<cybozu::util::File> fileV;
-    std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, !allowEmpty, st0, [&](const MetaState &) {
             MetaDiff diff;
             if (volSt.diffMgr.getApplicableDiff(srvLatestSnap, diff)) {
                 return MetaDiffVec{diff};
@@ -893,10 +992,10 @@ inline bool runDiffReplClient(
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, const CompressOpt &cmpr, uint64_t wdiffMergeSize, Logger &logger)
 {
     const char *const FUNC = __func__;
-    MetaState st0;
-    MetaDiffVec diffV;
+    MetaState st0 = volInfo.getMetaState();
     std::vector<cybozu::util::File> fileV;
-    std::tie(st0, diffV) = tryOpenDiffs(fileV, volInfo, !allowEmpty, [&](const MetaState &) {
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, !allowEmpty, st0, [&](const MetaState &) {
             return volInfo.getDiffListToSend(srvLatestSnap, wdiffMergeSize, ga.maxWdiffSendNr);
         });
 
@@ -1459,7 +1558,7 @@ inline void getAllActions(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, v);
 }
 
-inline void getRestored(protocol::GetCommandParams &p)
+inline void getSnapshot(protocol::GetCommandParams &p, bool isCold)
 {
     const char *const FUNC = __func__;
     const std::string volId = parseVolIdParam(p.params, 1);
@@ -1468,10 +1567,25 @@ inline void getRestored(protocol::GetCommandParams &p)
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
-    const StrVec strV = archive_local::listRestored(volId);
+    const StrVec strV = archive_local::listSnapshot(volId, isCold);
     ul.unlock();
     protocol::sendValueAndFin(p, strV);
-    p.logger.debug() << "get restored succeeded" << volId;
+
+    std::string msg = cybozu::util::formatString(
+        "get %s succeeded", isCold ? "cold" : "restored");
+    p.logger.debug() << msg << volId;
+}
+
+inline void getRestored(protocol::GetCommandParams &p)
+{
+    bool isCold = false;
+    getSnapshot(p, isCold);
+}
+
+inline void getCold(protocol::GetCommandParams &p)
+{
+    bool isCold = true;
+    getSnapshot(p, isCold);
 }
 
 inline void getRestorable(protocol::GetCommandParams &p)
@@ -1733,8 +1847,25 @@ inline void verifyArchiveVol(const std::string& volId)
     if (st == aSyncReady) return;
 
     assert(isStateIn(st, aActive));
+
+    volInfo.recoverColdToBaseIfNecessary();
+
     if (!volInfo.lvExists()) {
         throw cybozu::Exception(FUNC) << "base lv must exist" << volId;
+    }
+
+    // Check cold snapshots.
+    for (VolLvCache::LvMap::value_type& p : volSt.lvCache.getColdMap()) {
+        const uint64_t gid = p.first;
+        const cybozu::lvm::Lv& lv = p.second;
+        if (!lv.exists()) {
+            throw cybozu::Exception(FUNC)
+                << "cold snapshot does not exist" << volId << gid;
+        }
+        if (!volInfo.existsColdTimestamp(gid)) {
+            throw cybozu::Exception(FUNC)
+                << "cold timestamp file does not exist" << volId << gid;
+        }
     }
 }
 
@@ -1959,7 +2090,7 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     try {
-        if (volSt.lvCache.hasSnap(gid)) {
+        if (volSt.lvCache.hasRestored(gid)) {
             throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
         }
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
@@ -1985,37 +2116,16 @@ inline void c2aRestoreServer(protocol::ServerParams &p)
     logger.info() << "restore succeeded" << volId << gid << elapsed;
 }
 
-/**
- * del-restored command.
- */
 inline void c2aDelRestoredServer(protocol::ServerParams &p)
 {
-    const char *const FUNC = __func__;
-    ProtocolLogger logger(ga.nodeId, p.clientId);
-    packet::Packet pkt(p.sock);
+    bool isCold = false;
+    archive_local::delSnapshotServer(p, isCold);
+}
 
-    bool sendErr = true;
-    try {
-        const VolIdAndGidParam param = parseVolIdAndGidParam(protocol::recvStrVec(p.sock, 2, FUNC), 0, true, 0);
-        const std::string &volId = param.volId;
-        const uint64_t gid = param.gid;
-
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
-        verifyNotStopping(volSt.stopState, volId, FUNC);
-        verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
-        verifyActionNotRunning(volSt.ac, aActionOnLvm, FUNC);
-        ul.unlock();
-
-        archive_local::delRestored(volId, gid);
-
-        logger.info() << "del-restored succeeded" << volId << gid;
-        pkt.writeFin(msgOk);
-        sendErr = false;
-    } catch (std::exception &e) {
-        logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
-    }
+inline void c2aDelColdServer(protocol::ServerParams &p)
+{
+    bool isCold = true;
+    archive_local::delSnapshotServer(p, isCold);
 }
 
 /**
@@ -2635,6 +2745,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { existsBaseImageTN, archive_local::existsBaseImage },
     { numActionTN, archive_local::getNumAction },
     { restoredTN, archive_local::getRestored },
+    { coldTN, archive_local::getCold },
     { restorableTN, archive_local::getRestorable },
     { uuidTN, archive_local::getUuid },
     { archiveUuidTN, archive_local::getArchiveUuid },
@@ -2666,6 +2777,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { stopCN, c2aStopServer },
     { restoreCN, c2aRestoreServer },
     { delRestoredCN, c2aDelRestoredServer },
+    { delColdCN, c2aDelColdServer },
     { dbgReloadMetadataCN, c2aReloadMetadataServer },
     { replicateCN, c2aReplicateServer },
     { applyCN, c2aApplyServer },

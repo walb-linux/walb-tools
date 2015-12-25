@@ -181,6 +181,7 @@ const CommandInfo g_cmdTbl[] = {
     { hashBkpCN, c2sBackupClient, setupBkp, verifyBackupParam, "execute hash-backup." },
     { restoreCN, c2aRestoreClient, setupVolIdGid, verifyRestoreParam, "restore a volume in an archive server." },
     { delRestoredCN, c2aDelRestoredClient, setupVolIdGid, verifyDelRestoredParam, "delete a restored volume." },
+    { delColdCN, c2aDelColdClient, setupVolIdGid, verifyDelColdParam, "delete a cold volume." },
     { startCN, c2xStartClient, setupStart, verifyStartParam, "start a volume in a server." },
     { stopCN, c2xStopClient, setupStop, verifyStopParam, "stop a volume in a server." },
     { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, verifyArchiveInfoParam, "control archive information in a proxy." },

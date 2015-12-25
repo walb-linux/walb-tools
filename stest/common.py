@@ -23,6 +23,8 @@ walbc = None # Controller
 maxFgTasks = None # int
 maxBgTasks = None # int
 BASE_VOLUME_PREFIX = None # str
+RESTORED_VOLUME_PREFIX = None # str
+COLD_VOLUME_PREFIX = None # str
 
 
 def set_config(toSymbolTbl, fromSymbolTbl):
@@ -37,6 +39,18 @@ def set_config(toSymbolTbl, fromSymbolTbl):
         globals()[name] = symbol # this module also requires the symbols.
 
 
+def remove_all_lv_in_archive(ax):
+    verify_server_kind(ax, [K_ARCHIVE])
+    if ax.vg is None:
+        return
+    vgPath = os.path.join('/dev', ax.vg)
+    if not os.path.isdir(vgPath):
+        return
+    for f in os.listdir(vgPath):
+        if any([f.startswith(p) for p in [BASE_VOLUME_PREFIX, RESTORED_VOLUME_PREFIX, COLD_VOLUME_PREFIX]]):
+            remove_lv(os.path.join(vgPath, f))
+
+
 def setup_test(useTp):
     if useTp:
         use_thinp()
@@ -44,12 +58,7 @@ def setup_test(useTp):
     kill_all_servers()
     run_local_command(['/bin/rm', '-rf', workDir])
     for ax in sLayoutAll.archiveL:
-        if ax.vg:
-            vgPath = '/dev/' + ax.vg + '/'
-            if os.path.isdir(vgPath):
-                for f in os.listdir(vgPath):
-                    if f.startswith(BASE_VOLUME_PREFIX):
-                        run_local_command(['/sbin/lvremove', '-f', vgPath + f])
+        remove_all_lv_in_archive(ax)
     make_dir(workDir)
     for wdev in wdevL:
         recreate_walb_dev(wdev)
@@ -210,9 +219,7 @@ def remove_persistent_data(s):
     '''
     shutil.rmtree(workDir + s.name)
     if s in sLayoutAll.archiveL:
-        for f in os.listdir('/dev/' + s.vg):
-            if f.startswith(BASE_VOLUME_PREFIX):
-                remove_lv('/dev/' + s.vg + '/' + f)
+        remove_all_lv_in_archive(s)
 
 
 def write_random(bdevPath, sizeLb, offset=0, fixVar=None):

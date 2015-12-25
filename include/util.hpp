@@ -360,6 +360,12 @@ inline bool hasSuffix(const std::string &name, const std::string &suffix)
     return name.substr(name.size() - suffix.size()) == suffix;
 }
 
+inline std::string removeSuffix(const std::string &name, const std::string &suffix)
+{
+    assert(hasSuffix(name, suffix));
+    return name.substr(0, name.size() - suffix.size());
+}
+
 inline bool isAllDigit(const std::string &s)
 {
     return std::all_of(s.cbegin(), s.cend(), [](const char &c) {

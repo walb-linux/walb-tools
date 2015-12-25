@@ -78,6 +78,7 @@ VgList listVg(const std::string &vgName);
 Vg getVg(const std::string &vgName);
 bool existsVg(const std::string &vgName);
 LvAttr getLvAttr(const std::string &lvPathStr);
+void setPermission(const std::string &lvStr, bool isWritable);
 
 
 namespace local {
@@ -317,6 +318,7 @@ public:
         return getLvStr(vgName_, name());
     }
     bool exists() const {
+        if (vgName_.empty() || name().empty()) return false;
         if (attr_.isTpType()) {
             return cybozu::lvm::existsTp(vgName_, name());
         } else {
@@ -332,11 +334,12 @@ public:
         return cybozu::lvm::createLvSnap(vgName_, lvName_, snapName, isWritable, sizeLb);
     }
     Lv createTvSnap(const std::string &snapName, bool isWritable) const {
-        verifyVol();
+        /* dm-thinp supports snapshot of a snapshot. */
         if (!isTv()) {
             throw cybozu::Exception(__func__) << "sizeLb parameter required";
         }
-        return cybozu::lvm::createTvSnap(vgName_, lvName_, snapName, isWritable);
+        /* If this object is snapshot, this->snapName_ will be the new->lvName_. */
+        return cybozu::lvm::createTvSnap(vgName_, name(), snapName, isWritable);
     }
     /**
      * @snapName specify an empty string for wildcard.
@@ -828,6 +831,16 @@ inline LvAttr getLvAttr(const std::string &lvPathStr)
     }
     if (i != 1) throw cybozu::Exception(__func__) << "result is not oneline" << i << result;
     return attr;
+}
+
+inline void setPermission(const std::string &lvStr, bool isWritable)
+{
+    const StrVec args = {
+        local::getPermissionOpt(isWritable),
+        lvStr
+    };
+    local::putArgsDebug(__func__, args);
+    cybozu::process::call("/sbin/lvchange", args);
 }
 
 }} //namespace cybozu::lvm

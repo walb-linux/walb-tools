@@ -23,6 +23,7 @@ UINT64_MAX = (1 << 64) - 1
 
 BASE_VOLUME_PREFIX = 'wb_'
 RESTORED_VOLUME_PREFIX = 'wr_'
+COLD_VOLUME_PREFIX = 'wc_'
 
 
 ########################################
@@ -2058,6 +2059,16 @@ class Controller(object):
         vgName = self.run_ctl(ax, ['get', 'volume-group'])
         return '/dev/' + vgName + '/' + RESTORED_VOLUME_PREFIX + vol + '_' + str(gid)
 
+    def _get_snapshot(self, ax, vol, isCold):
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(isCold, bool)
+        target = 'cold' if isCold else 'restored'
+        ret = self.run_ctl(ax, ['get', target, vol])
+        if not ret:
+            return []
+        return map(int, ret.split('\n'))
+
     def get_restored(self, ax, vol):
         '''
         Get restored gid list.
@@ -2065,12 +2076,16 @@ class Controller(object):
         vol :: str       - volume name.
         return :: [int]  - gid list.
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        ret = self.run_ctl(ax, ['get', 'restored', vol])
-        if not ret:
-            return []
-        return map(int, ret.split('\n'))
+        return self._get_snapshot(ax, vol, False)
+
+    def get_cold(self, ax, vol):
+        '''
+        Get restored gid list.
+        ax :: ServerParams - archive server.
+        vol :: str       - volume name.
+        return :: [int]  - gid list.
+        '''
+        return self._get_snapshot(ax, vol, True)
 
     def wait_for_restorable(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
@@ -2368,6 +2383,26 @@ class Controller(object):
         self.run_ctl(ax, ['restore', vol, str(gid)])
         self.wait_for_restored(ax, vol, gid, timeoutS)
 
+    def _del_snapshot(self, ax, vol, gid, isCold):
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_u64(gid)
+        verify_type(isCold, bool)
+        cmd = 'del-cold' if isCold else 'del-restored'
+        retryTimes = 3
+        for i in xrange(retryTimes):
+            try:
+                if i != 0 and gid not in self._get_snapshot(ax, vol, isCold):
+                    break
+                self.run_ctl(ax, [cmd, vol, str(gid)])
+                break
+            except Exception, e:
+                print cmd + ' retry', i, e
+                time.sleep(1)
+        else:
+            raise Exception(cmd + ': exceeds max retry times', ax.name, vol, gid)
+        self._wait_for_not_restored(ax, vol, gid)
+
     def del_restored(self, ax, vol, gid):
         '''
         Delete a restored volume.
@@ -2375,23 +2410,16 @@ class Controller(object):
         vol :: str        - volume name.
         gid :: int        - generation id.
         '''
-        verify_server_kind(ax, [K_ARCHIVE])
-        verify_type(vol, str)
-        verify_u64(gid)
+        self._del_snapshot(ax, vol, gid, False)
 
-        retryTimes = 3
-        for i in xrange(retryTimes):
-            try:
-                if i != 0 and gid not in self.get_restored(ax, vol):
-                    break
-                self.run_ctl(ax, ['del-restored', vol, str(gid)])
-                break
-            except Exception, e:
-                print 'del-restored retry', i, e
-                time.sleep(1)
-        else:
-            raise Exception('del-restored: exceeds max retry times', ax.name, vol, gid)
-        self._wait_for_not_restored(ax, vol, gid)
+    def del_cold(self, ax, vol, gid):
+        '''
+        Delete a cold volume.
+        ax :: ServerParams  - archive server.
+        vol :: str        - volume name.
+        gid :: int        - generation id.
+        '''
+        self._del_snapshot(ax, vol, gid, True)
 
     def _del_restored_all(self, ax, vol):
         '''

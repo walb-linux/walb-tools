@@ -11,16 +11,42 @@
 
 namespace walb {
 
-inline void verifyVolIdFormat(const std::string& volId)
+namespace command_param_parser_local {
+
+inline bool isOrVerifyVolIdFormat(const std::string& s, bool doThrowError)
 {
-    if (volId.empty() || volId.size() > 64) {
-        throw cybozu::Exception("bad volId format: size") << volId << volId.size();
-    }
-    for (const char &c : volId) {
-        if (!('0' <= c && c <= '9') && !('a' <= c && c <= 'z') && !('A' <= c && c <= 'Z') && c != '-') {
-            throw cybozu::Exception("bad volId format: bad character") << volId << c;
+    if (s.empty() || s.size() > 64) {
+        if (doThrowError) {
+            throw cybozu::Exception("bad s format: size") << s << s.size();
+        } else {
+            return false;
         }
     }
+    for (const char &c : s) {
+        if (!('0' <= c && c <= '9') &&
+            !('a' <= c && c <= 'z') &&
+            !('A' <= c && c <= 'Z') &&
+            c != '-') {
+            if (doThrowError) {
+                throw cybozu::Exception("bad volId format: bad character") << s << c;
+            } else {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace command_param_parser_local
+
+inline void verifyVolIdFormat(const std::string& s)
+{
+    command_param_parser_local::isOrVerifyVolIdFormat(s, true);
+}
+
+inline bool isVolIdFormat(const std::string& s)
+{
+    return command_param_parser_local::isOrVerifyVolIdFormat(s, false);
 }
 
 inline std::string parseVolIdParam(const StrVec &args, size_t pos)
@@ -42,7 +68,7 @@ inline StatusParam parseStatusParam(const StrVec &args)
     StatusParam param;
     cybozu::util::parseStrVec(args, 0, 0, {&param.volId});
     param.isAll = param.volId.empty();
-    if (!param.isAll) verifyVolIdFormat(volId);
+    if (!param.isAll) verifyVolIdFormat(param.volId);
     return param;
 }
 
@@ -432,6 +458,7 @@ inline void verifyStartParam(const StrVec &args) { parseStartParam(args, false);
 inline void verifyStopParam(const StrVec &args) { parseStopParam(args, true); }
 inline void verifyRestoreParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
 inline void verifyDelRestoredParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
+inline void verifyDelColdParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
 inline void verifyReplicateParam(const StrVec &args) { parseReplicateParam(args); }
 inline void verifyApplyParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, true, 0); }
 inline void verifyMergeParam(const StrVec &args) { parseMergeParam(args); }

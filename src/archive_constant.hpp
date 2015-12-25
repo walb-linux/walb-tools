@@ -81,7 +81,8 @@ const StrVec aActionOnLvm = {aaRestore, aaResize};
 
 const std::string BASE_VOLUME_PREFIX = "wb_";
 const std::string RESTORED_VOLUME_PREFIX = "wr_";
-const std::string RESTORED_VOLUME_TMP_SUFFIX = "_tmp";
+const std::string COLD_VOLUME_PREFIX = "wc_";
+const std::string TMP_VOLUME_SUFFIX = "_tmp";
 
 const StrVec aAcceptForReplicateServer = {aSyncReady, aArchived};
 const StrVec aActive = {aArchived, atHashSync, atWdiffRecv, atReplSync};

@@ -85,6 +85,11 @@ inline void c2aDelRestoredClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
+inline void c2aDelColdClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
+}
+
 /**
  * pattern (1)
  *   list <volId>
@@ -439,6 +444,7 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {existsDiffTN, {protocol::SizeType, verifyExistsDiffParamForGet, "[volId gid0 gid1 gid2 gid3]"}},
         {existsBaseImageTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] 1 if base image exists, else 0."}},
         {restoredTN, {protocol::StringVecType, verifyVolIdParamForGet, "[volId] get restored clean snapshot list."}},
+        {coldTN, {protocol::StringVecType, verifyVolIdParamForGet, "[volId] get cold snapshot list."}},
         {restorableTN, {protocol::StringVecType, verifyRestorableParamForGet, "[volId (all)] get restorable clean snapshot and timestamp list."}},
         {uuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get uuid of a volume."}},
         {archiveUuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get archive uuid of a volume."}},

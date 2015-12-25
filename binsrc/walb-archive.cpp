@@ -88,9 +88,10 @@ void initArchiveData()
     LOGs.info() << "run lvs command (it may take long time)";
     const cybozu::lvm::LvList lvL = cybozu::lvm::listLv(ga.volumeGroup);
     LOGs.info() << "lvs command done.";
-    const size_t nr = removeTemporalArchiveSnapshots(lvL);
-    if (nr > 0) LOGs.info() << "remove temporal snapshots" << nr;
+    const size_t nr = removeTemporaryRestoredSnapshots(lvL);
+    if (nr > 0) LOGs.info() << "remove temporary snapshots" << nr;
     VolLvCacheMap map = getVolLvCacheMap(lvL, ga.thinpool, volIdV);
+
     LOGs.info() << "try to load metadata for volumes" << volIdV.size();
     for (VolLvCacheMap::value_type &p : map) {
         const std::string &volId = p.first;

@@ -316,12 +316,12 @@ inline uint64_t parseBulkLb(const std::string &str, const char *msg)
     return parseSizeLb(str, msg, LOGICAL_BLOCK_SIZE, MAX_BULK_SIZE);
 }
 
-class TemporalExistingFile
+class TemporaryExistingFile
 {
     const cybozu::FilePath  path_;
-    static constexpr const char *NAME() { return "TemporalExistingFile"; }
+    static constexpr const char *NAME() { return "TemporaryExistingFile"; }
 public:
-    explicit TemporalExistingFile(const cybozu::FilePath &path)
+    explicit TemporaryExistingFile(const cybozu::FilePath &path)
         : path_(path) {
         if (path.stat().exists()) {
             throw cybozu::Exception(NAME()) << "file exists" << path.str();
@@ -333,7 +333,7 @@ public:
             throw cybozu::Exception(NAME()) << "fopen failed" << path.str();
         }
     }
-    ~TemporalExistingFile() noexcept {
+    ~TemporaryExistingFile() noexcept {
         if (!path_.unlink()) {
             LOGs.error() << NAME() << "unlink error" << path_.str();
         }
