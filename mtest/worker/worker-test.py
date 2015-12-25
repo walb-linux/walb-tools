@@ -214,29 +214,39 @@ class TestGetMergeGidRange(unittest.TestCase):
             r = getMergeGidRange(diffL)
             self.assertEqual(r, t[1])
 
-class TestThreadManager(unittest.TestCase):
+class TestTaskManager(unittest.TestCase):
     def test(self):
-        name = 'test'
-        limit = {
-            name:2
-        }
-        tm = ThreadManager(limit)
+        tm = TaskManager(max_task=2, max_repl_task=1)
 
         def worker():
             time.sleep(0.1)
 
-        # run two workers
-        b = tm.tryRun(name, worker)
+        # run first task
+        b = tm.tryRun('vol0', 'merge', worker)
         self.assertTrue(b)
-        b = tm.tryRun(name, worker)
-        self.assertTrue(b)
-        # to run thrird worker fails
-        b = tm.tryRun(name, worker)
+        # fail if same vol
+        b = tm.tryRun('vol0', 'merge', worker)
         self.assertFalse(b)
-        # wait to finish first worker
-        time.sleep(0.3)
-        # to run third worker successes
-        b = tm.tryRun(name, worker)
+        # add second task
+        b = tm.tryRun('vol1', 'merge', worker)
+        self.assertTrue(b)
+        # limit max_task = 2
+        b = tm.tryRun('vol2', 'merge', worker)
+        self.assertFalse(b)
+        # wait to finish first task
+        time.sleep(0.2)
+        # to run third task
+        b = tm.tryRun('vol2', 'merge', worker)
+        self.assertTrue(b)
+        time.sleep(0.1)
+
+        b = tm.tryRun('vol5', 'repl', worker)
+        self.assertTrue(b)
+        # limit max_repl_task = 1
+        b = tm.tryRun('vol8', 'repl', worker)
+        self.assertFalse(b)
+        time.sleep(0.2)
+        b = tm.tryRun('vol8', 'repl', worker)
         self.assertTrue(b)
         tm.join()
 
@@ -262,7 +272,7 @@ class TestWoker(unittest.TestCase):
                 return tbl[i][0]
             w.walbc.get_base = get_base
             for t in tbl:
-                self.assertEqual(w._selectApplyTask1(volL), tbl[i][1])
+                self.assertEqual(w.selectApplyTask1(volL), tbl[i][1])
                 i = i + 1
             w.walbc.get_base = keep
 
@@ -321,7 +331,7 @@ class TestWoker(unittest.TestCase):
                 curTime = toDatetime(t[0])
                 period = parsePERIOD(t[1])
                 w.cfg.apply_.keep_period = period
-                r = w._selectApplyTask2(['vol0', 'vol1'], curTime)
+                r = w.selectApplyTask2(['vol0', 'vol1'], curTime)
                 self.assertEqual(r, t[2])
 
             w.walbc.get_restorable = keep_get_restorable
@@ -352,6 +362,43 @@ class TestWoker(unittest.TestCase):
 
         test_getNumDiffList()
 
+        def test_selectMaxDiffNumMergeTask():
+            keep_get_applicable_diff_list = w.walbc.get_applicable_diff_list
+            tbl = [
+                ([
+                '|0|-->|1| -- 2015-12-09T09:54:20 4120',
+                '|1|-->|2| -- 2015-12-09T09:54:23 8728',
+                '|2|-->|5| -- 2015-12-09T09:54:29 8728',
+                '|5|-->|6| -- 2015-12-09T09:54:31 8728',
+                '|6|-->|7| M- 2015-12-09T09:54:33 8728',
+                ],
+                [(3, 'sss'), (5, VOL), (4, 'ttt')],
+                Task("merge", VOL, (w.a0, 5, 7))),
+                ([
+                '|0|-->|1| -- 2015-12-09T09:54:20 4120',
+                '|1|-->|2| -- 2015-12-09T09:54:23 8728',
+                '|2|-->|5| -- 2015-12-09T09:54:29 8728',
+                '|5|-->|6| -- 2015-12-09T09:54:31 8728',
+                '|6|-->|7| M- 2015-12-09T09:54:33 8728',
+                ],
+                [(3, 'sss'), (5, VOL), (9, 'ttt')],
+                Task("merge", 'ttt', (w.a0, 5, 7))),
+
+            ]
+            i = 0
+            def get_applicable_diff_list(a0, vol):
+                return map(create_diff_from_str, tbl[i][0])
+            w.walbc.get_applicable_diff_list = get_applicable_diff_list
+
+            for t in tbl:
+                ls = t[1]
+                r = w.selectMaxDiffNumMergeTask(ls)
+                self.assertEqual(r, t[2])
+                i = i + 1
+
+            w.walbc.get_applicable_diff_list = keep_get_applicable_diff_list
+
+        test_selectMaxDiffNumMergeTask()
 
 if __name__ == '__main__':
     unittest.main()

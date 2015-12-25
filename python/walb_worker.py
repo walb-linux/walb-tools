@@ -309,7 +309,7 @@ def makeArchiveServer(name, addr, port):
     return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
-    def _createSeverLayout(self, cfg):
+    def createSeverLayout(self, cfg):
         self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
         s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
@@ -319,19 +319,19 @@ class Worker:
         verify_type(cfg, Config)
         setupSignal()
         self.cfg = cfg
-        self.serverLayout = self._createSeverLayout(self.cfg)
+        self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
         self.doneReplServerList = collections.defaultdict()
         self.mergeVol2ts = collections.defaultdict()
 
-    def _selectApplyTask1(self, volL):
+    def selectApplyTask1(self, volL):
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
             if ms.is_applying():
                 return Task("apply", vol, (self.a0, ms.B.gidB))
         return None
 
-    def _selectApplyTask2(self, volL, curTime):
+    def selectApplyTask2(self, volL, curTime):
         '''
             get (vol, gid) having max diff
         '''
@@ -358,7 +358,7 @@ class Worker:
             numDiffL.append(n)
         return numDiffL
 
-    def _selectMaxDiffNumMergeTask(self, ls):
+    def selectMaxDiffNumMergeTask(self, ls):
         """
             ls = [(n, vol)]
         """
@@ -374,23 +374,23 @@ class Worker:
                 return Task("merge", vol, (self.a0, r[0], r[1]))
         return None
 
-    def _selectMergeTask1(self, volL, numDiffL):
+    def selectMergeTask1(self, volL, numDiffL):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             if n >= self.cfg.merge.threshold_nr:
                 ls.append((n, vol))
-        return self._selectMaxDiffNumMergeTask(ls)
+        return self.selectMaxDiffNumMergeTask(ls)
 
-    def _selectMergeTask2(self, volL, numDiffL, curTime):
+    def selectMergeTask2(self, volL, numDiffL, curTime):
         ls = []
         for (vol, n) in zip(volL, numDiffL):
             ts = self.mergeVol2ts[vol]
             if ts and ts + self.cfg.merge.interval < curTime:
                 continue
             ls.append((n, vol))
-        return self._selectMaxDiffNumMergeTask(ls)
+        return self.selectMaxDiffNumMergeTask(ls)
 
-    def _selectReplTask(self, volL, curTime):
+    def selectReplTask(self, volL, curTime):
         tL = []
         rsL = self.cfg.repl_servers.values()
         for vol in volL:
@@ -419,82 +419,111 @@ class Worker:
         curTime = getCurrentTime()
         volL = self.walbc.get_vol_list(self.a0)
         # step 1
-        t = self._selectApplyTask1(volL)
+        t = self.selectApplyTask1(volL)
         if t:
             return t
         # step 2
-        t = self._selectApplyTask2(volL, curTime)
+        t = self.selectApplyTask2(volL, curTime)
         if t:
             return t
         # step 3
         numDiffL = self.getNumDiffList(volL)
-        t = self._selectMergeTask1(volL, numDiffL)
+        t = self.selectMergeTask1(volL, numDiffL)
         if t:
             return t
         # step 4
-        t = self._selectReplTask(volL, curTime)
+        t = self.selectReplTask(volL, curTime)
         if t:
             return t
         # step 5
-        t = self._selectMergeTask2(volL, numDiffL, curTime)
+        t = self.selectMergeTask2(volL, numDiffL, curTime)
         return t
 
-class ThreadManager:
-    def __init__(self, limit):
+class TaskManager:
+    def __init__(self, max_task, max_repl_task):
         """
-            create ThreadManager
-            example of limit
-            limit = {
-                'merge':3,
-                'apply':2,
-            }
+            exec one task(name='merge', 'apply', 'repl')  for each vol
+            total num <= max_task
+            total repl num <= max_replication_task
         """
-        verify_type(limit, dict)
-        self.limit = limit
-        self.threadTbl = {}
-        for k in self.limit.keys():
-            self.threadTbl[k] = []
+        verify_type(max_task, int)
+        verify_type(max_repl_task, int)
+        self.max_task = max_task
+        self.max_repl_task = max_repl_task
+        self.tasks = {} # map<vol, name>
+        self.handles = {} # map<hdl, vol>
+        self.mutex = threading.Lock()
+        self.repl_task_num = 0 # current repl task num
 
-    def tryRun(self, name, target, args=()):
+    def tryRun(self, vol, name, target, args=()):
         """
             run worker(args)
         """
+        verify_type(vol, str)
         verify_type(name, str)
         verify_type(args, tuple)
-        if name not in self.limit:
-            print 'ERR ThreadManager:tryRun not found', name
-            return False
-        threads = self.threadTbl[name]
-        if len(threads) >= self.limit[name]:
-            return False
 
-        def wrapperTarget(*args, **kwargs):
-            """
-                call target(args) and remove own handle in threads
-            """
-            target = kwargs['target']
-            if args:
-                target(args)
-            else:
-                target()
-            info = kwargs['threadInfo'][0]
-            info[0].remove(info[1])
-        info = []
-        kwargs = {
-            'threadInfo':info,
-            'target':target
-        }
+        with self.mutex:
+            if self.tasks.has_key(vol):
+                return False
+            if len(self.tasks) >= self.max_task:
+                return False
+            if self.repl_task_num >= self.max_repl_task:
+                return False
+            if name == 'repl':
+                self.repl_task_num += 1
 
-        th = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
-        threads.append(th)
-        info.append((threads,th))
-        th.start()
+            def wrapperTarget(*args, **kwargs):
+                """
+                    call target(args) and remove own handle in tasks
+                """
+                target = kwargs['target']
+                try:
+                    if args:
+                        target(args)
+                    else:
+                        target()
+                except Exception, e:
+                    print "TaskManager.wrapperTarget err", e
+                finally:
+                    ref_hdl = kwargs['ref_hdl']
+                    tasks = kwargs['tasks']
+                    handles = kwargs['handles']
+
+                    with self.mutex:
+                        hdl = ref_hdl[0]
+                        vol = handles[hdl]
+                        name = tasks.pop(vol)
+                        if name == 'repl':
+                            self.repl_task_num -= 1
+                        handles.pop(hdl)
+
+            ref_hdl = [] # use [] to set the value later
+            kwargs = {
+                'ref_hdl':ref_hdl,
+                'tasks':self.tasks,
+                'handles':self.handles,
+                'target':target
+            }
+            hdl = threading.Thread(target=wrapperTarget, args=args, kwargs=kwargs)
+            ref_hdl.append(hdl)
+            self.tasks[vol] = name
+            self.handles[hdl] = vol
+
+        # lock is unnecessary
+        hdl.start()
         return True
 
     def join(self):
-        for threads in self.threadTbl.values():
-            for th in threads:
+        cur = threading.current_thread()
+        for th in threading.enumerate():
+            if th != cur:
                 th.join()
+        with self.mutex:
+            if len(self.handles) > 0:
+                print "TaskManager.join err handle", len(self.handles)
+            if self.repl_task_num != 0:
+                print "TaskManager.join err repl_task_num", self.repl_task_num
 
 
 def usage():
