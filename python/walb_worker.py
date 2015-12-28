@@ -1,11 +1,9 @@
 #!/usr/bin/env python
-import sys, signal, time, yaml, datetime, collections, os, threading
+import sys, time, yaml, datetime, collections, os, threading
 from walblib import *
 
 isDebug = False # True
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
-
-g_signaled = None
 
 def getCurrentTime():
     return datetime.datetime.utcnow()
@@ -224,13 +222,6 @@ class ExecedRepl:
     def __str__(self):
         return "vol=%s rs=%s ts=%s" % (self.vol, self.rs, self.ts)
 
-def handler(signum, frame):
-    print "catch SIGHUP"
-    g_signaled = True
-
-def setupSignal():
-    signal.signal(signal.SIGHUP, handler)
-
 def getLatestGidInfoBefore(curTime, infoL):
     verify_type(curTime, datetime.datetime)
     verify_type(infoL, list, GidInfo)
@@ -336,7 +327,6 @@ class Worker:
 
     def __init__(self, cfg, Ctl=Controller):
         verify_type(cfg, Config)
-        setupSignal()
         self.cfg = cfg
         self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
@@ -567,16 +557,10 @@ def main():
         print "set -f option"
         usage()
 
-    manager = None
-    g_signaled = True
+    cfg = loadConfig(configName)
+    w = Worker(cfg)
+    manager = TaskManager(cfg.max_task, cfg.max_replication_task)
     while True:
-        if g_signaled:
-            cfg = loadConfig(configName)
-            w = Worker(cfg)
-            if manager:
-                manager.join()
-            manager = TaskManager(cfg.max_task, cfg.max_replication_task)
-            g_signaled = False
 #        volL = self.get_vol_list_without_action_running(self.a0)
         volTimeL = [('vol0', '0')]
         curTime = getCurrentTime()
