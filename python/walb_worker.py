@@ -279,7 +279,7 @@ class Task:
         elif name == "repl":
             (src, dst) = tpl
             self.src = src
-            self.dst = dst
+            self.dst = dst.getWalbServer()
         else:
             raise Exception("Task bad name", name, vol, tpl)
 
