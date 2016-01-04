@@ -392,8 +392,8 @@ class Worker:
     def selectMergeTask2(self, volActTimeL, numDiffL, curTime):
         ls = []
         for ((vol, actTimeD), n) in zip(volActTimeL, numDiffL):
-            ts = actTimeD.get(aaMerge, OLDEST_TIME)
-            if ts + self.cfg.merge.interval < curTime:
+            ts = actTimeD.get(aaMerge)
+            if ts and ts + self.cfg.merge.interval < curTime:
                 continue
             ls.append((n, vol))
         return self.selectMaxDiffNumMergeTask(ls)
@@ -462,6 +462,20 @@ class TaskManager:
         self.handles = {} # map<hdl, vol>
         self.mutex = threading.Lock()
         self.repl_task_num = 0 # current repl task num
+
+    def getNonActiveList(self, volD):
+        """
+            remove active vol from volD and return volL
+        """
+        verify_type(volD, dict)
+        L = []
+        with self.mutex:
+            volL = self.tasks.keys()
+        for (vol,d) in volD.iteritems():
+            if vol not in volL:
+                L.append((vol, d))
+        return L
+
 
     def tryRun(self, vol, name, target, args=()):
         """
@@ -561,14 +575,20 @@ def main():
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     while True:
-        volActTimeL = w.walbc.get_vol_list_without_running_actions(w.a0)
-#        volActTimeL = [('vol', {aaMerge:None, aaApply:None})]
+        volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
+        print "getD", volActTimeD
+#        volActTimeD = {'vol':{aaMerge:None, aaApply:None}}
+        volActTimeL = manager.getNonActiveList(volActTimeD)
+        print "getL", volActTimeL
         curTime = getCurrentTime()
         task = w.selectTask(volActTimeL, curTime)
-        print "select task", task, "at", curTime
-        b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
-        if not b:
-            print "fail task", task
+        if task:
+            print "select task", task, "at", curTime
+            b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
+            if b:
+                continue
+            print "[debug log] can't run task", task
+        print "[debug log] no task"
         time.sleep(cfg.general.kick_interval)
 
 if __name__ == "__main__":
