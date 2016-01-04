@@ -124,7 +124,7 @@ class Apply:
         verify_type(d, dict)
         self.keep_period = parsePERIOD(d['keep_period'])
     def __str__(self):
-        return "keep_period=%d" % self.keep_period
+        return "keep_period={}".format(self.keep_period)
 
 class Merge:
     def __init__(self):
@@ -142,7 +142,7 @@ class Merge:
         if d.has_key('threshold_nr'):
             self.threshold_nr = parsePositive(d['threshold_nr'])
     def __str__(self):
-        return "interval=%d, max_nr=%d, max_size=%d, threshold_nr=%d" % (self.interval, self.max_nr, self.max_size, self.threshold_nr)
+        return "interval={}, max_nr={}, max_size={}, threshold_nr={}".format(self.interval, self.max_nr, self.max_size, self.threshold_nr)
 
 class ReplServer:
     def __init__(self):
