@@ -1452,41 +1452,50 @@ class Controller(object):
         '''
         Get all action state for all the volumes.
         ax :: ServerParams - an archive server.
-        return :: {str: {str: int}} - volId, actionName, number of running actions.
+        return :: {str: {str: (int, datetime or None)}}
+            - volId, actionName, number of running actions, last beginning time or None.
         '''
         verify_type(ax, ServerParams)
         sL = self.run_ctl(ax, ['get', 'all-actions'])
         def parse(s):
             L = s.split()
-            if len(L) == 0 or len(L) % 2 == 0:
+            if len(L) == 0 or len(L) % 3 == 0:
                 raise Exception('parse all-actions response failed:', s)
             vol = L.pop(0)
             tL = []
             while len(L) > 0:
                 action = L.pop(0)
                 num = L.pop(0)
-                tL.append((action, int(num)))
+                tsStr = L.pop(0)
+                if tsStr == '---':
+                    ts = None
+                else:
+                    ts = str_to_datetime(tsStr, DatetimeFormatPretty)
+                tL.append((action, int(num), ts))
             return (vol, tL)
-        d = defaultdict(lambda: defaultdict(int))
+        d = defaultdict(lambda: defaultdict(lambda: (0, None)))
         for vol, tL in map(parse, sL.split('\n')):
-            for action, nr in tL:
-                d[vol][action] = nr
+            for action, nr, ts in tL:
+                d[vol][action] = (nr, ts)
         return d
 
-    def get_vol_list_without_action_running(self, ax):
+    def get_vol_list_without_running_actions(self, ax):
         '''
         Get volume list whose actions are not running at all.
         ax :: ServerParams - an archive server.
-        return :: [str] - volume list.
+        return :: [(str, {str: datetime or None})]
+            - volume, action name, the last time to begin.
         '''
         volL = []
         d = self.get_all_actions(ax)
         for vol, d2 in d.iteritems():
             total = 0
-            for nr in d2.itervalues():
+            d3 = {}
+            for action, (nr, ts) in d2.iteritems():
                 total += nr
+                d3[action] = ts
             if total == 0:
-                volL.append(vol)
+                volL.append((vol, d3))
         return volL
 
     def reset(self, s, vol, timeoutS=SHORT_TIMEOUT_SEC):

@@ -307,12 +307,16 @@ inline void verifyMaxForegroundTasks(size_t maxForegroundTasks, const char *msg)
     }
 }
 
-inline std::string formatActions(const char *prefix, ActionCounters &ac, const StrVec &actionV)
+inline std::string formatActions(const char *prefix, ActionCounters &ac, const StrVec &actionV, bool useTime = false)
 {
-    const std::vector<int> numV = ac.getValues(actionV);
+    const std::vector<ActionCounterItem> itemV = ac.getItems(actionV);
     std::string ret(prefix);
     for (size_t i = 0; i < actionV.size(); i++) {
-        ret += cybozu::util::formatString(" %s %d", actionV[i].c_str(), numV[i]);
+        ret += cybozu::util::formatString(" %s %d", actionV[i].c_str(), itemV[i].count);
+        if (useTime) {
+            ret += " ";
+            ret += util::timeToPrintable(itemV[i].bgn_time);
+        }
     }
     return ret;
 }

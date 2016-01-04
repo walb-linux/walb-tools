@@ -1453,7 +1453,8 @@ inline void getAllActions(protocol::GetCommandParams &p)
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
         if (volSt.sm.get() == aClear) continue;
-        v.push_back(formatActions(volId.c_str(), volSt.ac, allActionVec));
+        const bool useTime = true;
+        v.push_back(formatActions(volId.c_str(), volSt.ac, allActionVec, useTime));
     }
     protocol::sendValueAndFin(p, v);
 }
