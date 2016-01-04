@@ -96,7 +96,7 @@ class General:
         self.walbc_path = ''
         self.max_task = 1
         self.max_replication_task = 1
-        self.kick_period = 1
+        self.kick_interval = 1
 
     def set(self, d):
         verify_type(d, dict)
@@ -110,11 +110,11 @@ class General:
         self.max_task = parsePositive(d['max_task'])
         if d.has_key('max_replication_task'):
             self.max_replication_task = parsePositive(d['max_replication_task'])
-        if d.has_key('kick_period'):
-            self.kick_period = parsePositive(d['kick_period'])
+        if d.has_key('kick_interval'):
+            self.kick_interval = parsePositive(d['kick_interval'])
 
     def __str__(self):
-        return "addr=%s, port=%d, max_task=%d max_replication_task=%d kick_period=%d" % (self.addr, self.port, self.max_task, self.max_replication_task, self.kick_period)
+        return "addr=%s, port=%d, max_task=%d max_replication_task=%d kick_interval=%d" % (self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
 
 class Apply:
     def __init__(self):
@@ -168,7 +168,7 @@ class ReplServer:
             s = d['bulk_size']
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
-        return "name=%s, addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
     def getWalbServer(self):
         return makeArchiveServer(self.name, self.addr, self.port)
 
@@ -331,7 +331,6 @@ class Worker:
         self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
         self.doneReplServerList = collections.defaultdict()
-        self.mergeVol2ts = collections.defaultdict()
 
     def selectApplyTask1(self, volL):
         for vol in volL:
@@ -390,11 +389,11 @@ class Worker:
                 ls.append((n, vol))
         return self.selectMaxDiffNumMergeTask(ls)
 
-    def selectMergeTask2(self, volL, numDiffL, curTime):
+    def selectMergeTask2(self, volActTimeL, numDiffL, curTime):
         ls = []
-        for (vol, n) in zip(volL, numDiffL):
-            ts = self.mergeVol2ts[vol]
-            if ts and ts + self.cfg.merge.interval < curTime:
+        for ((vol, actTimeD), n) in zip(volActTimeL, numDiffL):
+            ts = actTimeD.get(aaMerge, OLDEST_TIME)
+            if ts + self.cfg.merge.interval < curTime:
                 continue
             ls.append((n, vol))
         return self.selectMaxDiffNumMergeTask(ls)
@@ -411,7 +410,7 @@ class Worker:
                 a1State = self.walbc.get_state(a1, vol)
                 if a1State not in aActive:
                     continue
-                ts = self.doneReplServerList[(vol, rs)]
+                ts = self.doneReplServerList.get((vol, rs))
                 if ts and ts + rs.interval < curTime:
                     continue
                 if not ts:
@@ -420,12 +419,13 @@ class Worker:
         if tL:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs) = tL[0]
+            self.doneReplServerList[(vol, rs)] = curTime
             return Task("repl", vol, (self.a0, rs))
         else:
             return None
 
-    def selectTask(self, volTimeL, curTime):
-        volL = map(lambda x:x[0], volTimeL)
+    def selectTask(self, volActTimeL, curTime):
+        volL = map(lambda x:x[0], volActTimeL)
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -444,7 +444,7 @@ class Worker:
         if t:
             return t
         # step 5
-        t = self.selectMergeTask2(volL, numDiffL, curTime)
+        t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
         return t
 
 class TaskManager:
@@ -559,17 +559,17 @@ def main():
 
     cfg = loadConfig(configName)
     w = Worker(cfg)
-    manager = TaskManager(cfg.max_task, cfg.max_replication_task)
+    manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     while True:
-#        volL = self.get_vol_list_without_action_running(self.a0)
-        volTimeL = [('vol0', '0')]
+        volActTimeL = w.walbc.get_vol_list_without_running_actions(w.a0)
+#        volActTimeL = [('vol', {aaMerge:None, aaApply:None})]
         curTime = getCurrentTime()
-        task = w.selectTask(volTimeL, curTime)
-        print "select task", task, "from", volL, "at", curTime
+        task = w.selectTask(volActTimeL, curTime)
+        print "select task", task, "at", curTime
         b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
         if not b:
             print "fail task", task
-        time.sleep(cfg.kick_period)
+        time.sleep(cfg.general.kick_interval)
 
 if __name__ == "__main__":
     main()
