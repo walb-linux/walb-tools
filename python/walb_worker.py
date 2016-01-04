@@ -308,7 +308,7 @@ def execTask(walbc, task):
     elif task.name == 'merge':
         walbc.merge(task.ax, task.vol, task.gidB, task.gidE)
     elif task.name == 'repl':
-        walbc.replicate(task.src, task.vol, task.dsk)
+        walbc.replicate_once(task.src, task.vol, task.dst)
     else:
         raise Exception('execTask bad name', task)
 
@@ -488,7 +488,7 @@ class TaskManager:
                 target = kwargs['target']
                 try:
                     if args:
-                        target(args)
+                        target(*args)
                     else:
                         target()
                 except Exception, e:
