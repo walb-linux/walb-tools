@@ -267,7 +267,7 @@ class TestWoker(unittest.TestCase):
                 (MetaState(Snapshot()), None),
                 (MetaState(Snapshot(2, 2)), None),
                 (MetaState(Snapshot(2, 4)), None),
-                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), Task("apply", VOL, (w.a0, 2))),
+                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), ApplyTask(VOL, w.a0, 2)),
             ]
             def get_base(a0, vol):
                 return tbl[i][0]
@@ -322,11 +322,11 @@ class TestWoker(unittest.TestCase):
 
             tbl = [
                 ('2015-11-16T07:32:00', '0', None),
-                ('2015-11-16T07:32:02', '0', Task("apply", 'vol0', (w.a0, 25))),
-                ('2015-11-16T07:32:03', '0', Task("apply", 'vol0', (w.a0, 25))),
-                ('2015-11-16T07:32:04', '0', Task("apply", 'vol1', (w.a0, 29))),
-                ('2015-11-16T07:32:10', '0', Task("apply", 'vol1', (w.a0, 31))),
-                ('2015-11-16T07:32:10', '8', Task("apply", 'vol0', (w.a0, 25))),
+                ('2015-11-16T07:32:02', '0', ApplyTask('vol0', w.a0, 25)),
+                ('2015-11-16T07:32:03', '0', ApplyTask('vol0', w.a0, 25)),
+                ('2015-11-16T07:32:04', '0', ApplyTask('vol1', w.a0, 29)),
+                ('2015-11-16T07:32:10', '0', ApplyTask('vol1', w.a0, 31)),
+                ('2015-11-16T07:32:10', '8', ApplyTask('vol0', w.a0, 25)),
             ]
             for t in tbl:
                 curTime = toDatetime(t[0])
@@ -374,7 +374,7 @@ class TestWoker(unittest.TestCase):
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
                 [(3, 'sss'), (5, VOL), (4, 'ttt')],
-                Task("merge", VOL, (w.a0, 5, 7))),
+                MergeTask(VOL, w.a0, 5, 7)),
                 ([
                 '|0|-->|1| -- 2015-12-09T09:54:20 4120',
                 '|1|-->|2| -- 2015-12-09T09:54:23 8728',
@@ -383,7 +383,7 @@ class TestWoker(unittest.TestCase):
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
                 [(3, 'sss'), (5, VOL), (9, 'ttt')],
-                Task("merge", 'ttt', (w.a0, 5, 7))),
+                MergeTask('ttt', w.a0, 5, 7)),
 
             ]
             i = 0
