@@ -474,7 +474,8 @@ class TaskManager:
             remove active vol from volD and return volL
         """
         verify_type(volD, dict)
-        return [(k, volD[k]) for k in volD.viewkeys() - self.tasks.viewkeys()]
+        with self.mutex:
+            return [(k, volD[k]) for k in volD.viewkeys() - self.tasks.viewkeys()]
 
     def tryRun(self, vol, name, target, args=()):
         """
