@@ -265,6 +265,8 @@ class Task:
             raise Exception('Task bad name', name, vol)
         self.name = name
         self.vol = vol
+    def run(self):
+        pass
     def __str__(self):
         return "Task name={} vol={}".format(self.name, self.vol)
     def __eq__(self, rhs):
@@ -279,6 +281,9 @@ class ApplyTask(Task):
         verify_u64(gid)
         self.ax = ax
         self.gid = gid
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.apply(self.ax, self.vol, self.gid)
     def __str__(self):
         return Task.__str__(self) + " ax={} gid={}".format(self.ax, self.gid)
     def __eq__(self, rhs):
@@ -292,6 +297,9 @@ class MergeTask(Task):
         self.ax = ax
         self.gidB = gidB
         self.gidE = gidE
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.merge(self.ax, self.vol, self.gidB, self.gidE)
     def __str__(self):
         return Task.__str__(self) + " ax={} gid=({}, {})".format(self.ax, self.gidB, self.gidE)
     def __eq__(self, rhs):
@@ -304,20 +312,13 @@ class ReplTask(Task):
         verify_type(dst, ServerParams)
         self.src = src
         self.dst = dst
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.replicate_once(self.src, self.vol, self.dst)
     def __str__(self):
         return Task.__str__(self) + " src={} dst={}".format(self.src, self.dst)
     def __eq__(self, rhs):
         return Task.__eq__(self, rhs) and self.src == rhs.src and self.dst == rhs.dst
-
-def execTask(walbc, task):
-    if task.name == 'apply':
-        walbc.apply(task.ax, task.vol, task.gid)
-    elif task.name == 'merge':
-        walbc.merge(task.ax, task.vol, task.gidB, task.gidE)
-    elif task.name == 'repl':
-        walbc.replicate_once(task.src, task.vol, task.dst)
-    else:
-        raise Exception('execTask bad name', task)
 
 g_binDir = ''
 g_dirName = ''
@@ -580,7 +581,7 @@ def main():
         task = w.selectTask(volActTimeL, curTime)
         if task:
             print "select task", task, "at", curTime
-            b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
+            b = manager.tryRun(task.vol, task.name, task.run, (w.walbc,))
             if b:
                 continue
             print "[debug log] can't run task", task
