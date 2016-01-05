@@ -167,16 +167,16 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.port, 10001)
         self.assertEqual(r.interval, datetime.timedelta(days=3))
         self.assertEqual(r.compress, ('snappy', 3, 4))
-        self.assertEqual(r.max_merge_size, 5 * 1024)
-        self.assertEqual(r.bulk_size, 40)
+        self.assertEqual(r.max_merge_size, '5K')
+        self.assertEqual(r.bulk_size, '40')
 
         r = repl_servers['repl1']
         self.assertEqual(r.addr, '192.168.0.3')
         self.assertEqual(r.port, 10002)
         self.assertEqual(r.interval, datetime.timedelta(hours=2))
         self.assertEqual(r.compress, ('gzip', 0, 0))
-        self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
-        self.assertEqual(r.bulk_size, 400)
+        self.assertEqual(r.max_merge_size, '2M')
+        self.assertEqual(r.bulk_size, '400')
 
 class TestGetLatestGidInfoBefore(unittest.TestCase):
     def test(self):
