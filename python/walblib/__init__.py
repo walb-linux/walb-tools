@@ -632,6 +632,10 @@ class CompressOpt(object):
         self.level = int(v[1])
         self.nrCpu = int(v[2])
         self.verify()
+    def __eq__(self, rhs):
+        return self.kind == rhs.kind and self.level == rhs.level and self.nrCpu == rhs.nrCpu
+    def __ne__(self, rhs):
+        return not self.__eq__(rhs)
 
 
 # Synchronization option.

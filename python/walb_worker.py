@@ -16,34 +16,6 @@ def parseFLAG(s):
         return True
     raise Exception('parseFLAG:bad s', s)
 
-def parseCOMPRESS_OPT(s):
-    """
-        MODE:LEVEL:NUM_CPU
-        MODE=(none|snappy|gzip|lzma)
-        LEVEL=[0-9]
-        NUM_CPU=digits
-    """
-    verify_type(s, str)
-    ss = s.split(':')
-    if len(ss) > 3:
-        raise Exception('parseCOMPRESS_OPT:bad s', s)
-    mode = 'none'
-    level = 0
-    numCpu = 0
-    if len(ss) > 0:
-        mode = ss[0]
-        if mode not in ['none', 'snappy', 'gzip', 'lzma']:
-            raise Exception('parseCOMPRESS_OPT:bad MODE', mode, s)
-    if len(ss) > 1:
-        level = int(ss[1])
-        if level < 0 or level > 9:
-            raise Exception('parseCOMPRESS_OPT:bad LEVEL', level, s)
-    if len(ss) > 2:
-        numCpu = int(ss[2])
-        if numCpu < 0:
-            raise Exception('parseCOMPRESS_OPT:bad NUM_CPU', numCpu, s)
-    return (mode, level, numCpu)
-
 def parseSuffix(s, suf):
     if type(s) == int:
         n = s

@@ -102,18 +102,6 @@ class TestParseSIZE_UNIT(unittest.TestCase):
             v = parseSIZE_UNIT(s)
             self.assertEqual(v, expect)
 
-class TestParseCOMPRESS_OPT(unittest.TestCase):
-    def test(self):
-        d = {
-            "none":('none', 0, 0),
-            "snappy:3":('snappy', 3, 0),
-            "gzip:9:4":('gzip', 9, 4),
-            "lzma:0:123":('lzma', 0, 123),
-        }
-        for (s, expect) in d.items():
-            v = parseCOMPRESS_OPT(s)
-            self.assertEqual(v, expect)
-
 configStr = """
 general:
   addr: 192.168.0.1
@@ -140,7 +128,7 @@ repl_servers:
     addr: 192.168.0.3
     port: 10002
     interval: 2h
-    compress: gzip
+    compress: gzip:1:4
     max_merge_size: 2M
     bulk_size: 400
 """
@@ -166,7 +154,7 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.addr, '192.168.0.2')
         self.assertEqual(r.port, 10001)
         self.assertEqual(r.interval, datetime.timedelta(days=3))
-        self.assertEqual(r.compress, ('snappy', 3, 4))
+        self.assertEqual(r.compress, CompressOpt(CMPR_SNAPPY, 3, 4))
         self.assertEqual(r.max_merge_size, '5K')
         self.assertEqual(r.bulk_size, '40')
 
@@ -174,7 +162,7 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.addr, '192.168.0.3')
         self.assertEqual(r.port, 10002)
         self.assertEqual(r.interval, datetime.timedelta(hours=2))
-        self.assertEqual(r.compress, ('gzip', 0, 0))
+        self.assertEqual(r.compress, CompressOpt(CMPR_GZIP, 1, 4))
         self.assertEqual(r.max_merge_size, '2M')
         self.assertEqual(r.bulk_size, '400')
 
