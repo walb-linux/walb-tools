@@ -169,8 +169,8 @@ class ReplServer:
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
         return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
-    def getWalbServer(self):
-        return makeArchiveServer(self.name, self.addr, self.port)
+    def getServerConnectionParam(self):
+        return makeServerConnectionParam(self.name, self.addr, self.port)
 
 class Config:
     def __init__(self):
@@ -322,12 +322,12 @@ def execTask(walbc, task):
 g_binDir = ''
 g_dirName = ''
 g_logName = ''
-def makeArchiveServer(name, addr, port):
+def makeServerConnectionParam(name, addr, port):
     return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
     def createSeverLayout(self, cfg):
-        self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
+        self.a0 = makeServerConnectionParam('a0', cfg.general.addr, cfg.general.port)
         s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
         return ServerLayout([s0], [p0], [self.a0])
@@ -413,7 +413,7 @@ class Worker:
             if a0State not in aActive:
                 continue
             for rs in rsL:
-                a1 = rs.getWalbServer()
+                a1 = rs.getServerConnectionParam()
                 a1State = self.walbc.get_state(a1, vol)
                 if a1State not in aActive:
                     continue
@@ -427,7 +427,7 @@ class Worker:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs) = tL[0]
             self.doneReplServerList[(vol, rs)] = curTime
-            return ReplTask(vol, self.a0, rs.getWalbServer())
+            return ReplTask(vol, self.a0, rs.getServerConnectionParam())
         else:
             return None
 
