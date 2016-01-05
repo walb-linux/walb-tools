@@ -170,7 +170,7 @@ class ReplServer:
     def __str__(self):
         return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
     def getServerConnectionParam(self):
-        return makeServerConnectionParam(self.name, self.addr, self.port)
+        return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
 class Config:
     def __init__(self):
@@ -322,12 +322,10 @@ def execTask(walbc, task):
 g_binDir = ''
 g_dirName = ''
 g_logName = ''
-def makeServerConnectionParam(name, addr, port):
-    return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
     def createSeverLayout(self, cfg):
-        self.a0 = makeServerConnectionParam('a0', cfg.general.addr, cfg.general.port)
+        self.a0 = ServerConnectionParam('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE)
         s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
         return ServerLayout([s0], [p0], [self.a0])
