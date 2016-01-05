@@ -258,68 +258,65 @@ def getMergeGidRange(diffL):
         return None
 
 class Task:
-    def __init__(self, name, vol):
+    def __init__(self, name, vol, ax):
         verify_type(name, str)
         verify_type(vol, str)
+        verify_server_kind(ax, [K_ARCHIVE])
         if name not in ['merge', 'apply', 'repl']:
             raise Exception('Task bad name', name, vol)
         self.name = name
         self.vol = vol
+        self.ax = ax
     def run(self):
         pass
     def __str__(self):
-        return "Task name={} vol={}".format(self.name, self.vol)
+        return "Task name={} vol={} ax={}".format(self.name, self.vol, self.ax)
     def __eq__(self, rhs):
-        return self.name == rhs.name and self.vol == rhs.vol
+        return self.name == rhs.name and self.vol == rhs.vol and self.ax == rhs.ax
     def __ne__(self, rhs):
         return not self.__eq__(rhs)
 
 class ApplyTask(Task):
     def __init__(self, vol, ax, gid):
-        Task.__init__(self, 'apply', vol)
-        verify_server_kind(ax, [K_ARCHIVE])
+        Task.__init__(self, 'apply', vol, ax)
         verify_u64(gid)
-        self.ax = ax
         self.gid = gid
     def run(self, walbc):
         verify_type(walbc, Controller)
         walbc.apply(self.ax, self.vol, self.gid)
     def __str__(self):
-        return Task.__str__(self) + " ax={} gid={}".format(self.ax, self.gid)
+        return Task.__str__(self) + " gid={}".format(self.gid)
     def __eq__(self, rhs):
-        return Task.__eq__(self, rhs) and self.ax == rhs.ax and self.gid == rhs.gid
+        return Task.__eq__(self, rhs) and self.gid == rhs.gid
 
 class MergeTask(Task):
     def __init__(self, vol, ax, gidB, gidE):
-        Task.__init__(self, 'merge', vol)
-        verify_server_kind(ax, [K_ARCHIVE])
+        Task.__init__(self, 'merge', vol, ax)
         verify_gid_range(gidB, gidE, 'merge')
-        self.ax = ax
         self.gidB = gidB
         self.gidE = gidE
     def run(self, walbc):
         verify_type(walbc, Controller)
         walbc.merge(self.ax, self.vol, self.gidB, self.gidE)
     def __str__(self):
-        return Task.__str__(self) + " ax={} gid=({}, {})".format(self.ax, self.gidB, self.gidE)
+        return Task.__str__(self) + " gid=({}, {})".format(self.gidB, self.gidE)
     def __eq__(self, rhs):
-        return Task.__eq__(self, rhs) and self.ax == rhs.ax and self.gidB == rhs.gidB and self.gidE == rhs.gidE
+        return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
     def __init__(self, vol, ax, rs):
-        Task.__init__(self, 'repl', vol)
-        verify_server_kind(ax, [K_ARCHIVE])
+        Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, ReplServer)
-        self.ax = ax
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
     def run(self, walbc):
         verify_type(walbc, Controller)
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt)
     def __str__(self):
-        return Task.__str__(self) + " ax={} dst={} opt={}".format(self.ax, self.dst, self.syncOpt)
+        return Task.__str__(self) + " dst={} opt={}".format(self.dst, self.syncOpt)
     def __eq__(self, rhs):
-        return Task.__eq__(self, rhs) and self.ax == rhs.ax and self.dst == rhs.dst
+        # QQQ : add self.syncOpt == rhs.syncOpt?
+        return Task.__eq__(self, rhs) and self.dst == rhs.dst
 
 g_binDir = ''
 g_dirName = ''
@@ -433,7 +430,6 @@ class Worker:
 
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
-        '''
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -443,7 +439,6 @@ class Worker:
         if t:
             return t
         # step 3
-        '''
         numDiffL = self.getNumDiffList(volL)
         t = self.selectMergeTask1(volL, numDiffL)
         if t:
