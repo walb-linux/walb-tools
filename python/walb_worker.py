@@ -149,7 +149,7 @@ class ReplServer:
         self.addr = ""
         self.port = 0
         self.interval = 0
-        self.compress = ('none', 0, 0)
+        self.compress = None
         self.max_merge_size = '1G'
         self.bulk_size = '64K'
     def set(self, name, d):
@@ -161,7 +161,8 @@ class ReplServer:
         self.port = parsePort(d['port'])
         self.interval = parsePERIOD(d['interval'])
         if d.has_key('compress'):
-            self.compress = parseCOMPRESS_OPT(d['compress'])
+            self.compress = CompressOpt()
+            self.compress.parse(d['compress'])
         if d.has_key('max_merge_size'):
             self.max_merge_size = str(d['max_merge_size'])
         if d.has_key('bulk_size'):
@@ -311,12 +312,12 @@ class ReplTask(Task):
         verify_type(rs, ReplServer)
         self.ax = ax
         self.dst = rs.getServerConnectionParam()
-        self.syncOpt = SyncOpt(maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
+        self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
     def run(self, walbc):
         verify_type(walbc, Controller)
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt)
     def __str__(self):
-        return Task.__str__(self) + " ax={} dst={}".format(self.ax, self.dst)
+        return Task.__str__(self) + " ax={} dst={} opt={}".format(self.ax, self.dst, self.syncOpt)
     def __eq__(self, rhs):
         return Task.__eq__(self, rhs) and self.ax == rhs.ax and self.dst == rhs.dst
 
@@ -432,6 +433,7 @@ class Worker:
 
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
+        '''
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -441,6 +443,7 @@ class Worker:
         if t:
             return t
         # step 3
+        '''
         numDiffL = self.getNumDiffList(volL)
         t = self.selectMergeTask1(volL, numDiffL)
         if t:

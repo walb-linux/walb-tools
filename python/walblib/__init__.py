@@ -672,6 +672,8 @@ class SyncOpt(object):
         return :: [str]
         '''
         return [str(self.cmprOpt), self.maxWdiffMergeSizeU, self.bulkSizeU]
+    def __str__(self):
+        return "cmpr={} merge={} bulk={}".format(self.cmprOpt, self.maxWdiffMergeSizeU, self.bulkSizeU)
 
 
 ########################################
