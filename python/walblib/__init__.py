@@ -1479,14 +1479,14 @@ class Controller(object):
                 d[vol][action] = (nr, ts)
         return d
 
-    def get_vol_list_without_running_actions(self, ax):
+    def get_vol_dict_without_running_actions(self, ax):
         '''
-        Get volume list whose actions are not running at all.
+        Get volume dict whose actions are not running at all.
         ax :: ServerParams - an archive server.
-        return :: [(str, {str: datetime or None})]
+        return :: {(str:{str: datetime or None})}
             - volume, action name, the last time to begin.
         '''
-        volL = []
+        volD = {}
         d = self.get_all_actions(ax)
         for vol, d2 in d.iteritems():
             total = 0
@@ -1495,8 +1495,8 @@ class Controller(object):
                 total += nr
                 d3[action] = ts
             if total == 0:
-                volL.append((vol, d3))
-        return volL
+                volD[vol] = d3
+        return volD
 
     def reset(self, s, vol, timeoutS=SHORT_TIMEOUT_SEC):
         '''

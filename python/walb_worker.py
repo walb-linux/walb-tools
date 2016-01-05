@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, signal, time, yaml, datetime, collections, os, threading
+import sys, time, yaml, datetime, collections, os, threading
 from walblib import *
 
 isDebug = False # True
@@ -94,7 +94,9 @@ class General:
         self.addr = ""
         self.port = 0
         self.walbc_path = ''
-        self.max_concurrent_tasks = 0
+        self.max_task = 1
+        self.max_replication_task = 1
+        self.kick_interval = 1
 
     def set(self, d):
         verify_type(d, dict)
@@ -105,10 +107,14 @@ class General:
         verify_type(self.walbc_path, str)
         if not os.path.exists(self.walbc_path):
             raise Exception('walbc_path is not found', self.walbc_path)
-        self.max_concurrent_tasks = parsePositive(d['max_concurrent_tasks'])
+        self.max_task = parsePositive(d['max_task'])
+        if d.has_key('max_replication_task'):
+            self.max_replication_task = parsePositive(d['max_replication_task'])
+        if d.has_key('kick_interval'):
+            self.kick_interval = parsePositive(d['kick_interval'])
 
     def __str__(self):
-        return "addr=%s, port=%d, max_concurrent_tasks=%d" % (self.addr, self.port, self.max_concurrent_tasks)
+        return "addr=%s, port=%d, max_task=%d max_replication_task=%d kick_interval=%d" % (self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
 
 class Apply:
     def __init__(self):
@@ -118,7 +124,7 @@ class Apply:
         verify_type(d, dict)
         self.keep_period = parsePERIOD(d['keep_period'])
     def __str__(self):
-        return "keep_period=%d" % self.keep_period
+        return "keep_period={}".format(self.keep_period)
 
 class Merge:
     def __init__(self):
@@ -136,7 +142,7 @@ class Merge:
         if d.has_key('threshold_nr'):
             self.threshold_nr = parsePositive(d['threshold_nr'])
     def __str__(self):
-        return "interval=%d, max_nr=%d, max_size=%d, threshold_nr=%d" % (self.interval, self.max_nr, self.max_size, self.threshold_nr)
+        return "interval={}, max_nr={}, max_size={}, threshold_nr={}".format(self.interval, self.max_nr, self.max_size, self.threshold_nr)
 
 class ReplServer:
     def __init__(self):
@@ -162,7 +168,7 @@ class ReplServer:
             s = d['bulk_size']
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
-        return "name=%s, addr=%s, port=%d, interval=%d, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
     def getWalbServer(self):
         return makeArchiveServer(self.name, self.addr, self.port)
 
@@ -215,12 +221,6 @@ class ExecedRepl:
         self.ts = ts
     def __str__(self):
         return "vol=%s rs=%s ts=%s" % (self.vol, self.rs, self.ts)
-
-def handler(signum, frame):
-    print "catch SIGHUP"
-
-def setupSignal():
-    signal.signal(signal.SIGHUP, handler)
 
 def getLatestGidInfoBefore(curTime, infoL):
     verify_type(curTime, datetime.datetime)
@@ -279,7 +279,7 @@ class Task:
         elif name == "repl":
             (src, dst) = tpl
             self.src = src
-            self.dst = dst
+            self.dst = dst.getWalbServer()
         else:
             raise Exception("Task bad name", name, vol, tpl)
 
@@ -302,6 +302,16 @@ class Task:
     def __ne__(self, rhs):
         return not self.__eq__(rhs)
 
+def execTask(walbc, task):
+    if task.name == 'apply':
+        walbc.apply(task.ax, task.vol, task.gid)
+    elif task.name == 'merge':
+        walbc.merge(task.ax, task.vol, task.gidB, task.gidE)
+    elif task.name == 'repl':
+        walbc.replicate_once(task.src, task.vol, task.dst)
+    else:
+        raise Exception('execTask bad name', task)
+
 g_binDir = ''
 g_dirName = ''
 g_logName = ''
@@ -317,12 +327,10 @@ class Worker:
 
     def __init__(self, cfg, Ctl=Controller):
         verify_type(cfg, Config)
-        setupSignal()
         self.cfg = cfg
         self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
         self.doneReplServerList = collections.defaultdict()
-        self.mergeVol2ts = collections.defaultdict()
 
     def selectApplyTask1(self, volL):
         for vol in volL:
@@ -381,10 +389,10 @@ class Worker:
                 ls.append((n, vol))
         return self.selectMaxDiffNumMergeTask(ls)
 
-    def selectMergeTask2(self, volL, numDiffL, curTime):
+    def selectMergeTask2(self, volActTimeL, numDiffL, curTime):
         ls = []
-        for (vol, n) in zip(volL, numDiffL):
-            ts = self.mergeVol2ts[vol]
+        for ((vol, actTimeD), n) in zip(volActTimeL, numDiffL):
+            ts = actTimeD.get(aaMerge)
             if ts and ts + self.cfg.merge.interval < curTime:
                 continue
             ls.append((n, vol))
@@ -402,7 +410,7 @@ class Worker:
                 a1State = self.walbc.get_state(a1, vol)
                 if a1State not in aActive:
                     continue
-                ts = self.doneReplServerList[(vol, rs)]
+                ts = self.doneReplServerList.get((vol, rs))
                 if ts and ts + rs.interval < curTime:
                     continue
                 if not ts:
@@ -411,13 +419,13 @@ class Worker:
         if tL:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs) = tL[0]
+            self.doneReplServerList[(vol, rs)] = curTime
             return Task("repl", vol, (self.a0, rs))
         else:
             return None
 
-    def selectTask(self):
-        curTime = getCurrentTime()
-        volL = self.walbc.get_vol_list(self.a0)
+    def selectTask(self, volActTimeL, curTime):
+        volL = map(lambda x:x[0], volActTimeL)
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -436,7 +444,7 @@ class Worker:
         if t:
             return t
         # step 5
-        t = self.selectMergeTask2(volL, numDiffL, curTime)
+        t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
         return t
 
 class TaskManager:
@@ -454,6 +462,20 @@ class TaskManager:
         self.handles = {} # map<hdl, vol>
         self.mutex = threading.Lock()
         self.repl_task_num = 0 # current repl task num
+
+    def getNonActiveList(self, volD):
+        """
+            remove active vol from volD and return volL
+        """
+        verify_type(volD, dict)
+        L = []
+        with self.mutex:
+            volL = self.tasks.keys()
+        for (vol,d) in volD.iteritems():
+            if vol not in volL:
+                L.append((vol, d))
+        return L
+
 
     def tryRun(self, vol, name, target, args=()):
         """
@@ -480,7 +502,7 @@ class TaskManager:
                 target = kwargs['target']
                 try:
                     if args:
-                        target(args)
+                        target(*args)
                     else:
                         target()
                 except Exception, e:
@@ -551,8 +573,23 @@ def main():
 
     cfg = loadConfig(configName)
     w = Worker(cfg)
-    task = w.selectTask()
-    print task
+    manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
+    while True:
+        volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
+        print "getD", volActTimeD
+#        volActTimeD = {'vol':{aaMerge:None, aaApply:None}}
+        volActTimeL = manager.getNonActiveList(volActTimeD)
+        print "getL", volActTimeL
+        curTime = getCurrentTime()
+        task = w.selectTask(volActTimeL, curTime)
+        if task:
+            print "select task", task, "at", curTime
+            b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
+            if b:
+                continue
+            print "[debug log] can't run task", task
+        print "[debug log] no task"
+        time.sleep(cfg.general.kick_interval)
 
 if __name__ == "__main__":
     main()
