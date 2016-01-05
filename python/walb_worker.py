@@ -163,12 +163,12 @@ class ReplServer:
         if d.has_key('compress'):
             self.compress = parseCOMPRESS_OPT(d['compress'])
         if d.has_key('max_merge_size'):
-            self.max_merge_size = parseSIZE_UNIT(d['max_merge_size'])
+            self.max_merge_size = d['max_merge_size']
         if d.has_key('bulk_size'):
             s = d['bulk_size']
             self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
     def __str__(self):
-        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%s, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
@@ -306,15 +306,17 @@ class MergeTask(Task):
         return Task.__eq__(self, rhs) and self.ax == rhs.ax and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
-    def __init__(self, vol, src, dst):
+    def __init__(self, vol, src, dst, max_merge_size):
         Task.__init__(self, 'repl', vol)
         verify_server_kind(src, [K_ARCHIVE])
         verify_type(dst, ServerParams)
+        verify_type(max_merge_size, str)
         self.src = src
         self.dst = dst
+        self.syncOpt = SyncOpt(maxWdiffMergeSizeU=max_merge_size)
     def run(self, walbc):
         verify_type(walbc, Controller)
-        walbc.replicate_once(self.src, self.vol, self.dst)
+        walbc.replicate_once(self.src, self.vol, self.dst, syncOpt=self.syncOpt)
     def __str__(self):
         return Task.__str__(self) + " src={} dst={}".format(self.src, self.dst)
     def __eq__(self, rhs):
@@ -426,7 +428,7 @@ class Worker:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs) = tL[0]
             self.doneReplServerList[(vol, rs)] = curTime
-            return ReplTask(vol, self.a0, rs.getServerConnectionParam())
+            return ReplTask(vol, self.a0, rs.getServerConnectionParam(), rs.max_merge_size)
         else:
             return None
 
