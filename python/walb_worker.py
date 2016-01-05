@@ -468,14 +468,7 @@ class TaskManager:
             remove active vol from volD and return volL
         """
         verify_type(volD, dict)
-        L = []
-        with self.mutex:
-            volL = self.tasks.keys()
-        for (vol,d) in volD.iteritems():
-            if vol not in volL:
-                L.append((vol, d))
-        return L
-
+        return [(k, volD[k]) for k in volD.viewkeys() - self.tasks.viewkeys()]
 
     def tryRun(self, vol, name, target, args=()):
         """
