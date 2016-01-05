@@ -576,10 +576,8 @@ def main():
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     while True:
         volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
-        print "getD", volActTimeD
 #        volActTimeD = {'vol':{aaMerge:None, aaApply:None}}
         volActTimeL = manager.getNonActiveList(volActTimeD)
-        print "getL", volActTimeL
         curTime = getCurrentTime()
         task = w.selectTask(volActTimeL, curTime)
         if task:
