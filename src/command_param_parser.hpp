@@ -11,10 +11,23 @@
 
 namespace walb {
 
+inline void verifyVolIdFormat(const std::string& volId)
+{
+    if (volId.empty() || volId.size() > 64) {
+        throw cybozu::Exception("bad volId format: size") << volId << volId.size();
+    }
+    for (const char &c : volId) {
+        if (!('0' <= c && c <= '9') && !('a' <= c && c <= 'z') && !('A' <= c && c <= 'Z') && c != '-') {
+            throw cybozu::Exception("bad volId format: bad character") << volId << c;
+        }
+    }
+}
+
 inline std::string parseVolIdParam(const StrVec &args, size_t pos)
 {
     std::string volId;
     cybozu::util::parseStrVec(args, pos, 1, {&volId});
+    verifyVolIdFormat(volId);
     return volId;
 }
 
@@ -29,6 +42,7 @@ inline StatusParam parseStatusParam(const StrVec &args)
     StatusParam param;
     cybozu::util::parseStrVec(args, 0, 0, {&param.volId});
     param.isAll = param.volId.empty();
+    if (!param.isAll) verifyVolIdFormat(volId);
     return param;
 }
 
@@ -43,6 +57,7 @@ inline InitVolParam parseInitVolParam(const StrVec &args, bool needWdevPath)
     InitVolParam param;
     const size_t n = needWdevPath ? 2 : 1;
     cybozu::util::parseStrVec(args, 0, n, {&param.volId, &param.wdevPath});
+    verifyVolIdFormat(param.volId);
     return param;
 }
 
@@ -61,6 +76,7 @@ inline VolIdAndGidParam parseVolIdAndGidParam(const StrVec &args, size_t pos, bo
     const size_t n = needGid ? 2 : 1;
     std::string gidStr;
     cybozu::util::parseStrVec(args, pos, n, {&param.volId, &gidStr});
+    verifyVolIdFormat(param.volId);
     if (gidStr.empty()) {
         param.gid = defaultGid;
     } else {
@@ -80,6 +96,7 @@ inline VolIdAndLsidParam parseVolIdAndLsidParam(const StrVec &args)
     VolIdAndLsidParam param;
     std::string lsidStr;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &lsidStr});
+    verifyVolIdFormat(param.volId);
     param.lsid = cybozu::atoi(lsidStr);
     return param;
 }
@@ -96,6 +113,7 @@ inline StartParam parseStartParam(const StrVec &args, bool needRole)
     const size_t n = needRole ? 2 : 1;
     std::string role;
     cybozu::util::parseStrVec(args, 0, n, {&param.volId, &role});
+    verifyVolIdFormat(param.volId);
     if (role == "target") {
         param.isTarget = true;
     } else if (role == "standby") {
@@ -117,6 +135,7 @@ inline StopParam parseStopParam(const StrVec &args, bool allowEmpty)
     StopParam param;
     std::string stopStr;
     cybozu::util::parseStrVec(args, 0, 1, {&param.volId, &stopStr});
+    verifyVolIdFormat(param.volId);
     if (!stopStr.empty()) {
         param.stopOpt.parse(stopStr);
     }
@@ -139,6 +158,7 @@ inline ReplicateParam parseReplicateParam(const StrVec &args)
     ReplicateParam param;
     std::string type, param2Str;
     cybozu::util::parseStrVec(args, 0, 3, {&param.volId, &type, &param2Str});
+    verifyVolIdFormat(param.volId);
     if (type == "size") {
         param.isSize = true;
     } else if (type == "gid") {
@@ -165,6 +185,7 @@ inline MergeParam parseMergeParam(const StrVec &args)
     MergeParam param;
     std::string gidBStr, type, param3Str;
     cybozu::util::parseStrVec(args, 0, 4, {&param.volId, &gidBStr, &type, &param3Str});
+    verifyVolIdFormat(param.volId);
     param.gidB = cybozu::atoi(gidBStr);
     if (type == "size") {
         param.isSize = true;
@@ -195,6 +216,7 @@ inline ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear, boo
     ResizeParam param;
     std::string newSizeLbStr, doZeroClearStr;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &newSizeLbStr, &doZeroClearStr});
+    verifyVolIdFormat(param.volId);
     const uint64_t newSizeLb = util::parseSizeLb(newSizeLbStr, FUNC);
     bool doZeroClear;
     if (doZeroClearStr.empty()) {
@@ -226,6 +248,7 @@ inline VirtualFullScanParam parseVirtualFullScanParam(const StrVec &args)
     VirtualFullScanParam param;
     std::string gidStr, bulkSizeU, sizeU;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU, &sizeU});
+    verifyVolIdFormat(param.volId);
     param.gid = cybozu::atoi(gidStr);
     if (bulkSizeU.empty()) {
         param.bulkLb = DEFAULT_BULK_LB;
@@ -270,6 +293,7 @@ inline SetUuidParam parseSetUuidParam(const StrVec &args)
     SetUuidParam param;
     std::string uuidStr;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &uuidStr});
+    verifyVolIdFormat(param.volId);
     param.uuid.set(uuidStr);
     return param;
 }
@@ -284,6 +308,7 @@ inline SetStateParam parseSetStateParam(const StrVec &args)
 {
     SetStateParam param;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &param.state});
+    verifyVolIdFormat(param.volId);
     return param;
 }
 
@@ -298,6 +323,7 @@ inline SetBaseParam parseSetBaseParam(const StrVec &args)
     SetBaseParam param;
     std::string metaStStr;
     cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &metaStStr});
+    verifyVolIdFormat(param.volId);
     param.metaSt = strToMetaState(metaStStr);
     return param;
 }
@@ -312,6 +338,7 @@ inline ChangeSnapshotParam parseChangeSnapshotParam(const StrVec &args)
 {
     ChangeSnapshotParam param;
     cybozu::util::parseStrVec(args, 0, 1, {&param.volId});
+    verifyVolIdFormat(param.volId);
     for (size_t i = 1; i < args.size(); i++) {
         param.gidL.push_back(cybozu::atoi(args[i]));
     }
@@ -331,6 +358,7 @@ inline ArchiveInfoParam parseArchiveInfoParam(const StrVec &args)
 {
     ArchiveInfoParam param;
     cybozu::util::parseStrVec(args, 0, 2, {&param.cmd, &param.volId});
+    verifyVolIdFormat(param.volId);
     for (const char *cmd : {"add", "update", "get", "delete", "list"}) {
         if (param.cmd == cmd) return param;
     }
@@ -347,6 +375,7 @@ inline KickParam parseKickParam(const StrVec &args)
 {
     KickParam param;
     cybozu::util::parseStrVec(args, 0, 0, {&param.volId, &param.archiveName});
+    if (!param.volId.empty()) verifyVolIdFormat(param.volId);
     return param;
 }
 
@@ -368,6 +397,7 @@ inline BackupParam parseBackupParam(const StrVec &args)
     BackupParam param;
     std::string bulkLbStr;
     cybozu::util::parseStrVec(args, 0, 1, {&param.volId, &bulkLbStr});
+    verifyVolIdFormat(param.volId);
     if (bulkLbStr.empty()) {
         param.bulkLb = DEFAULT_BULK_LB;
     } else {
