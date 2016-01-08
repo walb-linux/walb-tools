@@ -387,7 +387,7 @@ class Worker:
                 if a1State not in aActive:
                     continue
                 ts = self.doneReplServerList.get((vol, rs))
-                if ts and ts + rs.interval < curTime:
+                if ts and curTime < ts + rs.interval:
                     continue
                 if not ts:
                     ts = OLDEST_TIME
