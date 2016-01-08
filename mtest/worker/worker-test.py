@@ -200,7 +200,7 @@ class TestGetMergeGidRange(unittest.TestCase):
         ]
         for t in tbl:
             diffL = map(create_diff_from_str, t[0])
-            r = getMergeGidRange(diffL)
+            r = getMergeGidRange(diffL, 1000000000)
             self.assertEqual(r, t[1])
 
 class TestTaskManager(unittest.TestCase):

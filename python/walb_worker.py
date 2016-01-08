@@ -101,9 +101,9 @@ class Apply:
 class Merge:
     def __init__(self):
         self.interval = datetime.timedelta()
-        self.max_nr = 0
-        self.max_size = 0
-        self.threshold_nr = 0
+        self.max_nr = UINT64_MAX
+        self.max_size = UINT64_MAX
+        self.threshold_nr = UINT64_MAX
     def set(self, d):
         verify_type(d, dict)
         self.interval = parsePERIOD(d['interval'])
@@ -207,15 +207,16 @@ def getLatestGidInfoBefore(curTime, infoL):
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
 
-def getMergeGidRange(diffL):
+def getMergeGidRange(diffL, max_size):
     diffLL = []
     t = []
     for diff in diffL:
-        if diff.isCompDiff or not diff.isMergeable:
+        if diff.dataSize >= max_size or (diff.isCompDiff or not diff.isMergeable):
             if len(t) >= 2:
                 diffLL.append(t)
             t = []
-        t.append(diff)
+        if diff.dataSize < max_size:
+            t.append(diff)
     if len(t) >= 2:
         diffLL.append(t)
 
@@ -353,7 +354,7 @@ class Worker:
             ls.sort(key=lambda x : x[0], reverse=True)
             (_, vol) = ls[0]
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
-            r = getMergeGidRange(diffL)
+            r = getMergeGidRange(diffL, self.cfg.merge.max_size)
             if r:
                 return MergeTask(vol, self.a0, r[0], r[1])
         return None
@@ -402,6 +403,8 @@ class Worker:
 
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
+        numDiffL = self.getNumDiffList(volL)
+        '''
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -420,6 +423,7 @@ class Worker:
         if t:
             return t
         # step 5
+        '''
         t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
         return t
 
