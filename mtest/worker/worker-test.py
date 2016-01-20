@@ -102,18 +102,6 @@ class TestParseSIZE_UNIT(unittest.TestCase):
             v = parseSIZE_UNIT(s)
             self.assertEqual(v, expect)
 
-class TestParseCOMPRESS_OPT(unittest.TestCase):
-    def test(self):
-        d = {
-            "none":('none', 0, 0),
-            "snappy:3":('snappy', 3, 0),
-            "gzip:9:4":('gzip', 9, 4),
-            "lzma:0:123":('lzma', 0, 123),
-        }
-        for (s, expect) in d.items():
-            v = parseCOMPRESS_OPT(s)
-            self.assertEqual(v, expect)
-
 configStr = """
 general:
   addr: 192.168.0.1
@@ -140,7 +128,7 @@ repl_servers:
     addr: 192.168.0.3
     port: 10002
     interval: 2h
-    compress: gzip
+    compress: gzip:1:4
     max_merge_size: 2M
     bulk_size: 400
 """
@@ -166,17 +154,17 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.addr, '192.168.0.2')
         self.assertEqual(r.port, 10001)
         self.assertEqual(r.interval, datetime.timedelta(days=3))
-        self.assertEqual(r.compress, ('snappy', 3, 4))
-        self.assertEqual(r.max_merge_size, 5 * 1024)
-        self.assertEqual(r.bulk_size, 40)
+        self.assertEqual(r.compress, CompressOpt(CMPR_SNAPPY, 3, 4))
+        self.assertEqual(r.max_merge_size, '5K')
+        self.assertEqual(r.bulk_size, '40')
 
         r = repl_servers['repl1']
         self.assertEqual(r.addr, '192.168.0.3')
         self.assertEqual(r.port, 10002)
         self.assertEqual(r.interval, datetime.timedelta(hours=2))
-        self.assertEqual(r.compress, ('gzip', 0, 0))
-        self.assertEqual(r.max_merge_size, 2 * 1024 * 1024)
-        self.assertEqual(r.bulk_size, 400)
+        self.assertEqual(r.compress, CompressOpt(CMPR_GZIP, 1, 4))
+        self.assertEqual(r.max_merge_size, '2M')
+        self.assertEqual(r.bulk_size, '400')
 
 class TestGetLatestGidInfoBefore(unittest.TestCase):
     def test(self):
@@ -212,7 +200,7 @@ class TestGetMergeGidRange(unittest.TestCase):
         ]
         for t in tbl:
             diffL = map(create_diff_from_str, t[0])
-            r = getMergeGidRange(diffL)
+            r = getMergeGidRange(diffL, 1000000000)
             self.assertEqual(r, t[1])
 
 class TestTaskManager(unittest.TestCase):
@@ -267,7 +255,7 @@ class TestWoker(unittest.TestCase):
                 (MetaState(Snapshot()), None),
                 (MetaState(Snapshot(2, 2)), None),
                 (MetaState(Snapshot(2, 4)), None),
-                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), Task("apply", VOL, (w.a0, 2))),
+                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), ApplyTask(VOL, w.a0, 2)),
             ]
             def get_base(a0, vol):
                 return tbl[i][0]
@@ -322,11 +310,11 @@ class TestWoker(unittest.TestCase):
 
             tbl = [
                 ('2015-11-16T07:32:00', '0', None),
-                ('2015-11-16T07:32:02', '0', Task("apply", 'vol0', (w.a0, 25))),
-                ('2015-11-16T07:32:03', '0', Task("apply", 'vol0', (w.a0, 25))),
-                ('2015-11-16T07:32:04', '0', Task("apply", 'vol1', (w.a0, 29))),
-                ('2015-11-16T07:32:10', '0', Task("apply", 'vol1', (w.a0, 31))),
-                ('2015-11-16T07:32:10', '8', Task("apply", 'vol0', (w.a0, 25))),
+                ('2015-11-16T07:32:02', '0', ApplyTask('vol0', w.a0, 25)),
+                ('2015-11-16T07:32:03', '0', ApplyTask('vol0', w.a0, 25)),
+                ('2015-11-16T07:32:04', '0', ApplyTask('vol1', w.a0, 29)),
+                ('2015-11-16T07:32:10', '0', ApplyTask('vol1', w.a0, 31)),
+                ('2015-11-16T07:32:10', '8', ApplyTask('vol0', w.a0, 25)),
             ]
             for t in tbl:
                 curTime = toDatetime(t[0])
@@ -374,7 +362,7 @@ class TestWoker(unittest.TestCase):
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
                 [(3, 'sss'), (5, VOL), (4, 'ttt')],
-                Task("merge", VOL, (w.a0, 5, 7))),
+                MergeTask(VOL, w.a0, 5, 7)),
                 ([
                 '|0|-->|1| -- 2015-12-09T09:54:20 4120',
                 '|1|-->|2| -- 2015-12-09T09:54:23 8728',
@@ -383,7 +371,7 @@ class TestWoker(unittest.TestCase):
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
                 [(3, 'sss'), (5, VOL), (9, 'ttt')],
-                Task("merge", 'ttt', (w.a0, 5, 7))),
+                MergeTask('ttt', w.a0, 5, 7)),
 
             ]
             i = 0

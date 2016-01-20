@@ -16,34 +16,6 @@ def parseFLAG(s):
         return True
     raise Exception('parseFLAG:bad s', s)
 
-def parseCOMPRESS_OPT(s):
-    """
-        MODE:LEVEL:NUM_CPU
-        MODE=(none|snappy|gzip|lzma)
-        LEVEL=[0-9]
-        NUM_CPU=digits
-    """
-    verify_type(s, str)
-    ss = s.split(':')
-    if len(ss) > 3:
-        raise Exception('parseCOMPRESS_OPT:bad s', s)
-    mode = 'none'
-    level = 0
-    numCpu = 0
-    if len(ss) > 0:
-        mode = ss[0]
-        if mode not in ['none', 'snappy', 'gzip', 'lzma']:
-            raise Exception('parseCOMPRESS_OPT:bad MODE', mode, s)
-    if len(ss) > 1:
-        level = int(ss[1])
-        if level < 0 or level > 9:
-            raise Exception('parseCOMPRESS_OPT:bad LEVEL', level, s)
-    if len(ss) > 2:
-        numCpu = int(ss[2])
-        if numCpu < 0:
-            raise Exception('parseCOMPRESS_OPT:bad NUM_CPU', numCpu, s)
-    return (mode, level, numCpu)
-
 def parseSuffix(s, suf):
     if type(s) == int:
         n = s
@@ -129,9 +101,9 @@ class Apply:
 class Merge:
     def __init__(self):
         self.interval = datetime.timedelta()
-        self.max_nr = 0
-        self.max_size = 0
-        self.threshold_nr = 0
+        self.max_nr = UINT64_MAX
+        self.max_size = UINT64_MAX
+        self.threshold_nr = UINT64_MAX
     def set(self, d):
         verify_type(d, dict)
         self.interval = parsePERIOD(d['interval'])
@@ -149,9 +121,9 @@ class ReplServer:
         self.addr = ""
         self.port = 0
         self.interval = 0
-        self.compress = ('none', 0, 0)
-        self.max_merge_size = 0
-        self.bulk_size = 0
+        self.compress = None
+        self.max_merge_size = '1G'
+        self.bulk_size = '64K'
     def set(self, name, d):
         verify_type(name, str)
         verify_type(d, dict)
@@ -161,16 +133,16 @@ class ReplServer:
         self.port = parsePort(d['port'])
         self.interval = parsePERIOD(d['interval'])
         if d.has_key('compress'):
-            self.compress = parseCOMPRESS_OPT(d['compress'])
+            self.compress = CompressOpt()
+            self.compress.parse(d['compress'])
         if d.has_key('max_merge_size'):
-            self.max_merge_size = parseSIZE_UNIT(d['max_merge_size'])
+            self.max_merge_size = str(d['max_merge_size'])
         if d.has_key('bulk_size'):
-            s = d['bulk_size']
-            self.bulk_size = parseSIZE_UNIT(d['bulk_size'])
+            self.bulk_size = str(d['bulk_size'])
     def __str__(self):
-        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%d, bulk_size=%d" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
-    def getWalbServer(self):
-        return makeArchiveServer(self.name, self.addr, self.port)
+        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%s, bulk_size=%s" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+    def getServerConnectionParam(self):
+        return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
 class Config:
     def __init__(self):
@@ -235,15 +207,16 @@ def getLatestGidInfoBefore(curTime, infoL):
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
 
-def getMergeGidRange(diffL):
+def getMergeGidRange(diffL, max_size):
     diffLL = []
     t = []
     for diff in diffL:
-        if diff.isCompDiff or not diff.isMergeable:
+        if diff.dataSize >= max_size or (diff.isCompDiff or not diff.isMergeable):
             if len(t) >= 2:
                 diffLL.append(t)
             t = []
-        t.append(diff)
+        if diff.dataSize < max_size:
+            t.append(diff)
     if len(t) >= 2:
         diffLL.append(t)
 
@@ -258,69 +231,73 @@ def getMergeGidRange(diffL):
         return None
 
 class Task:
-    def __init__(self, name, vol, tpl):
+    def __init__(self, name, vol, ax):
         verify_type(name, str)
         verify_type(vol, str)
-        verify_type(tpl, tuple)
+        verify_server_kind(ax, [K_ARCHIVE])
+        if name not in ['merge', 'apply', 'repl']:
+            raise Exception('Task bad name', name, vol)
         self.name = name
         self.vol = vol
-        if name == "apply":
-            (ax, gid) = tpl
-            verify_server_kind(ax, [K_ARCHIVE])
-            self.ax = ax
-            self.gid = gid
-        elif name == "merge":
-            (ax, gidB, gidE) = tpl
-            verify_server_kind(ax, [K_ARCHIVE])
-            verify_gid_range(gidB, gidE, 'merge')
-            self.ax = ax
-            self.gidB = gidB
-            self.gidE = gidE
-        elif name == "repl":
-            (src, dst) = tpl
-            self.src = src
-            self.dst = dst.getWalbServer()
-        else:
-            raise Exception("Task bad name", name, vol, tpl)
-
+        self.ax = ax
+    def run(self):
+        pass
     def __str__(self):
-        if self.name == "apply":
-            return "Task apply ax=%s vol=%s gid=%s" % (self.ax, self.vol, self.gid)
-        if self.name == "merge":
-            return "Task merge ax=%s vol=%s gid=(%d, %d)" % (self.ax, self.vol, self.gidB, self.gidE)
-        if self.name == "repl":
-            return "Task repl vol=%s src=%s dst=%s" % (self.vol, self.src, self.dst)
+        return "Task name={} vol={} ax={}".format(self.name, self.vol, self.ax)
     def __eq__(self, rhs):
-        if self.name != rhs.name:
-            return false
-        if self.name == "apply":
-            return (self.ax, self.vol, self.gid) == (rhs.ax, rhs.vol, rhs.gid)
-        if self.name == "merge":
-            return (self.ax, self.vol, self.gidB, self.gidE) == (rhs.ax, rhs.vol, rhs.gidB, rhs.gidE)
-        if self.name == "repl":
-            return (self.vol, self.src, self.dst) == (rhs.vol, rhs.src, rhs.dst)
+        return self.name == rhs.name and self.vol == rhs.vol and self.ax == rhs.ax
     def __ne__(self, rhs):
         return not self.__eq__(rhs)
 
-def execTask(walbc, task):
-    if task.name == 'apply':
-        walbc.apply(task.ax, task.vol, task.gid)
-    elif task.name == 'merge':
-        walbc.merge(task.ax, task.vol, task.gidB, task.gidE)
-    elif task.name == 'repl':
-        walbc.replicate_once(task.src, task.vol, task.dst)
-    else:
-        raise Exception('execTask bad name', task)
+class ApplyTask(Task):
+    def __init__(self, vol, ax, gid):
+        Task.__init__(self, 'apply', vol, ax)
+        verify_u64(gid)
+        self.gid = gid
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.apply(self.ax, self.vol, self.gid)
+    def __str__(self):
+        return Task.__str__(self) + " gid={}".format(self.gid)
+    def __eq__(self, rhs):
+        return Task.__eq__(self, rhs) and self.gid == rhs.gid
+
+class MergeTask(Task):
+    def __init__(self, vol, ax, gidB, gidE):
+        Task.__init__(self, 'merge', vol, ax)
+        verify_gid_range(gidB, gidE, 'merge')
+        self.gidB = gidB
+        self.gidE = gidE
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.merge(self.ax, self.vol, self.gidB, self.gidE)
+    def __str__(self):
+        return Task.__str__(self) + " gid=({}, {})".format(self.gidB, self.gidE)
+    def __eq__(self, rhs):
+        return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
+
+class ReplTask(Task):
+    def __init__(self, vol, ax, rs):
+        Task.__init__(self, 'repl', vol, ax)
+        verify_type(rs, ReplServer)
+        self.dst = rs.getServerConnectionParam()
+        self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
+    def run(self, walbc):
+        verify_type(walbc, Controller)
+        walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt)
+    def __str__(self):
+        return Task.__str__(self) + " dst={} opt={}".format(self.dst, self.syncOpt)
+    def __eq__(self, rhs):
+        # QQQ : add self.syncOpt == rhs.syncOpt?
+        return Task.__eq__(self, rhs) and self.dst == rhs.dst
 
 g_binDir = ''
 g_dirName = ''
 g_logName = ''
-def makeArchiveServer(name, addr, port):
-    return ServerConnectionParam(name, addr, port, K_ARCHIVE)
 
 class Worker:
     def createSeverLayout(self, cfg):
-        self.a0 = makeArchiveServer('a0', cfg.general.addr, cfg.general.port)
+        self.a0 = ServerConnectionParam('a0', cfg.general.addr, cfg.general.port, K_ARCHIVE)
         s0 = ServerConnectionParam('s0', '', 0, K_STORAGE)
         p0 = ServerConnectionParam('p0', '', 0, K_PROXY)
         return ServerLayout([s0], [p0], [self.a0])
@@ -336,7 +313,7 @@ class Worker:
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
             if ms.is_applying():
-                return Task("apply", vol, (self.a0, ms.B.gidB))
+                return ApplyTask(vol, self.a0, ms.B.gidB)
         return None
 
     def selectApplyTask2(self, volL, curTime):
@@ -355,7 +332,7 @@ class Worker:
         if ls:
             ls.sort(key=lambda x : x[0])
             (size, vol, gid) = ls[-1]
-            return Task("apply", vol, (self.a0, gid))
+            return ApplyTask(vol, self.a0, gid)
         else:
             return None
 
@@ -377,9 +354,9 @@ class Worker:
             ls.sort(key=lambda x : x[0], reverse=True)
             (_, vol) = ls[0]
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
-            r = getMergeGidRange(diffL)
+            r = getMergeGidRange(diffL, self.cfg.merge.max_size)
             if r:
-                return Task("merge", vol, (self.a0, r[0], r[1]))
+                return MergeTask(vol, self.a0, r[0], r[1])
         return None
 
     def selectMergeTask1(self, volL, numDiffL):
@@ -406,12 +383,12 @@ class Worker:
             if a0State not in aActive:
                 continue
             for rs in rsL:
-                a1 = rs.getWalbServer()
+                a1 = rs.getServerConnectionParam()
                 a1State = self.walbc.get_state(a1, vol)
                 if a1State not in aActive:
                     continue
                 ts = self.doneReplServerList.get((vol, rs))
-                if ts and ts + rs.interval < curTime:
+                if ts and curTime < ts + rs.interval:
                     continue
                 if not ts:
                     ts = OLDEST_TIME
@@ -420,12 +397,14 @@ class Worker:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs) = tL[0]
             self.doneReplServerList[(vol, rs)] = curTime
-            return Task("repl", vol, (self.a0, rs))
+            return ReplTask(vol, self.a0, rs)
         else:
             return None
 
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
+        numDiffL = self.getNumDiffList(volL)
+        '''
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
@@ -444,6 +423,7 @@ class Worker:
         if t:
             return t
         # step 5
+        '''
         t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
         return t
 
@@ -468,14 +448,8 @@ class TaskManager:
             remove active vol from volD and return volL
         """
         verify_type(volD, dict)
-        L = []
         with self.mutex:
-            volL = self.tasks.keys()
-        for (vol,d) in volD.iteritems():
-            if vol not in volL:
-                L.append((vol, d))
-        return L
-
+            return [(k, volD[k]) for k in volD.viewkeys() - self.tasks.viewkeys()]
 
     def tryRun(self, vol, name, target, args=()):
         """
@@ -576,15 +550,13 @@ def main():
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     while True:
         volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
-        print "getD", volActTimeD
 #        volActTimeD = {'vol':{aaMerge:None, aaApply:None}}
         volActTimeL = manager.getNonActiveList(volActTimeD)
-        print "getL", volActTimeL
         curTime = getCurrentTime()
         task = w.selectTask(volActTimeL, curTime)
         if task:
             print "select task", task, "at", curTime
-            b = manager.tryRun(task.vol, task.name, execTask, (w.walbc, task))
+            b = manager.tryRun(task.vol, task.name, task.run, (w.walbc,))
             if b:
                 continue
             print "[debug log] can't run task", task
