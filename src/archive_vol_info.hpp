@@ -424,6 +424,30 @@ public:
         setMetaState(MetaState());
         setState(aSyncReady);
     }
+    void clearAllSnapLv() {
+        {
+            VolLvCache::LvMap snapM = lvC_.getRestoredMap();
+            for (VolLvCache::LvMap::value_type &p : snapM) {
+                const uint64_t gid = p.first;
+                cybozu::lvm::Lv &snap = p.second;
+                snap.remove();
+                lvC_.removeRestored(gid);
+            }
+        }
+        {
+            VolLvCache::LvMap snapM = lvC_.getColdMap();
+            for (VolLvCache::LvMap::value_type &p : snapM) {
+                const uint64_t gid = p.first;
+                cybozu::lvm::Lv &snap = p.second;
+                snap.remove();
+                lvC_.removeCold(gid);
+            }
+        }
+        removeColdTimestampFilesBeforeGid(UINT64_MAX); // all
+    }
+    void clearAllWdiffs() {
+        wdiffs_.clear();
+    }
     /**
      * CAUSION:
      *   The volume will be removed if exists.
@@ -432,24 +456,7 @@ public:
     void clear() {
         // Delete all related lvm volumes and snapshots.
         if (lvExists()) {
-            {
-                VolLvCache::LvMap snapM = lvC_.getRestoredMap();
-                for (VolLvCache::LvMap::value_type &p : snapM) {
-                    const uint64_t gid = p.first;
-                    cybozu::lvm::Lv &snap = p.second;
-                    snap.remove();
-                    lvC_.removeRestored(gid);
-                }
-            }
-            {
-                VolLvCache::LvMap snapM = lvC_.getColdMap();
-                for (VolLvCache::LvMap::value_type &p : snapM) {
-                    const uint64_t gid = p.first;
-                    cybozu::lvm::Lv &snap = p.second;
-                    snap.remove();
-                    lvC_.removeCold(gid);
-                }
-            }
+            clearAllSnapLv();
             cybozu::lvm::Lv lv = lvC_.getLv();
             lv.remove();
             lvC_.remove();

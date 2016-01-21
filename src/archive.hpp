@@ -1165,10 +1165,8 @@ inline bool runResyncReplServer(
     StateMachineTransaction tran2(volSt.sm, aSyncReady, atResync, FUNC);
     ul.unlock();
 
-    {
-        WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
-        wdiffs.clear();
-    }
+    volInfo.clearAllSnapLv();
+    volInfo.clearAllWdiffs();
     {
         cybozu::util::File reader;
         prepareRawFullScanner(reader, volSt, sizeLb);
