@@ -2,7 +2,9 @@
 import sys, time, yaml, datetime, collections, os, threading
 from walblib import *
 
-isDebug = False # True
+walbcDebug = False
+verbose = False
+
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
 
 def getCurrentTime():
@@ -317,7 +319,7 @@ class Worker:
         verify_type(cfg, Config)
         self.cfg = cfg
         self.serverLayout = self.createSeverLayout(self.cfg)
-        self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, isDebug)
+        self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, walbcDebug)
         self.doneReplServerList = collections.defaultdict()
 
     def selectApplyTask1(self, volL):
@@ -391,6 +393,7 @@ class Worker:
         rsL = self.cfg.repl_servers.values()
         for vol in volL:
             a0State = self.walbc.get_state(self.a0, vol)
+            a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
             if a0State not in aActive:
                 continue
             for rs in rsL:
@@ -400,6 +403,10 @@ class Worker:
                     continue
                 ts = self.doneReplServerList.get((vol, rs))
                 if ts and curTime < ts + rs.interval:
+                    continue
+                a1latest = self.walbc.get_latest_clean_snapshot(a1, vol)
+                # skip if repl is not necessary
+                if a0latest == a1latest:
                     continue
                 if not ts:
                     ts = OLDEST_TIME
@@ -419,7 +426,6 @@ class Worker:
         t = self.selectApplyTask1(volL)
         if t:
             return t
-        '''
         # step 2
         t = self.selectApplyTask2(volL, curTime)
         if t:
@@ -435,7 +441,6 @@ class Worker:
             return t
         # step 5
         t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
-        '''
         return t
 
 class TaskManager:
@@ -548,12 +553,18 @@ def main():
             configName = argv[i + 1]
             i += 2
             continue
+        if c == '-d':
+            global verbose
+            verbose = True
+            i += 1
+            continue
         else:
             print "option error", argv[i]
             usage()
 
     if not configName:
-        print "set -f option"
+        print "set -f option [-d]"
+        print "  -d ; debug"
         usage()
 
     cfg = loadConfig(configName)
@@ -566,12 +577,15 @@ def main():
         curTime = getCurrentTime()
         task = w.selectTask(volActTimeL, curTime)
         if task:
-            print "select task", task, "at", curTime
+            if verbose:
+                print "task", task, "at", curTime
             b = manager.tryRun(task.vol, task.name, task.run, (w.walbc,))
             if b:
                 continue
-            print "[debug log] can't run task", task
-        print "[debug log] no task"
+            if verbose:
+                print "task is canceled(max limit)", task
+        if verbose:
+            print "no task"
         time.sleep(cfg.general.kick_interval)
 
 if __name__ == "__main__":
