@@ -412,6 +412,7 @@ def create_snapshot_from_str(s):
     snap.parse(s)
     return snap
 
+
 class Diff(object):
     '''
     DIff class
@@ -2086,6 +2087,44 @@ class Controller(object):
         return :: [int]  - gid list.
         '''
         return self._get_snapshot(ax, vol, True)
+
+    def get_meta_snap(self, ax, vol, gid=None):
+        '''
+        Get snapshot having gid.
+        ax :: ServerParams - archive server.
+        vol :: str         - volume name.
+        gid :: None or int - generation id. None means the latest snapshot.
+        return :: Snapshot - snapshot object which gidB is maximum one no more than the specified gid.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        if gid is not None:
+            verify_u64(gid)
+        args = ['get', 'meta-snap', vol]
+        if gid is not None:
+            args.append(str(gid))
+        ret = self.run_ctl(ax, args)
+        return create_snapshot_from_str(ret)
+
+    def get_meta_state(self, ax, vol, isApplying, gid=None):
+        '''
+        Get snapshot having gid.
+        ax :: ServerParams  - archive server.
+        vol :: str          - volume name.
+        isApplying :: bool  - specify True to get applying state.
+        gid :: None or int  - generation id. None means the latest snapshot.
+        return :: MetaState - metastate object which B.gidB is maximum one no more than the specified gid.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_type(isApplying, bool)
+        if gid is not None:
+            verify_u64(gid)
+        args = ['get', 'meta-state', vol, '1' if isApplying else '0']
+        if gid is not None:
+            args.append(str(gid))
+        ret = self.run_ctl(ax, args)
+        return create_meta_state_from_str(ret)
 
     def wait_for_restorable(self, ax, vol, gid, timeoutS=TIMEOUT_SEC):
         '''
