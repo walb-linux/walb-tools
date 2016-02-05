@@ -1810,6 +1810,36 @@ inline void getThinpool(protocol::GetCommandParams &p)
     p.logger.debug() << "get thinpool succeeded";
 }
 
+inline MetaState getMetaStateDetail(const std::string &volId, bool isApplying, uint64_t gid)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+
+    const MetaState metaSt = volInfo.getMetaState();
+    MetaDiffVec diffV;
+    if (gid == UINT64_MAX) {
+        diffV = volSt.diffMgr.getApplicableDiffList(metaSt.snapB);
+    } else {
+        diffV = volSt.diffMgr.getApplicableDiffListByGid(metaSt.snapB, gid);
+    }
+    return isApplying ? beginApplying(metaSt, diffV) : apply(metaSt, diffV);
+}
+
+inline void getMetaSnap(protocol::GetCommandParams &p)
+{
+    const VolIdAndGidParam param = parseVolIdAndGidParam(p.params, 1, false, UINT64_MAX);
+    MetaState metaSt = getMetaStateDetail(param.volId, false, param.gid);
+    protocol::sendValueAndFin(p, metaSt.snapB.str());
+}
+
+inline void getMetaState(protocol::GetCommandParams &p)
+{
+    const GetMetaStateParam param = parseGetMetaStateParam(p.params);
+    MetaState metaSt = getMetaStateDetail(param.volId, param.isApplying, param.gid);
+    protocol::sendValueAndFin(p, metaSt.strTs());
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -2753,6 +2783,8 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { volumeGroupTN, archive_local::getVolumeGroup },
     { thinpoolTN, archive_local::getThinpool },
     { allActionsTN, archive_local::getAllActions },
+    { getMetaSnapTN, archive_local::getMetaSnap },
+    { getMetaStateTN, archive_local::getMetaState },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

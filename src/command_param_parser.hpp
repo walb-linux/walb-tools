@@ -447,7 +447,6 @@ inline bool parseShutdownParam(const StrVec &args)
     return isForce;
 }
 
-
 inline void verifyNoneParam(const StrVec &) {}
 
 inline void verifyVolIdParam(const StrVec &args) { parseVolIdParam(args, 0); }
@@ -567,6 +566,34 @@ inline IsWdiffSendErrorParam parseIsWdiffSendErrorParamForGet(const StrVec &args
     return param;
 }
 
+struct GetMetaStateParam
+{
+    std::string volId;
+    uint64_t gid; // -1 means the latest one.
+    bool isApplying;
+};
+
+inline GetMetaStateParam parseGetMetaStateParam(const StrVec &args)
+{
+    GetMetaStateParam param;
+    std::string isApplyingStr;
+    std::string gidStr;
+    cybozu::util::parseStrVec(args, 1, 2, {&param.volId, &isApplyingStr, &gidStr});
+    if (isApplyingStr == "0") {
+        param.isApplying = false;
+    } else if (isApplyingStr == "1") {
+        param.isApplying = true;
+    } else {
+        throw cybozu::Exception("bad isApplying parameter. specify 0 or 1.") << isApplyingStr;
+    }
+    if (gidStr.empty()) {
+        param.gid = UINT64_MAX;
+    } else {
+        param.gid = cybozu::atoi(gidStr);
+    }
+    return param;
+}
+
 inline void verifyVolIdParamForGet(const StrVec &args) { parseVolIdParam(args, 1); }
 inline void verifyApplicableDiffParamForGet(const StrVec &args) { parseVolIdAndGidParam(args, 1, false, UINT64_MAX); }
 inline void verifyVolIdAndGidRangeParamForGet(const StrVec &args) { parseVolIdAndGidRangeParamForGet(args); }
@@ -574,5 +601,7 @@ inline void verifyExistsDiffParamForGet(const StrVec &args) { parseExistsDiffPar
 inline void verifyRestorableParamForGet(const StrVec &args) { parseRestorableParamForGet(args); }
 inline void verifyNumActionParamForGet(const StrVec &args) { parseNumActionParamForGet(args); }
 inline void verifyIsWdiffSendErrorParamForGet(const StrVec &args) { parseIsWdiffSendErrorParamForGet(args); }
+inline void verifyGetMetaSnapParam(const StrVec &args) { parseVolIdAndGidParam(args, 1, false, UINT64_MAX); }
+inline void verifyGetMetaStateParam(const StrVec &args) { parseGetMetaStateParam(args); }
 
 } // namespace walb

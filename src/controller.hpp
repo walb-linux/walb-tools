@@ -454,6 +454,8 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {volumeGroupTN, {protocol::StringType, verifyNoneParam, "get volume group name"}},
         {thinpoolTN, {protocol::StringType, verifyNoneParam, "get thinpool name (may be emtpy string)"}},
         {allActionsTN, {protocol::StringVecType, verifyNoneParam, "get running action information for all the volumes."}},
+        {getMetaSnapTN, {protocol::StringType, verifyGetMetaSnapParam, "[volId (gid)] get MetaSnap having gid."}},
+        {getMetaStateTN, {protocol::StringType, verifyGetMetaStateParam, "[volId isApplying (gid)] get MetaState having gid."}},
     };
     return m;
 }
