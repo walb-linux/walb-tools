@@ -324,7 +324,7 @@ class Worker:
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
             if ms.is_applying():
-                return ApplyTask(vol, self.a0, ms.B.gidB)
+                return ApplyTask(vol, self.a0, ms.E.gidB)
         return None
 
     def selectApplyTask2(self, volL, curTime):
@@ -415,11 +415,11 @@ class Worker:
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
         numDiffL = self.getNumDiffList(volL)
-        '''
         # step 1
         t = self.selectApplyTask1(volL)
         if t:
             return t
+        '''
         # step 2
         t = self.selectApplyTask2(volL, curTime)
         if t:
@@ -434,8 +434,8 @@ class Worker:
         if t:
             return t
         # step 5
-        '''
         t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
+        '''
         return t
 
 class TaskManager:
