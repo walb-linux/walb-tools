@@ -5,6 +5,7 @@ from walblib import *
 walbcDebug = False
 g_verbose = False
 g_retryNum = 3
+g_step = 0
 
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
 
@@ -449,24 +450,28 @@ class Worker:
         volL = map(lambda x:x[0], volActTimeL)
         numDiffL = self.getNumDiffList(volL)
         # step 1
-        t = self.selectApplyTask1(volL)
-        if t:
-            return t
+        if g_step in [0, 1]:
+            t = self.selectApplyTask1(volL)
+            if t:
+                return t
         # step 2
-        t = self.selectApplyTask2(volL, curTime)
-        if t:
-            return t
+        if g_step in [0, 2]:
+            t = self.selectApplyTask2(volL, curTime)
+            if t:
+                return t
         # step 3
-        numDiffL = self.getNumDiffList(volL)
-        t = self.selectMergeTask1(volL, numDiffL)
-        if t:
-            return t
+        if g_step in [0, 3]:
+            t = self.selectMergeTask1(volL, numDiffL)
+            if t:
+                return t
         # step 4
-        t = self.selectReplTask(volL, curTime)
-        if t:
-            return t
+        if g_step in [0, 4]:
+            t = self.selectReplTask(volL, curTime)
+            if t:
+                return t
         # step 5
-        t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
+        if g_step in [0, 5]:
+            t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
         return t
 
 class TaskManager:
@@ -581,6 +586,11 @@ def main():
         c = argv[i]
         if c == '-f' and i < argc - 1:
             configName = argv[i + 1]
+            i += 2
+            continue
+        if c == '-step' and i < argc - 1:
+            global g_step
+            g_step = int(argv[i + 1])
             i += 2
             continue
         if c == '-d':
