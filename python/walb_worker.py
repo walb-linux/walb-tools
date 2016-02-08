@@ -3,12 +3,37 @@ import sys, time, yaml, datetime, collections, os, threading
 from walblib import *
 
 walbcDebug = False
-verbose = False
+g_verbose = False
+g_retryNum = 3
 
 OLDEST_TIME = datetime.datetime(2000, 1, 1, 0, 0)
 
 def getCurrentTime():
     return datetime.datetime.utcnow()
+
+WARN = 'WARN'
+INFO = 'INFO'
+ERR = 'ERROR'
+DEBUG = 'DEBUG'
+
+def log(mode, *s):
+    if mode == DEBUG and not g_verbose:
+        return
+    print getCurrentTime(), mode, ":".join(map(str,s))
+
+def logd(*s):
+    log(DEBUG, *s)
+
+def loge(*s):
+    log(ERR, *s)
+
+def logi(*s):
+    log(INFO, *s)
+
+def logstart(argv, cfg):
+    logi('start walb-worker')
+    print ' '.join(argv)
+    print '>>>\n' + str(cfg) + '<<<'
 
 def parseFLAG(s):
     verify_type(s, str)
@@ -88,7 +113,7 @@ class General:
             self.kick_interval = parsePositive(d['kick_interval'])
 
     def __str__(self):
-        return "addr=%s, port=%d, max_task=%d max_replication_task=%d kick_interval=%d" % (self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
+        return "addr={} port={} max_task={} max_replication_task={} kick_interval={}".format(self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
 
 class Apply:
     def __init__(self):
@@ -116,7 +141,7 @@ class Merge:
         if d.has_key('threshold_nr'):
             self.threshold_nr = parsePositive(d['threshold_nr'])
     def __str__(self):
-        return "interval={}, max_nr={}, max_size={}, threshold_nr={}".format(self.interval, self.max_nr, self.max_size, self.threshold_nr)
+        return "interval={} max_nr={} max_size={} threshold_nr={}".format(self.interval, self.max_nr, self.max_size, self.threshold_nr)
 
 class ReplServer:
     def __init__(self):
@@ -142,7 +167,7 @@ class ReplServer:
         if d.has_key('bulk_size'):
             self.bulk_size = str(d['bulk_size'])
     def __str__(self):
-        return "name=%s, addr=%s, port=%d, interval=%s, compress=(%s, %d, %d), max_merge_size=%s, bulk_size=%s" % (self.name, self.addr, self.port, self.interval, self.compress[0], self.compress[1], self.compress[2], self.max_merge_size, self.bulk_size)
+        return "name={} addr={} port={} interval={} compress={} max_merge_size={} bulk_size={}".format(self.name, self.addr, self.port, self.interval, self.compress, self.max_merge_size, self.bulk_size)
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
@@ -219,6 +244,7 @@ def getMergeGidRange(diffL, max_size):
     """
     diffLL = []
     inAppending = False
+    begin = None
     for i in xrange(len(diffL)):
         diff = diffL[i]
         canBeMerged = not diff.isCompDiff and diff.dataSize < max_size
@@ -467,13 +493,15 @@ class TaskManager:
         with self.mutex:
             return [(k, volD[k]) for k in volD.viewkeys() - self.tasks.viewkeys()]
 
-    def tryRun(self, vol, name, target, args=()):
+    def tryRun(self, task, args=()):
         """
             run worker(args)
         """
-        verify_type(vol, str)
-        verify_type(name, str)
+        verify_type(task, Task)
         verify_type(args, tuple)
+        vol = task.vol
+        name = task.name
+        target = task.run
 
         with self.mutex:
             if self.tasks.has_key(vol):
@@ -495,8 +523,9 @@ class TaskManager:
                         target(*args)
                     else:
                         target()
+                    logi('endTask  ', task)
                 except Exception, e:
-                    print "TaskManager.wrapperTarget err", e
+                    loge('errTask  ', task, e)
                 finally:
                     ref_hdl = kwargs['ref_hdl']
                     tasks = kwargs['tasks']
@@ -523,6 +552,7 @@ class TaskManager:
             self.handles[hdl] = vol
 
         # lock is unnecessary
+        logi('startTask', task)
         hdl.start()
         return True
 
@@ -533,9 +563,9 @@ class TaskManager:
                 th.join()
         with self.mutex:
             if len(self.handles) > 0:
-                print "TaskManager.join err handle", len(self.handles)
+                loge("TaskManager.join err handle", len(self.handles))
             if self.repl_task_num != 0:
-                print "TaskManager.join err repl_task_num", self.repl_task_num
+                loge("TaskManager.join err repl_task_num", self.repl_task_num)
 
 
 def usage():
@@ -554,8 +584,8 @@ def main():
             i += 2
             continue
         if c == '-d':
-            global verbose
-            verbose = True
+            global g_verbose
+            g_verbose = True
             i += 1
             continue
         else:
@@ -570,22 +600,28 @@ def main():
     cfg = loadConfig(configName)
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
+    logstart(sys.argv, cfg)
     while True:
-        volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
-#        volActTimeD = {'vol':{aaMerge:None, aaApply:None}}
-        volActTimeL = manager.getNonActiveList(volActTimeD)
-        curTime = getCurrentTime()
-        task = w.selectTask(volActTimeL, curTime)
+        for i in xrange(g_retryNum):
+            try:
+                volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
+                volActTimeL = manager.getNonActiveList(volActTimeD)
+                curTime = getCurrentTime()
+                task = w.selectTask(volActTimeL, curTime)
+                break
+            except Exception, e:
+                loge('err', e)
+                time.sleep(10)
+        else:
+            loge('max retryNum')
+            os._exit(1)
         if task:
-            if verbose:
-                print "task", task, "at", curTime
-            b = manager.tryRun(task.vol, task.name, task.run, (w.walbc,))
+            logd("selected task", task)
+            b = manager.tryRun(task, (w.walbc,))
             if b:
                 continue
-            if verbose:
-                print "task is canceled(max limit)", task
-        if verbose:
-            print "no task"
+            logd("task is canceled(max limit)", task)
+        logd('no task')
         time.sleep(cfg.general.kick_interval)
 
 if __name__ == "__main__":
