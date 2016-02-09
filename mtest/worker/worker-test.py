@@ -210,32 +210,43 @@ class TestTaskManager(unittest.TestCase):
         def worker():
             time.sleep(0.1)
 
+        def test_run(vol, name, worker):
+            a0 = ServerConnectionParam('a0', 'localhost', 10000, K_ARCHIVE)
+            rs = ReplServer()
+            rs.name = 'r'
+            if name == 'merge':
+                task = MergeTask(vol, a0, 0, 0)
+            elif name == 'repl':
+                task = ReplTask(vol, a0, rs)
+            task.run = worker
+            return tm.tryRun(task, ())
+
         # run first task
-        b = tm.tryRun('vol0', 'merge', worker)
+        b = test_run('vol0', 'merge', worker)
         self.assertTrue(b)
         # fail if same vol
-        b = tm.tryRun('vol0', 'merge', worker)
+        b = test_run('vol0', 'merge', worker)
         self.assertFalse(b)
         # add second task
-        b = tm.tryRun('vol1', 'merge', worker)
+        b = test_run('vol1', 'merge', worker)
         self.assertTrue(b)
         # limit max_task = 2
-        b = tm.tryRun('vol2', 'merge', worker)
+        b = test_run('vol2', 'merge', worker)
         self.assertFalse(b)
         # wait to finish first task
         time.sleep(0.2)
         # to run third task
-        b = tm.tryRun('vol2', 'merge', worker)
+        b = test_run('vol2', 'merge', worker)
         self.assertTrue(b)
         time.sleep(0.1)
 
-        b = tm.tryRun('vol5', 'repl', worker)
+        b = test_run('vol5', 'repl', worker)
         self.assertTrue(b)
         # limit max_repl_task = 1
-        b = tm.tryRun('vol8', 'repl', worker)
+        b = test_run('vol8', 'repl', worker)
         self.assertFalse(b)
         time.sleep(0.2)
-        b = tm.tryRun('vol8', 'repl', worker)
+        b = test_run('vol8', 'repl', worker)
         self.assertTrue(b)
         tm.join()
 
@@ -255,7 +266,7 @@ class TestWoker(unittest.TestCase):
                 (MetaState(Snapshot()), None),
                 (MetaState(Snapshot(2, 2)), None),
                 (MetaState(Snapshot(2, 4)), None),
-                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), ApplyTask(VOL, w.a0, 2)),
+                (MetaState(Snapshot(2, 3), Snapshot(4, 5)), ApplyTask(VOL, w.a0, 4)),
             ]
             def get_base(a0, vol):
                 return tbl[i][0]
