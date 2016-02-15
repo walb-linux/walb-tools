@@ -209,8 +209,12 @@ class Config:
 def loadConfig(configName):
     verify_type(configName, str)
     s = ''
-    with open(configName) as f:
-        s = f.read().decode('utf8')
+    if configName == '-':
+            s = sys.stdin.read()
+    else:
+        with open(configName) as f:
+            s = f.read()
+    s = s.decode('utf8')
     d = yaml.load(s)
     cfg = Config()
     cfg.set(d)
@@ -585,7 +589,9 @@ class TaskManager:
 
 
 def usage():
-    print "walb-worker [-f configName]"
+    print "walb-worker -f configName [-d]"
+    print "    -f configName ; load config ; load from stdin if configName = '-'"
+    print "    -d ; for debug"
     exit(1)
 
 def main():
@@ -614,8 +620,7 @@ def main():
             usage()
 
     if not configName:
-        print "set -f option [-d]"
-        print "  -d ; debug"
+        print "set -f option"
         usage()
 
     cfg = loadConfig(configName)
