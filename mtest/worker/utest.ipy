@@ -1,0 +1,24 @@
+import os
+execfile('stest/config0.py')
+
+def make_diff():
+    !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
+    !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
+
+def rewrite_base():
+    base = str(walbc.get_base(a0, VOL))
+    latest = walbc.get_latest_clean_snapshot(a0, VOL)
+    if base.find('-->') >= 0:
+        print 'not clean base', base
+        os._exit(1)
+    sp = base.split('>')
+    base2 = '"' + sp[0] + '-->|' + str(latest) + '|>' + sp[1] + '"'
+    print 'change', base, 'to', base2
+    !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
+
+def runWorker(step):
+    !python/walb_worker.py -f mtest/worker/walb-worker.config
+# test step 1
+make_diff()
+rewrite_base()
+

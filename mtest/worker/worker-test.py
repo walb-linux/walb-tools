@@ -111,7 +111,7 @@ general:
   max_replication_task: 5
 apply:
   keep_period: 14d
-  inteval: 20
+  inteval: 0
 merge:
   interval: 10
   max_nr: 10
@@ -283,6 +283,8 @@ class TestWoker(unittest.TestCase):
             keep_get_restorable = w.walbc.get_restorable
             keep_get_total_diff_size = w.walbc.get_total_diff_size
             keep_keep_period = w.cfg.apply_.keep_period
+            keep_interval = w.cfg.apply_.interval
+            w.cfg.apply_.interval = datetime.timedelta(seconds=1)
 
             def get_restorable(a0, vol, opt):
                 tbl = {
@@ -338,6 +340,7 @@ class TestWoker(unittest.TestCase):
             w.walbc.get_restorable = keep_get_restorable
             w.walbc.get_total_diff_size = keep_get_total_diff_size
             w.cfg.apply_.keep_period = keep_keep_period
+            w.cfg.apply_.interval = keep_interval
 
         test_selectApplyTask2()
 

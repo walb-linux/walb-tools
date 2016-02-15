@@ -208,12 +208,13 @@ class Config:
 
 def loadConfig(configName):
     verify_type(configName, str)
+    s = ''
     with open(configName) as f:
         s = f.read().decode('utf8')
-        d = yaml.load(s)
-        cfg = Config()
-        cfg.set(d)
-        return cfg
+    d = yaml.load(s)
+    cfg = Config()
+    cfg.set(d)
+    return cfg
 
 class ExecedRepl:
     def __init__(self, vol, rs, ts):
@@ -368,7 +369,8 @@ class Worker:
         ls = []
         for vol in volL:
             ts = self.doneApplyList.get(vol)
-            if ts and curTime < ts + self.cfg.apply.interval:
+            interval = self.cfg.apply_.interval
+            if ts and interval > datetime.timedelta() and curTime < ts + interval:
                 continue
             infoL = self.walbc.get_restorable(self.a0, vol, 'all')
             gidInfo = getLatestGidInfoBefore(curTime - self.cfg.apply_.keep_period, infoL)
