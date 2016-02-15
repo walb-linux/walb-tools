@@ -111,6 +111,7 @@ general:
   max_replication_task: 5
 apply:
   keep_period: 14d
+  inteval: 20
 merge:
   interval: 10
   max_nr: 10

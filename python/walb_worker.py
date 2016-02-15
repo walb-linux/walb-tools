@@ -119,10 +119,13 @@ class General:
 class Apply:
     def __init__(self):
         self.keep_period = datetime.timedelta()
+        self.interval = datetime.timedelta(days=1)
         self.time_window = (0, 0)
     def set(self, d):
         verify_type(d, dict)
         self.keep_period = parsePERIOD(d['keep_period'])
+        if d.has_key('interval'):
+            self.interval = parsePERIOD(d['interval'])
     def __str__(self):
         return "keep_period={}".format(self.keep_period)
 
@@ -349,6 +352,7 @@ class Worker:
         self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, walbcDebug)
         self.doneReplServerList = collections.defaultdict()
+        self.doneApplyList = collections.defaultdict()
 
     def selectApplyTask1(self, volL):
         for vol in volL:
@@ -363,6 +367,9 @@ class Worker:
         '''
         ls = []
         for vol in volL:
+            ts = self.doneApplyList.get(vol)
+            if ts and curTime < ts + self.cfg.apply.interval:
+                continue
             infoL = self.walbc.get_restorable(self.a0, vol, 'all')
             gidInfo = getLatestGidInfoBefore(curTime - self.cfg.apply_.keep_period, infoL)
             if not gidInfo:
@@ -373,6 +380,7 @@ class Worker:
         if ls:
             ls.sort(key=lambda x : x[0])
             (size, vol, gid) = ls[-1]
+            self.doneApplyList[vol] = curTime
             return ApplyTask(vol, self.a0, gid)
         else:
             return None
