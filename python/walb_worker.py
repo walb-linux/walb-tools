@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-import sys, time, yaml, datetime, collections, os, threading
+import sys, time, yaml, datetime, collections, os, threading, signal
 from walblib import *
 
 walbcDebug = False
+g_quit = False
 g_verbose = False
 g_retryNum = 3
 g_step = 0
@@ -31,10 +32,18 @@ def loge(*s):
 def logi(*s):
     log(INFO, *s)
 
-def logstart(argv, cfg):
+def logStart(argv, cfg):
     logi('start walb-worker')
     print ' '.join(argv)
     print '>>>\n' + str(cfg) + '<<<'
+
+def logEnd():
+    logi('end walb-worker')
+
+def quitHandler(sig, frame):
+    logi('signal walb-worker')
+    global g_quit
+    g_quit = True
 
 def parseFLAG(s):
     verify_type(s, str)
@@ -594,40 +603,17 @@ def usage():
     print "    -d ; for debug"
     exit(1)
 
-def main():
-    configName = ""
-    i = 1
-    argv = sys.argv
-    argc = len(argv)
-    while i < argc:
-        c = argv[i]
-        if c == '-f' and i < argc - 1:
-            configName = argv[i + 1]
-            i += 2
-            continue
-        if c == '-step' and i < argc - 1:
-            global g_step
-            g_step = int(argv[i + 1])
-            i += 2
-            continue
-        if c == '-d':
-            global g_verbose
-            g_verbose = True
-            i += 1
-            continue
-        else:
-            print "option error", argv[i]
-            usage()
-
-    if not configName:
-        print "set -f option"
-        usage()
-
-    cfg = loadConfig(configName)
+def workerMain(cfg, verbose=False, step=0):
+    global g_verbose
+    global g_step
+    global g_quit
+    g_verbose = verbose
+    g_step = step
+    signal.signal(signal.SIGINT, quitHandler)
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
-    logstart(sys.argv, cfg)
-    while True:
+    logStart(sys.argv, cfg)
+    while not g_quit:
         for i in xrange(g_retryNum):
             try:
                 volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
@@ -649,6 +635,40 @@ def main():
             logd("task is canceled(max limit)", task)
         logd('no task')
         time.sleep(cfg.general.kick_interval)
+    manager.join()
+    logEnd()
+
+def main():
+    configName = ""
+    step = 0
+    verbose = False
+    i = 1
+    argv = sys.argv
+    argc = len(argv)
+    while i < argc:
+        c = argv[i]
+        if c == '-f' and i < argc - 1:
+            configName = argv[i + 1]
+            i += 2
+            continue
+        if c == '-step' and i < argc - 1:
+            step = int(argv[i + 1])
+            i += 2
+            continue
+        if c == '-d':
+            verbose = True
+            i += 1
+            continue
+        else:
+            print "option error", argv[i]
+            usage()
+
+    if not configName:
+        print "set -f option"
+        usage()
+
+    cfg = loadConfig(configName)
+    workerMain(cfg, verbose, step)
 
 if __name__ == "__main__":
     main()

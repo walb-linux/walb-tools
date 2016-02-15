@@ -1,4 +1,6 @@
 import os
+import walb_worker
+cfg = walb_worker.loadConfig('mtest/worker/walb-worker.conf')
 execfile('stest/config0.py')
 
 def make_diff():
@@ -16,9 +18,9 @@ def rewrite_base():
     print 'change', base, 'to', base2
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
 
-def runWorker(step):
-    !python/walb_worker.py -f mtest/worker/walb-worker.config
+def runWorker(cfg):
+    walb_worker.workerMain(cfg)
 # test step 1
 make_diff()
 rewrite_base()
-
+runWorker(cfg)
