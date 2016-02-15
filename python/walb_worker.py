@@ -184,11 +184,12 @@ class Config:
         self.general.set(d['general'])
         self.apply_.set(d['apply'])
         self.merge.set(d['merge'])
-        ss = d['repl_servers']
-        for (name, v) in ss.items():
-            rs = ReplServer()
-            rs.set(name, v)
-            self.repl_servers[name] = rs
+        ss = d.get('repl_servers')
+        if ss:
+            for (name, v) in ss.items():
+                rs = ReplServer()
+                rs.set(name, v)
+                self.repl_servers[name] = rs
 
     def __str__(self):
         s = "general\n"
