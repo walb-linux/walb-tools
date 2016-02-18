@@ -598,27 +598,41 @@ class TaskManager:
 
 
 def usage():
-    print "walb-worker -f configName [-d]"
+    print "walb-worker -f configName [opt]"
     print "    -f configName ; load config ; load from stdin if configName = '-'"
     print "    -d ; for debug"
+    print "    (the following options are for only debug)"
+    print "    -step num ; only select step of task"
+    print "    -lifetime seconds : lifetime of worker"
     exit(1)
 
-def workerMain(cfg, verbose=False, step=0):
+def workerMain(cfg, verbose=False, step=0, lifetime=0):
+    verify_type(cfg, Config)
+    verify_type(verbose, bool)
+    verify_type(step, int)
+    verify_type(lifetime, int)
     global g_verbose
     global g_step
     global g_quit
     g_verbose = verbose
     g_step = step
     signal.signal(signal.SIGINT, quitHandler)
+    startTime = getCurrentTime()
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     logStart(sys.argv, cfg)
     while not g_quit:
         for i in xrange(g_retryNum):
+            if g_quit:
+                break
             try:
                 volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
                 volActTimeL = manager.getNonActiveList(volActTimeD)
                 curTime = getCurrentTime()
+                if lifetime > 0 and curTime - startTime > datetime.timedelta(seconds=lifetime):
+                    logd('lifetime ends')
+                    g_quit = True
+                    break
                 task = w.selectTask(volActTimeL, curTime)
                 break
             except Exception, e:
@@ -640,8 +654,9 @@ def workerMain(cfg, verbose=False, step=0):
 
 def main():
     configName = ""
-    step = 0
     verbose = False
+    step = 0
+    lifetime = 0
     i = 1
     argv = sys.argv
     argc = len(argv)
@@ -653,6 +668,10 @@ def main():
             continue
         if c == '-step' and i < argc - 1:
             step = int(argv[i + 1])
+            i += 2
+            continue
+        if c == '-lifetime' and i < argc - 1:
+            lifetime = int(argv[i + 1])
             i += 2
             continue
         if c == '-d':
@@ -668,7 +687,7 @@ def main():
         usage()
 
     cfg = loadConfig(configName)
-    workerMain(cfg, verbose, step)
+    workerMain(cfg, verbose, step, lifetime)
 
 if __name__ == "__main__":
     main()
