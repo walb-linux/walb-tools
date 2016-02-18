@@ -1,4 +1,5 @@
 import os
+import threading
 import walb_worker
 cfg = walb_worker.loadConfig('mtest/worker/walb-worker.conf')
 execfile('stest/config0.py')
@@ -19,8 +20,17 @@ def rewrite_base():
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
 
 def runWorker(cfg):
-    walb_worker.workerMain(cfg, verbose=True, lifetime=10)
+    verbose=True
+    step=0
+    lifetime=10
+    hdl = threading.Thread(target=walb_worker.workerMain, args=(cfg, verbose, step, lifetime))
+    hdl.start()
+    hdl.detach()
+
 # test step 1
 make_diff()
+time.sleep(1)
 rewrite_base()
 runWorker(cfg)
+print "BBB"
+

@@ -167,7 +167,7 @@ worker-test:
 	env PYTHONPATH=./python python mtest/worker/worker-test.py
 
 worker-itest:
-	env PYTHONPATH=./python ipython mtest/worker/itest.py
+	env PYTHONPATH=./python ipython mtest/worker/itest.ipy
 
 ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""
 -include $(DEPENDS)

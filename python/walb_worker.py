@@ -473,6 +473,7 @@ class Worker:
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
         numDiffL = self.getNumDiffList(volL)
+        t = None
         # step 1
         if g_step in [0, 1]:
             t = self.selectApplyTask1(volL)
@@ -614,9 +615,9 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0):
     global g_verbose
     global g_step
     global g_quit
+    logi('verbose', verbose, 'step', step, 'lifetime', lifetime)
     g_verbose = verbose
     g_step = step
-    signal.signal(signal.SIGINT, quitHandler)
     startTime = getCurrentTime()
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
@@ -687,6 +688,7 @@ def main():
         usage()
 
     cfg = loadConfig(configName)
+    signal.signal(signal.SIGINT, quitHandler)
     workerMain(cfg, verbose, step, lifetime)
 
 if __name__ == "__main__":
