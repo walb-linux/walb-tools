@@ -19,7 +19,7 @@ def rewrite_base():
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
 
 def runWorker(cfg):
-    walb_worker.workerMain(cfg)
+    walb_worker.workerMain(cfg, verbose=True, lifetime=10)
 # test step 1
 make_diff()
 rewrite_base()

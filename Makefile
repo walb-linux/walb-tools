@@ -166,6 +166,9 @@ utest-py:
 worker-test:
 	env PYTHONPATH=./python python mtest/worker/worker-test.py
 
+worker-itest:
+	env PYTHONPATH=./python ipython mtest/worker/itest.py
+
 ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""
 -include $(DEPENDS)
 endif
