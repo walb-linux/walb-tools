@@ -252,6 +252,21 @@ class Config:
                 rs.set(name, v)
                 self.repl_servers[name] = rs
 
+    def setStr(self, s):
+        verify_type(s, str)
+        d = yaml.load(s)
+        self.set(d)
+
+    def load(self, configName):
+        verify_type(configName, str)
+        s = ''
+        if configName == '-':
+                s = sys.stdin.read()
+        else:
+            with open(configName) as f:
+                s = f.read()
+        self.setStr(s)
+
     def __str__(self):
         indent = 2
         s = "general:\n"
@@ -270,20 +285,6 @@ class Config:
                 s += '\n'
             i += 1
         return s
-
-def loadConfig(configName):
-    verify_type(configName, str)
-    s = ''
-    if configName == '-':
-            s = sys.stdin.read()
-    else:
-        with open(configName) as f:
-            s = f.read()
-    s = s.decode('utf8')
-    d = yaml.load(s)
-    cfg = Config()
-    cfg.set(d)
-    return cfg
 
 class ExecedRepl:
     def __init__(self, vol, rs, ts):
@@ -749,7 +750,8 @@ def main():
         print "set -f option"
         usage()
 
-    cfg = loadConfig(configName)
+    cfg = Config()
+    cfg.load(configName)
     signal.signal(signal.SIGINT, quitHandler)
     workerMain(cfg, verbose, step, lifetime)
 

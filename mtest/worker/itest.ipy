@@ -1,7 +1,32 @@
 import os, subprocess
 import threading
 import walb_worker
-cfg = walb_worker.loadConfig('mtest/worker/walb-worker.conf')
+
+CONF="""
+general:
+  addr: localhost
+  port: 10200
+  walbc_path: binsrc/walbc
+  max_task: 2
+  max_replication_task: 5
+  kick_interval: 3
+apply:
+  keep_period: 30
+  interval: 10
+merge:
+  interval: 10
+  max_nr: 10
+  max_size: 1M
+  threshold_nr: 5
+repl_servers:
+  repl0:
+    addr: localhost
+    port: 10201
+    interval: 20
+    compress: snappy:0:1
+    max_merge_size: 5K
+    bulk_size: 4K
+"""
 execfile('stest/config0.py')
 
 def make_diff():
@@ -37,19 +62,22 @@ def runWorker(cfg, step):
     return s
 
 # test step 1
-def testStep1():
+def testStep1(cfg):
     make_diff()
-    time.sleep(1)
+    time.sleep(2)
     rewrite_base()
     ret = runWorker(cfg, 1)
     if ret.find('selectApplyTask1') >= 0:
         print 'ok step1'
+        print ret
     else:
         print 'err'
         print ret
 
 def main():
-    testStep1()
+    cfg = walb_worker.Config()
+    cfg.setStr(CONF)
+    testStep1(cfg)
 
 if __name__ == "__main__":
     main()
