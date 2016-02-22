@@ -1,4 +1,4 @@
-import os
+import os, subprocess
 import threading
 import walb_worker
 cfg = walb_worker.loadConfig('mtest/worker/walb-worker.conf')
@@ -19,18 +19,27 @@ def rewrite_base():
     print 'change', base, 'to', base2
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
 
-def runWorker(cfg):
-    verbose=True
-    step=0
-    lifetime=10
-    hdl = threading.Thread(target=walb_worker.workerMain, args=(cfg, verbose, step, lifetime))
-    hdl.start()
-    hdl.detach()
+def runWorker(cfg, step):
+    lifetime=5
+    args = [
+        '/usr/bin/python', 'python/walb_worker.py', '-f', '-',
+        '-lifetime', str(lifetime), '-d', '-step', str(step)
+    ]
+    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, close_fds=True)
+    ifs = p.stdin
+    ifs.write(str(cfg))
+    ifs.close()
+    ofs = p.stdout
+    s = ofs.read().strip()
+    ret = p.wait()
+    if ret != 0:
+        raise Exception('runWorker err', args, ret)
+    return s
 
 # test step 1
 make_diff()
 time.sleep(1)
 rewrite_base()
-runWorker(cfg)
-print "BBB"
+ret = runWorker(cfg, 1)
+print ret
 

@@ -35,7 +35,7 @@ def logi(*s):
 def logStart(argv, cfg):
     logi('start walb-worker')
     print ' '.join(argv)
-    print '>>>\n' + str(cfg) + '<<<'
+    print '>>>\n' + str(cfg) + '\n<<<'
 
 def logEnd():
     logi('end walb-worker')
@@ -534,26 +534,32 @@ class Worker:
         if g_step in [0, 1]:
             t = self.selectApplyTask1(volL)
             if t:
+                logd('selectApplyTask1')
                 return t
         # step 2
         if g_step in [0, 2]:
             t = self.selectApplyTask2(volL, curTime)
             if t:
+                logd('selectApplyTask2')
                 return t
         # step 3
         if g_step in [0, 3]:
             t = self.selectMergeTask1(volL, numDiffL)
             if t:
+                logd('selectMergeTask1')
                 return t
         # step 4
         if g_step in [0, 4]:
             t = self.selectReplTask(volL, curTime)
             if t:
+                logd('selectReplTask')
                 return t
         # step 5
         if g_step in [0, 5]:
             t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
-        return t
+            if t:
+                logd('selectMergeTask2')
+        return None
 
 class TaskManager:
     def __init__(self, max_task, max_repl_task):
