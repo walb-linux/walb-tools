@@ -358,7 +358,7 @@ class Task:
     def run(self):
         pass
     def __str__(self):
-        return "Task name={} vol={} ax={}".format(self.name, self.vol, self.ax)
+        return "name={} vol={} ax={}".format(self.name, self.vol, self.ax)
     def __eq__(self, rhs):
         return self.name == rhs.name and self.vol == rhs.vol and self.ax == rhs.ax
     def __ne__(self, rhs):
@@ -535,31 +535,31 @@ class Worker:
         if g_step in [0, 1]:
             t = self.selectApplyTask1(volL)
             if t:
-                logd('selectApplyTask1')
+                logd('selectApplyTask1', t)
                 return t
         # step 2
         if g_step in [0, 2]:
             t = self.selectApplyTask2(volL, curTime)
             if t:
-                logd('selectApplyTask2')
+                logd('selectApplyTask2', t)
                 return t
         # step 3
         if g_step in [0, 3]:
             t = self.selectMergeTask1(volL, numDiffL)
             if t:
-                logd('selectMergeTask1')
+                logd('selectMergeTask1', t)
                 return t
         # step 4
         if g_step in [0, 4]:
             t = self.selectReplTask(volL, curTime)
             if t:
-                logd('selectReplTask')
+                logd('selectReplTask', t)
                 return t
         # step 5
         if g_step in [0, 5]:
             t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
             if t:
-                logd('selectMergeTask2')
+                logd('selectMergeTask2', t)
         return None
 
 class TaskManager:
@@ -706,7 +706,6 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0):
             loge('max retryNum')
             os._exit(1)
         if task:
-            logd("selected task", task)
             b = manager.tryRun(task, (w.walbc,))
             if b:
                 continue

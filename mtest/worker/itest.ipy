@@ -1,4 +1,4 @@
-import os, subprocess
+import os, subprocess, re
 import threading
 import walb_worker
 
@@ -61,6 +61,45 @@ def runWorker(cfg, step):
         raise Exception('runWorker err', args, ret)
     return s
 
+RE_LOG = re.compile('(\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d{6}) ([A-Z]+) (.*)')
+
+def parseTask(s):
+    pos = s.find(':')
+    if pos > 0:
+        action = s[0:pos]
+        task = s[pos:]
+        return (action, task)
+    else:
+        return None
+    
+def parseLog(s):
+    S_SELECT = 0
+    S_START = 1
+    S_END = 2
+
+    mode = S_SELECT
+
+    for line in s.split('\n'):
+        p = RE_LOG.match(line)
+        if p:
+            time = p.group(1)
+            level = p.group(2)
+            m = p.group(3)
+            r = parseTask(m)
+            if r is None:
+                continue
+            (a, t) = r
+            if mode == S_SELECT:
+                if a.find('select') >=0:
+                    action = a
+                    mode = S_START
+            elif mode == S_START:
+                if a == 'startTask':
+                    mode = S_END
+            elif mode == S_END:
+                return (action, t)
+    return (None, None)
+
 # test step 1
 def testStep1(cfg):
     make_diff()
@@ -69,10 +108,14 @@ def testStep1(cfg):
     ret = runWorker(cfg, 1)
     if ret.find('selectApplyTask1') >= 0:
         print 'ok step1'
-        print ret
     else:
         print 'err'
-        print ret
+    (action, task) = parseLog(ret)
+    print 'SSS', action, task
+    if action == 'selectApplyTask1':
+        print 'ok', task
+    else:
+        print 'ng'
 
 def main():
     cfg = walb_worker.Config()
