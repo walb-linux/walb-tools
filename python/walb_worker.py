@@ -75,7 +75,13 @@ def parsePERIOD(s):
         digits suffix
         digits = [0-9]+
         suffix = (m|h|d)
+        or
+        hh:mm:ss
     """
+    if type(s) == str:
+        v = s.split(':')
+        if len(v) == 3:
+            return datetime.timedelta(hours=int(v[0]), minutes=int(v[1]), seconds=int(v[2]))
     v = parseSuffix(s, {'m':60, 'h':3600, 'd':86400})
     return datetime.timedelta(seconds=v)
 
@@ -97,6 +103,19 @@ def parsePort(d):
     if d <= 0 or d > 65535:
         raise Exception('parsePort', d)
     return d
+
+def formatIndent(d, indent):
+    s = ''
+    sp = ' ' * indent
+    n = len(d)
+    i = 0
+    for (k, v) in d:
+        s += sp
+        s += k + ': ' + str(v)
+        if i < n - 1:
+            s += '\n'
+        i += 1
+    return s
 
 class General:
     def __init__(self):
@@ -122,8 +141,18 @@ class General:
         if d.has_key('kick_interval'):
             self.kick_interval = parsePositive(d['kick_interval'])
 
-    def __str__(self):
-        return "addr={} port={} max_task={} max_replication_task={} kick_interval={}".format(self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
+#    def __str__(self):
+#        return "addr={} port={} max_task={} max_replication_task={} kick_interval={}".format(self.addr, self.port, self.max_task, self.max_replication_task, self.kick_interval)
+    def __str__(self, indent=2):
+        d = [
+            ('addr', self.addr),
+            ('port', self.port),
+            ('walbc_path', self.walbc_path),
+            ('max_task', self.max_task),
+            ('max_replication_task', self.max_replication_task),
+            ('kick_interval', self.kick_interval),
+        ]
+        return formatIndent(d, indent)
 
 class Apply:
     def __init__(self):
@@ -135,8 +164,12 @@ class Apply:
         self.keep_period = parsePERIOD(d['keep_period'])
         if d.has_key('interval'):
             self.interval = parsePERIOD(d['interval'])
-    def __str__(self):
-        return "keep_period={}".format(self.keep_period)
+    def __str__(self, indent=2):
+        d = [
+            ('keep_period', self.keep_period),
+            ('interval', self.interval),
+        ]
+        return formatIndent(d, indent)
 
 class Merge:
     def __init__(self):
@@ -153,8 +186,14 @@ class Merge:
             self.max_size = parseSIZE_UNIT(d['max_size'])
         if d.has_key('threshold_nr'):
             self.threshold_nr = parsePositive(d['threshold_nr'])
-    def __str__(self):
-        return "interval={} max_nr={} max_size={} threshold_nr={}".format(self.interval, self.max_nr, self.max_size, self.threshold_nr)
+    def __str__(self, indent=2):
+        d = [
+            ('interval', self.interval),
+            ('max_nr', self.max_nr),
+            ('max_size', self.max_size),
+            ('threashold_nr', self.threshold_nr),
+        ]
+        return formatIndent(d, indent)
 
 class ReplServer:
     def __init__(self):
@@ -164,6 +203,7 @@ class ReplServer:
         self.compress = None
         self.max_merge_size = '1G'
         self.bulk_size = '64K'
+
     def set(self, name, d):
         verify_type(name, str)
         verify_type(d, dict)
@@ -179,8 +219,17 @@ class ReplServer:
             self.max_merge_size = str(d['max_merge_size'])
         if d.has_key('bulk_size'):
             self.bulk_size = str(d['bulk_size'])
-    def __str__(self):
-        return "name={} addr={} port={} interval={} compress={} max_merge_size={} bulk_size={}".format(self.name, self.addr, self.port, self.interval, self.compress, self.max_merge_size, self.bulk_size)
+
+    def __str__(self, indent=2):
+        d = [
+            ('addr', self.addr),
+            ('port', self.port),
+            ('interval', self.interval),
+            ('compress', self.compress),
+            ('max_merge_size', self.max_merge_size),
+            ('bulk_size', self.bulk_size),
+        ]
+        return formatIndent(d, indent)
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
@@ -204,15 +253,22 @@ class Config:
                 self.repl_servers[name] = rs
 
     def __str__(self):
-        s = "general\n"
+        indent = 2
+        s = "general:\n"
         s += str(self.general) + '\n'
-        s += "apply\n"
+        s += "apply:\n"
         s += str(self.apply_) + '\n'
-        s += "merge\n"
+        s += "merge:\n"
         s += str(self.merge) + '\n'
-        s += 'repl_servers\n'
+        s += 'repl_servers:\n'
+        n = len(self.repl_servers)
+        i = 0
         for (name, rs) in self.repl_servers.items():
-            s += name + ':' + str(rs) + '\n'
+            s += ' ' * indent + name + ':\n'
+            s += rs.__str__(indent * 2)
+            if i < n - 1:
+                s += '\n'
+            i += 1
         return s
 
 def loadConfig(configName):
