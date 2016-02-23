@@ -24,7 +24,7 @@ general:
   max_replication_task: 5
   kick_interval: 1
 apply:
-  keep_period: 30
+  keep_period: 10
   interval: 100
 merge:
   interval: 10
@@ -88,11 +88,11 @@ def parseLog(s):
                 mode = S_SELECT
     return ls
 
-def runWorker(cfg, step):
-    lifetime=5
+def runWorker(cfg, step, lifetime=5, lastApply=0):
     args = [
         '/usr/bin/python', 'python/walb_worker.py', '-f', '-',
-        '-lifetime', str(lifetime), '-d', '-step', str(step)
+        '-lifetime', str(lifetime), '-d', '-step', str(step),
+        '-lastapply', str(lastApply),
     ]
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, close_fds=True)
     ifs = p.stdin
@@ -103,6 +103,7 @@ def runWorker(cfg, step):
     ret = p.wait()
     if ret != 0:
         raise Exception('runWorker err', args, ret)
+    print>>sys.stderr, s
     return parseLog(s)
 
 RE_LOG = re.compile('(\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d{6}) ([A-Z]+) (.*)')
@@ -116,20 +117,33 @@ def parseTask(s):
     else:
         return None
 
-# test step 1
 def testStep1(cfg):
+    # do nothing if no diff
     ls = runWorker(cfg, 1)
-    expectEqual(len(ls), 0)
+    expectEqual(ls, [])
+
+    # make applying state, then ApplyTask1 will be selected
     makeDiff()
     rewriteBase()
     ls = runWorker(cfg, 1)
     expectEqual(len(ls), 1)
     expectEqual(ls[0][0], 'selectApplyTask1')
 
+def testStep2(cfg):
+    makeDiff()
+    # do nothing if in apply.interval
+    ls = runWorker(cfg, 2, lastApply=20)
+    expectEqual(ls, [])
+    # ApplyTask2 is selected immediately
+    ls = runWorker(cfg, 2)
+    expectEqual(len(ls), 1)
+    expectEqual(ls[0][0], 'selectApplyTask2')
+
 def main():
     cfg = walb_worker.Config()
     cfg.setStr(CONF)
     testStep1(cfg)
+    testStep2(cfg)
     print "test {} / {}".format(g_errNum, g_testNum)
 
 if __name__ == "__main__":
