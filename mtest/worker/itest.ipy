@@ -2,6 +2,19 @@ import os, subprocess, re
 import threading
 import walb_worker
 
+g_testNum = 0
+g_errNum = 0
+
+def expectEqual(lhs, rhs):
+    global g_testNum
+    global g_errNum
+    g_testNum += 1
+    if lhs != rhs:
+        print 'ERR'
+        print ' lhs', lhs
+        print ' rhs', lhs
+        g_errNum += 1
+
 CONF="""
 general:
   addr: localhost
@@ -34,15 +47,14 @@ def make_diff():
     !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
 
 def rewrite_base():
-    base = str(walbc.get_base(a0, VOL))
-    latest = walbc.get_latest_clean_snapshot(a0, VOL)
-    if base.find('-->') >= 0:
-        print 'not clean base', base
-        os._exit(1)
-    sp = base.split('>')
-    base2 = '"' + sp[0] + '-->|' + str(latest) + '|>' + sp[1] + '"'
-    print 'change', base, 'to', base2
-    !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {base2}
+    base = walbc.get_base(a0, VOL)
+    if base.E is None:
+        print 'change', base,
+        latest = walbc.get_latest_clean_snapshot(a0, VOL)
+        base.E = Snapshot(latest, latest)
+        print 'to', base
+    s = '"' + str(base) + '"'
+    !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {s}
 
 def runWorker(cfg, step):
     lifetime=5
@@ -111,16 +123,14 @@ def testStep1(cfg):
     else:
         print 'err'
     (action, task) = parseLog(ret)
-    print 'SSS', action, task
-    if action == 'selectApplyTask1':
-        print 'ok', task
-    else:
-        print 'ng'
+    expectEqual(action, 'selectApplyTask1')
+    print task
 
 def main():
     cfg = walb_worker.Config()
     cfg.setStr(CONF)
     testStep1(cfg)
+    print "test ERR={} / {}".format(g_errNum, g_testNum)
 
 if __name__ == "__main__":
     main()
