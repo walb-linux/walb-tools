@@ -22,7 +22,7 @@ general:
   walbc_path: binsrc/walbc
   max_task: 2
   max_replication_task: 5
-  kick_interval: 3
+  kick_interval: 1
 apply:
   keep_period: 30
   interval: 10
@@ -43,16 +43,18 @@ repl_servers:
 execfile('stest/config0.py')
 
 def make_diff():
-    !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
-    !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
+    for i in xrange(4):
+        !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
+    time.sleep(2)
 
 def rewrite_base():
     base = walbc.get_base(a0, VOL)
     if base.E is None:
         print 'change', base,
         latest = walbc.get_latest_clean_snapshot(a0, VOL)
-        base.E = Snapshot(latest, latest)
-        print 'to', base
+        if base.E != latest:
+            base.E = Snapshot(latest, latest)
+            print 'to', base
     s = '"' + str(base) + '"'
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {s}
 
@@ -90,6 +92,7 @@ def parseLog(s):
     S_END = 2
 
     mode = S_SELECT
+    ls = []
 
     for line in s.split('\n'):
         p = RE_LOG.match(line)
@@ -109,28 +112,29 @@ def parseLog(s):
                 if a == 'startTask':
                     mode = S_END
             elif mode == S_END:
-                return (action, t)
-    return (None, None)
+                ls.append((action, t))
+                mode = S_SELECT
+    return ls
 
 # test step 1
 def testStep1(cfg):
     make_diff()
-    time.sleep(2)
     rewrite_base()
     ret = runWorker(cfg, 1)
     if ret.find('selectApplyTask1') >= 0:
         print 'ok step1'
     else:
         print 'err'
-    (action, task) = parseLog(ret)
-    expectEqual(action, 'selectApplyTask1')
-    print task
+    ls = parseLog(ret)
+    expectEqual(len(ls), 1)
+    expectEqual(ls[0][0], 'selectApplyTask1')
+    print ls[0][1]
 
 def main():
     cfg = walb_worker.Config()
     cfg.setStr(CONF)
     testStep1(cfg)
-    print "test ERR={} / {}".format(g_errNum, g_testNum)
+    print "test {} / {}".format(g_errNum, g_testNum)
 
 if __name__ == "__main__":
     main()
