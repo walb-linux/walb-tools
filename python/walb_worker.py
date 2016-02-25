@@ -430,12 +430,12 @@ class Worker:
                 return ApplyTask(vol, self.a0, ms.E.gidB)
         return None
 
-    def selectApplyTask2(self, volL, curTime, fromTime=None):
+    def selectApplyTask2(self, volActTimeL, curTime, fromTime=None):
         '''
             get (vol, gid) having max diff
         '''
         ls = []
-        for vol in volL:
+        for (vol, actTimeD) in volActTimeL:
             ts = self.doneApplyList.get(vol, fromTime)
             interval = self.cfg.apply_.interval
             if ts and interval > datetime.timedelta() and curTime < ts + interval:
@@ -537,7 +537,7 @@ class Worker:
                 return t
         # step 2
         if g_step in [0, 2]:
-            t = self.selectApplyTask2(volL, curTime, fromTime)
+            t = self.selectApplyTask2(volActTimeL, curTime, fromTime)
             if t:
                 logd('selectApplyTask2', t)
                 return t
