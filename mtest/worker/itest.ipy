@@ -1,6 +1,7 @@
 import os, subprocess, re
 import threading
 import walb_worker
+import collections
 
 g_testNum = 0
 g_errNum = 0
@@ -10,7 +11,7 @@ def expectTrue(msg, b):
     global g_errNum
     g_testNum += 1
     if not b:
-        print 'ERR', msg
+        print 'ERR:expectTrue', msg
         g_errNum += 1
 
 def expectEqual(msg, lhs, rhs):
@@ -18,7 +19,7 @@ def expectEqual(msg, lhs, rhs):
     global g_errNum
     g_testNum += 1
     if lhs != rhs:
-        print 'ERR', msg
+        print 'ERR:expectEqual', msg
         print ' lhs', lhs
         print ' rhs', rhs
         g_errNum += 1
@@ -50,10 +51,9 @@ repl_servers:
 """
 execfile('stest/config0.py')
 
-def makeDiff():
+def makeDiff(idx=0, bs=512):
     for i in xrange(4):
-        !dd if=/dev/urandom of=/dev/walb/0 count=1k bs=512
-    time.sleep(2)
+        !dd if=/dev/urandom of=/dev/walb/{idx} count=1k bs={bs}
 
 def rewriteBase():
     base = walbc.get_base(a0, VOL)
@@ -66,34 +66,21 @@ def rewriteBase():
     s = '"' + str(base) + '"'
     !binsrc/walbc -a localhost -p 10200 dbg-set-base vol0 {s}
 
+RE_LOG = re.compile('(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{6}) ([A-Z]+) ([^:]+):name=([^ ]+) vol=([^ ]+)')
+Log = collections.namedtuple('Log', 'time level action name vol')
+
 def parseLog(s):
-    S_SELECT = 0
-    S_START = 1
-    S_END = 2
-
-    mode = S_SELECT
     ls = []
-
     for line in s.split('\n'):
         p = RE_LOG.match(line)
         if p:
             time = p.group(1)
             level = p.group(2)
-            m = p.group(3)
-            r = parseTask(m)
-            if r is None:
-                continue
-            (a, t) = r
-            if mode == S_SELECT:
-                if a.find('select') >=0:
-                    action = a
-                    mode = S_START
-            elif mode == S_START:
-                if a == 'startTask':
-                    mode = S_END
-            elif mode == S_END:
-                ls.append((action, t))
-                mode = S_SELECT
+            action = p.group(3)
+            name = p.group(4)
+            vol = p.group(5)
+            if action.find('select') == 0:
+                ls.append(Log(time, level, action, name, vol))
     return ls
 
 def runWorker(cfg, step, lifetime=5):
@@ -110,10 +97,11 @@ def runWorker(cfg, step, lifetime=5):
     ret = p.wait()
     if ret != 0:
         raise Exception('runWorker err', args, ret)
+    print>>sys.stderr, '-'*20
     print>>sys.stderr, s
+    print>>sys.stderr, '-'*20
     return parseLog(s)
 
-RE_LOG = re.compile('(\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d\.\d{6}) ([A-Z]+) (.*)')
 
 def parseTask(s):
     pos = s.find(':')
@@ -126,25 +114,39 @@ def parseTask(s):
 
 def testStep1(cfg):
     # do nothing if no diff
-    ls = runWorker(cfg, 1)
-    expectTrue('no task1', ls == [])
+    log = runWorker(cfg, 1)
+    expectEqual('STEP1_1',log, [])
 
     # make applying state, then ApplyTask1 will be selected
     makeDiff()
+    time.sleep(3)
     rewriteBase()
-    ls = runWorker(cfg, 1)
-    expectTrue('task1', len(ls) > 0 and ls[0][0] == 'selectApplyTask1')
+    log = runWorker(cfg, 1)
+    expectTrue('STEP1_2', log)
+    if log:
+        expectEqual('STEP1_3', log[0].action, 'selectApplyTask1')
 
 def testStep2(cfg):
     makeDiff()
+    time.sleep(2)
     # do nothing if in apply.interval
-    cfg.apply_.interval = 100
-    ls = runWorker(cfg, 2)
-    expectTrue('no task2', ls == [])
+    cfg.apply_.interval = 100000
+    log = runWorker(cfg, 2)
+    expectEqual('STEP2_1', log, [])
+
     # ApplyTask2 is selected immediately
     cfg.apply_.interval = 1
-    ls = runWorker(cfg, 2)
-    expectTrue('task2', len(ls) > 0 and ls[0][0] == 'selectApplyTask2')
+    log = runWorker(cfg, 2)
+    expectTrue('STEP2_2', log)
+    if log:
+        expectEqual('STEP2_3', log[0].action, 'selectApplyTask2')
+    makeDiff(0, 1024)
+    makeDiff(1, 4096)
+    makeDiff(2, 2048)
+    time.sleep(3)
+    log = runWorker(cfg, 2)
+    for x in log:
+            print x
 
 def main():
     cfg = walb_worker.Config()
