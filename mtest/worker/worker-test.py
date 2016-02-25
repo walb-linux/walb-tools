@@ -330,11 +330,12 @@ class TestWoker(unittest.TestCase):
                 ('2015-11-16T07:32:10', '0', ApplyTask('vol1', w.a0, 31)),
                 ('2015-11-16T07:32:10', '8', ApplyTask('vol0', w.a0, 25)),
             ]
+            volActTimeL = [('vol0',{}), ('vol1',{})]
             for t in tbl:
                 curTime = toDatetime(t[0])
                 period = parsePERIOD(t[1])
                 w.cfg.apply_.keep_period = period
-                r = w.selectApplyTask2(['vol0', 'vol1'], curTime)
+                r = w.selectApplyTask2(volActTimeL, curTime)
                 self.assertEqual(r, t[2])
 
             w.walbc.get_restorable = keep_get_restorable
