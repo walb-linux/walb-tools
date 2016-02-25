@@ -421,7 +421,6 @@ class Worker:
         self.serverLayout = self.createSeverLayout(self.cfg)
         self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, walbcDebug)
         self.doneReplServerList = {}
-        self.doneApplyList = {}
 
     def selectApplyTask1(self, volL):
         for vol in volL:
@@ -430,13 +429,13 @@ class Worker:
                 return ApplyTask(vol, self.a0, ms.E.gidB)
         return None
 
-    def selectApplyTask2(self, volActTimeL, curTime, fromTime=None):
+    def selectApplyTask2(self, volActTimeL, curTime):
         '''
             get (vol, gid) having max diff
         '''
         ls = []
         for (vol, actTimeD) in volActTimeL:
-            ts = self.doneApplyList.get(vol, fromTime)
+            ts = actTimeD.get(aaApply)
             interval = self.cfg.apply_.interval
             if ts and interval > datetime.timedelta() and curTime < ts + interval:
                 continue
@@ -450,7 +449,6 @@ class Worker:
         if ls:
             ls.sort(key=lambda x : x[0])
             (size, vol, gid) = ls[-1]
-            self.doneApplyList[vol] = curTime
             return ApplyTask(vol, self.a0, gid)
         else:
             return None
@@ -525,7 +523,7 @@ class Worker:
         else:
             return None
 
-    def selectTask(self, volActTimeL, curTime, fromTime):
+    def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
         numDiffL = self.getNumDiffList(volL)
         t = None
@@ -537,7 +535,7 @@ class Worker:
                 return t
         # step 2
         if g_step in [0, 2]:
-            t = self.selectApplyTask2(volActTimeL, curTime, fromTime)
+            t = self.selectApplyTask2(volActTimeL, curTime)
             if t:
                 logd('selectApplyTask2', t)
                 return t
@@ -666,31 +664,26 @@ def usage():
     print "    (the following options are for only debug)"
     print "    -step num ; only select step of task"
     print "    -lifetime seconds : lifetime of worker"
-    print "    -lastapply seconds : set last apply time to current time - lastapply"
     exit(1)
 
-def workerMain(cfg, verbose=False, step=0, lifetime=0, lastApply=0):
+def workerMain(cfg, verbose=False, step=0, lifetime=0):
     verify_type(cfg, Config)
     verify_type(verbose, bool)
     verify_type(step, int)
     verify_type(lifetime, int)
-    verify_type(lastApply, int)
     global g_verbose
     global g_step
     global g_quit
-    logi('verbose', verbose, 'step', step, 'lifetime', lifetime, 'lastApply', lastApply)
+    logi('verbose', verbose, 'step', step, 'lifetime', lifetime)
     g_verbose = verbose
     g_step = step
     startTime = getCurrentTime()
-    if lastApply > 0:
-        fromTime = startTime - datetime.timedelta(seconds=lastApply)
-    else:
-        fromTime = None
 
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     logStart(sys.argv, cfg)
     while not g_quit:
+        task = None
         for i in xrange(g_retryNum):
             if g_quit:
                 break
@@ -702,7 +695,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, lastApply=0):
                     logd('lifetime ends')
                     g_quit = True
                     break
-                task = w.selectTask(volActTimeL, curTime, fromTime)
+                task = w.selectTask(volActTimeL, curTime)
                 break
             except Exception, e:
                 loge('err', e)
@@ -725,7 +718,6 @@ def main():
     verbose = False
     step = 0
     lifetime = 0
-    lastApply = 0
     i = 1
     argv = sys.argv
     argc = len(argv)
@@ -743,10 +735,6 @@ def main():
             lifetime = int(argv[i + 1])
             i += 2
             continue
-        if c == '-lastapply' and i < argc - 1:
-            lastApply = int(argv[i + 1])
-            i += 2
-            continue
         if c == '-d':
             verbose = True
             i += 1
@@ -762,7 +750,7 @@ def main():
     cfg = Config()
     cfg.load(configName)
     signal.signal(signal.SIGINT, quitHandler)
-    workerMain(cfg, verbose, step, lifetime, lastApply)
+    workerMain(cfg, verbose, step, lifetime)
 
 if __name__ == "__main__":
     main()

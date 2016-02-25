@@ -5,12 +5,20 @@ import walb_worker
 g_testNum = 0
 g_errNum = 0
 
-def expectEqual(lhs, rhs):
+def expectTrue(msg, b):
+    global g_testNum
+    global g_errNum
+    g_testNum += 1
+    if not b:
+        print 'ERR', msg
+        g_errNum += 1
+
+def expectEqual(msg, lhs, rhs):
     global g_testNum
     global g_errNum
     g_testNum += 1
     if lhs != rhs:
-        print 'ERR'
+        print 'ERR', msg
         print ' lhs', lhs
         print ' rhs', rhs
         g_errNum += 1
@@ -88,11 +96,10 @@ def parseLog(s):
                 mode = S_SELECT
     return ls
 
-def runWorker(cfg, step, lifetime=5, lastApply=0):
+def runWorker(cfg, step, lifetime=5):
     args = [
         '/usr/bin/python', 'python/walb_worker.py', '-f', '-',
         '-lifetime', str(lifetime), '-d', '-step', str(step),
-        '-lastapply', str(lastApply),
     ]
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, close_fds=True)
     ifs = p.stdin
@@ -120,24 +127,24 @@ def parseTask(s):
 def testStep1(cfg):
     # do nothing if no diff
     ls = runWorker(cfg, 1)
-    expectEqual(ls, [])
+    expectTrue('no task1', ls == [])
 
     # make applying state, then ApplyTask1 will be selected
     makeDiff()
     rewriteBase()
     ls = runWorker(cfg, 1)
-    expectEqual(len(ls), 1)
-    expectEqual(ls[0][0], 'selectApplyTask1')
+    expectTrue('task1', len(ls) > 0 and ls[0][0] == 'selectApplyTask1')
 
 def testStep2(cfg):
     makeDiff()
     # do nothing if in apply.interval
-    ls = runWorker(cfg, 2, lastApply=20)
-    expectEqual(ls, [])
-    # ApplyTask2 is selected immediately
+    cfg.apply_.interval = 100
     ls = runWorker(cfg, 2)
-    expectEqual(len(ls), 1)
-    expectEqual(ls[0][0], 'selectApplyTask2')
+    expectTrue('no task2', ls == [])
+    # ApplyTask2 is selected immediately
+    cfg.apply_.interval = 1
+    ls = runWorker(cfg, 2)
+    expectTrue('task2', len(ls) > 0 and ls[0][0] == 'selectApplyTask2')
 
 def main():
     cfg = walb_worker.Config()
