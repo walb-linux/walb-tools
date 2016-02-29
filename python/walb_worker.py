@@ -445,6 +445,7 @@ class Worker:
                 continue
             gid = gidInfo.gid
             size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gid)
+            logd('Task2 candidate', size, vol, gid)
             ls.append((size, vol, gid))
         if ls:
             ls.sort(key=lambda x : x[0])

@@ -52,8 +52,9 @@ repl_servers:
 execfile('stest/config0.py')
 
 def makeDiff(idx=0, bs=512):
+    print "write vol{} bs={}".format(idx, bs)
     for i in xrange(4):
-        !dd if=/dev/urandom of=/dev/walb/{idx} count=1k bs={bs}
+        !dd if=/dev/urandom of=/dev/walb/{idx} count=1k bs={bs} 2>1 1>/dev/null
 
 def rewriteBase():
     base = walbc.get_base(a0, VOL)
@@ -130,7 +131,7 @@ def testStep2(cfg):
     makeDiff()
     time.sleep(2)
     # do nothing if in apply.interval
-    cfg.apply_.interval = 100000
+    cfg.apply_.interval = 86400 * 1000
     log = runWorker(cfg, 2)
     expectEqual('STEP2_1', log, [])
 
@@ -141,12 +142,15 @@ def testStep2(cfg):
     if log:
         expectEqual('STEP2_3', log[0].action, 'selectApplyTask2')
     makeDiff(0, 1024)
-    makeDiff(1, 4096)
     makeDiff(2, 2048)
-    time.sleep(3)
-    log = runWorker(cfg, 2)
-    for x in log:
-            print x
+    print 'sleep'
+    time.sleep(10)
+    !ls -al stest/tmp/a0/vol*/*.wdiff
+    log = runWorker(cfg, 2, lifetime=20)
+    expectTrue('STEP2_4', len(log) == 2)
+    if len(log) == 2:
+        expectEqual('STEP2_5', log[0].vol, 'vol2')
+        expectEqual('STEP2_6', log[1].vol, 'vol0')
 
 def main():
     cfg = walb_worker.Config()
