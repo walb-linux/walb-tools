@@ -22,6 +22,7 @@ def log(mode, *s):
     if mode == DEBUG and not g_verbose:
         return
     print getCurrentTime(), mode, ":".join(map(str,s))
+    sys.stdout.flush()
 
 def logd(*s):
     log(DEBUG, *s)
