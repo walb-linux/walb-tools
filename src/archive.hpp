@@ -243,7 +243,8 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
     DiffRecIo recIo;
-    cybozu::util::File file(lv.path().str(), O_RDWR);
+    const std::string lvPathStr = lv.path().str();
+    cybozu::util::File file(lvPathStr, O_RDWR);
     std::vector<char> zero;
     const uint64_t lvSnapSizeLb = lv.sizeLb();
     double t0 = cybozu::util::getTime();
@@ -264,7 +265,8 @@ inline bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lv
 
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
-            LOGs.info() << FUNC << "progress" << ioAddress;
+            LOGs.info() << FUNC << "progress" << lvPathStr
+                        << cybozu::util::formatString("%" PRIu64 "/%" PRIu64 "", ioAddress, lvSnapSizeLb);
             t0 = t1;
         }
     }
