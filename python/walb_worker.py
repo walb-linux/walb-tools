@@ -752,7 +752,8 @@ def main():
 
     cfg = Config()
     cfg.load(configName)
-    signal.signal(signal.SIGINT, quitHandler)
+    for sig in [signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, quitHandler)
     workerMain(cfg, verbose, step, lifetime)
 
 if __name__ == "__main__":
