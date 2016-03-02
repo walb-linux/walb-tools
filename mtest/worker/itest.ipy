@@ -143,8 +143,10 @@ def testStep2(cfg):
         expectEqual('STEP2_3', log[0].action, 'selectApplyTask2')
     makeDiff(0, 1024)
     makeDiff(2, 2048)
+    # force to make diff
+    walbc.snapshot(s0, 'vol0', [a0])
+    walbc.snapshot(s0, 'vol2', [a0])
     print 'sleep'
-    time.sleep(10)
     !ls -al stest/tmp/a0/vol*/*.wdiff
     log = runWorker(cfg, 2, lifetime=20)
     expectTrue('STEP2_4', len(log) == 2)
@@ -152,9 +154,16 @@ def testStep2(cfg):
         expectEqual('STEP2_5', log[0].vol, 'vol2')
         expectEqual('STEP2_6', log[1].vol, 'vol0')
 
+def resetDevice(volId):
+    vol = 'vol' + str(volId)
+    walbc.stop(s0, vol)
+    walbc.hash_backup(s0, vol)
+
 def main():
     cfg = walb_worker.Config()
     cfg.setStr(CONF)
+    for volId in xrange(3):
+        resetDevice(volId)
     testStep1(cfg)
     testStep2(cfg)
     print "test {} / {}".format(g_errNum, g_testNum)
