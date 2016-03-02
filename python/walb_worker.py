@@ -558,6 +558,7 @@ class Worker:
             t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
             if t:
                 logd('selectMergeTask2', t)
+                return t
         return None
 
 class TaskManager:
