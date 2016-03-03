@@ -36,7 +36,7 @@ Package: walb-tools-python
 Architecture: all
 Section: python
 Depends: ${python:Depends}, ${misc:Depends}
-Description: python library to control walb-tools
+Description: python library to control walb-tools and walb-worker.
  This package contains python library to control walb-tools.
 
 Package: walb-tools-core-dbg
