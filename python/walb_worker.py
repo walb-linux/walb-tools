@@ -667,9 +667,10 @@ def usage():
     print "    (the following options are for only debug)"
     print "    -step num ; only select step of task"
     print "    -lifetime seconds : lifetime of worker"
+    print "    -no : select task but no action"
     exit(1)
 
-def workerMain(cfg, verbose=False, step=0, lifetime=0):
+def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
     verify_type(cfg, Config)
     verify_type(verbose, bool)
     verify_type(step, int)
@@ -706,7 +707,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0):
         else:
             loge('max retryNum')
             os._exit(1)
-        if task:
+        if not noAction and task:
             b = manager.tryRun(task, (w.walbc,))
             if b:
                 continue
@@ -721,6 +722,7 @@ def main():
     verbose = False
     step = 0
     lifetime = 0
+    noAction = False
     i = 1
     argv = sys.argv
     argc = len(argv)
@@ -738,6 +740,10 @@ def main():
             lifetime = int(argv[i + 1])
             i += 2
             continue
+        if c == '-no':
+            noAction = True
+            i += 1
+            continue
         if c == '-d':
             verbose = True
             i += 1
@@ -754,7 +760,7 @@ def main():
     cfg.load(configName)
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, quitHandler)
-    workerMain(cfg, verbose, step, lifetime)
+    workerMain(cfg, verbose, step, lifetime, noAction)
 
 if __name__ == "__main__":
     main()
