@@ -51,10 +51,11 @@ repl_servers:
 """
 execfile('stest/config0.py')
 
-def makeDiff(idx=0, bs=512):
-    print "write vol{} bs={}".format(idx, bs)
-    for i in xrange(4):
-        !dd if=/dev/urandom of=/dev/walb/{idx} count=1k bs={bs} 2>1 1>/dev/null
+def makeDiff(idx=0, bs=512,wait=True):
+    print "write data to vol{} bs={}".format(idx, bs)
+    !dd if=/dev/urandom of=/dev/walb/{idx} count=1k bs={bs} 2>1 1>/dev/null
+    if wait:
+        walbc.snapshot(s0, 'vol' + str(idx), [a0])
 
 def rewriteBase():
     base = walbc.get_base(a0, VOL)
@@ -129,7 +130,6 @@ def testStep1(cfg):
 
 def testStep2(cfg):
     makeDiff()
-    time.sleep(2)
     # do nothing if in apply.interval
     cfg.apply_.interval = 86400 * 1000
     log = runWorker(cfg, 2)
@@ -144,13 +144,13 @@ def testStep2(cfg):
     makeDiff(0, 1024)
     makeDiff(2, 2048)
     # force to make diff
-    walbc.snapshot(s0, 'vol0', [a0])
-    walbc.snapshot(s0, 'vol2', [a0])
     print 'sleep'
+    time.sleep(2)
     !ls -al stest/tmp/a0/vol*/*.wdiff
+    cfg.apply_.interval = 5
     log = runWorker(cfg, 2, lifetime=20)
-    expectTrue('STEP2_4', len(log) == 2)
-    if len(log) == 2:
+    expectTrue('STEP2_4', len(log) >= 2)
+    if len(log) >= 2:
         expectEqual('STEP2_5', log[0].vol, 'vol2')
         expectEqual('STEP2_6', log[1].vol, 'vol0')
 
