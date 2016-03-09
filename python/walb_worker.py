@@ -309,40 +309,38 @@ def getLatestGidInfoBefore(curTime, infoL):
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
 
-def getMergeGidRange(diffL, max_size):
+def getMergeGidRange(diffL, max_size, max_nr):
     """
-        diffL must satisfy the following conditions:
+        selected range must satisfy the following conditions:
         [L0, L1, ...]
-        L0 : canBeMerged
-        L1, L2, ... : toBeAppended
-        len >= 2
+        L0 : not diff.isCompDiff
+        L1, L2, ... : not diff.isCompDiff and diff.isMergeable
+        condition
+        2 <= len(diffL) <= max_nr
+        sum diffL <= max_size
     """
-    diffLL = []
-    inAppending = False
     begin = None
+    size = 0
     for i in xrange(len(diffL)):
         diff = diffL[i]
-        canBeMerged = not diff.isCompDiff and diff.dataSize < max_size
-        toBeAppended = diff.isMergeable and canBeMerged
-        if inAppending and not toBeAppended:
-            if i - begin >= 2:
-                diffLL.append(diffL[begin:i])
-            inAppending = False
-        if not inAppending and canBeMerged:
+        canBeMerged = not diff.isCompDiff and diff.dataSize <= max_size
+        if begin:
+            toBeAppended = diff.isMergeable and canBeMerged
+            size += diff.dataSize
+            n = i - begin
+            if toBeAppended and size <= max_size and n <= max_nr:
+                continue
+            if n < 2:
+                begin = None
+                size = 0
+        elif canBeMerged:
             begin = i
-            inAppending = True
-    if inAppending and len(diffL) - begin >= 2:
-        diffLL.append(diffL[begin:])
-
-    if not diffLL:
-        return None
-
-    def f(diffL):
-        return (sumDiffSize(diffL) / len(diffL), diffL[0].B.gidB, diffL[-1].E.gidB)
-    tL = map(f, diffLL)
-    tL.sort(key=lambda x:x[0])
-    (_, gidB, gidE) = tL[0]
-    return (gidB, gidE)
+            size = diff.dataSize
+    if begin:
+        gidB = diffL[begin].B.gidB
+        gidE = diffL[i - 1].E.gidB
+        return (gidB, gidE)
+    return None
 
 class Task:
     def __init__(self, name, vol, ax):
@@ -473,7 +471,7 @@ class Worker:
             ls.sort(key=lambda x : x[0], reverse=True)
             (_, vol) = ls[0]
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
-            r = getMergeGidRange(diffL, self.cfg.merge.max_size)
+            r = getMergeGidRange(diffL, self.cfg.merge.max_size, self.cfg.merge.max_nr)
             if r:
                 return MergeTask(vol, self.a0, r[0], r[1])
         return None

@@ -151,8 +151,8 @@ def testStep2(cfg):
     log = runWorker(cfg, 2, lifetime=20)
     expectTrue('STEP2_4', len(log) >= 2)
     if len(log) >= 2:
-        expectEqual('STEP2_5', log[0].vol, 'vol2')
-        expectEqual('STEP2_6', log[1].vol, 'vol0')
+        expectEqual('STEP2_5', log[0].vol, 'vol0')
+        expectEqual('STEP2_6', log[1].vol, 'vol2')
 
 def resetDevice(volId):
     vol = 'vol' + str(volId)
