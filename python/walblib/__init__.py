@@ -1464,7 +1464,6 @@ class Controller(object):
             - volId, actionName, number of running actions, last beginning time or None.
         '''
         verify_type(ax, ServerParams)
-        sL = self.run_ctl(ax, ['get', 'all-actions'])
         def parse(s):
             L = s.split()
             if len(L) == 0 or len(L) % 3 == 0:
@@ -1482,7 +1481,11 @@ class Controller(object):
                 tL.append((action, int(num), ts))
             return (vol, tL)
         d = defaultdict(lambda: defaultdict(lambda: (0, None)))
-        for vol, tL in map(parse, sL.split('\n')):
+        res  = self.run_ctl(ax, ['get', 'all-actions'])
+        if res == '':
+            return d # empty.
+        sL = res.split('\n')
+        for vol, tL in map(parse, sL):
             for action, nr, ts in tL:
                 d[vol][action] = (nr, ts)
         return d
