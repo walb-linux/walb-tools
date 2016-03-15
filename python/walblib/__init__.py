@@ -2201,7 +2201,7 @@ class Controller(object):
         elif sizeSrc > sizeDst:
             self.resize_archive(aDst, vol, sizeSrc, False)
 
-    def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, dontMerge=False, syncOpt=None):
+    def replicate_once_nbk(self, aSrc, vol, aDst, doResync=False, dontMerge=False, syncOpt=None, gid=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This does not wait for the replication done.
@@ -2212,6 +2212,7 @@ class Controller(object):
         doResync :: bool - resync if necessary.
         dontMerge :: bool - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
+        gid :: None or int - target gid. If None, gid of the latest clean snapshot will be used.
         return :: int  - latest gid to replicate
         '''
         verify_server_kind(aSrc, [K_ARCHIVE])
@@ -2230,7 +2231,8 @@ class Controller(object):
 
         self._grow_if_necessary_for_replicate(aSrc, vol, aDst)
 
-        gid = self.get_restorable_gid(aSrc, vol)[-1]
+        if gid is None:
+            gid = self.get_restorable_gid(aSrc, vol)[-1]
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(),
                 '1' if doResync else '0',
                 '1' if dontMerge else '0']
@@ -2259,7 +2261,7 @@ class Controller(object):
         raise Exception("wait_for_replicated:replicate failed",
                         aSrc.name, aDst.name, vol, gid, gidL)
 
-    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, dontMerge=False, syncOpt=None):
+    def replicate_once(self, aSrc, vol, aDst, timeoutS=TIMEOUT_SEC, doResync=False, dontMerge=False, syncOpt=None, gid=None):
         '''
         Copy current (aSrc, vol) to aDst.
         This will wait for the replicated done.
@@ -2270,9 +2272,10 @@ class Controller(object):
         doResync :: bool           - resync if necessary.
         dontMerge :: bool          - do not merge diffs (to avoid recompress).
         syncOpt :: SyncOpt or None - synchronization option.
+        gid :: None or int - target gid. If None, gid of the latest clean snapshot will be used.
         return :: int              - replicated gid.
         '''
-        gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, dontMerge, syncOpt)
+        gid = self.replicate_once_nbk(aSrc, vol, aDst, doResync, dontMerge, syncOpt, gid)
         self.wait_for_replicated(aSrc, vol, aDst, gid, timeoutS)
         return gid
 
