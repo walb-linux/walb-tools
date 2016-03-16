@@ -47,6 +47,7 @@ repl_servers:
     interval: 20
     compress: snappy:0:1
     max_merge_size: 5K
+    max_send_size: 1G
     bulk_size: 4K
 """
 execfile('stest/config0.py')
