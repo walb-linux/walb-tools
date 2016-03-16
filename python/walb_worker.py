@@ -342,36 +342,49 @@ def getGidToRepl(diffL, max_send_size, a1latest):
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
 
+
 def getMergeGidRange(diffL, max_size, max_nr):
     """
-        selected range must satisfy the following conditions:
+        select range which satisfies the following conditions:
         [L0, L1, ...]
         L0 : not diff.isCompDiff
         L1, L2, ... : not diff.isCompDiff and diff.isMergeable
-        condition
         2 <= len(diffL) <= max_nr
         sum diffL <= max_size
     """
-    begin = None
-    size = 0
+    inApplying = False
+    begin = 0
+    totalSize = 0
+    candidate = None
+
+    def average((begin, end, size)):
+        return size / (end - begin)
     for i in xrange(len(diffL)):
         diff = diffL[i]
         canBeMerged = not diff.isCompDiff and diff.dataSize <= max_size
-        if begin:
+        if inApplying:
             toBeAppended = diff.isMergeable and canBeMerged
-            size += diff.dataSize
+            totalSize += diff.dataSize
             n = i - begin
-            if toBeAppended and size <= max_size and n <= max_nr:
+            if toBeAppended and totalSize <= max_size and n <= max_nr:
                 continue
-            if n < 2:
-                begin = None
-                size = 0
-        elif canBeMerged:
+            if n >= 2:
+                t = (begin, i, totalSize)
+                if not candidate or average(t) < average(candidate):
+                    candidate = t
+            inApplying = False
+        if not inApplying and canBeMerged:
             begin = i
-            size = diff.dataSize
-    if begin:
+            totalSize = diff.dataSize
+            inApplying = True
+    else:
+        # don't select the latest diff
+        pass
+
+    if candidate:
+        begin, end, _ = candidate
         gidB = diffL[begin].B.gidB
-        gidE = diffL[i - 1].E.gidB
+        gidE = diffL[end - 1].E.gidB
         return (gidB, gidE)
     return None
 
