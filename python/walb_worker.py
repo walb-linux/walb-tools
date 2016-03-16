@@ -201,6 +201,7 @@ class ReplServer:
         self.interval = 0
         self.compress = None
         self.max_merge_size = '1G'
+        self.max_send_size = None
         self.bulk_size = '64K'
 
     def set(self, name, d):
@@ -216,6 +217,8 @@ class ReplServer:
             self.compress.parse(d['compress'])
         if d.has_key('max_merge_size'):
             self.max_merge_size = str(d['max_merge_size'])
+        if d.has_key('max_send_size'):
+            self.max_send_size = parseSIZE_UNIT(d['max_send_size'])
         if d.has_key('bulk_size'):
             self.bulk_size = str(d['bulk_size'])
 
@@ -226,6 +229,7 @@ class ReplServer:
             ('interval', self.interval),
             ('compress', self.compress),
             ('max_merge_size', self.max_merge_size),
+            ('max_send_size', self.max_send_size),
             ('bulk_size', self.bulk_size),
         ]
         return formatIndent(d, indent)
@@ -305,6 +309,35 @@ def getLatestGidInfoBefore(curTime, infoL):
             break
         prev = info
     return prev
+
+def getGidToRepl(diffL, max_send_size, a1latest):
+    verify_type(diffL, list, Diff)
+    if max_send_size is None:
+        return None
+    verify_int(max_send_size)
+    verify_int(a1latest)
+
+    n = len(diffL)
+    if n <= 1:
+        return None
+
+    for i in xrange(n - 1):
+        if diffL[i + 1].B.gidB > a1latest:
+            break
+    else:
+        return None
+    begin = i
+    s = 0
+    for i in xrange(begin, n):
+        s += diffL[i].dataSize
+        if s > max_send_size:
+            break
+    else:
+        return None
+    end = i
+    if begin == end:
+        end = begin + 1
+    return end.B.gidB
 
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
@@ -389,18 +422,18 @@ class MergeTask(Task):
         return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
-    def __init__(self, vol, ax, rs):
+    def __init__(self, vol, ax, rs, maxGid=None):
         Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, ReplServer)
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
+        self.maxGid = maxGid
     def run(self, walbc):
         verify_type(walbc, Controller)
-        walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt)
+        walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
     def __str__(self):
-        return Task.__str__(self) + " dst={} opt={}".format(self.dst, self.syncOpt)
+        return Task.__str__(self) + " dst={} opt={} maxGid={}".format(self.dst, self.syncOpt, self.maxGid)
     def __eq__(self, rhs):
-        # QQQ : add self.syncOpt == rhs.syncOpt?
         return Task.__eq__(self, rhs) and self.dst == rhs.dst
 
 g_binDir = ''
@@ -460,6 +493,7 @@ class Worker:
             numDiffL.append(n)
         return numDiffL
 
+
     def selectMaxDiffNumMergeTask(self, ls):
         """
             ls = [(n, vol)]
@@ -514,12 +548,14 @@ class Worker:
                     continue
                 if not ts:
                     ts = OLDEST_TIME
-                tL.append((ts, vol, rs))
+                tL.append((ts, vol, rs, a1latest))
         if tL:
             tL.sort(key=lambda x:x[0])
-            (_, vol, rs) = tL[0]
+            (_, vol, rs, a1latest) = tL[0]
+            diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
+            maxGid = getGidToRepl(diffL, rs.max_send_size, a1latest)
             self.doneReplServerList[(vol, rs)] = curTime
-            return ReplTask(vol, self.a0, rs)
+            return ReplTask(vol, self.a0, rs, maxGid)
         else:
             return None
 
