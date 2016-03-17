@@ -590,7 +590,7 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     mgr.add(mdiff1);
     mgr.add(mdiff2);
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), MetaSnap(5));
-    mgr.gc();
+    mgr.gc(MetaSnap(0));
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), MetaSnap(5));
     auto v3 = mgr.getAll();
     CYBOZU_TEST_EQUAL(v3.size(), 2);
@@ -745,7 +745,7 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
         auto v2 = mgr.getMergeableDiffList(randx() % maxGid);
         if (v2.size() > 1) {
             mgr.add(merge(v2));
-            mgr.gc();
+            mgr.gc(MetaSnap(0));
         }
         s1 = mgr.getLatestSnapshot(st);
         CYBOZU_TEST_EQUAL(s0, s1);

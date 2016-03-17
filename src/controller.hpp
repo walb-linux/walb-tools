@@ -427,6 +427,11 @@ inline void c2sDumpLogpackHeaderClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 2, __func__, msgOk);
 }
 
+inline void c2aGarbageCollectDiffClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 1, __func__, msgOk);
+}
+
 inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
 {
     static const protocol::GetCommandInfoMap m = {

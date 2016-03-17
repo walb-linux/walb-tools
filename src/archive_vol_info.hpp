@@ -862,7 +862,7 @@ public:
      * Remove garbage wdiff files.
      */
     size_t gcDiffs() {
-        return wdiffs_.gc();
+        return wdiffs_.gc(getMetaState().snapB);
     }
     size_t gcTmpFiles() {
         return cybozu::removeAllTmpFiles(volDir.str());

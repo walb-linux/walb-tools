@@ -809,43 +809,24 @@ public:
      * Garbage collect.
      *
      * RETURN:
-     *   Removed diffs.
+     *     removed diffs.
      */
-    MetaDiffVec gc() {
+    MetaDiffVec gc(const MetaSnap &snap) {
         AutoLock lk(mu_);
-        uint64_t maxRange = 0;
-        for (const Mmap::value_type &p : mmap_) {
-            const MetaDiff &d = p.second;
-            maxRange = std::max(maxRange, d.snapE.gidB - d.snapB.gidB);
-        }
-        /*
-         * If max(d.snapB.gidE - d.snapB.gidB) is small, O(NlogN).
-         * otherwise O(N^2).
-         */
-        MetaDiffVec v;
-        Mmap::iterator it = mmap_.begin();
-        while (it != mmap_.end()) {
-            const MetaDiff &d = it->second;
-            const uint64_t key =
-                d.snapB.gidB > maxRange ? d.snapB.gidB - maxRange : 0;
-            Mmap::const_iterator it0 = mmap_.lower_bound(key);
-            bool canRemove = false;
-            while (it0 != mmap_.cend() && it0->first <= d.snapB.gidB) {
-                const MetaDiff &d0 = it0->second;
-                if (d0 != d && contains(d0, d)) {
-                    canRemove = true;
-                    break;
-                }
-                ++it0;
-            }
-            if (canRemove) {
-                v.push_back(d);
-                it = mmap_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        return v;
+        MetaDiffVec garbages;
+
+        /* Remove non-garbage diffs from mmap_. */
+        MetaDiffVec v = getApplicableDiffList(snap);
+        for (const MetaDiff &d : v) eraseNolock(d);
+
+        /* All the remaining diffs in mmap_ are garbage. */
+        for (Mmap::value_type &p : mmap_) garbages.push_back(p.second);
+        mmap_.clear();
+
+        // Place back non-garbage diffs to mmap_.
+        for (const MetaDiff &d : v) addNolock(d);
+
+        return garbages;
     }
     /**
      * Clear all diffs.

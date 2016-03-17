@@ -199,6 +199,7 @@ const CommandInfo g_cmdTbl[] = {
     { getCN, c2xGetClient, setupGet, verifyNoneParam, "get some information from a server." },
     { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
     { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
+    { gcDiffCN, c2aGarbageCollectDiffClient, setupVolId, verifyVolIdParam, "garbage collect diffs." },
     { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, "reload metadata of a volue in an archive (for debug)." },
     { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
     { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },

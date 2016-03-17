@@ -131,8 +131,8 @@ public:
     /**
      * Garbage collect.
      */
-    size_t gc() {
-        return removeDiffFiles(mgr_.gc());
+    size_t gc(const MetaSnap &snap) {
+        return removeDiffFiles(mgr_.gc(snap));
     }
     /**
      * Remove wdiffs before a specified gid.

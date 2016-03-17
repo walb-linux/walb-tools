@@ -2762,6 +2762,32 @@ inline void c2aSetBaseServer(protocol::ServerParams &p)
     }
 }
 
+inline void c2aGarbageCollectDiffServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+        UniqueLock ul(volSt.mu);
+        verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
+
+        // Do not unlock volSt due to this command will not change the state.
+        const size_t num = volInfo.gcDiffs();
+
+        ul.unlock();
+        pkt.writeFin(msgOk);
+        logger.info() << "gc-diff succeeded" << volId << num;
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        pkt.write(e.what());
+    }
+}
+
 const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { stateTN, archive_local::getState },
     { hostTypeTN, archive_local::getHostType },
@@ -2824,6 +2850,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { disableSnapshotCN, c2aDisableSnapshot },
     { enableSnapshotCN, c2aEnableSnapshot },
     { virtualFullScanCN, c2aVirtualFullScan },
+    { gcDiffCN, c2aGarbageCollectDiffServer },
     // protocols.
     { dirtyFullSyncPN, s2aDirtyFullSyncServer },
     { dirtyHashSyncPN, s2aDirtyHashSyncServer },

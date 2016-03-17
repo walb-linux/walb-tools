@@ -44,7 +44,7 @@ CYBOZU_TEST_AUTO(consolidate)
         createDiffFile(diffFiles, mdiff);
     }
     CYBOZU_TEST_EQUAL(diffFiles.listName().size(), 7);
-    diffFiles.gc();
+    diffFiles.gc(walb::MetaSnap(0));
     CYBOZU_TEST_EQUAL(diffFiles.listName().size(), 2);
     for (const std::string &s : diffFiles.listName()) {
         ::printf("%s\n", s.c_str());

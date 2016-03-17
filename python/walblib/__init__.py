@@ -2698,6 +2698,16 @@ class Controller(object):
         for sx in self.sLayout.storageL:
             self.resize_storage(sx, vol, sizeMb)
 
+    def gc_diff(self, ax, vol):
+        '''
+        Run garbage collect diffs for a volume.
+        ax :: ServerParams  - archive server.
+        vol :: str          - volume name.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        self.run_ctl(ax, ['gc-diff', vol])
+
     '''
     Private member functions.
 
