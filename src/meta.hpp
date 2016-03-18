@@ -1137,7 +1137,7 @@ private:
     Mmap::iterator search(const MetaDiff &diff) {
         Mmap::iterator it, end;
         std::tie(it, end) = mmap_.equal_range(diff.snapB.gidB);
-        if (it != end) {
+        while (it != end) {
             const MetaDiff &d = it->second;
             if (diff == d) return it;
             ++it;
