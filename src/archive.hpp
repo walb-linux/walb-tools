@@ -1080,10 +1080,11 @@ inline bool runDiffReplServer(
     packet::Ack(pkt.sock()).send();
     pkt.flush();
     volSt.updateLastWdiffReceivedTime();
+    const size_t nrGc = volInfo.gcDiffsRange(diff.snapB.gidB, diff.snapE.gidB);
     ul.lock();
     tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
-    logger.info() << "diff-repl-server done" << volId << diff << elapsed;
+    logger.info() << "diff-repl-server done" << volId << diff << elapsed << nrGc;
     return true;
 }
 

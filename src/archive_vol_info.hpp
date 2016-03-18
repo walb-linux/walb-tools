@@ -864,6 +864,9 @@ public:
     size_t gcDiffs() {
         return wdiffs_.gc(getMetaState().snapB);
     }
+    size_t gcDiffsRange(uint64_t gidB, uint64_t gidE) {
+        return wdiffs_.gcRange(gidB, gidE);
+    }
     size_t gcTmpFiles() {
         return cybozu::removeAllTmpFiles(volDir.str());
     }

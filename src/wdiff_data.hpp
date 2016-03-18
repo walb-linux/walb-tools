@@ -134,6 +134,9 @@ public:
     size_t gc(const MetaSnap &snap) {
         return removeDiffFiles(mgr_.gc(snap));
     }
+    size_t gcRange(uint64_t gidB, uint64_t gidE) {
+        return removeDiffFiles(mgr_.gcRange(gidB, gidE));
+    }
     /**
      * Remove wdiffs before a specified gid.
      */

@@ -762,6 +762,29 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     }
 }
 
+CYBOZU_TEST_AUTO(metaDiffManagerGcRange)
+{
+    MetaSnap snap(0), s0(snap), s1(snap);
+    MetaState st(snap, 0);
+
+    MetaDiffVec v;
+    v.emplace_back(0, 1, true, 1000);
+    v.emplace_back(0, 2, true, 1000);
+    v.emplace_back(1, 2, true, 1000);
+    v.emplace_back(1, 3, true, 1000);
+    v.emplace_back(2, 3, true, 1002);
+    v.emplace_back(2, 4, true, 1003);
+
+    MetaDiffManager mgr;
+    for (const MetaDiff& d : v) mgr.add(d);
+
+    MetaDiffVec v2 = mgr.gcRange(1, 3);
+    //printDiffV(v2);
+    CYBOZU_TEST_EQUAL(v2.size(), 2);
+    CYBOZU_TEST_EQUAL(v2[0], v[2]);
+    CYBOZU_TEST_EQUAL(v2[1], v[4]);
+}
+
 void testDiffFileName(const MetaDiff& d)
 {
     const std::string name = createDiffFileName(d);

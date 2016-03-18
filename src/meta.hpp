@@ -829,6 +829,29 @@ public:
         return garbages;
     }
     /**
+     * Garbage collect in a gid range.
+     * The diff just having the gid range will not be removed.
+     * Use this after diff-repl-server execution.
+     * This is lower cost than gc().
+     */
+    MetaDiffVec gcRange(uint64_t gidB, uint64_t gidE) {
+        AutoLock lk(mu_);
+        MetaDiffVec garbages;
+        Mmap::iterator it = mmap_.lower_bound(gidB);
+        while (it != mmap_.end()) {
+            const MetaDiff &d = it->second;
+            if (d.snapB.gidB >= gidE) break;
+            if (gidB <= d.snapB.gidB && d.snapE.gidB <= gidE &&
+                !(gidB == d.snapB.gidB && gidE == d.snapE.gidB)) {
+                garbages.push_back(d);
+                it = mmap_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return garbages;
+    }
+    /**
      * Clear all diffs.
      */
     void clear() {
