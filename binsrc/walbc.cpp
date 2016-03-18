@@ -87,7 +87,7 @@ void setupReplicate(cybozu::Option& opt)
 void setupMerge(cybozu::Option& opt)
 {
     setupVolIdGid(opt);
-    setupOpt(opt, "opt", "('size' maxSize) | ('gid' gidE)");
+    setupOpt(opt, "opt", "(gidB) ('size' maxSize) | ('gid' gidE)");
 }
 void setupResize(cybozu::Option& opt)
 {
