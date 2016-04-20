@@ -888,6 +888,9 @@ class ServerConnectionParam(object):
     def __str__(self):
         return ', '.join(self._get_as_str_list())
 
+    def __eq__(self, rhs):
+        return self.name == rhs.name and self.address == rhs.address and self.port == rhs.port and self.kind == rhs.kind
+
     def get_host_port(self):
         '''
         Get 'address:port' string.
