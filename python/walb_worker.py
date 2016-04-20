@@ -101,7 +101,7 @@ def parsePositive(d):
 
 def parsePort(d):
     verify_type(d, int)
-    if d <= 0 or d > 65535:
+    if d < 0 or d > 65535:
         raise Exception('parsePort', d)
     return d
 
@@ -118,9 +118,17 @@ def formatIndent(d, indent):
         i += 1
     return s
 
+def setValIfExist(obj, d, k, pred):
+    if d.has_key(k):
+        # obj.k = pred(d[k])
+        setattr(obj, k, pred(d[k]))
+
+def identity(x):
+    return x
+
 class General:
     def __init__(self):
-        self.addr = ""
+        self.addr = ''
         self.port = 0
         self.walbc_path = ''
         self.max_task = 1
@@ -129,18 +137,26 @@ class General:
 
     def set(self, d):
         verify_type(d, dict)
-        self.addr = d['addr']
-        verify_type(self.addr, str)
-        self.port = parsePort(d['port'])
-        self.walbc_path = d['walbc_path']
-        verify_type(self.walbc_path, str)
+        tbl = {
+            'addr': identity,
+            'port': parsePort,
+            'walbc_path': identity,
+            'max_task': parsePositive,
+            'max_replication_task': parsePositive,
+            'kick_interval': parsePositive
+        }
+        for (k, pred) in tbl.items():
+            setValIfExist(self, d, k, pred)
+
+    def verify(self):
+        if self.addr == '':
+            raise Exception('General addr is not set')
+        if self.port == 0:
+            raise Exception('General port is not set')
+        if self.walbc_path == '':
+            raise Exception('General walbc_path is not set')
         if not os.path.exists(self.walbc_path):
             raise Exception('walbc_path is not found', self.walbc_path)
-        self.max_task = parsePositive(d['max_task'])
-        if d.has_key('max_replication_task'):
-            self.max_replication_task = parsePositive(d['max_replication_task'])
-        if d.has_key('kick_interval'):
-            self.kick_interval = parsePositive(d['kick_interval'])
 
     def __str__(self, indent=2):
         d = [
@@ -160,9 +176,13 @@ class Apply:
         self.time_window = (0, 0)
     def set(self, d):
         verify_type(d, dict)
-        self.keep_period = parsePERIOD(d['keep_period'])
-        if d.has_key('interval'):
-            self.interval = parsePERIOD(d['interval'])
+        setValIfExist(self, d, 'keep_period', parsePERIOD)
+        setValIfExist(self, d, 'interval', parsePERIOD)
+
+    def verify(self):
+        if self.keep_period == datetime.timedelta():
+            raise Exception('Apply keep_period is not set')
+
     def __str__(self, indent=2):
         d = [
             ('keep_period', self.keep_period),
@@ -178,13 +198,19 @@ class Merge:
         self.threshold_nr = UINT64_MAX
     def set(self, d):
         verify_type(d, dict)
-        self.interval = parsePERIOD(d['interval'])
-        if d.has_key('max_nr'):
-            self.max_nr = parsePositive(d['max_nr'])
-        if d.has_key('max_size'):
-            self.max_size = parseSIZE_UNIT(d['max_size'])
-        if d.has_key('threshold_nr'):
-            self.threshold_nr = parsePositive(d['threshold_nr'])
+        tbl = {
+            'interval': parsePERIOD,
+            'max_nr': parsePositive,
+            'max_size': parseSIZE_UNIT,
+            'threshold_nr': parsePositive,
+        }
+        for (k, pred) in tbl.items():
+            setValIfExist(self, d, k, pred)
+
+    def verify(self):
+        if self.interval == datetime.timedelta():
+            raise Exception('Merge interval is not set')
+
     def __str__(self, indent=2):
         d = [
             ('interval', self.interval),
@@ -196,31 +222,47 @@ class Merge:
 
 class ReplServer:
     def __init__(self):
-        self.addr = ""
+        self.addr = ''
         self.port = 0
         self.interval = 0
         self.compress = None
         self.max_merge_size = '1G'
         self.max_send_size = None
         self.bulk_size = '64K'
+        self.log_name = ''
+        self.enabled = True
 
     def set(self, name, d):
         verify_type(name, str)
         verify_type(d, dict)
         self.name = name
-        self.addr = d['addr']
-        verify_type(self.addr, str)
-        self.port = parsePort(d['port'])
-        self.interval = parsePERIOD(d['interval'])
+        tbl = {
+            'addr':identity,
+            'port': parsePort,
+            'interval': parsePERIOD,
+            'max_merge_size': str,
+            'max_send_size': parseSIZE_UNIT,
+            'bulk_size': str,
+            'log_name': identity,
+            'enabled': identity,
+        }
+        for (k, pred) in tbl.items():
+            setValIfExist(self, d, k, pred)
         if d.has_key('compress'):
             self.compress = CompressOpt()
             self.compress.parse(d['compress'])
-        if d.has_key('max_merge_size'):
-            self.max_merge_size = str(d['max_merge_size'])
-        if d.has_key('max_send_size'):
-            self.max_send_size = parseSIZE_UNIT(d['max_send_size'])
-        if d.has_key('bulk_size'):
-            self.bulk_size = str(d['bulk_size'])
+    def verify(self):
+        if not self.enabled:
+            return
+        if self.addr == '':
+            raise Exception('ReplServer addr is not set')
+        if self.port == 0:
+            raise Exception('ReplServer port is not set')
+        if self.interval == 0:
+            raise Exception('ReplServer interval is not set')
+        verify_type(self.addr, str)
+        verify_type(self.log_name, str)
+        verify_type(self.enabled, bool)
 
     def __str__(self, indent=2):
         d = [
@@ -231,6 +273,8 @@ class ReplServer:
             ('max_merge_size', self.max_merge_size),
             ('max_send_size', self.max_send_size),
             ('bulk_size', self.bulk_size),
+            ('log_name', self.log_name),
+            ('enabled', self.enabled),
         ]
         return formatIndent(d, indent)
     def getServerConnectionParam(self):
@@ -245,15 +289,29 @@ class Config:
 
     def set(self, d):
         verify_type(d, dict)
-        self.general.set(d['general'])
-        self.apply_.set(d['apply'])
-        self.merge.set(d['merge'])
-        ss = d.get('repl_servers')
-        if ss:
-            for (name, v) in ss.items():
-                rs = ReplServer()
-                rs.set(name, v)
-                self.repl_servers[name] = rs
+        if d.has_key('general'):
+            self.general.set(d['general'])
+        if d.has_key('apply'):
+            self.apply_.set(d['apply'])
+        if d.has_key('merge'):
+            self.merge.set(d['merge'])
+        if d.has_key('repl_servers'):
+            ss = d.get('repl_servers')
+            if ss:
+                for (name, v) in ss.items():
+                    if self.repl_servers.has_key(name):
+                        self.repl_servers[name].set(name, v)
+                    else:
+                        rs = ReplServer()
+                        rs.set(name, v)
+                        self.repl_servers[name] = rs
+
+    def verify(self):
+        self.general.verify()
+        self.apply_.verify()
+        self.merge.verify()
+        for rs in self.repl_servers.values():
+            rs.verify()
 
     def setStr(self, s):
         verify_type(s, str)
@@ -730,6 +788,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
     g_step = step
     startTime = getCurrentTime()
 
+    cfg.verify()
     w = Worker(cfg)
     manager = TaskManager(cfg.general.max_task, cfg.general.max_replication_task)
     logStart(sys.argv, cfg)
@@ -765,7 +824,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
     logEnd()
 
 def main():
-    configName = ""
+    configName = ''
     verbose = False
     step = 0
     lifetime = 0
