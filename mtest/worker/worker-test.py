@@ -508,5 +508,13 @@ repl:
         cfg.verify()
         self.assertEqual(len(cfg.repl.getEnabledList()), 3)
 
+        s = """
+repl:
+  disabled_volumes:
+    - vol1
+    - vol2
+    - vol5
+"""
+
 if __name__ == '__main__':
     unittest.main()

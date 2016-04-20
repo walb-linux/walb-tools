@@ -2,6 +2,16 @@ import os, subprocess, re
 import threading
 import walb_worker
 import collections
+"""
+REQUIREMENT:
+
+sudo make stest0 OPT="n1"
+walbc.init_storage(s0, 'vol1', '/dev/walb/1')
+walbc.full_backup(s0, 'vol1')
+walbc.init_storage(s0, 'vol2', '/dev/walb/2')
+walbc.full_backup(s0, 'vol2')
+
+"""
 
 g_testNum = 0
 g_errNum = 0

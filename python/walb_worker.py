@@ -261,7 +261,8 @@ class ReplServer:
         if self.interval == 0:
             raise Exception('ReplServer interval is not set')
         verify_type(self.addr, str)
-        verify_type(self.log_name, str)
+        if self.log_name is not None:
+            verify_type(self.log_name, str)
         verify_type(self.enabled, bool)
 
     def __str__(self, indent=2):
@@ -283,6 +284,7 @@ class ReplServer:
 class Repl:
     def __init__(self):
         self.servers = {}
+        self.disabled_volumes = []
     def set(self, d):
         verify_type(d, dict)
         if d.has_key('servers'):
@@ -294,9 +296,12 @@ class Repl:
                     rs = ReplServer()
                     rs.set(name, v)
                     self.servers[name] = rs
+        if d.has_key('disabled_volumes'):
+            self.disabled_volumes = d['disabled_volumes']
     def verify(self):
         for rs in self.servers.values():
             rs.verify()
+        verify_type(self.disabled_volumes, list, str)
 
     def __str__(self):
         indent = 2
