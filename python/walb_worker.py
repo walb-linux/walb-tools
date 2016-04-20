@@ -302,9 +302,10 @@ class Repl:
         indent = 2
         n = len(self.servers)
         i = 0
+        s = ' ' * indent + 'servers:\n'
         for (name, rs) in self.servers.items():
-            s += ' ' * indent + name + ':\n'
-            s += rs.__str__(indent * 2)
+            s += ' ' * indent * 2 + name + ':\n'
+            s += rs.__str__(indent * 3)
             if i < n - 1:
                 s += '\n'
             i += 1
