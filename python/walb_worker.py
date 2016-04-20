@@ -222,6 +222,7 @@ class Merge:
 
 class ReplServer:
     def __init__(self):
+        self.name = ''
         self.addr = ''
         self.port = 0
         self.interval = 0
@@ -524,6 +525,9 @@ class ReplTask(Task):
     def __init__(self, vol, ax, rs, maxGid=None):
         Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, ReplServer)
+        self.name = rs.name
+        if rs.log_name:
+            self.name += '_' + rs.log_name
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
         self.maxGid = maxGid
@@ -531,7 +535,7 @@ class ReplTask(Task):
         verify_type(walbc, Controller)
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
     def __str__(self):
-        return Task.__str__(self) + " dst={} opt={} maxGid={}".format(self.dst, self.syncOpt, self.maxGid)
+        return Task.__str__(self) + " dst={} maxGid={}".format(self.name, self.maxGid)
     def __eq__(self, rhs):
         return Task.__eq__(self, rhs) and self.dst == rhs.dst
 
@@ -629,6 +633,8 @@ class Worker:
         tL = []
         rsL = self.cfg.repl.getEnabledList()
         for vol in volL:
+            if vol in self.repl.disabled_volumes:
+                continue
             a0State = self.walbc.get_state(self.a0, vol)
             a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
             if a0State not in aActive:

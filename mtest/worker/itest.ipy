@@ -60,6 +60,7 @@ repl:
       max_merge_size: 5K
       max_send_size: 1G
       bulk_size: 4K
+      log_name: pqr
 """
 execfile('stest/config0.py')
 

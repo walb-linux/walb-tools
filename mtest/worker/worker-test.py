@@ -515,6 +515,13 @@ repl:
     - vol2
     - vol5
 """
+        cfg.set(yaml.load(s))
+        self.assertEqual(cfg.repl.servers['repl3'].addr, '192.168.0.5')
+        self.assertEqual(cfg.repl.servers['repl3'].port, 1234)
+        self.assertEqual(len(cfg.repl.disabled_volumes), 3)
+        self.assertEqual(cfg.repl.disabled_volumes[0], 'vol1')
+        self.assertEqual(cfg.repl.disabled_volumes[1], 'vol2')
+        self.assertEqual(cfg.repl.disabled_volumes[2], 'vol5')
 
 if __name__ == '__main__':
     unittest.main()
