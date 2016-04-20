@@ -472,6 +472,8 @@ general:
         cfg.set(yaml.load(s))
         self.assertEqual(cfg.general.addr, '192.168.0.1')
         self.assertEqual(cfg.general.port, 3)
+        self.assertEqual(len(cfg.getEnabledReplServer()), 2)
+
         s = """
 repl_servers:
   repl3:
@@ -486,6 +488,9 @@ repl_servers:
         self.assertEqual(cfg.repl_servers['repl3'].port, 0)
         self.assertEqual(cfg.repl_servers['repl3'].enabled, False)
         cfg.verify()
+        self.assertEqual(len(cfg.getEnabledReplServer()), 2)
+
+
         s = """
 repl_servers:
   repl3:
@@ -498,6 +503,7 @@ repl_servers:
         self.assertEqual(cfg.repl_servers['repl3'].port, 1234)
         self.assertEqual(cfg.repl_servers['repl3'].enabled, True)
         cfg.verify()
+        self.assertEqual(len(cfg.getEnabledReplServer()), 3)
 
 if __name__ == '__main__':
     unittest.main()

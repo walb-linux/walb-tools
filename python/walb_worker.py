@@ -347,6 +347,13 @@ class Config:
             i += 1
         return s
 
+    def getEnabledReplServer(self):
+        rsL = []
+        for rs in self.repl_servers.values():
+            if rs.enabled:
+                rsL.append(rs)
+        return rsL
+
 class ExecedRepl:
     def __init__(self, vol, rs, ts):
         verify_type(vol, str)
@@ -599,7 +606,7 @@ class Worker:
 
     def selectReplTask(self, volL, curTime):
         tL = []
-        rsL = self.cfg.repl_servers.values()
+        rsL = self.cfg.getEnabledReplServer()
         for vol in volL:
             a0State = self.walbc.get_state(self.a0, vol)
             a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
