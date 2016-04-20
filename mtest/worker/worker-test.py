@@ -117,22 +117,23 @@ merge:
   max_nr: 10
   max_size: 1M
   threshold_nr: 5
-repl_servers:
-  repl0:
-    addr: 192.168.0.2
-    port: 10001
-    interval: 3d
-    compress: snappy:3:4
-    max_merge_size: 5K
-    bulk_size: 40
-  repl1:
-    addr: 192.168.0.3
-    port: 10002
-    interval: 2h
-    compress: gzip:1:4
-    max_merge_size: 2M
-    max_send_size: 3M
-    bulk_size: 400
+repl:
+  servers:
+    repl0:
+      addr: 192.168.0.2
+      port: 10001
+      interval: 3d
+      compress: snappy:3:4
+      max_merge_size: 5K
+      bulk_size: 40
+    repl1:
+      addr: 192.168.0.3
+      port: 10002
+      interval: 2h
+      compress: gzip:1:4
+      max_merge_size: 2M
+      max_send_size: 3M
+      bulk_size: 400
 """
 
 class TestLoadConfigParam(unittest.TestCase):
@@ -151,7 +152,7 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(merge.max_nr, 10)
         self.assertEqual(merge.max_size, 1024 * 1024)
         self.assertEqual(merge.threshold_nr, 5)
-        repl_servers = cfg.repl_servers
+        repl_servers = cfg.repl.servers
         r = repl_servers['repl0']
         self.assertEqual(r.addr, '192.168.0.2')
         self.assertEqual(r.port, 10001)
@@ -472,38 +473,40 @@ general:
         cfg.set(yaml.load(s))
         self.assertEqual(cfg.general.addr, '192.168.0.1')
         self.assertEqual(cfg.general.port, 3)
-        self.assertEqual(len(cfg.getEnabledReplServer()), 2)
+        self.assertEqual(len(cfg.repl.getEnabledList()), 2)
 
         s = """
-repl_servers:
-  repl3:
-    interval: 3d
-    compress: snappy:3:4
-    max_merge_size: 5K
-    bulk_size: 40
-    enabled: false
+repl:
+  servers:
+    repl3:
+      interval: 3d
+      compress: snappy:3:4
+      max_merge_size: 5K
+      bulk_size: 40
+      enabled: false
 """
         cfg.set(yaml.load(s))
-        self.assertEqual(cfg.repl_servers['repl3'].addr, '')
-        self.assertEqual(cfg.repl_servers['repl3'].port, 0)
-        self.assertEqual(cfg.repl_servers['repl3'].enabled, False)
+        self.assertEqual(cfg.repl.servers['repl3'].addr, '')
+        self.assertEqual(cfg.repl.servers['repl3'].port, 0)
+        self.assertEqual(cfg.repl.servers['repl3'].enabled, False)
         cfg.verify()
-        self.assertEqual(len(cfg.getEnabledReplServer()), 2)
+        self.assertEqual(len(cfg.repl.getEnabledList()), 2)
 
 
         s = """
-repl_servers:
-  repl3:
-    addr: 192.168.0.5
-    port: 1234
-    enabled: true
+repl:
+  servers:
+    repl3:
+      addr: 192.168.0.5
+      port: 1234
+      enabled: true
 """
         cfg.set(yaml.load(s))
-        self.assertEqual(cfg.repl_servers['repl3'].addr, '192.168.0.5')
-        self.assertEqual(cfg.repl_servers['repl3'].port, 1234)
-        self.assertEqual(cfg.repl_servers['repl3'].enabled, True)
+        self.assertEqual(cfg.repl.servers['repl3'].addr, '192.168.0.5')
+        self.assertEqual(cfg.repl.servers['repl3'].port, 1234)
+        self.assertEqual(cfg.repl.servers['repl3'].enabled, True)
         cfg.verify()
-        self.assertEqual(len(cfg.getEnabledReplServer()), 3)
+        self.assertEqual(len(cfg.repl.getEnabledList()), 3)
 
 if __name__ == '__main__':
     unittest.main()

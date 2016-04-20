@@ -280,12 +280,50 @@ class ReplServer:
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
+class Repl:
+    def __init__(self):
+        self.servers = {}
+    def set(self, d):
+        verify_type(d, dict)
+        if d.has_key('servers'):
+            ss = d['servers']
+            for (name, v) in ss.items():
+                if self.servers.has_key(name):
+                    self.servers[name].set(name, v)
+                else:
+                    rs = ReplServer()
+                    rs.set(name, v)
+                    self.servers[name] = rs
+    def verify(self):
+        for rs in self.servers.values():
+            rs.verify()
+
+    def __str__(self):
+        indent = 2
+        n = len(self.servers)
+        i = 0
+        for (name, rs) in self.servers.items():
+            s += ' ' * indent + name + ':\n'
+            s += rs.__str__(indent * 2)
+            if i < n - 1:
+                s += '\n'
+            i += 1
+        return s
+
+    def getEnabledList(self):
+        rsL = []
+        for rs in self.servers.values():
+            if rs.enabled:
+                rsL.append(rs)
+        return rsL
+
+
 class Config:
     def __init__(self):
         self.general = General()
         self.apply_ = Apply()
         self.merge = Merge()
-        self.repl_servers = {}
+        self.repl = Repl()
 
     def set(self, d):
         verify_type(d, dict)
@@ -295,23 +333,14 @@ class Config:
             self.apply_.set(d['apply'])
         if d.has_key('merge'):
             self.merge.set(d['merge'])
-        if d.has_key('repl_servers'):
-            ss = d.get('repl_servers')
-            if ss:
-                for (name, v) in ss.items():
-                    if self.repl_servers.has_key(name):
-                        self.repl_servers[name].set(name, v)
-                    else:
-                        rs = ReplServer()
-                        rs.set(name, v)
-                        self.repl_servers[name] = rs
+        if d.has_key('repl'):
+            self.repl.set(d['repl'])
 
     def verify(self):
         self.general.verify()
         self.apply_.verify()
         self.merge.verify()
-        for rs in self.repl_servers.values():
-            rs.verify()
+        self.repl.verify()
 
     def setStr(self, s):
         verify_type(s, str)
@@ -329,30 +358,16 @@ class Config:
         self.setStr(s)
 
     def __str__(self):
-        indent = 2
         s = "general:\n"
         s += str(self.general) + '\n'
         s += "apply:\n"
         s += str(self.apply_) + '\n'
         s += "merge:\n"
         s += str(self.merge) + '\n'
-        s += 'repl_servers:\n'
-        n = len(self.repl_servers)
-        i = 0
-        for (name, rs) in self.repl_servers.items():
-            s += ' ' * indent + name + ':\n'
-            s += rs.__str__(indent * 2)
-            if i < n - 1:
-                s += '\n'
-            i += 1
+        s += 'repl:\n'
+        s += str(self.repl)
         return s
 
-    def getEnabledReplServer(self):
-        rsL = []
-        for rs in self.repl_servers.values():
-            if rs.enabled:
-                rsL.append(rs)
-        return rsL
 
 class ExecedRepl:
     def __init__(self, vol, rs, ts):
@@ -606,7 +621,7 @@ class Worker:
 
     def selectReplTask(self, volL, curTime):
         tL = []
-        rsL = self.cfg.getEnabledReplServer()
+        rsL = self.cfg.repl.getEnabledList()
         for vol in volL:
             a0State = self.walbc.get_state(self.a0, vol)
             a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
