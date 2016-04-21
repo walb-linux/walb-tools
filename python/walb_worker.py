@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, time, yaml, datetime, os, threading, signal
+import sys, time, yaml, datetime, os, threading, signal, traceback
 from walblib import *
 
 walbcDebug = False
@@ -633,7 +633,7 @@ class Worker:
         tL = []
         rsL = self.cfg.repl.getEnabledList()
         for vol in volL:
-            if vol in self.repl.disabled_volumes:
+            if vol in self.cfg.repl.disabled_volumes:
                 continue
             a0State = self.walbc.get_state(self.a0, vol)
             a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
@@ -802,7 +802,7 @@ class TaskManager:
 def usage():
     print "walb-worker -f configName [opt]"
     print "    -f configName ; load config ; load from stdin if configName = '-'"
-    print "    -d ; for debug"
+    print "    -v ; for verbose message"
     print "    (the following options are for only debug)"
     print "    -step num ; only select step of task"
     print "    -lifetime seconds : lifetime of worker"
@@ -841,8 +841,8 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
                     break
                 task = w.selectTask(volActTimeL, curTime)
                 break
-            except Exception, e:
-                loge('err', e)
+            except Exception:
+                loge('err', traceback.format_exc())
                 time.sleep(10)
         else:
             loge('max retryNum')
@@ -884,7 +884,7 @@ def main():
             noAction = True
             i += 1
             continue
-        if c == '-d':
+        if c == '-v':
             verbose = True
             i += 1
             continue
@@ -892,7 +892,7 @@ def main():
             print "option error", argv[i]
             usage()
 
-    if not configName:
+    if not configNames:
         print "set -f option"
         usage()
 
