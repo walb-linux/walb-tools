@@ -144,6 +144,7 @@ class TestLoadConfigParam(unittest.TestCase):
     def test(self):
         cfg = Config(yaml.load(configStr))
 
+        d = yaml.load(str(cfg))
         cfg2 = Config(yaml.load(str(cfg)))
         cfg3 = Config(yaml.load(str(cfg2)))
         self.assertEqual(str(cfg2), str(cfg3))

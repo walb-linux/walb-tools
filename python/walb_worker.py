@@ -105,6 +105,9 @@ def parsePort(d):
         raise Exception('parsePort', d)
     return d
 
+def timedelta2secondStr(ts):
+    return str(int(ts.total_seconds()))
+
 def formatIndent(d, indent):
     s = ''
     sp = ' ' * indent
@@ -112,14 +115,15 @@ def formatIndent(d, indent):
     i = 0
     for (k, v) in d:
         s += sp
-        s += k + ': ' + str(v)
+        s += k + ': '
+        if isinstance(v, datetime.timedelta):
+            s += timedelta2secondStr(v)
+        elif v is not None:
+            s += str(v)
         if i < n - 1:
             s += '\n'
         i += 1
     return s
-
-def timedelta2secondStr(ts):
-    return int(ts.total_seconds())
 
 def setValIfExist(obj, d, k, pred):
     if d.has_key(k):
@@ -188,8 +192,8 @@ class Apply:
 
     def __str__(self, indent=2):
         d = [
-            ('keep_period', timedelta2secondStr(self.keep_period)),
-            ('interval', timedelta2secondStr(self.interval)),
+            ('keep_period', self.keep_period),
+            ('interval', self.interval),
         ]
         return formatIndent(d, indent)
 
@@ -216,7 +220,7 @@ class Merge:
 
     def __str__(self, indent=2):
         d = [
-            ('interval', timedelta2secondStr(self.interval)),
+            ('interval', self.interval),
             ('max_nr', self.max_nr),
             ('max_size', self.max_size),
             ('threshold_nr', self.threshold_nr),
@@ -271,7 +275,7 @@ class ReplServer:
         d = [
             ('addr', self.addr),
             ('port', self.port),
-            ('interval', timedelta2secondStr(self.interval)),
+            ('interval', self.interval),
             ('compress', self.compress),
             ('max_merge_size', self.max_merge_size),
             ('max_send_size', self.max_send_size),
@@ -303,7 +307,8 @@ class Repl:
     def verify(self):
         for rs in self.servers.values():
             rs.verify()
-        verify_type(self.disabled_volumes, list, str)
+        if self.disabled_volumes:
+            verify_type(self.disabled_volumes, list, str)
 
     def __str__(self):
         indent = 2
@@ -330,12 +335,13 @@ class Repl:
 
 
 class Config:
-    def __init__(self, d={}):
+    def __init__(self, d=None):
         self.general = General()
         self.apply_ = Apply()
         self.merge = Merge()
         self.repl = Repl()
-        self.set(d)
+        if d is not None:
+            self.set(d)
 
     def set(self, d):
         verify_type(d, dict)
