@@ -101,7 +101,7 @@ def parseLog(s):
 def runWorker(cfg, step, lifetime=5):
     args = [
         '/usr/bin/python', 'python/walb_worker.py', '-f', '-',
-        '-lifetime', str(lifetime), '-d', '-step', str(step),
+        '-lifetime', str(lifetime), '-v', '-step', str(step),
     ]
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, close_fds=True)
     ifs = p.stdin
