@@ -133,7 +133,7 @@ def setValIfExist(obj, d, k, pred):
 def identity(x):
     return x
 
-class General:
+class GeneralConfig:
     def __init__(self):
         self.addr = ''
         self.port = 0
@@ -157,11 +157,11 @@ class General:
 
     def verify(self):
         if self.addr == '':
-            raise Exception('General addr is not set')
+            raise Exception('GeneralConfig addr is not set')
         if self.port == 0:
-            raise Exception('General port is not set')
+            raise Exception('GeneralConfig port is not set')
         if self.walbc_path == '':
-            raise Exception('General walbc_path is not set')
+            raise Exception('GeneralConfig walbc_path is not set')
         if not os.path.exists(self.walbc_path):
             raise Exception('walbc_path is not found', self.walbc_path)
 
@@ -176,7 +176,7 @@ class General:
         ]
         return formatIndent(d, indent)
 
-class Apply:
+class ApplyConfig:
     def __init__(self):
         self.keep_period = datetime.timedelta()
         self.interval = datetime.timedelta(days=1)
@@ -188,7 +188,7 @@ class Apply:
 
     def verify(self):
         if self.keep_period == datetime.timedelta():
-            raise Exception('Apply keep_period is not set')
+            raise Exception('ApplyConfig keep_period is not set')
 
     def __str__(self, indent=2):
         d = [
@@ -197,7 +197,7 @@ class Apply:
         ]
         return formatIndent(d, indent)
 
-class Merge:
+class MergeConfig:
     def __init__(self):
         self.interval = datetime.timedelta()
         self.max_nr = UINT64_MAX
@@ -216,7 +216,7 @@ class Merge:
 
     def verify(self):
         if self.interval == datetime.timedelta():
-            raise Exception('Merge interval is not set')
+            raise Exception('MergeConfig interval is not set')
 
     def __str__(self, indent=2):
         d = [
@@ -227,7 +227,7 @@ class Merge:
         ]
         return formatIndent(d, indent)
 
-class ReplServer:
+class ReplServerConfig:
     def __init__(self):
         self.name = ''
         self.addr = ''
@@ -262,11 +262,11 @@ class ReplServer:
         if not self.enabled:
             return
         if self.addr == '':
-            raise Exception('ReplServer addr is not set')
+            raise Exception('ReplServerConfig addr is not set')
         if self.port == 0:
-            raise Exception('ReplServer port is not set')
+            raise Exception('ReplServerConfig port is not set')
         if self.interval == datetime.timedelta():
-            raise Exception('ReplServer interval is not set')
+            raise Exception('ReplServerConfig interval is not set')
         verify_type(self.addr, str)
         verify_type(self.log_name, str)
         verify_type(self.enabled, bool)
@@ -287,7 +287,7 @@ class ReplServer:
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
-class Repl:
+class ReplConfig:
     def __init__(self):
         self.servers = {}
         self.disabled_volumes = []
@@ -299,7 +299,7 @@ class Repl:
                 if self.servers.has_key(name):
                     self.servers[name].set(name, v)
                 else:
-                    rs = ReplServer()
+                    rs = ReplServerConfig()
                     rs.set(name, v)
                     self.servers[name] = rs
         if d.has_key('disabled_volumes'):
@@ -336,10 +336,10 @@ class Repl:
 
 class Config:
     def __init__(self, d=None):
-        self.general = General()
-        self.apply_ = Apply()
-        self.merge = Merge()
-        self.repl = Repl()
+        self.general = GeneralConfig()
+        self.apply_ = ApplyConfig()
+        self.merge = MergeConfig()
+        self.repl = ReplConfig()
         if d is not None:
             self.set(d)
 
@@ -390,7 +390,7 @@ class Config:
 class ExecedRepl:
     def __init__(self, vol, rs, ts):
         verify_type(vol, str)
-        verify_type(rs, ReplServer)
+        verify_type(rs, ReplServerConfig)
         verify_type(ts, datetime.datetime)
         self.vol = vol
         self.rs = rs
@@ -535,7 +535,7 @@ class MergeTask(Task):
 class ReplTask(Task):
     def __init__(self, vol, ax, rs, maxGid=None):
         Task.__init__(self, 'repl', vol, ax)
-        verify_type(rs, ReplServer)
+        verify_type(rs, ReplServerConfig)
         self.log_name = rs.name
         if rs.log_name:
             self.log_name += '_' + rs.log_name

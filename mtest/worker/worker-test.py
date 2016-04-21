@@ -276,7 +276,7 @@ class TestTaskManager(unittest.TestCase):
 
         def test_run(vol, name, worker):
             a0 = ServerConnectionParam('a0', 'localhost', 10000, K_ARCHIVE)
-            rs = ReplServer()
+            rs = ReplServerConfig()
             rs.name = 'dummy_repl'
             if name == 'merge':
                 task = MergeTask(vol, a0, 0, 0)
