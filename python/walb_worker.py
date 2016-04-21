@@ -308,14 +308,17 @@ class Repl:
     def __str__(self):
         indent = 2
         n = len(self.servers)
-        i = 0
         s = ' ' * indent + 'servers:\n'
         for (name, rs) in self.servers.items():
             s += ' ' * indent * 2 + name + ':\n'
-            s += rs.__str__(indent * 3)
-            if i < n - 1:
-                s += '\n'
-            i += 1
+            s += rs.__str__(indent * 3) + '\n'
+        s += ' ' * indent + 'disabled_volumes:\n'
+        if self.disabled_volumes:
+            n = len(self.disabled_volumes)
+            for i in xrange(n):
+                s += ' ' * indent * 2 + '- ' + self.disabled_volumes[i]
+                if i < n - 1:
+                    s += '\n'
         return s
 
     def getEnabledList(self):
