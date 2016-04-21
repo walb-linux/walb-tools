@@ -134,13 +134,21 @@ repl:
       max_merge_size: 2M
       max_send_size: 3M
       bulk_size: 400
+  disabled_volumes:
+    - vol5
+    - vol7
+    - vol2
 """
 
 class TestLoadConfigParam(unittest.TestCase):
     def test(self):
-        d = yaml.load(configStr)
-        cfg = Config()
-        cfg.set(d)
+        cfg = Config(yaml.load(configStr))
+
+        cfg2 = Config(yaml.load(str(cfg)))
+        cfg3 = Config(yaml.load(str(cfg2)))
+        self.assertEqual(str(cfg2), str(cfg3))
+        cfg = cfg3
+
         general = cfg.general
         self.assertEqual(general.addr, '192.168.0.1')
         self.assertEqual(general.port, 10000)
@@ -171,6 +179,8 @@ class TestLoadConfigParam(unittest.TestCase):
         self.assertEqual(r.max_send_size, 3 * 1024 * 1024)
         self.assertEqual(r.bulk_size, '400')
         self.assertEqual(r.enabled, True)
+
+        self.assertEqual(cfg.repl.disabled_volumes, ['vol5', 'vol7', 'vol2'])
 
 class TestGetLatestGidInfoBefore(unittest.TestCase):
     def test(self):

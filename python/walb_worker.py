@@ -118,6 +118,9 @@ def formatIndent(d, indent):
         i += 1
     return s
 
+def timedelta2secondStr(ts):
+    return int(ts.total_seconds())
+
 def setValIfExist(obj, d, k, pred):
     if d.has_key(k):
         # obj.k = pred(d[k])
@@ -185,8 +188,8 @@ class Apply:
 
     def __str__(self, indent=2):
         d = [
-            ('keep_period', self.keep_period),
-            ('interval', self.interval),
+            ('keep_period', timedelta2secondStr(self.keep_period)),
+            ('interval', timedelta2secondStr(self.interval)),
         ]
         return formatIndent(d, indent)
 
@@ -213,10 +216,10 @@ class Merge:
 
     def __str__(self, indent=2):
         d = [
-            ('interval', self.interval),
+            ('interval', timedelta2secondStr(self.interval)),
             ('max_nr', self.max_nr),
             ('max_size', self.max_size),
-            ('threashold_nr', self.threshold_nr),
+            ('threshold_nr', self.threshold_nr),
         ]
         return formatIndent(d, indent)
 
@@ -225,10 +228,10 @@ class ReplServer:
         self.name = ''
         self.addr = ''
         self.port = 0
-        self.interval = 0
-        self.compress = None
+        self.interval = datetime.timedelta()
+        self.compress = CompressOpt()
         self.max_merge_size = '1G'
-        self.max_send_size = None
+        self.max_send_size = 0
         self.bulk_size = '64K'
         self.log_name = ''
         self.enabled = True
@@ -250,7 +253,6 @@ class ReplServer:
         for (k, pred) in tbl.items():
             setValIfExist(self, d, k, pred)
         if d.has_key('compress'):
-            self.compress = CompressOpt()
             self.compress.parse(d['compress'])
     def verify(self):
         if not self.enabled:
@@ -259,18 +261,17 @@ class ReplServer:
             raise Exception('ReplServer addr is not set')
         if self.port == 0:
             raise Exception('ReplServer port is not set')
-        if self.interval == 0:
+        if self.interval == datetime.timedelta():
             raise Exception('ReplServer interval is not set')
         verify_type(self.addr, str)
-        if self.log_name is not None:
-            verify_type(self.log_name, str)
+        verify_type(self.log_name, str)
         verify_type(self.enabled, bool)
 
     def __str__(self, indent=2):
         d = [
             ('addr', self.addr),
             ('port', self.port),
-            ('interval', self.interval),
+            ('interval', timedelta2secondStr(self.interval)),
             ('compress', self.compress),
             ('max_merge_size', self.max_merge_size),
             ('max_send_size', self.max_send_size),
@@ -326,11 +327,12 @@ class Repl:
 
 
 class Config:
-    def __init__(self):
+    def __init__(self, d={}):
         self.general = General()
         self.apply_ = Apply()
         self.merge = Merge()
         self.repl = Repl()
+        self.set(d)
 
     def set(self, d):
         verify_type(d, dict)
@@ -399,10 +401,10 @@ def getLatestGidInfoBefore(curTime, infoL):
 
 def getGidToRepl(diffL, max_send_size, a1latest):
     verify_type(diffL, list, Diff)
-    if max_send_size is None:
-        return None
     verify_int(max_send_size)
     verify_int(a1latest)
+    if max_send_size == 0:
+        return None
 
     n = len(diffL)
     if n <= 1:
