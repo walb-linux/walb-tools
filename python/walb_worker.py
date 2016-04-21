@@ -525,9 +525,9 @@ class ReplTask(Task):
     def __init__(self, vol, ax, rs, maxGid=None):
         Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, ReplServer)
-        self.name = rs.name
+        self.log_name = rs.name
         if rs.log_name:
-            self.name += '_' + rs.log_name
+            self.log_name += '_' + rs.log_name
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
         self.maxGid = maxGid
@@ -535,7 +535,7 @@ class ReplTask(Task):
         verify_type(walbc, Controller)
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
     def __str__(self):
-        return Task.__str__(self) + " dst={} maxGid={}".format(self.name, self.maxGid)
+        return Task.__str__(self) + " dst={} maxGid={}".format(self.log_name, self.maxGid)
     def __eq__(self, rhs):
         return Task.__eq__(self, rhs) and self.dst == rhs.dst
 
@@ -858,7 +858,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
     logEnd()
 
 def main():
-    configName = ''
+    configNames = []
     verbose = False
     step = 0
     lifetime = 0
@@ -869,7 +869,7 @@ def main():
     while i < argc:
         c = argv[i]
         if c == '-f' and i < argc - 1:
-            configName = argv[i + 1]
+            configNames.append(argv[i + 1])
             i += 2
             continue
         if c == '-step' and i < argc - 1:
@@ -897,7 +897,8 @@ def main():
         usage()
 
     cfg = Config()
-    cfg.load(configName)
+    for name in configNames:
+        cfg.load(name)
     for sig in [signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, quitHandler)
     workerMain(cfg, verbose, step, lifetime, noAction)
