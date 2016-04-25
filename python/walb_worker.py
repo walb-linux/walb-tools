@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, time, yaml, datetime, os, threading, signal, traceback
+import sys, time, datetime, os, threading, signal, traceback
 from walblib import *
 import walblib.worker as worker
 
