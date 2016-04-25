@@ -1,6 +1,7 @@
 import os, subprocess, re
 import threading
 import walb_worker
+from walblib.worker import *
 import collections
 """
 REQUIREMENT:
@@ -173,7 +174,7 @@ def resetDevice(volId):
     walbc.hash_backup(s0, vol)
 
 def main():
-    cfg = walb_worker.Config()
+    cfg = Config()
     cfg.setStr(CONF)
     for volId in xrange(3):
         resetDevice(volId)

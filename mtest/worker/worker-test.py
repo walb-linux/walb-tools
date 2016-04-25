@@ -2,6 +2,7 @@
 import unittest, yaml
 import sys
 from walblib import *
+from walblib.worker import *
 from walb_worker import *
 
 VOL = 'vol0'
