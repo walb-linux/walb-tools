@@ -49,6 +49,9 @@ def verify_type(obj, typeValue, elemType=None, allowNone=False):
         raise TypeError('Invalid: object is None')
     if not isinstance(typeValue, list):
         typeValue = [typeValue]
+    if not all([isinstance(t, types.TypeType) for t in typeValue]):
+        raise TypeError('Invalid type(s) are specified in typeValue(s).')
+
     if all([not isinstance(obj, t) for t in typeValue]):
         raise TypeError('Invalid object type: {} must be one of [{}]'
                         .format(str(type(obj)), ','.join([str(t) for t in typeValue])))
@@ -58,6 +61,8 @@ def verify_type(obj, typeValue, elemType=None, allowNone=False):
         raise TypeError('Do not specify elemType for generators')
     if not isinstance(elemType, list):
         elemType = [elemType]
+    if not all([isinstance(t, types.TypeType) for t in elemType]):
+        raise TypeError('Invalid type(s) are specified in elemType(s).')
     for elem in obj:
         if allowNone and elem is None:
             continue
