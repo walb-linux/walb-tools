@@ -8,6 +8,7 @@ import re
 import _strptime # strptime is not thread safe, so import _strptime before calling it
 import datetime
 from collections import defaultdict
+import types
 
 ########################################
 # Constants for general purpose.
@@ -30,17 +31,22 @@ COLD_VOLUME_PREFIX = 'wc_'
 # Verification functions.
 ########################################
 
-def verify_type(obj, typeValue, elemType=None):
+def verify_type(obj, typeValue, elemType=None, allowNone=False):
     '''Verify type of an object.
 
     It raises a TypeError when none of typeValue(s) did match obj.
 
-    obj       - object.
+    obj       - object to verify. Do not specify generators if you specify elemType.
     typeValue - type like int, str, list. or a list of them.
     elemType  - specify type of elements if typeValue is sequence. or a list of them.
+    allowNone - obj or elements of sequence can be None if specified True.
     '''
+    if not isinstance(allowNone, bool):
+        raise TypeError('allowNone must be bool type')
+    if allowNone and obj is None:
+        return
     if obj is None:
-        raise TypeError('None type')
+        raise TypeError('Invalid: object is None')
     if not isinstance(typeValue, list):
         typeValue = [typeValue]
     if all([not isinstance(obj, t) for t in typeValue]):
@@ -48,40 +54,66 @@ def verify_type(obj, typeValue, elemType=None):
                         .format(str(type(obj)), ','.join([str(t) for t in typeValue])))
     if elemType is None:
         return
+    if isinstance(obj, types.GeneratorType):
+        raise TypeError('Do not specify elemType for generators')
     if not isinstance(elemType, list):
         elemType = [elemType]
     for elem in obj:
+        if allowNone and elem is None:
+            continue
         if all([not isinstance(elem, t) for t in elemType]):
             raise TypeError('Invalid element type: {} must be one of [{}]'
                             .format(str(type(elem)), ','.join([str(t) for t in elemType])))
 
 
-def verify_int(obj):
+def _is_allowed_none(obj, allowNone):
+    verify_type(allowNone, bool)
+    return allowNone and obj is None
+
+
+def verify_int(obj, allowNone=False):
     '''
     obj -- object to verify.
     '''
+    if _is_allowed_none(obj, allowNone):
+        return
     if not isinstance(obj, int) and not isinstance(obj, long):
-        raise Exception('invalid type', type(obj))
+        raise TypeError('Not integer type', type(obj))
 
 
-def verify_u64(obj):
+def verify_u64(obj, allowNone=False):
     '''
     obj -- object to verify.
     '''
+    if _is_allowed_none(obj, allowNone):
+        return
     verify_int(obj)
     if obj < 0 or obj >= 2**64:
-        raise Exception('cannot be unsigned 64bit integer', obj)
+        raise TypeError('Cannot be unsigned 64bit integer', obj)
 
 
-def verify_function(obj):
+def verify_function(obj, allowNone=False):
     '''
     obj - function object.
 
     '''
+    if _is_allowed_none(obj, allowNone):
+        return
     def f():
         pass
     if type(obj) != type(f):
-        raise Exception('not function type', type(obj))
+        raise TypeError('Not function type', type(obj))
+
+
+def verify_iterable(obj, allowNone=False):
+    '''
+    obj - iterable object.
+
+    '''
+    if _is_allowed_none(obj, allowNone):
+        return
+    if not hasattr(obj, '__iter__'):
+        raise TypeError('not iterable type', type(obj))
 
 
 def verify_gid_range(gidB, gidE, msg):
@@ -96,13 +128,15 @@ def verify_gid_range(gidB, gidE, msg):
         raise Exception(msg, 'bad gid range', gidB, gidE)
 
 
-def verify_size_unit(sizeU):
+def verify_size_unit(sizeU, allowNone=False):
     '''
     sizeU - Normal non-negative integer with optional unit suffix.
       unit suffix must be one of
       'k', 'm', 'g', 't', 'p',
       'K', 'M', 'G', 'T', 'P'.
     '''
+    if _is_allowed_none(sizeU, allowNone):
+        return
     verify_type(sizeU, str)
     if re.match('[0-9]+(?:[kKmMgGtTpP])?', sizeU) is None:
         raise Exception('bad size unit', sizeU)
@@ -505,8 +539,7 @@ class MetaState(object):
         if B is None:
             B = Snapshot()
         verify_type(B, Snapshot)
-        if E is not None:
-            verify_type(E, Snapshot)
+        verify_type(E, Snapshot, allowNone=True)
         self.B = B
         self.E = E
         self.ts = datetime.datetime.now()
@@ -917,8 +950,7 @@ class ServerStartupParam(object):
         self._connParam = connParam
         verify_type(binDir, str)
         verify_type(dataDir, str)
-        if logPath is not None:
-            verify_type(logPath, str)
+        verify_type(logPath, str, allowNone=True)
         if self.kind == K_ARCHIVE or vg is not None:
             verify_type(vg, str)
         if self.kind == K_ARCHIVE and tp is not None:
@@ -1092,10 +1124,8 @@ def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTa
         verify_type(sLayout, ServerLayout)
     verify_type(isDebug, bool)
     verify_type(useRepeater, bool)
-    if maxFgTasks is not None:
-        verify_type(maxFgTasks, int)
-    if maxBgTasks is not None:
-        verify_type(maxBgTasks, int)
+    verify_type(maxFgTasks, int, allowNone=True)
+    verify_type(maxBgTasks, int, allowNone=True)
 
     ret = {}
     if s.kind == K_STORAGE:
@@ -1956,15 +1986,14 @@ class Controller(object):
         verify_type(vol, str)
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(doStart, bool)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
         st = self.get_state(px, vol)
         if st in pActive:
             self.stop(px, vol, 'force')
         aL = self.get_archive_info_list(px, vol)
         cmd = 'update' if ax.name in aL else 'add'
         args = ['archive-info', cmd, vol, ax.name, ax.get_host_port()]
-        if syncOpt:
+        if syncOpt is not None:
             args += syncOpt.getArchiveInfoArgs()
         self.run_ctl(px, args)
         st = self.get_state(px, vol)
@@ -2008,8 +2037,7 @@ class Controller(object):
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         verify_type(vol, str)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
         for px in self.sLayout.proxyL:
             self.add_archive_to_proxy(px, vol, ax, doStart=True, syncOpt=syncOpt)
         self.kick_storage_all()
@@ -2223,8 +2251,7 @@ class Controller(object):
         verify_server_kind(aDst, [K_ARCHIVE])
         verify_type(doResync, bool)
         verify_type(dontMerge, bool)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
 
         st = self.get_state(aDst, vol)
         if st == aClear:
@@ -2239,7 +2266,7 @@ class Controller(object):
         args = ['replicate', vol, "gid", str(gid), aDst.get_host_port(),
                 '1' if doResync else '0',
                 '1' if dontMerge else '0']
-        if syncOpt:
+        if syncOpt is not None:
             args += syncOpt.getReplicateArgs()
         self.run_ctl(aSrc, args)
         return gid
@@ -2295,8 +2322,7 @@ class Controller(object):
         verify_server_kind(aSrc, [K_ARCHIVE])
         verify_type(vol, str)
         verify_server_kind(aDst, [K_ARCHIVE])
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
 
         for px in self.sLayout.proxyL:
             st = self.get_state(px, vol)
@@ -2308,7 +2334,7 @@ class Controller(object):
             aL = self.get_archive_info_list(px, vol)
             cmd = 'update' if aDst.name in aL else 'add'
             args = ["archive-info", cmd, vol, aDst.name, aDst.get_host_port()]
-            if syncOpt:
+            if syncOpt is not None:
                 args += syncOpt.getArchiveInfoArgs()
             self.run_ctl(px, args)
 
@@ -2336,10 +2362,8 @@ class Controller(object):
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
-        if bulkSizeU:
-            verify_size_unit(bulkSizeU)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_size_unit(bulkSizeU, allowNone=True)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol, syncOpt)
@@ -2383,10 +2407,8 @@ class Controller(object):
         verify_type(vol, str)
         verify_type(timeoutS, int)
         verify_type(block, bool)
-        if bulkSizeU:
-            verify_size_unit(bulkSizeU)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_size_unit(bulkSizeU, allowNone=True)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
 
         a0 = self.sLayout.get_primary_archive()
         self._prepare_backup(sx, vol, syncOpt)
@@ -2829,8 +2851,7 @@ class Controller(object):
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
-        if syncOpt:
-            verify_type(syncOpt, SyncOpt)
+        verify_type(syncOpt, SyncOpt, allowNone=True)
 
         st = self.get_state(sx, vol)
         if st == sSyncReady:
@@ -2916,8 +2937,8 @@ class Controller(object):
         verify_u64(gid)
         verify_type(vol, str)
         verify_size_unit(bulkSizeU)
+        verify_size_unit(scanSizeU, allowNone=True)
         args = ['bhash', vol, str(gid), bulkSizeU]
         if scanSizeU is not None:
-            verify_size_unit(scanSizeU)
             args.append(scanSizeU)
         return self.run_ctl(ax, args)
