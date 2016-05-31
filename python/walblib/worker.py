@@ -291,12 +291,12 @@ class ReplConfig:
 
 
 class Config:
-    def __init__(self, d={}):
+    def __init__(self, d=None):
         self.general = GeneralConfig()
         self.apply_ = ApplyConfig()
         self.merge = MergeConfig()
         self.repl = ReplConfig()
-        if d:
+        if d is not None:
             self.set(d)
 
     def set(self, d):
