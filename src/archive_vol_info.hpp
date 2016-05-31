@@ -562,7 +562,7 @@ public:
     MetaState getMetaStateForDetail(uint64_t gid, bool &useCold, bool isApply) const {
         MetaState st = getMetaState();
         useCold = false;
-        uint64_t coldGid;
+        uint64_t coldGid = 0;
         if (isApply && st.isApplying) return st;
         if (!lvC_.searchColdNoGreaterThanGid(gid, coldGid)) return st;
         if (coldGid <= st.snapB.gidB) return st;
