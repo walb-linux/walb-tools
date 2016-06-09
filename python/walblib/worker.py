@@ -89,7 +89,7 @@ def setValIfExist(obj, d, k, pred):
 def identity(x):
     return x
 
-class GeneralConfig:
+class GeneralConfig(object):
     def __init__(self):
         self.addr = ''
         self.port = 0
@@ -132,7 +132,7 @@ class GeneralConfig:
         ]
         return formatIndent(d, indent)
 
-class ApplyConfig:
+class ApplyConfig(object):
     def __init__(self):
         self.keep_period = datetime.timedelta()
         self.interval = datetime.timedelta(days=1)
@@ -153,7 +153,7 @@ class ApplyConfig:
         ]
         return formatIndent(d, indent)
 
-class MergeConfig:
+class MergeConfig(object):
     def __init__(self):
         self.interval = datetime.timedelta()
         self.max_nr = UINT64_MAX
@@ -183,7 +183,7 @@ class MergeConfig:
         ]
         return formatIndent(d, indent)
 
-class ReplServerConfig:
+class ReplServerConfig(object):
     def __init__(self):
         self.name = ''
         self.addr = ''
@@ -243,7 +243,7 @@ class ReplServerConfig:
     def getServerConnectionParam(self):
         return ServerConnectionParam(self.name, self.addr, self.port, K_ARCHIVE)
 
-class ReplConfig:
+class ReplConfig(object):
     def __init__(self):
         self.servers = {}
         self.disabled_volumes = []
@@ -290,7 +290,7 @@ class ReplConfig:
         return rsL
 
 
-class Config:
+class Config(object):
     def __init__(self, d=None):
         self.general = GeneralConfig()
         self.apply_ = ApplyConfig()
