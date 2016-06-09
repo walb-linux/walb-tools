@@ -258,8 +258,10 @@ class ReplConfig(object):
                     rs = ReplServerConfig()
                     rs.set(name, v)
                     self.servers[name] = rs
-        if d.has_key('disabled_volumes'):
-            self.disabled_volumes = d['disabled_volumes']
+        name = 'disabled_volumes'
+        if d.has_key(name) and d[name] is not None:
+            verify_type(d[name], list, str)
+            self.disabled_volumes = d[name]
     def verify(self):
         for rs in self.servers.values():
             rs.verify()
