@@ -2364,7 +2364,7 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
         cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
         pkt.writeFin(msgAccept);
         sendErr = false;
-        logger.info() << "replication as client started" << volId;
+        logger.info() << "replication as client started" << volId << param.isSize << param.param2 << hostInfo;
         if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
