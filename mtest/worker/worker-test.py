@@ -535,5 +535,29 @@ repl:
         self.assertEqual(cfg.repl.disabled_volumes[1], 'vol2')
         self.assertEqual(cfg.repl.disabled_volumes[2], 'vol5')
 
+class Test_getGidToRepl(unittest.TestCase):
+    def test(self):
+        diffL = map(create_diff_from_str, [
+            '|0|-->|1| -- 2015-12-08T07:10:15 100',
+            '|1|-->|2| M- 2015-12-08T07:11:28 100',
+            '|2|-->|3| MC 2015-12-08T07:11:28 100',
+            '|3|-->|4| M- 2015-12-08T07:11:28 100',
+            '|4|-->|5| M- 2015-12-08T07:11:28 100',
+            '|5|-->|6| MC 2015-12-08T07:11:28 100',
+            '|6|-->|7| M- 2015-12-08T07:11:28 100',
+            '|7|-->|8| M- 2015-12-08T07:11:28 100',
+            '|8|-->|9| M- 2015-12-08T07:11:28 100',
+        ])
+        expectTbl = [
+            (0, None), (200, 2), (400, 4), (600, 6), (800, 8), (1000, None)
+        ]
+        for (size, ret) in expectTbl:
+            self.assertEqual(ret, getGidToRepl(diffL, size, 0))
+        expectTbl = [
+            (0, 2), (1, 3), (2, 4), (5, 7), (6, 8), (7, None)
+        ]
+        for (start, ret) in expectTbl:
+            self.assertEqual(ret, getGidToRepl(diffL, 200, start))
+
 if __name__ == '__main__':
     unittest.main()
