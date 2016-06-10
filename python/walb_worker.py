@@ -92,12 +92,10 @@ def getGidToRepl(diffL, max_send_size, a1latest):
         s += diffL[i].dataSize
         if s > max_send_size:
             break
-    else:
-        return None
     end = i
     if begin == end:
         end = begin + 1
-    return diffL[end].B.gidB
+    return diffL[end].E.gidB
 
 def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
