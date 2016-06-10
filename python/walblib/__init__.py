@@ -2292,7 +2292,7 @@ class Controller(object):
         verify_u64(gid)
         self._wait_for_no_action(aSrc, vol, aaReplSync, timeoutS)
         self._wait_for_not_state(aDst, vol, aDuringReplicate, timeoutS)
-        gidL = self.get_restorable_gid(aDst, vol, 'all')
+        gidL = [d.E.gidB for d in self.get_applicable_diff_list(aDst, vol)]
         if gidL and gid <= gidL[-1]:
             return
         raise Exception("wait_for_replicated:replicate failed",
