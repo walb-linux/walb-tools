@@ -2680,9 +2680,7 @@ class Controller(object):
         if sizeMb == 0:
             raise Exception('resize_archive:sizeMb must not be zero', ax.name, vol, sizeMb)
         st = self.get_state(ax, vol)
-        if st == aClear:
-            return
-        elif st not in aAcceptForResize:
+        if st not in aAcceptForResize:
             raise Exception('resize_archive:bad state', ax.name, vol, sizeMb, st)
 
         oldSizeMb = self._get_vol_size_mb(ax, vol)
