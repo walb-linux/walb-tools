@@ -2614,6 +2614,19 @@ class Controller(object):
         self.apply(ax, vol, gid, timeoutS=timeoutS)
         return gid
 
+    def _verify_mergeable(self, diffL, gidB, gidE):
+        for d in diffL:
+            if gidE <= d.B.gidB:
+                break
+            if d.B.gidB < gidB:
+                continue
+            if d.B.gidB == gidB:
+                if d.isCompDiff:
+                    raise Exception('merge: first diff must not be comp diff', d)
+                continue
+            if not d.isMergeable or d.isCompDiff:
+                raise Exception('merge: diff must mergeable and not comp diff', d)
+
     def merge(self, ax, vol, gidB, gidE, timeoutS=TIMEOUT_SEC):
         '''
         Merge diffs in gid ranges.
@@ -2628,6 +2641,7 @@ class Controller(object):
         diffL = self.get_applicable_diff_list(ax, vol, gidE)
         if gidB not in [d.B.gidB for d in diffL] or gidE not in [d.E.gidB for d in diffL]:
             raise Exception("merge: specify exact ranges", ax.name, vol, gidB, gidE)
+        self._verify_mergeable(diffL, gidB, gidE)
         self.run_ctl(ax, ["merge", vol, str(gidB), "gid", str(gidE)])
         self._wait_for_merged(ax, vol, gidB, gidE, timeoutS)
 
