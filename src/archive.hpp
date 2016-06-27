@@ -2592,9 +2592,13 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
                           << volId << gid;
         }
         if (failed) {
+#if 0
             // reload metadata.
             WalbDiffFiles wdiffs(volSt.diffMgr, volInfo.volDir.str());
             wdiffs.reload();
+#else
+            throw cybozu::Exception(FUNC) << "change snapshot failed" << volId << enable;
+#endif
         }
         ul.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
         pkt.writeFin(msgOk);
