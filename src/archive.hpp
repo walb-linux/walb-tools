@@ -1843,6 +1843,28 @@ inline void getMetaState(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, metaSt.strTs());
 }
 
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    auto fmt = cybozu::util::formatString;
+    StrVec ret;
+    for (const std::string &volId : ga.stMap.getKeyList()) {
+        ArchiveVolState &volSt = getArchiveVolState(volId);
+        UniqueLock ul(volSt.mu);
+        std::string s;
+        const std::string state = volSt.sm.get();
+        if (!isStateIn(state, aActive)) continue;
+
+        std::string line = fmt("name:%s\t", volId.c_str());
+        line += "kind:archive\t";
+        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+        const MetaState metaSt = volInfo.getLatestState();
+        line += fmt("gid:%" PRIu64 "\t", metaSt.snapB.gidB);
+        line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(metaSt.timestamp).c_str());
+        ret.push_back(std::move(line));
+    }
+    protocol::sendValueAndFin(p, ret);
+}
+
 } // namespace archive_local
 
 inline void ArchiveVolState::initInner(const std::string& volId)
@@ -2818,6 +2840,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { allActionsTN, archive_local::getAllActions },
     { getMetaSnapTN, archive_local::getMetaSnap },
     { getMetaStateTN, archive_local::getMetaState },
+    { getLatestSnapTN, archive_local::getLatestSnap },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

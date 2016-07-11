@@ -1225,6 +1225,28 @@ inline void getLogUsage(protocol::GetCommandParams &p)
     p.logger.debug() << "get log-usage succeeded" << volId << ret;
 }
 
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    auto fmt = cybozu::util::formatString;
+    StrVec ret;
+    for (const std::string &volId : gs.stMap.getKeyList()) {
+        StorageVolState &volSt = getStorageVolState(volId);
+        UniqueLock ul(volSt.mu);
+        const std::string state = volSt.sm.get();
+        if (state != sTarget) continue;
+
+        StorageVolInfo volInfo(gs.baseDirStr, volId);
+        MetaLsidGid lsidGid = volInfo.getLatestSnap();
+        std::string line = fmt("name:%s\t", volId.c_str());
+        line += "kind:storage\t";
+        line += fmt("gid:%" PRIu64 "\t", lsidGid.gid);
+        line += fmt("lsid:%" PRIu64 "\t", lsidGid.lsid);
+        line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(lsidGid.timestamp).c_str());
+        ret.push_back(std::move(line));
+    }
+    protocol::sendValueAndFin(p, ret);
+}
+
 inline void getUuid(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -1253,6 +1275,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { pidTN, storage_local::getPid },
     { isOverflowTN, storage_local::isOverflow },
     { logUsageTN, storage_local::getLogUsage },
+    { getLatestSnapTN, storage_local::getLatestSnap },
     { uuidTN, storage_local::getUuid },
 };
 

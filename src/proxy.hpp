@@ -1219,6 +1219,36 @@ inline void isWdiffSendError(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, size_t(isWdiffSendError));
 }
 
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    auto &fmt = cybozu::util::formatString;
+    StrVec ret;
+    for (const std::string &volId : gp.stMap.getKeyList()) {
+        ProxyVolState &volSt = getProxyVolState(volId);
+        UniqueLock ul(volSt.mu);
+        const std::string state = volSt.sm.get();
+        if (state == pClear) continue;
+
+        const ProxyVolInfo volInfo = getProxyVolInfo(volId);
+        for (const std::string& archiveName : volSt.archiveSet) {
+            std::string line = fmt("name:%s\t", volId.c_str());
+            line += "kind:proxy\t";
+            line += fmt("archive:%s\t", archiveName.c_str());
+            const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
+            MetaDiff diff;
+            if (mgr.getDiffWithMaxGid(diff)) {
+                line += fmt("gid:%" PRIu64 "\t", diff.snapE.gidB);
+                line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(diff.timestamp).c_str());
+            } else {
+                line += fmt("gid:---\t");
+                line += fmt("timestamp:---");
+            }
+            ret.push_back(std::move(line));
+        }
+    }
+    protocol::sendValueAndFin(p, ret);
+}
+
 } // namespace proxy_local
 
 const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
@@ -1227,6 +1257,7 @@ const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
     { volTN, proxy_local::getVolList },
     { pidTN, proxy_local::getPid },
     { isWdiffSendErrorTN, proxy_local::isWdiffSendError },
+    { getLatestSnapTN, proxy_local::getLatestSnap },
 };
 
 inline void c2pGetServer(protocol::ServerParams &p)

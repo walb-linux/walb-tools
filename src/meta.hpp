@@ -993,6 +993,14 @@ public:
         return apply(st.snapB, getApplicableDiffList(st.snapB));
     }
     /**
+     * Get the latest meta state.
+     * Returned meta state will be clean or dirty.
+     * @st base state.
+     */
+    MetaState getLatestState(const MetaState &st) const {
+        return apply(st, getApplicableDiffList(st.snapB));
+    }
+    /**
      * Get the oldest clean snapshot
      * @st base state.
      */
@@ -1139,6 +1147,18 @@ public:
             max = std::max(max, d.snapE.gidB);
         }
         return {min, max};
+    }
+    /**
+     * For proxy.
+     * If diff.snapB.gidB is max, it has the max diff.snapE.gidB.
+     */
+    bool getDiffWithMaxGid(MetaDiff& diff) const {
+        AutoLock lk(mu_);
+        if (mmap_.empty()) return false;
+        auto it = mmap_.end();
+        --it;
+        diff = it->second;
+        return true;
     }
 private:
     void addNolock(const MetaDiff &diff) {

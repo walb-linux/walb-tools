@@ -773,6 +773,10 @@ public:
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getLatestSnapshot(metaSt);
     }
+    MetaState getLatestState() const {
+        const MetaState metaSt = getMetaState();
+        return getDiffMgr().getLatestState(metaSt);
+    }
     uint64_t getOldestCleanSnapshot() const {
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getOldestCleanSnapshot(metaSt);

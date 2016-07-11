@@ -108,6 +108,7 @@ const char *const thinpoolTN = "thinpool";
 const char *const allActionsTN = "all-actions";
 const char *const getMetaSnapTN = "meta-snap";
 const char *const getMetaStateTN = "meta-state";
+const char *const getLatestSnapTN = "latest-snap";
 
 /**
  * Internal protocol name.

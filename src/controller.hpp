@@ -462,6 +462,7 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {allActionsTN, {protocol::StringVecType, verifyNoneParam, "get running action information for all the volumes."}},
         {getMetaSnapTN, {protocol::StringType, verifyGetMetaSnapParam, "[volId (gid)] get MetaSnap having gid."}},
         {getMetaStateTN, {protocol::StringType, verifyGetMetaStateParam, "[volId isApplying (gid)] get MetaState having gid."}},
+        {getLatestSnapTN, {protocol::StringVecType, verifyNoneParam, "get latest snapshot information for all active volumes."}},
     };
     return m;
 }

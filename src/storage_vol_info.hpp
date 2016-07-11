@@ -346,6 +346,16 @@ public:
         return {rec0.gid, rec1.gid};
     }
     /**
+     * Get the latest snapshot info.
+     */
+    MetaLsidGid getLatestSnap() const {
+        QFile qf(queuePath().str(), O_RDWR);
+        if (qf.empty()) return getDoneRecord();
+        MetaLsidGid rec;
+        qf.front(rec);
+        return rec;
+    }
+    /**
      * @sizeLb 0 can be specified (auto-detect).
      */
     void growWdev(uint64_t sizeLb = 0) {
