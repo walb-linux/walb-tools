@@ -1202,6 +1202,29 @@ inline void isOverflow(protocol::GetCommandParams &p)
     p.logger.debug() << "get overflow succeeded" << volId << isOverflow;
 }
 
+inline void getLogUsage(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    const std::string volId = parseVolIdParam(p.params, 1);
+
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string st = volSt.sm.get();
+    if (st == sClear) {
+        throw cybozu::Exception(FUNC) << "bad state" << st;
+    }
+    const StorageVolInfo volInfo(gs.baseDirStr, volId);
+    const std::string wdevPath = volInfo.getWdevPath();
+    const uint64_t logUsagePb = device::getLogUsagePb(wdevPath);
+    const uint64_t logCapacityPb = device::getLogCapacityPb(wdevPath);
+    ul.unlock();
+    std::string ret = cybozu::itoa(logUsagePb);
+    ret += " ";
+    ret += cybozu::itoa(logCapacityPb);
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get log-usage succeeded" << volId << ret;
+}
+
 inline void getUuid(protocol::GetCommandParams &p)
 {
     const char *const FUNC = __func__;
@@ -1229,6 +1252,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { volTN, storage_local::getVolList },
     { pidTN, storage_local::getPid },
     { isOverflowTN, storage_local::isOverflow },
+    { logUsageTN, storage_local::getLogUsage },
     { uuidTN, storage_local::getUuid },
 };
 

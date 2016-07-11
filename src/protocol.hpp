@@ -82,6 +82,7 @@ const char *const gcDiffCN = "gc-diff";
  * Target name of 'get' command.
  */
 const char *const isOverflowTN = "is-overflow";
+const char *const logUsageTN = "log-usage";
 const char *const isWdiffSendErrorTN = "is-wdiff-send-error";
 const char *const numActionTN = "num-action";
 const char *const stateTN = "state";
