@@ -68,7 +68,7 @@ public:
         setState(sSyncReady);
         const uint64_t lsid = -1;
         const uint64_t gid = -1;
-        MetaLsidGid doneRec(lsid, gid, false, 0);
+        MetaLsidGid doneRec(lsid, gid, false, ::time(0));
         setDoneRecord(doneRec);
         setUuid(cybozu::Uuid());
     }
@@ -325,10 +325,13 @@ public:
         if (lsidE == recE.lsid) {
             recS.gid = recE.gid;
             recS.isMergeable = recE.isMergeable;
+            recS.timestamp = recE.timestamp;
         } else {
             assert(recB.gid + 1 < recE.gid);
             recS.gid = recB.gid + 1;
             recS.isMergeable = true;
+            // gid is progressed while timestamp is not progressed.
+            recS.timestamp = recB.timestamp;
         }
         setDoneRecord(recS);
         if (recS.gid == recE.gid) qf.popBack();
