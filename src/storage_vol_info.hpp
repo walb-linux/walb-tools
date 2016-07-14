@@ -369,6 +369,10 @@ public:
         }
         device::resize(path, sizeLb);
     }
+    uint32_t getPbs() const {
+        cybozu::util::File file = device::getWldevFile(getWdevName());
+        return cybozu::util::getPhysicalBlockSize(file.fd());
+    }
 private:
     void loadWdevPath() {
         std::string s;
@@ -445,10 +449,6 @@ private:
         if (rec0.lsid != rec1.lsid || rec0.gid != rec1.gid) {
             cybozu::Exception(msg) << "not equal lsid or gid" << rec0 << rec1;
         }
-    }
-    uint32_t getPbs() const {
-        cybozu::util::File file = device::getWldevFile(getWdevName());
-        return cybozu::util::getPhysicalBlockSize(file.fd());
     }
     device::SuperBlock getSuperBlock() const {
         cybozu::util::File file = device::getWldevFile(getWdevName());

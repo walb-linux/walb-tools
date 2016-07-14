@@ -1202,27 +1202,47 @@ inline void isOverflow(protocol::GetCommandParams &p)
     p.logger.debug() << "get overflow succeeded" << volId << isOverflow;
 }
 
-inline void getLogUsage(protocol::GetCommandParams &p)
+inline std::string getLogUsageForVolume(const std::string& volId, bool throwError)
 {
     const char *const FUNC = __func__;
-    const std::string volId = parseVolIdParam(p.params, 1);
+    auto fmt = cybozu::util::formatString;
 
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
     if (st == sClear) {
-        throw cybozu::Exception(FUNC) << "bad state" << st;
+        if (throwError) throw cybozu::Exception(FUNC) << "bad state" << volId << st;
+        return std::string();
     }
     const StorageVolInfo volInfo(gs.baseDirStr, volId);
     const std::string wdevPath = volInfo.getWdevPath();
     const uint64_t logUsagePb = device::getLogUsagePb(wdevPath);
     const uint64_t logCapacityPb = device::getLogCapacityPb(wdevPath);
+    const uint32_t pbs = volInfo.getPbs();
     ul.unlock();
-    std::string ret = cybozu::itoa(logUsagePb);
-    ret += " ";
-    ret += cybozu::itoa(logCapacityPb);
+
+    return fmt("name: %s\t"
+               "usage_pb:%" PRIu64 "\t"
+               "capacity_pb:%" PRIu64 "\t"
+               "pbs:%u"
+               , volId.c_str(), logUsagePb, logCapacityPb, pbs);
+}
+
+inline void getLogUsage(protocol::GetCommandParams &p)
+{
+    VolIdOrAllParam param = parseVolIdOrAllParam(p.params, 1);
+    StrVec ret;
+    if (param.isAll) {
+        for (const std::string &volId : gs.stMap.getKeyList()) {
+            std::string line = getLogUsageForVolume(volId, false);
+            if (line.empty()) continue;
+            ret.push_back(std::move(line));
+        }
+    } else {
+        ret.push_back(getLogUsageForVolume(param.volId, true));
+    }
     protocol::sendValueAndFin(p, ret);
-    p.logger.debug() << "get log-usage succeeded" << volId << ret;
+    p.logger.debug() << "get log-usage succeeded";
 }
 
 inline std::string getLatestSnapForVolume(const std::string& volId)

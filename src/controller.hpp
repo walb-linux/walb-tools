@@ -436,7 +436,7 @@ inline const protocol::GetCommandInfoMap &getGetCommandInfoMap()
 {
     static const protocol::GetCommandInfoMap m = {
         {isOverflowTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get is-overflow boolean value."}},
-        {logUsageTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get log usage and capacity in physical blocks."}},
+        {logUsageTN, {protocol::StringVecType, verifyVolIdOrAllParamForGet, "[(volId)] get log usage and capacity in physical blocks for volume(s)."}},
         {isWdiffSendErrorTN, {protocol::SizeType, verifyIsWdiffSendErrorParamForGet, "[volId archiveName] get wdiff-send-error boolean value."}},
         {numActionTN, {protocol::SizeType, verifyNumActionParamForGet, "[volId actionName] get number of running actions."}},
         {stateTN, {protocol::StringType, verifyVolIdParamForGet, "[volId]"}},
