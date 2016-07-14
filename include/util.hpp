@@ -461,5 +461,15 @@ inline std::string concat(const C &list, const std::string &delim = "")
     return ss.str();
 }
 
+template <typename T>
+inline void moveToTail(std::vector<T>& base, std::vector<T>&& added)
+{
+    static_assert(std::is_move_assignable<T>::value, "T is not movable type.");
+    base.reserve(base.size() + added.size());
+    for (T& t : added) {
+        base.push_back(std::move(t));
+    }
+}
+
 } //namespace util
 } //namespace cybozu

@@ -431,7 +431,7 @@ inline void c2pStatusServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StatusParam param = parseStatusParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const VolIdOrAllParam param = parseVolIdOrAllParam(protocol::recvStrVec(p.sock, 0, FUNC), 0);
         StrVec stStrV;
         if (param.isAll) {
             stStrV = proxy_local::getAllStatusAsStrVec();
@@ -1219,31 +1219,48 @@ inline void isWdiffSendError(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, size_t(isWdiffSendError));
 }
 
-inline void getLatestSnap(protocol::GetCommandParams &p)
+inline StrVec getLatestSnapForVolume(const std::string& volId)
 {
     auto &fmt = cybozu::util::formatString;
+    ProxyVolState &volSt = getProxyVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string state = volSt.sm.get();
     StrVec ret;
-    for (const std::string &volId : gp.stMap.getKeyList()) {
-        ProxyVolState &volSt = getProxyVolState(volId);
-        UniqueLock ul(volSt.mu);
-        const std::string state = volSt.sm.get();
-        if (state == pClear) continue;
+    if (state == pClear) return ret;
 
-        const ProxyVolInfo volInfo = getProxyVolInfo(volId);
-        for (const std::string& archiveName : volSt.archiveSet) {
-            std::string line = fmt("name:%s\t", volId.c_str());
-            line += "kind:proxy\t";
-            line += fmt("archive:%s\t", archiveName.c_str());
-            const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
-            MetaDiff diff;
-            if (mgr.getDiffWithMaxGid(diff)) {
-                line += fmt("gid:%" PRIu64 "\t", diff.snapE.gidB);
-                line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(diff.timestamp).c_str());
-            } else {
-                line += fmt("gid:---\t");
-                line += fmt("timestamp:---");
-            }
-            ret.push_back(std::move(line));
+    const ProxyVolInfo volInfo = getProxyVolInfo(volId);
+    for (const std::string& archiveName : volSt.archiveSet) {
+        std::string line = fmt("name:%s\t", volId.c_str());
+        line += "kind:proxy\t";
+        line += fmt("archive:%s\t", archiveName.c_str());
+        const MetaDiffManager &mgr = volSt.diffMgrMap.get(archiveName);
+        MetaDiff diff;
+        if (mgr.getDiffWithMaxGid(diff)) {
+            line += fmt("gid:%" PRIu64 "\t", diff.snapE.gidB);
+            line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(diff.timestamp).c_str());
+        } else {
+            line += fmt("gid:\t");
+            line += fmt("timestamp:");
+        }
+        ret.push_back(std::move(line));
+    }
+    return ret;
+}
+
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    VolIdOrAllParam param = parseVolIdOrAllParam(p.params, 1);
+    StrVec ret;
+    if (param.isAll) {
+        for (const std::string &volId : gp.stMap.getKeyList()) {
+            cybozu::util::moveToTail(ret, getLatestSnapForVolume(volId));
+        }
+    } else {
+        cybozu::util::moveToTail(ret, getLatestSnapForVolume(param.volId));
+        if (ret.empty()) {
+            throw cybozu::Exception(FUNC)
+                << "could not get latest snapshot for volume" << param.volId;
         }
     }
     protocol::sendValueAndFin(p, ret);

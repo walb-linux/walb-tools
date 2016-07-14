@@ -391,7 +391,7 @@ inline void c2sStatusServer(protocol::ServerParams &p)
     bool sendErr = true;
     try {
         StrVec v;
-        const StatusParam param = parseStatusParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const VolIdOrAllParam param = parseVolIdOrAllParam(protocol::recvStrVec(p.sock, 0, FUNC), 0);
         if (param.isAll) {
             v = storage_local::getAllStatusAsStrVec();
         } else {
@@ -1225,23 +1225,42 @@ inline void getLogUsage(protocol::GetCommandParams &p)
     p.logger.debug() << "get log-usage succeeded" << volId << ret;
 }
 
-inline void getLatestSnap(protocol::GetCommandParams &p)
+inline std::string getLatestSnapForVolume(const std::string& volId)
 {
     auto fmt = cybozu::util::formatString;
-    StrVec ret;
-    for (const std::string &volId : gs.stMap.getKeyList()) {
-        StorageVolState &volSt = getStorageVolState(volId);
-        UniqueLock ul(volSt.mu);
-        const std::string state = volSt.sm.get();
-        if (state != sTarget) continue;
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string state = volSt.sm.get();
+    std::string line;
+    if (state != sTarget) return line;
 
-        StorageVolInfo volInfo(gs.baseDirStr, volId);
-        MetaLsidGid lsidGid = volInfo.getLatestSnap();
-        std::string line = fmt("name:%s\t", volId.c_str());
-        line += "kind:storage\t";
-        line += fmt("gid:%" PRIu64 "\t", lsidGid.gid);
-        line += fmt("lsid:%" PRIu64 "\t", lsidGid.lsid);
-        line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(lsidGid.timestamp).c_str());
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    MetaLsidGid lsidGid = volInfo.getLatestSnap();
+    line += fmt("name:%s\t", volId.c_str());
+    line += "kind:storage\t";
+    line += fmt("gid:%" PRIu64 "\t", lsidGid.gid);
+    line += fmt("lsid:%" PRIu64 "\t", lsidGid.lsid);
+    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(lsidGid.timestamp).c_str());
+    return line;
+}
+
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    VolIdOrAllParam param = parseVolIdOrAllParam(p.params, 1);
+    StrVec ret;
+    if (param.isAll) {
+        for (const std::string &volId : gs.stMap.getKeyList()) {
+            std::string line = getLatestSnapForVolume(volId);
+            if (line.empty()) continue;
+            ret.push_back(std::move(line));
+        }
+    } else {
+        std::string line = getLatestSnapForVolume(param.volId);
+        if (line.empty()) {
+            throw cybozu::Exception(FUNC)
+                << "could not get latest snapshot for volume" << param.volId;
+        }
         ret.push_back(std::move(line));
     }
     protocol::sendValueAndFin(p, ret);

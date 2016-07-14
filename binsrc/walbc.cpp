@@ -173,7 +173,7 @@ struct CommandInfo {
     const char *help;
 };
 const CommandInfo g_cmdTbl[] = {
-    { statusCN, c2xGetStrVecClient, setupStrVec, verifyStatusParam, "print human-readable status." },
+    { statusCN, c2xGetStrVecClient, setupStrVec, verifyVolIdOrAllParam, "print human-readable status." },
     { initVolCN, c2xInitVolClient, setupInitVol, verifyInitVolParam, "initialize a volume." },
     { clearVolCN, c2xClearVolClient, setupVolId, verifyVolIdParam, "clear a volume." },
     { resetVolCN, c2xResetVolClient, setupResetVol, verifyResetVolParam, "reset a volume in a server." },

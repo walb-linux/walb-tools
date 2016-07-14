@@ -1843,23 +1843,41 @@ inline void getMetaState(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, metaSt.strTs());
 }
 
-inline void getLatestSnap(protocol::GetCommandParams &p)
+inline std::string getLatestSnapForVolume(const std::string& volId)
 {
     auto fmt = cybozu::util::formatString;
-    StrVec ret;
-    for (const std::string &volId : ga.stMap.getKeyList()) {
-        ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
-        std::string s;
-        const std::string state = volSt.sm.get();
-        if (!isStateIn(state, aActive)) continue;
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string state = volSt.sm.get();
+    std::string line;
+    if (!isStateIn(state, aActive)) return line;
 
-        std::string line = fmt("name:%s\t", volId.c_str());
-        line += "kind:archive\t";
-        ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-        const MetaState metaSt = volInfo.getLatestState();
-        line += fmt("gid:%" PRIu64 "\t", metaSt.snapB.gidB);
-        line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(metaSt.timestamp).c_str());
+    line += fmt("name:%s\t", volId.c_str());
+    line += "kind:archive\t";
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    const MetaState metaSt = volInfo.getLatestState();
+    line += fmt("gid:%" PRIu64 "\t", metaSt.snapB.gidB);
+    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(metaSt.timestamp).c_str());
+    return line;
+}
+
+inline void getLatestSnap(protocol::GetCommandParams &p)
+{
+    const char *const FUNC = __func__;
+    VolIdOrAllParam param = parseVolIdOrAllParam(p.params, 1);
+    StrVec ret;
+    if (param.isAll) {
+        for (const std::string &volId : ga.stMap.getKeyList()) {
+            std::string line = getLatestSnapForVolume(volId);
+            if (line.empty()) continue;
+            ret.push_back(std::move(line));
+        }
+    } else {
+        std::string line = getLatestSnapForVolume(param.volId);
+        if (line.empty()) {
+            throw cybozu::Exception(FUNC)
+                << "could not get latest snapshot for volume" << param.volId;
+        }
         ret.push_back(std::move(line));
     }
     protocol::sendValueAndFin(p, ret);
@@ -1949,7 +1967,7 @@ inline void c2aStatusServer(protocol::ServerParams &p)
 
     bool sendErr = true;
     try {
-        const StatusParam param = parseStatusParam(protocol::recvStrVec(p.sock, 0, FUNC));
+        const VolIdOrAllParam param = parseVolIdOrAllParam(protocol::recvStrVec(p.sock, 0, FUNC), 0);
         StrVec strV;
         if (param.isAll) {
             strV = archive_local::getAllStatusAsStrVec();

@@ -57,16 +57,16 @@ inline std::string parseVolIdParam(const StrVec &args, size_t pos)
     return volId;
 }
 
-struct StatusParam
+struct VolIdOrAllParam
 {
     bool isAll;
     std::string volId;
 };
 
-inline StatusParam parseStatusParam(const StrVec &args)
+inline VolIdOrAllParam parseVolIdOrAllParam(const StrVec &args, size_t pos)
 {
-    StatusParam param;
-    cybozu::util::parseStrVec(args, 0, 0, {&param.volId});
+    VolIdOrAllParam param;
+    cybozu::util::parseStrVec(args, pos, 0, {&param.volId});
     param.isAll = param.volId.empty();
     if (!param.isAll) verifyVolIdFormat(param.volId);
     return param;
@@ -450,7 +450,7 @@ inline bool parseShutdownParam(const StrVec &args)
 inline void verifyNoneParam(const StrVec &) {}
 
 inline void verifyVolIdParam(const StrVec &args) { parseVolIdParam(args, 0); }
-inline void verifyStatusParam(const StrVec &args) { parseStatusParam(args); }
+inline void verifyVolIdOrAllParam(const StrVec &args) { parseVolIdOrAllParam(args, 0); }
 inline void verifyInitVolParam(const StrVec &args) { parseInitVolParam(args, false); }
 inline void verifyResetVolParam(const StrVec &args) { parseVolIdAndGidParam(args, 0, false, 0); }
 inline void verifyStartParam(const StrVec &args) { parseStartParam(args, false); }
@@ -595,6 +595,7 @@ inline GetMetaStateParam parseGetMetaStateParam(const StrVec &args)
 }
 
 inline void verifyVolIdParamForGet(const StrVec &args) { parseVolIdParam(args, 1); }
+inline void verifyVolIdOrAllParamForGet(const StrVec &args) { parseVolIdOrAllParam(args, 1); }
 inline void verifyApplicableDiffParamForGet(const StrVec &args) { parseVolIdAndGidParam(args, 1, false, UINT64_MAX); }
 inline void verifyVolIdAndGidRangeParamForGet(const StrVec &args) { parseVolIdAndGidRangeParamForGet(args); }
 inline void verifyExistsDiffParamForGet(const StrVec &args) { parseExistsDiffParamForGet(args); }
