@@ -1155,9 +1155,7 @@ public:
     bool getDiffWithMaxGid(MetaDiff& diff) const {
         AutoLock lk(mu_);
         if (mmap_.empty()) return false;
-        auto it = mmap_.end();
-        --it;
-        diff = it->second;
+        diff = mmap_.crbegin()->second;
         return true;
     }
 private:
