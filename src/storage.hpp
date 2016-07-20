@@ -1221,7 +1221,7 @@ inline std::string getLogUsageForVolume(const std::string& volId, bool throwErro
     const uint32_t pbs = volInfo.getPbs();
     ul.unlock();
 
-    return fmt("name: %s\t"
+    return fmt("name:%s\t"
                "usage_pb:%" PRIu64 "\t"
                "capacity_pb:%" PRIu64 "\t"
                "pbs:%u"
