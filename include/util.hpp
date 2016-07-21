@@ -465,7 +465,7 @@ template <typename T>
 inline void moveToTail(std::vector<T>& base, std::vector<T>&& added)
 {
     static_assert(std::is_move_assignable<T>::value, "T is not movable type.");
-    base.reserve(base.size() + added.size());
+    base.resize(base.size() + added.size());
     std::move_backward(added.begin(), added.end(), base.end());
 }
 
