@@ -466,9 +466,7 @@ inline void moveToTail(std::vector<T>& base, std::vector<T>&& added)
 {
     static_assert(std::is_move_assignable<T>::value, "T is not movable type.");
     base.reserve(base.size() + added.size());
-    for (T& t : added) {
-        base.push_back(std::move(t));
-    }
+    std::move_backward(added.begin(), added.end(), base.end());
 }
 
 } //namespace util
