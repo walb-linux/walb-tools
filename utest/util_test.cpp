@@ -190,3 +190,19 @@ CYBOZU_TEST_AUTO(isAllZero)
         CYBOZU_TEST_ASSERT(!cybozu::util::isAllZero(&v[i], s - i));
     }
 }
+
+CYBOZU_TEST_AUTO(moveToTail)
+{
+    std::vector<std::string> expected = { "abc", "def", "ghi", "123", "456", "79", "0" };
+    const size_t middle = 3;
+    std::vector<std::string> s(expected.begin(), expected.begin() + middle);
+    std::vector<std::string> d(expected.begin() + middle, expected.end());
+    CYBOZU_TEST_EQUAL(s.size(), middle);
+    CYBOZU_TEST_EQUAL(d.size(), expected.size() - middle);
+    cybozu::util::moveToTail(s, std::move(d));
+    CYBOZU_TEST_EQUAL(s.size(), expected.size());
+    for (const auto& c : d) {
+        CYBOZU_TEST_ASSERT(c.empty());
+    }
+    CYBOZU_TEST_EQUAL_ARRAY(s, expected, s.size());
+}
