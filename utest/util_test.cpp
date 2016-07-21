@@ -201,8 +201,5 @@ CYBOZU_TEST_AUTO(moveToTail)
     CYBOZU_TEST_EQUAL(d.size(), expected.size() - middle);
     cybozu::util::moveToTail(s, std::move(d));
     CYBOZU_TEST_EQUAL(s.size(), expected.size());
-    for (const auto& c : d) {
-        CYBOZU_TEST_ASSERT(c.empty());
-    }
     CYBOZU_TEST_EQUAL_ARRAY(s, expected, s.size());
 }
