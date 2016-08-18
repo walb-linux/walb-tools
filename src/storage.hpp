@@ -17,6 +17,8 @@
 #include "walb_util.hpp"
 #include "bdev_reader.hpp"
 #include "command_param_parser.hpp"
+#include "snap_info.hpp"
+#include "ts_delta.hpp"
 
 namespace walb {
 
@@ -128,6 +130,31 @@ private:
     Info checkAvailability(const cybozu::SocketAddr &);
 };
 
+
+class TsDeltaManager
+{
+public:
+    using Map = std::map<std::string, TsDelta>; // key: volId
+private:
+    using AutoLock = std::lock_guard<std::mutex>;
+    mutable std::mutex mu_;
+    uint64_t lastSucceededTs_;
+    Map map_;
+public:
+    void connectAndGet();
+    Map copyMap(uint64_t *ts = nullptr) const {
+        AutoLock lk(mu_);
+        if (ts) *ts = lastSucceededTs_;
+        return map_;
+    }
+private:
+    void setMap(const Map& map) {
+        AutoLock lk(mu_);
+        map_ = map;
+        lastSucceededTs_ = ::time(0);
+    }
+};
+
 } // namespace storage_local
 
 struct StorageSingleton
@@ -149,6 +176,7 @@ struct StorageSingleton
     size_t maxForegroundTasks;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;
+    size_t tsDeltaGetterIntervalSec;
     bool allowExec;
 
     /**
@@ -164,6 +192,9 @@ struct StorageSingleton
     std::unique_ptr<std::thread> proxyMonitor;
     std::atomic<bool> quitProxyMonitor;
     storage_local::ProxyManager proxyManager;
+    std::unique_ptr<std::thread> tsDeltaGetter;
+    std::atomic<bool> quitTsDeltaGetter;
+    storage_local::TsDeltaManager tsDeltaManager;
     std::atomic<uint64_t> fullScanLbPerSec; // 0 means unlimited.
 
     using Str2Str = std::map<std::string, std::string>;
@@ -964,6 +995,97 @@ inline void ProxyManager::tryCheckAvailability()
     }
 }
 
+inline SnapshotInfo getLatestSnapshotInfo(const std::string &volId)
+{
+    StorageVolState &volSt = getStorageVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string state = volSt.sm.get();
+    SnapshotInfo snapInfo;
+    snapInfo.init();
+    snapInfo.volId = volId;
+    if (state != sTarget) return snapInfo;
+
+    StorageVolInfo volInfo(gs.baseDirStr, volId);
+    MetaLsidGid lsidGid = volInfo.getLatestSnap();
+
+    snapInfo.gid = lsidGid.gid;
+    snapInfo.lsid = lsidGid.lsid;
+    snapInfo.timestamp = lsidGid.timestamp;
+    return snapInfo;
+}
+
+
+inline TsDelta generateTsDelta(const SnapshotInfo &src, const SnapshotInfo &dst, const std::string& archiveId)
+{
+    if (src.volId != dst.volId) {
+        throw cybozu::Exception(__func__)
+            << "bad result" << src.volId << dst.volId;
+    }
+    return TsDelta{src.volId, archiveId, {"storage", "archive"}
+        , {src.gid, dst.gid}, {src.timestamp, dst.timestamp}};
+}
+
+
+inline void TsDeltaManager::connectAndGet()
+{
+    LOGs.debug() << "connectAndGet called";
+
+    const char *const FUNC = __func__;
+    cybozu::Socket sock;
+    std::string archiveId;
+    try {
+        util::connectWithTimeout(sock, gs.archive, gs.socketTimeout);
+        gs.setSocketParams(sock);
+        archiveId = protocol::run1stNegotiateAsClient(sock, gs.nodeId, gatherLatestSnapPN);
+    } catch (std::exception &e) {
+        LOGs.warn() << FUNC << e.what();
+        return;
+    }
+    ProtocolLogger logger(gs.nodeId, archiveId);
+
+    // get volumes with Target state.
+    packet::Packet pkt(sock);
+    std::vector<SnapshotInfo> snapInfoV0;
+    StrVec volIdV;
+    try {
+        for (const std::string &volId : gs.stMap.getKeyList()) {
+            const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
+            if (snapInfo.isUnknown()) continue;
+            snapInfoV0.push_back(snapInfo);
+            volIdV.push_back(volId);
+        }
+    } catch (std::exception &e) {
+        logger.warn() << FUNC << e.what();
+        pkt.write(e.what());
+        return;
+    }
+
+    // communicate with the archive process.
+    pkt.write(msgOk);
+    protocol::sendStrVec(sock, volIdV, 0, FUNC, msgAccept);
+    std::vector<SnapshotInfo> snapInfoV1;
+    pkt.read(snapInfoV1);
+    std::string msg;
+    pkt.read(msg);
+    if (msg != msgOk) {
+        throw cybozu::Exception(FUNC) << "something wrong";
+    }
+    sock.close();
+
+    // store internal map.
+    if (snapInfoV0.size() != snapInfoV1.size()) {
+        throw cybozu::Exception(FUNC)
+            << "bad result" << snapInfoV0.size() << snapInfoV0.size();
+    }
+    Map map;
+    for (size_t i = 0; i < snapInfoV0.size(); i++) {
+        const TsDelta tsd = generateTsDelta(snapInfoV0[i], snapInfoV1[i], archiveId);
+        map.emplace(tsd.volId, tsd);
+    }
+    setMap(map);
+    logger.debug() << "gather-latest-snap succeeded";
+}
+
 } // namespace storage_local
 
 inline void wdevMonitorWorker() noexcept
@@ -1003,6 +1125,29 @@ inline void proxyMonitorWorker() noexcept
             LOGs.error() << FUNC << e.what();
         } catch (...) {
             LOGs.error() << FUNC << "unknown error";
+        }
+    }
+}
+
+inline void tsDeltaGetterWorker() noexcept
+{
+    const char *const FUNC = __func__;
+    StorageSingleton& g = getStorageGlobal();
+    assert(g.tsDeltaGetterIntervalSec > 0);
+    size_t remaining = 5; // The first run will be 5 seconds later.
+    while (!g.quitTsDeltaGetter) {
+        try {
+            util::sleepMs(1000);
+            if (--remaining == 0) {
+                g.tsDeltaManager.connectAndGet();
+            }
+        } catch (std::exception& e) {
+            LOGs.error() << FUNC << e.what();
+        } catch (...) {
+            LOGs.error() << FUNC << "unknown error";
+        }
+        if (remaining == 0) {
+            remaining = g.tsDeltaGetterIntervalSec;
         }
     }
 }
@@ -1248,19 +1393,16 @@ inline void getLogUsage(protocol::GetCommandParams &p)
 inline std::string getLatestSnapForVolume(const std::string& volId)
 {
     auto fmt = cybozu::util::formatString;
-    StorageVolState &volSt = getStorageVolState(volId);
-    UniqueLock ul(volSt.mu);
-    const std::string state = volSt.sm.get();
-    std::string line;
-    if (state != sTarget) return line;
 
-    StorageVolInfo volInfo(gs.baseDirStr, volId);
-    MetaLsidGid lsidGid = volInfo.getLatestSnap();
-    line += fmt("name:%s\t", volId.c_str());
+    const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
+    std::string line;
+    if (snapInfo.isUnknown()) return line; // empty.
+
+    line += fmt("name:%s\t", snapInfo.volId.c_str());
     line += "kind:storage\t";
-    line += fmt("gid:%" PRIu64 "\t", lsidGid.gid);
-    line += fmt("lsid:%" PRIu64 "\t", lsidGid.lsid);
-    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(lsidGid.timestamp).c_str());
+    line += fmt("gid:%" PRIu64 "\t", snapInfo.gid);
+    line += fmt("lsid:%" PRIu64 "\t", snapInfo.lsid);
+    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
     return line;
 }
 
@@ -1305,6 +1447,19 @@ inline void getUuid(protocol::GetCommandParams &p)
     p.logger.debug() << "get uuid succeeded" << volId << uuidStr;
 }
 
+inline void getTsDelta(protocol::GetCommandParams &p)
+{
+    StrVec ret;
+    uint64_t ts = 0;
+    const TsDeltaManager::Map map = gs.tsDeltaManager.copyMap(&ts);
+    for (const TsDeltaManager::Map::value_type& pair : map) {
+        const TsDelta& tsd = pair.second;
+        ret.push_back(tsd.toStr());
+    }
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get ts-delta succeeded" << cybozu::unixTimeToPrettyStr(ts);
+}
+
 } // namespace storage_local
 
 const protocol::GetCommandHandlerMap storageGetHandlerMap = {
@@ -1316,6 +1471,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { logUsageTN, storage_local::getLogUsage },
     { getLatestSnapTN, storage_local::getLatestSnap },
     { uuidTN, storage_local::getUuid },
+    { getTsDeltaTN, storage_local::getTsDelta },
 };
 
 inline void c2sGetServer(protocol::ServerParams &p)

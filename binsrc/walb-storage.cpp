@@ -56,6 +56,7 @@ struct Option
         opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "Default full scan throughput [bytes/s]");
+        opt.appendOpt(&s.tsDeltaGetterIntervalSec, DEFAULT_TS_DELTA_INTERVAL_SEC, "tsdintvl", "ts-delta getter interval [sec].");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&s.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
 #endif
@@ -71,6 +72,7 @@ struct Option
         util::verifyNotZero(maxBackgroundTasks, "maxBackgroundTasks");
         util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
+        util::verifyNotZero(s.tsDeltaGetterIntervalSec, "tsDeltaGetterIntervalSec");
         s.keepAliveParams.verify();
         s.fullScanLbPerSec = defaultFullScanBytesPerSec / LOGICAL_BLOCK_SIZE;
     }
@@ -97,12 +99,17 @@ struct StorageThreads {
         g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
         g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
         g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
+        g.tsDeltaGetter.reset(new std::thread(tsDeltaGetterWorker));
     }
 
     ~StorageThreads()
         try
     {
         StorageSingleton &g = getStorageGlobal();
+
+        g.quitTsDeltaGetter = true;
+        g.tsDeltaGetter->join();
+        g.tsDeltaGetter.reset();
 
         g.quitProxyMonitor = true;
         g.proxyMonitor->join();

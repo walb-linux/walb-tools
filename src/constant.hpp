@@ -48,4 +48,6 @@ const int MAX_TCP_KEEPCNT = 100;
 
 const size_t PROGRESS_INTERVAL_SEC = 60;
 
+const size_t DEFAULT_TS_DELTA_INTERVAL_SEC = 60;
+
 } // walb

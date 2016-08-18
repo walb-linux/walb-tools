@@ -17,6 +17,8 @@
 #include "command_param_parser.hpp"
 #include "discard_type.hpp"
 #include "walb_diff_io.hpp"
+#include "snap_info.hpp"
+#include "ts_delta.hpp"
 
 namespace walb {
 
@@ -75,6 +77,54 @@ private:
     void initInner(const std::string& volId);
 };
 
+
+namespace archive_local {
+
+class RemoteSnapshotManager
+{
+public:
+    struct Info {
+        std::string volId;
+        std::string dstId;
+        MetaState metaSt;
+    };
+    using InternalMap = std::map<std::string, Info>; // key: dstId;
+    using Map = std::map<std::string, InternalMap>; // key: volId
+private:
+    using AutoLock = std::lock_guard<std::mutex>;
+    mutable std::mutex mu_;
+    Map map_;
+public:
+    void update(const std::string& volId, const std::string& dstId, const MetaState& metaSt) {
+        Info info{volId, dstId, metaSt};
+        AutoLock lk(mu_);
+        auto it = map_.find(volId);
+        if (it == map_.end()) {
+            map_.emplace(volId, InternalMap());
+        } else {
+            InternalMap& imap = it->second;
+            auto it1 = imap.find(dstId);
+            if (it1 == imap.end()) {
+                imap.emplace(dstId, info);
+            } else {
+                it1->second = info;
+            }
+        }
+    }
+    void remove(const std::string& volId) {
+        AutoLock lk(mu_);
+        auto it = map_.find(volId);
+        if (it != map_.end()) map_.erase(it);
+    }
+    Map copyMap() const {
+        AutoLock lk(mu_);
+        return map_;
+    }
+};
+
+} // namespace archive_local
+
+
 struct ArchiveSingleton
 {
     static ArchiveSingleton& getInstance() {
@@ -103,6 +153,7 @@ struct ArchiveSingleton
      */
     ProcessStatus ps;
     AtomicMap<ArchiveVolState> stMap;
+    archive_local::RemoteSnapshotManager remoteSnapshotManager;
 
     void setSocketParams(cybozu::Socket& sock) const {
         util::setSocketParams(sock, keepAliveParams, socketTimeout);
@@ -732,15 +783,13 @@ inline void delSnapshotServer(protocol::ServerParams &p, bool isCold)
     }
 }
 
-inline cybozu::Socket runReplSync1stNegotiation(const std::string &volId, const AddrPort &addrPort)
+inline void runReplSync1stNegotiation(const std::string &volId, const AddrPort &addrPort, cybozu::Socket &sock, std::string &dstId)
 {
-    cybozu::Socket sock;
     const cybozu::SocketAddr server = addrPort.getSocketAddr();
     util::connectWithTimeout(sock, server, ga.socketTimeout);
     ga.setSocketParams(sock);
-    protocol::run1stNegotiateAsClient(sock, ga.nodeId, replSyncPN);
+    dstId = protocol::run1stNegotiateAsClient(sock, ga.nodeId, replSyncPN);
     protocol::sendStrVec(sock, {volId}, 1, __func__, msgAccept);
-    return sock;
 }
 
 inline void verifyVolumeSize(ArchiveVolState &volSt, ArchiveVolInfo &volInfo, uint64_t sizeLb, Logger &logger)
@@ -763,8 +812,14 @@ inline void verifyVolumeSize(ArchiveVolState &volSt, ArchiveVolInfo &volInfo, ui
     }
 }
 
+inline TsDelta generateTsDelta(const std::string &volId, const std::string &dstId, const MetaState &srcSt, const MetaState &dstSt)
+{
+    return TsDelta{volId, dstId, {"archive", "archive"}
+        , {srcSt.snapB.gidB, dstSt.snapB.gidB}, {srcSt.timestamp, dstSt.timestamp}};
+}
+
 inline bool runFullReplClient(
-    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -793,6 +848,7 @@ inline bool runFullReplClient(
         return false;
     }
     logger.info() << "full-repl-client done" << volId;
+    getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, metaSt);
     return true;
 }
 
@@ -854,7 +910,7 @@ inline bool runFullReplServer(
 }
 
 inline bool runHashReplClient(
-    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, uint64_t bulkLb, const MetaDiff &diff, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -884,6 +940,10 @@ inline bool runHashReplClient(
     logger.info() << "hash-repl-client-mergeOut" << volId << virt.statOut();
     logger.info() << "hash-repl-client-mergeMemUsage" << volId << virt.memUsageStr();
     logger.info() << "hash-repl-client done" << volId;
+
+    const MetaState dstMetaSt(diff.snapE, diff.timestamp);
+    getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, dstMetaSt);
+
     return true;
 }
 
@@ -944,7 +1004,7 @@ inline bool runHashReplServer(
 }
 
 inline bool runNoMergeDiffReplClient(
-    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -986,11 +1046,15 @@ inline bool runNoMergeDiffReplClient(
     }
     packet::Ack(pkt.sock()).recv();
     logger.info() << "diff-repl-nomerge-client done" << volId << diff;
+
+    const MetaState dstMetaSt(diff.snapE, diff.timestamp);
+    getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, dstMetaSt);
+
     return true;
 }
 
 inline bool runDiffReplClient(
-    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, const CompressOpt &cmpr, uint64_t wdiffMergeSize, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -1032,6 +1096,10 @@ inline bool runDiffReplClient(
     logger.info() << "diff-repl-mergeOut" << volId << statOut;
     logger.info() << "diff-repl-mergeMemUsage" << volId << merger.memUsageStr();
     logger.info() << "diff-repl-client done" << volId << mergedDiff;
+
+    const MetaState dstMetaSt(mergedDiff.snapE, mergedDiff.timestamp);
+    getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, dstMetaSt);
+
     return true;
 }
 
@@ -1089,7 +1157,7 @@ inline bool runDiffReplServer(
 }
 
 inline bool runResyncReplClient(
-    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
+    const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -1123,6 +1191,9 @@ inline bool runResyncReplClient(
     logger.info() << "resync-repl-client-mergeOut" << volId << virt.statOut();
     logger.info() << "resync-repl-client-mergeMemUsage" << volId << virt.memUsageStr();
     logger.info() << "resync-repl-client done" << volId << metaSt;
+
+    getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, metaSt);
+
     return true;
 }
 
@@ -1201,7 +1272,7 @@ enum {
     DO_HASH_OR_DIFF_SYNC = 2,
 };
 
-inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, bool isSize, uint64_t param, Logger &logger)
+inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo, bool isSize, uint64_t param, const std::string &dstId, Logger &logger)
 {
     const char *const FUNC = __func__;
     packet::Packet pkt(sock);
@@ -1220,27 +1291,31 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         throw cybozu::Exception(FUNC) << "not accept" << volId << res;
     }
 
+    bool runAtLeastOnce = false;
     int kind;
     pkt.read(kind);
     if (kind == DO_FULL_SYNC) {
-        if (!runFullReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
+        if (!runFullReplClient(volId, volSt, volInfo, dstId, pkt, hostInfo.bulkLb, logger)) {
             return false;
         }
+        runAtLeastOnce = true;
     } else if (kind == DO_RESYNC) {
         if (!hostInfo.doResync) {
             throw cybozu::Exception(FUNC)
                 << "bad response: resync is not allowed" << volId;
         }
-        if (!runResyncReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, logger)) {
+        if (!runResyncReplClient(volId, volSt, volInfo, dstId, pkt, hostInfo.bulkLb, logger)) {
             return false;
         }
+        runAtLeastOnce = true;
     } else if (kind != DO_HASH_OR_DIFF_SYNC) {
         throw cybozu::Exception(FUNC) << "bad resonse" << volId << kind;
     }
 
+    MetaState srvLatestState;
     for (;;) {
-        MetaSnap srvLatestSnap;
-        pkt.read(srvLatestSnap);
+        pkt.read(srvLatestState);
+        const MetaSnap srvLatestSnap = srvLatestState.snapB;
         const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
         const int repl = volInfo.shouldDoRepl(srvLatestSnap, cliLatestSnap, isSize, param);
         logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap
@@ -1249,29 +1324,33 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
         pkt.flush();
         if (repl == ArchiveVolInfo::DONT_REPL) break;
         if (repl == ArchiveVolInfo::DO_HASH_REPL) {
-            const MetaState metaSt = volInfo.getMetaState();
-            const MetaSnap cliOldestSnap(volInfo.getOldestCleanSnapshot());
+            const MetaState oldestMetaSt = volInfo.getOldestCleanState();
+            const MetaSnap cliOldestSnap = oldestMetaSt.snapB;
             if (srvLatestSnap.gidB >= cliOldestSnap.gidB) {
                 throw cybozu::Exception(__func__)
                     << "could not execute hash-repl" << srvLatestSnap << cliOldestSnap;
             }
-            MetaDiff diff(srvLatestSnap, cliOldestSnap, true, metaSt.timestamp);
+            MetaDiff diff(srvLatestSnap, cliOldestSnap, true, oldestMetaSt.timestamp);
             diff.isCompDiff = true;
-            if (!runHashReplClient(volId, volSt, volInfo, pkt, hostInfo.bulkLb, diff, logger)) {
+            if (!runHashReplClient(volId, volSt, volInfo, dstId, pkt, hostInfo.bulkLb, diff, logger)) {
                 return false;
             }
         } else {
             if (hostInfo.dontMerge) {
                 if (!runNoMergeDiffReplClient(
-                        volId, volSt, volInfo, pkt, srvLatestSnap, logger)) return false;
+                        volId, volSt, volInfo, dstId, pkt, srvLatestSnap, logger)) return false;
             } else {
                 if (!runDiffReplClient(
-                        volId, volSt, volInfo, pkt, srvLatestSnap,
+                        volId, volSt, volInfo, dstId, pkt, srvLatestSnap,
                         hostInfo.cmpr, hostInfo.maxWdiffMergeSize, logger)) return false;
             }
         }
+        runAtLeastOnce = true;
     }
     packet::Ack(sock).recv();
+    if (!runAtLeastOnce) {
+        getArchiveGlobal().remoteSnapshotManager.update(volId, dstId, srvLatestState);
+    }
     return true;
 }
 
@@ -1327,8 +1406,8 @@ inline bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, Un
     }
 
     for (;;) {
-        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
-        pkt.write(latestSnap);
+        const MetaState latestState = volInfo.getLatestState();
+        pkt.write(latestState);
         pkt.flush();
         int repl;
         pkt.read(repl);
@@ -1843,21 +1922,42 @@ inline void getMetaState(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, metaSt.strTs());
 }
 
-inline std::string getLatestSnapForVolume(const std::string& volId)
+inline bool getLatestMetaState(const std::string &volId, MetaState &metaSt)
 {
-    auto fmt = cybozu::util::formatString;
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string state = volSt.sm.get();
-    std::string line;
-    if (!isStateIn(state, aActive)) return line;
+    if (!isStateIn(state, aActive)) return false;
 
-    line += fmt("name:%s\t", volId.c_str());
-    line += "kind:archive\t";
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    const MetaState metaSt = volInfo.getLatestState();
-    line += fmt("gid:%" PRIu64 "\t", metaSt.snapB.gidB);
-    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(metaSt.timestamp).c_str());
+    metaSt = volInfo.getLatestState();
+    return true;
+}
+
+inline SnapshotInfo getLatestSnapshotInfo(const std::string &volId)
+{
+    SnapshotInfo snapInfo;
+    snapInfo.init();
+    snapInfo.volId = volId;
+    MetaState metaSt;
+    if (!getLatestMetaState(volId, metaSt)) return snapInfo;
+    snapInfo.gid = metaSt.snapB.gidB;
+    snapInfo.timestamp = metaSt.timestamp;
+    return snapInfo;
+}
+
+inline std::string getLatestSnapForVolume(const std::string& volId)
+{
+    auto fmt = cybozu::util::formatString;
+
+    const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
+    std::string line;
+    if (snapInfo.isUnknown()) return line; // empty.
+
+    line += fmt("name:%s\t", snapInfo.volId.c_str());
+    line += "kind:archive\t";
+    line += fmt("gid:%" PRIu64 "\t", snapInfo.gid);
+    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
     return line;
 }
 
@@ -1881,6 +1981,23 @@ inline void getLatestSnap(protocol::GetCommandParams &p)
         ret.push_back(std::move(line));
     }
     protocol::sendValueAndFin(p, ret);
+}
+
+inline void getTsDelta(protocol::GetCommandParams &p)
+{
+    StrVec ret;
+    const RemoteSnapshotManager::Map map = ga.remoteSnapshotManager.copyMap();
+    for (const RemoteSnapshotManager::Map::value_type& pair0 : map) {
+        const std::string &volId = pair0.first;
+        MetaState srcMetaSt;
+        if (!getLatestMetaState(volId, srcMetaSt)) continue;
+        for (const RemoteSnapshotManager::InternalMap::value_type &pair1 : pair0.second) {
+            const RemoteSnapshotManager::Info &info = pair1.second;
+            ret.push_back(generateTsDelta(volId, info.dstId, srcMetaSt, info.metaSt).toStr());
+        }
+    }
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get ts-delta succeeded";
 }
 
 } // namespace archive_local
@@ -2026,6 +2143,7 @@ inline void c2aClearVolServer(protocol::ServerParams &p)
         ul.unlock();
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.clear();
+        getArchiveGlobal().remoteSnapshotManager.remove(volId);
         tran.commit(aClear);
         pkt.writeFin(msgOk);
         logger.info() << "clearVol succeeded" << volId;
@@ -2401,11 +2519,14 @@ inline void c2aReplicateServer(protocol::ServerParams &p)
 
         ActionCounterTransaction tran(volSt.ac, aaReplSync);
         ul.unlock();
-        cybozu::Socket aSock = archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort);
+        cybozu::Socket aSock;
+        std::string dstId;
+        archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort, aSock, dstId);
         pkt.writeFin(msgAccept);
         sendErr = false;
-        logger.info() << "replication as client started" << volId << param.isSize << param.param2 << hostInfo;
-        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, logger)) {
+        logger.info() << "replication as client started"
+                      << volId << param.isSize << param.param2 << hostInfo;
+        if (!archive_local::runReplSyncClient(volId, aSock, hostInfo, isSize, param2, dstId, logger)) {
             logger.warn() << FUNC << "replication as client force stopped" << volId << hostInfo;
             return;
         }
@@ -2833,6 +2954,40 @@ inline void c2aGarbageCollectDiffServer(protocol::ServerParams &p)
     }
 }
 
+
+inline void s2aGatherLatestSnapServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+    bool sendErr = true;
+
+    try {
+        std::string msg;
+        pkt.read(msg);
+        if (msg != msgOk) {
+            logger.info() << FUNC << "client failed" << msg;
+            return;
+        }
+
+        const StrVec volIdV = protocol::recvStrVec(p.sock, 0, FUNC);
+        std::vector<SnapshotInfo> snapInfoV;
+
+        for (const std::string &volId : volIdV) {
+            snapInfoV.push_back(archive_local::getLatestSnapshotInfo(volId));
+        }
+        pkt.write(msgAccept);
+        sendErr = false;
+        pkt.write(snapInfoV);
+        pkt.writeFin(msgOk);
+        logger.debug() << "gather-latest-snap succeeded";
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+        if (sendErr) pkt.write(e.what());
+    }
+}
+
+
 const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { stateTN, archive_local::getState },
     { hostTypeTN, archive_local::getHostType },
@@ -2859,6 +3014,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { getMetaSnapTN, archive_local::getMetaSnap },
     { getMetaStateTN, archive_local::getMetaState },
     { getLatestSnapTN, archive_local::getLatestSnap },
+    { getTsDeltaTN, archive_local::getTsDelta },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)
@@ -2902,6 +3058,7 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { dirtyHashSyncPN, s2aDirtyHashSyncServer },
     { wdiffTransferPN, p2aWdiffTransferServer },
     { replSyncPN, a2aReplSyncServer },
+    { gatherLatestSnapPN, s2aGatherLatestSnapServer },
 };
 
 } // namespace walb

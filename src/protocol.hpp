@@ -109,6 +109,7 @@ const char *const allActionsTN = "all-actions";
 const char *const getMetaSnapTN = "meta-snap";
 const char *const getMetaStateTN = "meta-state";
 const char *const getLatestSnapTN = "latest-snap";
+const char *const getTsDeltaTN = "ts-delta";
 
 /**
  * Internal protocol name.
@@ -118,6 +119,7 @@ const char *const dirtyHashSyncPN = "dirty-hash-sync";
 const char *const wlogTransferPN = "wlog-transfer";
 const char *const wdiffTransferPN = "wdiff-transfer";
 const char *const replSyncPN = "repl-sync";
+const char *const gatherLatestSnapPN = "gather-latest-snap";
 
 
 inline cybozu::SocketAddr parseSocketAddr(const std::string &addrPort)

@@ -1004,12 +1004,29 @@ public:
      * Get the oldest clean snapshot
      * @st base state.
      */
-    uint64_t getOldestCleanSnapshot(const MetaState &st) const {
-        const std::vector<uint64_t> v = getCleanSnapshotList(st);
-        if (v.empty()) {
-            throw cybozu::Exception("MetaDiffManager::getOldestCleanSnapshot:there is no clean snapshot");
+    uint64_t getOldestCleanSnapshot(const MetaState &st0) const {
+        MetaState st = getOldestCleanState(st0);
+        assert(!st.isApplying);
+        assert(st.snapB.isClean());
+        return st.snapB.gidB;
+    }
+    /**
+     * Get the oldest clean meta state.
+     */
+    MetaState getOldestCleanState(const MetaState &st0) const {
+        AutoLock lk(mu_);
+        MetaDiffVec minV = getMinimumApplicableDiffList(st0);
+        MetaState st = apply(st0, minV);
+        assert(!st.isApplying);
+        for (;;) {
+            if (st.snapB.isClean()) break;
+            MetaDiff d;
+            if (!getApplicableDiff(st.snapB, d)) {
+                throw cybozu::Exception("MetaDiffManager::getOldestCleanState:there is no clean snapshot.");
+            }
+            st = apply(st, d);
         }
-        return v[0];
+        return st;
     }
     /**
      * Get clean snapshot list sorted by gid.
