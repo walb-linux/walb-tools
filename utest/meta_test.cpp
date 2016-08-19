@@ -764,7 +764,7 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
 
 CYBOZU_TEST_AUTO(metaDiffManagerGcRange)
 {
-    MetaSnap snap(0), s0(snap), s1(snap);
+    MetaSnap snap(0);
     MetaState st(snap, 0);
 
     MetaDiffVec v;
