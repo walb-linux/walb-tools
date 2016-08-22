@@ -1049,9 +1049,9 @@ inline void TsDeltaManager::connectAndGet()
     StrVec volIdV;
     try {
         for (const std::string &volId : gs.stMap.getKeyList()) {
-            const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
+            SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
             if (snapInfo.isUnknown()) continue;
-            snapInfoV0.push_back(snapInfo);
+            snapInfoV0.push_back(std::move(snapInfo));
             volIdV.push_back(volId);
         }
     } catch (std::exception &e) {

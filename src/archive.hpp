@@ -98,18 +98,10 @@ public:
     void update(const std::string& volId, const std::string& dstId, const MetaState& metaSt) {
         Info info{volId, dstId, metaSt};
         AutoLock lk(mu_);
-        auto it = map_.find(volId);
-        if (it == map_.end()) {
-            map_.emplace(volId, InternalMap());
-        } else {
-            InternalMap& imap = it->second;
-            auto it1 = imap.find(dstId);
-            if (it1 == imap.end()) {
-                imap.emplace(dstId, info);
-            } else {
-                it1->second = info;
-            }
-        }
+        auto p0 = map_.emplace(volId, InternalMap());
+        InternalMap& imap = p0.first->second;
+        auto p1 = imap.emplace(dstId, Info());
+        p1.first->second = std::move(info);
     }
     void remove(const std::string& volId) {
         AutoLock lk(mu_);
@@ -1948,17 +1940,17 @@ inline SnapshotInfo getLatestSnapshotInfo(const std::string &volId)
 
 inline std::string getLatestSnapForVolume(const std::string& volId)
 {
-    auto fmt = cybozu::util::formatString;
-
     const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
-    std::string line;
-    if (snapInfo.isUnknown()) return line; // empty.
+    if (snapInfo.isUnknown()) return "";
 
-    line += fmt("name:%s\t", snapInfo.volId.c_str());
-    line += "kind:archive\t";
-    line += fmt("gid:%" PRIu64 "\t", snapInfo.gid);
-    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
-    return line;
+    return cybozu::util::formatString(
+        "name:%s\t"
+        "kind:archive\t"
+        "gid:%" PRIu64 "\t"
+        "timestamp:%s"
+        , snapInfo.volId.c_str()
+        , snapInfo.gid
+        , cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
 }
 
 inline void getLatestSnap(protocol::GetCommandParams &p)
