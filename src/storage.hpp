@@ -1392,18 +1392,19 @@ inline void getLogUsage(protocol::GetCommandParams &p)
 
 inline std::string getLatestSnapForVolume(const std::string& volId)
 {
-    auto fmt = cybozu::util::formatString;
-
     const SnapshotInfo snapInfo = getLatestSnapshotInfo(volId);
-    std::string line;
-    if (snapInfo.isUnknown()) return line; // empty.
+    if (snapInfo.isUnknown()) return "";
 
-    line += fmt("name:%s\t", snapInfo.volId.c_str());
-    line += "kind:storage\t";
-    line += fmt("gid:%" PRIu64 "\t", snapInfo.gid);
-    line += fmt("lsid:%" PRIu64 "\t", snapInfo.lsid);
-    line += fmt("timestamp:%s", cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
-    return line;
+    return cybozu::util::formatString(
+        "name:%s\t"
+        "kind:storage\t"
+        "gid:%" PRIu64 "\t"
+        "lsid:%" PRIu64 "\t"
+        "timestamp:%s"
+        , snapInfo.volId.c_str()
+        , snapInfo.gid
+        , snapInfo.lsid
+        , cybozu::unixTimeToPrettyStr(snapInfo.timestamp).c_str());
 }
 
 inline void getLatestSnap(protocol::GetCommandParams &p)
