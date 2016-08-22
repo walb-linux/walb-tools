@@ -96,12 +96,8 @@ private:
     Map map_;
 public:
     void update(const std::string& volId, const std::string& dstId, const MetaState& metaSt) {
-        Info info{volId, dstId, metaSt};
         AutoLock lk(mu_);
-        auto p0 = map_.emplace(volId, InternalMap());
-        InternalMap& imap = p0.first->second;
-        auto p1 = imap.emplace(dstId, Info());
-        p1.first->second = std::move(info);
+        map_[volId][dstId] = Info{volId, dstId, metaSt};
     }
     void remove(const std::string& volId) {
         AutoLock lk(mu_);
