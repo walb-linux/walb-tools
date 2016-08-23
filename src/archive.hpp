@@ -53,6 +53,13 @@ struct ArchiveVolState
      */
     uint64_t lastWdiffReceivedTime;
 
+private:
+    /**
+     * Latest meta state. This is cache data. mu lock is required to access this variable.
+     */
+    MetaState latestMetaSt;
+public:
+
     explicit ArchiveVolState(const std::string& volId)
         : stopState(NotStopping)
         , sm(mu)
@@ -72,6 +79,17 @@ struct ArchiveVolState
     void updateLastWdiffReceivedTime() {
         UniqueLock ul(mu);
         lastWdiffReceivedTime = ::time(0);
+    }
+    void setLatestMetaState(const MetaState& metaSt) {
+        if (metaSt.isApplying) {
+            throw cybozu::Exception(__func__) << "bad metaSt" << metaSt;
+        }
+        UniqueLock ul(mu);
+        latestMetaSt = metaSt;
+    }
+    MetaState getLatestMetaState() {
+        UniqueLock ul(mu);
+        return latestMetaSt;
     }
 private:
     void initInner(const std::string& volId);
@@ -616,6 +634,29 @@ inline void doAutoResizeIfNecessary(ArchiveVolState& volSt, ArchiveVolInfo& volI
     LOGs.info() << "auto-resize succeeded" << volId << lv.sizeLb() << sizeLb;
 }
 
+/**
+ * This is debug code.
+ */
+inline void dbgVerifyLatestMetaState(const std::string &volId)
+{
+#ifdef NDEBUG
+    unusedVar(volId);
+#else
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    UniqueLock ul(volSt.mu);
+    const std::string state = volSt.sm.get();
+    if (!isStateIn(state, aActiveOrStopped)) return;
+
+    const MetaState metaSt0 = volSt.getLatestMetaState();
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+    const MetaState metaSt1 = volInfo.getLatestState();
+    if (metaSt0 != metaSt1) {
+        throw cybozu::Exception(__func__) << "meta state cache is invalid" << metaSt0 << metaSt1;
+    }
+#endif
+}
+
+
 template <typename T>
 struct ZeroResetterT
 {
@@ -658,7 +699,7 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         verifyStateIn(sm.get(), {stFrom}, FUNC);
-        if (!isFull) snapFrom = volInfo.getLatestSnapshot();
+        if (!isFull) snapFrom = volSt.getLatestMetaState().snapB;
     } catch (std::exception &e) {
         logger.warn() << e.what();
         pkt.write(e.what());
@@ -714,9 +755,9 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
 
     MetaSnap snapTo;
     pkt.read(snapTo);
+    MetaState metaSt(snapTo, curTime);
     if (isFull) {
-        MetaState state(snapTo, curTime);
-        volInfo.setMetaState(state);
+        volInfo.setMetaState(metaSt);
         volInfo.generateArchiveUuid();
     } else {
         /*
@@ -729,6 +770,8 @@ inline void backupServer(protocol::ServerParams &p, bool isFull)
         tmpFileP.reset();
         volSt.diffMgr.add(diff);
     }
+    volSt.setLatestMetaState(metaSt);
+    dbgVerifyLatestMetaState(volId);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
     volInfo.setState(aArchived);
@@ -887,6 +930,8 @@ inline bool runFullReplServer(
     }
     ul.lock();
     volInfo.setMetaState(metaSt);
+    volSt.setLatestMetaState(metaSt);
+    dbgVerifyLatestMetaState(volId);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
     volInfo.removeFullReplState();
@@ -937,7 +982,7 @@ inline bool runHashReplClient(
 
 inline bool runHashReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
+    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -953,6 +998,9 @@ inline bool runHashReplServer(
         logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
+        if (!canApply(metaSt, diff)) {
+            throw cybozu::Exception(FUNC) << "diff is not applicable" << metaSt << diff;
+        }
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
     } catch (std::exception &e) {
@@ -978,10 +1026,12 @@ inline bool runHashReplServer(
     }
     diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
+    ul.lock();
     volSt.diffMgr.add(diff);
+    volSt.setLatestMetaState(apply(metaSt, diff));
+    dbgVerifyLatestMetaState(volId);
     volInfo.setUuid(uuid);
     volSt.updateLastSyncTime();
-    ul.lock();
     tran.commit(aArchived);
     logger.info() << "hash-repl-server-mergeIn " << volId << virt.statIn();
     logger.info() << "hash-repl-server-mergeOut" << volId << virt.statOut();
@@ -1093,7 +1143,7 @@ inline bool runDiffReplClient(
 
 inline bool runDiffReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
+    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb;
@@ -1108,9 +1158,8 @@ inline bool runDiffReplServer(
         logger.debug() << "diff-repl-server" << sizeLb << maxIoBlocks << uuid << diff;
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
-        const MetaSnap snap = volInfo.getLatestSnapshot();
-        if (!canApply(snap, diff)) {
-            throw cybozu::Exception(FUNC) << "can not apply" << snap << diff;
+        if (!canApply(metaSt, diff)) {
+            throw cybozu::Exception(FUNC) << "can not apply" << metaSt << diff;
         }
     } catch (std::exception &e) {
         pkt.write(e.what());
@@ -1133,6 +1182,8 @@ inline bool runDiffReplServer(
     diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(fPath.str());
     volSt.diffMgr.add(diff);
+    volSt.setLatestMetaState(apply(metaSt, diff));
+    dbgVerifyLatestMetaState(volId);
     packet::Ack(pkt.sock()).send();
     pkt.flush();
     volSt.updateLastWdiffReceivedTime();
@@ -1243,6 +1294,8 @@ inline bool runResyncReplServer(
         }
     }
     volInfo.setMetaState(metaSt);
+    volSt.setLatestMetaState(metaSt);
+    dbgVerifyLatestMetaState(volId);
     volInfo.setUuid(uuid);
     volInfo.setArchiveUuid(archiveUuid);
     volSt.updateLastSyncTime();
@@ -1304,7 +1357,7 @@ inline bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, co
     for (;;) {
         pkt.read(srvLatestState);
         const MetaSnap srvLatestSnap = srvLatestState.snapB;
-        const MetaSnap cliLatestSnap = volInfo.getLatestSnapshot();
+        const MetaSnap cliLatestSnap = volSt.getLatestMetaState().snapB;
         const int repl = volInfo.shouldDoRepl(srvLatestSnap, cliLatestSnap, isSize, param);
         logger.debug() << "srvLatestSnap" << srvLatestSnap << "cliLatestSnap" << cliLatestSnap
                        << repl;
@@ -1394,17 +1447,17 @@ inline bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, Un
     }
 
     for (;;) {
-        const MetaState latestState = volInfo.getLatestState();
-        pkt.write(latestState);
+        const MetaState latestMetaSt = volSt.getLatestMetaState();
+        pkt.write(latestMetaSt);
         pkt.flush();
         int repl;
         pkt.read(repl);
         if (repl == ArchiveVolInfo::DONT_REPL) break;
 
         if (repl == ArchiveVolInfo::DO_HASH_REPL) {
-            if (!runHashReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
+            if (!runHashReplServer(volId, volSt, volInfo, pkt, ul, latestMetaSt, logger)) return false;
         } else {
-            if (!runDiffReplServer(volId, volSt, volInfo, pkt, ul, logger)) return false;
+            if (!runDiffReplServer(volId, volSt, volInfo, pkt, ul, latestMetaSt, logger)) return false;
         }
     }
     packet::Ack(sock).sendFin();
@@ -1452,7 +1505,7 @@ inline StrVec getAllStatusAsStrVec()
             v.push_back(s);
             continue;
         }
-        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+        const MetaSnap latestSnap = volSt.getLatestMetaState().snapB;
         s += fmt(" latestSnapshot %s", latestSnap.str().c_str());
         const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
         const std::string sizeS = cybozu::util::toUnitIntString(sizeLb * LOGICAL_BLOCK_SIZE);
@@ -1915,10 +1968,9 @@ inline bool getLatestMetaState(const std::string &volId, MetaState &metaSt)
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string state = volSt.sm.get();
-    if (!isStateIn(state, aActive)) return false;
+    if (!isStateIn(state, aActiveOrStopped)) return false;
 
-    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    metaSt = volInfo.getLatestState();
+    metaSt = volSt.getLatestMetaState();
     return true;
 }
 
@@ -1992,11 +2044,16 @@ inline void getTsDelta(protocol::GetCommandParams &p)
 
 inline void ArchiveVolState::initInner(const std::string& volId)
 {
+    UniqueLock ul(mu);
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, diffMgr, lvCache);
     if (volInfo.existsVolDir()) {
-        sm.set(volInfo.getState());
+        const std::string st = volInfo.getState();
+        sm.set(st);
         WalbDiffFiles wdiffs(diffMgr, volInfo.volDir.str());
         wdiffs.reload();
+        if (isStateIn(st, aActiveOrStopped)) {
+            latestMetaSt = volInfo.getLatestState();
+        }
     } else {
         sm.set(aClear);
     }
@@ -2418,7 +2475,8 @@ inline void p2aWdiffTransferServer(protocol::ServerParams &p)
             logger.warn() << "larger lv size" << volId << sizeLb << selfSizeLb;
             // no problem to continue.
         }
-        const MetaSnap latestSnap = volInfo.getLatestSnapshot();
+        const MetaState latestMetaSt = volSt.getLatestMetaState();
+        const MetaSnap& latestSnap = latestMetaSt.snapB;
         const Relation rel = getRelation(latestSnap, diff);
 
         if (rel != Relation::APPLICABLE_DIFF) {
@@ -2463,6 +2521,8 @@ inline void p2aWdiffTransferServer(protocol::ServerParams &p)
 
         ul.lock();
         volSt.diffMgr.add(diff);
+        volSt.setLatestMetaState(apply(latestMetaSt, diff));
+        archive_local::dbgVerifyLatestMetaState(volId);
         tran.commit(aArchived);
         volSt.updateLastWdiffReceivedTime();
         ul.unlock();

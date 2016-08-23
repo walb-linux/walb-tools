@@ -769,10 +769,6 @@ public:
     const MetaDiffManager &getDiffMgr() const {
         return wdiffs_.getMgr();
     }
-    MetaSnap getLatestSnapshot() const {
-        const MetaState metaSt = getMetaState();
-        return getDiffMgr().getLatestSnapshot(metaSt);
-    }
     MetaState getLatestState() const {
         const MetaState metaSt = getMetaState();
         return getDiffMgr().getLatestState(metaSt);
