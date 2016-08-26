@@ -2794,10 +2794,12 @@ inline void changeSnapshot(protocol::ServerParams &p, bool enable)
 
         bool failed = false;
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+        const std::string msg = (enable ? "enable" : "disable");
         for (const uint64_t gid : param.gidL) {
-            MetaDiffVec diffV = volSt.diffMgr.changeSnapshot(gid, enable);
+            MetaDiffVec diffV;
+            if (!volSt.diffMgr.changeSnapshot(gid, enable, diffV)) failed = true;
             if (!volInfo.changeSnapshot(diffV, enable)) failed = true;
-            logger.info() << (enable ? "enable snapshot succeeded" : "disable snapshot succeeded")
+            logger.info() << msg + " snapshot " + (failed ? "failed" : "succeeded")
                           << volId << gid;
         }
         if (failed) {

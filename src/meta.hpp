@@ -782,13 +782,18 @@ public:
         }
     }
     /**
+     * diffV: an empty diff vector.
+     *   This will be filled by only updated diffs corresponding to the enabled/disabled snapshots.
+     *
      * RETURN:
-     *   a diff vector corresponding to the enabled/disabled snapshots.
+     *   True when the snapshot for gid is found.
      */
-    MetaDiffVec changeSnapshot(uint64_t gid, bool enable) {
+    bool changeSnapshot(uint64_t gid, bool enable, MetaDiffVec &diffV) {
         AutoLock lk(mu_);
         auto range = mmap_.equal_range(gid);
-        MetaDiffVec diffV;
+        if (range.first == range.second) {
+            return false; // not found.
+        }
         for (Mmap::iterator i = range.first; i != range.second; ++i) {
             MetaDiff& diff = i->second;
             if (enable) {
@@ -803,7 +808,7 @@ public:
                 }
             }
         }
-        return diffV;
+        return true;
     }
     /**
      * Garbage collect.
