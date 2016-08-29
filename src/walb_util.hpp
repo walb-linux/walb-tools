@@ -22,6 +22,7 @@
 #include "thread_util.hpp"
 #include "time.hpp"
 #include "process.hpp"
+#include "linux/walb/walb.h"
 #include "linux/walb/block_size.h"
 #include "cybozu/exception.hpp"
 #include "cybozu/string_operation.hpp"
@@ -389,13 +390,14 @@ inline void parseDecOrHexInt(const std::string& s, Int& v)
 inline std::string getDescription(const char *prefix)
 {
     return cybozu::util::formatString(
-        "%s version %s build at %s\n"
+        "%s version %s build at %s (wlog version %d)\n"
 #ifndef DISABLE_COMMIT_ID
         "commit %s\n"
 #endif
         , prefix
         , getWalbToolsVersion()
         , getWalbToolsBuildDate()
+        , WALB_LOG_VERSION
 #ifndef DISABLE_COMMIT_ID
         , getWalbToolsCommitId()
 #endif
