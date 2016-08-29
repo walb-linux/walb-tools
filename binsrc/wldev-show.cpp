@@ -64,7 +64,7 @@ struct Option
     }
 };
 
-inline bool matchAddress(uint64_t addr, uint16_t iosize, const LogPackHeader& pack)
+inline bool matchAddress(uint64_t addr, uint32_t iosize, const LogPackHeader& pack)
 {
     const size_t nr = pack.nRecords();
     for (size_t i = 0; i < nr; i++) {
