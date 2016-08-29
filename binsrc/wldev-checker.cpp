@@ -35,6 +35,7 @@ struct Option
     bool skipLogIos;
     bool isZeroDelete;
     bool keepCsum;
+    bool monitorPadding;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -53,6 +54,7 @@ struct Option
         opt.appendBoolOpt(&skipLogIos, "skipio", ": skip logpack IOs.");
         opt.appendBoolOpt(&isZeroDelete, "zero", ": delete wlogs with filling zero data.");
         opt.appendBoolOpt(&keepCsum, "csum", ": keep checksum of each logical block. (enabled only if skipio is disabled.)");
+        opt.appendBoolOpt(&monitorPadding, "monpadding", ": monitor padding record.");
 
         opt.appendHelp("h", ": show this message.");
         if (!opt.parse(argc, argv)) {
@@ -269,6 +271,9 @@ void checkWldev(const Option &opt)
                     goto fin;
                 }
                 reader.reset(lsid + 1); // for next read.
+            }
+            if (opt.monitorPadding && packH.nPadding() > 0) {
+                LOGs.info() << std::string("padding found\n") + packH.str();
             }
             if (opt.keepCsum) {
                 const uint32_t csum = cybozu::util::calcChecksum(packH.rawData(), pbs, 0);
