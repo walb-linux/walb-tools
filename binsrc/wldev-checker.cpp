@@ -104,9 +104,28 @@ bool isEqualLogPackHeaderImage(const LogPackHeader& packH, const AlignedArray& p
     return ::memcmp(packH.rawData(), prevImg.data(), prevImg.size()) == 0;
 }
 
+class IntervalChecker
+{
+    using Clock = std::chrono::high_resolution_clock;
+    Clock::time_point prevTime_;
+    Clock::duration interval_;
+
+public:
+    explicit IntervalChecker(uint64_t intervalMs)
+        : prevTime_(Clock::now()), interval_(std::chrono::milliseconds(intervalMs)) {
+        assert(intervalMs > 0);
+    }
+    bool isElapsed() {
+        Clock::time_point now = Clock::now();
+        if (now < prevTime_ + interval_) return false;
+        prevTime_ = now;
+        return true;
+    }
+};
+
 bool retryForeverReadLogPackHeader(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
-    LogPackHeader& packH, uint64_t lsid, size_t retryMs)
+    LogPackHeader& packH, uint64_t lsid, size_t retryMs, uint64_t logCapacityPb)
 {
     const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
@@ -116,6 +135,7 @@ bool retryForeverReadLogPackHeader(
     ::memcpy(prevImg.data(), packH.rawData(), prevImg.size());
 
     size_t c = 0;
+    IntervalChecker ic(1000);
   retry:
     if (cybozu::signal::gotSignal()) return false;
     waitMs(retryMs);
@@ -130,6 +150,14 @@ bool retryForeverReadLogPackHeader(
             LOGs.info() << "invalid logpack header changed" << wdevName << lsid << ts1 << c;
             dumpLogPackHeader(wdevName, lsid, packH, ts1);
             ::memcpy(prevImg.data(), packH.rawData(), prevImg.size());
+        }
+        if (ic.isElapsed()) {
+            // Check one lap behined.
+            device::LsidSet lsidSet;
+            device::getLsidSet(wdevName, lsidSet);
+            if (lsidSet.latest - lsid > logCapacityPb) {
+                throw cybozu::Exception("One lap behined.") << lsidSet.latest << lsid;
+            }
         }
         goto retry;
     }
@@ -177,7 +205,7 @@ bool isEqualLogPackIoImage(const LogBlockShared& blockS, const AlignedArray& pre
 
 bool retryForeverReadLogPackIo(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
-    const LogPackHeader& packH, size_t i, LogBlockShared& blockS, size_t retryMs)
+    const LogPackHeader& packH, size_t i, LogBlockShared& blockS, size_t retryMs, uint64_t logCapacityPb)
 {
     const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
@@ -190,6 +218,7 @@ bool retryForeverReadLogPackIo(
     copyLogPackIo(prevImg, blockS);
 
     size_t c = 0;
+    IntervalChecker ic(1000);
 retry:
     if (cybozu::signal::gotSignal()) return false;
     waitMs(retryMs);
@@ -206,6 +235,14 @@ retry:
             dumpLogPackHeader(wdevName, lsid, packH, ts1);
             dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts1);
             copyLogPackIo(prevImg, blockS);
+        }
+        if (ic.isElapsed()) {
+            // Check one lap behined.
+            device::LsidSet lsidSet;
+            device::getLsidSet(wdevName, lsidSet);
+            if (lsidSet.latest - lsid > logCapacityPb) {
+                throw cybozu::Exception("One lap behined.") << lsidSet.latest << lsid;
+            }
         }
         goto retry;
     }
@@ -229,6 +266,8 @@ void checkWldev(const Option &opt)
     const uint32_t pbs = super.pbs();
     const uint32_t salt = super.salt();
     const uint64_t readStepPb = opt.readStepSize / pbs;
+    const uint64_t logCapacityPb = super.getRingBufferSize();
+
     uint64_t lsid = opt.bgnLsid;
     if (lsid == UINT64_MAX) {
         device::LsidSet lsidSet;
@@ -267,7 +306,7 @@ void checkWldev(const Option &opt)
         reader.reset(lsid);
         while (lsid < lsidEnd) {
             if (!readLogPackHeader(reader, packH, lsid)) {
-                if (!retryForeverReadLogPackHeader(wdevName, sReader, packH, lsid, opt.retryMs)) {
+                if (!retryForeverReadLogPackHeader(wdevName, sReader, packH, lsid, opt.retryMs, logCapacityPb)) {
                     goto fin;
                 }
                 reader.reset(lsid + 1); // for next read.
@@ -289,7 +328,7 @@ void checkWldev(const Option &opt)
                     LogBlockShared blockS;
                     const uint64_t nextLsid = rec.lsid + rec.ioSizePb(pbs);
                     if (!readLogIo(reader, packH, i, blockS)) {
-                        if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, blockS, opt.retryMs)) {
+                        if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, blockS, opt.retryMs, logCapacityPb)) {
                             goto fin;
                         }
                         reader.reset(nextLsid); // for next read.
@@ -314,9 +353,8 @@ void checkWldev(const Option &opt)
         }
         if (opt.keepCsum) {
             // Remove old records.
-            const uint64_t rbSize = super.getRingBufferSize();
-            if (rbSize * 2 < csumDeq.size()) {
-                const size_t nr = csumDeq.size() - (rbSize * 2);
+            if (logCapacityPb * 2 < csumDeq.size()) {
+                const size_t nr = csumDeq.size() - (logCapacityPb * 2);
                 csumDeq.erase(csumDeq.begin(), csumDeq.begin() + nr);
             }
         }
