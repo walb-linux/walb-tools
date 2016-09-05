@@ -376,7 +376,7 @@ public:
      * RETURN:
      *   true in success, or false (you must create a new header).
      */
-    bool addDiscardIo(uint64_t offset, uint16_t size) {
+    bool addDiscardIo(uint64_t offset, uint32_t size) {
         if (::max_n_log_record_in_sector(pbs()) <= nRecords()) {
             return false;
         }

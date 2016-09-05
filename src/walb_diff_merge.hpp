@@ -130,7 +130,7 @@ private:
 #endif
     };
     bool shouldValidateUuid_;
-    uint16_t maxIoBlocks_;
+    uint32_t maxIoBlocks_;
 
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
@@ -187,7 +187,7 @@ public:
      * @maxIoBlocks Max io blocks in the output wdiff [logical block].
      *     0 means no limitation.
      */
-    void setMaxIoBlocks(uint16_t maxIoBlocks) {
+    void setMaxIoBlocks(uint32_t maxIoBlocks) {
         maxIoBlocks_ = maxIoBlocks;
     }
     /**
@@ -473,10 +473,10 @@ private:
             }
         }
     }
-    uint16_t getMaxIoBlocks() const {
-        uint16_t ret = 0;
+    uint32_t getMaxIoBlocks() const {
+        uint32_t ret = 0;
         for (const WdiffPtr &wdiffP : wdiffs_) {
-            const uint16_t m = wdiffP->header().getMaxIoBlocks();
+            const uint32_t m = wdiffP->header().getMaxIoBlocks();
             if (ret < m) ret = m;
         }
         return ret;

@@ -26,7 +26,7 @@ struct Option
     bool showSuper, showHead, showPack, showStat;
     bool doSearch;
     uint64_t addr; // for doSearch
-    uint16_t iosize; // for doSearch
+    uint32_t iosize; // for doSearch
     bool dontUseAio;
     bool doForce;
     bool isDebug;

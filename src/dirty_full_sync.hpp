@@ -39,7 +39,7 @@ inline bool dirtyFullSyncClient(
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
-        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
+        const uint32_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
         reader.read(&buf[0], size);
         if (cybozu::util::isAllZero(buf.data(), buf.size())) {
@@ -99,7 +99,7 @@ inline bool dirtyFullSyncServer(
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
-        const uint16_t lb = std::min<uint64_t>(bulkLb, remainingLb);
+        const uint32_t lb = std::min<uint64_t>(bulkLb, remainingLb);
         const size_t size = lb * LOGICAL_BLOCK_SIZE;
         size_t encSize;
         pkt.read(encSize);

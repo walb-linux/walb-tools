@@ -18,7 +18,7 @@ IoType getIoType(const DiffRecord &rec)
     throw cybozu::Exception(__func__) << "bad ioType";
 }
 
-std::pair<DiffRecord, DiffIo> genRecIo(uint64_t ioAddr, uint16_t ioBlocks, IoType ioType = Normal)
+std::pair<DiffRecord, DiffIo> genRecIo(uint64_t ioAddr, uint32_t ioBlocks, IoType ioType = Normal)
 {
     DiffRecord rec;
     rec.io_address = ioAddr;
@@ -60,7 +60,7 @@ void getFromDiffMemory(DiffMemory &diffMem, std::vector<DiffRecord> &recV, std::
     }
 }
 
-void verifyDiffIoEuqality(const DiffIo &io0, uint16_t startBlocks0, const DiffIo &io1, uint16_t startBlocks1, uint16_t ioBlocks)
+void verifyDiffIoEuqality(const DiffIo &io0, uint32_t startBlocks0, const DiffIo &io1, uint32_t startBlocks1, uint32_t ioBlocks)
 {
     CYBOZU_TEST_ASSERT(!io0.isCompressed());
     const size_t off0 = startBlocks0 * LOGICAL_BLOCK_SIZE;

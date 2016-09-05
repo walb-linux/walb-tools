@@ -50,6 +50,8 @@ const size_t PROGRESS_INTERVAL_SEC = 60;
 
 const size_t DEFAULT_TS_DELTA_INTERVAL_SEC = 60;
 
+const uint32_t DEFAULT_MAX_WDIFF_IO_BLOCKS = 64 * 1024;
+
 const size_t DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC = 10;
 
 } // walb

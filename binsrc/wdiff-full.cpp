@@ -14,12 +14,12 @@ using namespace walb;
 class FullImageToWalbDiffConverter
 {
 private:
-    const uint16_t ioBlocks_;
+    const uint32_t ioBlocks_;
     const uint32_t ioSize_;
     std::vector<char> buf0_;
 
 public:
-    explicit FullImageToWalbDiffConverter(uint16_t ioBlocks)
+    explicit FullImageToWalbDiffConverter(uint32_t ioBlocks)
         : ioBlocks_(ioBlocks)
         , ioSize_(ioBlocks * LOGICAL_BLOCK_SIZE)
         , buf0_(ioSize_) {
@@ -32,7 +32,7 @@ public:
         writer.writeHeader(head);
 
         uint64_t ioAddr = 0;
-        uint16_t blks = readChunk(reader);
+        uint32_t blks = readChunk(reader);
         while (0 < blks) {
             DiffRecord rec;
             rec.io_address = ioAddr;
@@ -53,8 +53,8 @@ private:
      * RETURN:
      *   Number of read blocks [logical block]
      */
-    uint16_t readChunk(cybozu::util::File &reader) {
-        uint16_t c = 0;
+    uint32_t readChunk(cybozu::util::File &reader) {
+        uint32_t c = 0;
         char *p = buf0_.data();
         try {
             while (c < ioBlocks_) {

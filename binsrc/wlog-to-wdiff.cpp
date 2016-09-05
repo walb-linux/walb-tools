@@ -19,7 +19,8 @@ struct Option
         opt.setUsage("Usage: wlog-to-wdiff < [wlog] > [wdiff]", true);
         opt.appendOpt(&input, "-", "i", ": input wlog file (default: stdin)");
         opt.appendOpt(&output, "-", "o", ": output wdiff file (default: stdout)");
-        opt.appendOpt(&maxIoSize, 64 * KIBI, "x", ": max IO size in the output wdiff [byte].");
+        opt.appendOpt(&maxIoSize, DEFAULT_MAX_WDIFF_IO_BLOCKS * LBS
+                      , "x", ": max IO size in the output wdiff [byte].");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
         opt.appendHelp("h");
         if (!opt.parse(argc, argv)) {

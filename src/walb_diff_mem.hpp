@@ -85,7 +85,7 @@ public:
      * Split the DiffRecIo into pieces
      * where each ioBlocks is <= a specified one.
      */
-    std::vector<DiffRecIo> splitAll(uint16_t ioBlocks) const {
+    std::vector<DiffRecIo> splitAll(uint32_t ioBlocks) const {
         assert(isValid());
         std::vector<DiffRecIo> v;
 
@@ -133,8 +133,8 @@ public:
          * oooooo + __xx__ = ooxxoo
          */
         if (rhs.rec_.isOverwrittenBy(rec_)) {
-            uint16_t blks0 = rhs.rec_.io_address - rec_.io_address;
-            uint16_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
+            uint32_t blks0 = rhs.rec_.io_address - rec_.io_address;
+            uint32_t blks1 = rec_.endIoAddress() - rhs.rec_.endIoAddress();
             uint64_t addr0 = rec_.io_address;
             uint64_t addr1 = rec_.endIoAddress() - blks1;
 
@@ -180,7 +180,7 @@ public:
         if (rec_.io_address < rhs.rec_.io_address) {
             const uint64_t endIoAddr = rec_.endIoAddress();
             assert(rhs.rec_.io_address < endIoAddr);
-            uint16_t rblks = endIoAddr - rhs.rec_.io_address;
+            uint32_t rblks = endIoAddr - rhs.rec_.io_address;
             assert(rhs.rec_.io_address + rblks == endIoAddr);
 
             DiffRecord rec = rec_;
@@ -209,7 +209,7 @@ public:
          */
         const uint64_t rhsEndIoAddr = rhs.rec_.endIoAddress();
         assert(rec_.io_address < rhsEndIoAddr);
-        uint16_t rblks = rhsEndIoAddr - rec_.io_address;
+        uint32_t rblks = rhsEndIoAddr - rec_.io_address;
         assert(rec_.io_address + rblks == rhsEndIoAddr);
         size_t off = rblks * LOGICAL_BLOCK_SIZE;
 
@@ -245,21 +245,22 @@ class DiffMemory
 public:
     using Map = std::map<uint64_t, DiffRecIo>;
 private:
-    const uint16_t maxIoBlocks_; /* All IOs must not exceed the size. */
+    /* All IOs must not exceed the size inside the map. */
+    const uint32_t maxIoBlocks_;
     Map map_;
     DiffFileHeader fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
-    explicit DiffMemory(uint16_t maxIoBlocks = uint16_t(-1))
+    explicit DiffMemory(uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS)
         : maxIoBlocks_(maxIoBlocks), map_(), fileH_(), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
     ~DiffMemory() noexcept = default;
     bool empty() const { return map_.empty(); }
 
-    void add(const DiffRecord& rec, DiffIo &&io, uint16_t maxIoBlocks = 0) {
+    void add(const DiffRecord& rec, DiffIo &&io, uint32_t maxIoBlocks = 0) {
         /* Decide key range to search. */
         uint64_t addr0 = rec.io_address;
         if (addr0 <= fileH_.getMaxIoBlocks()) {
@@ -307,7 +308,7 @@ public:
         }
         for (DiffRecIo &r : rv) {
             uint64_t addr = r.record().io_address;
-            uint16_t blks = r.record().io_blocks;
+            uint32_t blks = r.record().io_blocks;
             map_.emplace(addr, std::move(r));
             fileH_.setMaxIoBlocksIfNecessary(blks);
         }

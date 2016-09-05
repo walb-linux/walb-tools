@@ -1065,7 +1065,7 @@ inline bool runNoMergeDiffReplClient(
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     DiffFileHeader fileH;
     fileH.readFrom(fileR);
-    const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const uint32_t maxIoBlocks = fileH.getMaxIoBlocks();
     const cybozu::Uuid uuid = fileH.getUuid();
     pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
@@ -1111,7 +1111,7 @@ inline bool runDiffReplClient(
 
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     const DiffFileHeader &fileH = merger.header();
-    const uint16_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const uint32_t maxIoBlocks = fileH.getMaxIoBlocks();
     const cybozu::Uuid uuid = fileH.getUuid();
     pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
@@ -1147,7 +1147,7 @@ inline bool runDiffReplServer(
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb;
-    uint16_t maxIoBlocks;
+    uint32_t maxIoBlocks;
     cybozu::Uuid uuid;
     MetaDiff diff;
     try {
@@ -2400,7 +2400,7 @@ inline void p2aWdiffTransferServer(protocol::ServerParams &p)
         std::string volId;
         std::string hostType;
         cybozu::Uuid uuid;
-        uint16_t maxIoBlocks;
+        uint32_t maxIoBlocks;
         uint64_t sizeLb;
         MetaDiff diff;
 

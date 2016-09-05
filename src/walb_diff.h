@@ -13,6 +13,8 @@
 extern "C" {
 #endif
 
+#define WALB_DIFF_VERSION 2
+
 /**
  * Wdiff file format.
  *
@@ -58,12 +60,14 @@ enum {
 struct walb_diff_record
 {
     uint64_t io_address; /* [logical block] */
-    uint16_t io_blocks; /* [logical block] */
+    uint32_t io_blocks; /* [logical block] */
     uint8_t flags; /* see WALB_DIFF_FLAG_XXX. */
     uint8_t compression_type; /* see WALB_DIFF_CMPR_XXX. */
+    uint16_t reserved1;
     uint32_t data_offset; /* [byte] */
     uint32_t data_size; /* [byte] */
     uint32_t checksum; /* compressed data checksum with salt 0. */
+    uint32_t reserved2;
 } __attribute__((packed));
 
 /**
@@ -72,9 +76,11 @@ struct walb_diff_record
 struct walb_diff_file_header
 {
     uint32_t checksum;       /* header block checksum. salt is 0. */
-    uint16_t max_io_blocks;  /* Max io_blocks inside the diff.
-                                This is used for overlapped check. */
+    uint16_t version;        /* WalB diff version */
     uint16_t reserved1;
+    uint32_t max_io_blocks;  /* Max io_blocks inside the diff.
+                                This is used for overlapped check. */
+    uint32_t reserved2;
     uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
 } __attribute__((packed));
 

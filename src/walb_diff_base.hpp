@@ -133,7 +133,7 @@ struct DiffRecord : public walb_diff_record {
      *   The checksum of splitted records will be invalid state.
      *   Only non-compressed records can be splitted.
      */
-    std::vector<DiffRecord> splitAll(uint16_t ioBlocks0) const {
+    std::vector<DiffRecord> splitAll(uint32_t ioBlocks0) const {
         if (ioBlocks0 == 0) {
             throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
         }
@@ -142,10 +142,10 @@ struct DiffRecord : public walb_diff_record {
         }
         std::vector<DiffRecord> v;
         uint64_t addr = io_address;
-        uint16_t remaining = io_blocks;
+        uint32_t remaining = io_blocks;
         const bool isNormal = this->isNormal();
         while (remaining > 0) {
-            uint16_t blks = std::min(ioBlocks0, remaining);
+            uint32_t blks = std::min(ioBlocks0, remaining);
             v.push_back(*this);
             DiffRecord& r = v.back();
             r.io_address = addr;
@@ -166,7 +166,7 @@ struct DiffRecord : public walb_diff_record {
  */
 struct DiffIo
 {
-    uint16_t ioBlocks; /* [logical block]. */
+    uint32_t ioBlocks; /* [logical block]. */
     int compressionType;
     AlignedArray data;
 
@@ -174,7 +174,7 @@ struct DiffIo
     char *get() { return data.data(); }
     size_t getSize() const { return data.size(); }
 
-    explicit DiffIo(uint16_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0)
+    explicit DiffIo(uint32_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0)
         : ioBlocks(ioBlocks), compressionType(compressionType), data() {
         if (data && size > 0) util::assignAlignedArray(this->data, data, size);
     }
@@ -270,7 +270,7 @@ struct DiffIo
      * CAUSION:
      *   Compressed IO can not be splitted.
      */
-    std::vector<DiffIo> splitIoDataAll(uint16_t ioBlocks0) const
+    std::vector<DiffIo> splitIoDataAll(uint32_t ioBlocks0) const
     {
         if (ioBlocks0 == 0) {
             throw cybozu::Exception("splitIoDataAll: ioBlocks0 must not be 0.");
@@ -280,10 +280,10 @@ struct DiffIo
         }
         assert(isValid());
         std::vector<DiffIo> v;
-        uint16_t remaining = ioBlocks;
+        uint32_t remaining = ioBlocks;
         const char *p = data.data();
         while (remaining > 0) {
-            uint16_t blks = std::min(remaining, ioBlocks0);
+            uint32_t blks = std::min(remaining, ioBlocks0);
             size_t size = blks * LOGICAL_BLOCK_SIZE;
             v.emplace_back(blks, WALB_DIFF_CMPR_NONE, p, size);
             remaining -= blks;

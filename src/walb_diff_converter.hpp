@@ -92,7 +92,7 @@ class DiffConverter /* final */
 {
 public:
     void convert(int inputLogFd, int outputWdiffFd,
-                 uint16_t maxIoBlocks = uint16_t(-1)) {
+                 uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS) {
         /* Prepare walb diff. */
         DiffMemory diffMem(maxIoBlocks);
 

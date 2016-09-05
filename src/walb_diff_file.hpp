@@ -24,10 +24,10 @@ struct DiffFileHeader : walb_diff_file_header
         init();
     }
     uint32_t getChecksum() const { return checksum; }
-    uint16_t getMaxIoBlocks() const { return max_io_blocks; }
+    uint32_t getMaxIoBlocks() const { return max_io_blocks; }
     cybozu::Uuid getUuid() const { return cybozu::Uuid(&uuid[0]); }
 
-    void setMaxIoBlocksIfNecessary(uint16_t ioBlocks) {
+    void setMaxIoBlocksIfNecessary(uint32_t ioBlocks) {
         if (max_io_blocks < ioBlocks) {
             max_io_blocks = ioBlocks;
         }
@@ -37,8 +37,22 @@ struct DiffFileHeader : walb_diff_file_header
 
     size_t getSize() const { return sizeof(walb_diff_file_header); }
 
-    bool isValid() const {
-        return cybozu::util::calcChecksum(this, getSize(), 0) == 0;
+    bool isValid() const { return verify(false); }
+    bool verify(bool throwError = true) const {
+        if (cybozu::util::calcChecksum(this, getSize(), 0) != 0) {
+            if (throwError) {
+                throw cybozu::Exception(__func__) << "invalid checksum";
+            }
+            return false;
+        }
+        if (version != WALB_DIFF_VERSION) {
+            if (throwError) {
+                throw cybozu::Exception(__func__)
+                    << "invalid walb diff version" << version << WALB_DIFF_VERSION;
+            }
+            return false;
+        }
+        return true;
     }
 
     void updateChecksum() {
@@ -54,9 +68,10 @@ struct DiffFileHeader : walb_diff_file_header
         return cybozu::util::formatString(
             "wdiff_h:\n"
             "  checksum: %08x\n"
+            "  version: %u\n"
             "  maxIoBlocks: %u\n"
             "  uuid: %s\n"
-            , checksum, max_io_blocks, getUuid().str().c_str());
+            , checksum, version, max_io_blocks, getUuid().str().c_str());
     }
     friend inline std::ostream& operator<<(std::ostream &os, const DiffFileHeader &fileH) {
         os << fileH.str();
@@ -68,6 +83,7 @@ struct DiffFileHeader : walb_diff_file_header
 
     void init() {
         ::memset(this, 0, getSize());
+        version = WALB_DIFF_VERSION;
     }
     template<class Writer>
     void writeTo(Writer& writer) {
@@ -77,12 +93,12 @@ struct DiffFileHeader : walb_diff_file_header
     template<class Reader>
     void readFrom(Reader& reader) {
         reader.read(this, getSize());
-        if (!isValid()) throw cybozu::Exception("DiffFileHeader:readFrom:bad checksum");
+        verify();
     }
 };
 
 template <class Writer>
-inline void writeDiffFileHeader(Writer& writer, uint16_t maxIoBlocks, const cybozu::Uuid &uuid)
+inline void writeDiffFileHeader(Writer& writer, uint32_t maxIoBlocks, const cybozu::Uuid &uuid)
 {
     DiffFileHeader fileH;
     fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);

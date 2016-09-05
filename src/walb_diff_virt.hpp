@@ -34,7 +34,7 @@ private:
     DiffMerger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     DiffRecIo recIo_; /* current diff rec IO. */
-    uint16_t offInIo_; /* offset in the IO [logical block]. */
+    uint32_t offInIo_; /* offset in the IO [logical block]. */
     bool isEndDiff_; /* true if there is no more wdiff IO. */
     bool emptyWdiff_;
     DiffStatistics statOut_;
@@ -108,11 +108,9 @@ public:
      */
     size_t readSome(void *data, size_t size) {
         assert(size % LOGICAL_BLOCK_SIZE == 0);
-        /* Read up to 65535 blocks at once. */
-        uint16_t blks = uint16_t(-1);
-        if (size / LOGICAL_BLOCK_SIZE < blks) {
-            blks = size / LOGICAL_BLOCK_SIZE;
-        }
+
+        const uint32_t blks = size / LOGICAL_BLOCK_SIZE;
+        assert(blks * LOGICAL_BLOCK_SIZE == size);
 
         fillDiffIo();
         if (emptyWdiff_ || isEndDiff_) {
@@ -124,14 +122,14 @@ public:
         assert(addr_ <= diffAddr);
         if (addr_ == diffAddr) {
             /* Read wdiff IO partially. */
-            uint16_t blks0 = std::min(blks, currentDiffBlocks());
+            const size_t blks0 = std::min(blks, currentDiffBlocks());
             return readWdiff(data, blks0);
         }
         /* Read the base image. */
-        uint16_t blks0 = blks;
+        uint32_t blks0 = blks;
         uint64_t blksToIo = diffAddr - addr_;
         if (blksToIo < blks) {
-            blks0 = uint16_t(blksToIo);
+            blks0 = blksToIo;
         }
         return readBase(data, blks0);
     }
@@ -245,7 +243,7 @@ private:
     uint64_t currentDiffAddr() const {
         return recIo_.record().io_address + offInIo_;
     }
-    uint16_t currentDiffBlocks() const {
+    uint32_t currentDiffBlocks() const {
         assert(offInIo_ <= recIo_.record().io_blocks);
         return recIo_.record().io_blocks - offInIo_;
     }

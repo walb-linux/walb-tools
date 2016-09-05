@@ -26,12 +26,9 @@ struct Option : public cybozu::Option
         appendBoolOpt(&doStat, "stat", ": put statistics.");
         appendHelp("h", ": put this message.");
     }
-    uint16_t maxIoBlocks() const {
+    uint32_t maxIoBlocks() const {
         if (0 < maxIoSize && maxIoSize < LOGICAL_BLOCK_SIZE) {
             throw RT_ERR("Too small max IO size specified.");
-        }
-        if (uint16_t(-1) < maxIoSize / LOGICAL_BLOCK_SIZE) {
-            throw RT_ERR("Max IO size must be less than 32M.");
         }
         return maxIoSize / LOGICAL_BLOCK_SIZE;
     }

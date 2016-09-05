@@ -232,8 +232,9 @@ public:
      * RETURN:
      *   false: failed. You need to create another pack.
      */
-    bool add(uint64_t ioAddr, uint16_t ioBlocks, const char *data) {
+    bool add(uint64_t ioAddr, uint32_t ioBlocks, const char *data) {
         assert(ioBlocks != 0);
+        assert(ioBlocks <= UINT16_MAX);
         uint32_t dSize = ioBlocks * LOGICAL_BLOCK_SIZE;
         if (!pack_->canAdd(dSize)) return false;
 
@@ -254,7 +255,7 @@ public:
     }
     bool add(const DiffRecord &rec, const char *data) {
         assert(rec.isValid());
-        const size_t dSize = rec.data_size;
+        const uint32_t dSize = rec.data_size;
         if (!pack_->canAdd(dSize)) return false;
 
         bool isNormal = rec.isNormal();

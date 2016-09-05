@@ -72,18 +72,18 @@ public:
             throw RT_ERR("The flag must have O_RDWR.");
         }
     }
-    bool write(uint64_t ioAddr, uint16_t ioBlocks, const void *data) {
+    bool write(uint64_t ioAddr, uint32_t ioBlocks, const void *data) {
         assert(data);
         return issueIo(ioAddr, ioBlocks, data);
     }
-    bool discard(uint64_t ioAddr, uint16_t ioBlocks) {
+    bool discard(uint64_t ioAddr, uint32_t ioBlocks) {
         return issueIo(ioAddr, ioBlocks, nullptr);
     }
     void sync() {
         file_.fdatasync();
     }
 private:
-    bool issueIo(uint64_t ioAddr, uint16_t ioBlocks, const void *data = nullptr) {
+    bool issueIo(uint64_t ioAddr, uint32_t ioBlocks, const void *data = nullptr) {
         size_t oft = ioAddr * LOGICAL_BLOCK_SIZE;
         size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
 
@@ -147,7 +147,7 @@ public:
      */
     void executeDiffIo(const DiffRecord& rec, const DiffIo& io) {
         const uint64_t ioAddr = rec.io_address;
-        const uint16_t ioBlocks = rec.io_blocks;
+        const uint32_t ioBlocks = rec.io_blocks;
         bool isSuccess = false;
         if (rec.isAllZero()) {
             isSuccess = executeZeroIo(ioAddr, ioBlocks);
@@ -215,13 +215,13 @@ public:
     }
 
 private:
-    bool executeZeroIo(uint64_t ioAddr, uint16_t ioBlocks) {
+    bool executeZeroIo(uint64_t ioAddr, uint32_t ioBlocks) {
         static AlignedArray zero;
         zero.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
         return ioExec_.write(ioAddr, ioBlocks, zero.data());
     }
 
-    bool executeDiscardIo(uint64_t ioAddr, uint16_t ioBlocks) {
+    bool executeDiscardIo(uint64_t ioAddr, uint32_t ioBlocks) {
         return ioExec_.discard(ioAddr, ioBlocks);
     }
 };

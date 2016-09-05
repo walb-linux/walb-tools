@@ -138,7 +138,7 @@ inline bool dirtyHashSyncClient(
         pkt.read(recvHash);
         cHash++;
 
-        const uint16_t lb = std::min<uint64_t>(remainingLb, bulkLb);
+        const uint32_t lb = std::min<uint64_t>(remainingLb, bulkLb);
         buf.resize(lb * LOGICAL_BLOCK_SIZE);
         reader.read(buf.data(), buf.size());
 

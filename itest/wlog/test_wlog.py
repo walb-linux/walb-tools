@@ -94,7 +94,8 @@ def Initialization():
 	global totalPadding0
 
 	format_ldev()
-	run("%s/wlog-gen -s 32M -z 16M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
+	#run("%s/wlog-gen -s 32M -z 16M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
+	run("%s/wlog-gen -s 32M -z 16M --minIoSize 512 --maxIoSize 64M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
 	#${BIN}/wlog-gen -s 32M -z 16M --minIoSize 512 --maxIoSize 512 --maxPackSize 1M -o WLOG_0
 	endLsid0 = echo_wlog_value(WLOG_0, "reallyEndLsid")
 	nPacks0 = echo_wlog_value(WLOG_0, "nrPacks")

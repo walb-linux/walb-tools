@@ -45,17 +45,8 @@ public:
             if (!::is_valid_pbs(pbs)) {
                 throw RT_ERR("pbs invalid.");
             }
-            if (65535 < minIoLb) {
-                throw RT_ERR("minSize must be < 512 * 65536 bytes.");
-            }
-            if (65535 < maxIoLb) {
-                throw RT_ERR("maxSize must be < 512 * 65536 bytes.");
-            }
             if (maxIoLb < minIoLb) {
                 throw RT_ERR("minIoSize must be <= maxIoSize.");
-            }
-            if (maxPackPb < 1 + ::capacity_pb(pbs, maxIoLb)) {
-                throw RT_ERR("maxPackSize must be >= pbs + maxIoSize.");
             }
             if (lsid + outLogPb < lsid) {
                 throw RT_ERR("lsid will overflow.");
@@ -176,9 +167,29 @@ private:
 
         for (size_t i = 0; i < nRecords; i++) {
             uint64_t offset = rand.get64() % devLb;
+            /* Decide IO type. */
+            bool isDiscard = false;
+            bool isPadding = false;
+            bool isPaddingZero = false;
+            {
+                const size_t v = rand.get32() % 100;
+                if (config_.isPadding && v < 10) {
+                    isPadding = true;
+                    if (v < 5) isPaddingZero = true;
+                } else if (config_.isDiscard && v < 30) {
+                    isDiscard = true;
+                }
+            }
             /* Decide io_size. */
-            uint16_t ioSize = config_.minIoLb;
-            uint16_t range = config_.maxIoLb - config_.minIoLb;
+            uint32_t minIoLb = config_.minIoLb;
+            uint32_t maxIoLb = config_.maxIoLb;
+            /* Non-discard IO size must be UINT16_MAX [logical block]. */
+            if (!isDiscard) {
+                if (minIoLb > UINT16_MAX) minIoLb = UINT16_MAX;
+                if (maxIoLb > UINT16_MAX) maxIoLb = UINT16_MAX;
+            }
+            uint32_t ioSize = minIoLb;
+            uint32_t range = maxIoLb - minIoLb;
             if (0 < range) {
                 ioSize += rand.get32() % range;
             }
@@ -187,24 +198,24 @@ private:
             }
             assert(0 < ioSize);
             /* Check total_io_size limitation. */
-            if (0 < packH.totalIoSize() && 1 < nRecords &&
-                config_.maxPackPb <
-                packH.totalIoSize() + ::capacity_pb(pbs, ioSize)) {
+            if (0 < packH.totalIoSize() && 1 < nRecords && !isDiscard
+                && config_.maxPackPb < packH.totalIoSize() + ::capacity_pb(pbs, ioSize)) {
                 break;
             }
             /* Decide IO type. */
-            uint32_t v = rand.get32() % 100;
-            if (config_.isPadding && v < 10) {
-                uint16_t psize = capacity_lb(pbs, capacity_pb(pbs, ioSize));
-                if (v < 5) { psize = 0; } /* padding size can be 0. */
-                if (!packH.addPadding(psize)) { break; }
+            if (isPadding) {
+                uint32_t psize = capacity_lb(pbs, capacity_pb(pbs, ioSize));
+                if (isPaddingZero) psize = 0; /* padding size can be 0. */
+                assert(psize <= UINT16_MAX);
+                if (!packH.addPadding(psize)) break;
                 continue;
             }
-            if (config_.isDiscard && v < 30) {
-                if (!packH.addDiscardIo(offset, ioSize)) { break; }
+            if (isDiscard) {
+                if (!packH.addDiscardIo(offset, ioSize)) break;
                 continue;
             }
-            if (!packH.addNormalIo(offset, ioSize)) { break; }
+            assert(ioSize <= UINT16_MAX);
+            if (!packH.addNormalIo(offset, ioSize)) break;
         }
         packH.isValid(false);
     }
