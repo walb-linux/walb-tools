@@ -44,6 +44,8 @@ WlogGenerator::Config createConfig()
     cfg.devLb = (10 << 20) >> 9;
     cfg.minIoLb = 512 >> 9;
     cfg.maxIoLb = 262144 >> 9;
+    cfg.minDiscardLb = 512 >> 9;
+    cfg.maxDiscardLb = 262144 >> 9;
     cfg.pbs = 512;
     cfg.maxPackPb = (1 << 20) >> 9;
     cfg.outLogPb = (10 << 20) >> 9;

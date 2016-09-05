@@ -31,6 +31,8 @@ public:
         uint64_t devLb;
         uint32_t minIoLb;
         uint32_t maxIoLb;
+        uint32_t minDiscardLb;
+        uint32_t maxDiscardLb;
         uint32_t pbs;
         uint32_t maxPackPb;
         uint32_t outLogPb;
@@ -45,8 +47,23 @@ public:
             if (!::is_valid_pbs(pbs)) {
                 throw RT_ERR("pbs invalid.");
             }
+            if (minIoLb > UINT16_MAX) {
+                throw RT_ERR("minIoSize must be less than 32MiB.");
+            }
+            if (maxIoLb > UINT16_MAX) {
+                throw RT_ERR("maxIoSize must be less than 32MiB.");
+            }
             if (maxIoLb < minIoLb) {
                 throw RT_ERR("minIoSize must be <= maxIoSize.");
+            }
+            if (minDiscardLb > UINT32_MAX) {
+                throw RT_ERR("minDiscardSize must be less than 2TB.");
+            }
+            if (maxDiscardLb > UINT32_MAX) {
+                throw RT_ERR("maxDiscardSize must be less than 2TB.");
+            }
+            if (maxDiscardLb < minDiscardLb) {
+                throw RT_ERR("minDiscardSize must be <= maxDiscardSize.");
             }
             if (lsid + outLogPb < lsid) {
                 throw RT_ERR("lsid will overflow.");
@@ -181,17 +198,18 @@ private:
                 }
             }
             /* Decide io_size. */
-            uint32_t minIoLb = config_.minIoLb;
-            uint32_t maxIoLb = config_.maxIoLb;
-            /* Non-discard IO size must be UINT16_MAX [logical block]. */
-            if (!isDiscard) {
-                if (minIoLb > UINT16_MAX) minIoLb = UINT16_MAX;
-                if (maxIoLb > UINT16_MAX) maxIoLb = UINT16_MAX;
+            uint32_t minIoLb, maxIoLb;
+            if (isDiscard) {
+                minIoLb = config_.minDiscardLb;
+                maxIoLb = config_.maxDiscardLb;
+            } else {
+                minIoLb = config_.minIoLb;
+                maxIoLb = config_.maxIoLb;
             }
             uint32_t ioSize = minIoLb;
             uint32_t range = maxIoLb - minIoLb;
             if (0 < range) {
-                ioSize += rand.get32() % range;
+                ioSize += rand.get64() % range;
             }
             if (devLb < offset + ioSize) {
                 ioSize = devLb - offset; /* clipping. */
