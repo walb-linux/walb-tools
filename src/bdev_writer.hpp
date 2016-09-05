@@ -304,10 +304,11 @@ class ReadyQueue
 {
 private:
     IoSet ioSet_;
-    size_t totalSize_;
+    size_t totalSize_; /* total IO size in ioSet_. */
+    std::unordered_set<uint32_t> doneSet_; /* aio key set. */
 
 public:
-    ReadyQueue() : ioSet_(), totalSize_(0) {}
+    ReadyQueue() : ioSet_(), totalSize_(0), doneSet_() {}
     void push(Io *iop) {
         assert(iop);
         ioSet_.insert(iop);
@@ -320,9 +321,12 @@ public:
     size_t totalSize() const {
         return totalSize_;
     }
+    /**
+     * ioSet_ may not become empty.
+     */
     void submit(cybozu::aio::Aio &aio) {
         size_t nBulk = 0;
-        while (!ioSet_.empty()) {
+        while (!ioSet_.empty() && !aio.isQueueFull()) {
             Io* iop = *ioSet_.begin();
             ioSet_.erase(ioSet_.begin());
             g_debug.delReadyQ(*iop);
@@ -344,18 +348,22 @@ public:
         }
     }
     void forceComplete(Io &io, cybozu::aio::Aio &aio) {
-        if (io.state == Io::Init) {
-            /* The IO is not still submitted. */
-            assert(io.nOverlapped == 0);
-            submit(aio);
-        } else if (io.state == Io::Overwritten) {
-            tryErase(io);
-        }
-        if (io.state == Io::Submitted) {
-            assert(io.aioKey > 0);
-            aio.waitFor(io.aioKey);
-        } else {
-            assert(io.state == Io::Overwritten);
+        for (;;) {
+            if (io.state == Io::Init) {
+                /* The IO is not still submitted. */
+                assert(io.nOverlapped == 0);
+                submit(aio);
+            } else if (io.state == Io::Overwritten) {
+                tryErase(io);
+                break;
+            }
+            if (io.state == Io::Submitted) {
+                assert(io.aioKey > 0);
+                waitFor(io, aio);
+                break;
+            }
+            assert(io.state == Io::Init);
+            waitAny(aio);
         }
     }
     bool empty() const {
@@ -378,6 +386,23 @@ private:
                 return;
             }
             ++i;
+        }
+    }
+    void waitFor(Io& io, cybozu::aio::Aio &aio) {
+        assert(io.state == Io::Submitted);
+        auto it = doneSet_.find(io.aioKey);
+        if (it == doneSet_.end()) {
+            aio.waitFor(io.aioKey);
+        } else {
+            doneSet_.erase(it);
+        }
+    }
+    void waitAny(cybozu::aio::Aio &aio) {
+        std::queue<uint32_t> q;
+        aio.waitOneOrMore(q);
+        while (!q.empty()) {
+            doneSet_.insert(q.front());
+            q.pop();
         }
     }
 };
@@ -693,18 +718,21 @@ private:
         ioQ_.popFront();
     }
     void processIos(bool force) {
-        while (ioQ_.getProcessingSize() >= bufferSize_ / 2) {
-            waitForAnIoCompletion();
-        }
-        while (ioQ_.hasFetched()) {
-            bdev_writer_local::Io& io = ioQ_.nextFetched();
-            overlapped_.add(io);
-            if (io.nOverlapped == 0) {
-                readyQ_.push(&io);
+        for (;;) {
+            while (ioQ_.getProcessingSize() >= bufferSize_ / 2) {
+                waitForAnIoCompletion();
             }
-        }
-        if (force || readyQ_.totalSize() >= bufferSize_ / 2) {
-            readyQ_.submit(aio_);
+            while (ioQ_.hasFetched()) {
+                bdev_writer_local::Io& io = ioQ_.nextFetched();
+                overlapped_.add(io);
+                if (io.nOverlapped == 0) {
+                    readyQ_.push(&io);
+                }
+            }
+            if (force || readyQ_.totalSize() >= bufferSize_ / 2) {
+                readyQ_.submit(aio_);
+            }
+            if (!force || readyQ_.empty()) break;
         }
     }
     bool isClipped(uint64_t offLb, size_t sizeLb) {

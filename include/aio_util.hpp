@@ -12,6 +12,7 @@
 #include <queue>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <string>
 #include <exception>
@@ -375,6 +376,14 @@ public:
         popAnyCompleted(iop);
         verifyNoError(*iop);
         return iop->key;
+    }
+    void waitOneOrMore(std::queue<uint>& queue) {
+        if (completedIOs_.empty()) wait_(1);
+        AioDataPtr iop;
+        while (popAnyCompleted(iop)) {
+            verifyNoError(*iop);
+            queue.push(iop->key);
+        }
     }
 private:
     /**
