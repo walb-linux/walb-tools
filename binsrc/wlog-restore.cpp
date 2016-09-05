@@ -151,6 +151,11 @@ public:
         const uint64_t endLsidX = lsid + lsidDiff;
         if (bgnLsidX < endLsidX) {
             invalidateLsid(ldevFile, super, pbs, endLsidX);
+            if (endLsidX - bgnLsidX > super.getRingBufferSize() + 1) {
+                /* 1 means invalidated block. */
+                throw cybozu::Exception(__func__)
+                    << "overflow" << endLsidX - bgnLsidX << super.getRingBufferSize();
+            }
         }
         /* Invalidate the specified block. */
         if (opt_.invalidLsid != uint64_t(-1)) {
