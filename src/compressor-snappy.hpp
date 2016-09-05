@@ -1,21 +1,22 @@
 #pragma once
-#include <snappy.h>
+#include <snappy-c.h>
 #include <string>
 
 struct CompressorSnappy : walb::compressor_local::CompressorIF {
     CompressorSnappy(size_t) {}
     bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
     {
-        const size_t maxCompressedSize = snappy::MaxCompressedLength(inSize);
-        if (maxCompressedSize <= maxOutSize) {
-            snappy::RawCompress((const char*)in, inSize, (char*)out, outSize);
-            return true;
+        const size_t maxSize = ::snappy_max_compressed_length(inSize);
+        *outSize = maxSize;
+        if (maxSize <= maxOutSize) {
+            return ::snappy_compress((const char*)in, inSize, (char *)out, outSize) == SNAPPY_OK;
         }
         std::string enc;
-        size_t encSize = snappy::Compress((const char*)in, inSize, &enc);
-        if (maxOutSize < encSize) return false;
-        memcpy(out, &enc[0], encSize);
-        *outSize = encSize;
+        enc.resize(maxSize);
+        if (::snappy_compress((const char*)in, inSize, &enc[0], outSize) != SNAPPY_OK) {
+            return false;
+        }
+        ::memcpy(out, &enc[0], *outSize);
         return true;
     }
 };
@@ -24,18 +25,10 @@ struct UncompressorSnappy : walb::compressor_local::UncompressorIF {
     UncompressorSnappy(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-        const char *p = (const char *)in;
-        size_t decSize;
-        if (!snappy::GetUncompressedLength(p, inSize, &decSize)) {
-            throw cybozu::Exception("UncompressorSnappy:run:GetUncompressedLength") << inSize;
-        }
-        if (maxOutSize < decSize) {
-            throw cybozu::Exception("UncompressorSnappy:run:small maxOutSize") << decSize << maxOutSize;
-        }
-        if (!snappy::RawUncompress(p, inSize, (char*)out)) {
-            throw cybozu::Exception("UncompressorSnappy:run:RawUncompress");
+        size_t decSize = maxOutSize;
+        if (::snappy_uncompress((const char *)in, inSize, (char *)out, &decSize) != SNAPPY_OK) {
+            throw cybozu::Exception("UncompressorSnappy:run:snappy_uncompress");
         }
         return decSize;
     }
 };
-
