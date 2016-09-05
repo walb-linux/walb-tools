@@ -6,6 +6,6 @@ default:
 test:
 	python test_wlog.py
 clean:
-	rm -f wlog.* ddev* ldev*
+	rm -f wlog.* ddev* ldev* *.txt
 
 

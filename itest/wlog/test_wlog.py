@@ -12,8 +12,8 @@ from run import *
 # LOOP0 and LOOP1 must be ordinal block devices.
 #
 
-LDEV="ldev32M"
-DDEV="ddev32M"
+LDEV="ldev128M"
+DDEV="ddev64M"
 DDEV_0 = DDEV + ".0"
 DDEV_0z= DDEV + ".0z"
 DDEV_1 = DDEV + ".1"
@@ -50,7 +50,7 @@ def getKeyValue(fileName, keyword, pos):
 
 def prepare_bdev(devPath, devFile):
 	# ex. /dev/loop0
-	# ex. ldev32M.0
+	# ex. ldev64M.0
 	if USE_LOOP_DEV == 1:
 		run("losetup %s %s" % (devPath, devFile))
 	else:
@@ -63,8 +63,8 @@ def finalize_bdev(devPath, devFile):
 		run("dd oflag=direct if=%s of=%s bs=1M" % (devPath, devFile))
 
 def format_ldev():
-	run("dd if=/dev/zero of=%s bs=1M count=32" % LDEV)
-	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_0)
+	run("dd if=/dev/zero of=%s bs=1M count=128" % LDEV)
+	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_0)
 	prepare_bdev(LOOP0, LDEV)
 	prepare_bdev(LOOP1,  DDEV_0)
 	run("%s format-ldev %s %s" % (CTL2, LOOP0, LOOP1))
@@ -94,9 +94,9 @@ def Initialization():
 	global totalPadding0
 
 	format_ldev()
-	#run("%s/wlog-gen -s 32M -z 16M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
-	run("%s/wlog-gen -s 32M -z 16M --minIoSize 512 --maxIoSize 64M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
-	#${BIN}/wlog-gen -s 32M -z 16M --minIoSize 512 --maxIoSize 512 --maxPackSize 1M -o WLOG_0
+	#run("%s/wlog-gen -s 64M -z 16M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
+	run("%s/wlog-gen -s 64M -z 32M --minIoSize 512 --maxIoSize 1M --minDiscardSize 1M --maxDiscardSize 64M --maxPackSize 4M -o %s" % (BIN, WLOG_0))
+	#${BIN}/wlog-gen -s 64M -z 16M --minIoSize 512 --maxIoSize 512 --maxPackSize 1M -o WLOG_0
 	endLsid0 = echo_wlog_value(WLOG_0, "reallyEndLsid")
 	nPacks0 = echo_wlog_value(WLOG_0, "nrPacks")
 	totalPadding0 = echo_wlog_value(WLOG_0, "paddingPb")
@@ -118,10 +118,10 @@ def SimpleTest():
 
 
 def restore_test(testId, lsidDiff, invalidLsid):
-	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_1)
-	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_1z)
-	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_2)
-	run("dd if=/dev/zero of=%s bs=1M count=32" % DDEV_3)
+	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_1)
+	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_1z)
+	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_2)
+	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_3)
 	run("%s/wlog-restore %s --verify -d %d -i %d < %s" % (BIN, LDEV, lsidDiff, invalidLsid, WLOG_0))
 	run("%s/wlog-cat %s -v -o %s" % (BIN, LDEV, WLOG_1))
 	prepare_bdev(LOOP0, LDEV)
