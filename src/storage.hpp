@@ -172,6 +172,7 @@ struct StorageSingleton
     std::string nodeId;
     std::string baseDirStr;
     uint64_t maxWlogSendMb;
+    size_t implicitSnapshotIntervalSec;
     size_t delaySecForRetry;
     size_t maxForegroundTasks;
     size_t socketTimeout;
@@ -802,7 +803,8 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
     MetaLsidGid rec0, rec1;
     uint64_t lsidLimit;
     bool doLater;
-    std::tie(rec0, rec1, lsidLimit, doLater) = volInfo.prepareWlogTransfer(gs.maxWlogSendMb);
+    std::tie(rec0, rec1, lsidLimit, doLater) =
+        volInfo.prepareWlogTransfer(gs.maxWlogSendMb, gs.implicitSnapshotIntervalSec);
     if (doLater) {
         LOGs.debug() << FUNC << "wait a bit for wlogs to be permanent" << volId;
         return true;

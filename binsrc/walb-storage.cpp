@@ -53,6 +53,8 @@ struct Option
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&s.nodeId, hostName, "id", "node identifier");
         opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
+        opt.appendOpt(&s.implicitSnapshotIntervalSec, DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC, "snapintvl"
+                      , "Implicit snapshot interval [sec].");
         opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "Default full scan throughput [bytes/s]");
@@ -72,6 +74,7 @@ struct Option
         util::verifyNotZero(maxBackgroundTasks, "maxBackgroundTasks");
         util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
+        util::verifyNotZero(s.implicitSnapshotIntervalSec, "implicitSnapshotIntervalSec");
         util::verifyNotZero(s.tsDeltaGetterIntervalSec, "tsDeltaGetterIntervalSec");
         s.keepAliveParams.verify();
         s.fullScanLbPerSec = defaultFullScanBytesPerSec / LOGICAL_BLOCK_SIZE;

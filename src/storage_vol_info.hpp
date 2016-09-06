@@ -192,7 +192,7 @@ public:
         const char *const FUNC = __func__;
         const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
         QFile qf(queuePath().str(), O_RDWR);
-        return takeSnapshotDetail(maxWlogSendPb, false, qf);
+        return takeSnapshotDetail(maxWlogSendPb, false, qf, device::getLatestLsid(getWdevPath()));
     }
     /**
      * Delete garbage wlogs if necessary.
@@ -241,6 +241,10 @@ public:
         return isWlogTransferRequiredDetail(true);
     }
     /**
+     * @maxWlogSendMb
+     *   maximum transferring size per once [MiB].
+     * @intervalSec
+     *   implicit snapshot interval [sec].
      *
      * RETURN:
      *   target lsid/gid range by two MetaLsidGids: recB and recE,
@@ -248,38 +252,24 @@ public:
      *   and boolean value which is true if we must pospone the wlog-transfer.
      *   Do not transfer logpacks which lsid >= lsidLimit.
      */
-    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> prepareWlogTransfer(uint64_t maxWlogSendMb) {
+    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> prepareWlogTransfer(uint64_t maxWlogSendMb, size_t intervalSec) {
         const char *const FUNC = __func__;
         QFile qf(queuePath().str(), O_RDWR);
-        MetaLsidGid recB = getDoneRecord();
-        MetaLsidGid recE;
-        for (;;) {
-            if (qf.empty()) break;
-            qf.back(recE);
-            if ((recE.lsid < recB.lsid) || (recB.lsid == recE.lsid && recE.gid <= recB.gid)) {
-                qf.popBack();
-                continue;
-            }
-            break;
-        }
+        const MetaLsidGid recB = getDoneRecord(); // begin
+        removeOldRecordsFromQueueFile(qf, recB);
+        /* Take a implicit snapshot if necessary. */
+        device::LsidSet lsids;
+        device::getLsidSet(getWdevName(), lsids);
         const uint64_t maxWlogSendPb = getMaxWlogSendPb(maxWlogSendMb, FUNC);
-        if (qf.empty()) {
-            takeSnapshotDetail(maxWlogSendPb, true, qf);
-            qf.back(recE);
+        MetaLsidGid recE;
+        if (!qf.empty()) qf.front(recE);
+        if (qf.empty() || (recE.lsid < lsids.latest && recE.timestamp + intervalSec <= uint64_t(::time(0)))) {
+            takeSnapshotDetail(maxWlogSendPb, true, qf, lsids.latest);
         }
-        if (!(recB.lsid <= recE.lsid)) {
-            throw cybozu::Exception(FUNC)
-                << "invalid MetaLsidGidRecord" << recB << recE;
-        }
-        assert(recB.gid < recE.gid);
-
+        /* Get the end of the target range. */
         uint64_t lsidLimit;
-        if (recB.gid + 1 == recE.gid) {
-            lsidLimit = recE.lsid;
-        } else {
-            lsidLimit = std::min(recB.lsid + maxWlogSendPb, recE.lsid);
-        }
-        const bool doLater = (device::getPermanentLsid(getWdevPath()) < lsidLimit);
+        std::tie(recE, lsidLimit) = getEndSnapshot(qf, recB, maxWlogSendPb, lsids.permanent);
+        const bool doLater = lsids.permanent < lsidLimit;
         return std::make_tuple(recB, recE, lsidLimit, doLater);
     }
     /**
@@ -334,7 +324,7 @@ public:
             recS.timestamp = recB.timestamp;
         }
         setDoneRecord(recS);
-        if (recS.gid == recE.gid) qf.popBack();
+        removeOldRecordsFromQueueFile(qf, recS);
         return !qf.empty();
     }
     /**
@@ -422,7 +412,7 @@ private:
         }
         return maxWlogSendPb;
     }
-    uint64_t takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, QFile& qf) {
+    uint64_t takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, QFile& qf, uint64_t lsid) {
         const char *const FUNC = __func__;
         MetaLsidGid pre;
         if (qf.empty()) {
@@ -431,7 +421,6 @@ private:
             qf.front(pre);
         }
         const std::string wdevPath = wdevPath_.str();
-        const uint64_t lsid = device::getLatestLsid(wdevPath);
         if (device::isOverflow(wdevPath)) {
             throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
         }
@@ -468,6 +457,53 @@ private:
             isQueueEmpty = qf.empty();
         }
         return doneLsid < targetLsid || !isQueueEmpty;
+    }
+    std::pair<MetaLsidGid, uint64_t> getEndSnapshot(
+        QFile &qf, const MetaLsidGid &recB, uint64_t maxWlogSendPb, uint64_t permanentLsid) {
+        assert(!qf.empty());
+        QFile::ConstIterator it = qf.cend();
+        --it;
+        MetaLsidGid recE;
+        it.get(recE);
+        size_t nr = 1;
+        while (it != qf.cbegin() && recE.isMergeable) {
+            --it;
+            MetaLsidGid rec;
+            it.get(rec);
+            if (rec.lsid > recB.lsid + maxWlogSendPb) break;
+            if (rec.lsid > permanentLsid) break;
+            recE = rec;
+            nr++;
+        }
+
+        if (!(recB.lsid <= recE.lsid)) {
+            throw cybozu::Exception(__func__) << "invalid MetaLsidGid record" << recB << recE;
+        }
+        assert(recB.gid < recE.gid);
+
+        uint64_t lsidE;
+        if (nr == 1 && recE.gid == recB.gid + 1) {
+            lsidE = recE.lsid;
+            if (lsidE - recB.lsid > maxWlogSendPb) {
+                LOGs.warn() << "MaxWlogSendPb is too small" << maxWlogSendPb << lsidE - recB.lsid;
+            }
+        } else {
+            lsidE = std::min(recB.lsid + maxWlogSendPb, recE.lsid);
+        }
+        return std::make_pair(recE, lsidE);
+    }
+    void removeOldRecordsFromQueueFile(QFile &qf, const MetaLsidGid &recB) {
+        MetaLsidGid rec;
+        while (!qf.empty()) {
+            qf.back(rec);
+            const bool isOld0 = rec.lsid < recB.lsid;
+            const bool isOld1 = rec.lsid == recB.lsid && rec.gid <= recB.gid;
+            if (isOld0 || isOld1) {
+                qf.popBack();
+            } else {
+                break;
+            }
+        }
     }
 };
 
