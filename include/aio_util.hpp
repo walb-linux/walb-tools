@@ -10,7 +10,7 @@
 
 #include <vector>
 #include <queue>
-#include <list>
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
@@ -103,7 +103,7 @@ private:
      *   Key: aiodata.key, value: aiodata ptr.
      */
     using AioDataPtr = std::unique_ptr<AioData>;
-    std::list<AioDataPtr> submitQ_;
+    std::deque<AioDataPtr> submitQ_;
     using Umap = std::unordered_map<uint, AioDataPtr>;
     Umap pendingIOs_;
     Umap completedIOs_;
@@ -253,7 +253,7 @@ public:
     bool cancel(uint key) {
         /* Submit queue. */
         {
-            std::list<AioDataPtr>::iterator it = submitQ_.begin();
+            std::deque<AioDataPtr>::iterator it = submitQ_.begin();
             while (it != submitQ_.end()) {
                 AioDataPtr& iop = *it;
                 if (iop->key == key) {
