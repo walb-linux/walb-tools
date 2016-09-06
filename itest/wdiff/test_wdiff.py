@@ -14,7 +14,7 @@ def prepare_test():
     run("dd if=/dev/urandom of=./ddev32M bs=1048576 count=32")
     for i in xrange(1, 5):
         #BIN/wlog-gen --nodiscard -s 32M -o ${i}.wlog
-        run(BIN + ("/wlog-gen -s 32M -z 32M -o %d.wlog" % i))
+        run(BIN + ("/wlog-gen -s 32M -z 32M --minDiscardSize 512 --maxDiscardSize 1M -o %d.wlog" % i))
         run(BIN + ("/wlog-to-wdiff > %d.wdiff < %d.wlog" % (i, i)))
 
 def log_diff_equality_test():
