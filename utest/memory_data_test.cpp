@@ -103,7 +103,7 @@ void verifySplitPattern1(IoType type0, IoType type1)
 
     verifyIoTypeEquality(rec1, recV[0]);
     CYBOZU_TEST_EQUAL(recV[0].io_address, 0);
-    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 6);
+    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 6U);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 6 * LOGICAL_BLOCK_SIZE);
         verifyDiffIoEquality(io1, 0, ioV[0], 0, 6);
@@ -140,9 +140,9 @@ void verifySplitPattern2(IoType type0, IoType type1)
     CYBOZU_TEST_EQUAL(recV[0].io_address, 0);
     CYBOZU_TEST_EQUAL(recV[1].io_address, 2);
     CYBOZU_TEST_EQUAL(recV[2].io_address, 4);
-    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 2);
-    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 2);
-    CYBOZU_TEST_EQUAL(recV[2].io_blocks, 2);
+    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 2U);
+    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 2U);
+    CYBOZU_TEST_EQUAL(recV[2].io_blocks, 2U);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 2 * LOGICAL_BLOCK_SIZE);
         verifyDiffIoEquality(io0, 0, ioV[0], 0, 2);
@@ -180,8 +180,8 @@ void verifySplitPattern3(IoType type0, IoType type1)
     verifyIoTypeEquality(recV[1], rec1);
     CYBOZU_TEST_EQUAL(recV[0].io_address, 0);
     CYBOZU_TEST_EQUAL(recV[1].io_address, 2);
-    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 2);
-    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 4);
+    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 2U);
+    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 4U);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 2 * LOGICAL_BLOCK_SIZE);
         verifyDiffIoEquality(io0, 0, ioV[0], 0, 2);
@@ -215,8 +215,8 @@ void verifySplitPattern4(IoType type0, IoType type1)
     verifyIoTypeEquality(recV[1], rec0);
     CYBOZU_TEST_EQUAL(recV[0].io_address, 0);
     CYBOZU_TEST_EQUAL(recV[1].io_address, 4);
-    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 4);
-    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 2);
+    CYBOZU_TEST_EQUAL(recV[0].io_blocks, 4U);
+    CYBOZU_TEST_EQUAL(recV[1].io_blocks, 2U);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 4 * LOGICAL_BLOCK_SIZE);
         verifyDiffIoEquality(io1, 0, ioV[0], 0, 4);
