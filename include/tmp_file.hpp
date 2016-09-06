@@ -27,21 +27,26 @@ private:
     std::string path_;
     int fd_;
 public:
+    TmpFile() : path_(), fd_(-1) {}
     explicit TmpFile(const std::string &dirPath, int flags = 0, const std::string &prefix = DEFAULT_TMP_FILE_PREFIX)
-        : path_(createTmpPathStatic(dirPath, prefix)), fd_(-1) {
-        fd_ = ::mkostemp(&path_[0], flags);
-        if (fd_ < 0) {
-            throw std::runtime_error("mkstemp failed.");
-        }
+        : TmpFile() {
+        prepare(dirPath, flags, prefix);
     }
     ~TmpFile() noexcept {
-        if (0 < fd_) ::close(fd_);
-        if (!path_.empty()) ::unlink(path_.c_str());
+        quietClose();
     }
     const std::string &path() const {
         return path_;
     }
     int fd() const { return fd_; }
+    void prepare(const std::string &dirPath, int flags = 0, const std::string &prefix = DEFAULT_TMP_FILE_PREFIX) {
+        quietClose();
+        path_ = createTmpPathStatic(dirPath, prefix);
+        fd_ = ::mkostemp(&path_[0], flags);
+        if (fd_ < 0) {
+            throw std::runtime_error("mkostemp failed.");
+        }
+    }
     void save(const std::string &path, mode_t mode = 0644) {
         assert(0 <= fd_);
         if (::fsync(fd_) < 0) {
@@ -56,7 +61,7 @@ public:
         if (!oldPath.rename(newPath)) {
             throw std::runtime_error("rename failed.");
         }
-        path_.resize(0);
+        path_.clear();
         if (!newPath.chmod(mode)) {
             throw std::runtime_error("chmod failed.");
         }
@@ -71,6 +76,16 @@ private:
             throw std::runtime_error("dirPath not found.");
         }
         return (FilePath(dirPath) + FilePath(prefix)).str() + "XXXXXX";
+    }
+    void quietClose() {
+        if (0 < fd_) {
+            ::close(fd_);
+            fd_ = -1;
+        }
+        if (!path_.empty()) {
+            ::unlink(path_.c_str());
+            path_.clear();
+        }
     }
 };
 
