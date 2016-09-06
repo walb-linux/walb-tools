@@ -772,23 +772,36 @@ namespace proxy_local {
  */
 inline bool recvWlogAndWriteDiff(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
-    const std::atomic<int> &stopState, const ProcessStatus &ps)
+    const std::atomic<int> &stopState, const ProcessStatus &ps, int wlogFd)
 {
     DiffMemory diffMem(DEFAULT_MAX_IO_LB);
     diffMem.header().setUuid(uuid);
 
     LogPackHeader packH(pbs, salt);
-
     WlogReceiver receiver(sock, pbs, salt);
+
+    bool isWlogHeaderWritten = false;
+    std::unique_ptr<WlogWriter> wlogW;
+    if (wlogFd >= 0) wlogW.reset(new WlogWriter(wlogFd));
 
     while (receiver.popHeader(packH)) {
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
+        if (wlogW) {
+            if (!isWlogHeaderWritten) {
+                WlogFileHeader wh;
+                wh.init(pbs, salt, uuid, packH.logpackLsid(), MAX_LSID);
+                wlogW->writeHeader(wh);
+                isWlogHeaderWritten = true;
+            }
+            wlogW->writePackHeader(packH.header());
+        }
         LogBlockShared blockS(pbs);
         for (size_t i = 0; i < packH.header().n_records; i++) {
             WlogRecord &lrec = packH.record(i);
             receiver.popIo(lrec, blockS);
+            if (wlogW) wlogW->writePackIo(blockS);
             DiffRecord drec;
             DiffIo diffIo;
             if (convertLogToDiff(pbs, lrec, blockS, drec, diffIo)) {
@@ -796,6 +809,7 @@ inline bool recvWlogAndWriteDiff(
             }
         }
     }
+    if (wlogW) wlogW->close();
     diffMem.writeTo(fd);
     return true;
 }
@@ -862,8 +876,11 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     cybozu::Stopwatch stopwatch;
     ProxyVolInfo volInfo = getProxyVolInfo(volId);
     cybozu::TmpFile tmpFile(volInfo.getReceivedDir().str());
+    cybozu::TmpFile wlogTmpFile;
+    const bool savesWlog = false; // for DEBUG.
+    if (savesWlog) wlogTmpFile.prepare(volInfo.getReceivedDir().str());
     if (!proxy_local::recvWlogAndWriteDiff(p.sock, tmpFile.fd(), uuid, pbs, salt,
-                                           volSt.stopState, gp.ps)) {
+                                           volSt.stopState, gp.ps, wlogTmpFile.fd())) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
         return;
     }
@@ -874,6 +891,11 @@ inline void s2pWlogTransferServer(protocol::ServerParams &p)
     }
     diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
+    if (savesWlog) {
+        const std::string fname =
+            cybozu::util::removeSuffix(createDiffFileName(diff), ".wdiff") + ".wlog";
+        wlogTmpFile.save((volInfo.volDir + fname).str());
+    }
     // You must register the diff before trying to send ack.
     // When ack failed, next wlog-transfer will do the remaining procedures.
     ul.lock();
