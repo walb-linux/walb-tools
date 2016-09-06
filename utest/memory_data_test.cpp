@@ -60,7 +60,7 @@ void getFromDiffMemory(DiffMemory &diffMem, std::vector<DiffRecord> &recV, std::
     }
 }
 
-void verifyDiffIoEuqality(const DiffIo &io0, uint32_t startBlocks0, const DiffIo &io1, uint32_t startBlocks1, uint32_t ioBlocks)
+void verifyDiffIoEquality(const DiffIo &io0, uint32_t startBlocks0, const DiffIo &io1, uint32_t startBlocks1, uint32_t ioBlocks)
 {
     CYBOZU_TEST_ASSERT(!io0.isCompressed());
     const size_t off0 = startBlocks0 * LOGICAL_BLOCK_SIZE;
@@ -106,7 +106,7 @@ void verifySplitPattern1(IoType type0, IoType type1)
     CYBOZU_TEST_EQUAL(recV[0].io_blocks, 6);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 6 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io1, 0, ioV[0], 0, 6);
+        verifyDiffIoEquality(io1, 0, ioV[0], 0, 6);
     }
 #if 0
     printRecIo(rec0, io0);
@@ -145,15 +145,15 @@ void verifySplitPattern2(IoType type0, IoType type1)
     CYBOZU_TEST_EQUAL(recV[2].io_blocks, 2);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 2 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io0, 0, ioV[0], 0, 2);
+        verifyDiffIoEquality(io0, 0, ioV[0], 0, 2);
     }
     if (getIoType(recV[1]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[1].getSize(), 2 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io1, 0, ioV[1], 0, 2);
+        verifyDiffIoEquality(io1, 0, ioV[1], 0, 2);
     }
     if (getIoType(recV[2]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[2].getSize(), 2 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io0, 4, ioV[2], 0, 2);
+        verifyDiffIoEquality(io0, 4, ioV[2], 0, 2);
     }
 }
 
@@ -184,11 +184,11 @@ void verifySplitPattern3(IoType type0, IoType type1)
     CYBOZU_TEST_EQUAL(recV[1].io_blocks, 4);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 2 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io0, 0, ioV[0], 0, 2);
+        verifyDiffIoEquality(io0, 0, ioV[0], 0, 2);
     }
     if (getIoType(recV[1]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[1].getSize(), 4 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io1, 0, ioV[1], 0, 4);
+        verifyDiffIoEquality(io1, 0, ioV[1], 0, 4);
     }
 }
 
@@ -219,11 +219,11 @@ void verifySplitPattern4(IoType type0, IoType type1)
     CYBOZU_TEST_EQUAL(recV[1].io_blocks, 2);
     if (getIoType(recV[0]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[0].getSize(), 4 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io1, 0, ioV[0], 0, 4);
+        verifyDiffIoEquality(io1, 0, ioV[0], 0, 4);
     }
     if (getIoType(recV[1]) == Normal) {
         CYBOZU_TEST_EQUAL(ioV[1].getSize(), 2 * LOGICAL_BLOCK_SIZE);
-        verifyDiffIoEuqality(io0, 2, ioV[1], 0, 2);
+        verifyDiffIoEquality(io0, 2, ioV[1], 0, 2);
     }
 }
 
