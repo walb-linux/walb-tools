@@ -9,6 +9,7 @@ from walblib import *
 isDebug = False
 TIMEOUT = 100
 wdevSizeMb = 12
+archiveDiscardMode = 'zero'
 
 workDir = os.getcwd() + '/stest/tmp/'
 binDir = os.getcwd() + '/binsrc/'

@@ -1107,6 +1107,8 @@ def create_dummy_diff(devSizeB, logSizeB):
     run_local_command([binDir + 'wlog-gen',
                        '-s', str(devSizeB),
                        '-z', str(logSizeB),
+                       '--minDiscardSize', '512',
+                       '--maxDiscardSize', '1M',
                        '-o', wlog.name], putMsg=True)
     run_local_command([binDir + 'wlog-to-wdiff',
                        '-i', wlog.name,
