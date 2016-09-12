@@ -78,7 +78,7 @@ private:
         return (FilePath(dirPath) + FilePath(prefix)).str() + "XXXXXX";
     }
     void quietClose() {
-        if (0 < fd_) {
+        if (0 <= fd_) {
             ::close(fd_);
             fd_ = -1;
         }
