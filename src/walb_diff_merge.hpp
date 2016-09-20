@@ -356,6 +356,7 @@ private:
         }
         if (!wdiffs_.empty()) {
             // It must progress.
+            (void)nr;
             assert(nr > 0);
         }
     }
