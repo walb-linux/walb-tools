@@ -193,7 +193,7 @@ class MergeTask(Task):
         return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
-    def __init__(self, vol, ax, rs, maxGid=None):
+    def __init__(self, vol, ax, rs, maxGid=None, updateTime=None):
         Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, worker.ReplServerConfig)
         self.log_name = rs.name
@@ -202,8 +202,11 @@ class ReplTask(Task):
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
         self.maxGid = maxGid
+        self.updateTime = updateTime
     def run(self, walbc):
         verify_type(walbc, Controller)
+        if self.updateTime:
+            self.updateTime()
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
     def __str__(self):
         return Task.__str__(self) + " dst={} maxGid={}".format(self.log_name, self.maxGid)
@@ -330,8 +333,9 @@ class Worker:
             (_, vol, rs, a1latest) = tL[0]
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
             maxGid = getGidToRepl(diffL, rs.max_send_size, a1latest)
-            self.doneReplServerList[(vol, rs)] = curTime
-            return ReplTask(vol, self.a0, rs, maxGid)
+            def updateTime():
+                self.doneReplServerList[(vol, rs)] = curTime
+            return ReplTask(vol, self.a0, rs, maxGid, updateTime)
         else:
             return None
 
