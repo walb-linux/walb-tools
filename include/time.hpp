@@ -151,6 +151,11 @@ inline std::string getHighResolutionTimeStr(const struct timespec& ts)
 
 struct TimespecBase : timespec
 {
+    TimespecBase() {}
+    TimespecBase(int v) {
+        this->tv_sec = v;
+        this->tv_nsec = 0;
+    }
     bool operator==(const TimespecBase& rhs) const {
         return this->tv_sec == rhs.tv_sec && this->tv_nsec == rhs.tv_nsec;
     }
@@ -202,7 +207,13 @@ struct TimespecDiff : TimespecBase
         ret -= rhs;
         return ret;
     }
-
+    double getAsDouble() const {
+        return (double)this->tv_sec + (double)this->tv_nsec / (double)1000000000;
+    }
+    void setAsDouble(double sec) {
+        this->tv_sec = size_t(sec);
+        this->tv_nsec = sec - (double)this->tv_sec;
+    }
     std::string str() const {
         const int len = 21 + 1 + 9 + 1; // 20 bytes for time_t
         char buf[len];
