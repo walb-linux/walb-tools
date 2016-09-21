@@ -156,18 +156,22 @@ def getMergeGidRange(diffL, max_size, max_nr, notMergeGidL):
     return None
 
 class Task:
-    def __init__(self, name, vol, ax):
+    def __init__(self, name, vol, ax, callback=None):
         verify_type(name, str)
         verify_type(vol, str)
         verify_server_kind(ax, [K_ARCHIVE])
+        verify_function(callback, allowNone=True)
         if name not in ['merge', 'apply', 'repl']:
             raise Exception('Task bad name', name, vol)
         self.name = name
         self.vol = vol
         self.ax = ax
-        self.callback = None
+        self._callback = callback
     def run(self):
         pass
+    def callback(self):
+        if self._callback is not None:
+            self._callback()
     def __str__(self):
         return "name={} vol={} ax={}".format(self.name, self.vol, self.ax)
     def __eq__(self, rhs):
@@ -203,8 +207,8 @@ class MergeTask(Task):
         return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
-    def __init__(self, vol, ax, rs, maxGid=None, callback=None):
-        Task.__init__(self, 'repl', vol, ax)
+    def __init__(self, vol, ax, rs, maxGid=None, updateTime=None):
+        Task.__init__(self, 'repl', vol, ax, updateTime)
         verify_type(rs, worker.ReplServerConfig)
         self.log_name = rs.name
         if rs.log_name:
@@ -212,7 +216,6 @@ class ReplTask(Task):
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
         self.maxGid = maxGid
-        self.callback = callback
     def run(self, walbc):
         verify_type(walbc, Controller)
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
@@ -546,8 +549,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
         if not noAction and task:
             b = manager.tryRun(task, (w.walbc,))
             if b:
-                if task.callback:
-                    task.callback()
+                task.callback()
                 continue
             logd("task is canceled(max limit)", task)
         logd('no task')
