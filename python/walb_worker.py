@@ -156,6 +156,7 @@ class Task:
         self.name = name
         self.vol = vol
         self.ax = ax
+        self.callback = None
     def run(self):
         pass
     def __str__(self):
@@ -193,7 +194,7 @@ class MergeTask(Task):
         return Task.__eq__(self, rhs) and self.gidB == rhs.gidB and self.gidE == rhs.gidE
 
 class ReplTask(Task):
-    def __init__(self, vol, ax, rs, maxGid=None, updateTime=None):
+    def __init__(self, vol, ax, rs, maxGid=None, callback=None):
         Task.__init__(self, 'repl', vol, ax)
         verify_type(rs, worker.ReplServerConfig)
         self.log_name = rs.name
@@ -202,11 +203,9 @@ class ReplTask(Task):
         self.dst = rs.getServerConnectionParam()
         self.syncOpt = SyncOpt(cmprOpt=rs.compress, maxWdiffMergeSizeU=rs.max_merge_size, bulkSizeU=rs.bulk_size)
         self.maxGid = maxGid
-        self.updateTime = updateTime
+        self.callback = callback
     def run(self, walbc):
         verify_type(walbc, Controller)
-        if self.updateTime:
-            self.updateTime()
         walbc.replicate_once(self.ax, self.vol, self.dst, syncOpt=self.syncOpt, gid=self.maxGid)
     def __str__(self):
         return Task.__str__(self) + " dst={} maxGid={}".format(self.log_name, self.maxGid)
@@ -525,6 +524,8 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
         if not noAction and task:
             b = manager.tryRun(task, (w.walbc,))
             if b:
+                if task.callback:
+                    task.callback()
                 continue
             logd("task is canceled(max limit)", task)
         logd('no task')
