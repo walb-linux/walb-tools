@@ -2,9 +2,13 @@
 
 namespace walb {
 
-const uint64_t KIBI = 1024ULL;
-const uint64_t MEBI = 1024ULL * 1024ULL;
-const uint64_t GIBI = 1024ULL * 1024ULL * 1024ULL;
+const uint64_t KIBI = 1ULL << 10;
+const uint64_t MEBI = 1ULL << 20;
+const uint64_t GIBI = 1ULL << 30;
+
+const uint64_t KILO = 1000ULL;
+const uint64_t MEGA = KILO * 1000ULL;
+const uint64_t GIGA = MEGA * 1000ULL;
 
 const uint64_t LBS = 512;
 
