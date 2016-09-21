@@ -114,4 +114,55 @@ public:
     }
 };
 
+/**
+ * This algorithm is originally developed
+ * by David Blackman and Sebastiano Vigna (vigna@acm.org)
+ * http://xorshift.di.unimi.it/splitmix64.c
+ */
+class SplitMix64
+{
+    uint64_t x_;
+public:
+    using ResultType = uint64_t;
+    explicit SplitMix64(uint64_t seed) : x_(seed) {}
+    uint64_t operator()() {
+        uint64_t z = (x_ += UINT64_C(0x9E3779B97F4A7C15));
+        z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+        return z ^ (z >> 31);
+    }
+};
+
+/**
+ * This algorithm is originally developed
+ * by David Blackman and Sebastiano Vigna (vigna@acm.org)
+ * http://xoroshiro.di.unimi.it/xoroshiro128plus.c
+ */
+class Xoroshiro128Plus
+{
+    uint64_t s_[2];
+public:
+    using ResultType = uint64_t;
+    explicit Xoroshiro128Plus(uint64_t seed) {
+        s_[0] = seed;
+        s_[1] = SplitMix64(seed)();
+    }
+    uint64_t operator()() {
+        const uint64_t s0 = s_[0];
+        uint64_t s1 = s_[1];
+        const uint64_t res = s0 + s1;
+        s1 ^= s0;
+        s_[0] = rotl(s0, 55) ^ s1 ^ (s1 << 14);
+        s_[1] = rotl(s1, 36);
+        return res;
+    }
+    void fill(void *data, size_t size) {
+        fillRandom<uint64_t>(*this, data, size);
+    }
+private:
+    uint64_t rotl(const uint64_t x, int k) {
+        return (x << k) | (x >> (64 - k));
+    }
+};
+
 }} //namespace cybozu::util
