@@ -24,17 +24,23 @@ struct Option
     bool dontUseAio;
     bool isDebug;
     std::string logPath;
+    size_t ioSizeB;
+    size_t aheadSizeB;
     size_t maxThroughputMb;
-    size_t intervalMb;
+    size_t monitorIntervalSec;
+    bool fillAll;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("writer: block device writer.");
         opt.appendParam(&bdevPath, "BLOCK_DEVICE_PATH");
         opt.appendOpt(&maxThroughputMb, 0, "throughput", ": max throughput [MB/s] (default unlimited)");
-        opt.appendOpt(&intervalMb, 2, "interval", ": time calculation interval [MB] (default 2)");
+        opt.appendOpt(&ioSizeB, 64 * KIBI, "iosize", ": io size [bytes] (default 64K)");
+        opt.appendOpt(&aheadSizeB, 64 * MEBI, "ahead", ": ahead size [bytes] (default 64M)");
+        opt.appendOpt(&monitorIntervalSec, 10, "monintvl", ": monitor interval [sec] (default 10)");
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
+        opt.appendBoolOpt(&fillAll, "fill", ": fill all data with random data (default with zero)");
         opt.appendOpt(&logPath, "-", "l", ": log output path. (default: stderr)");
 
         opt.appendHelp("h", ": show this message.");
@@ -42,6 +48,7 @@ struct Option
             opt.usage();
             ::exit(1);
         }
+        if (monitorIntervalSec == 0) throw cybozu::Exception("-monintvl must not be 0.");
     }
 };
 
@@ -181,12 +188,20 @@ struct PbRecord
 };
 
 template <typename Rand>
-AlignedArray prepareData(uint32_t pbs, uint32_t pb, uint64_t lsid, Rand& rand)
+AlignedArray prepareData(uint32_t pbs, uint32_t pb, uint64_t lsid, Rand& rand, bool fillAll)
 {
-    AlignedArray buf(pb * pbs, true);
-    for (size_t i = 0; i < pb; i++) {
-        PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
-        rec->set(lsid + i, rand);
+    AlignedArray buf(pb * pbs, !fillAll);
+    if (fillAll) {
+        rand.fill(buf.data(), buf.size());
+    } else {
+#if 0
+        for (size_t i = 0; i < pb; i++) {
+            PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
+            rec->set(lsid + i, rand);
+        }
+#else
+        (void)lsid;
+#endif
     }
     return buf;
 }
@@ -210,7 +225,7 @@ class ThroughputMonitor
         Timespec ts;
     };
 
-    const size_t intervalB_;
+    size_t intervalB_;
     const size_t monitorMs_;
     std::deque<Rec> queue_;
 
@@ -222,7 +237,7 @@ class ThroughputMonitor
 
 public:
     /**
-     * internalB: [bytes]
+     * intervalB: [bytes] (initial value)
      * monitorMs: [ms]
      */
     ThroughputMonitor(size_t intervalB, size_t monitorMs)
@@ -235,27 +250,61 @@ public:
         assert(monitorMs > 0);
         assert(intervalB_ > 0);
     }
-    void add(size_t ioSizeB) { // bytes.
+    /**
+     * RETURNS:
+     *   0 if throughput does not calculated, else throughput.
+     */
+    size_t add(size_t ioSizeB) { // bytes.
         AutoLock lk(mutex_);
         localB_ += ioSizeB;
         if (queue_.empty() || localB_ >= intervalB_) {
-            queue_.push_back(Rec{localB_, cybozu::getNowAsTimespec()});
+            const Timespec now = cybozu::getNowAsTimespec();
+            if (!queue_.empty()) adjustInterval(now - queue_.back().ts);
+            queue_.push_back(Rec{localB_, now});
             totalB_ += localB_;
             localB_ = 0;
             gc();
+            return getThroughputDetail(now);
+        } else {
+            return 0;
         }
     }
     size_t getThroughput() const {
         AutoLock lk(mutex_);
-        Timespec ts0, ts1;
+        const Timespec now = cybozu::getNowAsTimespec();
+        return getThroughputDetail(now);
+    }
+private:
+    static constexpr size_t UPPER_LIMIT_SIZE = 100 * MEGA;
+    static constexpr size_t LOWER_LIMIT_SIZE = MEGA;
+    void adjustInterval(const TimespecDiff& diff) {
+        const double d = diff.getAsDouble();
+        if (d < 0.01) { //10ms
+            size_t intvl;
+            if (d < 0.005) { //5ms
+                intvl = intervalB_ * 2;
+            } else {
+                intvl = intervalB_ * 11 / 10;
+            }
+            intervalB_ = std::min(intvl, UPPER_LIMIT_SIZE);
+            //LOGs.info() << __func__ << intervalB_;
+        } else if (d > 0.02) { //20ms
+            size_t intvl;
+            if (d > 0.05) { //50ms
+                intvl = intervalB_ / 2;
+            } else {
+                intvl = intervalB_ * 9 / 10;
+            }
+            intervalB_ = std::max(intvl, LOWER_LIMIT_SIZE);
+            //LOGs.info() << __func__ << intervalB_;
+        }
+    }
+    size_t getThroughputDetail(const Timespec& now) const {
         if (queue_.empty()) return 0;
-        ts0 = queue_.front().ts;
-        ts1 = cybozu::getNowAsTimespec();
-        TimespecDiff diff = ts1 - ts0;
+        const TimespecDiff diff = now - queue_.front().ts;
         if (diff == 0) return 0;
         return size_t((totalB_ + localB_) / diff.getAsDouble());
     }
-private:
     void gc() {
         if (queue_.size() < 2) return;
         TimespecDiff diff = queue_.back().ts - queue_.front().ts;
@@ -276,15 +325,14 @@ std::atomic<bool> failed_(false);
 
 template <typename Writer>
 void doWriteSubmit(Writer& writer, uint64_t aheadPb, const std::atomic<uint64_t>& readPb, Queue& outQ,
-                   ThroughputMonitor &thMon, size_t maxThroughput)
+                   ThroughputMonitor &thMon, size_t maxThroughput, bool fillAll, uint32_t ioPb)
 try {
     const uint32_t pbs = writer.pbs();
-    const uint32_t maxIoPb = 64 * KIBI / pbs;
     uint64_t lsid = 0;
     writer.reset(lsid % writer.devPb());
-    cybozu::util::Random<uint64_t> rand;
+    cybozu::util::Xoroshiro128Plus rand(::time(0));
+
     uint64_t writtenPb = 0;
-    std::queue<IoRecord> tmpQ;
 
     while (!cybozu::signal::gotSignal()) {
         if (failed_) return;
@@ -292,35 +340,24 @@ try {
             util::sleepMs(1); // backpressure.
             continue;
         }
-        const uint32_t pb = std::min<uint64_t>(writer.tailPb(), 1 + rand() % maxIoPb);
-        AlignedArray buf = prepareData(pbs, pb, lsid, rand);
+        const uint32_t pb = std::min<uint64_t>(writer.tailPb(), ioPb);
+        AlignedArray buf = prepareData(pbs, pb, lsid, rand, fillAll);
         const uint32_t aioKey = writer.prepare(std::move(buf));
-        tmpQ.push(IoRecord{lsid, pb * pbs, aioKey});
-        if (tmpQ.size() >= 8 || rand() % 10 == 0) {
-            writer.submit();
-            while (!tmpQ.empty()) {
-                const IoRecord& rec = tmpQ.front();
-                LOGs.debug() << "write" << rec;
-                thMon.add(rec.ioSizeB);
-                outQ.push(rec);
-                tmpQ.pop();
-            }
-            if (rand() % 1000 == 0) writer.sync();
-            while (thMon.getThroughput() > maxThroughput) {
+        IoRecord rec{lsid, pb * pbs, aioKey};
+        writer.submit();
+        LOGs.debug() << "write" << rec;
+        const size_t throughput = thMon.add(rec.ioSizeB);
+        outQ.push(rec);
+#if 0
+        if (rand() % 10000 == 0) writer.sync();
+#endif
+        if (maxThroughput > 0 && throughput > 0 && throughput > maxThroughput) {
+            do {
                 util::sleepMs(1);
-            }
+            } while (thMon.getThroughput() > maxThroughput);
         }
         lsid += pb;
         writtenPb += pb;
-    }
-    if (!tmpQ.empty()) {
-        writer.submit();
-            while (!tmpQ.empty()) {
-                const IoRecord& rec = tmpQ.front();
-                LOGs.debug() << "write" << rec;
-                outQ.push(rec);
-                tmpQ.pop();
-            }
     }
     outQ.sync();
 } catch (...) {
@@ -376,22 +413,26 @@ template <typename Writer>
 void writeAndVerify(const Option& opt)
 {
     const uint32_t pbs = getPbs(opt.bdevPath);
-    const size_t queueSize = 4 * MEBI / pbs;
+    const uint32_t ioPb = opt.ioSizeB / pbs;
+    if (ioPb == 0) throw cybozu::Exception("too small io size") << opt.ioSizeB;
+    const uint64_t aheadPb = opt.aheadSizeB / pbs;
+    if (aheadPb < ioPb) throw cybozu::Exception("too small ahead size") << opt.aheadSizeB;
+    const size_t queueSize = aheadPb / ioPb + 1;
     Queue queue(queueSize);
     Writer writer;
     writer.open(opt.bdevPath, queueSize);
-    std::atomic<uint64_t> readPb(0);
-    const uint64_t aheadPb = 128 * MEBI / pbs;
     const uint64_t devPb = writer.devPb();
     LOGs.info() << "devPb" << devPb;
     LOGs.info() << "pbs" << pbs;
-    ThroughputMonitor thMon(1000000, 3000);
-    const size_t maxThroughput = opt.maxThroughputMb * 1000 * 1000;
+    std::atomic<uint64_t> readPb(0);
+    ThroughputMonitor thMon(MEGA, 3000);
+    const size_t maxThroughput = opt.maxThroughputMb * MEGA;
 
     cybozu::thread::ThreadRunnerSet thS;
-    thS.add([&]() { doWriteSubmit<Writer>(writer, aheadPb, readPb, queue, thMon, maxThroughput); });
+    thS.add([&]() { doWriteSubmit<Writer>(writer, aheadPb, readPb, queue, thMon,
+                                          maxThroughput, opt.fillAll, ioPb); });
     thS.add([&]() { doWriteWait<Writer>(writer, readPb, queue); });
-    thS.add([&]() { doMonitor(readPb, 5, devPb, thMon); } );
+    thS.add([&]() { doMonitor(readPb, opt.monitorIntervalSec, devPb, thMon); } );
     thS.start();
 
     std::vector<std::exception_ptr> epV = thS.join();
