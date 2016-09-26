@@ -317,7 +317,7 @@ class Worker:
                 ls.append((n, vol, notMergeGidL))
         return self.selectMaxDiffNumMergeTask(ls)
 
-    def selectMergeTask2(self, volActTimeL, numDiffL, curTime, notMergeGidLL):
+    def selectMergeTask2(self, volActTimeL, numDiffL, notMergeGidLL, curTime):
         ls = []
         for ((vol, actTimeD), n, notMergeGidL) in zip(volActTimeL, numDiffL, notMergeGidLL):
             ts = actTimeD.get(aaMerge)
@@ -381,7 +381,7 @@ class Worker:
                 return t
         # step 3
         if g_step in [0, 3]:
-            t = self.selectMergeTask1(volL, numDiffL)
+            t = self.selectMergeTask1(volL, numDiffL, notMergeGidLL)
             if t:
                 logd('selectMergeTask1', t)
                 return t
@@ -393,7 +393,7 @@ class Worker:
                 return t
         # step 5
         if g_step in [0, 5]:
-            t = self.selectMergeTask2(volActTimeL, numDiffL, curTime)
+            t = self.selectMergeTask2(volActTimeL, numDiffL, notMergeGidLL, curTime)
             if t:
                 logd('selectMergeTask2', t)
                 return t
