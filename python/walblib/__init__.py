@@ -533,6 +533,17 @@ def create_diff_from_str(s):
     d.parse(s)
     return d
 
+def create_ts_delta_from_str(s):
+    '''
+    create ts-delta from str
+    s :: str
+    return :: dict
+    '''
+    d = {}
+    for kv in s.split('\t'):
+        (k, v) = kv.split(':')
+        d[k] = v
+    return d
 
 class MetaState(object):
     '''
@@ -2961,3 +2972,17 @@ class Controller(object):
         if scanSizeU is not None:
             args.append(scanSizeU)
         return self.run_ctl(ax, args)
+
+    def get_ts_delta(self, ax):
+        '''
+        Get timestamp delta
+        ax :: ServerParams - archive server.
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        args = ['get', 'ts-delta']
+        ls = self.run_ctl(ax, args)
+        if not ls:
+            return []
+        return map(create_ts_delta_from_str, ls.split('\n'))
+
+

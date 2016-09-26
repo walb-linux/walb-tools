@@ -2,6 +2,7 @@
 import sys, time, datetime, os, threading, signal, traceback
 from walblib import *
 import walblib.worker as worker
+from collections import defaultdict
 
 walbcDebug = False
 g_quit = False
@@ -101,7 +102,7 @@ def sumDiffSize(diffL):
     return sum([d.dataSize for d in diffL])
 
 
-def getMergeGidRange(diffL, max_size, max_nr):
+def getMergeGidRange(diffL, max_size, max_nr, notMergeGidL):
     """
         select range which satisfies the following conditions:
         [L0, L1, ...]
@@ -117,11 +118,19 @@ def getMergeGidRange(diffL, max_size, max_nr):
 
     def average((begin, end, size)):
         return size / (end - begin)
+
+    def IsAnyOfGidLInRange(gidL, begin, end):
+        for gid in gidL:
+            if begin < gid and gid < end:
+                return True
+        return False
+
     for i in xrange(len(diffL)):
         diff = diffL[i]
         canBeMerged = not diff.isCompDiff and diff.dataSize <= max_size
         if inApplying:
-            toBeAppended = diff.isMergeable and canBeMerged
+            inRange = IsAnyOfGidLInRange(notMergeGidL, diffL[begin].B.gidB, diff.E.gidB)
+            toBeAppended = diff.isMergeable and canBeMerged and not inRange
             totalSize += diff.dataSize
             n = i - begin
             if toBeAppended and totalSize <= max_size and n <= max_nr:
@@ -269,37 +278,49 @@ class Worker:
             numDiffL.append(n)
         return numDiffL
 
+    def getNotMergeGidLL(self, volL):
+        ts_deltaL = self.walbc.get_ts_delta(self.a0)
+        vol_gid = defaultdict(list)
+        for d in ts_deltaL:
+            vol = d['name']
+            dest_gid = int(d['dest_gid'])
+            vol_gid[vol].append(dest_gid)
+        ret = []
+        for vol in volL:
+            ret.append(vol_gid[vol])
+        return ret
 
     def selectMaxDiffNumMergeTask(self, ls):
         """
-            ls = [(n, vol)]
+            ls = [(n, vol, notMergeGidL)]
         """
         verify_type(ls, list, tuple)
         if ls:
             verify_type(ls[0][0], int)
             verify_type(ls[0][1], str)
+            verify_type(ls[0][2], list)
             ls.sort(key=lambda x : x[0], reverse=True)
-            (_, vol) = ls[0]
+            (_, vol, notMergeGidL) = ls[0]
             diffL = self.walbc.get_applicable_diff_list(self.a0, vol)
-            r = getMergeGidRange(diffL, self.cfg.merge.max_size, self.cfg.merge.max_nr)
+            r = getMergeGidRange(diffL, self.cfg.merge.max_size, self.cfg.merge.max_nr, notMergeGidL)
             if r:
                 return MergeTask(vol, self.a0, r[0], r[1])
         return None
 
-    def selectMergeTask1(self, volL, numDiffL):
+    def selectMergeTask1(self, volL, numDiffL, notMergeGidLL):
         ls = []
-        for (vol, n) in zip(volL, numDiffL):
+        for (vol, n, notMergeGidL) in zip(volL, numDiffL, notMergeGidLL):
             if n >= self.cfg.merge.threshold_nr:
-                ls.append((n, vol))
+                ls.append((n, vol, notMergeGidL))
         return self.selectMaxDiffNumMergeTask(ls)
 
-    def selectMergeTask2(self, volActTimeL, numDiffL, curTime):
+    def selectMergeTask2(self, volActTimeL, numDiffL, curTime, notMergeGidLL):
         ls = []
-        for ((vol, actTimeD), n) in zip(volActTimeL, numDiffL):
+        for ((vol, actTimeD), n, notMergeGidL) in zip(volActTimeL, numDiffL, notMergeGidLL):
             ts = actTimeD.get(aaMerge)
             if ts and curTime < ts + self.cfg.merge.interval:
                 continue
-            ls.append((n, vol))
+            ls.append((n, vol, notMergeGidL))
         return self.selectMaxDiffNumMergeTask(ls)
 
     def selectReplTask(self, volL, curTime):
@@ -341,6 +362,7 @@ class Worker:
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
         numDiffL = self.getNumDiffList(volL)
+        notMergeGidLL = self.getNotMergeGidLL(volL)
         t = None
         # step 1
         if g_step in [0, 1]:
