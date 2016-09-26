@@ -537,11 +537,15 @@ def create_ts_delta_from_str(s):
     '''
     create ts-delta from str
     s :: str
-    return :: dict
+    return :: dict(tag_name::str, value::str)
     '''
     d = {}
     for kv in s.split('\t'):
-        (k, v) = kv.split(':')
+        i = kv.find(':')
+        if i < 0:
+            raise Exception("parse error: not found ':'"), kv
+        k = kv[0:1]
+        v = kv[i + 1:]
         d[k] = v
     return d
 
@@ -2977,6 +2981,7 @@ class Controller(object):
         '''
         Get timestamp delta
         ax :: ServerParams - archive server.
+        return :: [dict(str, str)]
         '''
         verify_server_kind(ax, [K_ARCHIVE])
         args = ['get', 'ts-delta']
@@ -2984,5 +2989,3 @@ class Controller(object):
         if not ls:
             return []
         return map(create_ts_delta_from_str, ls.split('\n'))
-
-
