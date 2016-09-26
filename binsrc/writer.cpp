@@ -275,9 +275,9 @@ public:
         return getThroughputDetail(now);
     }
 private:
-    static constexpr size_t UPPER_LIMIT_SIZE = 100 * MEGA;
-    static constexpr size_t LOWER_LIMIT_SIZE = MEGA;
     void adjustInterval(const TimespecDiff& diff) {
+        const size_t UPPER_LIMIT_SIZE = 100 * MEGA;
+        const size_t LOWER_LIMIT_SIZE = MEGA;
         const double d = diff.getAsDouble();
         if (d < 0.01) { //10ms
             size_t intvl;
