@@ -219,7 +219,7 @@ class TestGetMergeGidRange(unittest.TestCase):
             '|8|-->|9| M- 2015-12-08T07:11:28 100',
             '|9|-->|10| M- 2015-12-08T07:11:28 100',
             ]
-        r = getMergeGidRange(map(create_diff_from_str, P0), 1000000000, 2)
+        r = getMergeGidRange(map(create_diff_from_str, P0), 1000000000, 2, [])
         self.assertEqual(r, (6, 9))
         tbl = [
             ([], None),
@@ -265,7 +265,7 @@ class TestGetMergeGidRange(unittest.TestCase):
         ]
         for t in tbl:
             diffL = map(create_diff_from_str, t[0])
-            r = getMergeGidRange(diffL, 1000000000, 1000000)
+            r = getMergeGidRange(diffL, 1000000000, 1000000, [])
             self.assertEqual(r, t[1])
 
 class TestTaskManager(unittest.TestCase):
@@ -441,7 +441,7 @@ class TestWoker(unittest.TestCase):
                 '|5|-->|6| M- 2015-12-09T09:54:31 8728',
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
-                [(3, 'sss'), (5, VOL), (4, 'ttt')],
+                [(3, 'sss', []), (5, VOL, []), (4, 'ttt', [])],
                 MergeTask(VOL, w.a0, 0, 2)),
                 ([
                 '|0|-->|1| -- 2015-12-09T09:54:20 4120',
@@ -450,7 +450,7 @@ class TestWoker(unittest.TestCase):
                 '|5|-->|6| M- 2015-12-09T09:54:31 8728',
                 '|6|-->|7| M- 2015-12-09T09:54:33 8728',
                 ],
-                [(3, 'sss'), (5, VOL), (9, 'ttt')],
+                [(3, 'sss', []), (5, VOL, []), (9, 'ttt', [])],
                 MergeTask('ttt', w.a0, 0, 2)),
 
             ]
