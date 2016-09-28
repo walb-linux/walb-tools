@@ -544,7 +544,7 @@ def create_ts_delta_from_str(s):
         i = kv.find(':')
         if i < 0:
             raise Exception("parse error: not found ':'"), kv
-        k = kv[0:1]
+        k = kv[0:i]
         v = kv[i + 1:]
         d[k] = v
     return d
