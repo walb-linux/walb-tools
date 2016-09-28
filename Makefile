@@ -116,7 +116,7 @@ man/%: man/%.ronn
 
 version_cpp:
 	cat src/version.cpp.template |sed "s/VERSION/`cat VERSION`/g" \
-|sed "s/BUILD_DATE/`date +%Y%m%dT%H%M%S`/g" \
+|sed "s/BUILD_DATE/`date +%Y-%m-%dT%H:%M:%S`/g" \
 > src/version.cpp.tmp
 ifeq ($(DISABLE_COMMIT_ID),1)
 	mv src/version.cpp.tmp src/version.cpp
