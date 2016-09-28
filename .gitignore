@@ -11,5 +11,5 @@ GSYMS
 GTAGS
 *.wdiff
 *.wlog
-*.depend
+*.d
 *.pyc
