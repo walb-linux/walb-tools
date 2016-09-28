@@ -48,7 +48,6 @@ BIN_SOURCES = $(wildcard binsrc/*.cpp)
 OTHER_SOURCES = $(wildcard src/*.cpp)
 TEST_SOURCES = $(wildcard utest/*.cpp)
 SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES) $(TEST_SOURCES)
-DEPENDS = $(patsubst %.cpp,%.depend,$(SOURCES))
 BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 LOCAL_LIB = src/libwalb-tools.a
@@ -81,7 +80,7 @@ echo_binaries:
 	@echo $(BINARIES)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -99,7 +98,7 @@ clean: cleanobj cleandep cleanman
 cleanobj:
 	rm -f src/*.o binsrc/*.o utest/*.o
 cleandep:
-	rm -f src/*.depend binsrc/*.depend utest/*.depend
+	rm -f src/*.d binsrc/*.d utest/*.d
 cleanman:
 	rm -f $(MANPAGES)
 
@@ -126,13 +125,6 @@ else
 |sed "s/COMMIT_ID/`git show-ref --head HEAD |cut -f 1 -d ' '|head -n1`/g" \
 > src/version.cpp
 endif
-
-binsrc/%.depend: binsrc/%.cpp
-	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|binsrc/\1|' > $@
-src/%.depend: src/%.cpp
-	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|src/\1|' > $@
-utest/%.depend: utest/%.cpp
-	$(CXX) -MM $< $(CXXFLAGS) |sed -e 's|^\(.\+\.o:\)|utest/\1|' > $@
 
 
 PYTHON_SOURCES0 = python/walblib/__init__.py python/walblib/worker.py stest/config0.py stest/stest_util.py stest/repeater.py stest/common.py stest/scenario0.py
@@ -169,6 +161,10 @@ worker-test:
 worker-itest:
 	env PYTHONPATH=./python ipython mtest/worker/itest.ipy
 
-ifeq "$(findstring $(MAKECMDGOALS), clean archive pylint manpages)" ""
--include $(DEPENDS)
-endif
+ALL_SRC=$(BIN_SOURCES) $(OTHER_SOURCES) $(TEST_SOURCES)
+DEPEND_FILE=$(ALL_SRC:.cpp=.d)
+-include $(DEPEND_FILE)
+
+
+# don't remove these files automatically
+.SECONDARY: $(ALL_SRC:.cpp=.o)
