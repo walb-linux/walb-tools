@@ -342,6 +342,7 @@ def get_sha1(bdevPath):
     return :: str  - sha1sum string.
     '''
     verify_type(bdevPath, str)
+    flush_bufs(bdevPath)
     ret = run_local_command(['/usr/bin/sha1sum', bdevPath])
     return ret.split(' ')[0]
 
