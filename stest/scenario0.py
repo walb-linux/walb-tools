@@ -279,6 +279,7 @@ def test_n9():
         if len(list0) != 1:
             raise Exception('test_n9: list size must be 1', list0)
         write_random(wdev0.path, 1)
+        walbc.snapshot(s0, VOL, [a0], TIMEOUT)
         walbc.replicate(a0, VOL, a1, False, TIMEOUT)
         gid1a0 = walbc.get_latest_clean_snapshot(a0, VOL)
         gid1a1 = walbc.get_latest_clean_snapshot(a1, VOL)
