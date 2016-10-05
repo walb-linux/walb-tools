@@ -346,8 +346,15 @@ void checkWldev(const Option &opt)
         }
         if (opt.isDeleteWlog && !device::isOverflow(wdevPath) && lsidSet.oldest < lsid && lsidSet.oldest < lsidSet.prevWritten) {
             const uint64_t newOldestLsid = std::min(lsid, lsidSet.prevWritten);
-            device::eraseWal(wdevName, newOldestLsid);
-            if (opt.isZeroDelete) {
+            bool succeeded = false;
+            try {
+                device::eraseWal(wdevName, newOldestLsid);
+                succeeded = true;
+            } catch (std::exception& e) {
+                LOGs.warn() << "erase wal failed" << e.what();
+            }
+            // When the wdev is going to overflow, it is dangerous to fill zero.
+            if (opt.isZeroDelete && succeeded) {
                 device::fillZeroToLdev(wdevName, lsidSet.oldest, newOldestLsid);
             }
         }
