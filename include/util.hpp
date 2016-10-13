@@ -114,7 +114,7 @@ inline double getTime()
 class LibcError : public std::exception
 {
 public:
-    explicit LibcError(int errnum = errno, const std::string &msg = "libc_error:")
+    explicit LibcError(const std::string &msg, int errnum = errno)
         : errnum_(errnum)
         , str_(generateMessage(errnum, msg)) {}
     virtual const char *what() const noexcept {
@@ -125,13 +125,13 @@ private:
     int errnum_;
     std::string str_;
     static std::string generateMessage(int errnum, const std::string &msg) {
-        std::string s(msg);
         const size_t BUF_SIZE = 1024;
         char buf[BUF_SIZE];
 #ifndef _GNU_SOURCE
 #error "We use GNU strerror_r()."
 #endif
-        ::snprintf(buf, 1024, " %d ", errnum);
+        std::string s;
+        ::snprintf(buf, BUF_SIZE, "%s <libc_error> %d ", msg.c_str(), errnum);
         s += buf;
         const char *c = ::strerror_r(errnum, buf, BUF_SIZE);
         s += c;

@@ -46,7 +46,7 @@ private:
         const int err = errno;
         std::string s("open failed: ");
         s += filePath;
-        throw LibcError(err, s);
+        throw LibcError(s, err);
     }
 public:
     File()
@@ -101,7 +101,7 @@ public:
     void close() {
         if (!autoClose_ || fd_ < 0) return;
         if (::close(fd_) < 0) {
-            throw LibcError(errno, "close failed: ");
+            throw LibcError("close failed.");
         }
         fd_ = -1;
     }
@@ -111,13 +111,13 @@ public:
     off_t lseek(off_t oft, int whence = SEEK_SET) {
         off_t ret = ::lseek(fd(), oft, whence);
         if (ret == off_t(-1)) {
-            throw LibcError(errno, "lseek failed: ");
+            throw LibcError("lseek failed.");
         }
         return ret;
     }
     size_t readsome(void *data, size_t size) {
         ssize_t r = ::read(fd(), data, size);
-        if (r < 0) throw LibcError(errno, "read failed: ");
+        if (r < 0) throw LibcError("read failed.");
         return r;
     }
     void read(void *data, size_t size) {
@@ -138,7 +138,7 @@ public:
         size_t s = 0;
         while (s < size) {
             ssize_t r = ::write(fd(), &buf[s], size - s);
-            if (r < 0) throw LibcError(errno, "write failed: ");
+            if (r < 0) throw LibcError("write failed.");
             if (r == 0) throw EofError();
             s += r;
         }
@@ -149,17 +149,17 @@ public:
     }
     void fdatasync() {
         if (::fdatasync(fd()) < 0) {
-            throw LibcError(errno, "fdsync failed: ");
+            throw LibcError("fdsync failed.");
         }
     }
     void fsync() {
         if (::fsync(fd()) < 0) {
-            throw LibcError(errno, "fsync failed: ");
+            throw LibcError("fsync failed.");
         }
     }
     void ftruncate(off_t length) {
         if (::ftruncate(fd(), length) < 0) {
-            throw LibcError(errno, "ftruncate failed: ");
+            throw LibcError("ftruncate failed.");
         }
     }
 };

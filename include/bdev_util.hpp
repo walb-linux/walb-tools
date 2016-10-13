@@ -16,7 +16,7 @@ inline void fstat(int fd, struct stat &s)
 {
     if (fd < 0) throw RT_ERR("fstat: fd < 0");
     if (::fstat(fd, &s) < 0) {
-        throw LibcError(errno, "fstat failed: ");
+        throw LibcError("fstat failed.");
     }
 }
 
@@ -35,7 +35,7 @@ inline uint32_t getLogicalBlockSize(int fd)
 
     uint32_t lbs;
     if (::ioctl(fd, BLKSSZGET, &lbs) < 0) {
-        throw LibcError(errno, "Geting logical block size failed: ");
+        throw LibcError("Geting logical block size failed.");
     }
     assert(lbs > 0);
     return lbs;
@@ -47,7 +47,7 @@ inline uint32_t getPhysicalBlockSize(int fd)
     if (!isBlockDevice(fd)) return 512;
     uint32_t pbs;
     if (::ioctl(fd, BLKPBSZGET, &pbs) < 0) {
-        throw LibcError(errno, "Getting physical block size failed: ");
+        throw LibcError("Getting physical block size failed.");
     }
     assert(pbs > 0);
     return pbs;
@@ -66,7 +66,7 @@ inline uint64_t getBlockDeviceSize(int fd)
     if (isBlockDevice(fd)) {
         uint64_t size;
         if (::ioctl(fd, BLKGETSIZE64, &size) < 0) {
-            throw LibcError(errno, __func__);
+            throw LibcError(__func__);
         }
         return size;
     } else {
@@ -82,7 +82,7 @@ inline uint64_t getBlockDeviceSize(int fd)
 inline void flushBufferCache(int fd)
 {
     if (::ioctl(fd, BLKFLSBUF, 0) < 0) {
-        throw LibcError(errno, __func__);
+        throw LibcError(__func__);
     }
 }
 
@@ -107,7 +107,7 @@ inline void issueDiscard(int fd, uint64_t offsetLb, uint64_t sizeLb)
     assert(fd > 0);
     uint64_t range[2] = {offsetLb << 9, sizeLb << 9};
     if (::ioctl(fd, BLKDISCARD, &range) < 0) {
-        throw LibcError(errno, __func__);
+        throw LibcError(__func__);
     }
 }
 
@@ -119,7 +119,7 @@ inline uint64_t getAvailableDiskSpace(const std::string& path)
 {
     struct statvfs stvfs;
     if (::statvfs(path.c_str(), &stvfs) < 0) {
-        throw LibcError(errno, __func__);
+        throw LibcError(__func__);
     }
     return stvfs.f_bavail * stvfs.f_bsize;
 }

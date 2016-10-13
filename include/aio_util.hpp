@@ -140,7 +140,7 @@ public:
         assert(queueSize > 0);
         const int err = ::io_queue_init(queueSize_, &ctx_);
         if (err < 0) {
-            throw util::LibcError(-err);
+            throw util::LibcError("Aio: io_queue_init failed.", -err);
         }
     }
     ~Aio() noexcept try {
@@ -151,7 +151,7 @@ public:
         if (isReleased_) return;
         int err = ::io_queue_release(ctx_);
         if (err < 0) {
-            throw util::LibcError(-err, "Aio: release failed.");
+            throw util::LibcError("Aio: io_queue_release failed.", -err);
         }
         isReleased_ = true;
     }
@@ -238,7 +238,7 @@ public:
         while (done < nr) {
             int err = ::io_submit(ctx_, nr - done, &iocbs_[done]);
             if (err < 0) {
-                throw util::LibcError(-err);
+                throw util::LibcError("Aio: io_submit failed.", -err);
             }
             done += err;
         }
@@ -353,7 +353,7 @@ public:
             nr--;
         }
         if (isLibcError) {
-            throw util::LibcError(EIO, "Aio: some IOs failed.");
+            throw util::LibcError("Aio: some IOs failed.", EIO);
         }
         if (isEofError) {
             throw util::EofError();
@@ -405,7 +405,7 @@ private:
         assert(minNr <= queueSize_);
         const int nr = ::io_getevents(ctx_, minNr, queueSize_, &ioEvents_[0], NULL);
         if (nr < 0) {
-            throw util::LibcError(-nr, "io_getevents: ");
+            throw util::LibcError("Aio: io_getevents failed.", -nr);
         }
         if ((size_t)nr < minNr) {
             throw RT_ERR("io_getevents returns bad value %d %u.", nr, minNr);
@@ -472,7 +472,7 @@ private:
             throw util::EofError();
         }
         if (io.err < 0) {
-            throw util::LibcError(-io.err, "Aio: io failed.");
+            throw util::LibcError("Aio: io failed.", -io.err);
         }
         assert(io.iocb.u.c.nbytes == static_cast<uint>(io.err));
     }
