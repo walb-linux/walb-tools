@@ -170,21 +170,24 @@ def to_str(ss):
     return " ".join(ss)
 
 
-def run_local_command(args, putMsg=False):
+def run_local_command(args, putMsg=False, quietErr=False):
     '''
     run a command at localhost.
     args :: [str] - command line arguments.
                     The head item must be full-path executable.
     putMsg :: bool - put debug message.
+    quietErr :: bool - do not put stderr.
     return :: str  - standard output of the command.
     '''
     verify_type(args, list, str)
     verify_type(putMsg, bool)
+    verify_type(quietErr, bool)
 
     if putMsg:
         print "run_command:", to_str(args)
+    stderr = None if quietErr else sys.stderr
     p = subprocess.Popen(args, stdout=subprocess.PIPE,
-                         stderr=sys.stderr, close_fds=True)
+                         stderr=stderr, close_fds=True)
     f = p.stdout
     s = f.read().strip()
     ret = p.wait()
@@ -1225,13 +1228,14 @@ class Controller(object):
         verify_type(sLayout, ServerLayout)
         self.sLayout = sLayout
 
-    def run_ctl(self, s, cmdArgs, putMsg=False, timeoutS=0):
+    def run_ctl(self, s, cmdArgs, putMsg=False, timeoutS=0, quietErr=False):
         '''
         Run walb-tools controller.
         s :: ServerParams  - a server.
         cmdArgs :: [str] - command arguments.
         putMsg :: bool   - put debug message if True.
         timeoutS :: int  - timeout in sec. 0 means default.
+        quietErr :: bool - do not put stderr.
         return :: str    - stdout of the control command.
         '''
         verify_type(s, ServerParams)
@@ -1245,7 +1249,8 @@ class Controller(object):
             ctlArgs += ['-debug']
         if timeoutS:
             ctlArgs += ['-to', str(timeoutS)]
-        return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg)
+        return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg,
+                                 quietErr=quietErr)
 
     def run_remote_command(self, s, args, putMsg=False, timeoutS=0):
         '''
@@ -1281,14 +1286,14 @@ class Controller(object):
 
         return func
 
-    def get_host_type(self, s):
+    def get_host_type(self, s, quietErr=False):
         '''
         Get host type.
         s :: ServerParams
         return :: str - 'storage', 'proxy', or 'archive'.
         '''
         verify_type(s, ServerParams)
-        return self.run_ctl(s, ['get', 'host-type'])
+        return self.run_ctl(s, ['get', 'host-type'], quietErr=quietErr)
 
     def get_state(self, s, vol):
         '''
