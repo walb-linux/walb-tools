@@ -243,7 +243,7 @@ inline StorageSingleton& getStorageGlobal()
 
 const StorageSingleton& gs = getStorageGlobal();
 
-inline void pushTask(const std::string &volId, size_t delayMs=0)
+inline void pushTask(const std::string &volId, size_t delayMs = 0)
 {
     LOGs.debug() << __func__ << volId << delayMs;
     getStorageGlobal().taskQueue.push(volId, delayMs);
