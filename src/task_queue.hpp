@@ -1,5 +1,6 @@
 #pragma once
 #include <mutex>
+#include <condition_variable>
 #include <chrono>
 #include <vector>
 #include <map>
@@ -19,18 +20,20 @@ private:
     using TimePoint = typename Clock::time_point;
     using MilliSeconds = std::chrono::milliseconds;
     using AutoLock = std::lock_guard<std::mutex>;
+    using UniqueLock = std::unique_lock<std::mutex>;
 
     using Map = std::map<Task, TimePoint>;
     using Rmap = std::multimap<TimePoint, Task>;
 
     mutable std::mutex mu_;
+    mutable std::condition_variable cv_;
     Map map_;
     Rmap rmap_;
     bool isStopped_;
 
 public:
     TaskQueue()
-        : mu_(), map_(), rmap_(), isStopped_(false) {
+        : mu_(), cv_(), map_(), rmap_(), isStopped_(false) {
     }
     /**
      * Push a task with current time (or with a delay).
@@ -47,6 +50,7 @@ public:
         std::tie(itr, maked) = map_.insert(std::make_pair(task, ts));
         if (maked) rmap_.insert(std::make_pair(ts, task));
         assert(map_.size() == rmap_.size());
+        cv_.notify_all();
     }
     /**
      * Push a task with a delay.
@@ -67,6 +71,7 @@ public:
         }
         rmap_.insert(std::make_pair(ts, task));
         assert(map_.size() == rmap_.size());
+        cv_.notify_all();
     }
     /**
      * Pop a task with the oldest timestamp and the timestamp
@@ -74,8 +79,10 @@ public:
      * RETURN:
      *   false if there is no task satisfying the condition.
      */
-    bool pop(Task &task) {
-        AutoLock lk(mu_);
+    bool pop(Task &task, size_t timeoutMs) {
+        UniqueLock lk(mu_);
+        cv_.wait_for(lk, std::chrono::milliseconds(timeoutMs));
+
         typename Rmap::iterator itr = rmap_.begin();
         if (itr == rmap_.end()) return false;
         if (!isStopped_ && Clock::now() < itr->first) return false;
@@ -91,6 +98,7 @@ public:
     void quit() {
         AutoLock lk(mu_);
         isStopped_ = true;
+        cv_.notify_all();
     }
     /**
      * Cancel waiting tasks where pred(task) is true.
@@ -110,6 +118,7 @@ public:
             }
         }
         assert(map_.size() == rmap_.size());
+        cv_.notify_all();
     }
     /**
      * RETURN:

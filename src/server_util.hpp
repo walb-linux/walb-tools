@@ -219,10 +219,7 @@ public:
             logErrors(pool.gc());
             if (taskQ.empty()) {
                 Task task;
-                if (!tq.pop(task)) {
-                    util::sleepMs(SLEEP_MS);
-                    continue;
-                }
+                if (!tq.pop(task, SLEEP_MS)) continue;
                 LOGs.debug() << "dispatchTask pop" << task;
                 taskQ.push(task);
             }
