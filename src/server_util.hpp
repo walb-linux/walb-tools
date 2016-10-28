@@ -190,6 +190,8 @@ private:
     size_t maxBackgroundTasks;
     std::thread th;
 
+    static const size_t SLEEP_MS = 100;
+
 public:
     DispatchTask(TaskQueue<Task> &tq,
                  size_t maxBackgroundTasks)
@@ -218,7 +220,7 @@ public:
             if (taskQ.empty()) {
                 Task task;
                 if (!tq.pop(task)) {
-                    util::sleepMs(1000);
+                    util::sleepMs(SLEEP_MS);
                     continue;
                 }
                 LOGs.debug() << "dispatchTask pop" << task;
@@ -226,7 +228,7 @@ public:
             }
             Task &task = taskQ.front();
             if (!pool.add(Worker(task))) {
-                util::sleepMs(1000);
+                util::sleepMs(SLEEP_MS);
                 continue;
             }
             LOGs.debug() << "dispatchTask dispatch task" << task;
