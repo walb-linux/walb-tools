@@ -188,6 +188,7 @@ void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
 
 inline void setLogSetting(const std::string &pathStr, bool isDebug)
 {
+    cybozu::SetLogUseMsec(true);
     if (pathStr == "-") {
         cybozu::SetLogFILE(::stderr);
     } else {
