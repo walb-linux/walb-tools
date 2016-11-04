@@ -190,7 +190,7 @@ private:
     size_t maxBackgroundTasks;
     std::thread th;
 
-    static const size_t SLEEP_MS = 100;
+    static const size_t SLEEP_MS = 1000;
 
 public:
     DispatchTask(TaskQueue<Task> &tq,
