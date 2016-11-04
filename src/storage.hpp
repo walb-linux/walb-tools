@@ -1096,7 +1096,7 @@ inline void wdevMonitorWorker() noexcept
     const char *const FUNC = __func__;
     StorageSingleton& g = getStorageGlobal();
     const int timeoutMs = 1000;
-    const int delayMs = 1000;
+    const int delayMs = 100;
     while (!g.quitWdevMonitor) {
         try {
             const StrVec v = g.logDevMonitor.poll(timeoutMs);
