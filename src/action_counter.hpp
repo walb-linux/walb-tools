@@ -71,16 +71,22 @@ class ActionCounterTransaction
 {
     std::recursive_mutex &mu_;
     ActionCounterItem *p_;
+    bool closed_;
 public:
     ActionCounterTransaction(ActionCounters &ac, const std::string &name)
-        : mu_(ac.mu_), p_(ac.get(name)) {
+        : mu_(ac.mu_), p_(ac.get(name)), closed_(false) {
         std::lock_guard<std::recursive_mutex> lk(mu_);
         p_->count++;
         p_->bgn_time = ::time(0);
     }
-    ~ActionCounterTransaction() noexcept {
+    void close() {
+        if (closed_) return;
         std::lock_guard<std::recursive_mutex> lk(mu_);
         p_->count--;
+        closed_ = true;
+    }
+    ~ActionCounterTransaction() noexcept {
+        close();
     }
 };
 

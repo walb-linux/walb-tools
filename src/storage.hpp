@@ -947,6 +947,7 @@ inline void StorageWorker::operator()()
     ul.unlock();
     try {
         const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
+        tran.close();
         if (isRemaining) pushTask(volId);
     } catch (...) {
         pushTaskForce(volId, gs.delaySecForRetry * 1000);
