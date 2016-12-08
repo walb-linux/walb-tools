@@ -612,7 +612,9 @@ inline StrVec listRestorable(const std::string &volId, bool isAll = false)
     StrVec ret;
     const std::vector<MetaState> stV = volInfo.getRestorableSnapshots(isAll);
     for (const MetaState &st : stV) {
-        ret.push_back(cybozu::itoa(st.snapB.gidB) + ' ' + util::timeToPrintable(st.timestamp));
+        ret.push_back(cybozu::itoa(st.snapB.gidB)
+                      + ' ' + util::timeToPrintable(st.timestamp)
+                      + ' ' + (st.isExplicit ? '1' : '0'));
     }
     return ret;
 }

@@ -637,18 +637,27 @@ class GidInfo(object):
     '''
     def __init__(self, s):
         '''
-        s :: str such as '<gid> <datetime>'
+        s :: str such as '<gid> <datetime> <explicit>'
+             explicit is optional.
         '''
         verify_type(s, str)
         p = s.split()
-        if len(p) != 2:
+        if len(p) != 2 and len(p) != 3:
             raise Exception('GidInfo:bad format', s)
         self.gid = int(p[0])
         self.ts = str_to_datetime(p[1], DatetimeFormatPretty)
+        if len(p) == 3:
+            self.is_explicit = p[2] == '1'
+        else:
+            self.is_explicit = None
     def __str__(self):
-        return str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
+        s = str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
+        if self.is_explicit is not None:
+            s += ' ' + int(self.is_explicit)
+        return s
     def __eq__(self, rhs):
-        return self.gid == rhs.gid and self.ts == rhs.ts
+        return (self.gid == rhs.gid and self.ts == rhs.ts
+                and self.is_explicit == rhs.is_explicit)
     def __ne__(self, rhs):
         return not(self == rhs)
 

@@ -293,17 +293,19 @@ struct MetaState
     uint64_t timestamp;
     MetaSnap snapB, snapE; /* snapE is meaningful when isApplying is true */
 
+    bool isExplicit; // This is optional.
+
     MetaState()
         : isApplying(false), timestamp(0)
-        , snapB(), snapE() {}
+        , snapB(), snapE(), isExplicit(false) {}
     explicit MetaState(const MetaSnap &snap, uint64_t ts)
         : isApplying(false), timestamp(ts)
-        , snapB(snap), snapE(snap) {
+        , snapB(snap), snapE(snap), isExplicit(false) {
         verify();
     }
     MetaState(const MetaSnap &snapB, const MetaSnap &snapE, uint64_t ts)
         : isApplying(true), timestamp(ts)
-        , snapB(snapB), snapE(snapE) {
+        , snapB(snapB), snapE(snapE), isExplicit(false) {
         verify();
     }
     bool operator==(const MetaState &rhs) const {
@@ -1063,6 +1065,7 @@ public:
             st0 = apply(st0, applicableV[i]);
             const bool isLast = (i + 1 == applicableV.size());
             const bool isExplicit = isLast || !applicableV[i + 1].isMergeable;
+            st0.isExplicit = isExplicit;
             if (st0.snapB.isClean() && (isAll || isExplicit)) ret.push_back(st0);
         }
         return ret;

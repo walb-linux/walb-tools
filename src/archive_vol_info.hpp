@@ -756,6 +756,7 @@ public:
      * RETURN:
      *   MetaState list.
      *   st.snapB.gidB and st.timestamp have meaning.
+     *   st.isExplicit has also meaning.
      */
     std::vector<MetaState> getRestorableSnapshots(bool isAll = false) const {
         return getDiffMgr().getRestorableList(getMetaState(), isAll);
