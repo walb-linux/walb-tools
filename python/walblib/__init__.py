@@ -653,7 +653,7 @@ class GidInfo(object):
     def __str__(self):
         s = str(self.gid) + " " + datetime_to_str(self.ts, DatetimeFormatPretty)
         if self.is_explicit is not None:
-            s += ' ' + int(self.is_explicit)
+            s += ' ' + str(int(self.is_explicit))
         return s
     def __eq__(self, rhs):
         return (self.gid == rhs.gid and self.ts == rhs.ts
