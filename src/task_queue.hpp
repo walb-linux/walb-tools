@@ -79,7 +79,7 @@ public:
      * RETURN:
      *   false if there is no task satisfying the condition.
      */
-    bool pop(Task &task, size_t timeoutMs) {
+    bool pop(Task &task, size_t timeoutMs=0) {
         UniqueLock lk(mu_);
         cv_.wait_for(lk, std::chrono::milliseconds(timeoutMs));
 
