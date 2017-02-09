@@ -114,9 +114,9 @@ inline double getTime()
 class LibcError : public std::exception
 {
 public:
-    explicit LibcError(const std::string &msg, int errnum = errno)
+    explicit LibcError(const std::string &msg, const char *func, int line, int errnum = errno)
         : errnum_(errnum)
-        , str_(generateMessage(errnum, msg)) {}
+        , str_(generateMessage(errnum, msg, func, line)) {}
     virtual const char *what() const noexcept {
         return str_.c_str();
     }
@@ -124,20 +124,24 @@ public:
 private:
     int errnum_;
     std::string str_;
-    static std::string generateMessage(int errnum, const std::string &msg) {
+    static std::string generateMessage(int errnum, const std::string &msg, const char *func, int line) {
         const size_t BUF_SIZE = 1024;
         char buf[BUF_SIZE];
 #ifndef _GNU_SOURCE
 #error "We use GNU strerror_r()."
 #endif
         std::string s;
-        ::snprintf(buf, BUF_SIZE, "%s <libc_error> %d ", msg.c_str(), errnum);
+        ::snprintf(buf, BUF_SIZE, "%s (%s:%d) <libc_error> %d ", msg.c_str(), func, line, errnum);
         s += buf;
         const char *c = ::strerror_r(errnum, buf, BUF_SIZE);
         s += c;
         return s;
     }
 };
+
+#define throwLibcError(s) throw cybozu::util::LibcError(s, __func__, __LINE__)
+#define throwLibcErrorWithNo(s, err) throw  cybozu::util::LibcError(s, __func__, __LINE__, err)
+
 
 /**
  * Convert size string with unit suffix to unsigned integer.
