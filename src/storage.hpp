@@ -903,7 +903,7 @@ inline bool extractAndSendAndDeleteWlog(const std::string &volId)
 } // storage_local
 
 /**
- * Run wlog-trnasfer or wlog-remove for a specified volume.
+ * Run wlog-transfer or wlog-remove for a specified volume.
  */
 inline void StorageWorker::operator()()
 {
@@ -920,7 +920,13 @@ inline void StorageWorker::operator()()
         return;
     }
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
-    verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
+    try {
+        verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
+    } catch (...) {
+        // This is rare case, but possible.
+        pushTaskForce(volId, 1000);
+        return;
+    }
 
     StorageVolInfo volInfo(gs.baseDirStr, volId);
     const std::string wdevPath = volInfo.getWdevPath();
