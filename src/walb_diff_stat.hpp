@@ -72,7 +72,7 @@ struct DiffStatistics
                   "%s""wdiffNr %s\n"
                   "%s""normalNr %s\n"
                   "%s""allZeroNr %s\n"
-                  "%s""discarcNr %s\n"
+                  "%s""discardNr %s\n"
                   "%s""normalLb %s\n"
                   "%s""allZeroLb %s\n"
                   "%s""discardLb %s\n"
