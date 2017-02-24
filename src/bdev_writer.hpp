@@ -717,9 +717,17 @@ private:
         overlapped_.delIoAndPushReadyIos(io, readyQ_);
         ioQ_.popFront();
     }
+    bool hasEnoughReadyIos() const {
+        return readyQ_.totalSize() >= bufferSize_ / 2
+            || readyQ_.size() >= aio_.queueSize() / 2;
+    }
+    bool hasManyProcessingIos() const {
+        return ioQ_.getProcessingSize() >= bufferSize_ / 2
+            || aio_.queueUsage() >= aio_.queueSize() / 2;
+    }
     void processIos(bool force) {
         for (;;) {
-            while (ioQ_.getProcessingSize() >= bufferSize_ / 2) {
+            while (hasManyProcessingIos()) {
                 waitForAnIoCompletion();
             }
             while (ioQ_.hasFetched()) {
@@ -729,7 +737,7 @@ private:
                     readyQ_.push(&io);
                 }
             }
-            if (force || readyQ_.totalSize() >= bufferSize_ / 2) {
+            if (force || hasEnoughReadyIos()) {
                 readyQ_.submit(aio_);
             }
             if (!force || readyQ_.empty()) break;

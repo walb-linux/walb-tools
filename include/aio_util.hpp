@@ -164,10 +164,16 @@ public:
     }
     /**
      * If this returns true, the queue is full.
-     * call submit() and waitXXX() before calling additional prepareXXX().
+     * Call submit() and waitXXX() before calling additional prepareXXX().
      */
     bool isQueueFull() const {
-        return submitQ_.size() + pendingIOs_.size() + completedIOs_.size() >= queueSize_;
+        return submitQ_.size() + pendingIOs_.size() >= queueSize_;
+    }
+    size_t queueSize() const {
+        return queueSize_;
+    }
+    size_t queueUsage() const {
+        return submitQ_.size() + pendingIOs_.size();
     }
     bool empty() const {
         return submitQ_.empty() && pendingIOs_.empty() && completedIOs_.empty();
