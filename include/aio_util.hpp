@@ -117,6 +117,13 @@ private:
     const bool isMeasureTime_;
     bool isReleased_;
     uint key_;
+
+    /*
+     * This must be not greater than /proc/sys/fs/aio-max-nr value.
+     * Otherwise, io_queue_init() will fail with EAGAIN.
+     */
+    static constexpr size_t MAX_AIO_REQ_NR() { return 1024; }
+
 public:
     /**
      * @fd Opened file descripter.
@@ -127,7 +134,7 @@ public:
      */
     Aio(int fd, size_t queueSize)
         : fd_(fd)
-        , queueSize_(queueSize)
+        , queueSize_(std::min(MAX_AIO_REQ_NR(), queueSize))
         , submitQ_()
         , pendingIOs_()
         , completedIOs_()
