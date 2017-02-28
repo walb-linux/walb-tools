@@ -185,14 +185,14 @@ def run_local_command(args, putMsg=False, quietErr=False):
 
     if putMsg:
         print "run_command:", to_str(args)
-    stderr = None if quietErr else sys.stderr
+    stderr = subprocess.PIPE if quietErr else sys.stderr
     p = subprocess.Popen(args, stdout=subprocess.PIPE,
                          stderr=stderr, close_fds=True)
-    f = p.stdout
-    s = f.read().strip()
+    out, _ = p.communicate()
     ret = p.wait()
     if ret != 0:
         raise Exception("command error %s %d\n" % (args, ret))
+    s = out.strip()
     if putMsg:
         print "run_command_result:", s
     return s
