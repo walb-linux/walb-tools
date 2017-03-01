@@ -20,18 +20,7 @@ public:
     WlogFileHeader()
         : data_(WALBLOG_HEADER_SIZE, true) {}
 
-    void init(uint32_t pbs, uint32_t salt, const cybozu::Uuid &uuid, uint64_t beginLsid, uint64_t endLsid) {
-        ::memset(data_.data(), 0, data_.size());
-        header().sector_type = SECTOR_TYPE_WALBLOG_HEADER;
-        header().version = WALB_LOG_VERSION;
-        header().header_size = WALBLOG_HEADER_SIZE;
-        header().log_checksum_salt = salt;
-        header().logical_bs = LOGICAL_BLOCK_SIZE;
-        header().physical_bs = pbs;
-        uuid.copyTo(header().uuid);
-        header().begin_lsid = beginLsid;
-        header().end_lsid = endLsid;
-    }
+    void init(uint32_t pbs, uint32_t salt, const cybozu::Uuid &uuid, uint64_t beginLsid, uint64_t endLsid);
 
     template <typename Reader>
     void readFrom(Reader& reader) {
@@ -71,61 +60,15 @@ public:
     uint16_t headerSize() const { return header().header_size; }
     uint16_t version() const { return header().version; }
 
-    bool isValid(bool isChecksum = true) const {
-        CHECKd(header().sector_type == SECTOR_TYPE_WALBLOG_HEADER);
-        CHECKd(header().version == WALB_LOG_VERSION);
-        CHECKd(header().begin_lsid < header().end_lsid);
-        if (isChecksum) {
-            CHECKd(calcChecksum() == 0);
-        }
-        return true;
-      error:
-        return false;
-    }
+    bool isValid(bool isChecksum = true) const;
     void verify() const {
         if (!isValid(true)) {
             throw cybozu::Exception("WlogFileHeader") << "invalid";
         }
     }
 
-    std::string str() const {
-        return cybozu::util::formatString(
-            "wlog_h:"
-            " ver %3u"
-            " pbs %4u"
-            " salt %08x"
-            " uuid %s"
-            " lsid %" PRIu64 " %" PRIu64 ""
-            , header().version
-            , header().physical_bs
-            , header().log_checksum_salt
-            , getUuid().str().c_str()
-            , header().begin_lsid
-            , header().end_lsid);
-    }
-    std::string strDetail() const {
-        return cybozu::util::formatString(
-            "wlog_header:\n"
-            "  sector_type %d\n"
-            "  version %u\n"
-            "  header_size %u\n"
-            "  log_checksum_salt %" PRIu32 " (%08x)\n"
-            "  logical_bs %u\n"
-            "  physical_bs %u\n"
-            "  uuid %s\n"
-            "  begin_lsid %" PRIu64 "\n"
-            "  end_lsid %" PRIu64 ""
-            , header().sector_type
-            , header().version
-            , header().header_size
-            , header().log_checksum_salt
-            , header().log_checksum_salt
-            , header().logical_bs
-            , header().physical_bs
-            , getUuid().str().c_str()
-            , header().begin_lsid
-            , header().end_lsid);
-    }
+    std::string str() const;
+    std::string strDetail() const;
     friend inline std::ostream& operator<<(std::ostream& os, WlogFileHeader& wh) {
         os << wh.str();
         return os;
@@ -167,37 +110,16 @@ public:
      * Read log file header.
      * This will throw EofError.
      */
-    void readHeader(WlogFileHeader &fileH) {
-        if (isReadHeader_) throw RT_ERR("Wlog file header has been read already.");
-        isReadHeader_ = true;
-        fileH.readFrom(fileR_);
-        pbs_ = fileH.pbs();
-        salt_ = fileH.salt();
-        endLsid_ = fileH.beginLsid();
-        packH_.init(pbs_, salt_);
-    }
+    void readHeader(WlogFileHeader &fileH);
+
     /**
      * ReadLog.
      * This does not throw EofError.
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(WlogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr)
-    {
-        if (!fetchNextPackHeader()) return false;
+    bool readLog(WlogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr);
 
-        /* Copy to the record. */
-        rec = packH_.record(recIdx_);
-
-        /* Read to the blockS. */
-        if (!readLogIo(fileR_, packH_, recIdx_, blockS)) {
-            throw cybozu::Exception(__func__) << "invalid log IO" << packH_.record(recIdx_);
-        }
-
-        if (recIdxP) *recIdxP = recIdx_;
-        recIdx_++;
-        return true;
-    }
     /**
      * Get pack header reference.
      */
@@ -217,26 +139,7 @@ private:
      * RETURN:
      *   true if there are one or more log data remaining.
      */
-    bool fetchNextPackHeader() {
-        if (!isReadHeader_) {
-            throw cybozu::Exception(__func__)
-                << "You have not called readHeader() yet";
-        }
-        if (isEnd_) return false;
-        if (isBegun_) {
-            if (recIdx_ < packH_.nRecords()) return true;
-        } else {
-            isBegun_ = true;
-        }
-
-        if (!packH_.readFrom(fileR_) || packH_.isEnd()) {
-            isEnd_ = true;
-            return false;
-        }
-        recIdx_ = 0;
-        endLsid_ = packH_.nextLogpackLsid();
-        return true;
-    }
+    bool fetchNextPackHeader();
 };
 
 /**
@@ -272,29 +175,16 @@ public:
      * fdatasync() will not be called.
      * You can call this multiple times.
      */
-    void close() {
-        if (!isClosed_ && isWrittenHeader_) {
-            writeEof();
-            fileW_.close();
-            isClosed_ = true;
-        }
-    }
+    void close();
+
     /**
      * Write a file header.
      *
      * You must call this just once.
      * You need not call fileH.updateChecksum() by yourself before.
      */
-    void writeHeader(WlogFileHeader &fileH) {
-        if (isWrittenHeader_) throw RT_ERR("Wlog file header has been written already.");
-        if (!fileH.isValid(false)) throw RT_ERR("Wlog file header is invalid.");
-        fileH.writeTo(fileW_);
-        isWrittenHeader_ = true;
-        pbs_ = fileH.pbs();
-        salt_ = fileH.salt();
-        beginLsid_ = fileH.beginLsid();
-        lsid_ = beginLsid_;
-    }
+    void writeHeader(WlogFileHeader &fileH);
+
     /**
      * Write a pack header block.
      * You must call writePackIo() n times after this.
@@ -316,19 +206,9 @@ public:
         blockS.write(fileW_);
         lsid_ += blockS.nBlocks();
     }
-    void writePack(const LogPackHeader &header, std::queue<LogBlockShared> &&blockSQ) {
-        checkHeader(header);
-        if (blockSQ.size() != header.nRecordsHavingData()) {
-            throw cybozu::Exception(__func__)
-                << "bad queue size" << blockSQ.size() << header.nRecordsHavingData();
-        }
-        writePackHeader(header);
-        while (!blockSQ.empty()) {
-            writePackIo(blockSQ.front());
-            blockSQ.pop();
-        }
-        assert(lsid_ == header.nextLogpackLsid());
-    }
+
+    void writePack(const LogPackHeader &header, std::queue<LogBlockShared> &&blockSQ);
+
     /**
      * Get the end lsid that is next lsid of the latest written logpack.
      * Header's begenLsid will be returned if writePack() was not called at all.
@@ -343,22 +223,8 @@ private:
     /**
      * Check a pack header block.
      */
-    void checkHeader(const LogPackHeader &header) const {
-        if (!header.isValid()) {
-            throw RT_ERR("Logpack header invalid.");
-        }
-        if (pbs_ != header.pbs()) {
-            throw RT_ERR("pbs differs %u %u.", pbs_, header.pbs());
-        }
-        if (salt_ != header.salt()) {
-            throw RT_ERR("salt differs %" PRIu32 " %" PRIu32 "."
-                         , salt_, header.salt());
-        }
-        if (lsid_ != header.logpackLsid()) {
-            throw RT_ERR("logpack lsid differs %" PRIu64 " %" PRIu64 "."
-                         , lsid_, header.logpackLsid());
-        }
-    }
+    void checkHeader(const LogPackHeader &header) const;
+
     /**
      * Write the end block.
      */
@@ -382,18 +248,7 @@ public:
     void setSeekable(bool seekable) {
         seekable_ = seekable;
     }
-    void skip(size_t size) {
-        if (seekable_) {
-            lseek(size, SEEK_CUR);
-            return;
-        }
-        AlignedArray buf(4096);
-        while (size > 0) {
-            const size_t s = std::min(buf.size(), size);
-            read(buf.data(), s);
-            size -= s;
-        }
-    }
+    void skip(size_t size);
 };
 
 } // namespace walb

@@ -18,33 +18,8 @@ namespace walb {
 
 constexpr size_t Q_SIZE = 16;
 
-CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress)
-{
-    const uint32_t pbs = blockS.pbs();
-    const size_t n = blockS.nBlocks();
-    assert(0 < n);
-    AlignedArray d(n * pbs);
-    for (size_t i = 0; i < n; i++) {
-        ::memcpy(&d[i * pbs], blockS.get(i), pbs);
-    }
-    CompressedData cd;
-    cd.setUncompressed(std::move(d));
-    if (doCompress) cd.compress();
-    return cd;
-}
-
-inline void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs)
-{
-    const char *const FUNC = __func__;
-    AlignedArray v;
-    cd.getUncompressed(v);
-    if (sizePb * pbs != v.size()) throw cybozu::Exception(FUNC) << "invalid size" << v.size() << sizePb;
-    blockS.init(pbs);
-    blockS.resize(sizePb);
-    for (size_t i = 0; i < sizePb; i++) {
-        ::memcpy(blockS.get(i), &v[i * pbs], pbs);
-    }
-}
+CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress);
+void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs);
 
 /**
  * Walb log sender via TCP/IP connection.
@@ -70,16 +45,8 @@ public:
     WlogSender(cybozu::Socket &sock, Logger &logger, uint32_t pbs, uint32_t salt)
         : packet_(sock), ctrl_(sock), logger_(logger), pbs_(pbs), salt_(salt) {
     }
-    void process(CompressedData& cd) try {
-        cd.compress();
-        ctrl_.next();
-        cd.send(packet_);
-    } catch (std::exception& e) {
-        try {
-            packet::StreamControl(packet_.sock()).error();
-        } catch (...) {}
-        logger_.error() << "WlogSender:process" << e.what();
-    }
+    void process(CompressedData& cd);
+
     /**
      * You must call pushHeader(h) and n times of pushIo(),
      * where n is h.nRecords().
@@ -93,15 +60,8 @@ public:
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS) {
-        verifyPbsAndSalt(header);
-        const WlogRecord &rec = header.record(recIdx);
-        if (rec.hasDataForChecksum()) {
-            CompressedData cd = convertToCompressedData(blockS, false);
-            assert(0 < cd.originalSize());
-            process(cd);
-        }
-    }
+    void pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS);
+
     /**
      * Notify the end of input.
      */
@@ -109,14 +69,7 @@ public:
         ctrl_.end();
     }
 private:
-    void verifyPbsAndSalt(const LogPackHeader &header) const {
-        if (header.pbs() != pbs_) {
-            throw cybozu::Exception(NAME()) << "invalid pbs" << pbs_ << header.pbs();
-        }
-        if (header.salt() != salt_) {
-            throw cybozu::Exception(NAME()) << "invalid salt" << salt_ << header.salt();
-        }
-    }
+    void verifyPbsAndSalt(const LogPackHeader &header) const;
 };
 
 /**
@@ -141,18 +94,8 @@ public:
     WlogReceiver(cybozu::Socket &sock, uint32_t pbs, uint32_t salt)
         : packet_(sock), ctrl_(sock), pbs_(pbs), salt_(salt) {
     }
-    bool process(CompressedData& cd) {
-        if (ctrl_.isNext()) {
-            cd.recv(packet_);
-            cd.uncompress();
-            ctrl_.reset();
-            return true;
-        }
-        if (ctrl_.isError()) {
-            throw cybozu::Exception("WlogReceiver:process:isError");
-        }
-        return false;
-    }
+    bool process(CompressedData& cd);
+
     /**
      * You must call popHeader(h) and its corresponding popIo() n times,
      * where n is h.n_records.
@@ -160,35 +103,13 @@ public:
      * RETURN:
      *   false if the input stream has reached the end.
      */
-    bool popHeader(LogPackHeader &header) {
-        const char *const FUNC = __func__;
-        CompressedData cd;
-        if (!process(cd)) {
-            return false;
-        }
-        assert(!cd.isCompressed());
-        if (cd.rawSize() != pbs_) {
-            throw cybozu::Exception(FUNC) << "invalid pack header size" << cd.rawSize() << pbs_;
-        }
-        header.copyFrom(cd.rawData(), pbs_);
-        if (header.isEnd()) throw cybozu::Exception(FUNC) << "end header is not permitted";
-        return true;
-    }
+    bool popHeader(LogPackHeader &header);
+
     /**
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const WlogRecord &rec, LogBlockShared &blockS) {
-        if (rec.hasDataForChecksum()) {
-            CompressedData cd;
-            if (!process(cd)) throw cybozu::Exception("WlogReceiver:popIo:failed.");
-            convertToLogBlockShared(blockS, cd, rec.ioSizePb(pbs_), pbs_);
-            verifyWlogChecksum(rec, blockS, salt_);
-        } else {
-            blockS.init(pbs_);
-        }
-    }
-private:
+    void popIo(const WlogRecord &rec, LogBlockShared &blockS);
 };
 
 } //namespace walb

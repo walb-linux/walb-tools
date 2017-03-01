@@ -71,7 +71,7 @@ void readAndSendHash(
     hashLb += lb;
 }
 
-void readPackAndWrite(
+inline void readPackAndWrite(
     uint64_t& writeSize, packet::Packet& pkt,
     cybozu::util::File& fileW, bool doWriteDiff, DiscardType discardType,
     uint64_t fsyncIntervalSize,
@@ -104,7 +104,7 @@ void readPackAndWrite(
  * Reader must have the member function: void read(void *data, size_t size).
  */
 template <typename Reader>
-inline bool dirtyHashSyncClient(
+bool dirtyHashSyncClient(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed,
     const std::atomic<int> &stopState, const ProcessStatus &ps,
@@ -191,7 +191,7 @@ inline bool dirtyHashSyncClient(
  * fsyncIntervalSize [bytes].
  */
 template <typename Reader>
-inline bool dirtyHashSyncServer(
+bool dirtyHashSyncServer(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
     bool doWriteDiff, int outFd, DiscardType discardType,
@@ -292,7 +292,7 @@ inline bool dirtyHashSyncServer(
  * For test.
  */
 template <typename Reader>
-inline bool dirtyHashSyncServer2(
+bool dirtyHashSyncServer2(
     packet::Packet &pkt, Reader &reader,
     uint64_t sizeLb, uint64_t bulkLb, const cybozu::Uuid& uuid, uint32_t hashSeed,
     bool doWriteDiff, int outFd, DiscardType discardType,

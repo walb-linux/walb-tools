@@ -33,9 +33,9 @@ namespace walb {
 /*
     you can freely cast this class to DiffRecord safely and vice versa.
 */
-struct DiffRecord : public walb_diff_record {
-    DiffRecord()
-    {
+struct DiffRecord : public walb_diff_record
+{
+    DiffRecord() {
         init();
     }
     void init() {
@@ -47,56 +47,14 @@ struct DiffRecord : public walb_diff_record {
     bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
     bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
     bool isNormal() const { return !isAllZero() && !isDiscard(); }
-    bool isValid() const {
-        try {
-            verify();
-            return true;
-        } catch (...) {
-            return false;
-        }
-    }
-    void verify() const {
-        const char *const NAME = "DiffRecord";
-        if (!isNormal()) {
-            if (isAllZero() && isDiscard()) {
-                throw cybozu::Exception(NAME) << "allzero and discard flag is exclusive";
-            }
-            return;
-        }
-        if (::WALB_DIFF_CMPR_MAX <= compression_type) {
-            throw cybozu::Exception(NAME) << "compression type is invalid";
-        }
-        if (io_blocks == 0) {
-            throw cybozu::Exception(NAME) << "io_blocks must not be 0";
-        }
-    }
+    bool isValid() const;
+    void verify() const;
 
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "----------\n"
-                  "ioAddress: %" PRIu64 "\n"
-                  "ioBlocks: %u\n"
-                  "compressionType: %u (%s)\n"
-                  "dataOffset: %u\n"
-                  "dataSize: %u\n"
-                  "checksum: %08x\n"
-                  "isAllZero: %d\n"
-                  "isDiscard: %d\n"
-                  , io_address, io_blocks
-                  , compression_type, compressionTypeToStr(compression_type).c_str()
-                  , data_offset, data_size
-                  , checksum, isAllZero(), isDiscard());
-    }
+    void print(::FILE *fp = ::stdout) const;
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "%s\n", toStr("wdiff_rec:\t").c_str());
     }
-    std::string toStr(const char *prefix = "") const {
-        return cybozu::util::formatString(
-            "%s""%" PRIu64 "\t%u\t%s\t%u\t%u\t%08x\t%c%c"
-            , prefix, io_address, io_blocks
-            , compressionTypeToStr(compression_type).c_str()
-            , data_offset, data_size, checksum
-            , isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
-    }
+    std::string toStr(const char *prefix = "") const;
     friend inline std::ostream &operator<<(std::ostream &os, const DiffRecord &rec) {
         os << rec.toStr();
         return os;
@@ -133,32 +91,7 @@ struct DiffRecord : public walb_diff_record {
      *   The checksum of splitted records will be invalid state.
      *   Only non-compressed records can be splitted.
      */
-    std::vector<DiffRecord> splitAll(uint32_t ioBlocks0) const {
-        if (ioBlocks0 == 0) {
-            throw cybozu::Exception("splitAll: ioBlocks0 must not be 0.");
-        }
-        if (isCompressed()) {
-            throw cybozu::Exception("splitAll: compressed data can not be splitted.");
-        }
-        std::vector<DiffRecord> v;
-        uint64_t addr = io_address;
-        uint32_t remaining = io_blocks;
-        const bool isNormal = this->isNormal();
-        while (remaining > 0) {
-            uint32_t blks = std::min(ioBlocks0, remaining);
-            v.push_back(*this);
-            DiffRecord& r = v.back();
-            r.io_address = addr;
-            r.io_blocks = blks;
-            if (isNormal) {
-                r.data_size = blks * LOGICAL_BLOCK_SIZE;
-            }
-            addr += blks;
-            remaining -= blks;
-        }
-        assert(!v.empty());
-        return v;
-    }
+    std::vector<DiffRecord> splitAll(uint32_t ioBlocks0) const;
 };
 
 /**
@@ -192,26 +125,7 @@ struct DiffIo
 
     bool empty() const { return ioBlocks == 0; }
 
-    bool isValid() const {
-        if (empty()) {
-            if (!data.empty()) {
-                LOGd("Data is not empty.\n");
-                return false;
-            }
-            return true;
-        } else {
-            if (isCompressed()) {
-                return true;
-            } else {
-                if (getSize() != ioBlocks * LOGICAL_BLOCK_SIZE) {
-                    LOGd("dataSize is not the same: %zu %u\n"
-                         , getSize(), ioBlocks * LOGICAL_BLOCK_SIZE);
-                    return false;
-                }
-                return true;
-            }
-        }
-    }
+    bool isValid() const;
 
     /**
      * Calculate checksum.
@@ -231,38 +145,11 @@ struct DiffIo
         return cybozu::util::isAllZero(get(), size);
     }
 
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp,
-                  "ioBlocks %u\n"
-                  "type %d\n"
-                  "size %zu\n"
-                  "checksum %0x\n"
-                  , ioBlocks
-                  , compressionType
-                  , getSize()
-                  , calcChecksum());
-    }
-    void printOneline(::FILE *fp = ::stdout) const {
-        ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
-                  , ioBlocks
-                  , compressionType
-                  , getSize()
-                  , calcChecksum());
-    }
+    void print(::FILE *fp = ::stdout) const;
+    void printOneline(::FILE *fp = ::stdout) const;
 
+    void set(const DiffRecord &rec, const char *data0 = nullptr);
 
-    void set(const DiffRecord &rec, const char *data0 = nullptr) {
-        if (rec.isNormal()) {
-            ioBlocks = rec.io_blocks;
-            compressionType = rec.compression_type;
-            data.resize(rec.data_size, false);
-            if (data0) ::memcpy(data.data(), data0, data.size());
-        } else {
-            ioBlocks = 0;
-            compressionType = ::WALB_DIFF_CMPR_NONE;
-            data.clear();
-        }
-    }
     /**
      * Split an IO into multiple IOs
      * each of which io size is not more than a specified one.
@@ -270,27 +157,8 @@ struct DiffIo
      * CAUSION:
      *   Compressed IO can not be splitted.
      */
-    std::vector<DiffIo> splitIoDataAll(uint32_t ioBlocks0) const
-    {
-        if (ioBlocks0 == 0) {
-            throw cybozu::Exception("splitIoDataAll: ioBlocks0 must not be 0.");
-        }
-        if (isCompressed()) {
-            throw cybozu::Exception("splitIoDataAll: compressed IO can not be splitted.");
-        }
-        assert(isValid());
-        std::vector<DiffIo> v;
-        uint32_t remaining = ioBlocks;
-        const char *p = data.data();
-        while (remaining > 0) {
-            uint32_t blks = std::min(remaining, ioBlocks0);
-            size_t size = blks * LOGICAL_BLOCK_SIZE;
-            v.emplace_back(blks, WALB_DIFF_CMPR_NONE, p, size);
-            remaining -= blks;
-            p += size;
-        }
-        return v;
-    }
+    std::vector<DiffIo> splitIoDataAll(uint32_t ioBlocks0) const;
+
     template <typename Writer>
     void writeTo(Writer &writer) const {
         if (getSize() > 0) {
@@ -326,51 +194,11 @@ inline bool calcDiffIoIsAllZero(const AlignedArray &io)
     return cybozu::util::isAllZero(io.data(), io.size());
 }
 
-inline void compressDiffIo(
+void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, AlignedArray &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0)
-{
-    assert(inRec.isNormal());
-    assert(!inRec.isCompressed());
-    assert(inData != nullptr);
-
-    const size_t size = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
-    outData.resize(size + 4096); // margin to reduce malloc at compression.
-    size_t outSize;
-    walb::Compressor enc(type, level);
-    if (enc.run(outData.data(), &outSize, outData.size(), inData, size) && outSize < size) {
-        outData.resize(outSize);
-    } else {
-        outSize = size;
-        outData.resize(size);
-        ::memcpy(outData.data(), inData, size);
-        type = ::WALB_DIFF_CMPR_NONE;
-    }
-    outRec = inRec;
-    outRec.compression_type = type;
-    outRec.data_size = outSize;
-    outRec.checksum = calcDiffIoChecksum(outData);
-}
-
-inline void uncompressDiffIo(
+    DiffRecord &outRec, AlignedArray &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
+void uncompressDiffIo(
     const DiffRecord &inRec, const char *inData,
-    DiffRecord &outRec, AlignedArray &outData, bool calcChecksum = true)
-{
-    assert(inRec.isNormal());
-    assert(inRec.isCompressed());
-    assert(inData != nullptr);
-
-    const size_t size = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
-    outData.resize(size, false);
-    walb::Uncompressor dec(inRec.compression_type);
-    size_t outSize = dec.run(outData.data(), size, inData, inRec.data_size);
-    if (outSize != size) {
-        throw cybozu::Exception("uncompressDiffIo:size is invalid") << outSize << size << inRec;
-    }
-    outRec = inRec;
-    outRec.data_size = size;
-    outRec.compression_type = ::WALB_DIFF_CMPR_NONE;
-    outRec.checksum = calcChecksum ? calcDiffIoChecksum(outData) : 0;
-}
+    DiffRecord &outRec, AlignedArray &outData, bool calcChecksum = true);
 
 } //namesapce walb

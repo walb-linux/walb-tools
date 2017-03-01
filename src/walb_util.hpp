@@ -86,18 +86,7 @@ struct KeepAliveParams
 
 namespace util {
 
-inline void saveMap(const std::string& file)
-{
-    const int pid = getpid();
-    char name[256];
-    snprintf(name, sizeof(name), "/proc/%d/maps", pid);
-    std::ifstream ifs(name, std::ios::binary);
-    std::ofstream ofs(file.c_str(), std::ios::binary);
-    std::string line;
-    while (std::getline(ifs, line)) {
-        ofs << line << std::endl;
-    }
-}
+void saveMap(const std::string& file);
 
 /**
  * Make a directory.
@@ -110,56 +99,13 @@ inline void saveMap(const std::string& file)
  *     throw an error.
  */
 void makeDir(const std::string &dirStr, const char *msg,
-             bool ensureNotExistance = false)
-{
-    cybozu::FilePath dir(dirStr);
-    if (dir.stat().exists()) {
-        if (ensureNotExistance) {
-            throw cybozu::Exception(msg) << "already exists" << dirStr;
-        } else {
-            if (dir.stat().isDirectory()) {
-                return;
-            } else {
-                throw cybozu::Exception(msg) << "not directory" << dirStr;
-            }
-        }
-    }
-    if (!dir.mkdir()) {
-        throw cybozu::Exception(msg) << "mkdir failed" << dirStr;
-    }
-}
+             bool ensureNotExistance = false);
 
 namespace walb_util_local {
 
-/**
- * isDir: if true, get directories only.
- *        othwerwise, get files only.
- */
-inline StrVec getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "")
-{
-    StrVec ret;
-    std::vector<cybozu::FileInfo> list = cybozu::GetFileList(dirStr, ext);
-    for (const cybozu::FileInfo &info : list) {
-        bool isDir2, isFile2;
-        if (info.isUnknown()) {
-            cybozu::FilePath fpath(dirStr);
-            fpath += info.name;
-            cybozu::FileStat stat = fpath.stat();
-            if (!stat.exists()) continue;
-            isDir2 = stat.isDirectory();
-            isFile2 = stat.isFile();
-        } else {
-            isDir2 = info.isDirectory();
-            isFile2 = info.isFile();
-        }
-        if ((isDir && isDir2) || (!isDir && isFile2)) {
-            ret.push_back(info.name);
-        }
-    }
-    return ret;
-}
+StrVec getDirEntNameList(const std::string &dirStr, bool isDir, const char *ext = "");
 
-} // walb_util_local
+} // namesapce walb_util_local
 
 inline StrVec getDirNameList(const std::string &dirStr)
 {
@@ -186,48 +132,19 @@ void loadFile(const cybozu::FilePath &dir, const std::string &fname, T &t)
     cybozu::load(t, r);
 }
 
-inline void setLogSetting(const std::string &pathStr, bool isDebug)
-{
-    cybozu::SetLogUseMsec(true);
-    if (pathStr == "-") {
-        cybozu::SetLogFILE(::stderr);
-    } else {
-        cybozu::OpenLogFile(pathStr);
-    }
-    if (isDebug) {
-        cybozu::SetLogPriority(cybozu::LogDebug);
-    } else {
-        cybozu::SetLogPriority(cybozu::LogInfo);
-    }
-}
+void setLogSetting(const std::string &pathStr, bool isDebug);
 
 inline void sleepMs(size_t ms)
 {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
-inline std::string getNowStr()
-{
-    struct timespec ts;
-    if (::clock_gettime(CLOCK_REALTIME, &ts) < 0) {
-        throw cybozu::Exception("getNowStr: clock_gettime failed.");
-    }
-    return cybozu::getHighResolutionTimeStr(ts);
-}
+std::string getNowStr();
 
 /**
  * Convert binary data to hex string.
  */
-inline std::string binaryToStr(const void *data, size_t size)
-{
-    std::string s;
-    const uint8_t *p = static_cast<const uint8_t *>(data);
-    s.resize(size * 2);
-    for (size_t i = 0; i < size; i++) {
-        cybozu::itohex(&s[i * 2], 2, p[i], false);
-    }
-    return s;
-}
+std::string binaryToStr(const void *data, size_t size);
 
 /**
  * Convert a hex string to binary data.
@@ -279,17 +196,7 @@ inline void enableKeepAlive(cybozu::Socket &sock, int idle, int intvl, int cnt)
     sock.setSocketOption(TCP_KEEPCNT, cnt, IPPROTO_TCP);
 }
 
-inline void setSocketParams(cybozu::Socket& sock, const KeepAliveParams& params, size_t timeoutS)
-{
-    if (params.enabled) {
-        sock.setSendTimeout(0);
-        sock.setReceiveTimeout(0);
-        util::enableKeepAlive(sock, params.idle, params.intvl, params.cnt);
-    } else {
-        sock.setSendTimeout(timeoutS * 1000);
-        sock.setReceiveTimeout(timeoutS * 1000);
-    }
-}
+void setSocketParams(cybozu::Socket& sock, const KeepAliveParams& params, size_t timeoutS);
 
 inline void setKeepAliveOptions(cybozu::Option& opt, KeepAliveParams& params)
 {
@@ -303,15 +210,7 @@ inline void setKeepAliveOptions(cybozu::Option& opt, KeepAliveParams& params)
  * Parse integer string with suffix character k/m/g/t/p which means kibi/mebi/gibi/tebi/pebi.
  * and convert from [byte] to [logical block size].
  */
-inline uint64_t parseSizeLb(const std::string &str, const char *msg, uint64_t minB = 0, uint64_t maxB = -1)
-{
-    const uint64_t sizeLb = cybozu::util::fromUnitIntString(str) / LOGICAL_BLOCK_SIZE;
-    const uint64_t minLb = minB / LOGICAL_BLOCK_SIZE;
-    const uint64_t maxLb = maxB / LOGICAL_BLOCK_SIZE;
-    if (sizeLb < minLb) throw cybozu::Exception(msg) << "too small size" << minB << sizeLb;
-    if (maxLb < sizeLb) throw cybozu::Exception(msg) << "too large size" << maxB << sizeLb;
-    return sizeLb;
-}
+uint64_t parseSizeLb(const std::string &str, const char *msg, uint64_t minB = 0, uint64_t maxB = -1);
 
 inline uint64_t parseBulkLb(const std::string &str, const char *msg)
 {
@@ -388,37 +287,11 @@ inline void parseDecOrHexInt(const std::string& s, Int& v)
     }
 }
 
-inline std::string getDescription(const char *prefix)
-{
-    return cybozu::util::formatString(
-        "%s version %s build at %s (wlog version %d)\n"
-#ifndef DISABLE_COMMIT_ID
-        "commit %s\n"
-#endif
-        , prefix
-        , getWalbToolsVersion()
-        , getWalbToolsBuildDate()
-        , WALB_LOG_VERSION
-#ifndef DISABLE_COMMIT_ID
-        , getWalbToolsCommitId()
-#endif
-        );
-}
+std::string getDescription(const char *prefix);
 
 }} // walb::util
 
-inline int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg)
-{
-    try {
-        walb::util::setLogSetting("-", false);
-        return doMain(argc, argv);
-    } catch (std::exception &e) {
-        LOGs.error() << msg << e.what();
-    } catch (...) {
-        LOGs.error() << msg << "unknown error";
-    }
-    return 1;
-}
+int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg);
 
 #define DEFINE_ERROR_SAFE_MAIN(msg)                    \
     int main(int argc, char *argv[]) {                 \

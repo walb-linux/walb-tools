@@ -471,7 +471,7 @@ private:
 /**
  * Get lv string.
  */
-std::string getLvStr(const std::string &vgName, const std::string &name)
+inline std::string getLvStr(const std::string &vgName, const std::string &name)
 {
     return vgName + '/' + name;
 }

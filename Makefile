@@ -51,7 +51,8 @@ SOURCES = $(OTHER_SOURCES) $(BIN_SOURCES) $(TEST_SOURCES)
 BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 LOCAL_LIB = src/libwalb-tools.a
-LOCAL_LIB_OBJ = $(patsubst %.cpp,%.o,$(OTHER_SOURCES))
+NON_LIB_OBJ = $(patsubst %, src/%.o, storage storage_vol_info proxy proxy_vol_info archive archive_vol_info controller)
+LOCAL_LIB_OBJ = $(filter-out $(NON_LIB_OBJ),$(patsubst %.cpp,%.o,$(OTHER_SOURCES) src/version.o))
 MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 
 all: build
@@ -87,6 +88,12 @@ echo_binaries:
 $(LOCAL_LIB): $(LOCAL_LIB_OBJ)
 	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)
 
+binsrc/walbc: binsrc/walbc.o src/controller.o $(LOCAL_LIB)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(filter %.o,$+) $(LDLIBS)
+
+binsrc/walb-%: binsrc/walb-%.o src/%.o src/%_vol_info.o $(LOCAL_LIB)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(filter %.o,$+) $(LDLIBS)
+
 binsrc/%: binsrc/%.o $(LOCAL_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
@@ -114,6 +121,9 @@ manpages: $(MANPAGES)
 man/%: man/%.ronn
 	ronn -r $<
 
+src/version.cpp:
+	$(MAKE) version_cpp
+
 version_cpp:
 	cat src/version.cpp.template |sed "s/VERSION/`cat VERSION`/g" \
 |sed "s/BUILD_DATE/`date +%Y-%m-%dT%H:%M:%S`/g" \
@@ -124,6 +134,7 @@ else
 	cat src/version.cpp.tmp \
 |sed "s/COMMIT_ID/`git show-ref --head HEAD |cut -f 1 -d ' '|head -n1`/g" \
 > src/version.cpp
+	rm -f src/version.cpp.tmp
 endif
 
 

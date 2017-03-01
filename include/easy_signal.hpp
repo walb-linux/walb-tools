@@ -7,13 +7,13 @@ namespace signal {
 
 namespace local {
 
-sig_atomic_t& getSignalVariable()
+inline sig_atomic_t& getSignalVariable()
 {
     static sig_atomic_t signal = 0;
     return signal;
 }
 
-void signalHandler(int val)
+inline void signalHandler(int val)
 {
     sig_atomic_t& signal = getSignalVariable();
     signal = val;
@@ -21,7 +21,7 @@ void signalHandler(int val)
 
 } // namespace local
 
-bool setSignalHandler(void (*callback)(int), std::initializer_list<int> signals, bool throwError = true)
+inline bool setSignalHandler(void (*callback)(int), std::initializer_list<int> signals, bool throwError = true)
 {
     struct sigaction sa;
     sa.sa_handler = callback;
@@ -36,12 +36,12 @@ bool setSignalHandler(void (*callback)(int), std::initializer_list<int> signals,
     return true;
 }
 
-void setSignalHandler(std::initializer_list<int> signals, bool throwError = true)
+inline void setSignalHandler(std::initializer_list<int> signals, bool throwError = true)
 {
     setSignalHandler(local::signalHandler, signals, throwError);
 }
 
-bool gotSignal(int* val = nullptr)
+inline bool gotSignal(int* val = nullptr)
 {
     const int signal = local::getSignalVariable();
     if (val != nullptr) *val = signal;

@@ -5,6 +5,8 @@
 #include "walb_types.hpp"
 #include "aio_util.hpp"
 #include "range_util.hpp"
+#include "constant.hpp"
+#include "bdev_util.hpp"
 
 //#define USE_DEBUG_TRACE
 
@@ -49,35 +51,12 @@ public:
         assert(blocks_.empty());
         blocks_.push_back(std::move(b));
     }
-    void print(::FILE *p = ::stdout) const {
-        ::fprintf(p, "IO offset: %" PRIu64 " size: %zu aioKey: %u "
-                  "state: %d\n",
-                  offset_, size_, aioKey, state);
-        for (auto &b : blocks_) {
-            ::fprintf(p, "  block %p\n", b.data());
-        }
-    }
+    void print(::FILE *p = ::stdout) const;
 
     /**
      * Can an IO be merged to this.
      */
-    bool canMerge(const Io& rhs) const {
-        /* They must have data buffers. */
-        if (blocks_.empty() || rhs.blocks_.empty()) {
-            return false;
-        }
-
-        /* Check Io targets and buffers are adjacent. */
-        if (offset_ + size_ != rhs.offset_) {
-            //::fprintf(::stderr, "offset mismatch\n"); //debug
-            return false;
-        }
-
-        /* Check buffers are contiguous. */
-        const char *p0 = blocks_.front().data();
-        const char *p1 = rhs.blocks_.front().data();
-        return p0 + size_ == p1;
-    }
+    bool canMerge(const Io& rhs) const;
 
     /**
      * Try merge an IO.
@@ -85,17 +64,7 @@ public:
      * RETURN:
      *   true if merged, or false.
      */
-    bool tryMerge(Io& rhs) {
-        if (!canMerge(rhs)) {
-            return false;
-        }
-        size_ += rhs.size_;
-        while (!rhs.empty()) {
-            blocks_.push_back(std::move(rhs.blocks_.front()));
-            rhs.blocks_.pop_front();
-        }
-        return true;
-    }
+    bool tryMerge(Io& rhs);
 
     /**
      * RETURN:
@@ -123,6 +92,7 @@ struct StrVec : std::vector<std::string> {
         printf("\n");
     }
 };
+
 std::ostream& operator<<(std::ostream& os, const StrVec& v) {
     for (const std::string& s : v) {
         os << s << " -> ";
@@ -131,6 +101,7 @@ std::ostream& operator<<(std::ostream& os, const StrVec& v) {
     return os;
 }
 #endif
+
 struct Debug {
 #ifdef USE_DEBUG_TRACE
     typedef std::set<const Io*> IoSet;
@@ -205,7 +176,11 @@ struct Debug {
     void delIoQ(const Io&) { }
     void delReadyQ(const Io&) { }
 #endif
-} g_debug;
+};
+
+
+extern struct Debug g_debug;
+
 
 /**
  *  Io state
@@ -242,39 +217,12 @@ public:
         , fetchedBegin_(list_.end())
     {
     }
-    void add(Io &&io) {
-        assert(io.size() > 0);
-        fetchedSize_ += io.size();
-        if (hasFetched() && tryMerge(*fetchedBegin_, io)) {
-            return;
-        }
-        list_.push_back(std::move(io));
-        if (fetchedBegin_ == list_.end()) {
-            --fetchedBegin_;
-        }
-    }
+    void add(Io &&io);
     bool hasFetched() const { return fetchedBegin_ != list_.end(); }
     bool hasProcessing() const { return list_.begin() != fetchedBegin_; }
     size_t getProcessingSize() const { return processingSize_; }
-
-    Io& nextFetched() {
-        Io &io = *fetchedBegin_++;
-        processingSize_ += io.size();
-        fetchedSize_ -= io.size();
-        g_debug.addIoQ(io);
-        return io;
-    }
-
-    void waitForAllSubmitted(cybozu::aio::Aio &aio) noexcept {
-        for (List::iterator it = list_.begin(); it != fetchedBegin_; ++it) {
-            Io& io = *it;
-            if (io.state == Io::Submitted) {
-                try {
-                    aio.waitFor(io.aioKey);
-                } catch (...) {}
-            }
-        }
-    }
+    Io& nextFetched();
+    void waitForAllSubmitted(cybozu::aio::Aio &aio) noexcept;
     Io& getFront() {
         assert(hasProcessing());
         return list_.front();
@@ -287,6 +235,7 @@ public:
     }
 };
 
+
 struct IoSetLess
 {
     bool operator()(const Io *a, const Io *b) const {
@@ -294,7 +243,9 @@ struct IoSetLess
     }
 };
 
+
 using IoSet = std::multiset<Io*, IoSetLess>;
+
 
 /**
  * IO queue to store IOs are ready to submit.
@@ -324,88 +275,15 @@ public:
     /**
      * ioSet_ may not become empty.
      */
-    void submit(cybozu::aio::Aio &aio) {
-        size_t nBulk = 0;
-        while (!ioSet_.empty() && !aio.isQueueFull()) {
-            Io* iop = *ioSet_.begin();
-            ioSet_.erase(ioSet_.begin());
-            g_debug.delReadyQ(*iop);
-            totalSize_ -= iop->size();
-
-            assert(iop->state != Io::Submitted);
-            if (iop->state == Io::Overwritten) continue;
-            iop->state = Io::Submitted;
-
-            /* Prepare aio. */
-            assert(iop->nOverlapped == 0);
-            iop->aioKey = aio.prepareWrite(
-                iop->offset(), iop->size(), iop->data());
-            assert(iop->aioKey > 0);
-            nBulk++;
-        }
-        if (nBulk > 0) {
-            aio.submit();
-        }
-    }
-    void forceComplete(Io &io, cybozu::aio::Aio &aio) {
-        for (;;) {
-            if (io.state == Io::Init) {
-                /* The IO is not still submitted. */
-                assert(io.nOverlapped == 0);
-                submit(aio);
-            } else if (io.state == Io::Overwritten) {
-                tryErase(io);
-                break;
-            }
-            if (io.state == Io::Submitted) {
-                assert(io.aioKey > 0);
-                waitFor(io, aio);
-                break;
-            }
-            assert(io.state == Io::Init);
-            waitAny(aio);
-        }
-    }
-    bool empty() const {
-        const bool ret = ioSet_.empty();
-        if (ret) {
-            assert(ioSet_.size() == 0);
-            assert(totalSize_ == 0);
-        }
-        return ret;
-    }
+    void submit(cybozu::aio::Aio &aio);
+    void forceComplete(Io &io, cybozu::aio::Aio &aio);
+    bool empty() const;
 private:
-    void tryErase(Io& io) {
-        IoSet::iterator i, e;
-        std::tie(i, e) = ioSet_.equal_range(&io);
-        while (i != e) {
-            if (*i == &io) {
-                ioSet_.erase(i);
-                g_debug.delReadyQ(io);
-                totalSize_ -= io.size();
-                return;
-            }
-            ++i;
-        }
-    }
-    void waitFor(Io& io, cybozu::aio::Aio &aio) {
-        assert(io.state == Io::Submitted);
-        auto it = doneSet_.find(io.aioKey);
-        if (it == doneSet_.end()) {
-            aio.waitFor(io.aioKey);
-        } else {
-            doneSet_.erase(it);
-        }
-    }
-    void waitAny(cybozu::aio::Aio &aio) {
-        std::queue<uint32_t> q;
-        aio.waitOneOrMore(q);
-        while (!q.empty()) {
-            doneSet_.insert(q.front());
-            q.pop();
-        }
-    }
+    void tryErase(Io& io);
+    void waitFor(Io& io, cybozu::aio::Aio &aio);
+    void waitAny(cybozu::aio::Aio &aio);
 };
+
 
 /**
  * In order to serialize overlapped IOs execution.
@@ -425,18 +303,7 @@ public:
      * (1) count overlapped IOs.
      * (2) set iop->nOverlapped to the number of overlapped IOs.
      */
-    void add(Io& io) {
-        io.nOverlapped = 0;
-        forEachOverlapped(io, [&](Io &ioX) {
-                io.nOverlapped++;
-                if (ioX.isOverwrittenBy(io) && ioX.state == Io::Init) {
-                    ioX.state = Io::Overwritten;
-                }
-            });
-
-        set_.insert(&io);
-        if (maxSize_ < io.size()) maxSize_ = io.size();
-    }
+    void add(Io& io);
     /**
      * Delete from the overlapped data.
      *
@@ -445,18 +312,8 @@ public:
      * (3) IOs where iop->nOverlapped became 0 will be added to the ioQ.
      *     You can submit them just after returned.
      */
-    void delIoAndPushReadyIos(Io& io, ReadyQueue& readyQ) {
-        assert(io.nOverlapped == 0);
-        erase(io);
-        if (set_.empty()) maxSize_ = 0;
+    void delIoAndPushReadyIos(Io& io, ReadyQueue& readyQ);
 
-        forEachOverlapped(io, [&](Io &ioX) {
-                ioX.nOverlapped--;
-                if (ioX.nOverlapped == 0 && ioX.state == Io::Init) {
-                    readyQ.push(&ioX);
-                }
-            });
-    }
     bool empty() const { return set_.empty(); }
 private:
     template <typename Func>
@@ -476,30 +333,14 @@ private:
             ++it;
         }
     }
-    void erase(Io &io) {
-        IoSet::iterator i, e;
-        std::tie(i, e) = set_.equal_range(&io);
-        while (i != e) {
-            if (*i == &io) {
-                set_.erase(i);
-                return;
-            }
-        }
-        assert(false);
-    }
+    void erase(Io &io);
 };
 
-void verifyApplicablePbs(uint32_t wlogPbs, uint32_t devPbs)
-{
-    if (devPbs <= wlogPbs && wlogPbs % devPbs == 0) {
-        return;
-    }
-    throw cybozu::Exception(__func__)
-        << "Physical block size does not match"
-        << wlogPbs << devPbs;
-}
+
+void verifyApplicablePbs(uint32_t wlogPbs, uint32_t devPbs);
 
 } // namespace bdev_writer_local
+
 
 struct WriteIoStatistics
 {
@@ -518,18 +359,7 @@ struct WriteIoStatistics
     WriteIoStatistics() {
         clear();
     }
-    void clear() {
-        normalNr = 0;
-        discardNr = 0;
-        writtenNr = 0;
-        overwrittenNr = 0;
-        clippedNr = 0;
-        normalLb = 0;
-        discardLb = 0;
-        writtenLb = 0;
-        overwrittenLb = 0;
-        clippedLb = 0;
-    }
+    void clear();
     void addNormal(size_t sizeLb) {
         normalNr++;
         normalLb += sizeLb;
@@ -550,39 +380,15 @@ struct WriteIoStatistics
         clippedNr++;
         clippedLb += sizeLb;
     }
-    void print(::FILE *fp = ::stdout) const {
-        ::fprintf(fp,
-                  "normal:      %10zu ( %10" PRIu64 " LB)\n"
-                  "discard:     %10zu ( %10" PRIu64 " LB)\n"
-                  "written:     %10zu ( %10" PRIu64 " LB)\n"
-                  "overwritten: %10zu ( %10" PRIu64 " LB)\n"
-                  "clipped:     %10zu ( %10" PRIu64 " LB)\n"
-                  , normalNr, normalLb
-                  , discardNr, discardLb
-                  , writtenNr, writtenLb
-                  , overwrittenNr, overwrittenLb
-                  , clippedNr, clippedLb);
-    }
+    void print(::FILE *fp = ::stdout) const;
     void printOneline(::FILE *fp = ::stdout) const {
         std::stringstream ss;
         ss << *this;
         ::fprintf(fp, "%s\n", ss.str().c_str());
     }
-    friend inline std::ostream& operator<<(std::ostream& os, const WriteIoStatistics& stat) {
-        os << "nrN " << stat.normalNr
-           << " nrD " << stat.discardNr
-           << " nrW " << stat.writtenNr
-           << " nrO " << stat.overwrittenNr
-           << " nrC " << stat.clippedNr
-           << "  "
-           << "lbN " << stat.normalLb
-           << " lbD " << stat.discardLb
-           << " lbW " << stat.writtenLb
-           << " lbO " << stat.overwrittenLb
-           << " lbC " << stat.clippedLb;
-        return os;
-    }
+    friend std::ostream& operator<<(std::ostream& os, const WriteIoStatistics& stat);
 };
+
 
 class SimpleBdevWriter
 {
@@ -642,6 +448,7 @@ private:
     }
 };
 
+
 class AsyncBdevWriter
 {
 private:
@@ -682,15 +489,7 @@ public:
     void submit() {
         processIos(false);
     }
-    bool discard(uint64_t offLb, uint32_t sizeLb) {
-        if (isClipped(offLb, sizeLb)) return false;
-        // This is not clever method to serialize IOs.
-        waitForAll();
-        cybozu::util::issueDiscard(bdevFile_.fd(), offLb, sizeLb);
-        stat_.addDiscard(sizeLb);
-        stat_.addWritten(sizeLb);
-        return true;
-    }
+    bool discard(uint64_t offLb, uint32_t sizeLb);
     void waitForAll() {
         processIos(true);
         waitForAllProcessingIos();
@@ -699,24 +498,8 @@ public:
         return stat_;
     }
 private:
-    void waitForAllProcessingIos() {
-        while (ioQ_.hasProcessing()) {
-            waitForAnIoCompletion();
-        }
-        assert(overlapped_.empty());
-        assert(readyQ_.empty());
-    }
-    void waitForAnIoCompletion() {
-        bdev_writer_local::Io& io = ioQ_.getFront();
-        readyQ_.forceComplete(io, aio_);
-        if (io.state == bdev_writer_local::Io::Submitted) {
-            stat_.addWritten(io.size() >> 9);
-        } else {
-            stat_.addOverwritten(io.size() >> 9);
-        }
-        overlapped_.delIoAndPushReadyIos(io, readyQ_);
-        ioQ_.popFront();
-    }
+    void waitForAllProcessingIos();
+    void waitForAnIoCompletion();
     bool hasEnoughReadyIos() const {
         return readyQ_.totalSize() >= bufferSize_ / 2
             || readyQ_.size() >= aio_.queueSize() / 2;
@@ -725,24 +508,7 @@ private:
         return ioQ_.getProcessingSize() >= bufferSize_ / 2
             || aio_.queueUsage() >= aio_.queueSize() / 2;
     }
-    void processIos(bool force) {
-        for (;;) {
-            while (hasManyProcessingIos()) {
-                waitForAnIoCompletion();
-            }
-            while (ioQ_.hasFetched()) {
-                bdev_writer_local::Io& io = ioQ_.nextFetched();
-                overlapped_.add(io);
-                if (io.nOverlapped == 0) {
-                    readyQ_.push(&io);
-                }
-            }
-            if (force || hasEnoughReadyIos()) {
-                readyQ_.submit(aio_);
-            }
-            if (!force || readyQ_.empty()) break;
-        }
-    }
+    void processIos(bool force);
     bool isClipped(uint64_t offLb, size_t sizeLb) {
         if (offLb + sizeLb > bdevSizeLb_) {
             stat_.addClipped(sizeLb);
