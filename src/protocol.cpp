@@ -113,47 +113,47 @@ ServerHandler findServerHandler(
 
 
 void RequestWorker::operator()() noexcept
-    {
+{
 // #define DEBUG_HANDLER
 #ifdef DEBUG_HANDLER
-        static std::atomic<int> ccc;
-        LOGs.info() << "SERVER_START" << nodeId << int(ccc++);
+    static std::atomic<int> ccc;
+    LOGs.info() << "SERVER_START" << nodeId << int(ccc++);
 #endif
+    try {
+        std::string clientId, protocolName;
+        packet::Packet pkt(sock);
+        bool sendErr = true;
         try {
-            std::string clientId, protocolName;
-            packet::Packet pkt(sock);
-            bool sendErr = true;
-            try {
-                run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
-                ServerHandler handler = findServerHandler(handlers, protocolName);
-                ServerParams serverParams(sock, clientId, ps);
-                pkt.write(msgOk);
-                pkt.flush();
-                sendErr = false;
+            run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
+            ServerHandler handler = findServerHandler(handlers, protocolName);
+            ServerParams serverParams(sock, clientId, ps);
+            pkt.write(msgOk);
+            pkt.flush();
+            sendErr = false;
 #ifdef DEBUG_HANDLER
-                LOGs.info() << "SERVER_HANDLE" << nodeId << protocolName;
+            LOGs.info() << "SERVER_HANDLE" << nodeId << protocolName;
 #endif
-                handler(serverParams);
-            } catch (std::exception &e) {
-                LOGs.error() << e.what();
-                if (sendErr) pkt.write(e.what());
-            } catch (...) {
-                cybozu::Exception e(__func__);
-                e << "other error";
-                LOGs.error() << e.what();
-                if (sendErr) pkt.write(e.what());
-            }
+            handler(serverParams);
         } catch (std::exception &e) {
             LOGs.error() << e.what();
+            if (sendErr) pkt.write(e.what());
         } catch (...) {
-            LOGs.error() << "other error";
+            cybozu::Exception e(__func__);
+            e << "other error";
+            LOGs.error() << e.what();
+            if (sendErr) pkt.write(e.what());
         }
-        const bool dontThrow = true;
-        sock.close(dontThrow);
-#ifdef DEBUG_HANDLER
-        LOGs.info() << "SERVER_END  " << nodeId << int(ccc--);
-#endif
+    } catch (std::exception &e) {
+        LOGs.error() << e.what();
+    } catch (...) {
+        LOGs.error() << "other error";
     }
+    const bool dontThrow = true;
+    sock.close(dontThrow);
+#ifdef DEBUG_HANDLER
+    LOGs.info() << "SERVER_END  " << nodeId << int(ccc--);
+#endif
+}
 
 
 void sendStrVec(
