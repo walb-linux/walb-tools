@@ -2135,7 +2135,8 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
                     << "bad meta diff relation" << (int)rel
                     << latestSnap << diff;
             }
-            logger.info() << FUNC << "rejected due to" << msg << volId;
+            logger.info() << FUNC << "rejected due to"
+                          << msg << volId << latestSnap << diff;
             ul.unlock();
             pkt.writeFin(msg);
             return;
