@@ -64,9 +64,16 @@ public:
         if (i == map_.end()) throw cybozu::Exception("StateMachine:setState:not found") << state;
         cur_ = i;
     }
-    const std::string &get() const {
+    const std::string &get(bool doThrow = true) const {
+        static const std::string noState("NO_STATE");
         AutoLock al(m_);
-        if (cur_ == map_.end()) throw cybozu::Exception("StateMachine:get:not set");
+        if (cur_ == map_.end()) {
+            if (doThrow) {
+                throw cybozu::Exception("StateMachine:get:not set");
+            } else {
+                return noState;
+            }
+        }
         return cur_->first;
     }
     bool change(const std::string& from, const std::string& to) {
@@ -96,7 +103,8 @@ public:
         : sm_(sm), errMsg_(errMsg) {
         if (!tryChange(from, to)) {
             throw cybozu::Exception(errMsg)
-                << "StateMachineTransaction:bad state" << sm.get() << from << to;
+                << "StateMachineTransaction:bad state"
+                << sm.get(false) << from << to;
         }
     }
     bool tryChange(const std::string& from, const std::string& pass) {
@@ -104,7 +112,7 @@ public:
         if (sm_.inTrans_) {
             throw cybozu::Exception(errMsg_)
                 << "StateMachineTransaction:tryChange:already called"
-                << sm_.get() << from << pass;
+                << sm_.get(false) << from << pass;
         }
         from_ = sm_.cur_;
         if (!sm_.changeNoLock(sm_.cur_, from, pass)) return false;
@@ -115,7 +123,8 @@ public:
         StateMachine::AutoLock al(sm_.m_);
         if (!sm_.inTrans_) {
             throw cybozu::Exception(errMsg_)
-                << "StateMachineTransaction:commit:tryChange is not called";
+                << "StateMachineTransaction:commit:tryChange is not called"
+                << sm_.get(false) << to;
         }
         if (!sm_.changeNoLock(sm_.cur_, sm_.cur_->first, to)) {
             throw cybozu::Exception(errMsg_)
