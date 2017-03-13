@@ -234,12 +234,13 @@ CYBOZU_TEST_AUTO(testAioWaitOne)
 
     std::list<uint32_t> keys0, keys1;
     for (size_t i = 0; i < 1024; i++) {
-        if (aio.isQueueFull()) {
+        while (aio.isQueueFull()) {
             keys1.push_back(aio.waitOne());
         }
         const size_t blk = randx() % 128;
         const size_t off = blk * LBS;
         const uint32_t key = aio.prepareRead(off, LBS, &v1[off]);
+        CYBOZU_TEST_ASSERT(key != 0);
         keys0.push_back(key);
         aio.submit();
     }
