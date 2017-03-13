@@ -89,20 +89,21 @@ private:
     StateMachine &sm_;
     StateMachine::Map::iterator from_;
     std::string errMsg_;
-    bool calledTryChange_;
+    bool localInTrans_;
+
 public:
     explicit StateMachineTransaction(StateMachine &sm)
-        : sm_(sm), calledTryChange_(false) {
+        : sm_(sm), localInTrans_(false) {
     }
     ~StateMachineTransaction() noexcept {
         StateMachine::AutoLock al(sm_.m_);
-        if (!sm_.inTrans_) return;
-        if (!calledTryChange_) return;
+        if (!localInTrans_) return;
+        assert(sm_.inTrans_);
         sm_.cur_ = from_;
         sm_.inTrans_ = false;
     }
     StateMachineTransaction(StateMachine &sm, const std::string& from, const std::string& to, const std::string &errMsg = "")
-        : sm_(sm), errMsg_(errMsg), calledTryChange_(false) {
+        : sm_(sm), errMsg_(errMsg), localInTrans_(false) {
         if (!tryChange(from, to)) {
             throw cybozu::Exception(errMsg)
                 << "StateMachineTransaction:bad state"
@@ -119,7 +120,7 @@ public:
         from_ = sm_.cur_;
         if (!sm_.changeNoLock(sm_.cur_, from, pass)) return false;
         sm_.inTrans_ = true;
-        calledTryChange_ = true;
+        localInTrans_ = true;
         return true;
     }
     void commit(const std::string& to) {
@@ -134,6 +135,7 @@ public:
                 << "StateMachineTransaction:commit:can't change" << to;
         }
         sm_.inTrans_ = false;
+        localInTrans_ = false;
     }
     void setErrorMessage(const std::string &msg) {
         errMsg_ = msg;
