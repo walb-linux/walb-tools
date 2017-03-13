@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import time, shutil, threading, os, signal
+import time, shutil, threading, os, signal, sys
 from repeater import *
 
 from stest_util import *
@@ -444,6 +444,7 @@ def print_action_info(action, info):
     verify_type(action, str)
     verify_type(info, str)
     print '++++++++++++++++++++++++++++++++++++++++', action, info
+    sys.stdout.flush()
 
 
 def get_restored_path(ax, vol, gid):
