@@ -101,6 +101,7 @@ CYBOZU_TEST_AUTO(double_trans)
     sm.addEdge("a", "c");
     sm.addEdge("b", "c");
     sm.addEdge("c", "d");
+    sm.addEdge("b", "a");
     sm.set("a");
     {
         walb::StateMachineTransaction ts(sm);
@@ -120,4 +121,13 @@ CYBOZU_TEST_AUTO(double_trans)
         }
         ts.commit("c");
     }
+
+    sm.set("a");
+    walb::StateMachineTransaction ts2(sm);
+    {
+        walb::StateMachineTransaction ts(sm, "a", "b");
+        ts.commit("a");
+        ts2.tryChange("a", "b");
+    }
+    ts2.commit("a");
 }
