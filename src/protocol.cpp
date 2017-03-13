@@ -97,6 +97,29 @@ void shutdownServer(ServerParams &p)
     pkt.writeFin(msgAccept);
 }
 
+StrVec prettyPrintHandlerStat(const HandlerStat& stat)
+{
+    StrVec ret;
+    for (const protocol::HandlerStat::CountMap::value_type &pair0 : stat.countMap) {
+        const std::string& protocolName = pair0.first;
+        for (const protocol::HandlerStat::Imap::value_type &pair1 : pair0.second) {
+            const std::string& clientId = pair1.first;
+            const uint64_t count = pair1.second;
+            ret.push_back(
+                cybozu::util::formatString(
+                    "COUNT\t%s\t%s\t%" PRIu64 "", protocolName.c_str(), clientId.c_str(), count));
+        }
+    }
+    for (const protocol::HandlerStat::LatencyMap::value_type &pair : stat.latencyMap) {
+        const std::string& protocolName = pair.first;
+        const protocol::HandlerStat::Latency& latency = pair.second;
+        double averageLatency = latency.sum / latency.count;
+        ret.push_back(
+            cybozu::util::formatString(
+                "LATENCY\t%s\t%.06f", protocolName.c_str(), averageLatency));
+    }
+    return ret;
+}
 
 ServerHandler findServerHandler(
     const Str2ServerHandler &handlers, const std::string &protocolName)
@@ -133,7 +156,9 @@ void RequestWorker::operator()() noexcept
 #ifdef DEBUG_HANDLER
             LOGs.info() << "SERVER_HANDLE" << nodeId << protocolName;
 #endif
+            HandlerStatMgr::Transaction tran = handlerStatMgr.start(protocolName, clientId);
             handler(serverParams);
+            tran.succeed();
         } catch (std::exception &e) {
             LOGs.error() << e.what();
             if (sendErr) pkt.write(e.what());

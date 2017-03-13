@@ -1050,6 +1050,14 @@ void getLatestSnap(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, ret);
 }
 
+void getHandlerStat(protocol::GetCommandParams &p)
+{
+    const protocol::HandlerStat stat = getProxyGlobal().handlerStatMgr.getStatByMove();
+    const StrVec ret = prettyPrintHandlerStat(stat);
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get handler-stat succeeded";
+}
+
 } // namespace proxy_local
 
 } // namespace walb

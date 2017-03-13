@@ -47,7 +47,8 @@ private:
     }
 
 public:
-    void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& handlers,
+    void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId,
+             const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
              size_t maxNumThreads, const KeepAliveParams& keepAliveParams, size_t timeoutS);
 private:
     void logErrors(std::vector<std::exception_ptr> &&v) {

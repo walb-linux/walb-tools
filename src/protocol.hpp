@@ -9,6 +9,7 @@
 #include <map>
 #include <string>
 #include <memory>
+#include <unordered_map>
 #include "cybozu/socket.hpp"
 #include "packet.hpp"
 #include "util.hpp"
@@ -110,6 +111,7 @@ const char *const getMetaSnapTN = "meta-snap";
 const char *const getMetaStateTN = "meta-state";
 const char *const getLatestSnapTN = "latest-snap";
 const char *const getTsDeltaTN = "ts-delta";
+const char *const getHandlerStatTN = "handler-stat";
 
 /**
  * Internal protocol name.
@@ -196,6 +198,85 @@ void shutdownServer(ServerParams &p);
 
 
 /**
+ * Statistics of Request Handlers.
+ */
+struct HandlerStat
+{
+    using Imap = std::unordered_map<std::string, uint64_t>; // key: clientId. value: count.
+    using CountMap = std::unordered_map<std::string, Imap>; // key: protocolName.
+
+    struct Latency {
+        double sum;
+        uint64_t count;
+    };
+    using LatencyMap = std::unordered_map<std::string, Latency>; // key: protocolName.
+
+    CountMap countMap;
+    LatencyMap latencyMap;
+};
+
+class HandlerStatMgr
+{
+    mutable std::recursive_mutex mu_;
+    using Autolock = std::unique_lock<std::recursive_mutex>;
+
+    HandlerStat stat_;
+
+    // key: unique id. value: timestamp.
+    using TsMap = std::unordered_map<uint64_t, cybozu::Timespec>;
+    TsMap tsMap_; // in order to calcurate protocol latency.
+
+    uint64_t getId() const {
+        static std::atomic<uint64_t> v_(0);
+        return v_.fetch_add(1);
+    }
+public:
+    class Transaction {
+        HandlerStatMgr *self_;
+        bool isEnd_;
+        const uint64_t id_;
+        std::string protocolName_;
+        std::string clientId_;
+    public:
+        Transaction(HandlerStatMgr *self, const std::string& protocolName,
+                    const std::string& clientId)
+            : self_(self), isEnd_(false), id_(self->getId())
+            , protocolName_(protocolName), clientId_(clientId) {
+            assert(self);
+            cybozu::Timespec ts = cybozu::getNowAsTimespec();
+            Autolock lk(self_->mu_);
+            self_->stat_.countMap[protocolName][clientId]++;
+            self->tsMap_[id_] = ts;
+        }
+        void succeed() {
+            cybozu::Timespec ts = cybozu::getNowAsTimespec();
+            Autolock lk(self_->mu_);
+            HandlerStat::Latency& latency = self_->stat_.latencyMap[protocolName_];
+            latency.sum += (ts - self_->tsMap_[id_]).getAsDouble();
+            latency.count++;
+            self_->tsMap_.erase(id_);
+            isEnd_ = true;
+        }
+        ~Transaction() noexcept {
+            if (isEnd_) return;
+            Autolock lk(self_->mu_);
+            self_->tsMap_.erase(id_);
+        }
+    };
+
+    Transaction start(const std::string& protocolName, const std::string& clientId) {
+        return Transaction(this, protocolName, clientId);
+    }
+    HandlerStat getStatByMove() {
+        Autolock lk(mu_);
+        return std::move(stat_);
+    }
+};
+
+StrVec prettyPrintHandlerStat(const HandlerStat& stat);
+
+
+/**
  * Server handler type.
  */
 using ServerHandler = void (*)(ServerParams &);
@@ -212,13 +293,16 @@ class RequestWorker
     cybozu::Socket sock;
     std::string nodeId;
     ProcessStatus &ps;
+    HandlerStatMgr &handlerStatMgr;
 public:
     const protocol::Str2ServerHandler& handlers;
     RequestWorker(cybozu::Socket &&sock, const std::string &nodeId,
-                  ProcessStatus &ps, const protocol::Str2ServerHandler& handlers)
+                  ProcessStatus &ps, const protocol::Str2ServerHandler& handlers,
+                  HandlerStatMgr& handlerStatMgr)
         : sock(std::move(sock))
         , nodeId(nodeId)
         , ps(ps)
+        , handlerStatMgr(handlerStatMgr)
         , handlers(handlers) {}
     void operator()() noexcept;
 };

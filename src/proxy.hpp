@@ -169,6 +169,7 @@ struct ProxySingleton
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
     std::atomic<uint64_t> conversionUsageMb;
+    protocol::HandlerStatMgr handlerStatMgr;
 
     void setSocketParams(cybozu::Socket& sock) const {
         util::setSocketParams(sock, keepAliveParams, socketTimeout);
@@ -294,6 +295,7 @@ inline void getPid(protocol::GetCommandParams &p)
 void isWdiffSendError(protocol::GetCommandParams &p);
 StrVec getLatestSnapForVolume(const std::string& volId);
 void getLatestSnap(protocol::GetCommandParams &p);
+void getHandlerStat(protocol::GetCommandParams &p);
 
 } // namespace proxy_local
 
@@ -304,6 +306,7 @@ const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
     { pidTN, proxy_local::getPid },
     { isWdiffSendErrorTN, proxy_local::isWdiffSendError },
     { getLatestSnapTN, proxy_local::getLatestSnap },
+    { getHandlerStatTN, proxy_local::getHandlerStat },
 };
 
 inline void c2pGetServer(protocol::ServerParams &p)

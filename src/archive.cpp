@@ -1701,6 +1701,14 @@ void getTsDelta(protocol::GetCommandParams &p)
     p.logger.debug() << "get ts-delta succeeded";
 }
 
+void getHandlerStat(protocol::GetCommandParams &p)
+{
+    const protocol::HandlerStat stat = getArchiveGlobal().handlerStatMgr.getStatByMove();
+    const StrVec ret = prettyPrintHandlerStat(stat);
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get handler-stat succeeded";
+}
+
 } // archive_local
 
 

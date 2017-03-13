@@ -6,7 +6,8 @@ namespace server {
 ProcessStatus *MultiThreadedServer::pps_;
 
 void MultiThreadedServer::run(
-    ProcessStatus &ps, uint16_t port, const std::string& nodeId, const protocol::Str2ServerHandler& handlers,
+    ProcessStatus &ps, uint16_t port, const std::string& nodeId,
+    const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
     size_t maxNumThreads, const KeepAliveParams& keepAliveParams, size_t timeoutS)
 {
         const char *const FUNC = __func__;
@@ -33,7 +34,7 @@ void MultiThreadedServer::run(
             ssock.accept(sock);
             util::setSocketParams(sock, keepAliveParams, timeoutS);
             logErrors(pool.gc());
-            if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers))) {
+            if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr))) {
                 LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads;
                 // The socket will be closed.
             }

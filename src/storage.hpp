@@ -197,6 +197,7 @@ struct StorageSingleton
     std::atomic<bool> quitTsDeltaGetter;
     storage_local::TsDeltaManager tsDeltaManager;
     std::atomic<uint64_t> fullScanLbPerSec; // 0 means unlimited.
+    protocol::HandlerStatMgr handlerStatMgr;
 
     using Str2Str = std::map<std::string, std::string>;
     using AutoLock = std::lock_guard<std::mutex>;
@@ -393,6 +394,7 @@ std::string getLatestSnapForVolume(const std::string& volId);
 void getLatestSnap(protocol::GetCommandParams &p);
 void getUuid(protocol::GetCommandParams &p);
 void getTsDelta(protocol::GetCommandParams &p);
+void getHandlerStat(protocol::GetCommandParams &p);
 
 } // namespace storage_local
 
@@ -406,6 +408,7 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
     { getLatestSnapTN, storage_local::getLatestSnap },
     { uuidTN, storage_local::getUuid },
     { getTsDeltaTN, storage_local::getTsDelta },
+    { getHandlerStatTN, storage_local::getHandlerStat },
 };
 
 inline void c2sGetServer(protocol::ServerParams &p)

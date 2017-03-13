@@ -160,6 +160,7 @@ struct ArchiveSingleton
     ProcessStatus ps;
     AtomicMap<ArchiveVolState> stMap;
     archive_local::RemoteSnapshotManager remoteSnapshotManager;
+    protocol::HandlerStatMgr handlerStatMgr;
 
     void setSocketParams(cybozu::Socket& sock) const {
         util::setSocketParams(sock, keepAliveParams, socketTimeout);
@@ -507,6 +508,7 @@ SnapshotInfo getLatestSnapshotInfo(const std::string &volId);
 std::string getLatestSnapForVolume(const std::string& volId);
 void getLatestSnap(protocol::GetCommandParams &p);
 void getTsDelta(protocol::GetCommandParams &p);
+void getHandlerStat(protocol::GetCommandParams &p);
 
 } // namespace archive_local
 
@@ -607,6 +609,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { getMetaStateTN, archive_local::getMetaState },
     { getLatestSnapTN, archive_local::getLatestSnap },
     { getTsDeltaTN, archive_local::getTsDelta },
+    { getHandlerStatTN, archive_local::getHandlerStat },
 };
 
 inline void c2aGetServer(protocol::ServerParams &p)

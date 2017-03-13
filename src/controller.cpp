@@ -200,6 +200,7 @@ const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {getMetaStateTN, {protocol::StringType, verifyGetMetaStateParam, "[volId isApplying (gid)] get MetaState having gid."}},
         {getLatestSnapTN, {protocol::StringVecType, verifyVolIdOrAllParamForGet, "[(volId)] get latest snapshot information for volume(s)."}},
         {getTsDeltaTN, {protocol::StringVecType, verifyNoneParam, "get timestamp delta information."}},
+        {getHandlerStatTN, {protocol::StringVecType, verifyNoneParam, "get handler statistics."}},
     };
     return m;
 }

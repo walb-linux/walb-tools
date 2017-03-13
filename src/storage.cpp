@@ -1166,8 +1166,13 @@ void getTsDelta(protocol::GetCommandParams &p)
     p.logger.debug() << "get ts-delta succeeded" << cybozu::unixTimeToPrettyStr(ts);
 }
 
-
-
+void getHandlerStat(protocol::GetCommandParams &p)
+{
+    const protocol::HandlerStat stat = getStorageGlobal().handlerStatMgr.getStatByMove();
+    const StrVec ret = prettyPrintHandlerStat(stat);
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get handler-stat succeeded";
+}
 
 } // namespace storage_local
 

@@ -140,7 +140,8 @@ int main(int argc, char *argv[]) try
         StorageThreads threads(opt);
         server::MultiThreadedServer server;
         const size_t concurrency = g.maxForegroundTasks + 5;
-        server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, concurrency, g.keepAliveParams, g.socketTimeout);
+        server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, g.handlerStatMgr,
+                   concurrency, g.keepAliveParams, g.socketTimeout);
     }
     LOGs.info() << "shutdown walb storage server";
 

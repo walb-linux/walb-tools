@@ -119,7 +119,8 @@ int main(int argc, char *argv[]) try
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     server::MultiThreadedServer server;
     const size_t concurrency = g.maxForegroundTasks + 5;
-    server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, concurrency, g.keepAliveParams, g.socketTimeout);
+    server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, g.handlerStatMgr,
+               concurrency, g.keepAliveParams, g.socketTimeout);
     LOGs.info() << "shutdown walb archive server";
 
 } catch (std::exception &e) {
