@@ -93,3 +93,31 @@ CYBOZU_TEST_AUTO(trans)
     }
     CYBOZU_TEST_EQUAL(sm.get(), "c");
 }
+
+CYBOZU_TEST_AUTO(double_trans)
+{
+    walb::StateMachine sm(g_m);
+    sm.addEdge("a", "b");
+    sm.addEdge("a", "c");
+    sm.addEdge("b", "c");
+    sm.addEdge("c", "d");
+    sm.set("a");
+    {
+        walb::StateMachineTransaction ts(sm);
+        ts.tryChange("a", "b");
+        {
+            walb::StateMachineTransaction ts2(sm);
+        }
+        ts.commit("c");
+    }
+    sm.set("a");
+    {
+        walb::StateMachineTransaction ts(sm);
+        ts.tryChange("a", "b");
+        {
+            walb::StateMachineTransaction ts2(sm);
+            CYBOZU_TEST_EXCEPTION(ts2.tryChange("a", "c"), cybozu::Exception);
+        }
+        ts.commit("c");
+    }
+}
