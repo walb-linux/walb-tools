@@ -16,7 +16,7 @@ extern "C" {
 #define WALB_DIFF_VERSION 2
 
 /**
- * Wdiff file format.
+ * Sorted wdiff file format.
  *
  * [sizeof: walb_diff_file_header]
  * [[4KiB: walb_diff_pack, [walb_diff_record, ...]]
@@ -26,6 +26,27 @@ extern "C" {
  * All IOs are sorted by address.
  * There is no overlap of IO range.
  */
+
+/**
+ * Indexed wdiff file format.
+ *
+ * [sizeof: walb_diff_file_header]
+ * [compressed IO data, ...]
+ * [[sizeof: walb_diff_index_record], ...]
+ * [sizeof: walb_diff_index_super: super block for the index]
+ *
+ * All IO data is alighed to 2^N (N >= 9).
+ * IO may not be sorted by address in the walb_diff_pack array.
+ */
+
+/**
+ * Walb diff format type.
+ */
+enum {
+    WALB_DIFF_TYPE_SORTED = 0,
+    WALB_DIFF_TYPE_INDEXED,
+    WALB_DIFF_TYPE_MAX
+};
 
 /**
  * Walb diff flag bit indicators.
@@ -52,6 +73,23 @@ enum {
     WALB_DIFF_CMPR_MAX
 };
 
+
+/**
+ * Walb diff file header.
+ */
+struct walb_diff_file_header
+{
+    uint32_t checksum;       /* header block checksum. salt is 0. */
+    uint16_t version;        /* WalB diff version */
+    uint8_t type;            /* WALB_DIFF_TYPE_XXX */
+    uint8_t reserved1;
+    uint32_t max_io_blocks;  /* Max io_blocks inside the diff.
+                                This is used for overlapped check. */
+    uint32_t reserved2;
+    uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
+} __attribute__((packed));
+
+
 /**
  * Walb diff metadata record for an IO.
  *
@@ -68,20 +106,6 @@ struct walb_diff_record
     uint32_t data_size; /* [byte] */
     uint32_t checksum; /* compressed data checksum with salt 0. */
     uint32_t reserved2;
-} __attribute__((packed));
-
-/**
- * Walb diff file header.
- */
-struct walb_diff_file_header
-{
-    uint32_t checksum;       /* header block checksum. salt is 0. */
-    uint16_t version;        /* WalB diff version */
-    uint16_t reserved1;
-    uint32_t max_io_blocks;  /* Max io_blocks inside the diff.
-                                This is used for overlapped check. */
-    uint32_t reserved2;
-    uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
 } __attribute__((packed));
 
 /**
@@ -112,6 +136,43 @@ const size_t WALB_DIFF_PACK_SIZE = 4096; /* 4KiB */
 const size_t MAX_N_RECORDS_IN_WALB_DIFF_PACK =
     (WALB_DIFF_PACK_SIZE - sizeof(struct walb_diff_pack)) / sizeof(struct walb_diff_record);
 const size_t WALB_DIFF_PACK_MAX_SIZE = 32 * 1024 * 1024; /* 32MiB */
+
+
+/**
+ * WalB diff index record.
+ * If the flags is 0, the record is invalid.
+ */
+struct walb_diff_index_record
+{
+    uint64_t io_address; /* [logical block] */
+
+    uint32_t io_blocks; /* [logical block] */
+    uint8_t flags; /* see WALB_DIFF_FLAG_XXX. */
+    uint8_t compression_type; /* see WALB_DIFF_CMPR_XXX. */
+    uint16_t reserved1;
+
+    uint64_t data_offset; /* [byte] offset of compressed image in the whole file. */
+
+    uint32_t data_size; /* [byte] size of compressed image. */
+    uint32_t io_offset; /* [logical block]. offset in uncompressed image. */
+
+    uint32_t orig_blocks; /* [logical lock] size of decompressed image. */
+    uint32_t reserved2;
+
+    uint32_t io_checksum; /* compressed image checksum with salt 0. */
+    uint32_t rec_checksum; /* self checksum. */
+} __attribute__((packed));
+
+
+struct walb_diff_index_super
+{
+    uint64_t index_offset; /* in the whole file. */
+    uint32_t n_records; /* number of index records. */
+    uint32_t n_data;  /* number of compressed images. */
+    uint32_t reserved1;
+    uint32_t checksum; /* self checksum */
+} __attribute__((packed));
+
 
 #ifdef __cplusplus
 }
