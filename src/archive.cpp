@@ -1270,6 +1270,8 @@ StrVec getAllStatusAsStrVec()
     v.push_back(fmt("maxForegroundTasks %zu", ga.maxForegroundTasks));
     v.push_back(fmt("socketTimeout %zu", ga.socketTimeout));
     v.push_back(fmt("keepAlive %s", ga.keepAliveParams.toStr().c_str()));
+    v.push_back(fmt("doAutoResize %d", ga.doAutoResize));
+    v.push_back(fmt("keepOneColdSnapshot %d", ga.keepOneColdSnapshot));
 
     v.push_back("-----Volume-----");
     for (const std::string &volId : ga.stMap.getKeyList()) {
