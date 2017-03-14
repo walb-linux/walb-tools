@@ -73,7 +73,7 @@ utest_all: $(TEST_BINARIES)
 	    ./$$t; \
 	done 2>&1 |tee test.log |grep ^ctest:name
 	@grep ctest:name test.log | grep -v "ng=0, exception=0"; \
-	if [ $$? -eq 1 ]; then echo "all unit tests succeed"; else exit 1; fi
+	if [ $$? -eq 1 ]; then (echo "all unit tests succeed"; rm -f test.log test.status); else exit 1; fi
 
 itest: $(BINARIES)
 	$(MAKE) -C itest/wdiff
