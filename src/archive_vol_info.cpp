@@ -284,6 +284,7 @@ void ArchiveVolInfo::removeBeforeGid(uint64_t gid)
     wdiffs_.removeBeforeGid(gid);
     removeColdTimestampFilesBeforeGid(gid);
 
+    std::vector<uint64_t> removed;
     VolLvCache::LvMap coldM = lvC_.getColdMap();
     for (VolLvCache::LvMap::iterator it = coldM.begin(); it != coldM.end(); ++it) {
         uint64_t coldGid = it->first;
@@ -293,11 +294,16 @@ void ArchiveVolInfo::removeBeforeGid(uint64_t gid)
             coldLv.remove();
         } catch (std::exception &e) {
             LOGs.error() << __func__ << "remove snapshot failed" << coldLv << e.what();
+            continue;
         }
         lvC_.removeCold(coldGid);
+        removed.push_back(coldGid);
+    }
+    if (!removed.empty()) {
+        LOGs.info() << "Removed cold snapshots before gid" << volId << gid
+                    << cybozu::util::concat(removed, ", ");
     }
 }
-
 
 
 MetaState ArchiveVolInfo::getMetaStateForDetail(uint64_t gid, bool &useCold, bool isApply) const
