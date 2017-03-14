@@ -28,3 +28,4 @@ bdev_reader_test
 walb_diff_merge_test
 walb_diff_file_test
 siphash_test
+address_util_test
