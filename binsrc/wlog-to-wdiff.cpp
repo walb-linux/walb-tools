@@ -11,7 +11,7 @@ using namespace walb;
 struct Option
 {
     uint32_t maxIoSize;
-    bool isDebug;
+    bool isDebug, isIndexed;
     std::string input, output;
 
     Option(int argc, char *argv[]) {
@@ -21,6 +21,7 @@ struct Option
         opt.appendOpt(&output, "-", "o", ": output wdiff file (default: stdout)");
         opt.appendOpt(&maxIoSize, DEFAULT_MAX_WDIFF_IO_BLOCKS * LBS
                       , "x", ": max IO size in the output wdiff [byte].");
+        opt.appendBoolOpt(&isIndexed, "indexed", ": use indexed format instead of sorted format.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
         opt.appendHelp("h");
         if (!opt.parse(argc, argv)) {
@@ -41,17 +42,29 @@ void setupFile(cybozu::util::File &file, const std::string &path, bool isRead)
     }
 }
 
+
+template <typename Converter>
+void convert(const Option &opt)
+{
+    Converter c;
+    cybozu::util::File inFile, outFile;
+    setupFile(inFile, opt.input, true);
+    setupFile(outFile, opt.output, false);
+    c.convert(inFile.fd(), outFile.fd(), opt.maxIoSize / LBS);
+    outFile.fdatasync();
+    outFile.close();
+}
+
+
 int doMain(int argc, char *argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
-    DiffConverter c;
-    cybozu::util::File inputFile, outputFile;
-    setupFile(inputFile, opt.input, true);
-    setupFile(outputFile, opt.output, false);
-    c.convert(inputFile.fd(), outputFile.fd(), opt.maxIoSize / LBS);
-    outputFile.fdatasync();
-    outputFile.close();
+    if (opt.isIndexed) {
+        convert<IndexedDiffConverter>(opt);
+    } else {
+        convert<DiffConverter>(opt);
+    }
     return 0;
 }
 
