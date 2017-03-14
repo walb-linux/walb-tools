@@ -27,7 +27,7 @@ private:
     void *mapped_;
     uint64_t mappedSize_;
     uint64_t size_;
-    File file_;
+    mutable File file_;
 
 public:
     MmappedFile()
@@ -94,6 +94,7 @@ public:
      * Current size. This is not file size.
      */
     uint64_t size() const { return size_; }
+    uint64_t getFileSize() const { return lseek(0, SEEK_END); }
     /**
      * Pointer to access the mmapped file.
      */
@@ -137,7 +138,7 @@ private:
         if (0 < size_) {
             fileSize = adjustFileSize();
         } else {
-            fileSize = lseek(0, SEEK_END);
+            fileSize = getFileSize();
             size_ = fileSize;
         }
         mmap(fileSize);
@@ -145,7 +146,7 @@ private:
     uint64_t calcFileSize() const {
         return ((size_ - 1) / pageSize() + 1) * pageSize();
     }
-    uint64_t lseek(off_t offset, int whence) {
+    uint64_t lseek(off_t offset, int whence) const {
         return file_.lseek(offset, whence);
     }
     void appendZeroData(uint64_t len) {
