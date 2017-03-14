@@ -400,6 +400,7 @@ void delSnapshot(const std::string &volId, uint64_t gid, bool isCold)
     }
     if (isCold) {
         lvC.removeCold(gid);
+        volInfo.removeColdTimestamp(gid);
     } else {
         lvC.removeRestored(gid);
     }
