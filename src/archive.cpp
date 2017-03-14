@@ -264,6 +264,40 @@ struct TmpSnapshotDeleter
     }
 };
 
+static void removeColdSnapshotsExceptTheLatestOne(ArchiveVolInfo &volInfo)
+{
+    const char *const FUNC = __func__;
+    VolLvCache &lvC = volInfo.lvCache();
+    VolLvCache::LvMap lvMap = lvC.getColdMap();
+
+    // Remove the last element from the map to keep the latest cold snapshot.
+    if (lvMap.empty()) return;
+    VolLvCache::LvMap::iterator it = lvMap.end();
+    --it;
+    lvMap.erase(it);
+    if (lvMap.empty()) return;
+
+    // Remove the remaining cold snapshots.
+    std::vector<uint64_t> removed;
+    for (VolLvCache::LvMap::value_type& p : lvMap) {
+        const uint64_t gid = p.first;
+        cybozu::lvm::Lv& coldLv = p.second;
+        if (coldLv.exists()) {
+            try {
+                util::flushBdevBufs(coldLv.path().str());
+                coldLv.remove();
+            } catch (std::exception &e) {
+                LOGs.warn() << FUNC << e.what();
+                continue;
+            }
+        }
+        volInfo.removeColdTimestamp(gid);
+        lvC.removeCold(gid);
+        removed.push_back(gid);
+    }
+    LOGs.info() << "Removed cold snapshots" << volInfo.volId
+                << cybozu::util::concat(removed, ", ");
+}
 
 /**
  * Restore a snapshot.
@@ -341,6 +375,9 @@ bool restore(const std::string &volId, uint64_t gid)
     cybozu::lvm::Lv snapLv = cybozu::lvm::renameLv(baseLv.vgName(), tmpLvName, targetName);
     lvC.addRestored(gid, snapLv);
     util::flushBdevBufs(snapLv.path().str());
+    if (isThinpool() && ga.keepOneColdSnapshot) {
+        removeColdSnapshotsExceptTheLatestOne(volInfo);
+    }
     return true;
 }
 

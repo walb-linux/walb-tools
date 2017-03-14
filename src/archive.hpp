@@ -153,6 +153,7 @@ struct ArchiveSingleton
     uint64_t fsyncIntervalSize;
     KeepAliveParams keepAliveParams;
     bool doAutoResize;
+    bool keepOneColdSnapshot;
     bool allowExec;
 
     /**

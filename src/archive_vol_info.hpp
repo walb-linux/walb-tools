@@ -480,6 +480,8 @@ public:
     std::string coldToBaseLvName(uint64_t gid) const {
         return lvName() + "_" + cybozu::itoa(gid) + "_tmp";
     }
+    VolLvCache& lvCache() { return lvC_; }
+    const VolLvCache& lvCache() const { return lvC_; }
 private:
     cybozu::lvm::Vg getVg() const {
         return cybozu::lvm::getVg(vgName);

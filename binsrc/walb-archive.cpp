@@ -52,6 +52,7 @@ struct Option
         opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
         opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "fsync interval size [bytes].");
         opt.appendBoolOpt(&a.doAutoResize, "autoresize", "resize base image automatically if necessary");
+        opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", "keep just one cold snapshot per volume.");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&a.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
 #endif
