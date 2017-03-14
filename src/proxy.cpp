@@ -635,7 +635,9 @@ StrVec getAllStatusAsStrVec()
     ret.push_back(fmt("maxWdiffSendMb %zu", gp.maxWdiffSendMb));
     ret.push_back(fmt("delaySecForRetry %zu", gp.delaySecForRetry));
     ret.push_back(fmt("retryTimeout %zu", gp.retryTimeout));
+    ret.push_back(fmt("maxConnections %zu", gp.maxConnections));
     ret.push_back(fmt("maxForegroundTasks %zu", gp.maxForegroundTasks));
+    ret.push_back(fmt("maxBackgroundTasks %zu", gp.maxBackgroundTasks));
     ret.push_back(fmt("maxConversionMb %zu", gp.maxConversionMb));
     ret.push_back(fmt("socketTimeout %zu", gp.socketTimeout));
     ret.push_back(fmt("keepAlive %s", gp.keepAliveParams.toStr().c_str()));

@@ -155,7 +155,9 @@ struct ProxySingleton
     size_t maxWdiffSendNr;
     size_t delaySecForRetry;
     size_t retryTimeout;
+    size_t maxConnections;
     size_t maxForegroundTasks;
+    size_t maxBackgroundTasks;
     size_t maxConversionMb;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;

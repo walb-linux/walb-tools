@@ -145,6 +145,7 @@ struct ArchiveSingleton
     std::string baseDirStr;
     std::string volumeGroup;
     std::string thinpool;
+    size_t maxConnections;
     size_t maxForegroundTasks;
     size_t socketTimeout;
     size_t maxWdiffSendNr;

@@ -33,7 +33,6 @@ struct Option
     std::string archiveDStr;
     std::string multiProxyDStr;
     bool isDebug;
-    size_t maxBackgroundTasks;
     uint64_t defaultFullScanBytesPerSec;
     cybozu::Option opt;
 
@@ -45,10 +44,11 @@ struct Option
         opt.appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
         opt.appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
         opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
-        opt.appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
 
         StorageSingleton &s = getStorageGlobal();
+        opt.appendOpt(&s.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
         opt.appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foregroud tasks.");
+        opt.appendOpt(&s.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
         opt.appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&s.nodeId, hostName, "id", "node identifier");
@@ -71,7 +71,7 @@ struct Option
             ::exit(1);
         }
 
-        util::verifyNotZero(maxBackgroundTasks, "maxBackgroundTasks");
+        util::verifyNotZero(s.maxBackgroundTasks, "maxBackgroundTasks");
         util::verifyNotZero(s.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(s.maxWlogSendMb, "maxWlogSendMb");
         util::verifyNotZero(s.implicitSnapshotIntervalSec, "implicitSnapshotIntervalSec");
@@ -99,7 +99,7 @@ struct StorageThreads {
             }
         }
 
-        g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, opt.maxBackgroundTasks));
+        g.dispatcher.reset(new DispatchTask<std::string, StorageWorker>(g.taskQueue, g.maxBackgroundTasks));
         g.wdevMonitor.reset(new std::thread(wdevMonitorWorker));
         g.proxyMonitor.reset(new std::thread(proxyMonitorWorker));
         g.tsDeltaGetter.reset(new std::thread(tsDeltaGetterWorker));
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) try
     {
         StorageThreads threads(opt);
         server::MultiThreadedServer server;
-        const size_t concurrency = g.maxForegroundTasks + 5;
+        const size_t concurrency = g.maxConnections;
         server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }

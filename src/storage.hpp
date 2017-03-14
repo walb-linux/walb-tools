@@ -174,7 +174,9 @@ struct StorageSingleton
     uint64_t maxWlogSendMb;
     size_t implicitSnapshotIntervalSec;
     size_t delaySecForRetry;
+    size_t maxConnections;
     size_t maxForegroundTasks;
+    size_t maxBackgroundTasks;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;
     size_t tsDeltaGetterIntervalSec;

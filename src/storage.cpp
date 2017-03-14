@@ -550,7 +550,9 @@ StrVec getAllStatusAsStrVec()
     v.push_back(fmt("baseDir %s", gs.baseDirStr.c_str()));
     v.push_back(fmt("maxWlogSendMb %" PRIu64, gs.maxWlogSendMb));
     v.push_back(fmt("delaySecForRetry %zu", gs.delaySecForRetry));
+    v.push_back(fmt("maxConnections %zu", gs.maxConnections));
     v.push_back(fmt("maxForegroundTasks %zu", gs.maxForegroundTasks));
+    v.push_back(fmt("maxBackgroundTasks %zu", gs.maxBackgroundTasks));
     v.push_back(fmt("socketTimeout %zu", gs.socketTimeout));
     v.push_back(fmt("keepAlive %s", gs.keepAliveParams.toStr().c_str()));
 
@@ -635,12 +637,18 @@ void backupClient(protocol::ServerParams &p, bool isFull)
     logger.debug() << FUNC << volId << bulkLb << curTime;
     std::string archiveId;
 
-    ForegroundCounterTransaction foregroundTasksTran;
-    verifyMaxForegroundTasks(gs.maxForegroundTasks, FUNC);
-
     StorageVolInfo volInfo(gs.baseDirStr, volId);
 
     packet::Packet cPkt(p.sock);
+
+    ForegroundCounterTransaction foregroundTasksTran;
+    try {
+        verifyMaxForegroundTasks(gs.maxForegroundTasks, FUNC);
+    } catch (std::exception &e) {
+        logger.warn() << e.what();
+        cPkt.writeFin(e.what());
+        return;
+    }
 
     StorageVolState &volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
@@ -677,9 +685,10 @@ void backupClient(protocol::ServerParams &p, bool isFull)
                 cPkt.writeFin(msgAccept);
             } else {
                 cybozu::Exception e(FUNC);
-                e << "bad response" << archiveId << res;
-                cPkt.write(e.what());
-                throw e;
+                e << "not accepted by archive" << archiveId << res;
+                logger.warn() << e.what();
+                cPkt.writeFin(e.what());
+                return;
             }
         }
         MetaSnap snap;

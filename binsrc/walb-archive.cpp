@@ -43,6 +43,7 @@ struct Option
         opt.appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
         opt.appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
         opt.appendOpt(&a.thinpool, "", "tp", "lvm thinpool (optional).");
+        opt.appendOpt(&a.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
         opt.appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&a.nodeId, hostName, "id", "node identifier");
@@ -63,6 +64,7 @@ struct Option
             ::exit(1);
         }
 
+        util::verifyNotZero(a.maxConnections, "maxConnections");
         util::verifyNotZero(a.maxForegroundTasks, "maxForegroundTasks");
         util::verifyNotZero(a.maxWdiffSendNr, "maxWdiffSendNr");
         util::verifyNotZero(a.fsyncIntervalSize, "fsyncIntervalSize");
@@ -118,7 +120,7 @@ int main(int argc, char *argv[]) try
     initArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
     server::MultiThreadedServer server;
-    const size_t concurrency = g.maxForegroundTasks + 5;
+    const size_t concurrency = g.maxConnections;
     server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, g.handlerStatMgr,
                concurrency, g.keepAliveParams, g.socketTimeout);
     LOGs.info() << "shutdown walb archive server";

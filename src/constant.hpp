@@ -16,6 +16,7 @@ const uint64_t DEFAULT_BULK_LB = 64 * KIBI / LBS;
 const uint64_t MAX_BULK_SIZE = 4 * MEBI;
 const size_t DEFAULT_TIMEOUT_SEC = 60;
 
+const size_t DEFAULT_MAX_CONNECTIONS = 10;
 const size_t DEFAULT_MAX_FOREGROUND_TASKS = 2;
 const size_t DEFAULT_MAX_BACKGROUND_TASKS = 1;
 const size_t DEFAULT_MAX_WDIFF_SEND_MB = 128;

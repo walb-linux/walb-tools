@@ -28,7 +28,6 @@ struct Option
     uint16_t port;
     std::string logFileStr;
     bool isDebug;
-    size_t maxBackgroundTasks;
     bool isStopped;
     cybozu::Option opt;
 
@@ -38,11 +37,12 @@ struct Option
         opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
         opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
         opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
-        opt.appendOpt(&maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
         opt.appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
 
         ProxySingleton &p = getProxyGlobal();
+        opt.appendOpt(&p.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
         opt.appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
+        opt.appendOpt(&p.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
         opt.appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "max size of wdiff files to send [MiB].");
         opt.appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
         opt.appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
@@ -64,7 +64,7 @@ struct Option
             ::exit(1);
         }
 
-        util::verifyNotZero(maxBackgroundTasks, "maxBackgroundtasks");
+        util::verifyNotZero(p.maxBackgroundTasks, "maxBackgroundtasks");
         util::verifyNotZero(p.maxForegroundTasks, "maxForegroundtasks");
         util::verifyNotZero(p.maxWdiffSendMb, "maxWdiffSendMb");
         util::verifyNotZero(p.maxWdiffSendNr, "maxWdiffSendNr");
@@ -94,7 +94,7 @@ struct ProxyThreads
 
         // Start a task dispatch thread.
         ProxySingleton &g = getProxyGlobal();
-        g.dispatcher.reset(new DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, opt.maxBackgroundTasks));
+        g.dispatcher.reset(new DispatchTask<ProxyTask, ProxyWorker>(g.taskQueue, g.maxBackgroundTasks));
     }
     ~ProxyThreads() try {
         // Stop the task dispatch thread.
@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) try
     {
         ProxyThreads threads(opt);
         server::MultiThreadedServer server;
-        const size_t concurrency = g.maxForegroundTasks + 5;
+        const size_t concurrency = g.maxConnections;
         server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }

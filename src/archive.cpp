@@ -1228,6 +1228,7 @@ StrVec getAllStatusAsStrVec()
     if (!ga.thinpool.empty()) {
         v.push_back(fmt("thinpool %s", ga.thinpool.c_str()));
     }
+    v.push_back(fmt("maxConnections %zu", ga.maxConnections));
     v.push_back(fmt("maxForegroundTasks %zu", ga.maxForegroundTasks));
     v.push_back(fmt("socketTimeout %zu", ga.socketTimeout));
     v.push_back(fmt("keepAlive %s", ga.keepAliveParams.toStr().c_str()));
@@ -2492,6 +2493,8 @@ void c2aVirtualFullScan(protocol::ServerParams &p)
         const uint64_t bulkLb = param.bulkLb;
         const uint64_t sizeLb = param.sizeLb;
 
+        ForegroundCounterTransaction foregroundTasksTran;
+        verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         ArchiveVolState &volSt = getArchiveVolState(volId);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         pkt.write(msgAccept);
@@ -2509,7 +2512,11 @@ void c2aVirtualFullScan(protocol::ServerParams &p)
     }
 }
 
-
+/**
+ * This is synchronous command.
+ * The socket timeout is a concern.
+ * Currently, this command can be used for test only.
+ */
 void c2aBlockHashServer(protocol::ServerParams &p)
 {
     const char *const FUNC = __func__;

@@ -249,13 +249,19 @@ void verifyActionNotRunning(const ActionCounters& ac, const C& actions, const ch
 const int ForegroundCounterType = 0;
 using ForegroundCounterTransaction = counter::CounterTransaction<ForegroundCounterType>;
 
-inline void verifyMaxForegroundTasks(size_t maxForegroundTasks, const char *msg)
+template <int type>
+void verifyMaxCounter(size_t maxNr, const char *msg0, const char *msg1)
 {
-    if (counter::getCounter<ForegroundCounterType>() > maxForegroundTasks) {
-        throw cybozu::Exception(msg)
-            << "exceeds max foreground tasks" << maxForegroundTasks;
+    if (counter::getCounter<type>() > maxNr) {
+        throw cybozu::Exception(msg0) << msg1 << maxNr;
     }
 }
+
+inline void verifyMaxForegroundTasks(size_t maxForegroundTasks, const char *msg)
+{
+    verifyMaxCounter<ForegroundCounterType>(maxForegroundTasks, msg, "exceeds max foreground tasks");
+}
+
 
 std::string formatActions(const char *prefix, ActionCounters &ac, const StrVec &actionV, bool useTime = false);
 
