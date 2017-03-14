@@ -35,26 +35,26 @@ struct Option
     Option(int argc, char *argv[]) {
         opt.setDescription(util::getDescription("walb archive server"));
 
-        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug message.");
 
         ArchiveSingleton &a = getArchiveGlobal();
-        opt.appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
-        opt.appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "lvm volume group.");
-        opt.appendOpt(&a.thinpool, "", "tp", "lvm thinpool (optional).");
-        opt.appendOpt(&a.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
-        opt.appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
+        opt.appendOpt(&a.baseDirStr, DEFAULT_BASE_DIR, "b", "PATH : base directory (full path)");
+        opt.appendOpt(&a.volumeGroup, DEFAULT_VG, "vg", "VG : lvm volume group.");
+        opt.appendOpt(&a.thinpool, "", "tp", "TP : lvm thinpool (optional).");
+        opt.appendOpt(&a.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "NUM : num of max connections.");
+        opt.appendOpt(&a.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "NUM : num of max concurrent foreground tasks.");
         std::string hostName = cybozu::net::getHostName();
-        opt.appendOpt(&a.nodeId, hostName, "id", "node identifier");
-        opt.appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
-        opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
-        opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", "discard behavior: ignore/passdown/zero.");
-        opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "fsync interval size [bytes].");
-        opt.appendBoolOpt(&a.doAutoResize, "autoresize", "resize base image automatically if necessary");
-        opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", "keep just one cold snapshot per volume.");
+        opt.appendOpt(&a.nodeId, hostName, "id", "STRING : node identifier");
+        opt.appendOpt(&a.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : Socket timeout [sec].");
+        opt.appendOpt(&a.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "NUM : max number of wdiff files to send.");
+        opt.appendOpt(&discardTypeStr, DEFAULT_DISCARD_TYPE_STR, "discard", ": discard behavior: ignore/passdown/zero.");
+        opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "SIZE : fsync interval size [bytes].");
+        opt.appendBoolOpt(&a.doAutoResize, "autoresize", ": resize base image automatically if necessary");
+        opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", ": keep just one cold snapshot per volume.");
 #ifdef ENABLE_EXEC_PROTOCOL
-        opt.appendBoolOpt(&a.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
+        opt.appendBoolOpt(&a.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
         util::setKeepAliveOptions(opt, a.keepAliveParams);
 

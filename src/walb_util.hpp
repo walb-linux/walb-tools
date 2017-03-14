@@ -200,10 +200,10 @@ void setSocketParams(cybozu::Socket& sock, const KeepAliveParams& params, size_t
 
 inline void setKeepAliveOptions(cybozu::Option& opt, KeepAliveParams& params)
 {
-    opt.appendBoolOpt(&params.enabled, "ka", "enable TCP keep-alive.");
-    opt.appendOpt(&params.idle, DEFAULT_TCP_KEEPIDLE, "kaidle", "TCP keep-alive idle time [sec].");
-    opt.appendOpt(&params.intvl, DEFAULT_TCP_KEEPINTVL, "kaintvl", "TCP keep-alive interval time [sec].");
-    opt.appendOpt(&params.cnt, DEFAULT_TCP_KEEPCNT, "kacnt", "TCP keep-alive count.");
+    opt.appendBoolOpt(&params.enabled, "ka", ": enable TCP keep-alive.");
+    opt.appendOpt(&params.idle, DEFAULT_TCP_KEEPIDLE, "kaidle", "PERIOD : TCP keep-alive idle time [sec].");
+    opt.appendOpt(&params.intvl, DEFAULT_TCP_KEEPINTVL, "kaintvl", "PERIOD : TCP keep-alive interval time [sec].");
+    opt.appendOpt(&params.cnt, DEFAULT_TCP_KEEPCNT, "kacnt", "NUM : TCP keep-alive count.");
 }
 
 /**

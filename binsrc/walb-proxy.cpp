@@ -34,26 +34,26 @@ struct Option
     Option(int argc, char *argv[]) {
         opt.setDescription(util::getDescription("walb proxy server"));
 
-        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
-        opt.appendBoolOpt(&isStopped, "stop", "Start a daemon in stopped state for all volumes.");
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug message.");
+        opt.appendBoolOpt(&isStopped, "stop", ": start a daemon in stopped state for all volumes.");
 
         ProxySingleton &p = getProxyGlobal();
-        opt.appendOpt(&p.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
-        opt.appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foreground tasks.");
-        opt.appendOpt(&p.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
-        opt.appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "max size of wdiff files to send [MiB].");
-        opt.appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "max number of wdiff files to send.");
-        opt.appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        opt.appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "Retry timeout (total period) [sec].");
-        opt.appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory");
-        opt.appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "max memory size of wlog-wdiff conversion [MiB].");
+        opt.appendOpt(&p.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "NUM : num of max connections.");
+        opt.appendOpt(&p.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "NUM : num of max concurrent foreground tasks.");
+        opt.appendOpt(&p.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "NUM : num of max concurrent background tasks.");
+        opt.appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "SIZE : max size of wdiff files to send [MiB].");
+        opt.appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "NUM : max number of wdiff files to send.");
+        opt.appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : waiting time for next retry [sec].");
+        opt.appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "PERIOD : retry timeout (total period) [sec].");
+        opt.appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "PATH : base directory");
+        opt.appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "SIZE : max memory size of wlog-wdiff conversion [MiB].");
         std::string hostName = cybozu::net::getHostName();
-        opt.appendOpt(&p.nodeId, hostName, "id", "node identifier");
-        opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
+        opt.appendOpt(&p.nodeId, hostName, "id", "STRING : node identifier");
+        opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : Socket timeout [sec].");
 #ifdef ENABLE_EXEC_PROTOCOL
-        opt.appendBoolOpt(&p.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
+        opt.appendBoolOpt(&p.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
         util::setKeepAliveOptions(opt, p.keepAliveParams);
 

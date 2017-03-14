@@ -39,28 +39,28 @@ struct Option
     Option(int argc, char *argv[]) {
         opt.setDescription(util::getDescription("walb storage server"));
 
-        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "listen port");
-        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "log file name.");
-        opt.appendMust(&archiveDStr, "archive", "archive daemon (host:port)");
-        opt.appendMust(&multiProxyDStr, "proxy", "proxy daemons (host:port,host:port,...)");
-        opt.appendBoolOpt(&isDebug, "debug", "put debug message.");
+        opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
+        opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
+        opt.appendMust(&archiveDStr, "archive", "HOST_PORT : archive daemon (host:port)");
+        opt.appendMust(&multiProxyDStr, "proxy", "HOST_PORT_LIST : proxy daemons (host:port,host:port,...)");
+        opt.appendBoolOpt(&isDebug, "debug", ": put debug message.");
 
         StorageSingleton &s = getStorageGlobal();
-        opt.appendOpt(&s.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "num of max connections.");
-        opt.appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "num of max concurrent foregroud tasks.");
-        opt.appendOpt(&s.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "num of max concurrent background tasks.");
-        opt.appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "base directory (full path)");
+        opt.appendOpt(&s.maxConnections, DEFAULT_MAX_CONNECTIONS, "maxconn", "NUM : num of max connections.");
+        opt.appendOpt(&s.maxForegroundTasks, DEFAULT_MAX_FOREGROUND_TASKS, "fg", "NUM : num of max concurrent foregroud tasks.");
+        opt.appendOpt(&s.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "NUM : num of max concurrent background tasks.");
+        opt.appendOpt(&s.baseDirStr, DEFAULT_BASE_DIR, "b", "PATH : base directory (full path)");
         std::string hostName = cybozu::net::getHostName();
-        opt.appendOpt(&s.nodeId, hostName, "id", "node identifier");
-        opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "max wlog size to send at once [MiB].");
+        opt.appendOpt(&s.nodeId, hostName, "id", "STRING : node identifier");
+        opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "SIZE : max wlog size to send at once [MiB].");
         opt.appendOpt(&s.implicitSnapshotIntervalSec, DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC, "snapintvl"
-                      , "Implicit snapshot interval [sec].");
-        opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "Waiting time for next retry [sec].");
-        opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
-        opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "Default full scan throughput [bytes/s]");
-        opt.appendOpt(&s.tsDeltaGetterIntervalSec, DEFAULT_TS_DELTA_INTERVAL_SEC, "tsdintvl", "ts-delta getter interval [sec].");
+                      , "PERIOD : implicit snapshot interval [sec].");
+        opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : waiting time for next retry [sec].");
+        opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : socket timeout [sec].");
+        opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "SIZE : default full scan throughput [bytes/s]");
+        opt.appendOpt(&s.tsDeltaGetterIntervalSec, DEFAULT_TS_DELTA_INTERVAL_SEC, "tsdintvl", "PERIOD : ts-delta getter interval [sec].");
 #ifdef ENABLE_EXEC_PROTOCOL
-        opt.appendBoolOpt(&s.allowExec, "allow-exec", "Allow exec protocol for test. This is NOT SECURE.");
+        opt.appendBoolOpt(&s.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
         util::setKeepAliveOptions(opt, s.keepAliveParams);
 
