@@ -24,6 +24,7 @@
 #include "backtrace.hpp"
 #include "compressor.hpp"
 #include "compression_type.hpp"
+#include "address_util.hpp"
 
 static_assert(::WALB_DIFF_FLAGS_SHIFT_MAX <= 8, "Too many walb diff flags.");
 static_assert(::WALB_DIFF_CMPR_MAX <= 256, "Too many walb diff cmpr types.");
@@ -200,5 +201,72 @@ void compressDiffIo(
 void uncompressDiffIo(
     const DiffRecord &inRec, const char *inData,
     DiffRecord &outRec, AlignedArray &outData, bool calcChecksum = true);
+
+
+/**
+ * sizeof(DiffIndexRecord) == sizeof(walb_diff_index_record)
+ */
+struct DiffIndexRecord : public walb_diff_index_record
+{
+    void init() {
+        ::memset(this, 0, sizeof(*this));
+        // Now isNormal() will be true.
+    }
+
+    uint64_t endIoAddress() const { return io_address + io_blocks; }
+    bool isCompressed() const { return compression_type != ::WALB_DIFF_CMPR_NONE; }
+
+    bool isAllZero() const { return (flags & WALB_DIFF_FLAG(ALLZERO)) != 0; }
+    bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
+    bool isNormal() const { return !isAllZero() && !isDiscard(); }
+
+    bool isValid() const { return verifyDetail(false); }
+    void verify() const { verifyDetail(true); }
+
+    static constexpr const char *NAME = "DiffIndexRecord";
+
+    void printOneline(::FILE *fp = ::stdout) const {
+        ::fprintf(fp, "%s\n", toStr("wdiff_idx_rec:\t").c_str());
+    }
+    std::string toStr(const char *prefix = "") const;
+    friend inline std::ostream &operator<<(std::ostream &os, const DiffIndexRecord &rec) {
+        os << rec.toStr();
+        return os;
+    }
+
+    void setNormal() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setAllZero() {
+        flags |= WALB_DIFF_FLAG(ALLZERO);
+        flags &= ~WALB_DIFF_FLAG(DISCARD);
+    }
+    void setDiscard() {
+        flags &= ~WALB_DIFF_FLAG(ALLZERO);
+        flags |= WALB_DIFF_FLAG(DISCARD);
+    }
+
+    bool isOverwrittenBy(const DiffIndexRecord &rhs) const {
+        return cybozu::isOverwritten(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
+    }
+    bool isOverlapped(const DiffIndexRecord &rhs) const {
+        return cybozu::isOverlapped(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
+    }
+
+    void verifyAligned() const {
+        if (!isAlignedSize(io_blocks)) {
+            throw cybozu::Exception(NAME) << "IO is not alined" << io_blocks;
+        }
+    }
+
+    std::vector<DiffIndexRecord> split() const;
+    std::vector<DiffIndexRecord> minus(const DiffIndexRecord& rhs) const;
+
+private:
+    bool verifyDetail(bool throwError) const;
+};
+
+
 
 } //namesapce walb

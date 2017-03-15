@@ -165,6 +165,7 @@ std::vector<DiffIo> DiffIo::splitIoDataAll(uint32_t ioBlocks0) const
     return v;
 }
 
+
 void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
     DiffRecord &outRec, AlignedArray &outData, int type, int level)
@@ -210,6 +211,124 @@ void uncompressDiffIo(
     outRec.data_size = size;
     outRec.compression_type = ::WALB_DIFF_CMPR_NONE;
     outRec.checksum = calcChecksum ? calcDiffIoChecksum(outData) : 0;
+}
+
+
+std::string DiffIndexRecord::toStr(const char *prefix) const
+{
+    return cybozu::util::formatString(
+        "%s""%" PRIu64 "\t%u\t%s\t%" PRIu64 "\t%u\t%u\t%u\t%08x\t%08x\t%c%c"
+        , prefix, io_address, io_blocks
+        , compressionTypeToStr(compression_type).c_str()
+        , data_offset, data_size, orig_blocks, io_offset
+        , io_checksum, rec_checksum
+        , isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
+}
+
+std::vector<DiffIndexRecord> DiffIndexRecord::split() const
+{
+    const std::vector<uint32_t> sizeV =
+        splitIoToAligned(io_address, io_blocks);
+
+    uint64_t addr = io_address;
+    uint32_t off = io_offset;
+
+    std::vector<DiffIndexRecord> recV;
+    recV.reserve(sizeV.size());
+
+    for (uint32_t s : sizeV) {
+        recV.push_back(*this);
+        DiffIndexRecord& rec = recV.back();
+
+        rec.io_address = addr;
+        rec.io_blocks = s;
+        rec.io_offset = off;
+        rec.rec_checksum = 0; // QQQ
+
+        addr += s;
+        off += s;
+    }
+
+    return recV;
+}
+
+std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) const
+{
+    const DiffIndexRecord &lhs = *this;
+
+    assert(lhs.isOverlapped(rhs));
+    std::vector<DiffIndexRecord> v;
+    /*
+     * Pattern 1:
+     * __oo__ - xxxxxx = ______
+     */
+    if (lhs.isOverwrittenBy(rhs)) return v; /* empty */
+
+    /*
+     * Pattern 2:
+     * oooooo - __xx__ = oo__oo
+     */
+    if (rhs.isOverwrittenBy(lhs)) {
+        uint32_t blks0 = rhs.io_address - lhs.io_address;
+        uint32_t blks1 = lhs.endIoAddress() - rhs.endIoAddress();
+        uint64_t addr0 = lhs.io_address;
+        uint64_t addr1 = rhs.endIoAddress();
+
+        DiffIndexRecord r0 = lhs;
+        DiffIndexRecord r1 = lhs;
+        r0.io_address = addr0;
+        r0.io_blocks = blks0;
+        // r0.io_offset need not to change.
+        r1.io_address = addr1;
+        r1.io_blocks = blks1;
+        r1.io_offset += addr1 - addr0;
+
+        // QQQ update rec_checksum.
+
+        if (blks0 > 0) v.push_back(r0);
+        if (blks1 > 0) v.push_back(r1);
+
+        return v;
+    }
+
+    /*
+     * Pattern 3 does not exist.
+     * oooo__ - __xxxx = oo____
+     *
+     * Pattern 4 does not exist.
+     * __oooo - xxxx__ = ____oo
+     */
+    throw cybozu::Exception("BUG: DiffIndexRecord:minus.") << lhs << rhs;
+}
+
+bool DiffIndexRecord::verifyDetail(bool throwError) const
+{
+    if (!isNormal()) {
+        if (isAllZero() && isDiscard()) {
+            if (throwError) {
+                throw cybozu::Exception(NAME)
+                    << "allzero and discard flag must be exclusive";
+            }
+            return false;
+        }
+        return true;
+    }
+    if (::WALB_DIFF_CMPR_MAX <= compression_type) {
+        if (throwError) {
+            throw cybozu::Exception(NAME) << "compression type is invalid";
+        }
+        return false;
+    }
+    if (io_blocks == 0) {
+        if (throwError) {
+            throw cybozu::Exception(NAME) << "io_blocks must not be 0";
+        }
+        return false;
+    }
+
+    /* QQQ: verify checksum. */
+
+    return true;
 }
 
 } //namesapce walb
