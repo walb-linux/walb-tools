@@ -35,7 +35,7 @@ void MultiThreadedServer::run(
             util::setSocketParams(sock, keepAliveParams, timeoutS);
             logErrors(pool.gc());
             if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr))) {
-                LOGs.warn() << FUNC << "Exceeds max concurrency" <<  maxNumThreads;
+                putLogExceedsMaxConcurrency(maxNumThreads);
                 // The socket will be closed.
             }
         }
@@ -44,6 +44,21 @@ void MultiThreadedServer::run(
         pool.stop();
         logErrors(pool.gc());
     }
+
+void MultiThreadedServer::putLogExceedsMaxConcurrency(size_t maxNumThreads)
+{
+    static size_t count = 0;
+    static cybozu::Timespec ts(0);
+    const cybozu::TimespecDiff oneSec(1);
+    cybozu::Timespec now = cybozu::getNowAsTimespec();
+    if (now - ts < oneSec) {
+        count++;
+        return; // supress.
+    }
+    LOGs.warn() << "MultiThreadedServer:exceeds max concurrency"
+                << maxNumThreads << "supressed" << count;
+    count = 0;
+}
 
 } // namespace server
 

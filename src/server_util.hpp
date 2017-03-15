@@ -58,6 +58,7 @@ private:
                 << cybozu::thread::exceptionPtrToStr(ep);
         }
     }
+    void putLogExceedsMaxConcurrency(size_t maxNumThreads);
 };
 
 } //namespace server
