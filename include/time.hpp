@@ -152,9 +152,12 @@ inline std::string getHighResolutionTimeStr(const struct timespec& ts)
 struct TimespecBase : timespec
 {
     TimespecBase() {}
-    TimespecBase(int v) {
-        this->tv_sec = v;
-        this->tv_nsec = 0;
+    TimespecBase(time_t sec, long nsec = 0) {
+        set(sec, nsec);
+    }
+    TimespecBase(int sec) : TimespecBase(time_t(sec), 0) {}
+    TimespecBase(double sec) : TimespecBase() {
+        setAsDouble(sec);
     }
     bool operator==(const TimespecBase& rhs) const {
         return this->tv_sec == rhs.tv_sec && this->tv_nsec == rhs.tv_nsec;
@@ -187,10 +190,22 @@ struct TimespecBase : timespec
             this->tv_nsec -= rhs.tv_nsec;
         }
     }
+    void set(time_t sec, long nsec = 0) {
+        this->tv_sec = sec;
+        this->tv_nsec = nsec;
+    }
+    double getAsDouble() const {
+        return (double)this->tv_sec + (double)this->tv_nsec / (double)1000000000;
+    }
+    void setAsDouble(double sec) {
+        const size_t s = sec;
+        set(s, sec - (double)s);
+    }
 };
 
 struct TimespecDiff : TimespecBase
 {
+    using TimespecBase::TimespecBase;
     void operator+=(const TimespecDiff& rhs) {
         add(rhs);
     }
@@ -206,13 +221,6 @@ struct TimespecDiff : TimespecBase
         TimespecDiff ret = *this;
         ret -= rhs;
         return ret;
-    }
-    double getAsDouble() const {
-        return (double)this->tv_sec + (double)this->tv_nsec / (double)1000000000;
-    }
-    void setAsDouble(double sec) {
-        this->tv_sec = size_t(sec);
-        this->tv_nsec = sec - (double)this->tv_sec;
     }
     std::string str() const {
         const int len = 21 + 1 + 9 + 1; // 20 bytes for time_t
@@ -230,6 +238,7 @@ struct TimespecDiff : TimespecBase
 
 struct Timespec : TimespecBase
 {
+    using TimespecBase::TimespecBase;
     TimespecDiff operator-(const Timespec& rhs) const {
         TimespecDiff ret = *(TimespecDiff*)this;
         ret.sub(rhs);
