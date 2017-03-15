@@ -165,6 +165,30 @@ std::vector<DiffIo> DiffIo::splitIoDataAll(uint32_t ioBlocks0) const
     return v;
 }
 
+int compressData(const char *inData, size_t inSize,
+                 AlignedArray &outData, size_t &outSize, int type, int level)
+{
+    outData.resize(inSize + 4096); // margin to reduce malloc at compression.
+    walb::Compressor enc(type, level);
+    if (enc.run(outData.data(), &outSize, outData.size(), inData, inSize) && outSize < inSize) {
+        outData.resize(outSize);
+    } else {
+        outSize = inSize;
+        outData.resize(inSize);
+        ::memcpy(outData.data(), inData, inSize);
+        type = ::WALB_DIFF_CMPR_NONE;
+    }
+    return type;
+}
+
+void uncompressData(const char *inData, size_t inSize, AlignedArray &outData, int type)
+{
+    walb::Uncompressor dec(type);
+    size_t outSize = dec.run(outData.data(), outData.size(), inData, inSize);
+    if (outSize != outData.size()) {
+        throw cybozu::Exception("uncompressData:size is invalid") << outSize << outData.size();
+    }
+}
 
 void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
@@ -174,18 +198,10 @@ void compressDiffIo(
     assert(!inRec.isCompressed());
     assert(inData != nullptr);
 
-    const size_t size = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
-    outData.resize(size + 4096); // margin to reduce malloc at compression.
-    size_t outSize;
-    walb::Compressor enc(type, level);
-    if (enc.run(outData.data(), &outSize, outData.size(), inData, size) && outSize < size) {
-        outData.resize(outSize);
-    } else {
-        outSize = size;
-        outData.resize(size);
-        ::memcpy(outData.data(), inData, size);
-        type = ::WALB_DIFF_CMPR_NONE;
-    }
+    const size_t inSize = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
+    size_t outSize = 0;
+    type = compressData(inData, inSize, outData, outSize, type, level);
+
     outRec = inRec;
     outRec.compression_type = type;
     outRec.data_size = outSize;
@@ -202,11 +218,8 @@ void uncompressDiffIo(
 
     const size_t size = inRec.io_blocks * LOGICAL_BLOCK_SIZE;
     outData.resize(size, false);
-    walb::Uncompressor dec(inRec.compression_type);
-    size_t outSize = dec.run(outData.data(), size, inData, inRec.data_size);
-    if (outSize != size) {
-        throw cybozu::Exception("uncompressDiffIo:size is invalid") << outSize << size << inRec;
-    }
+    uncompressData(inData, inRec.data_size, outData, inRec.compression_type);
+
     outRec = inRec;
     outRec.data_size = size;
     outRec.compression_type = ::WALB_DIFF_CMPR_NONE;

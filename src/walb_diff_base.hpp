@@ -195,6 +195,13 @@ inline bool calcDiffIoIsAllZero(const AlignedArray &io)
     return cybozu::util::isAllZero(io.data(), io.size());
 }
 
+
+int compressData(
+    const char *inData, size_t inSize, AlignedArray &outData, size_t &outSize,
+    int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
+void uncompressData(
+    const char *inData, size_t inSize, AlignedArray &outData, int type);
+
 void compressDiffIo(
     const DiffRecord &inRec, const char *inData,
     DiffRecord &outRec, AlignedArray &outData, int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
