@@ -32,20 +32,6 @@ class MultiThreadedServer
 {
 private:
     static ProcessStatus *pps_;
-    static inline void quitHandler(int) noexcept
-    {
-        if (pps_) {
-            pps_->setForceShutdown();
-        }
-    }
-    void setQuitHandler()
-    {
-        if (!cybozu::signal::setSignalHandler(quitHandler, {SIGINT, SIGQUIT, SIGABRT, SIGTERM}, false)) {
-            LOGs.error() << "can't set sigaction";
-            ::exit(1);
-        }
-    }
-
 public:
     void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId,
              const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
@@ -56,6 +42,17 @@ private:
             LOGs.error()
                 << "REQUEST_WORKER_ERROR"
                 << cybozu::thread::exceptionPtrToStr(ep);
+        }
+    }
+    static void quitHandler(int) noexcept {
+        if (pps_) {
+            pps_->setForceShutdown();
+        }
+    }
+    void setQuitHandler() {
+        if (!cybozu::signal::setSignalHandler(quitHandler, {SIGINT, SIGQUIT, SIGABRT, SIGTERM}, false)) {
+            LOGs.error() << "can't set sigaction";
+            ::exit(1);
         }
     }
     void putLogExceedsMaxConcurrency(size_t maxNumThreads);

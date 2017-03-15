@@ -10,40 +10,40 @@ void MultiThreadedServer::run(
     const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
     size_t maxNumThreads, const KeepAliveParams& keepAliveParams, size_t timeoutS)
 {
-        const char *const FUNC = __func__;
-        pps_ = &ps;
-        setQuitHandler();
-        cybozu::Socket ssock;
-        ssock.bind(port);
-        cybozu::thread::ThreadRunnerFixedPool pool;
-        pool.start(maxNumThreads);
-        LOGs.info() << FUNC << "Ready to accept connections";
+    const char *const FUNC = __func__;
+    pps_ = &ps;
+    setQuitHandler();
+    cybozu::Socket ssock;
+    ssock.bind(port);
+    cybozu::thread::ThreadRunnerFixedPool pool;
+    pool.start(maxNumThreads);
+    LOGs.info() << FUNC << "Ready to accept connections";
+    for (;;) {
         for (;;) {
-            for (;;) {
-                if (!ps.isRunning()) goto quit;
-                int ret = ssock.queryAcceptNoThrow();
-                if (ret > 0) break; // accepted
-                if (ret == 0) continue; // timeout
-                if (ret == -EINTR) {
-                    LOGs.info() << FUNC << "queryAccept:interrupted";
-                    continue;
-                }
-                throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
+            if (!ps.isRunning()) goto quit;
+            int ret = ssock.queryAcceptNoThrow();
+            if (ret > 0) break; // accepted
+            if (ret == 0) continue; // timeout
+            if (ret == -EINTR) {
+                LOGs.info() << FUNC << "queryAccept:interrupted";
+                continue;
             }
-            cybozu::Socket sock;
-            ssock.accept(sock);
-            util::setSocketParams(sock, keepAliveParams, timeoutS);
-            logErrors(pool.gc());
-            if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr))) {
-                putLogExceedsMaxConcurrency(maxNumThreads);
-                // The socket will be closed.
-            }
+            throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
         }
-    quit:
-        LOGs.info() << FUNC << "Waiting for remaining tasks";
-        pool.stop();
+        cybozu::Socket sock;
+        ssock.accept(sock);
+        util::setSocketParams(sock, keepAliveParams, timeoutS);
         logErrors(pool.gc());
+        if (!pool.add(protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr))) {
+            putLogExceedsMaxConcurrency(maxNumThreads);
+            // The socket will be closed.
+        }
     }
+  quit:
+    LOGs.info() << FUNC << "Waiting for remaining tasks";
+    pool.stop();
+    logErrors(pool.gc());
+}
 
 void MultiThreadedServer::putLogExceedsMaxConcurrency(size_t maxNumThreads)
 {
