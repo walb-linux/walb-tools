@@ -148,4 +148,232 @@ void DiffWriter::writePack()
     pack_.clear();
 }
 
+void DiffIndexMem::checkNoOverlappedAndSorted() const
+{
+    auto it = index_.cbegin();
+    const DiffIndexRecord *prev = nullptr;
+    while (it != index_.cend()) {
+        const DiffIndexRecord *curr = &it->second;
+        if (prev) {
+            if (!(prev->io_address < curr->io_address)) {
+                throw RT_ERR("Not sorted.");
+            }
+            if (!(prev->endIoAddress() <= curr->io_address)) {
+                throw RT_ERR("Overlapped records exists.");
+            }
+        }
+        prev = curr;
+        ++it;
+    }
+}
+
+void DiffIndexMem::addDetail(const DiffIndexRecord &rec)
+{
+    assert(isAlignedIo(rec.io_address, rec.io_blocks));
+
+    /* Decide the first item to search. */
+    auto it = index_.lower_bound(rec.io_address);
+    if (it == index_.end()) {
+        if (index_.empty()) {
+            index_.emplace(rec.io_address, rec);
+            return;
+        }
+        --it; // the last item.
+    } else {
+        if (rec.io_address < it->first && it != index_.begin()) {
+            --it; // previous item.
+        }
+    }
+
+    /* Search overlapped items. */
+    uint64_t addr1 = rec.endIoAddress();
+    std::queue<DiffIndexRecord> q;
+    while (it != index_.end() && it->first < addr1) {
+        DiffIndexRecord &r = it->second;
+        if (r.isOverlapped(rec)) {
+            q.push(r);
+            it = index_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    /* Eliminate overlaps. */
+    while (!q.empty()) {
+        for (const DiffIndexRecord &r0 : q.front().minus(rec)) {
+            for (const DiffIndexRecord &r1 : r0.split()) {
+                index_.emplace(r1.io_address, r1);
+            }
+        }
+        q.pop();
+    }
+
+    index_.emplace(rec.io_address, rec);
+}
+
+void IndexedDiffWriter::finalize()
+{
+    if (isClosed_) return;
+
+    const uint64_t indexOffset = offset_;
+    indexMem_.writeTo(fileW_);
+    writeSuper(indexOffset);
+
+    fileW_.close();
+    isClosed_ = true;
+}
+
+void IndexedDiffWriter::writeHeader(DiffFileHeader &header)
+{
+    if (isWrittenHeader_) {
+        throw cybozu::Exception(NAME)
+            << "do not call writeHeader() more than once.";
+    }
+    header.writeTo(fileW_);
+    assert(offset_ == 0);
+    offset_ += header.getSize();
+    isWrittenHeader_ = true;
+}
+
+void IndexedDiffWriter::writeDiff(const DiffIndexRecord &rec, const char *data)
+{
+    checkWrittenHeader();
+    DiffIndexRecord r = rec;
+    r.data_offset = offset_;
+    if (rec.isNormal()) {
+        assert(data != nullptr);
+        // r.io_checksum must be up-to-date.
+        fileW_.write(data, rec.data_size);
+        offset_ += rec.data_size;
+    }
+    indexMem_.add(r);
+}
+
+void IndexedDiffWriter::compressAndWriteDiff(
+    const DiffIndexRecord &rec, const char *data, int type, int level)
+{
+    if (!rec.isNormal()) {
+        writeDiff(rec, nullptr);
+        return;
+    }
+    if (rec.isCompressed()) {
+        writeDiff(rec, data);
+        return;
+    }
+    size_t outSize = 0;
+    type = compressData(data, rec.io_blocks * LOGICAL_BLOCK_SIZE,
+                        buf_, outSize, type, level);
+    DiffIndexRecord r = rec;
+    r.compression_type = type;
+    r.data_size = outSize;
+    r.io_checksum = calcDiffIoChecksum(buf_);
+    writeDiff(r, buf_.data());
+}
+
+void IndexedDiffWriter::init()
+{
+    indexMem_.clear();
+    offset_ = 0;
+    isWrittenHeader_ = false;
+    isClosed_ = false;
+    stat_.clear();
+}
+
+void IndexedDiffWriter::writeSuper(uint64_t indexOffset)
+{
+    walb_diff_index_super super;
+    ::memset(&super, 0, sizeof(super));
+    super.index_offset = indexOffset;
+    super.n_records = indexMem_.size();
+    super.n_data = 0; // QQQ
+    // QQQ update super.checksum;
+
+    fileW_.write(&super, sizeof(super));
+}
+
+AlignedArray* IndexedDiffCache::find(uint64_t key)
+{
+    auto it = map_.find(key);
+    if (it == map_.end()) return nullptr;
+    ListIt lit = it->second;
+
+    std::unique_ptr<AlignedArray> dataPtr = std::move(lit->dataPtr);
+    AlignedArray *ret = dataPtr.get();
+
+    list_.erase(lit);
+    list_.push_front({key, std::move(dataPtr)});
+    map_[key] = list_.begin(); // update.
+
+    return ret;
+}
+
+void IndexedDiffCache::add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr)
+{
+    if (map_.find(key) != map_.end()) {
+        throw cybozu::Exception("already in cache") << key;
+    }
+
+    curBytes_ += dataPtr->size();
+    list_.push_front({key, std::move(dataPtr)});
+    map_[key] = list_.begin();
+
+    while (maxBytes_ > 0 && curBytes_ > maxBytes_ && map_.size() > 1) {
+        evictOne();
+    }
+}
+
+void IndexedDiffCache::evictOne()
+{
+    if (list_.empty()) return;
+    Item &item = list_.back();
+    map_.erase(item.key);
+    curBytes_ -= item.dataPtr->size();
+    list_.pop_back();
+}
+
+void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
+{
+    memFile_.reset(std::move(fileR));
+
+    // read header.
+    ::memcpy(&header_, &memFile_[0], sizeof(header_));
+
+    // read index super.
+    walb_diff_index_super super;
+    idxEndOffset_  = memFile_.getFileSize() - sizeof(super);
+    ::memcpy(&super, &memFile_[idxEndOffset_], sizeof(super));
+    idxBgnOffset_ = super.index_offset;
+    idxOffset_ = idxBgnOffset_;
+}
+
+bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
+{
+    if (!getNextRec(rec)) return false;
+    if (!rec.isNormal()) return true;
+
+    AlignedArray *aryPtr = cache_.find(rec.data_offset);
+    if (aryPtr == nullptr) {
+        std::unique_ptr<AlignedArray> p(new AlignedArray());
+        p->resize(rec.orig_blocks * LOGICAL_BLOCK_SIZE);
+        uncompressData(&memFile_[rec.data_offset], rec.data_size, *p, rec.compression_type);
+        cache_.add(rec.data_offset, std::move(p));
+        aryPtr = cache_.find(rec.data_offset);
+    }
+
+    const size_t offset = rec.io_offset * LOGICAL_BLOCK_SIZE;
+    const size_t size = rec.io_blocks * LOGICAL_BLOCK_SIZE;
+    data.resize(size);
+    ::memcpy(data.data(), &(*aryPtr)[offset], size);
+
+    return true;
+}
+
+bool IndexedDiffReader::getNextRec(DiffIndexRecord& rec)
+{
+    if (idxOffset_ >= idxEndOffset_) return false;
+    ::memcpy(&rec, &memFile_[idxOffset_], sizeof(rec));
+    idxOffset_ += sizeof(rec);
+    return true;
+}
+
 } //namespace walb

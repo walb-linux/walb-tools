@@ -3,9 +3,11 @@
  * @file
  * @brief walb diff utiltities for files.
  */
+#include <unordered_map>
 #include "walb_diff_pack.hpp"
 #include "walb_diff_stat.hpp"
 #include "uuid.hpp"
+#include "mmap_file.hpp"
 #include "cybozu/exception.hpp"
 
 namespace walb {
@@ -61,6 +63,7 @@ struct DiffFileHeader : walb_diff_file_header
     void init() {
         ::memset(this, 0, getSize());
         version = WALB_DIFF_VERSION;
+        type = WALB_DIFF_TYPE_SORTED;
     }
     template<class Writer>
     void writeTo(Writer& writer) {
@@ -348,5 +351,150 @@ private:
         stat_.wdiffNr = 1;
     }
 };
+
+
+class DiffIndexMem
+{
+private:
+    std::map<uint64_t, DiffIndexRecord> index_; // key: io_address.
+
+    void addDetail(const DiffIndexRecord &rec);
+public:
+    void add(const DiffIndexRecord &rec) {
+        for (const DiffIndexRecord& r : rec.split()) {
+            addDetail(r);
+        }
+    }
+    void clear() {
+        index_.clear();
+    }
+    template<class Writer>
+    void writeTo(Writer& writer) const {
+        for (const std::pair<uint64_t, DiffIndexRecord>& pair : index_) {
+            const DiffIndexRecord& rec = pair.second;
+            writer.write(&rec, sizeof(rec));
+        }
+    }
+    size_t size() const { return index_.size(); }
+
+    /**
+     * for debug and test.
+     */
+    void checkNoOverlappedAndSorted() const;
+};
+
+
+/**
+ * QQQ update stat_.
+ */
+class IndexedDiffWriter /* final */
+{
+private:
+    cybozu::util::File fileW_;
+    bool isWrittenHeader_;
+    bool isClosed_;
+    uint64_t offset_;
+    DiffIndexMem indexMem_;
+    DiffStatistics stat_;
+    AlignedArray buf_;
+
+public:
+    IndexedDiffWriter() {
+        init();
+    }
+    ~IndexedDiffWriter() {
+        finalize();
+    }
+    void setFd(int fd) {
+        init();
+        fileW_.setFd(fd);
+    }
+    void open(const std::string& diffPath, int flags, mode_t mode) {
+        init();
+        fileW_.open(diffPath, flags, mode);
+    }
+    void finalize();
+    void writeHeader(DiffFileHeader &header);
+    void writeDiff(const DiffIndexRecord &rec, const char *data);
+    void compressAndWriteDiff(const DiffIndexRecord &rec, const char *data,
+                              int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
+
+    const DiffStatistics& getStat() const {
+        return stat_;
+    }
+
+    /**
+     * for debug and test.
+     */
+    void checkNoOverlappedAndSorted() const {
+        indexMem_.checkNoOverlappedAndSorted();
+    }
+
+    static constexpr const char *NAME = "IndexedDiffWriter";
+
+private:
+    void init();
+    void writeSuper(uint64_t indexOffset);
+    void checkWrittenHeader() const {
+        if (!isWrittenHeader_) {
+            throw cybozu::Exception(NAME) <<
+                "checkWrittenHeader: call writeHeader() before writeDiff().";
+        }
+    }
+};
+
+
+class IndexedDiffCache /* final */
+{
+private:
+    struct Item {
+        uint64_t key;
+        std::unique_ptr<AlignedArray> dataPtr;
+    };
+
+    using ListIt = std::list<Item>::iterator;
+
+    size_t maxBytes_;
+    size_t curBytes_;
+    std::list<Item> list_;
+    std::unordered_map<uint64_t, ListIt> map_;
+
+public:
+    IndexedDiffCache() : maxBytes_(0), curBytes_(0), list_(), map_() {}
+    void setMaxSize(size_t bytes) { maxBytes_ = bytes; }
+    AlignedArray* find(uint64_t key);
+    void add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr);
+private:
+    void evictOne();
+};
+
+
+/**
+ * This use random access.
+ */
+class IndexedDiffReader /* final */
+{
+private:
+    cybozu::util::MmappedFile memFile_;
+
+    DiffFileHeader header_;
+    size_t idxBgnOffset_;
+    size_t idxEndOffset_;
+    size_t idxOffset_;
+
+    IndexedDiffCache cache_;
+
+public:
+    IndexedDiffReader() { cache_.setMaxSize(32 * MEBI); } // QQQ
+    void setFile(cybozu::util::File &&fileR);
+    const DiffFileHeader& header() const { return header_; }
+    /**
+     * data will be uncompressed data.
+     */
+    bool readDiff(DiffIndexRecord &rec, AlignedArray &data);
+private:
+    bool getNextRec(DiffIndexRecord& rec);
+};
+
 
 } //namespace walb
