@@ -527,10 +527,10 @@ void ProxyWorker::operator()()
         }
     } catch (std::exception &e) {
         LOGs.error() << FUNC << e.what();
-        q.pushForce(task_, 0);
+        q.pushForce(task_, 1000);
     } catch (...) {
         LOGs.error() << FUNC << "unknown error";
-        q.pushForce(task_, 0);
+        q.pushForce(task_, 1000);
     }
 }
 
