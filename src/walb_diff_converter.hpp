@@ -58,4 +58,22 @@ private:
     bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd, DiffMemory &diffMem);
 };
 
+
+bool convertLogToDiff(
+    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
+    DiffIndexRecord& mrec, AlignedArray &buf);
+
+
+class IndexedDiffConverter /* final */
+{
+public:
+    void convert(int inputLogFd, int outputWdiffFd,
+                 uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS);
+private:
+    bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
+                     IndexedDiffWriter &writer, DiffFileHeader &wdiffH);
+
+};
+
+
 } //namespace walb
