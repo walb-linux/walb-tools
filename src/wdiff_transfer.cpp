@@ -73,6 +73,59 @@ bool wdiffTransferNoMergeClient(
     return true;
 }
 
+bool indexedWdiffTransferClient(
+    packet::Packet &pkt, IndexedDiffReader& reader, const CompressOpt &cmpr,
+    const std::atomic<int> &stopState, const ProcessStatus &ps,
+    DiffStatistics &statOut)
+{
+    const size_t maxPushedNum = cmpr.numCpu * 2 + 1;
+    ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
+    packet::StreamControl ctrl(pkt.sock());
+    statOut.clear();
+    statOut.wdiffNr = -1;
+
+    DiffIndexRecord irec;
+    AlignedArray data;
+    DiffPacker packer;
+    size_t pushedNum = 0;
+    while (reader.readDiff(irec, data)) {
+        if (stopState == ForceStopping || ps.isForceShutdown()) {
+            return false;
+        }
+        DiffRecord rec;
+        rec.io_address = irec.io_address;
+        rec.io_blocks = irec.io_blocks;
+        rec.flags = irec.flags;
+        const char *dataPtr = nullptr;
+        if (irec.isNormal()) {
+            rec.compression_type = ::WALB_DIFF_CMPR_NONE;
+            rec.data_offset = 0; // updated later.
+            rec.data_size = irec.io_blocks * LOGICAL_BLOCK_SIZE;
+            rec.checksum = irec.io_checksum;
+            dataPtr = data.data() + (irec.io_offset * LOGICAL_BLOCK_SIZE);
+        }
+
+        if (packer.add(rec, dataPtr)) continue;
+        conv.push(packer.getPackAsArray());
+        pushedNum++;
+        packer.clear();
+        packer.add(rec, dataPtr);
+        if (pushedNum < maxPushedNum) continue;
+        wdiff_transfer_local::sendPack(pkt, ctrl, statOut, conv.pop());
+        pushedNum--;
+    }
+    if (!packer.empty()) {
+        conv.push(packer.getPackAsArray());
+    }
+    conv.quit();
+    for (compressor::Buffer pack = conv.pop(); !pack.empty(); pack = conv.pop()) {
+        wdiff_transfer_local::sendPack(pkt, ctrl, statOut, pack);
+    }
+    ctrl.end();
+    pkt.flush();
+    return true;
+}
+
 bool wdiffTransferServer(
     packet::Packet &pkt, int wdiffOutFd,
     const std::atomic<int> &stopState, const ProcessStatus &ps, uint64_t fsyncIntervalSize)

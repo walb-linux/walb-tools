@@ -39,6 +39,15 @@ bool wdiffTransferNoMergeClient(
     const std::atomic<int> &stopState, const ProcessStatus &ps);
 
 /**
+ * RETURN:
+ *   false if force stopped.
+ */
+bool indexedWdiffTransferClient(
+    packet::Packet &pkt, IndexedDiffReader& reader, const CompressOpt &cmpr,
+    const std::atomic<int> &stopState, const ProcessStatus &ps,
+    DiffStatistics &statOut);
+
+/**
  * Wdiff header must have been written already before calling this.
  *
  * RETURN:
