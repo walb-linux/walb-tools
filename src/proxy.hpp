@@ -124,7 +124,11 @@ class ProxyWorker
 private:
     const ProxyTask task_;
 
+    /**
+     * setupMerger currently supports sorted diffs only.
+     */
     void setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+    bool setupReader(IndexedDiffReader& reader, MetaDiff& diff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
@@ -136,7 +140,8 @@ private:
         bool isForce;
         size_t delaySec;
     };
-    int transferWdiffIfNecessary(PushOpt &);
+    int transferWdiffIfNecessary(PushOpt &); // For sorted diff.
+    int transferWdiffIfNecessary2(PushOpt &); // For indexed diff.
 };
 
 struct ProxySingleton
@@ -269,6 +274,9 @@ void addArchiveInfo(const std::string &volId, const std::string &archiveName, co
 void deleteArchiveInfo(const std::string &volId, const std::string &archiveName);
 
 bool recvWlogAndWriteDiff(
+    cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
+    const std::atomic<int> &stopState, const ProcessStatus &ps, int wlogFd);
+bool recvWlogAndWriteDiff2(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
     const std::atomic<int> &stopState, const ProcessStatus &ps, int wlogFd);
 
