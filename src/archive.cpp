@@ -1418,7 +1418,7 @@ void getAllActions(protocol::GetCommandParams &p)
     for (const std::string& volId : getVolIdList()) {
         ArchiveVolState &volSt = getArchiveVolState(volId);
         UniqueLock ul(volSt.mu);
-        if (volSt.sm.get() == aClear) continue;
+        if (!isStateIn(volSt.sm.get(), aActive)) continue;
         const bool useTime = true;
         v.push_back(formatActions(volId.c_str(), volSt.ac, allActionVec, useTime));
     }
