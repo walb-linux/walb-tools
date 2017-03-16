@@ -616,7 +616,8 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
 
 inline void c2aGetServer(protocol::ServerParams &p)
 {
-    protocol::runGetCommandServer(p, ga.nodeId, archiveGetHandlerMap);
+    protocol::runGetCommandServer(p, ga.nodeId, archiveGetHandlerMap,
+                                  getArchiveGlobal().handlerStatMgr);
 }
 
 inline void c2aExecServer(protocol::ServerParams &p)

@@ -107,7 +107,7 @@ StrVec prettyPrintHandlerStat(const HandlerStat& stat)
             const uint64_t count = pair1.second;
             ret.push_back(
                 cybozu::util::formatString(
-                    "COUNT\t%s\t%s\t%" PRIu64 "", protocolName.c_str(), clientId.c_str(), count));
+                    "PROTOCOL_COUNT\t%s\t%s\t%" PRIu64 "", protocolName.c_str(), clientId.c_str(), count));
         }
     }
     for (const protocol::HandlerStat::LatencyMap::value_type &pair : stat.latencyMap) {
@@ -116,7 +116,17 @@ StrVec prettyPrintHandlerStat(const HandlerStat& stat)
         double averageLatency = latency.sum / latency.count;
         ret.push_back(
             cybozu::util::formatString(
-                "LATENCY\t%s\t%.06f", protocolName.c_str(), averageLatency));
+                "PROTOCOL_LATENCY\t%s\t%.06f", protocolName.c_str(), averageLatency));
+    }
+    for (const protocol::HandlerStat::GetCountMap::value_type &pair0 : stat.getCountMap) {
+        const std::string& targetName = pair0.first;
+        for (const protocol::HandlerStat::Imap::value_type &pair1 : pair0.second) {
+            const std::string& clientId = pair1.first;
+            const uint64_t count = pair1.second;
+            ret.push_back(
+                cybozu::util::formatString(
+                    "GET_COUNT\t%s\t%s\t%" PRIu64 "", targetName.c_str(), clientId.c_str(), count));
+        }
     }
     return ret;
 }
@@ -269,7 +279,8 @@ void recvValueAndPut(cybozu::Socket &sock, ValueType valType, const char *msg)
 }
 
 
-void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCommandHandlerMap &hMap)
+void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCommandHandlerMap &hMap,
+                         HandlerStatMgr &handlerStatMgr)
 {
     const char *const FUNC = __func__;
     ProtocolLogger logger(nodeId, p.clientId);
@@ -284,6 +295,7 @@ void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCo
         if (it == hMap.cend()) throw cybozu::Exception(FUNC) << "no such target" << targetName;
         protocol::GetCommandHandler handler = it->second;
         GetCommandParams cParams{params, pkt, logger, sendErr};
+        handlerStatMgr.recordGetCommand(targetName, p.clientId);
         handler(cParams);
     } catch (std::exception &e) {
         logger.error() << e.what();

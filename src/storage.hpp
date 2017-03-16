@@ -415,7 +415,8 @@ const protocol::GetCommandHandlerMap storageGetHandlerMap = {
 
 inline void c2sGetServer(protocol::ServerParams &p)
 {
-    protocol::runGetCommandServer(p, gs.nodeId, storageGetHandlerMap);
+    protocol::runGetCommandServer(p, gs.nodeId, storageGetHandlerMap,
+                                  getStorageGlobal().handlerStatMgr);
 }
 
 inline void c2sExecServer(protocol::ServerParams &p)

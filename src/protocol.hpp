@@ -211,8 +211,11 @@ struct HandlerStat
     };
     using LatencyMap = std::unordered_map<std::string, Latency>; // key: protocolName.
 
+    using GetCountMap = std::unordered_map<std::string, Imap>; // key: targetName of get command
+
     CountMap countMap;
     LatencyMap latencyMap;
+    GetCountMap getCountMap;
 };
 
 class HandlerStatMgr
@@ -266,6 +269,10 @@ public:
 
     Transaction start(const std::string& protocolName, const std::string& clientId) {
         return Transaction(this, protocolName, clientId);
+    }
+    void recordGetCommand(const std::string& targetName, const std::string& clientId) {
+        Autolock lk(mu_);
+        stat_.getCountMap[targetName][clientId]++;
     }
     HandlerStat getStatByMove() {
         Autolock lk(mu_);
@@ -350,7 +357,8 @@ struct GetCommandParams
 using GetCommandHandler = void (*)(GetCommandParams&);
 using GetCommandHandlerMap = std::map<std::string, GetCommandHandler>;
 
-void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCommandHandlerMap &hMap);
+void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCommandHandlerMap &hMap,
+                         HandlerStatMgr &handlerStatMgr);
 
 
 template <typename T>

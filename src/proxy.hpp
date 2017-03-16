@@ -313,7 +313,8 @@ const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
 
 inline void c2pGetServer(protocol::ServerParams &p)
 {
-    protocol::runGetCommandServer(p, gp.nodeId, proxyGetHandlerMap);
+    protocol::runGetCommandServer(p, gp.nodeId, proxyGetHandlerMap,
+                                  getProxyGlobal().handlerStatMgr);
 }
 
 inline void c2pExecServer(protocol::ServerParams &p)
