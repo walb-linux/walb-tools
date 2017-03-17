@@ -33,7 +33,7 @@ namespace walb {
  */
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffRecord& mrec, DiffIo &diffIo);
+    DiffRecord& mrec, DiffIo &diffIo, bool calcChecksum);
 
 /**
  * Converter from walb logs to a walb diff.
@@ -61,7 +61,7 @@ private:
 
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffIndexRecord& mrec, AlignedArray &buf);
+    DiffIndexRecord& mrec, AlignedArray &buf, bool calcChecksum);
 
 
 class IndexedDiffConverter /* final */

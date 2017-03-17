@@ -1115,7 +1115,7 @@ bool recvWlogAndWriteDiff(
             if (wlogW) wlogW->writePackIo(blockS);
             DiffRecord drec;
             DiffIo diffIo;
-            if (convertLogToDiff(pbs, lrec, blockS, drec, diffIo)) {
+            if (convertLogToDiff(pbs, lrec, blockS, drec, diffIo, false)) {
                 diffMem.add(drec, std::move(diffIo));
             }
         }
@@ -1156,7 +1156,7 @@ bool recvWlogAndWriteDiff2(
 
             DiffIndexRecord drec;
             AlignedArray data;
-            if (convertLogToDiff(pbs, lrec, blockS, drec, data)) {
+            if (convertLogToDiff(pbs, lrec, blockS, drec, data, false)) {
                 writer.compressAndWriteDiff(drec, data.data());
             }
         }

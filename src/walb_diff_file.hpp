@@ -63,7 +63,7 @@ struct DiffFileHeader : walb_diff_file_header
     void init() {
         ::memset(this, 0, getSize());
         version = WALB_DIFF_VERSION;
-        type = WALB_DIFF_TYPE_SORTED;
+        type = WALB_DIFF_TYPE_SORTED; // default.
     }
     template<class Writer>
     void writeTo(Writer& writer) {
@@ -212,6 +212,7 @@ private:
     DiffStatistics stat_;
 
 public:
+    constexpr static const char *NAME = "DiffReader";
     DiffReader() : pack_(edp_.header) {
         init();
     }
@@ -254,6 +255,10 @@ public:
             throw RT_ERR("Do not call readHeader() more than once.");
         }
         head.readFrom(fileR_);
+        if (head.type != WALB_DIFF_TYPE_SORTED) {
+            cybozu::Exception(NAME)
+                << "readHeader" << "Not sorted diff file" << head.type;
+        }
         isReadHeader_ = true;
         if (doReadPackHeader) readPackHeader();
     }
@@ -394,6 +399,7 @@ private:
     bool isWrittenHeader_;
     bool isClosed_;
     uint64_t offset_;
+    uint64_t n_data_;
     DiffIndexMem indexMem_;
     DiffStatistics stat_;
     AlignedArray buf_;
@@ -434,7 +440,7 @@ public:
 
 private:
     void init();
-    void writeSuper(uint64_t indexOffset);
+    void writeSuper();
     void checkWrittenHeader() const {
         if (!isWrittenHeader_) {
             throw cybozu::Exception(NAME) <<
@@ -485,6 +491,7 @@ private:
     IndexedDiffCache cache_;
 
 public:
+    constexpr static const char *NAME = "IndexedDiffReader";
     IndexedDiffReader() { cache_.setMaxSize(32 * MEBI); } // QQQ
     void setFile(cybozu::util::File &&fileR);
     const DiffFileHeader& header() const { return header_; }

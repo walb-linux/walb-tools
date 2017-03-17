@@ -215,9 +215,8 @@ void IndexedDiffWriter::finalize()
 {
     if (isClosed_) return;
 
-    const uint64_t indexOffset = offset_;
     indexMem_.writeTo(fileW_);
-    writeSuper(indexOffset);
+    writeSuper();
 
     fileW_.close();
     isClosed_ = true;
@@ -243,10 +242,12 @@ void IndexedDiffWriter::writeDiff(const DiffIndexRecord &rec, const char *data)
     if (rec.isNormal()) {
         assert(data != nullptr);
         // r.io_checksum must be up-to-date.
+        r.updateRecChecksum();
         fileW_.write(data, rec.data_size);
         offset_ += rec.data_size;
     }
     indexMem_.add(r);
+    n_data_++;
 }
 
 void IndexedDiffWriter::compressAndWriteDiff(
@@ -274,19 +275,20 @@ void IndexedDiffWriter::init()
 {
     indexMem_.clear();
     offset_ = 0;
+    n_data_ = 0;
     isWrittenHeader_ = false;
     isClosed_ = false;
     stat_.clear();
 }
 
-void IndexedDiffWriter::writeSuper(uint64_t indexOffset)
+void IndexedDiffWriter::writeSuper()
 {
-    walb_diff_index_super super;
-    ::memset(&super, 0, sizeof(super));
-    super.index_offset = indexOffset;
+    DiffIndexSuper super;
+    super.init();
+    super.index_offset = offset_;
     super.n_records = indexMem_.size();
-    super.n_data = 0; // QQQ
-    // QQQ update super.checksum;
+    super.n_data = n_data_;
+    super.updateChecksum();
 
     fileW_.write(&super, sizeof(super));
 }
@@ -337,11 +339,16 @@ void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
 
     // read header.
     ::memcpy(&header_, &memFile_[0], sizeof(header_));
+    header_.verify();
+    if (header_.type != WALB_DIFF_TYPE_INDEXED) {
+        throw cybozu::Exception(NAME) << "Not indexed diff file" << header_.type;
+    }
 
     // read index super.
-    walb_diff_index_super super;
+    DiffIndexSuper super;
     idxEndOffset_  = memFile_.getFileSize() - sizeof(super);
     ::memcpy(&super, &memFile_[idxEndOffset_], sizeof(super));
+    super.verify();
     idxBgnOffset_ = super.index_offset;
     idxOffset_ = idxBgnOffset_;
 }

@@ -151,22 +151,22 @@ struct walb_diff_index_record
     uint8_t compression_type; /* see WALB_DIFF_CMPR_XXX. */
     uint16_t reserved1;
 
-    uint64_t data_offset; /* [byte] offset of compressed image in the whole file. */
+    uint64_t data_offset; /* [byte] offset of the compressed image in the whole file. */
 
-    uint32_t data_size; /* [byte] size of compressed image. */
-    uint32_t io_offset; /* [logical block]. offset in uncompressed image. */
+    uint32_t data_size; /* [byte] size of the compressed image. */
+    uint32_t io_offset; /* [logical block]. offset in the decompressed image. */
 
-    uint32_t orig_blocks; /* [logical lock] size of decompressed image. */
+    uint32_t orig_blocks; /* [logical block] size of the decompressed image. */
     uint32_t reserved2;
 
-    uint32_t io_checksum; /* compressed image checksum with salt 0. */
+    uint32_t io_checksum; /* chcksum of the compressed image with salt 0. */
     uint32_t rec_checksum; /* self checksum. */
 } __attribute__((packed));
 
 
 struct walb_diff_index_super
 {
-    uint64_t index_offset; /* in the whole file. */
+    uint64_t index_offset; /* [byte] in the whole file. */
     uint32_t n_records; /* number of index records. */
     uint32_t n_data;  /* number of compressed images. */
     uint32_t reserved1;

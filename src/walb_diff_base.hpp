@@ -227,8 +227,8 @@ struct DiffIndexRecord : public walb_diff_index_record
     bool isDiscard() const { return (flags & WALB_DIFF_FLAG(DISCARD)) != 0; }
     bool isNormal() const { return !isAllZero() && !isDiscard(); }
 
-    bool isValid() const { return verifyDetail(false); }
-    void verify() const { verifyDetail(true); }
+    bool isValid(bool doChecksum = true) const { return verifyDetail(false, doChecksum); }
+    void verify(bool doChecksum = true) const { verifyDetail(true, doChecksum); }
 
     static constexpr const char *NAME = "DiffIndexRecord";
 
@@ -270,10 +270,31 @@ struct DiffIndexRecord : public walb_diff_index_record
     std::vector<DiffIndexRecord> split() const;
     std::vector<DiffIndexRecord> minus(const DiffIndexRecord& rhs) const;
 
+    void updateRecChecksum();
 private:
-    bool verifyDetail(bool throwError) const;
+    bool verifyDetail(bool throwError, bool doChecksum) const;
 };
 
+
+/**
+ * sizeof(DiffIndexedSuper) == sizeof(walb_diff_index_super)
+ */
+struct DiffIndexSuper : walb_diff_index_super
+{
+    constexpr static const char *NAME = "DiffIndexSuper";
+    void init() {
+        ::memset(this, 0, sizeof(*this));
+    }
+    void updateChecksum() {
+        checksum = 0;
+        checksum = cybozu::util::calcChecksum(this, sizeof(*this), 0);
+    }
+    void verify() {
+        if (cybozu::util::calcChecksum(this, sizeof(*this), 0) != 0) {
+            throw cybozu::Exception(NAME) << "invalid checksum";
+        }
+    }
+};
 
 
 } //namesapce walb

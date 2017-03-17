@@ -256,7 +256,7 @@ std::vector<DiffIndexRecord> DiffIndexRecord::split() const
         rec.io_address = addr;
         rec.io_blocks = s;
         rec.io_offset = off;
-        rec.rec_checksum = 0; // QQQ
+        rec.updateRecChecksum();
 
         addr += s;
         off += s;
@@ -296,11 +296,14 @@ std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) 
         r1.io_blocks = blks1;
         r1.io_offset += addr1 - addr0;
 
-        // QQQ update rec_checksum.
-
-        if (blks0 > 0) v.push_back(r0);
-        if (blks1 > 0) v.push_back(r1);
-
+        if (blks0 > 0) {
+            r0.updateRecChecksum();
+            v.push_back(r0);
+        }
+        if (blks1 > 0) {
+            r1.updateRecChecksum();
+            v.push_back(r1);
+        }
         return v;
     }
 
@@ -314,7 +317,16 @@ std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) 
     throw cybozu::Exception("BUG: DiffIndexRecord:minus.") << lhs << rhs;
 }
 
-bool DiffIndexRecord::verifyDetail(bool throwError) const
+void DiffIndexRecord::updateRecChecksum()
+{
+    rec_checksum = 0;
+    rec_checksum = cybozu::util::calcChecksum(this, sizeof(*this), 0);
+#ifndef NDEBUG
+    verify();
+#endif
+}
+
+bool DiffIndexRecord::verifyDetail(bool throwError, bool doChecksum) const
 {
     if (!isNormal()) {
         if (isAllZero() && isDiscard()) {
@@ -339,7 +351,14 @@ bool DiffIndexRecord::verifyDetail(bool throwError) const
         return false;
     }
 
-    /* QQQ: verify checksum. */
+    if (!doChecksum) return true;
+
+    if (cybozu::util::calcChecksum(this, sizeof(*this), 0) != 0) {
+        if (throwError) {
+            throw cybozu::Exception(NAME) << "invalid checksum";
+        }
+        return false;
+    }
 
     return true;
 }

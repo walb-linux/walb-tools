@@ -4,7 +4,7 @@ namespace walb {
 
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffRecord& mrec, DiffIo &diffIo)
+    DiffRecord& mrec, DiffIo &diffIo, bool calcChecksum)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -50,8 +50,7 @@ bool convertLogToDiff(
     mrec.data_offset = 0;
     mrec.data_size = ioSizeB;
 
-    /* Checksum. */
-    mrec.checksum = diffIo.calcChecksum();
+    if (calcChecksum) mrec.checksum = diffIo.calcChecksum();
 
     return true;
 }
@@ -131,7 +130,7 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
     while (reader.readLog(lrec, blockS)) {
         DiffRecord diffRec;
         DiffIo diffIo;
-        if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo)) {
+        if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo, true)) {
             diffMem.add(diffRec, std::move(diffIo));
             writtenBlocks += diffRec.io_blocks;
         }
@@ -144,7 +143,7 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
 
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffIndexRecord& mrec, AlignedArray &buf)
+    DiffIndexRecord& mrec, AlignedArray &buf, bool calcChecksum)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -193,11 +192,9 @@ bool convertLogToDiff(
     mrec.io_offset = 0;
     mrec.data_size = ioSizeB;
 
-    /* Checksum. */
-    // QQQ
-#if 0
-    mrec.io_checksum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
-#endif
+    if (calcChecksum) {
+        mrec.io_checksum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
+    }
 
     return true;
 }
@@ -280,7 +277,7 @@ bool IndexedDiffConverter::convertWlog(
     while (reader.readLog(lrec, blockS)) {
         DiffIndexRecord drec;
         AlignedArray buf;
-        if (convertLogToDiff(pbs, lrec, blockS, drec, buf)) {
+        if (convertLogToDiff(pbs, lrec, blockS, drec, buf, false)) {
             writer.compressAndWriteDiff(drec, buf.data());
             writtenBlocks += drec.io_blocks;
         }
