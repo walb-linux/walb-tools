@@ -452,6 +452,7 @@ bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
 
     AlignedArray *aryPtr = cache_.find(rec.data_offset);
     if (aryPtr == nullptr) {
+        verifyIoData(rec.data_offset, rec.data_size);
         std::unique_ptr<AlignedArray> p(new AlignedArray());
         p->resize(rec.orig_blocks * LOGICAL_BLOCK_SIZE);
         uncompressData(&memFile_[rec.data_offset], rec.data_size, *p, rec.compression_type);
@@ -474,5 +475,13 @@ bool IndexedDiffReader::getNextRec(DiffIndexRecord& rec)
     idxOffset_ += sizeof(rec);
     return true;
 }
+
+void IndexedDiffReader::verifyIoData(uint64_t offset, uint32_t size) const
+{
+    if (cybozu::util::calcChecksum(&memFile_[offset], size, 0) != 0) {
+        throw cybozu::Exception(NAME) << "IO data invalid" << offset << size;
+    }
+}
+
 
 } //namespace walb

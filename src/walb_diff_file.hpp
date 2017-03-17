@@ -433,6 +433,7 @@ public:
     bool readDiff(DiffIndexRecord &rec, AlignedArray &data);
 private:
     bool getNextRec(DiffIndexRecord& rec);
+    void verifyIoData(uint64_t offset, uint32_t size) const;
 };
 
 
