@@ -148,6 +148,98 @@ void DiffWriter::writePack()
     pack_.clear();
 }
 
+
+void DiffReader::readHeader(DiffFileHeader &head, bool doReadPackHeader)
+{
+    if (isReadHeader_) {
+        throw RT_ERR("Do not call readHeader() more than once.");
+    }
+    head.readFrom(fileR_);
+    if (head.type != WALB_DIFF_TYPE_SORTED) {
+        cybozu::Exception(NAME)
+            << "readHeader" << "Not sorted diff file" << head.type;
+    }
+    isReadHeader_ = true;
+    if (doReadPackHeader) readPackHeader();
+}
+
+bool DiffReader::readDiff(DiffRecord &rec, DiffIo &io)
+{
+    if (!prepareRead()) return false;
+    assert(pack_.n_records == 0 || recIdx_ < pack_.n_records);
+    rec = pack_[recIdx_];
+
+    if (!rec.isValid()) {
+        throw cybozu::Exception(__func__)
+            << "invalid record" << fileR_.fd() << recIdx_ << rec;
+    }
+    readDiffIo(rec, io);
+    return true;
+}
+
+bool DiffReader::readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum)
+{
+    if (!readDiff(rec, io)) {
+        return false;
+    }
+    if (!rec.isNormal() || !rec.isCompressed()) {
+        return true;
+    }
+    DiffRecord outRec;
+    DiffIo outIo;
+    uncompressDiffIo(rec, io.get(), outRec, outIo.data, calcChecksum);
+    outIo.set(outRec);
+    rec = outRec;
+    io = std::move(outIo);
+    return true;
+}
+
+bool DiffReader::prepareRead()
+{
+    if (pack_.isEnd()) return false;
+    bool ret = true;
+    if (recIdx_ == pack_.n_records) {
+        ret = readPackHeader();
+    }
+    return ret;
+}
+
+void DiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io)
+{
+    if (rec.data_offset != totalSize_) {
+        throw cybozu::Exception(__func__)
+            << "data offset invalid" << rec.data_offset << totalSize_;
+    }
+    io.setAndReadFrom(rec, fileR_);
+    totalSize_ += rec.data_size;
+    recIdx_++;
+}
+
+bool DiffReader::readPackHeader()
+{
+    try {
+        pack_.readFrom(fileR_);
+    } catch (cybozu::util::EofError &e) {
+        pack_.setEnd();
+        return false;
+    }
+    if (pack_.isEnd()) return false;
+    recIdx_ = 0;
+    totalSize_ = 0;
+    stat_.update(pack_);
+    return true;
+}
+
+void DiffReader::init()
+{
+    pack_.clear();
+    isReadHeader_ = false;
+    recIdx_ = 0;
+    totalSize_ = 0;
+    stat_.clear();
+    stat_.wdiffNr = 1;
+}
+
 void DiffIndexMem::checkNoOverlappedAndSorted() const
 {
     auto it = index_.cbegin();

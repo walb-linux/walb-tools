@@ -250,18 +250,7 @@ public:
      * Read header data.
      * You must call this at first.
      */
-    void readHeader(DiffFileHeader &head, bool doReadPackHeader = true) {
-        if (isReadHeader_) {
-            throw RT_ERR("Do not call readHeader() more than once.");
-        }
-        head.readFrom(fileR_);
-        if (head.type != WALB_DIFF_TYPE_SORTED) {
-            cybozu::Exception(NAME)
-                << "readHeader" << "Not sorted diff file" << head.type;
-        }
-        isReadHeader_ = true;
-        if (doReadPackHeader) readPackHeader();
-    }
+    void readHeader(DiffFileHeader &head, bool doReadPackHeader = true);
     /**
      * Read header data with another interface.
      */
@@ -275,86 +264,29 @@ public:
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readDiff(DiffRecord &rec, DiffIo &io) {
-        if (!prepareRead()) return false;
-        assert(pack_.n_records == 0 || recIdx_ < pack_.n_records);
-        rec = pack_[recIdx_];
-
-        if (!rec.isValid()) {
-            throw cybozu::Exception(__func__)
-                << "invalid record" << fileR_.fd() << recIdx_ << rec;
-        }
-        readDiffIo(rec, io);
-        return true;
-    }
+    bool readDiff(DiffRecord &rec, DiffIo &io);
     /**
      * Read a diff IO and uncompress it.
      *
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum = true) {
-        if (!readDiff(rec, io)) {
-            return false;
-        }
-        if (!rec.isNormal() || !rec.isCompressed()) {
-            return true;
-        }
-        DiffRecord outRec;
-        DiffIo outIo;
-        uncompressDiffIo(rec, io.get(), outRec, outIo.data, calcChecksum);
-        outIo.set(outRec);
-        rec = outRec;
-        io = std::move(outIo);
-        return true;
-    }
-    bool prepareRead() {
-        if (pack_.isEnd()) return false;
-        bool ret = true;
-        if (recIdx_ == pack_.n_records) {
-            ret = readPackHeader();
-        }
-        return ret;
-    }
+    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum = true);
+
+    bool prepareRead();
     /**
      * Read a diff IO.
      * @rec diff record.
      * @io block IO to be filled.
      */
-    void readDiffIo(const DiffRecord &rec, DiffIo &io) {
-        if (rec.data_offset != totalSize_) {
-            throw cybozu::Exception(__func__)
-                << "data offset invalid" << rec.data_offset << totalSize_;
-        }
-        io.setAndReadFrom(rec, fileR_);
-        totalSize_ += rec.data_size;
-        recIdx_++;
-    }
+    void readDiffIo(const DiffRecord &rec, DiffIo &io);
+
     const DiffStatistics& getStat() const {
         return stat_;
     }
 private:
-    bool readPackHeader() {
-        try {
-            pack_.readFrom(fileR_);
-        } catch (cybozu::util::EofError &e) {
-            pack_.setEnd();
-            return false;
-        }
-        if (pack_.isEnd()) return false;
-        recIdx_ = 0;
-        totalSize_ = 0;
-        stat_.update(pack_);
-        return true;
-    }
-    void init() {
-        pack_.clear();
-        isReadHeader_ = false;
-        recIdx_ = 0;
-        totalSize_ = 0;
-        stat_.clear();
-        stat_.wdiffNr = 1;
-    }
+    bool readPackHeader();
+    void init();
 };
 
 
