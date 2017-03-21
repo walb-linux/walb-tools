@@ -385,7 +385,7 @@ void IndexedDiffWriter::writeSuper()
     fileW_.write(&super, sizeof(super));
 }
 
-AlignedArray* IndexedDiffCache::find(uint64_t key)
+AlignedArray* IndexedDiffCache::find(Key key)
 {
     auto it = map_.find(key);
     if (it == map_.end()) return nullptr;
@@ -401,7 +401,7 @@ AlignedArray* IndexedDiffCache::find(uint64_t key)
     return ret;
 }
 
-void IndexedDiffCache::add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr)
+void IndexedDiffCache::add(Key key, std::unique_ptr<AlignedArray> &&dataPtr)
 {
     if (map_.find(key) != map_.end()) {
         throw cybozu::Exception("already in cache") << key;
@@ -450,14 +450,15 @@ bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
     if (!getNextRec(rec)) return false;
     if (!rec.isNormal()) return true;
 
-    AlignedArray *aryPtr = cache_.find(rec.data_offset);
+    const IndexedDiffCache::Key key{this, rec.data_offset};
+    AlignedArray *aryPtr = cache_.find(key);
     if (aryPtr == nullptr) {
         verifyIoData(rec.data_offset, rec.data_size);
         std::unique_ptr<AlignedArray> p(new AlignedArray());
         p->resize(rec.orig_blocks * LOGICAL_BLOCK_SIZE);
         uncompressData(&memFile_[rec.data_offset], rec.data_size, *p, rec.compression_type);
-        cache_.add(rec.data_offset, std::move(p));
-        aryPtr = cache_.find(rec.data_offset);
+        cache_.add(key, std::move(p));
+        aryPtr = cache_.find(key);
     }
 
     const size_t offset = rec.io_offset * LOGICAL_BLOCK_SIZE;

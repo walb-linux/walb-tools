@@ -384,9 +384,32 @@ private:
 
 class IndexedDiffCache /* final */
 {
+public:
+    struct Key {
+        void *tag;
+        uint64_t addr;
+
+        friend inline std::ostream& operator<<(std::ostream& os, const Key& key) {
+            os << "(" << key.tag << "," << key.addr << ")";
+            return os;
+        }
+    };
 private:
+    struct HashKey {
+        size_t operator()(Key key) const {
+            size_t h0 = std::hash<uintptr_t>()(uintptr_t(key.tag));
+            size_t h1 = std::hash<uint64_t>()(key.addr);
+            // like boost::hash_combine().
+            return h0 ^ (h1 + 0x9e3779b9 + (h0 << 6) + (h0 >> 2));
+        }
+    };
+    struct EqualKey {
+        bool operator()(Key lhs, Key rhs) const {
+            return lhs.tag == rhs.tag && lhs.addr == rhs.addr;
+        }
+    };
     struct Item {
-        uint64_t key;
+        Key key;
         std::unique_ptr<AlignedArray> dataPtr;
     };
 
@@ -395,16 +418,17 @@ private:
     size_t maxBytes_;
     size_t curBytes_;
     std::list<Item> lruList_;
-    std::unordered_map<uint64_t, ListIt> map_;
+    std::unordered_map<Key, ListIt, HashKey, EqualKey> map_;
 
 public:
     IndexedDiffCache() : maxBytes_(0), curBytes_(0), lruList_(), map_() {}
     void setMaxSize(size_t bytes) { maxBytes_ = bytes; }
-    AlignedArray* find(uint64_t key);
-    void add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr);
+    AlignedArray* find(Key key);
+    void add(Key key, std::unique_ptr<AlignedArray> &&dataPtr);
 private:
     void evictOne();
 };
+
 
 
 /**
