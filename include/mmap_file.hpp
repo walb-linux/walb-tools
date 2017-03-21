@@ -28,13 +28,15 @@ private:
     uint64_t mappedSize_;
     uint64_t size_;
     mutable File file_;
+    bool isReadOnly_;
 
 public:
     MmappedFile()
         : mapped_(nullptr)
         , mappedSize_(0)
         , size_(0)
-        , file_() {
+        , file_()
+        , isReadOnly_(false) {
     }
     /**
      * @size file size in bytes. 0 means not changing the file size.
@@ -43,6 +45,7 @@ public:
      */
     MmappedFile(uint64_t size, const std::string& filePath, int flags)
         : MmappedFile() {
+        setIsReadOnly(flags);
         reset(File(filePath, flags), size);
     }
     /**
@@ -53,10 +56,12 @@ public:
      */
     MmappedFile(uint64_t size, const std::string& filePath, int flags, int mode)
         : MmappedFile() {
+        setIsReadOnly(flags);
         reset(File(filePath, flags, mode), size);
     }
     MmappedFile(const std::string& filePath, int flags)
         : MmappedFile() {
+        setIsReadOnly(flags);
         reset(File(filePath, flags));
     }
     MmappedFile(MmappedFile &&rhs)
@@ -89,6 +94,7 @@ public:
         std::swap(mappedSize_, rhs.mappedSize_);
         std::swap(size_, rhs.size_);
         std::swap(file_, rhs.file_);
+        std::swap(isReadOnly_, rhs.isReadOnly_);
     }
     /**
      * Current size. This is not file size.
@@ -132,6 +138,9 @@ public:
         uint64_t fileSize = adjustFileSize();
         mremap(fileSize);
     }
+    void setReadOnly(bool isReadOnly = true) {
+        isReadOnly_ = isReadOnly;
+    }
 private:
     void init() {
         uint64_t fileSize = 0;
@@ -142,6 +151,10 @@ private:
             size_ = fileSize;
         }
         mmap(fileSize);
+    }
+    void setIsReadOnly(int flags) {
+        // It may be enough check.
+        isReadOnly_ = (flags == O_RDONLY);
     }
     uint64_t calcFileSize() const {
         return ((size_ - 1) / pageSize() + 1) * pageSize();
@@ -173,7 +186,9 @@ private:
     void mmap(uint64_t fileSize) {
         if (mapped_) return;
         lseek(0, SEEK_SET);
-        void *p = ::mmap(NULL, fileSize, PROT_READ | PROT_WRITE, MAP_SHARED, file_.fd(), 0);
+        int prot = PROT_READ;
+        if (!isReadOnly_) prot |= PROT_WRITE;
+        void *p = ::mmap(NULL, fileSize, prot, MAP_SHARED, file_.fd(), 0);
         if (p == MAP_FAILED) {
             throw std::runtime_error("mmap failed.");
         }

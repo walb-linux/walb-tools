@@ -103,7 +103,7 @@ void printIndexedWdiffs(const Option &opt)
         throw cybozu::Exception("Indexed format does not support stream.");
     }
     for (const std::string &path : opt.filePathV) {
-        reader.setFile(cybozu::util::File(path, O_RDWR));
+        reader.setFile(cybozu::util::File(path, O_RDONLY));
         printIndexedWdiff(reader, opt);
     }
 }
