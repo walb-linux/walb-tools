@@ -394,11 +394,11 @@ private:
 
     size_t maxBytes_;
     size_t curBytes_;
-    std::list<Item> list_;
+    std::list<Item> lruList_;
     std::unordered_map<uint64_t, ListIt> map_;
 
 public:
-    IndexedDiffCache() : maxBytes_(0), curBytes_(0), list_(), map_() {}
+    IndexedDiffCache() : maxBytes_(0), curBytes_(0), lruList_(), map_() {}
     void setMaxSize(size_t bytes) { maxBytes_ = bytes; }
     AlignedArray* find(uint64_t key);
     void add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr);

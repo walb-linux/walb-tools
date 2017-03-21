@@ -394,9 +394,9 @@ AlignedArray* IndexedDiffCache::find(uint64_t key)
     std::unique_ptr<AlignedArray> dataPtr = std::move(lit->dataPtr);
     AlignedArray *ret = dataPtr.get();
 
-    list_.erase(lit);
-    list_.push_front({key, std::move(dataPtr)});
-    map_[key] = list_.begin(); // update.
+    lruList_.erase(lit);
+    lruList_.push_front({key, std::move(dataPtr)});
+    map_[key] = lruList_.begin(); // update.
 
     return ret;
 }
@@ -408,8 +408,8 @@ void IndexedDiffCache::add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr
     }
 
     curBytes_ += dataPtr->size();
-    list_.push_front({key, std::move(dataPtr)});
-    map_[key] = list_.begin();
+    lruList_.push_front({key, std::move(dataPtr)});
+    map_[key] = lruList_.begin();
 
     while (maxBytes_ > 0 && curBytes_ > maxBytes_ && map_.size() > 1) {
         evictOne();
@@ -418,11 +418,11 @@ void IndexedDiffCache::add(uint64_t key, std::unique_ptr<AlignedArray> &&dataPtr
 
 void IndexedDiffCache::evictOne()
 {
-    if (list_.empty()) return;
-    Item &item = list_.back();
+    if (lruList_.empty()) return;
+    Item &item = lruList_.back();
     map_.erase(item.key);
     curBytes_ -= item.dataPtr->size();
-    list_.pop_back();
+    lruList_.pop_back();
 }
 
 void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
