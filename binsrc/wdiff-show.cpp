@@ -95,6 +95,9 @@ void printIndexedWdiff(IndexedDiffReader &reader, const Option &opt)
 void printIndexedWdiffs(const Option &opt)
 {
     IndexedDiffReader reader;
+    IndexedDiffCache cache;
+    cache.setMaxSize(32 * MEBI);
+    reader.setCache(&cache);
 
     if (opt.filePathV.empty()) {
         throw cybozu::Exception("Indexed format does not support stream.");

@@ -558,6 +558,9 @@ int ProxyWorker::transferWdiffIfNecessary2(PushOpt &pushOpt)
 
     MetaDiffVec diffV;
     IndexedDiffReader reader;
+    IndexedDiffCache cache;
+    cache.setMaxSize(32 * MEBI);
+    reader.setCache(&cache);
     MetaDiff mergedDiff;
     if (!setupReader(reader, mergedDiff, volInfo, archiveName)) {
         LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;

@@ -444,11 +444,14 @@ private:
     size_t idxEndOffset_;
     size_t idxOffset_;
 
-    IndexedDiffCache cache_;
+    IndexedDiffCache *cache_;
 
 public:
     constexpr static const char *NAME = "IndexedDiffReader";
-    IndexedDiffReader() { cache_.setMaxSize(32 * MEBI); } // QQQ
+    IndexedDiffReader()
+        : memFile_(), header_(), idxBgnOffset_(), idxEndOffset_()
+        , idxOffset_(), cache_(nullptr) {}
+    void setCache(IndexedDiffCache *cache) { cache_ = cache; }
     void setFile(cybozu::util::File &&fileR);
     const DiffFileHeader& header() const { return header_; }
     /**
