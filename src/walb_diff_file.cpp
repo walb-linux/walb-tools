@@ -307,7 +307,7 @@ void IndexedDiffWriter::finalize()
 {
     if (isClosed_) return;
 
-    indexMem_.writeTo(fileW_);
+    indexMem_.writeTo(fileW_, &stat_);
     writeSuper();
 
     fileW_.close();
@@ -336,6 +336,7 @@ void IndexedDiffWriter::writeDiff(const DiffIndexRecord &rec, const char *data)
         // r.io_checksum must be up-to-date.
         r.updateRecChecksum();
         fileW_.write(data, rec.data_size);
+        stat_.dataSize += rec.data_size;
         offset_ += rec.data_size;
     }
     indexMem_.add(r);
@@ -371,6 +372,7 @@ void IndexedDiffWriter::init()
     isWrittenHeader_ = false;
     isClosed_ = false;
     stat_.clear();
+    stat_.wdiffNr = 1;
 }
 
 void IndexedDiffWriter::writeSuper()
@@ -427,6 +429,7 @@ void IndexedDiffCache::evictOne()
 
 void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
 {
+    memFile_.setReadOnly();
     memFile_.reset(std::move(fileR));
 
     // read header.
@@ -443,11 +446,19 @@ void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
     super.verify();
     idxBgnOffset_ = super.index_offset;
     idxOffset_ = idxBgnOffset_;
+
+    stat_.clear();
+    stat_.wdiffNr = 1;
+    stat_.dataSize = idxBgnOffset_ - sizeof(header_);
 }
 
+/**
+ * Uncompressed data will be set while rec indicates compression.
+ */
 bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
 {
     if (!getNextRec(rec)) return false;
+    stat_.update(rec);
     if (!rec.isNormal()) return true;
     if (cache_ == nullptr) {
         throw cybozu::Exception(NAME) << "BUG: cache_ must be set.";

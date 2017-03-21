@@ -2,6 +2,26 @@
 
 namespace walb {
 
+void DiffMerger::Wdiff::setFile(cybozu::util::File &&file, IndexedDiffCache *cache)
+{
+    header_.readFrom(file);
+    if (header_.type == WALB_DIFF_TYPE_SORTED) {
+        isIndexed_ = false;
+        sReader_.setFile(std::move(file));
+        sReader_.dontReadHeader();
+        // cache is not used.
+    } else if (header_.type == WALB_DIFF_TYPE_INDEXED) {
+        isIndexed_ = true;
+        iReader_.setFile(std::move(file));
+        if (cache == nullptr) {
+            throw cybozu::Exception(NAME) << "indexed diff cache must be specified.";
+        }
+        iReader_.setCache(cache);
+    } else {
+        throw cybozu::Exception(NAME) << "bad wdiff type" << header_.type;
+    }
+}
+
 void DiffMerger::Wdiff::getAndRemoveIo(DiffIo &io)
 {
     verifyNotEnd(__func__);
@@ -23,11 +43,42 @@ void DiffMerger::Wdiff::getAndRemoveIo(DiffIo &io)
 void DiffMerger::Wdiff::fill() const
 {
     if (isEnd_ || isFilled_) return;
-    if (reader_.readAndUncompressDiff(rec_, io_, false)) {
+
+    bool success;
+    if (isIndexed_) {
+        success = readIndexedDiff();
+    } else {
+        success = sReader_.readAndUncompressDiff(rec_, io_, false);
+    }
+    if (success) {
         isFilled_ = true;
     } else {
         isEnd_ = true;
     }
+}
+
+bool DiffMerger::Wdiff::readIndexedDiff() const
+{
+    DiffIndexRecord irec;
+    if (!iReader_.readDiff(irec, io_.data)) return false;
+
+    // Convert DiffIndexRecord to DiffRecord.
+    rec_.init();
+    rec_.io_address = irec.io_address;
+    rec_.io_blocks = irec.io_blocks;
+    rec_.flags = irec.flags;
+    if (!irec.isNormal()) return true;
+
+    rec_.compression_type = ::WALB_DIFF_CMPR_NONE;
+    rec_.data_offset = 0; // updated later.
+    rec_.data_size = irec.io_blocks * LOGICAL_BLOCK_SIZE;
+    rec_.checksum = irec.io_checksum; // not set.
+
+    io_.compressionType = ::WALB_DIFF_CMPR_NONE;
+    io_.ioBlocks = irec.io_blocks;
+    assert(io_.data.size() == io_.ioBlocks * LOGICAL_BLOCK_SIZE);
+
+    return true;
 }
 
 void DiffMerger::mergeToFd(int outFd)

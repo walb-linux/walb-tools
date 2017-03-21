@@ -23,6 +23,7 @@ struct DiffStatistics
 
     uint64_t dataSize; // total IO data size (compressed) [byte]
 
+    constexpr static const char *NAME = "DiffStatistics";
     DiffStatistics() {
         clear();
     }
@@ -37,19 +38,14 @@ struct DiffStatistics
         dataSize = 0;
     }
     void update(const DiffRecord& rec) {
-        if (rec.isNormal()) {
-            normNr++;
-            normLb += rec.io_blocks;
-        } else if (rec.isDiscard()) {
-            discNr++;
-            discLb += rec.io_blocks;
-        } else if (rec.isAllZero()) {
-            zeroNr++;
-            zeroLb += rec.io_blocks;
-        } else {
-            assert(false);
-        }
-        dataSize += rec.data_size;
+        updateDetail(rec.isNormal(), rec.isDiscard(), rec.isAllZero(),
+                     rec.io_blocks, rec.data_size, [&]() { return rec.toStr(); });
+    }
+    void update(const DiffIndexRecord& rec) {
+        // data size can not be updated here.
+        // It will be set independently.
+        updateDetail(rec.isNormal(), rec.isDiscard(), rec.isAllZero(),
+                     rec.io_blocks, 0, [&]() { return rec.toStr(); });
     }
     void update(const DiffPackHeader& pack) {
         if (pack.isEnd()) return;
@@ -109,6 +105,24 @@ struct DiffStatistics
         } else {
             return cybozu::itoa(i);
         }
+    }
+private:
+    void updateDetail(bool isNormal, bool isDiscard, bool isAllZero,
+                      size_t ioBlocks, size_t dataSize,
+                      std::function<std::string()> recStrGen) {
+        if (isNormal) {
+            normNr++;
+            normLb += ioBlocks;
+        } else if (isDiscard) {
+            discNr++;
+            discLb += ioBlocks;
+        } else if (isAllZero) {
+            zeroNr++;
+            zeroLb += ioBlocks;
+        } else {
+            throw cybozu::Exception(NAME) << "invalid record" << recStrGen();
+        }
+        this->dataSize += dataSize;
     }
 };
 

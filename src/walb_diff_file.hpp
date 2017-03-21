@@ -245,6 +245,11 @@ public:
         init();
         fileR_.setFd(fd);
     }
+    void setFile(cybozu::util::File &&fileR) {
+        close();
+        init();
+        fileR_ = std::move(fileR);
+    }
 
     /**
      * Read header data.
@@ -256,6 +261,15 @@ public:
      */
     void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
         readHeader(head, false);
+    }
+    /**
+     * If other code read the header before using this class,
+     * call this function to set header data.
+     * The file position must be just after the header to continue reading.
+     */
+    void dontReadHeader(bool doReadPackHeader = true) {
+        isReadHeader_ = true;
+        if (doReadPackHeader) readPackHeader();
     }
 
     /**
@@ -306,10 +320,11 @@ public:
         index_.clear();
     }
     template<class Writer>
-    void writeTo(Writer& writer) const {
+    void writeTo(Writer& writer, DiffStatistics *stat = nullptr) const {
         for (const std::pair<uint64_t, DiffIndexRecord>& pair : index_) {
             const DiffIndexRecord& rec = pair.second;
             writer.write(&rec, sizeof(rec));
+            if (stat) stat->update(rec);
         }
     }
     size_t size() const { return index_.size(); }
@@ -445,12 +460,13 @@ private:
     size_t idxOffset_;
 
     IndexedDiffCache *cache_;
+    DiffStatistics stat_;
 
 public:
     constexpr static const char *NAME = "IndexedDiffReader";
     IndexedDiffReader()
         : memFile_(), header_(), idxBgnOffset_(), idxEndOffset_()
-        , idxOffset_(), cache_(nullptr) {}
+        , idxOffset_(), cache_(nullptr), stat_() {}
     void setCache(IndexedDiffCache *cache) { cache_ = cache; }
     void setFile(cybozu::util::File &&fileR);
     const DiffFileHeader& header() const { return header_; }
@@ -458,6 +474,7 @@ public:
      * data will be uncompressed data.
      */
     bool readDiff(DiffIndexRecord &rec, AlignedArray &data);
+    const DiffStatistics& getStat() const { return stat_; }
 private:
     bool getNextRec(DiffIndexRecord& rec);
     void verifyIoData(uint64_t offset, uint32_t size) const;

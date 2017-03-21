@@ -36,36 +36,28 @@ class DiffMerger /* final */
 private:
     class Wdiff {
     private:
-        const std::string wdiffPath_;
-        mutable DiffReader reader_;
+        mutable DiffReader sReader_;
+        mutable IndexedDiffReader iReader_;
+        mutable bool isIndexed_;  // true: use iReader_, false: use sReader_.
         DiffFileHeader header_;
         mutable DiffRecord rec_; // checksum field may not be calculated.
         mutable DiffIo io_;
         mutable bool isFilled_;
         mutable bool isEnd_;
+
     public:
-        explicit Wdiff(const std::string &wdiffPath)
-            : wdiffPath_(wdiffPath)
-            , reader_(cybozu::util::File(wdiffPath, O_RDONLY))
-            , rec_()
-            , io_()
-            , isFilled_(false)
-            , isEnd_(false) {
-            reader_.readHeader(header_);
+        constexpr static const char *NAME = "DiffMerger::Wdiff";
+        Wdiff() : sReader_(), iReader_()
+                , header_(), rec_(), io_(), isFilled_(false), isEnd_(false) {
+        }
+        void open(const std::string &wdiffPath, IndexedDiffCache *cache) {
+            setFile(cybozu::util::File(wdiffPath, O_RDONLY), cache);
         }
         /**
-         * You must open the file before calling this constructor.
+         * File position must be set to the beginning.
          */
-        explicit Wdiff(cybozu::util::File &&file)
-            : wdiffPath_()
-            , reader_(std::move(file))
-            , rec_()
-            , io_()
-            , isFilled_(false)
-            , isEnd_(false) {
-            reader_.readHeader(header_);
-        }
-        const std::string &path() const { return wdiffPath_; }
+        void setFile(cybozu::util::File &&file, IndexedDiffCache *cache);
+
         const DiffFileHeader &header() const { return header_; }
         DiffRecord getFrontRec() const {
             verifyNotEnd(__func__);
@@ -89,10 +81,15 @@ private:
             return rec_.io_address;
         }
         const DiffStatistics& getStat() const {
-            return reader_.getStat();
+            if (isIndexed_) {
+                return iReader_.getStat();
+            } else {
+                return sReader_.getStat();
+            }
         }
     private:
         void fill() const;
+        bool readIndexedDiff() const;
 #ifdef DEBUG
         void verifyNotEnd(const char *msg) const {
             if (isEnd()) throw cybozu::Exception(msg) << "reached to end";
@@ -120,6 +117,8 @@ private:
     std::queue<DiffRecIo> mergedQ_;
     uint64_t doneAddr_;
     size_t searchLen_;
+    IndexedDiffCache cache_; // shared by indexed diff files.
+
     /**
      * Diff recIos will be read from wdiffs_,
      * then added to diffMem_ (and merged inside it),
@@ -174,12 +173,16 @@ public:
     void setShouldValidateUuid(bool shouldValidateUuid) {
         shouldValidateUuid_ = shouldValidateUuid;
     }
+    void setMaxCacheSize(size_t bytes) {
+        cache_.setMaxSize(bytes);
+    }
     /**
      * Add a diff file.
      * Newer wdiff file must be added later.
      */
     void addWdiff(const std::string& wdiffPath) {
-        wdiffs_.emplace_back(new Wdiff(wdiffPath));
+        wdiffs_.emplace_back(new Wdiff());
+        wdiffs_.back()->open(wdiffPath, &cache_);
     }
     /**
      * Add diff files.
@@ -191,7 +194,8 @@ public:
     }
     void addWdiffs(std::vector<cybozu::util::File> &&fileV) {
         for (cybozu::util::File &file : fileV) {
-            wdiffs_.emplace_back(new Wdiff(std::move(file)));
+            wdiffs_.emplace_back(new Wdiff());
+            wdiffs_.back()->setFile(std::move(file), &cache_);
         }
         fileV.clear();
     }
