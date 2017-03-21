@@ -387,6 +387,7 @@ retry:
             fileV.push_back(std::move(file));
         }
     }
+    merger.setMaxCacheSize(INDEXED_DIFF_CACHE_SIZE);
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 }

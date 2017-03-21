@@ -59,4 +59,6 @@ const uint32_t DEFAULT_MAX_WDIFF_IO_BLOCKS = 64 * 1024;
 
 const size_t DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC = 10;
 
+const size_t INDEXED_DIFF_CACHE_SIZE = 32 * MEBI;
+
 } // walb
