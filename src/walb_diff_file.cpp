@@ -26,9 +26,34 @@ std::string DiffFileHeader::str() const
         "wdiff_h:\n"
         "  checksum: %08x\n"
         "  version: %u\n"
+        "  type: %s\n"
         "  maxIoBlocks: %u\n"
         "  uuid: %s\n"
-        , checksum, version, max_io_blocks, getUuid().str().c_str());
+        , checksum, version, typeStr().c_str(), max_io_blocks, getUuid().str().c_str());
+}
+
+bool DiffFileHeader::isIndexed() const
+{
+    switch (type) {
+    case WALB_DIFF_TYPE_SORTED:
+        return false;
+    case WALB_DIFF_TYPE_INDEXED:
+        return true;
+    default:
+        throw cybozu::Exception(NAME) << "Invalid type" << type;
+    }
+}
+
+std::string DiffFileHeader::typeStr() const
+{
+    switch (type) {
+    case WALB_DIFF_TYPE_SORTED:
+        return "sorted";
+    case WALB_DIFF_TYPE_INDEXED:
+        return "indexed";
+    default:
+        return std::string("unknown:") + std::to_string(type);
+    }
 }
 
 void DiffWriter::close()
@@ -204,13 +229,13 @@ bool DiffReader::prepareRead()
     return ret;
 }
 
-void DiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io)
+void DiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum)
 {
     if (rec.data_offset != totalSize_) {
         throw cybozu::Exception(__func__)
             << "data offset invalid" << rec.data_offset << totalSize_;
     }
-    io.setAndReadFrom(rec, fileR_);
+    io.setAndReadFrom(rec, fileR_, verifyChecksum);
     totalSize_ += rec.data_size;
     recIdx_++;
 }
@@ -418,6 +443,13 @@ void IndexedDiffCache::add(Key key, std::unique_ptr<AlignedArray> &&dataPtr)
     }
 }
 
+void IndexedDiffCache::clear()
+{
+    lruList_.clear();
+    map_.clear();
+    curBytes_ = 0;
+}
+
 void IndexedDiffCache::evictOne()
 {
     if (lruList_.empty()) return;
@@ -427,8 +459,9 @@ void IndexedDiffCache::evictOne()
     lruList_.pop_back();
 }
 
-void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
+void IndexedDiffReader::setFile(cybozu::util::File &&fileR, IndexedDiffCache &cache)
 {
+    cache_ = &cache;
     memFile_.setReadOnly();
     memFile_.reset(std::move(fileR));
 
@@ -452,25 +485,48 @@ void IndexedDiffReader::setFile(cybozu::util::File &&fileR)
     stat_.dataSize = idxBgnOffset_ - sizeof(header_);
 }
 
+bool IndexedDiffReader::readDiffRecord(DiffIndexRecord &rec, bool doVerify)
+{
+    if (!getNextRec(rec)) return false;
+    if (doVerify) rec.verify();
+    stat_.update(rec);
+    return true;
+}
+
+bool IndexedDiffReader::isOnCache(const DiffIndexRecord &rec) const
+{
+    const IndexedDiffCache::Key key{this, rec.data_offset};
+    return cache_->find(key) != nullptr;
+}
+
+bool IndexedDiffReader::loadToCache(const DiffIndexRecord &rec, bool throwError)
+{
+    assert(isOnCache(rec));
+    if (!verifyIoData(rec.data_offset, rec.data_size, throwError)) {
+        return false;
+    }
+    std::unique_ptr<AlignedArray> p(new AlignedArray());
+    p->resize(rec.orig_blocks * LOGICAL_BLOCK_SIZE);
+    uncompressData(&memFile_[rec.data_offset], rec.data_size, *p, rec.compression_type);
+    const IndexedDiffCache::Key key{this, rec.data_offset};
+    cache_->add(key, std::move(p));
+    return true;
+}
+
 /**
  * Uncompressed data will be set while rec indicates compression.
  */
-bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
+void IndexedDiffReader::readDiffIo(const DiffIndexRecord &rec, AlignedArray &data)
 {
-    if (!getNextRec(rec)) return false;
-    stat_.update(rec);
-    if (!rec.isNormal()) return true;
+    if (!rec.isNormal()) return;
     if (cache_ == nullptr) {
         throw cybozu::Exception(NAME) << "BUG: cache_ must be set.";
     }
+
     const IndexedDiffCache::Key key{this, rec.data_offset};
     AlignedArray *aryPtr = cache_->find(key);
     if (aryPtr == nullptr) {
-        verifyIoData(rec.data_offset, rec.data_size);
-        std::unique_ptr<AlignedArray> p(new AlignedArray());
-        p->resize(rec.orig_blocks * LOGICAL_BLOCK_SIZE);
-        uncompressData(&memFile_[rec.data_offset], rec.data_size, *p, rec.compression_type);
-        cache_->add(key, std::move(p));
+        loadToCache(rec);
         aryPtr = cache_->find(key);
     }
 
@@ -478,8 +534,6 @@ bool IndexedDiffReader::readDiff(DiffIndexRecord &rec, AlignedArray &data)
     const size_t size = rec.io_blocks * LOGICAL_BLOCK_SIZE;
     data.resize(size);
     ::memcpy(data.data(), &(*aryPtr)[offset], size);
-
-    return true;
 }
 
 bool IndexedDiffReader::getNextRec(DiffIndexRecord& rec)
@@ -490,11 +544,15 @@ bool IndexedDiffReader::getNextRec(DiffIndexRecord& rec)
     return true;
 }
 
-void IndexedDiffReader::verifyIoData(uint64_t offset, uint32_t size) const
+bool IndexedDiffReader::verifyIoData(uint64_t offset, uint32_t size, bool throwError) const
 {
-    if (cybozu::util::calcChecksum(&memFile_[offset], size, 0) != 0) {
+    if (cybozu::util::calcChecksum(&memFile_[offset], size, 0) == 0) {
+        return true;
+    }
+    if (throwError) {
         throw cybozu::Exception(NAME) << "IO data invalid" << offset << size;
     }
+    return false;
 }
 
 

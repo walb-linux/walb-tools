@@ -14,6 +14,7 @@ namespace walb {
  */
 struct DiffPackHeader : walb_diff_pack
 {
+    constexpr static const char *NAME = "DiffPackHeader";
     DiffRecord &operator[](size_t i) {
         return static_cast<DiffRecord&>(record[i]);
     }
@@ -47,9 +48,9 @@ struct DiffPackHeader : walb_diff_pack
         writer.write(data(), size());
     }
     template <typename Reader>
-    void readFrom(Reader &reader) {
+    void readFrom(Reader &reader, bool doVerify = true) {
         reader.read(data(), size());
-        verify();
+        if (doVerify) verify();
     }
 
     void updateChecksum() {
@@ -95,6 +96,7 @@ private:
     const char *p_;
     size_t size_;
 public:
+    constexpr static const char *NAME = "MemoryDiffPack";
     MemoryDiffPack(const char *p, size_t size) : p_(), size_(0) {
         reset(p, size);
     }

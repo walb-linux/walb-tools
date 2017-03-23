@@ -298,7 +298,7 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
 #if 0
     const bool ret = proxy_local::recvWlogAndWriteDiff(
         p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd());
-#else
+#else  /* deprecated */
     const bool ret = proxy_local::recvWlogAndWriteDiff2(
         p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd()); // QQQ
 #endif
@@ -396,7 +396,9 @@ retry:
 
 
 
-bool ProxyWorker::setupReader(IndexedDiffReader& reader, MetaDiff& diff, const ProxyVolInfo& volInfo, const std::string& archiveName)
+bool ProxyWorker::setupReader(
+    IndexedDiffReader& reader, IndexedDiffCache &cache, MetaDiff& diff,
+    const ProxyVolInfo& volInfo, const std::string& archiveName)
 {
     const char *const FUNC = __func__;
     const int maxRetryNum = 10;
@@ -416,7 +418,7 @@ retry:
             }
             goto retry;
         }
-        reader.setFile(std::move(file));
+        reader.setFile(std::move(file), cache);
     }
     return true;
 }
@@ -561,9 +563,8 @@ int ProxyWorker::transferWdiffIfNecessary2(PushOpt &pushOpt)
     IndexedDiffReader reader;
     IndexedDiffCache cache;
     cache.setMaxSize(32 * MEBI);
-    reader.setCache(&cache);
     MetaDiff mergedDiff;
-    if (!setupReader(reader, mergedDiff, volInfo, archiveName)) {
+    if (!setupReader(reader, cache, mergedDiff, volInfo, archiveName)) {
         LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;
         return DONT_SEND;
     }

@@ -22,6 +22,7 @@ union ExtendedDiffPackHeader {
  */
 struct DiffFileHeader : walb_diff_file_header
 {
+    constexpr static const char *NAME = "DiffFileHeader";
     DiffFileHeader() {
         init();
     }
@@ -59,6 +60,9 @@ struct DiffFileHeader : walb_diff_file_header
     void print(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "%s", str().c_str());
     }
+
+    bool isIndexed() const;
+    std::string typeStr() const;
 
     void init() {
         ::memset(this, 0, getSize());
@@ -276,7 +280,8 @@ public:
      * Read a diff IO.
      *
      * RETURN:
-     *   false if the input stream reached the end.
+     *   false if the input stream reached the end,
+     *   or the record/data is invalid (only when throwError is false).
      */
     bool readDiff(DiffRecord &rec, DiffIo &io);
     /**
@@ -293,7 +298,7 @@ public:
      * @rec diff record.
      * @io block IO to be filled.
      */
-    void readDiffIo(const DiffRecord &rec, DiffIo &io);
+    void readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum = true);
 
     const DiffStatistics& getStat() const {
         return stat_;
@@ -401,7 +406,7 @@ class IndexedDiffCache /* final */
 {
 public:
     struct Key {
-        void *tag;
+        const void *tag;
         uint64_t addr;
 
         friend inline std::ostream& operator<<(std::ostream& os, const Key& key) {
@@ -440,6 +445,7 @@ public:
     void setMaxSize(size_t bytes) { maxBytes_ = bytes; }
     AlignedArray* find(Key key);
     void add(Key key, std::unique_ptr<AlignedArray> &&dataPtr);
+    void clear();
 private:
     void evictOne();
 };
@@ -467,17 +473,30 @@ public:
     IndexedDiffReader()
         : memFile_(), header_(), idxBgnOffset_(), idxEndOffset_()
         , idxOffset_(), cache_(nullptr), stat_() {}
-    void setCache(IndexedDiffCache *cache) { cache_ = cache; }
-    void setFile(cybozu::util::File &&fileR);
+    void setFile(cybozu::util::File &&fileR, IndexedDiffCache &cache);
     const DiffFileHeader& header() const { return header_; }
+
+    bool readDiffRecord(DiffIndexRecord &rec, bool doVerify = true);
     /**
      * data will be uncompressed data.
      */
-    bool readDiff(DiffIndexRecord &rec, AlignedArray &data);
+    void readDiffIo(const DiffIndexRecord &rec, AlignedArray &data);
+    bool readDiff(DiffIndexRecord &rec, AlignedArray &data) {
+        if (!readDiffRecord(rec)) return false;
+        readDiffIo(rec, data);
+        return true;
+    }
     const DiffStatistics& getStat() const { return stat_; }
+    void close() { memFile_.reset(); }
+
+    /*
+     * isOnCache() and loadToCache() are special interface for wdiff-show command.
+     */
+    bool isOnCache(const DiffIndexRecord &rec) const;
+    bool loadToCache(const DiffIndexRecord &rec, bool throwError = true);
 private:
     bool getNextRec(DiffIndexRecord& rec);
-    void verifyIoData(uint64_t offset, uint32_t size) const;
+    bool verifyIoData(uint64_t offset, uint32_t size, bool throwError) const;
 };
 
 

@@ -128,6 +128,19 @@ public:
             s += r;
         }
     }
+    void skip(size_t size) {
+        if (seekable()) {
+            lseek(size, SEEK_CUR);
+            return;
+        }
+        char buf[4096];
+        size_t s = 0;
+        while (s < size) {
+            size_t r = readsome(&buf[0], std::min<size_t>(size - s, 4096));
+            if (r == 0) throw EofError();
+            s += r;
+        }
+    }
     void pread(void *data, size_t size, off_t off) {
         lseek(off);
         read(data, size);

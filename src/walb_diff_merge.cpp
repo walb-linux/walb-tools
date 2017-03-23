@@ -5,20 +5,16 @@ namespace walb {
 void DiffMerger::Wdiff::setFile(cybozu::util::File &&file, IndexedDiffCache *cache)
 {
     header_.readFrom(file);
-    if (header_.type == WALB_DIFF_TYPE_SORTED) {
-        isIndexed_ = false;
-        sReader_.setFile(std::move(file));
-        sReader_.dontReadHeader();
-        // cache is not used.
-    } else if (header_.type == WALB_DIFF_TYPE_INDEXED) {
-        isIndexed_ = true;
-        iReader_.setFile(std::move(file));
+    isIndexed_ = header_.isIndexed();
+    if (isIndexed_) {
         if (cache == nullptr) {
             throw cybozu::Exception(NAME) << "indexed diff cache must be specified.";
         }
-        iReader_.setCache(cache);
+        iReader_.setFile(std::move(file), *cache);
     } else {
-        throw cybozu::Exception(NAME) << "bad wdiff type" << header_.type;
+        sReader_.setFile(std::move(file));
+        sReader_.dontReadHeader();
+        // cache is not used.
     }
 }
 

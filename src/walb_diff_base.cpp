@@ -14,7 +14,6 @@ bool DiffRecord::isValid() const
 
 void DiffRecord::verify() const
 {
-    const char *const NAME = "DiffRecord";
     if (!isNormal()) {
         if (isAllZero() && isDiscard()) {
             throw cybozu::Exception(NAME) << "allzero and discard flag is exclusive";
@@ -46,7 +45,8 @@ void DiffRecord::print(::FILE *fp) const
               , checksum, isAllZero(), isDiscard());
 }
 
-std::string DiffRecord::toStr(const char *prefix) const {
+std::string DiffRecord::toStr(const char *prefix) const
+{
     return cybozu::util::formatString(
         "%s""%" PRIu64 "\t%u\t%s\t%u\t%u\t%08x\t%c%c"
         , prefix, io_address, io_blocks

@@ -4,7 +4,6 @@ namespace walb {
 
 void DiffPackHeader::verify() const
 {
-    const char *const NAME = "DiffPackHeader";
     if (cybozu::util::calcChecksum(data(), size(), 0) != 0) {
         throw cybozu::Exception(NAME) << "invalid checksum";
     }
@@ -85,7 +84,6 @@ void MemoryDiffPack::reset(const char *p, size_t size)
 
 void MemoryDiffPack::verify(bool doChecksum) const
 {
-    const char *const NAME = "MemoryDiffPack";
     header().verify();
     for (size_t i = 0; i < header().n_records; i++) {
         const DiffRecord& rec = header()[i];

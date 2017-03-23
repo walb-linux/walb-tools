@@ -36,6 +36,7 @@ namespace walb {
 */
 struct DiffRecord : public walb_diff_record
 {
+    constexpr static const char *NAME = "DiffRecord";
     DiffRecord() {
         init();
     }
@@ -173,9 +174,10 @@ struct DiffIo
         }
     }
     template <typename Reader>
-    void setAndReadFrom(const DiffRecord &rec, Reader &reader) {
+    void setAndReadFrom(const DiffRecord &rec, Reader &reader, bool verifyChecksum = true) {
         set(rec);
         readFrom(reader);
+        if (!verifyChecksum) return;
         const uint32_t csum = calcChecksum();
         if (rec.checksum != csum) {
             throw cybozu::Exception(__func__) << "checksum differ" << rec.checksum << csum;

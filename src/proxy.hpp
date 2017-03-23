@@ -128,7 +128,7 @@ private:
      * setupMerger currently supports sorted diffs only.
      */
     void setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
-    bool setupReader(IndexedDiffReader& reader, MetaDiff& diff, const ProxyVolInfo& volInfo, const std::string& archiveName);
+    bool setupReader(IndexedDiffReader& reader, IndexedDiffCache &cache, MetaDiff& diff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {

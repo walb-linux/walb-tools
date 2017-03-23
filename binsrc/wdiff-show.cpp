@@ -16,7 +16,7 @@ using namespace walb;
 
 struct Option
 {
-    bool isDebug, doSearch, doStat, noHead, noRec, isIndexed;
+    bool isDebug, doSearch, doStat, noHead, noRec, verifyCsum;
     uint64_t addr;
     std::string filePath;
     std::vector<std::string> filePathV;
@@ -33,13 +33,18 @@ struct Option
         opt.appendOpt(&addr, 0, "addr", ": search address [logical block].");
         opt.appendBoolOpt(&doStat, "stat", ": put statistics.");
         opt.appendBoolOpt(&noHead, "nohead", ": does not put header..");
-        opt.appendBoolOpt(&noRec, "norec", "; does not put records.");
+        opt.appendBoolOpt(&noRec, "norec", ": does not put records.");
+        opt.appendBoolOpt(&verifyCsum, "csum", ": verify checksum of each IO data.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages.");
-        opt.appendBoolOpt(&isIndexed, "indexed", ": use indexed format instead of sorted format.");
         opt.appendParamVec(&filePathV, "WDIFF_PATH_LIST", ": wdiff file list (default: stdin)");
         opt.appendHelp("h", ": put this message.");
 
         if (!opt.parse(argc, argv)) {
+            opt.usage();
+            ::exit(1);
+        }
+        if (filePathV.empty()) {
+            ::fprintf(::stderr, "Specify wdiff files.");
             opt.usage();
             ::exit(1);
         }
@@ -52,60 +57,87 @@ inline bool matchAddress(uint64_t addr, const Record& rec)
     return rec.io_address <= addr && addr < rec.endIoAddress();
 }
 
-void printWdiff(DiffReader &reader, DiffStatistics &stat, const Option &opt)
+int printSortedWdiff(
+    const DiffFileHeader &header, cybozu::util::File &file,
+    DiffStatistics &stat, const Option &opt)
 {
-    DiffFileHeader wdiffH;
-    reader.readHeader(wdiffH);
-    if (!opt.noHead) wdiffH.print();
+    if (!opt.noHead) header.print();
 
-    DiffRecord rec;
-    DiffIo io;
-    while (reader.readDiff(rec, io)) {
-        if (!opt.doSearch || matchAddress(opt.addr, rec)) {
-            if (!opt.noRec) {
-                if (!rec.isValid()) ::printf("Invalid record: ");
-                rec.printOneline();
+    ExtendedDiffPackHeader edp;
+    DiffPackHeader &pack = edp.header;
+
+    int ret = 0;
+    for (;;) {
+        pack.readFrom(file, false);
+        if (!pack.isValid()) {
+            ::printf("invalid pack: ");
+            pack.print();
+            return 1;
+        }
+        if (pack.isEnd()) break;
+        stat.update(pack);
+
+        for (size_t i = 0; i < pack.n_records; i++) {
+            const DiffRecord &rec = pack[i];
+            assert(rec.isValid()); // If pack is valid, record must be valid.
+            std::string extra;
+            if (rec.isNormal()) {
+                if (opt.verifyCsum) {
+                    DiffIo io;
+                    io.setAndReadFrom(rec, file, false);
+                    const uint32_t csum = io.calcChecksum();
+                    if (rec.checksum != csum) {
+                        extra += cybozu::util::formatString(
+                            " invalid data checksum: %08x", csum);
+                        ret = 1;
+                    }
+                } else {
+                    file.skip(rec.data_size);
+                }
             }
-            if (opt.doStat) stat.update(rec);
+            const bool showRec = !opt.doSearch || matchAddress(opt.addr, rec);
+            if ((!opt.noRec && showRec) || !extra.empty()) {
+                ::printf("wdiff_sorted_rec:\t%s%s\n", rec.toStr().c_str(), extra.c_str());
+            }
         }
     }
+    return ret;
 }
 
-
-void printIndexedWdiff(IndexedDiffReader &reader, const Option &opt)
-{
-    DiffFileHeader wdiffH;
-    wdiffH = reader.header();
-    if (!opt.noHead) wdiffH.print();
-
-    DiffIndexRecord rec;
-    AlignedArray data;
-    while (reader.readDiff(rec, data)) {
-        if (!opt.doSearch || matchAddress(opt.addr, rec)) {
-            if (!opt.noRec) {
-                if (!rec.isValid()) ::printf("Invalid record: ");
-                rec.printOneline();
-            }
-            //if (opt.doStat) stat.update(rec); // QQQ
-        }
-    }
-}
-
-
-void printIndexedWdiffs(const Option &opt)
+int printIndexedWdiff(
+    cybozu::util::File &&file,
+    DiffStatistics &stat, const Option &opt)
 {
     IndexedDiffReader reader;
     IndexedDiffCache cache;
     cache.setMaxSize(32 * MEBI);
-    reader.setCache(&cache);
+    reader.setFile(std::move(file), cache);
 
-    if (opt.filePathV.empty()) {
-        throw cybozu::Exception("Indexed format does not support stream.");
+    if (!opt.noHead) reader.header().print();
+
+    DiffIndexRecord rec;
+    AlignedArray data;
+    int ret = 0;
+    while (reader.readDiffRecord(rec, false)) {
+        std::string extra;
+        if (!rec.isValid()) {
+            extra += cybozu::util::formatString(" invalid record");
+            ret = 1;
+        }
+        if (rec.isValid() && opt.verifyCsum && !reader.isOnCache(rec)) {
+            if (!reader.loadToCache(rec, false)) {
+                extra += cybozu::util::formatString(" invalid data checksum");
+                ret = 1;
+            }
+        }
+        const bool showRec = !opt.doSearch || matchAddress(opt.addr, rec);
+        if ((!opt.noRec && showRec) || !extra.empty()) {
+            ::printf("wdiff_indexed_rec:\t%s%s\n", rec.toStr().c_str(), extra.c_str());
+        }
     }
-    for (const std::string &path : opt.filePathV) {
-        reader.setFile(cybozu::util::File(path, O_RDONLY));
-        printIndexedWdiff(reader, opt);
-    }
+    stat.update(reader.getStat());
+    reader.close();
+    return ret;
 }
 
 
@@ -113,25 +145,21 @@ int doMain(int argc, char *argv[])
 {
     Option opt(argc, argv);
     util::setLogSetting("-", opt.isDebug);
-    if (opt.isIndexed) {
-        printIndexedWdiffs(opt);
-        return 0;
-    }
-
-    DiffReader reader;
     DiffStatistics stat;
-    if (opt.filePathV.empty()) {
-        reader.setFd(0);
-        printWdiff(reader, stat, opt);
-    } else {
-        for (const std::string &path : opt.filePathV) {
-            reader.open(path);
-            printWdiff(reader, stat, opt);
-            reader.close();
+
+    int ret = 0;
+    for (const std::string &path : opt.filePathV) {
+        DiffFileHeader header;
+        cybozu::util::File file(path, O_RDONLY);
+        header.readFrom(file);
+        if (header.isIndexed()) {
+            ret = printIndexedWdiff(std::move(file), stat, opt);
+        } else {
+            ret = printSortedWdiff(header, file, stat, opt);
         }
     }
     if (opt.doStat) stat.print(::stdout, "wdiff_stat: ");
-    return 0;
+    return ret;
 }
 
 DEFINE_ERROR_SAFE_MAIN("wdiff-show")
