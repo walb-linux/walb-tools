@@ -129,14 +129,14 @@ struct Statistics
 /**
  * Wdiff redo manager.
  */
-class WdiffRedoManger
+class WdiffRedoManager
 {
 private:
     const Config &config_;
     Statistics inStat_, outStat_;
     SimpleDiffIoExecutor ioExec_;
 public:
-    WdiffRedoManger(const Config &config)
+    WdiffRedoManager(const Config &config)
         : config_(config)
         , inStat_()
         , outStat_()
@@ -229,7 +229,7 @@ private:
 int doMain(int argc, char *argv[])
 {
     Config config(argc, argv);
-    WdiffRedoManger m(config);
+    WdiffRedoManager m(config);
     m.run();
     return 0;
 }
