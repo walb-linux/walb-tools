@@ -268,9 +268,9 @@ void DiffReader::init()
 void DiffIndexMem::checkNoOverlappedAndSorted() const
 {
     auto it = index_.cbegin();
-    const DiffIndexRecord *prev = nullptr;
+    const IndexedDiffRecord *prev = nullptr;
     while (it != index_.cend()) {
-        const DiffIndexRecord *curr = &it->second;
+        const IndexedDiffRecord *curr = &it->second;
         if (prev) {
             if (!(prev->io_address < curr->io_address)) {
                 throw RT_ERR("Not sorted.");
@@ -284,7 +284,7 @@ void DiffIndexMem::checkNoOverlappedAndSorted() const
     }
 }
 
-void DiffIndexMem::addDetail(const DiffIndexRecord &rec)
+void DiffIndexMem::addDetail(const IndexedDiffRecord &rec)
 {
     assert(isAlignedIo(rec.io_address, rec.io_blocks));
 
@@ -304,9 +304,9 @@ void DiffIndexMem::addDetail(const DiffIndexRecord &rec)
 
     /* Search overlapped items. */
     uint64_t addr1 = rec.endIoAddress();
-    std::queue<DiffIndexRecord> q;
+    std::queue<IndexedDiffRecord> q;
     while (it != index_.end() && it->first < addr1) {
-        DiffIndexRecord &r = it->second;
+        IndexedDiffRecord &r = it->second;
         if (r.isOverlapped(rec)) {
             q.push(r);
             it = index_.erase(it);
@@ -317,8 +317,8 @@ void DiffIndexMem::addDetail(const DiffIndexRecord &rec)
 
     /* Eliminate overlaps. */
     while (!q.empty()) {
-        for (const DiffIndexRecord &r0 : q.front().minus(rec)) {
-            for (const DiffIndexRecord &r1 : r0.split()) {
+        for (const IndexedDiffRecord &r0 : q.front().minus(rec)) {
+            for (const IndexedDiffRecord &r1 : r0.split()) {
                 index_.emplace(r1.io_address, r1);
             }
         }
@@ -351,10 +351,10 @@ void IndexedDiffWriter::writeHeader(DiffFileHeader &header)
     isWrittenHeader_ = true;
 }
 
-void IndexedDiffWriter::writeDiff(const DiffIndexRecord &rec, const char *data)
+void IndexedDiffWriter::writeDiff(const IndexedDiffRecord &rec, const char *data)
 {
     checkWrittenHeader();
-    DiffIndexRecord r = rec;
+    IndexedDiffRecord r = rec;
     r.data_offset = offset_;
     if (rec.isNormal()) {
         assert(data != nullptr);
@@ -369,7 +369,7 @@ void IndexedDiffWriter::writeDiff(const DiffIndexRecord &rec, const char *data)
 }
 
 void IndexedDiffWriter::compressAndWriteDiff(
-    const DiffIndexRecord &rec, const char *data, int type, int level)
+    const IndexedDiffRecord &rec, const char *data, int type, int level)
 {
     if (!rec.isNormal()) {
         writeDiff(rec, nullptr);
@@ -382,7 +382,7 @@ void IndexedDiffWriter::compressAndWriteDiff(
     size_t outSize = 0;
     type = compressData(data, rec.io_blocks * LOGICAL_BLOCK_SIZE,
                         buf_, outSize, type, level);
-    DiffIndexRecord r = rec;
+    IndexedDiffRecord r = rec;
     r.compression_type = type;
     r.data_size = outSize;
     r.io_checksum = calcDiffIoChecksum(buf_);
@@ -485,7 +485,7 @@ void IndexedDiffReader::setFile(cybozu::util::File &&fileR, IndexedDiffCache &ca
     stat_.dataSize = idxBgnOffset_ - sizeof(header_);
 }
 
-bool IndexedDiffReader::readDiffRecord(DiffIndexRecord &rec, bool doVerify)
+bool IndexedDiffReader::readDiffRecord(IndexedDiffRecord &rec, bool doVerify)
 {
     if (!getNextRec(rec)) return false;
     if (doVerify) rec.verify();
@@ -493,13 +493,13 @@ bool IndexedDiffReader::readDiffRecord(DiffIndexRecord &rec, bool doVerify)
     return true;
 }
 
-bool IndexedDiffReader::isOnCache(const DiffIndexRecord &rec) const
+bool IndexedDiffReader::isOnCache(const IndexedDiffRecord &rec) const
 {
     const IndexedDiffCache::Key key{this, rec.data_offset};
     return cache_->find(key) != nullptr;
 }
 
-bool IndexedDiffReader::loadToCache(const DiffIndexRecord &rec, bool throwError)
+bool IndexedDiffReader::loadToCache(const IndexedDiffRecord &rec, bool throwError)
 {
     assert(isOnCache(rec));
     if (!verifyIoData(rec.data_offset, rec.data_size, throwError)) {
@@ -516,7 +516,7 @@ bool IndexedDiffReader::loadToCache(const DiffIndexRecord &rec, bool throwError)
 /**
  * Uncompressed data will be set while rec indicates compression.
  */
-void IndexedDiffReader::readDiffIo(const DiffIndexRecord &rec, AlignedArray &data)
+void IndexedDiffReader::readDiffIo(const IndexedDiffRecord &rec, AlignedArray &data)
 {
     if (!rec.isNormal()) return;
     if (cache_ == nullptr) {
@@ -536,7 +536,7 @@ void IndexedDiffReader::readDiffIo(const DiffIndexRecord &rec, AlignedArray &dat
     ::memcpy(data.data(), &(*aryPtr)[offset], size);
 }
 
-bool IndexedDiffReader::getNextRec(DiffIndexRecord& rec)
+bool IndexedDiffReader::getNextRec(IndexedDiffRecord& rec)
 {
     if (idxOffset_ >= idxEndOffset_) return false;
     ::memcpy(&rec, &memFile_[idxOffset_], sizeof(rec));

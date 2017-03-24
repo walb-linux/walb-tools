@@ -1159,7 +1159,7 @@ bool recvWlogAndWriteDiff2(
             WlogRecord &lrec = packH.record(i);
             receiver.popIo(lrec, blockS);
 
-            DiffIndexRecord drec;
+            IndexedDiffRecord drec;
             AlignedArray data;
             if (convertLogToDiff(pbs, lrec, blockS, drec, data, false)) {
                 writer.compressAndWriteDiff(drec, data.data());

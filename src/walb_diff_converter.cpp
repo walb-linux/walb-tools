@@ -143,7 +143,7 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
 
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffIndexRecord& mrec, AlignedArray &buf, bool calcChecksum)
+    IndexedDiffRecord& mrec, AlignedArray &buf, bool calcChecksum)
 {
     /* Padding */
     if (rec.isPadding()) return false;
@@ -275,7 +275,7 @@ bool IndexedDiffConverter::convertWlog(
     WlogRecord lrec;
     LogBlockShared blockS;
     while (reader.readLog(lrec, blockS)) {
-        DiffIndexRecord drec;
+        IndexedDiffRecord drec;
         AlignedArray buf;
         if (convertLogToDiff(pbs, lrec, blockS, drec, buf, false)) {
             writer.compressAndWriteDiff(drec, buf.data());

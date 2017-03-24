@@ -227,7 +227,7 @@ void uncompressDiffIo(
 }
 
 
-std::string DiffIndexRecord::toStr(const char *prefix) const
+std::string IndexedDiffRecord::toStr(const char *prefix) const
 {
     return cybozu::util::formatString(
         "%s""%" PRIu64 "\t%u\t%s\t%" PRIu64 "\t%u\t%u\t%u\t%08x\t%08x\t%c%c"
@@ -238,7 +238,7 @@ std::string DiffIndexRecord::toStr(const char *prefix) const
         , isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
 }
 
-std::vector<DiffIndexRecord> DiffIndexRecord::split() const
+std::vector<IndexedDiffRecord> IndexedDiffRecord::split() const
 {
     const std::vector<uint32_t> sizeV =
         splitIoToAligned(io_address, io_blocks);
@@ -246,12 +246,12 @@ std::vector<DiffIndexRecord> DiffIndexRecord::split() const
     uint64_t addr = io_address;
     uint32_t off = io_offset;
 
-    std::vector<DiffIndexRecord> recV;
+    std::vector<IndexedDiffRecord> recV;
     recV.reserve(sizeV.size());
 
     for (uint32_t s : sizeV) {
         recV.push_back(*this);
-        DiffIndexRecord& rec = recV.back();
+        IndexedDiffRecord& rec = recV.back();
 
         rec.io_address = addr;
         rec.io_blocks = s;
@@ -265,12 +265,12 @@ std::vector<DiffIndexRecord> DiffIndexRecord::split() const
     return recV;
 }
 
-std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) const
+std::vector<IndexedDiffRecord> IndexedDiffRecord::minus(const IndexedDiffRecord& rhs) const
 {
-    const DiffIndexRecord &lhs = *this;
+    const IndexedDiffRecord &lhs = *this;
 
     assert(lhs.isOverlapped(rhs));
-    std::vector<DiffIndexRecord> v;
+    std::vector<IndexedDiffRecord> v;
     /*
      * Pattern 1:
      * __oo__ - xxxxxx = ______
@@ -287,8 +287,8 @@ std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) 
         uint64_t addr0 = lhs.io_address;
         uint64_t addr1 = rhs.endIoAddress();
 
-        DiffIndexRecord r0 = lhs;
-        DiffIndexRecord r1 = lhs;
+        IndexedDiffRecord r0 = lhs;
+        IndexedDiffRecord r1 = lhs;
         r0.io_address = addr0;
         r0.io_blocks = blks0;
         // r0.io_offset need not to change.
@@ -314,10 +314,10 @@ std::vector<DiffIndexRecord> DiffIndexRecord::minus(const DiffIndexRecord& rhs) 
      * Pattern 4 does not exist.
      * __oooo - xxxx__ = ____oo
      */
-    throw cybozu::Exception("BUG: DiffIndexRecord:minus.") << lhs << rhs;
+    throw cybozu::Exception("BUG: IndexedDiffRecord:minus.") << lhs << rhs;
 }
 
-void DiffIndexRecord::updateRecChecksum()
+void IndexedDiffRecord::updateRecChecksum()
 {
     rec_checksum = 0;
     rec_checksum = cybozu::util::calcChecksum(this, sizeof(*this), 0);
@@ -326,7 +326,7 @@ void DiffIndexRecord::updateRecChecksum()
 #endif
 }
 
-bool DiffIndexRecord::verifyDetail(bool throwError, bool doChecksum) const
+bool IndexedDiffRecord::verifyDetail(bool throwError, bool doChecksum) const
 {
     if (!isNormal()) {
         if (isAllZero() && isDiscard()) {

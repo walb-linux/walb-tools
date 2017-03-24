@@ -41,7 +41,7 @@ struct DiffStatistics
         updateDetail(rec.isNormal(), rec.isDiscard(), rec.isAllZero(),
                      rec.io_blocks, rec.data_size, [&]() { return rec.toStr(); });
     }
-    void update(const DiffIndexRecord& rec) {
+    void update(const IndexedDiffRecord& rec) {
         // data size can not be updated here.
         // It will be set independently.
         updateDetail(rec.isNormal(), rec.isDiscard(), rec.isAllZero(),

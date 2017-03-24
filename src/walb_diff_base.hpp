@@ -213,9 +213,9 @@ void uncompressDiffIo(
 
 
 /**
- * sizeof(DiffIndexRecord) == sizeof(walb_indexed_diff_record)
+ * sizeof(IndexedDiffRecord) == sizeof(walb_indexed_diff_record)
  */
-struct DiffIndexRecord : public walb_indexed_diff_record
+struct IndexedDiffRecord : public walb_indexed_diff_record
 {
     void init() {
         ::memset(this, 0, sizeof(*this));
@@ -232,13 +232,13 @@ struct DiffIndexRecord : public walb_indexed_diff_record
     bool isValid(bool doChecksum = true) const { return verifyDetail(false, doChecksum); }
     void verify(bool doChecksum = true) const { verifyDetail(true, doChecksum); }
 
-    static constexpr const char *NAME = "DiffIndexRecord";
+    static constexpr const char *NAME = "IndexedDiffRecord";
 
     void printOneline(::FILE *fp = ::stdout) const {
         ::fprintf(fp, "%s\n", toStr("wdiff_idx_rec:\t").c_str());
     }
     std::string toStr(const char *prefix = "") const;
-    friend inline std::ostream &operator<<(std::ostream &os, const DiffIndexRecord &rec) {
+    friend inline std::ostream &operator<<(std::ostream &os, const IndexedDiffRecord &rec) {
         os << rec.toStr();
         return os;
     }
@@ -256,10 +256,10 @@ struct DiffIndexRecord : public walb_indexed_diff_record
         flags |= WALB_DIFF_FLAG(DISCARD);
     }
 
-    bool isOverwrittenBy(const DiffIndexRecord &rhs) const {
+    bool isOverwrittenBy(const IndexedDiffRecord &rhs) const {
         return cybozu::isOverwritten(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
     }
-    bool isOverlapped(const DiffIndexRecord &rhs) const {
+    bool isOverlapped(const IndexedDiffRecord &rhs) const {
         return cybozu::isOverlapped(io_address, io_blocks, rhs.io_address, rhs.io_blocks);
     }
 
@@ -269,8 +269,8 @@ struct DiffIndexRecord : public walb_indexed_diff_record
         }
     }
 
-    std::vector<DiffIndexRecord> split() const;
-    std::vector<DiffIndexRecord> minus(const DiffIndexRecord& rhs) const;
+    std::vector<IndexedDiffRecord> split() const;
+    std::vector<IndexedDiffRecord> minus(const IndexedDiffRecord& rhs) const;
 
     void updateRecChecksum();
 private:

@@ -55,10 +55,10 @@ void DiffMerger::Wdiff::fill() const
 
 bool DiffMerger::Wdiff::readIndexedDiff() const
 {
-    DiffIndexRecord irec;
+    IndexedDiffRecord irec;
     if (!iReader_.readDiff(irec, io_.data)) return false;
 
-    // Convert DiffIndexRecord to DiffRecord.
+    // Convert IndexedDiffRecord to DiffRecord.
     rec_.init();
     rec_.io_address = irec.io_address;
     rec_.io_blocks = irec.io_blocks;

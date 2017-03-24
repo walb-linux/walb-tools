@@ -61,7 +61,7 @@ private:
 
 bool convertLogToDiff(
     uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffIndexRecord& mrec, AlignedArray &buf, bool calcChecksum);
+    IndexedDiffRecord& mrec, AlignedArray &buf, bool calcChecksum);
 
 
 class IndexedDiffConverter /* final */

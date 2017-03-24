@@ -312,12 +312,12 @@ private:
 class DiffIndexMem
 {
 private:
-    std::map<uint64_t, DiffIndexRecord> index_; // key: io_address.
+    std::map<uint64_t, IndexedDiffRecord> index_; // key: io_address.
 
-    void addDetail(const DiffIndexRecord &rec);
+    void addDetail(const IndexedDiffRecord &rec);
 public:
-    void add(const DiffIndexRecord &rec) {
-        for (const DiffIndexRecord& r : rec.split()) {
+    void add(const IndexedDiffRecord &rec) {
+        for (const IndexedDiffRecord& r : rec.split()) {
             addDetail(r);
         }
     }
@@ -326,8 +326,8 @@ public:
     }
     template<class Writer>
     void writeTo(Writer& writer, DiffStatistics *stat = nullptr) const {
-        for (const std::pair<uint64_t, DiffIndexRecord>& pair : index_) {
-            const DiffIndexRecord& rec = pair.second;
+        for (const std::pair<uint64_t, IndexedDiffRecord>& pair : index_) {
+            const IndexedDiffRecord& rec = pair.second;
             writer.write(&rec, sizeof(rec));
             if (stat) stat->update(rec);
         }
@@ -373,8 +373,8 @@ public:
     }
     void finalize();
     void writeHeader(DiffFileHeader &header);
-    void writeDiff(const DiffIndexRecord &rec, const char *data);
-    void compressAndWriteDiff(const DiffIndexRecord &rec, const char *data,
+    void writeDiff(const IndexedDiffRecord &rec, const char *data);
+    void compressAndWriteDiff(const IndexedDiffRecord &rec, const char *data,
                               int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
 
     const DiffStatistics& getStat() const {
@@ -476,12 +476,12 @@ public:
     void setFile(cybozu::util::File &&fileR, IndexedDiffCache &cache);
     const DiffFileHeader& header() const { return header_; }
 
-    bool readDiffRecord(DiffIndexRecord &rec, bool doVerify = true);
+    bool readDiffRecord(IndexedDiffRecord &rec, bool doVerify = true);
     /**
      * data will be uncompressed data.
      */
-    void readDiffIo(const DiffIndexRecord &rec, AlignedArray &data);
-    bool readDiff(DiffIndexRecord &rec, AlignedArray &data) {
+    void readDiffIo(const IndexedDiffRecord &rec, AlignedArray &data);
+    bool readDiff(IndexedDiffRecord &rec, AlignedArray &data) {
         if (!readDiffRecord(rec)) return false;
         readDiffIo(rec, data);
         return true;
@@ -492,10 +492,10 @@ public:
     /*
      * isOnCache() and loadToCache() are special interface for wdiff-show command.
      */
-    bool isOnCache(const DiffIndexRecord &rec) const;
-    bool loadToCache(const DiffIndexRecord &rec, bool throwError = true);
+    bool isOnCache(const IndexedDiffRecord &rec) const;
+    bool loadToCache(const IndexedDiffRecord &rec, bool throwError = true);
 private:
-    bool getNextRec(DiffIndexRecord& rec);
+    bool getNextRec(IndexedDiffRecord& rec);
     bool verifyIoData(uint64_t offset, uint32_t size, bool throwError) const;
 };
 

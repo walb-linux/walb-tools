@@ -84,7 +84,7 @@ bool indexedWdiffTransferClient(
     statOut.clear();
     statOut.wdiffNr = -1;
 
-    DiffIndexRecord irec;
+    IndexedDiffRecord irec;
     AlignedArray data;
     DiffPacker packer;
     size_t pushedNum = 0;

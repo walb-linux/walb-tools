@@ -115,7 +115,7 @@ int printIndexedWdiff(
 
     if (!opt.noHead) reader.header().print();
 
-    DiffIndexRecord rec;
+    IndexedDiffRecord rec;
     AlignedArray data;
     int ret = 0;
     while (reader.readDiffRecord(rec, false)) {
