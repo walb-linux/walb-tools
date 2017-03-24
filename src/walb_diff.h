@@ -32,7 +32,7 @@ extern "C" {
  *
  * [sizeof: walb_diff_file_header]
  * [compressed IO data, ...]
- * [[sizeof: walb_diff_index_record], ...]
+ * [[sizeof: walb_indexed_diff_record], ...]
  * [sizeof: walb_diff_index_super: super block for the index]
  *
  * All IO data is alighed to 2^N (N >= 9).
@@ -142,7 +142,7 @@ const size_t WALB_DIFF_PACK_MAX_SIZE = 32 * 1024 * 1024; /* 32MiB */
  * WalB diff index record.
  * If the flags is 0, the record is invalid.
  */
-struct walb_diff_index_record
+struct walb_indexed_diff_record
 {
     uint64_t io_address; /* [logical block] */
 

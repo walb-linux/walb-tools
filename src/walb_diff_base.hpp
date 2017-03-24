@@ -213,9 +213,9 @@ void uncompressDiffIo(
 
 
 /**
- * sizeof(DiffIndexRecord) == sizeof(walb_diff_index_record)
+ * sizeof(DiffIndexRecord) == sizeof(walb_indexed_diff_record)
  */
-struct DiffIndexRecord : public walb_diff_index_record
+struct DiffIndexRecord : public walb_indexed_diff_record
 {
     void init() {
         ::memset(this, 0, sizeof(*this));
