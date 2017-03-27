@@ -7,172 +7,24 @@
 #include <vector>
 
 using namespace walb;
-class TmpDiffFile;
+struct TmpDiffFile;
 using TmpDiffFileVec = std::vector<TmpDiffFile>;
 
 cybozu::util::Random<size_t> g_rand;
 
+struct TmpDiffFile : cybozu::TmpFile
+{
+    TmpDiffFile() : TmpFile(".") {}
+};
+
 CYBOZU_TEST_AUTO(Setup)
 {
+#if 0
     g_rand.setSeed(395019343);
+#endif
     ::printf("random number generator seed: %zu\n", g_rand.getSeed());
     setRandForTest(g_rand);
 }
-
-class TmpDiffFile
-{
-private:
-    cybozu::TmpFile tmpFile;
-    DiffWriter writer;
-    uint64_t curAddr;
-
-public:
-    TmpDiffFile() : tmpFile("."), writer(tmpFile.fd()), curAddr(0) {
-        writeHeader();
-    }
-    void writeHeader() {
-        DiffFileHeader head;
-        writer.writeHeader(head);
-    }
-    void writeIo(uint64_t addr, size_t len) {
-        CYBOZU_TEST_ASSERT(addr >= curAddr);
-        CYBOZU_TEST_ASSERT(len > 0);
-        DiffRecord rec;
-        DiffIo io;
-        prepareIo(addr, len, rec, io);
-        writer.writeDiff(rec, std::move(io));
-        curAddr = addr + len;
-    }
-    void writeEof() {
-        writer.close();
-    }
-    std::string path() const {
-        return tmpFile.path();
-    }
-private:
-    void prepareIo(uint64_t addr, size_t len, DiffRecord &rec, DiffIo &io) {
-        rec.init();
-        rec.io_address = addr;
-        rec.io_blocks = len;
-        rec.compression_type = ::WALB_DIFF_CMPR_NONE;
-
-        const size_t r = g_rand.get<size_t>() % 100;
-        if (r < 10) { // 10%
-            rec.setDiscard();
-            io.clear();
-            return;
-        }
-        if (r < 20) { // 10%
-            rec.setAllZero();
-            io.clear();
-            return;
-        }
-        // 80%
-        rec.setNormal();
-        io.data.resize(len * LBS);
-#if 1
-        g_rand.fill(io.data.data(), io.data.size());
-#endif
-        rec.data_size = io.data.size();
-        io.set(rec);
-        rec.checksum = calcDiffIoChecksum(io.data);
-    }
-};
-
-class TmpDisk
-{
-private:
-    AlignedArray buf_;
-public:
-    explicit TmpDisk(size_t len) : buf_(len * LBS) {
-        clear();
-    }
-    void clear() {
-        ::memset(buf_.data(), 0, buf_.size());
-    }
-    void writeDiff(const DiffRecord &rec, const DiffIo &io) {
-        if (writeDiffTopHalf(rec)) return;
-        assert(!rec.isCompressed());
-        write(rec.io_address, rec.io_blocks, io.data.data());
-    }
-    void writeDiff(const IndexedDiffRecord &rec, const AlignedArray &data) {
-        if (writeDiffTopHalf(rec)) return;
-        write(rec.io_address, rec.io_blocks, data.data());
-    }
-    void verifyEquals(const TmpDisk &rhs) const {
-        const size_t len = buf_.size() / LBS;
-        AlignedArray buf0(LBS), buf1(LBS);
-        size_t nr = 0;
-        for (size_t i = 0; i < len; i++) {
-            read(i, 1, buf0.data());
-            rhs.read(i, 1, buf1.data());
-            if (::memcmp(buf0.data(), buf1.data(), LBS) != 0) {
-                ::printf("block differ %zu\n", i);
-                nr++;
-            }
-        }
-        if (nr > 0) throw cybozu::Exception(__func__) << nr;
-    }
-    void apply(const std::string &diffPath) {
-        cybozu::util::File file(diffPath, O_RDONLY);
-        DiffFileHeader header;
-        header.readFrom(file);
-        if (header.isIndexed()) {
-            IndexedDiffReader reader;
-            IndexedDiffCache cache;
-            cache.setMaxSize(4 * MEBI);
-            reader.setFile(std::move(file), cache);
-            IndexedDiffRecord rec;
-            AlignedArray data;
-            while (reader.readDiff(rec, data)) {
-                writeDiff(rec, data);
-            }
-        } else {
-            DiffReader reader(std::move(file));
-            reader.dontReadHeader();
-            DiffRecord rec;
-            DiffIo io;
-            while (reader.readAndUncompressDiff(rec, io, false)) {
-                writeDiff(rec, io);
-            }
-        }
-    }
-private:
-    void read(uint64_t addr, size_t len, char *data) const {
-        verifyAddr(addr, len);
-        ::memcpy(data, &buf_[addr * LBS], len * LBS);
-    }
-    void write(uint64_t addr, size_t len, const char *data) {
-        verifyAddr(addr, len);
-        ::memcpy(&buf_[addr * LBS], data, len * LBS);
-    }
-    void writeAllZero(uint64_t addr, size_t len) {
-        verifyAddr(addr, len);
-        ::memset(&buf_[addr * LBS], 0, len * LBS);
-    }
-    void discard(uint64_t addr, size_t len) {
-        verifyAddr(addr, len);
-        ::memset(&buf_[addr * LBS], 0xff, len * LBS); // This is for test.
-    }
-    void verifyAddr(uint64_t addr, size_t len) const {
-        CYBOZU_TEST_ASSERT(len > 0);
-        CYBOZU_TEST_ASSERT(addr + len <= buf_.size() / LBS);
-    }
-    template <typename Record>
-    bool writeDiffTopHalf(const Record &rec) {
-        verifyAddr(rec.io_address, rec.io_blocks);
-        if (rec.isAllZero()) {
-            writeAllZero(rec.io_address, rec.io_blocks);
-            return true;
-        }
-        if (rec.isDiscard()) {
-            discard(rec.io_address, rec.io_blocks);
-            return true;
-        }
-        assert(rec.isNormal());
-        return false;
-    }
-};
 
 void verifyMergedDiff(size_t len, TmpDiffFileVec &d)
 {
@@ -182,7 +34,7 @@ void verifyMergedDiff(size_t len, TmpDiffFileVec &d)
         disk0.apply(d[i].path());
     }
 
-    cybozu::TmpFile merged(".");
+    TmpDiffFile merged;
     DiffMerger merger(0);
     for (size_t i = 0; i < d.size(); i++) {
         merger.addWdiff(d[i].path());
@@ -193,6 +45,18 @@ void verifyMergedDiff(size_t len, TmpDiffFileVec &d)
     disk0.verifyEquals(disk1);
 }
 
+void verifyDiffEquality(size_t len, TmpDiffFileVec &d0, TmpDiffFileVec &d1)
+{
+    CYBOZU_TEST_EQUAL(d0.size(), d1.size());
+    const size_t nr = std::min(d0.size(), d1.size());
+    for (size_t i = 0; i < nr; i++) {
+        TmpDisk disk0(len), disk1(len);
+        disk0.apply(d0[i].path());
+        disk1.apply(d1[i].path());
+        disk0.verifyEquals(disk1);
+    }
+}
+
 struct MetaIo
 {
     uint64_t addr;
@@ -201,16 +65,136 @@ struct MetaIo
 
 using Recipe = std::vector<std::vector<MetaIo> >;
 
-void execIoRecipe(TmpDiffFileVec &d, Recipe &&recipe)
-{
-    CYBOZU_TEST_EQUAL(d.size(), recipe.size());
 
-    for (size_t i = 0; i < d.size(); i++) {
+using SioListVec = std::vector<SioList>;
+
+SioListVec generateSioListVec(const Recipe &recipe)
+{
+    SioListVec ret;
+    for (size_t i = 0; i < recipe.size(); i++) {
+        ret.emplace_back();
+        SioList &sioList = ret.back();
         for (const MetaIo &mio : recipe[i]) {
-            d[i].writeIo(mio.addr, mio.len);
+            sioList.emplace_back();
+            sioList.back().setRandomly(mio.addr, mio.len);
         }
-        d[i].writeEof();
     }
+    return ret;
+}
+
+int getCompressionTypeRandomly()
+{
+    size_t x = g_rand() % 100;
+    if (x < 70) {
+        return ::WALB_DIFF_CMPR_SNAPPY;
+    } else if (x < 20) {
+        return ::WALB_DIFF_CMPR_GZIP;
+    } else {
+        return ::WALB_DIFF_CMPR_LZMA;
+    }
+}
+
+/**
+ * sl must be sorted and overlap areas does not exist.
+ */
+void makeSortedWdiff1(TmpDiffFile &file, const SioList &sl)
+{
+    DiffWriter writer(file.fd());
+    DiffFileHeader header;
+    header.max_io_blocks = 0;
+    for (const Sio &sio : sl) {
+        header.max_io_blocks = std::max(header.max_io_blocks, sio.ioBlocks);
+    }
+    writer.writeHeader(header);
+    for (const Sio &sio : sl) {
+        DiffRecord rec;
+        AlignedArray data;
+        sio.copyTo(rec, data);
+
+#if 0
+        if (rec.isNormal()) rec.checksum = calcDiffIoChecksum(data);
+        writer.writeDiff(rec, data.data());
+#else
+        writer.compressAndWriteDiff(rec, data.data(), getCompressionTypeRandomly());
+#endif
+    }
+    writer.close();
+}
+
+void makeSortedWdiffs1(TmpDiffFileVec &tfv, const SioListVec &slv)
+{
+    CYBOZU_TEST_EQUAL(tfv.size(), slv.size());
+    size_t nr = std::min(tfv.size(), slv.size());
+    for (size_t i = 0; i < nr; i++) {
+        makeSortedWdiff1(tfv[i], slv[i]);
+    }
+}
+
+/**
+ * Any sl is allowed.
+ */
+void makeSortedWdiff2(TmpDiffFile &file, const SioList &sl)
+{
+    DiffMemory mem;
+
+    for (const Sio &sio : sl) {
+        DiffRecord rec;
+        DiffIo io;
+        sio.copyTo(rec, io.data);
+        io.set(rec);
+        mem.add(rec, std::move(io));
+    }
+    mem.writeTo(file.fd());
+}
+
+void makeSortedWdiffs2(TmpDiffFileVec &tfv, const SioListVec &slv)
+{
+    CYBOZU_TEST_EQUAL(tfv.size(), slv.size());
+    size_t nr = std::min(tfv.size(), slv.size());
+    for (size_t i = 0; i < nr; i++) {
+        makeSortedWdiff2(tfv[i], slv[i]);
+    }
+}
+
+void makeIndexedWdiff(TmpDiffFile &file, const SioList &sl)
+{
+    IndexedDiffWriter writer;
+    writer.setFd(file.fd());
+    DiffFileHeader header;
+    writer.writeHeader(header);
+    for (const Sio &sio : sl) {
+        IndexedDiffRecord rec;
+        AlignedArray data;
+        sio.copyTo(rec, data);
+#if 0
+        if (rec.isNormal()) rec.io_checksum = calcDiffIoChecksum(data);
+        writer.writeDiff(rec, data.data());
+#else
+        writer.compressAndWriteDiff(rec, data.data(), getCompressionTypeRandomly());
+#endif
+    }
+    writer.finalize();
+}
+
+void makeIndexedWdiffs(TmpDiffFileVec &tfv, const SioListVec &slv)
+{
+    CYBOZU_TEST_EQUAL(tfv.size(), slv.size());
+    size_t nr = std::min(tfv.size(), slv.size());
+    for (size_t i = 0; i < nr; i++) {
+        makeIndexedWdiff(tfv[i], slv[i]);
+    }
+}
+
+void testMerge1(size_t len, const Recipe &recipe)
+{
+    SioListVec slv = generateSioListVec(std::move(recipe));
+    size_t nr = recipe.size();
+    TmpDiffFileVec d0(nr), d1(nr);
+    makeSortedWdiffs1(d0, slv);
+    makeIndexedWdiffs(d1, slv);
+    verifyMergedDiff(len, d0);
+    verifyMergedDiff(len, d1);
+    verifyDiffEquality(len, d0, d1);
 }
 
 CYBOZU_TEST_AUTO(wdiffMerge)
@@ -222,12 +206,10 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0  XXX XXX XXX
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {
+        testMerge1(20,  {
                 {{0, 3}, {4, 3}, {8, 3}},
                 {{0, 3}, {4, 3}, {8, 3}},
                 {{0, 3}, {4, 3}, {8, 3}}});
-        verifyMergedDiff(20, d);
     }
 
     /*
@@ -237,9 +219,7 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0      XXXX
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {{{4, 4}}, {{2, 4}}, {{0, 4}}});
-        verifyMergedDiff(10, d);
+        testMerge1(10, {{{4, 4}}, {{2, 4}}, {{0, 4}}});
     }
 
     /*
@@ -250,9 +230,7 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0          AAAA
      */
     {
-        TmpDiffFileVec d(4);
-        execIoRecipe(d, {{{8, 4}}, {{6, 4}}, {{2, 4}}, {{0, 4}}});
-        verifyMergedDiff(20, d);
+        testMerge1(20, {{{8, 4}}, {{6, 4}}, {{2, 4}}, {{0, 4}}});
     }
 
     /**
@@ -262,9 +240,7 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0      AAAA
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {{{4, 4}}, {{2, 4}}, {{0, 10}}});
-        verifyMergedDiff(20, d);
+        testMerge1(20, {{{4, 4}}, {{2, 4}}, {{0, 10}}});
     }
 
     /**
@@ -274,12 +250,10 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0      AAAA BBBB CCCC
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {
+        testMerge1(20, {
                 {{4, 4}, {9, 4}, {14, 4}},
                 {{2, 4}, {7, 4}},
                 {{0, 16}}});
-        verifyMergedDiff(20, d);
     }
 
     /**
@@ -291,15 +265,13 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0          XXXX XXXX XXXX
      */
     {
-        TmpDiffFileVec d(5);
-        execIoRecipe(d, {
+        testMerge1(30, {
                 {{8, 4}, {13, 4}, {18, 4}},
                 {{6, 4}, {11, 4}},
                 {{4, 14}},
                 {{2, 4}},
                 {{0, 4}}
             });
-        verifyMergedDiff(30, d);
     }
 
     /**
@@ -309,12 +281,10 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0  XXX XXX XXX XXX
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {
+        testMerge1(20, {
                 {{0, 3}, {4, 3}, {8, 3}, {12, 3}},
                 {{2, 3}, {6, 3}, {10, 3}, {14, 3}},
                 {{4, 3}, {8, 3}, {12, 3}, {16, 3}}});
-        verifyMergedDiff(20, d);
     }
 
     /**
@@ -324,12 +294,10 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0  XXX XXX XXX XXX
      */
     {
-        TmpDiffFileVec d(3);
-        execIoRecipe(d, {
+        testMerge1(20, {
                 {{0, 3}, {4, 3}, {8, 3}, {12, 3}},
                 {{2, 3}, {6, 3}, {10, 3}, {14, 3}},
                 {{4, 3}, {8, 3}, {12, 3}, {16, 3}}});
-        verifyMergedDiff(20, d);
     }
 
     /**
@@ -342,8 +310,7 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0              XXX
      */
     {
-        TmpDiffFileVec d(6);
-        execIoRecipe(d, {
+        testMerge1(20, {
                 {{12, 3}},
                 {{6, 3}},
                 {{4, 3}},
@@ -351,7 +318,6 @@ CYBOZU_TEST_AUTO(wdiffMerge)
                 {{2, 3}},
                 {{0, 3}}
             });
-        verifyMergedDiff(20, d);
     }
 
     /**
@@ -364,8 +330,7 @@ CYBOZU_TEST_AUTO(wdiffMerge)
      * diff0    XXX
      */
     {
-        TmpDiffFileVec d(6);
-        execIoRecipe(d, {
+        testMerge1(10, {
                 {{2, 3}},
                 {{0, 3}},
                 {{2, 3}},
@@ -373,6 +338,36 @@ CYBOZU_TEST_AUTO(wdiffMerge)
                 {{2, 3}},
                 {{0, 3}}
             });
-        verifyMergedDiff(10, d);
+    }
+}
+
+void testMerge2(size_t len, const Recipe &recipe)
+{
+    SioListVec slv = generateSioListVec(recipe);
+    size_t nr = recipe.size();
+    TmpDiffFileVec d0(nr), d1(nr);
+    makeSortedWdiffs2(d0, slv);
+    makeIndexedWdiffs(d1, slv);
+    verifyMergedDiff(len, d0);
+    verifyMergedDiff(len, d1);
+    verifyDiffEquality(len, d0, d1);
+}
+
+CYBOZU_TEST_AUTO(wdiffMergeRandom)
+{
+    const size_t len = 512;
+    const size_t ioNr = 32;
+    const size_t diffNr = 8;
+    for (size_t i = 0; i < 10; i++) {
+        Recipe recipe;
+        for (size_t j = 0; j < diffNr; j++) {
+            recipe.emplace_back();
+            for (size_t k = 0; k < ioNr; k++) {
+                const uint64_t ioAddr = g_rand() % len;
+                const uint32_t ioBlocks = std::min(g_rand() % 16 + 1, len - ioAddr);
+                recipe.back().push_back({ioAddr, ioBlocks});
+            }
+        }
+        testMerge2(len, recipe);
     }
 }

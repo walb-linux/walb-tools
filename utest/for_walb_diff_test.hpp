@@ -65,7 +65,17 @@ struct Sio
     }
     void setRandomly() {
         cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
-
+        ioAddr = rand_.get64() % (128 * MEBI / LOGICAL_BLOCK_SIZE);
+        ioBlocks = rand_() % 15 + 1;
+        setRandomlyBottomHalf();
+    }
+    void setRandomly(uint64_t ioAddr, uint32_t ioBlocks) {
+        this->ioAddr = ioAddr;
+        this->ioBlocks = ioBlocks;
+        setRandomlyBottomHalf();
+    }
+    void setRandomlyBottomHalf() {
+        cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
         const size_t r = rand_() % 100;
         if (r < 80) {
             type = RecType::NORMAL;
@@ -74,14 +84,12 @@ struct Sio
         } else {
             type = RecType::ALLZERO;
         }
-        ioBlocks = rand_() % 15 + 1;
         if (type == RecType::NORMAL) {
             data.resize(LOGICAL_BLOCK_SIZE * ioBlocks);
             rand_.fill(data.data(), data.size());
         } else {
             data.resize(0);
         }
-        ioAddr = rand_.get64() % (128 * MEBI / LOGICAL_BLOCK_SIZE);
     }
     template <typename Record>
     void copyTopHalfTo(Record& rec) const {
@@ -144,6 +152,8 @@ struct Sio
     }
 };
 
+using SioList = std::list<Sio>;
+
 inline std::string dataToStr(const AlignedArray& data)
 {
     std::stringstream ss;
@@ -190,7 +200,7 @@ public:
     }
 };
 
-inline void removeOverlapped(std::list<Sio>& list)
+inline void removeOverlapped(SioList& list)
 {
     if (list.empty()) return;
     RangeSet rset;
@@ -209,9 +219,9 @@ inline void removeOverlapped(std::list<Sio>& list)
 #endif
 }
 
-inline std::list<Sio> generateSioList(size_t nr, bool mustBeSorted)
+inline SioList generateSioList(size_t nr, bool mustBeSorted)
 {
-    std::list<Sio> list;
+    SioList list;
     size_t prevNr = 0;
     while (list.size() < nr) {
         for (size_t i = 0; i < nr; i++) {
@@ -229,14 +239,14 @@ inline std::list<Sio> generateSioList(size_t nr, bool mustBeSorted)
     return list;
 }
 
-inline void mergeOrAddSioList(std::list<Sio>& list, Sio&& sio)
+inline void mergeOrAddSioList(SioList& list, Sio&& sio)
 {
     if (list.empty() || !list.back().tryMerge(sio)) {
         list.push_back(std::move(sio));
     }
 }
 
-inline void compareSioList(const std::list<Sio>& lhs, const std::list<Sio>& rhs)
+inline void compareSioList(const SioList& lhs, const SioList& rhs)
 {
     CYBOZU_TEST_EQUAL(lhs.size(), rhs.size());
     auto it0 = lhs.begin();
@@ -272,5 +282,100 @@ inline void compareSioList(const std::list<Sio>& lhs, const std::list<Sio>& rhs)
         }
     }
 }
+
+class TmpDisk
+{
+private:
+    AlignedArray buf_;
+public:
+    explicit TmpDisk(size_t len) : buf_(len * LBS) {
+        clear();
+    }
+    void clear() {
+        ::memset(buf_.data(), 0, buf_.size());
+    }
+    void writeDiff(const DiffRecord &rec, const DiffIo &io) {
+        if (writeDiffTopHalf(rec)) return;
+        assert(!rec.isCompressed());
+        write(rec.io_address, rec.io_blocks, io.data.data());
+    }
+    void writeDiff(const IndexedDiffRecord &rec, const AlignedArray &data) {
+        if (writeDiffTopHalf(rec)) return;
+        write(rec.io_address, rec.io_blocks, data.data());
+    }
+    void verifyEquals(const TmpDisk &rhs) const {
+        const size_t len = buf_.size() / LBS;
+        AlignedArray buf0(LBS), buf1(LBS);
+        size_t nr = 0;
+        for (size_t i = 0; i < len; i++) {
+            read(i, 1, buf0.data());
+            rhs.read(i, 1, buf1.data());
+            if (::memcmp(buf0.data(), buf1.data(), LBS) != 0) {
+                ::printf("block differ %zu\n", i);
+                nr++;
+            }
+        }
+        if (nr > 0) throw cybozu::Exception(__func__) << nr;
+    }
+    void apply(const std::string &diffPath) {
+        cybozu::util::File file(diffPath, O_RDONLY);
+        DiffFileHeader header;
+        header.readFrom(file);
+        if (header.isIndexed()) {
+            IndexedDiffReader reader;
+            IndexedDiffCache cache;
+            cache.setMaxSize(4 * MEBI);
+            reader.setFile(std::move(file), cache);
+            IndexedDiffRecord rec;
+            AlignedArray data;
+            while (reader.readDiff(rec, data)) {
+                writeDiff(rec, data);
+            }
+        } else {
+            DiffReader reader(std::move(file));
+            reader.dontReadHeader();
+            DiffRecord rec;
+            DiffIo io;
+            while (reader.readAndUncompressDiff(rec, io, false)) {
+                writeDiff(rec, io);
+            }
+        }
+    }
+private:
+    void read(uint64_t addr, size_t len, char *data) const {
+        verifyAddr(addr, len);
+        ::memcpy(data, &buf_[addr * LBS], len * LBS);
+    }
+    void write(uint64_t addr, size_t len, const char *data) {
+        verifyAddr(addr, len);
+        ::memcpy(&buf_[addr * LBS], data, len * LBS);
+    }
+    void writeAllZero(uint64_t addr, size_t len) {
+        verifyAddr(addr, len);
+        ::memset(&buf_[addr * LBS], 0, len * LBS);
+    }
+    void discard(uint64_t addr, size_t len) {
+        verifyAddr(addr, len);
+        ::memset(&buf_[addr * LBS], 0xff, len * LBS); // This is for test.
+    }
+    void verifyAddr(uint64_t addr, size_t len) const {
+        CYBOZU_TEST_ASSERT(len > 0);
+        CYBOZU_TEST_ASSERT(addr + len <= buf_.size() / LBS);
+    }
+    template <typename Record>
+    bool writeDiffTopHalf(const Record &rec) {
+        verifyAddr(rec.io_address, rec.io_blocks);
+        if (rec.isAllZero()) {
+            writeAllZero(rec.io_address, rec.io_blocks);
+            return true;
+        }
+        if (rec.isDiscard()) {
+            discard(rec.io_address, rec.io_blocks);
+            return true;
+        }
+        assert(rec.isNormal());
+        return false;
+    }
+};
 
 } // namespace walb

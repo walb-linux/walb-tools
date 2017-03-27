@@ -7,16 +7,18 @@
 
 using namespace walb;
 
-cybozu::util::Random<size_t> rand_;
+cybozu::util::Random<size_t> g_rand;
 
 /**
- * If you want to fix the seed, specify it to rand_.setSeed().
+ * If you want to fix the seed, specify it to g_rand.setSeed().
  */
 CYBOZU_TEST_AUTO(Setup)
 {
-    rand_.setSeed(395019343);
-    ::printf("random number generator seed: %zu\n", rand_.getSeed());
-    setRandForTest(rand_);
+#if 0
+    g_rand.setSeed(395019343);
+#endif
+    ::printf("random number generator seed: %zu\n", g_rand.getSeed());
+    setRandForTest(g_rand);
 }
 
 CYBOZU_TEST_AUTO(NullSortedDiffFile)
