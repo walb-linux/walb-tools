@@ -312,7 +312,8 @@ private:
 class DiffIndexMem
 {
 private:
-    std::map<uint64_t, IndexedDiffRecord> index_; // key: io_address.
+    using Map = std::map<uint64_t, IndexedDiffRecord>;
+    Map index_; // key: io_address.
 
     void addDetail(const IndexedDiffRecord &rec);
 public:
@@ -326,7 +327,7 @@ public:
     }
     template<class Writer>
     void writeTo(Writer& writer, DiffStatistics *stat = nullptr) const {
-        for (const std::pair<uint64_t, IndexedDiffRecord>& pair : index_) {
+        for (const Map::value_type& pair : index_) {
             const IndexedDiffRecord& rec = pair.second;
             writer.write(&rec, sizeof(rec));
             if (stat) stat->update(rec);
@@ -338,6 +339,11 @@ public:
      * for debug and test.
      */
     void checkNoOverlappedAndSorted() const;
+
+    /**
+     * For debug and test.
+     */
+    std::vector<IndexedDiffRecord> getAsVec() const;
 };
 
 
@@ -373,7 +379,14 @@ public:
     }
     void finalize();
     void writeHeader(DiffFileHeader &header);
+    /**
+     * rec.io_checksum must be set before calling this function.
+     */
     void writeDiff(const IndexedDiffRecord &rec, const char *data);
+    /**
+     * rec.io_checksum can be empty before calling this function
+     * if they are not compressed.
+     */
     void compressAndWriteDiff(const IndexedDiffRecord &rec, const char *data,
                               int type = ::WALB_DIFF_CMPR_SNAPPY, int level = 0);
 
@@ -496,7 +509,7 @@ public:
     bool loadToCache(const IndexedDiffRecord &rec, bool throwError = true);
 private:
     bool getNextRec(IndexedDiffRecord& rec);
-    bool verifyIoData(uint64_t offset, uint32_t size, bool throwError) const;
+    bool verifyIoData(uint64_t offset, uint32_t size, uint32_t csum, bool throwError) const;
 };
 
 

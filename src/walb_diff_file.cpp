@@ -71,6 +71,7 @@ void DiffWriter::writeHeader(DiffFileHeader &header)
     if (isWrittenHeader_) {
         throw RT_ERR("Do not call writeHeader() more than once.");
     }
+    header.type = ::WALB_DIFF_TYPE_SORTED;
     header.writeTo(fileW_);
     isWrittenHeader_ = true;
 }
@@ -284,6 +285,16 @@ void DiffIndexMem::checkNoOverlappedAndSorted() const
     }
 }
 
+std::vector<IndexedDiffRecord> DiffIndexMem::getAsVec() const
+{
+    std::vector<IndexedDiffRecord> ret;
+    ret.reserve(index_.size());
+    for (const Map::value_type& pair : index_) {
+        ret.push_back(pair.second);
+    }
+    return ret;
+}
+
 void DiffIndexMem::addDetail(const IndexedDiffRecord &rec)
 {
     assert(isAlignedIo(rec.io_address, rec.io_blocks));
@@ -345,6 +356,7 @@ void IndexedDiffWriter::writeHeader(DiffFileHeader &header)
         throw cybozu::Exception(NAME)
             << "do not call writeHeader() more than once.";
     }
+    header.type = ::WALB_DIFF_TYPE_INDEXED;
     header.writeTo(fileW_);
     assert(offset_ == 0);
     offset_ += header.getSize();
@@ -501,8 +513,8 @@ bool IndexedDiffReader::isOnCache(const IndexedDiffRecord &rec) const
 
 bool IndexedDiffReader::loadToCache(const IndexedDiffRecord &rec, bool throwError)
 {
-    assert(isOnCache(rec));
-    if (!verifyIoData(rec.data_offset, rec.data_size, throwError)) {
+    assert(!isOnCache(rec));
+    if (!verifyIoData(rec.data_offset, rec.data_size, rec.io_checksum, throwError)) {
         return false;
     }
     std::unique_ptr<AlignedArray> p(new AlignedArray());
@@ -544,9 +556,9 @@ bool IndexedDiffReader::getNextRec(IndexedDiffRecord& rec)
     return true;
 }
 
-bool IndexedDiffReader::verifyIoData(uint64_t offset, uint32_t size, bool throwError) const
+bool IndexedDiffReader::verifyIoData(uint64_t offset, uint32_t size, uint32_t csum, bool throwError) const
 {
-    if (cybozu::util::calcChecksum(&memFile_[offset], size, 0) == 0) {
+    if (cybozu::util::calcChecksum(&memFile_[offset], size, 0) == csum) {
         return true;
     }
     if (throwError) {
