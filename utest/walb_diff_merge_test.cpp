@@ -3,6 +3,7 @@
 #include "walb_diff_merge.hpp"
 #include "tmp_file.hpp"
 #include "random.hpp"
+#include "for_walb_diff_test.hpp"
 #include <vector>
 
 using namespace walb;
@@ -10,6 +11,13 @@ class TmpDiffFile;
 using TmpDiffFileVec = std::vector<TmpDiffFile>;
 
 cybozu::util::Random<size_t> g_rand;
+
+CYBOZU_TEST_AUTO(Setup)
+{
+    g_rand.setSeed(395019343);
+    ::printf("random number generator seed: %zu\n", g_rand.getSeed());
+    setRandForTest(g_rand);
+}
 
 class TmpDiffFile
 {
@@ -83,24 +91,13 @@ public:
         ::memset(buf_.data(), 0, buf_.size());
     }
     void writeDiff(const DiffRecord &rec, const DiffIo &io) {
-        verifyAddr(rec.io_address, rec.io_blocks);
-        if (rec.isAllZero()) {
-            writeAllZero(rec.io_address, rec.io_blocks);
-            return;
-        }
-        if (rec.isDiscard()) {
-            discard(rec.io_address, rec.io_blocks);
-            return;
-        }
-        assert(rec.isNormal());
-        if (rec.isCompressed()) {
-            DiffRecord outRec;
-            DiffIo outIo;
-            uncompressDiffIo(rec, io.data.data(), outRec, outIo.data);
-            write(rec.io_address, rec.io_blocks, outIo.data.data());
-        } else {
-            write(rec.io_address, rec.io_blocks, io.data.data());
-        }
+        if (writeDiffTopHalf(rec)) return;
+        assert(!rec.isCompressed());
+        write(rec.io_address, rec.io_blocks, io.data.data());
+    }
+    void writeDiff(const IndexedDiffRecord &rec, const AlignedArray &data) {
+        if (writeDiffTopHalf(rec)) return;
+        write(rec.io_address, rec.io_blocks, data.data());
     }
     void verifyEquals(const TmpDisk &rhs) const {
         const size_t len = buf_.size() / LBS;
@@ -117,13 +114,27 @@ public:
         if (nr > 0) throw cybozu::Exception(__func__) << nr;
     }
     void apply(const std::string &diffPath) {
-        DiffReader reader(diffPath);
-        DiffFileHeader head;
-        reader.readHeader(head);
-        DiffRecord rec;
-        DiffIo io;
-        while (reader.readDiff(rec, io)) {
-            writeDiff(rec, io);
+        cybozu::util::File file(diffPath, O_RDONLY);
+        DiffFileHeader header;
+        header.readFrom(file);
+        if (header.isIndexed()) {
+            IndexedDiffReader reader;
+            IndexedDiffCache cache;
+            cache.setMaxSize(4 * MEBI);
+            reader.setFile(std::move(file), cache);
+            IndexedDiffRecord rec;
+            AlignedArray data;
+            while (reader.readDiff(rec, data)) {
+                writeDiff(rec, data);
+            }
+        } else {
+            DiffReader reader(std::move(file));
+            reader.dontReadHeader();
+            DiffRecord rec;
+            DiffIo io;
+            while (reader.readAndUncompressDiff(rec, io, false)) {
+                writeDiff(rec, io);
+            }
         }
     }
 private:
@@ -140,11 +151,26 @@ private:
         ::memset(&buf_[addr * LBS], 0, len * LBS);
     }
     void discard(uint64_t addr, size_t len) {
-        writeAllZero(addr, len);
+        verifyAddr(addr, len);
+        ::memset(&buf_[addr * LBS], 0xff, len * LBS); // This is for test.
     }
     void verifyAddr(uint64_t addr, size_t len) const {
         CYBOZU_TEST_ASSERT(len > 0);
         CYBOZU_TEST_ASSERT(addr + len <= buf_.size() / LBS);
+    }
+    template <typename Record>
+    bool writeDiffTopHalf(const Record &rec) {
+        verifyAddr(rec.io_address, rec.io_blocks);
+        if (rec.isAllZero()) {
+            writeAllZero(rec.io_address, rec.io_blocks);
+            return true;
+        }
+        if (rec.isDiscard()) {
+            discard(rec.io_address, rec.io_blocks);
+            return true;
+        }
+        assert(rec.isNormal());
+        return false;
     }
 };
 
