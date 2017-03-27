@@ -39,6 +39,7 @@ class Random
 {
 private:
     std::random_device rd_;
+    IntType seed_;
     std::mt19937 gen_;
     std::uniform_int_distribution<IntType> dist_;
 
@@ -46,8 +47,21 @@ public:
     Random(IntType minValue = std::numeric_limits<IntType>::min(),
            IntType maxValue = std::numeric_limits<IntType>::max())
         : rd_()
-        , gen_(rd_())
+        , seed_(rd_())
+        , gen_(seed_)
         , dist_(minValue, maxValue) {
+    }
+
+    void setSeed(IntType seed) {
+        seed_ = seed;
+        gen_.seed(seed_);
+    }
+    void setSeed() {
+        seed_ = rd_();
+        gen_.seed(seed_);
+    }
+    IntType getSeed() const {
+        return seed_;
     }
 
     IntType operator()() {
