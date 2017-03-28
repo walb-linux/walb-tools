@@ -95,6 +95,45 @@ void DiffMerger::mergeToFd(int outFd)
     statOut_.update(writer.getStat());
 }
 
+void DiffMerger::mergeToFdInParallel(int outFd, const CompressOpt& cmpr)
+{
+    cybozu::util::File file(outFd);
+    DiffFileHeader header;
+    header.type = ::WALB_DIFF_TYPE_SORTED;
+    header.writeTo(file);
+
+    prepare();
+    const size_t maxPushedNr = cmpr.numCpu * 2 + 1;
+    ConverterQueue conv(maxPushedNr, cmpr.numCpu, true, cmpr.type, cmpr.level);
+
+    DiffRecIo d;
+    DiffPacker packer;
+    size_t pushedNr = 0;
+    while (getAndRemove(d)) {
+        assert(d.isValid());
+        const DiffRecord& rec = d.record();
+        const DiffIo& io = d.io();
+        if (packer.add(rec, io.get())) continue;
+        conv.push(packer.getPackAsArray());
+        pushedNr++;
+        packer.clear();
+        packer.add(rec, io.get());
+        if (pushedNr < maxPushedNr) continue;
+        AlignedArray pack(conv.pop());
+        file.write(pack.data(), pack.size());
+        pushedNr--;
+    }
+    if (!packer.empty()) {
+        conv.push(packer.getPackAsArray());
+    }
+    conv.quit();
+    for (AlignedArray pack = conv.pop(); !pack.empty(); pack = conv.pop()) {
+        file.write(pack.data(), pack.size());
+    }
+
+    writeDiffEofPack(file);
+}
+
 void DiffMerger::prepare()
 {
     if (!isHeaderPrepared_) {

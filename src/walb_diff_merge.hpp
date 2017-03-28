@@ -18,6 +18,8 @@
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_diff_stat.hpp"
+#include "walb_diff_compressor.hpp"
+#include "host_info.hpp"
 #include "fileio.hpp"
 
 namespace walb {
@@ -206,6 +208,7 @@ public:
      * @outFd file descriptor for output wdiff.
      */
     void mergeToFd(int outFd);
+    void mergeToFdInParallel(int outFd, const CompressOpt& cmpr);
     /**
      * Prepare wdiff header and variables.
      */

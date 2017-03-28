@@ -8,6 +8,7 @@
 #include "cybozu/option.hpp"
 #include "util.hpp"
 #include "walb_diff_merge.hpp"
+#include "host_info.hpp"
 
 using namespace walb;
 
@@ -15,8 +16,9 @@ struct Option : public cybozu::Option
 {
     uint32_t maxIoSize;
     std::vector<std::string> inputWdiffs;
-    std::string outputWdiff;
+    std::string outputWdiff, cmprStr;
     bool doStat;
+    CompressOpt cmpr;
 
     Option() {
         setDescription("Merge wdiff files.");
@@ -24,6 +26,7 @@ struct Option : public cybozu::Option
         appendVec(&inputWdiffs, "i", "WDIFF_PATH_LIST: input wdiff paths.");
         appendMust(&outputWdiff, "o", "WDIFF_PATH: output wdiff path.");
         appendBoolOpt(&doStat, "stat", ": put statistics.");
+        appendOpt(&cmprStr, "snappy:0:1", "cmpr", "type:level:concurrency : compression for output (default: snappy:0:1)");
         appendHelp("h", ": put this message.");
     }
     uint32_t maxIoBlocks() const {
@@ -40,6 +43,7 @@ struct Option : public cybozu::Option
             ::printf("You must specify one or more input wdiff files.\n");
             goto error;
         }
+        cmpr.parse(cmprStr);
         return true;
       error:
         usage();
@@ -58,7 +62,11 @@ int doMain(int argc, char *argv[])
     cybozu::util::File file(opt.outputWdiff, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     merger.setMaxIoBlocks(opt.maxIoBlocks());
     merger.setShouldValidateUuid(false);
+#if 0
     merger.mergeToFd(file.fd());
+#else
+    merger.mergeToFdInParallel(file.fd(), opt.cmpr);
+#endif
     file.close();
     if (opt.doStat) {
         std::cerr << "mergeIn  " << merger.statIn() << std::endl
