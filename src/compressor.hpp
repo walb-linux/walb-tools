@@ -113,7 +113,7 @@ public:
         case WALB_DIFF_CMPR_GZIP:
             engine_ = new UncompressorZlib(para);
             break;
-        case WALB_DIFF_CMPR_LZMA: \
+        case WALB_DIFF_CMPR_LZMA:
             engine_ = new UncompressorXz(para);
             break;
         default:
