@@ -259,7 +259,7 @@ void DiffMemory::checkStatistics() const
     }
 }
 
-void DiffMemory::writeTo(int outFd, bool isCompressed)
+void DiffMemory::writeTo(int outFd, int cmprType)
 {
     DiffWriter writer(outFd);
     writer.writeHeader(fileH_);
@@ -267,8 +267,8 @@ void DiffMemory::writeTo(int outFd, bool isCompressed)
     while (it != map_.cend()) {
         const DiffRecIo &r = it->second;
         assert(r.isValid());
-        if (isCompressed) {
-            writer.compressAndWriteDiff(r.record(), r.io().get());
+        if (cmprType != ::WALB_DIFF_CMPR_NONE) {
+            writer.compressAndWriteDiff(r.record(), r.io().get(), cmprType);
         } else {
             DiffRecord rec = r.record();
             rec.checksum = r.io().calcChecksum();

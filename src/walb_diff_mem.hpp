@@ -101,7 +101,7 @@ public:
     uint64_t getNIos() const { return nIos_; }
     void checkStatistics() const;
     DiffFileHeader& header() { return fileH_; }
-    void writeTo(int outFd, bool isCompressed = true);
+    void writeTo(int outFd, int cmprType = ::WALB_DIFF_CMPR_SNAPPY);
     void readFrom(int inFd);
     /**
      * Clear all data.
