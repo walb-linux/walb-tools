@@ -12,11 +12,9 @@ struct CompressorZlib : walb::compressor_local::CompressorIF {
     bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)
         try
     {
-        cybozu::MemoryOutputStream os(out, maxOutSize);
-        cybozu::ZlibCompressorT<cybozu::MemoryOutputStream> enc(os, false, compressionLevel_);
-        enc.write(in, inSize);
-        enc.flush();
-        *outSize = os.pos;
+        size_t size = cybozu::ZlibCompress(out, maxOutSize, in, inSize, compressionLevel_);
+        if (size  == 0) return false;
+        *outSize = size;
         return true;
     } catch (...) {
         return false;
@@ -27,19 +25,7 @@ struct UncompressorZlib : walb::compressor_local::UncompressorIF {
     UncompressorZlib(size_t) {}
     size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize)
     {
-       cybozu::MemoryInputStream is(in, inSize);
-       cybozu::ZlibDecompressorT<cybozu::MemoryInputStream> dec(is);
-       char *const top = (char *)out;
-       size_t pos = 0;
-       for (;;) {
-           size_t readSize = dec.readSome(top + pos, maxOutSize - pos);
-           if (readSize == 0) return pos;
-           pos += readSize;
-           if (pos == maxOutSize) {
-               if (dec.isEmpty()) return pos;
-               throw cybozu::Exception("UncompressorZlib:run:small maxOutSize") << maxOutSize;
-           }
-       }
+        return cybozu::ZlibUncompress(out, maxOutSize, in, inSize);
     }
 };
 
