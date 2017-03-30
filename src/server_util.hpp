@@ -21,6 +21,7 @@
 #include "meta.hpp"
 #include "protocol.hpp"
 #include "easy_signal.hpp"
+#include "suppressed_logger.hpp"
 
 namespace walb {
 namespace server {
@@ -32,7 +33,14 @@ class MultiThreadedServer
 {
 private:
     static ProcessStatus *pps_;
+    SuppressedLogger logger_;
+    static const char *exceedsMaxConcurrencyMsg() {
+        return "MultiThreadedServer:exceeds max concurrency";
+    }
 public:
+    MultiThreadedServer() : logger_() {
+        logger_.setSuppressMessageSuffix(exceedsMaxConcurrencyMsg());
+    }
     void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId,
              const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
              size_t maxNumThreads, const KeepAliveParams& keepAliveParams, size_t timeoutS);
@@ -55,7 +63,12 @@ private:
             ::exit(1);
         }
     }
-    void putLogExceedsMaxConcurrency(size_t maxNumThreads);
+    void putLogExceedsMaxConcurrency(size_t maxNumThreads) {
+        logger_.warn() << exceedsMaxConcurrencyMsg() << maxNumThreads;
+    }
+    void putLogExceedsMaxConcurrencySuppressed() {
+        logger_.putSuppressedMessageIfNecessary();
+    }
 };
 
 } //namespace server
