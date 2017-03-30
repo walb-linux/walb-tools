@@ -7,7 +7,7 @@ void Logger::writeV(cybozu::LogPriority pri, const char *format, va_list args) c
     try {
         std::string msg;
         cybozu::vformat(msg, format, args);
-        write(pri, msg);
+        writeS(pri, msg);
     } catch (...) {
         write(pri, "Logger::write() error.");
     }

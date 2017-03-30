@@ -43,7 +43,7 @@ public:
     virtual ~Logger() noexcept = default;
     virtual void write(cybozu::LogPriority pri, const char *msg) const noexcept = 0;
 
-    void write(cybozu::LogPriority pri, const std::string &msg) const noexcept {
+    void writeS(cybozu::LogPriority pri, const std::string &msg) const noexcept {
         write(pri, msg.c_str());
     }
     void writeV(cybozu::LogPriority pri, const char *format, va_list args) const noexcept;
@@ -56,10 +56,10 @@ public:
     #define WALB_LOGGER_FORMAT_ATTR
 #endif
 
-    void debug(const std::string &msg) const noexcept { write(cybozu::LogDebug, msg); }
-    void info(const std::string &msg) const noexcept { write(cybozu::LogInfo, msg); }
-    void warn(const std::string &msg) const noexcept { write(cybozu::LogWarning, msg); }
-    void error(const std::string &msg) const noexcept { write(cybozu::LogError, msg); }
+    void debug(const std::string &msg) const noexcept { writeS(cybozu::LogDebug, msg); }
+    void info(const std::string &msg) const noexcept { writeS(cybozu::LogInfo, msg); }
+    void warn(const std::string &msg) const noexcept { writeS(cybozu::LogWarning, msg); }
+    void error(const std::string &msg) const noexcept { writeS(cybozu::LogError, msg); }
 
     void debug(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
     void info(const char *format, ...) const noexcept WALB_LOGGER_FORMAT_ATTR;
@@ -86,7 +86,7 @@ public:
         explicit Sync(const Logger& logger) : logger_(logger) {}
         ~Sync() noexcept {
             if (!s_.empty()) {
-                logger_.write(priority, s_);
+                logger_.writeS(priority, s_);
             }
         }
         Sync(Sync&& rhs)
