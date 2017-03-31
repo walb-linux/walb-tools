@@ -3,10 +3,11 @@ import sys, time, datetime, os, threading, signal, traceback
 from walblib import *
 import walblib.worker as worker
 from collections import defaultdict
+import json
 
 walbcDebug = False
 g_quit = False
-g_verbose = False
+g_verbose = 0  # -v: 1 -vv: 2
 g_retryNum = 3
 g_step = 0
 
@@ -20,13 +21,24 @@ INFO = 'INFO'
 ERR = 'ERROR'
 DEBUG = 'DEBUG'
 
+def verbose2():
+    return g_verbose >= 2
+
+def verbose1():
+    return g_verbose >= 1
+
 def log(mode, *s):
-    if mode == DEBUG and not g_verbose:
-        return
     print getCurrentTime(), mode, ":".join(map(str,s))
     sys.stdout.flush()
 
+def logdd(*s):
+    if not verbose2():
+        return
+    log(DEBUG, *s)
+
 def logd(*s):
+    if not verbose1():
+        return
     log(DEBUG, *s)
 
 def loge(*s):
@@ -48,6 +60,25 @@ def quitHandler(sig, frame):
     global g_quit
     g_quit = True
 
+
+def volActTimeD2Str(volTimeActD):
+    '''
+    Args:
+        volTimeActD: {str:{str:datetime or None}}
+    Returns:
+        str
+    '''
+    ret = {}
+    for vol, d1 in volTimeActD.iteritems():
+        d2 = {}
+        for act, dt in d1.iteritems():
+            if dt is None:
+                d2[act] = None
+            else:
+                verify_type(dt, datetime.datetime)
+                d2[act] = str(dt)
+    ret[vol] = d2
+    return json.dumps(ret)
 
 
 class ExecedRepl:
@@ -245,6 +276,7 @@ class Worker:
     def selectApplyTask1(self, volL):
         for vol in volL:
             ms = self.walbc.get_base(self.a0, vol)
+            logdd('selectApplyTask1', vol, ms)
             if ms.is_applying():
                 return ApplyTask(vol, self.a0, ms.E.gidB)
         return None
@@ -267,6 +299,7 @@ class Worker:
             size = self.walbc.get_total_diff_size(self.a0, vol, gid1=gid)
             logd('Task2 candidate', size, vol, gid)
             ls.append((size, vol, gid))
+        logdd('selectApplyTask2', ls)
         if ls:
             ls.sort(key=lambda x : x[0])
             (size, vol, gid) = ls[-1]
@@ -315,6 +348,7 @@ class Worker:
         for (vol, n, notMergeGidL) in zip(volL, numDiffL, notMergeGidLL):
             if n >= self.cfg.merge.threshold_nr:
                 ls.append((n, vol, notMergeGidL))
+        logdd('selectMergeTask1', ls)
         return self.selectMaxDiffNumMergeTask(ls)
 
     def selectMergeTask2(self, volActTimeL, numDiffL, notMergeGidLL, curTime):
@@ -324,11 +358,13 @@ class Worker:
             if ts and curTime < ts + self.cfg.merge.interval:
                 continue
             ls.append((n, vol, notMergeGidL))
+        logdd('selectMergeTask2', ls)
         return self.selectMaxDiffNumMergeTask(ls)
 
     def selectReplTask(self, volL, curTime):
         tL = []
         rsL = self.cfg.repl.getEnabledList()
+        logdd('selectReplTask', 'rsL', [(rs.name, rs.log_name, rs.addr, rs.port) for rs in rsL])
         for vol in volL:
             if vol in self.cfg.repl.disabled_volumes:
                 continue
@@ -351,6 +387,7 @@ class Worker:
                 if not ts:
                     ts = OLDEST_TIME
                 tL.append((ts, vol, rs, a1latest))
+        logdd('selectReplTask', 'tL', [(x[0], x[1], x[2].name, x[3]) for x in tL])
         if tL:
             tL.sort(key=lambda x:x[0])
             (_, vol, rs, a1latest) = tL[0]
@@ -364,8 +401,14 @@ class Worker:
 
     def selectTask(self, volActTimeL, curTime):
         volL = map(lambda x:x[0], volActTimeL)
+        if verbose2():
+            logd('selectTask', 'volL', volL)
         numDiffL = self.getNumDiffList(volL)
+        if verbose2():
+            logd('selectTask', 'numDiffL', numDiffL)
         notMergeGidLL = self.getNotMergeGidLL(volL)
+        if verbose2():
+            logd('selectTask', 'notMergeGidLL', notMergeGidLL)
         t = None
         # step 1
         if g_step in [0, 1]:
@@ -502,15 +545,16 @@ def usage():
     print "walb-worker -f configName [opt]"
     print "    -f configName ; load config ; load from stdin if configName = '-'"
     print "    -v ; for verbose message"
+    print "    -vv ; for more verbose message"
     print "    (the following options are for only debug)"
     print "    -step num ; only select step of task"
     print "    -lifetime seconds : lifetime of worker"
     print "    -no : select task but no action"
     exit(1)
 
-def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
+def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
     verify_type(cfg, worker.Config)
-    verify_type(verbose, bool)
+    verify_type(verbose, int)
     verify_type(step, int)
     verify_type(lifetime, int)
     global g_verbose
@@ -532,6 +576,8 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
                 break
             try:
                 volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
+                if verbose2():
+                    logd('volActTimeD', volActTimeD2Str(volActTimeD))
                 volActTimeL = manager.getNonActiveList(volActTimeD)
                 curTime = getCurrentTime()
                 if lifetime > 0 and curTime - startTime > datetime.timedelta(seconds=lifetime):
@@ -559,7 +605,7 @@ def workerMain(cfg, verbose=False, step=0, lifetime=0, noAction=False):
 
 def main():
     configNames = []
-    verbose = False
+    verbose = 0
     step = 0
     lifetime = 0
     noAction = False
@@ -585,7 +631,11 @@ def main():
             i += 1
             continue
         if c == '-v':
-            verbose = True
+            verbose = 1
+            i += 1
+            continue
+        if c == '-vv':
+            verbose = 2
             i += 1
             continue
         else:
