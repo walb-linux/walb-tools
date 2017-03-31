@@ -9,22 +9,25 @@ class SuppressedLogger
 {
     class Sync {
         SuppressedLogger& logger_;
-        std::ostringstream os_;
+        // gcc-4.8 does not support move cstr of std::ostringstream.
+        using SSPtr = std::unique_ptr<std::ostringstream>;
+        SSPtr osP_;
         bool atBegin_;
     public:
         explicit Sync(SuppressedLogger& logger)
-            : logger_(logger), os_(), atBegin_(true) {}
+            : logger_(logger), osP_(new std::ostringstream()), atBegin_(true) {}
         ~Sync() noexcept {
-            logger_.tryToWrite(os_.str());
+            if (osP_) logger_.tryToWrite(osP_->str());
         }
         Sync(Sync&& rhs)
-            : logger_(rhs.logger_), os_(std::move(rhs.os_)), atBegin_(rhs.atBegin_) {}
+            : logger_(rhs.logger_), osP_(std::move(rhs.osP_)), atBegin_(rhs.atBegin_) {}
         Sync(const Sync& rhs) = delete;
         template <typename T>
         Sync& operator<<(const T& t) {
+            if (!osP_) return *this;
             if (atBegin_) atBegin_ = false;
-            else os_ << ':';
-            os_ << t;
+            else *osP_ << ':';
+            *osP_ << t;
             return *this;
         }
     };
