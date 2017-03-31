@@ -42,3 +42,4 @@ binsrc/wldev-checker usr/lib/walb/bin
 binsrc/fs-workload usr/lib/walb/bin
 binsrc/wldev-dump usr/lib/walb/bin
 binsrc/writer-verifier usr/lib/walb/bin
+binsrc/writer usr/lib/walb/bin
