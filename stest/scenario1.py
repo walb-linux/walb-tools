@@ -194,6 +194,7 @@ class TestWorker(object):
                 action(self.threadId, i, self.vol, self.wdev)
         except Exception:
             print traceback.format_exc()
+            sys.stdout.flush()
             os._exit(1)
 
 
