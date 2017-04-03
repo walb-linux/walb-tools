@@ -98,18 +98,16 @@ def do_merge(threadId, count, vol, wdev):
             time.sleep(0.5)
             gidB = walbc.snapshot(s0, vol, [a0], TIMEOUT)
             time.sleep(1)
-            walbc.stop(s0, vol)
-            walbc.stop(p0, vol, 'empty')
-            walbc.start(s0, vol)
-            walbc.start(p0, vol)
+            gidM = walbc.snapshot(s0, vol, [a0], TIMEOUT)
             time.sleep(1)
             gidE = walbc.snapshot(s0, vol, [a0], TIMEOUT)
+            walbc.disable_snapshot(a0, vol, [gidM])
             gidL = walbc.get_restorable_gid(a0, vol, 'all')
             posB = gidL.index(gidB)
             posE = gidL.index(gidE)
-            print 'gidB', gidB, 'gidE', gidE, 'gidL', gidL
+            print 'gidB', gidB, 'gidM', gidM, 'gidE', gidE, 'gidL', gidL
             if posE - posB < 2:
-                raise Exception('bad range', info)
+                raise Exception('bad range', posB, gidM, posE, info)
             time.sleep(0.5)
         md0 = get_sha1_of_restorable(a0, vol, gidE)
         walbc.merge(a0, vol, gidB, gidE, TIMEOUT)
