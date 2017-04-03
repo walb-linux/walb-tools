@@ -6,7 +6,7 @@ BIN="../../binsrc"
 
 def make_zero_image(*args):
     for i in args:
-        run("dd if=/dev/zero of=./ddev32M.%d bs=1048576 count=32" % i)
+        run("dd if=/dev/zero of=./ddev32M.{} bs=1048576 count=32".format(i))
 
 def prepare_test():
     # Generate wlog/wdiff files for test.
@@ -14,7 +14,7 @@ def prepare_test():
     run("dd if=/dev/urandom of=./ddev32M bs=1048576 count=32")
     for i in xrange(1, 5):
         #BIN/wlog-gen --nodiscard -s 32M -o ${i}.wlog
-        run(BIN + ("/wlog-gen -s 32M -z 32M --minDiscardSize 512 --maxDiscardSize 1M -o %d.wlog" % i))
+        run(BIN + ("/wlog-gen -s 32M -z 32M --minDiscardSize 512 --maxDiscardSize 1M -o {}.wlog".format(i)))
         run(BIN + ("/wlog-to-wdiff -o {}.s.wdiff -i {}.wlog".format(i, i)))
         run(BIN + ("/wlog-to-wdiff -indexed -o {}.i.wdiff -i {}.wlog".format(i, i)))
 
@@ -22,13 +22,13 @@ def log_diff_equality_test():
     print "#################### Log/diff equality test ####################"
     for i in xrange(1, 5):
         make_zero_image(0, 1, 2)
-        run(BIN + ("/wlog-redo -z ddev32M.0 < %d.wlog" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.1 -i %d.s.wdiff" % i))
+        run(BIN + ("/wlog-redo -z ddev32M.0 < {}.wlog".format(i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.1 -i {}.s.wdiff".format(i)))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-        check_result("log/diff equality test %dth wlog/s.wdiff." % i)
-        run(BIN + ("/wdiff-redo -z ddev32M.2 -i %d.i.wdiff" % i))
+        check_result("log/diff equality test {}th wlog/s.wdiff.".format(i))
+        run(BIN + ("/wdiff-redo -z ddev32M.2 -i {}.i.wdiff".format(i)))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.2")
-        check_result("log/diff equality test %dth wlog/i.wdiff." % i)
+        check_result("log/diff equality test {}th wlog/i.wdiff.".format(i))
 
 def full_image_test():
     print "#################### Full image test ####################"
@@ -46,9 +46,9 @@ def consolidation_test1():
     print "##################### Consolidation test ####################"
     make_zero_image(0, 1, 2, 3, 4)
     for i in xrange(1, 5):
-        run(BIN + ("/wlog-redo -z ddev32M.0 < %d.wlog" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.1 -i %d.s.wdiff" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.2 -i %d.i.wdiff" % i))
+        run(BIN + ("/wlog-redo -z ddev32M.0 < {}.wlog".format(i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.1 -i {}.s.wdiff".format(i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.2 -i {}.i.wdiff".format(i)))
 
     run(BIN + "/wdiff-merge -stat -x 16K -i {} -o all.s.wdiff".format(' '.join('{}.s.wdiff'.format(i) for i in xrange(1, 5))))
     run(BIN + "/wdiff-redo -z ddev32M.3 -i all.s.wdiff")
@@ -63,7 +63,7 @@ def consolidation_test2():
     print "##################### Consolidation test ####################"
     run("cp ddev32M ddev32M.0")
     for i in xrange(1, 5):
-        run(BIN + ("/wdiff-redo -z ddev32M.0 -i %d.s.wdiff" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.0 -i {}.s.wdiff".format(i)))
 
     run(BIN + "/virt-full-cat -stat -i ddev32M -o ddev32M.1 -d {}".format(' '.join('{}.s.wdiff'.format(i) for i in xrange(1, 5))))
     run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
@@ -76,15 +76,15 @@ def max_io_blocks_test():
     print "#################### MaxIoBlocks test #################### "
     make_zero_image(0, 1, 2)
     for i in xrange(1, 5):
-        run(BIN + ("/wlog-to-wdiff -x  4K < %d.wlog > %d-4K.wdiff" % (i, i)))
-        run(BIN + ("/wlog-to-wdiff -x 16K < %d.wlog > %d-16K.wdiff" % (i, i)))
-        run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.s.wdiff" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.1 < %d-4K.wdiff" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.2 < %d-16K.wdiff" % i))
+        run(BIN + ("/wlog-to-wdiff -x  4K < {}.wlog > {}-4K.wdiff".format(i, i)))
+        run(BIN + ("/wlog-to-wdiff -x 16K < {}.wlog > {}-16K.wdiff".format(i, i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.0 < {}.s.wdiff".format(i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.1 < {}-4K.wdiff".format(i)))
+        run(BIN + ("/wdiff-redo -z ddev32M.2 < {}-16K.wdiff".format(i)))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-        check_result("maxIoBlocks test %dth wdiff 4K" % i)
+        check_result("maxIoBlocks test {}th wdiff 4K".format(i))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.2")
-        check_result("maxIoBlocks test %dth wdiff 16K" % i)
+        check_result("maxIoBlocks test {}th wdiff 16K".format(i))
 
 def main():
     prepare_test()
@@ -97,4 +97,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
