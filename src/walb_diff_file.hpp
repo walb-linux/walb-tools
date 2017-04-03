@@ -208,7 +208,7 @@ private:
  *   (2) call readDiff() / readAndUncompressDiff().
  *   (3) repeat (2) until readDiff() returns false.
  * usage2
- *   (1) call readHeaderWithoutReadingPackHeader() just once.
+ *   (1) call readHeader(head, false) just once.
  *   (2) call readDiffIo() multiple times after readPackHeader() once.
  *   (3) repeat (2) until readPackHeader() returns false.
  */
@@ -270,12 +270,6 @@ public:
      * You must call this at first.
      */
     void readHeader(DiffFileHeader &head, bool doReadPackHeader = true);
-    /**
-     * Read header data with another interface.
-     */
-    void readHeaderWithoutReadingPackHeader(DiffFileHeader &head) {
-        readHeader(head, false);
-    }
     /**
      * If other code read the header before using this class,
      * call this function to set header data.

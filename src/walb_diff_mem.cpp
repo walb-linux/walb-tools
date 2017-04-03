@@ -280,9 +280,11 @@ void DiffMemory::writeTo(int outFd, int cmprType)
     writer.close();
 }
 
+/**
+ * Indexed diff is not supported.
+ */
 void DiffMemory::readFrom(int inFd)
 {
-    // QQQ TODO: support indexed diff.
     SortedDiffReader reader(inFd);
     reader.readHeader(fileH_);
     DiffRecord rec;

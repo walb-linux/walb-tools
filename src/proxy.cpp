@@ -295,12 +295,12 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
     cybozu::TmpFile wlogTmpFile;
     const bool savesWlog = false; // for DEBUG.
     if (savesWlog) wlogTmpFile.prepare(volInfo.getReceivedDir().str());
-#if 0
+#if 0 /* deprecated */
     const bool ret = proxy_local::recvWlogAndWriteDiff(
         p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd());
-#else  /* deprecated */
+#else /* QQQ */
     const bool ret = proxy_local::recvWlogAndWriteDiff2(
-        p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd()); // QQQ
+        p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd());
 #endif
     if (!ret) {
         logger.warn() << FUNC << "force stopped wlog receiving" << volId;
@@ -370,9 +370,9 @@ retry:
                 fileV.clear();
                 goto retry;
             }
-            SortedDiffReader reader(file.fd());  // QQQ TODO: do not use reader.
+
             DiffFileHeader header;
-            reader.readHeaderWithoutReadingPackHeader(header);
+            header.readFrom(file);
             if (fileV.empty()) {
                 uuid = header.getUuid();
                 mergedDiff = diff;
@@ -390,37 +390,6 @@ retry:
     merger.setMaxCacheSize(INDEXED_DIFF_CACHE_SIZE);
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
-}
-
-
-
-
-
-bool ProxyWorker::setupReader(
-    IndexedDiffReader& reader, IndexedDiffCache &cache, MetaDiff& diff,
-    const ProxyVolInfo& volInfo, const std::string& archiveName)
-{
-    const char *const FUNC = __func__;
-    const int maxRetryNum = 10;
-    int retryNum = 0;
-retry:
-    {
-        MetaDiffVec diffV;
-        diffV = volInfo.getDiffListToSend(archiveName, gp.maxWdiffSendMb * MEBI, gp.maxWdiffSendNr);
-        if (diffV.empty()) return false;
-
-        diff = diffV[0];
-        cybozu::util::File file;
-        if (!file.open(volInfo.getDiffPath(diff, archiveName).str(), O_RDWR)) {
-            retryNum++;
-            if (retryNum == maxRetryNum) {
-                throw cybozu::Exception(FUNC) << "exceed max retry";
-            }
-            goto retry;
-        }
-        reader.setFile(std::move(file), cache);
-    }
-    return true;
 }
 
 
@@ -537,123 +506,13 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 }
 
 
-/**
- * QQQ
- */
-int ProxyWorker::transferWdiffIfNecessary2(PushOpt &pushOpt)
-{
-    const char *const FUNC = __func__;
-    const std::string& volId = task_.volId;
-    const std::string& archiveName = task_.archiveName;
-    ProxyVolState& volSt = getProxyVolState(volId);
-    UniqueLock ul(volSt.mu);
-    verifyStopState(volSt.stopState, NotStopping | WaitingForEmpty, volId, FUNC);
-    const std::string st = volSt.sm.get();
-    if (st == ptStart) {
-        // This is rare case, but possible.
-        pushOpt.isForce = false;
-        pushOpt.delaySec = 1;
-        return CONTINUE_TO_SEND;
-    }
-    verifyStateIn(st, pAcceptForWdiffSend, FUNC);
-
-    ProxyVolInfo volInfo = getProxyVolInfo(volId);
-
-    MetaDiffVec diffV;
-    IndexedDiffReader reader;
-    IndexedDiffCache cache;
-    cache.setMaxSize(32 * MEBI);
-    MetaDiff mergedDiff;
-    if (!setupReader(reader, cache, mergedDiff, volInfo, archiveName)) {
-        LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;
-        return DONT_SEND;
-    }
-    diffV.push_back(mergedDiff);
-
-    const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
-    cybozu::Socket sock;
-    ActionCounterTransaction trans(volSt.ac, archiveName);
-    ul.unlock();
-    util::connectWithTimeout(sock, hi.addrPort.getSocketAddr(), gp.socketTimeout);
-    gp.setSocketParams(sock);
-    const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
-    ProtocolLogger logger(gp.nodeId, serverId);
-
-    const DiffFileHeader& fileH = reader.header();
-
-    /* wdiff-send negotiation */
-    packet::Packet pkt(sock);
-    pkt.write(volId);
-    pkt.write(proxyHT);
-    pkt.write(fileH.getUuid());
-    pkt.write(fileH.getMaxIoBlocks());
-    pkt.write(volInfo.getSizeLb());
-    pkt.write(mergedDiff);
-    pkt.flush();
-    logger.debug() << "send" << volId << proxyHT << fileH.getUuid()
-                   << fileH.getMaxIoBlocks() << volInfo.getSizeLb() << mergedDiff;
-
-    std::string res;
-    pkt.read(res);
-    if (res == msgAccept) {
-        DiffStatistics statOut;
-        if (!indexedWdiffTransferClient(pkt, reader, hi.cmpr, volSt.stopState, gp.ps, statOut)) {
-            logger.warn() << FUNC << "force stopped wdiff sending" << volId;
-            return DONT_SEND;
-        }
-        packet::Ack(pkt.sock()).recv();
-        //logger.debug() << "mergeIn " << volId << merger.statIn();
-        logger.debug() << "mergeOut" << volId << statOut;
-        ul.lock();
-        volSt.lastWdiffSentTimeMap[archiveName] = ::time(0);
-        ul.unlock();
-        volInfo.deleteDiffs(diffV, archiveName);
-        pushOpt.isForce = false;
-        pushOpt.delaySec = 0;
-        return CONTINUE_TO_SEND;
-    }
-    if (res == msgStopped || res == msgWdiffRecv || res == msgTooNewDiff || res == msgSyncing) {
-        const uint64_t curTs = ::time(0);
-        ul.lock();
-        if (volSt.lastWlogReceivedTime != 0 &&
-            curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
-            logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout;
-            return SEND_ERROR;
-        }
-        logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry;
-        pushOpt.isForce = true;
-        pushOpt.delaySec = gp.delaySecForRetry;
-        return CONTINUE_TO_SEND;
-    }
-    if (res == msgDifferentUuid || res == msgTooOldDiff) {
-        logger.info() << FUNC << res;
-        volInfo.deleteDiffs(diffV, archiveName);
-        pushOpt.isForce = true;
-        pushOpt.delaySec = 0;
-        return CONTINUE_TO_SEND;
-    }
-    /**
-     * archive-not-found, not-applicable-diff, smaller-lv-size
-     *
-     * The background task will stop, and change to stop state.
-     * You must start by hand.
-     */
-    logger.error() << FUNC << res;
-    return SEND_ERROR;
-}
-
-
 void ProxyWorker::operator()()
 {
     const char *const FUNC = __func__;
     TaskQueue<ProxyTask> &q = getProxyGlobal().taskQueue;
     try {
         PushOpt opt;
-#if 0
         const int ret = transferWdiffIfNecessary(opt);
-#else
-        const int ret = transferWdiffIfNecessary2(opt);  // QQQ
-#endif
         switch (ret) {
         case CONTINUE_TO_SEND:
             {
@@ -1083,6 +942,8 @@ void deleteArchiveInfo(const std::string &volId, const std::string &archiveName)
 
 
 /**
+ * Use DiffMemory (SortedDiffWriter).
+ *
  * RETURN:
  *   false if force stopped.
  */

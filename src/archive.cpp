@@ -867,7 +867,7 @@ bool runNoMergeDiffReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    if (!wdiffTransferNoMergeClient(pkt, fileR, volSt.stopState, ga.ps)) {
+    if (!wdiffTransferNoMergeClient(pkt, fileR, fileH, volSt.stopState, ga.ps)) {
         logger.warn() << "diff-repl-nomerge-client force-stopped" << volId;
         return false;
     }

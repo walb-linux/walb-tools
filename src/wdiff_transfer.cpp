@@ -43,7 +43,11 @@ bool wdiffTransferClient(
     return true;
 }
 
-bool wdiffTransferNoMergeClient(
+
+/**
+ * This function supports only sorted wdiff files.
+ */
+static bool sortedWdiffTransferNoMergeClient(
     packet::Packet &pkt, cybozu::util::File &fileR,
     const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
@@ -73,16 +77,15 @@ bool wdiffTransferNoMergeClient(
     return true;
 }
 
-bool indexedWdiffTransferClient(
+
+static bool indexedWdiffTransferNoMergeClient(
     packet::Packet &pkt, IndexedDiffReader& reader, const CompressOpt &cmpr,
-    const std::atomic<int> &stopState, const ProcessStatus &ps,
-    DiffStatistics &statOut)
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
 {
     const size_t maxPushedNum = cmpr.numCpu * 2 + 1;
     ConverterQueue conv(maxPushedNum, cmpr.numCpu, true, cmpr.type, cmpr.level);
     packet::StreamControl ctrl(pkt.sock());
-    statOut.clear();
-    statOut.wdiffNr = -1;
+    DiffStatistics statOut;
 
     IndexedDiffRecord irec;
     AlignedArray data;
@@ -125,6 +128,25 @@ bool indexedWdiffTransferClient(
     pkt.flush();
     return true;
 }
+
+
+bool wdiffTransferNoMergeClient(
+    packet::Packet &pkt, cybozu::util::File &fileR, const DiffFileHeader &fileH,
+    const std::atomic<int> &stopState, const ProcessStatus &ps)
+{
+    if (fileH.isIndexed()) {
+        CompressOpt cmpr; // default value.
+        IndexedDiffReader reader;
+        IndexedDiffCache cache;
+        cache.setMaxSize(32 * MEBI);
+        reader.setFile(std::move(fileR), cache);
+        return indexedWdiffTransferNoMergeClient(pkt, reader, cmpr, stopState, ps);
+    } else {
+        // This does not touch (compressed) IO data.
+        return sortedWdiffTransferNoMergeClient(pkt, fileR, stopState, ps);
+    }
+}
+
 
 bool wdiffTransferServer(
     packet::Packet &pkt, int wdiffOutFd,

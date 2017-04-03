@@ -128,7 +128,6 @@ private:
      * setupMerger currently supports sorted diffs only.
      */
     void setupMerger(DiffMerger& merger, MetaDiffVec& diffV, MetaDiff& mergedDiff, const ProxyVolInfo& volInfo, const std::string& archiveName);
-    bool setupReader(IndexedDiffReader& reader, IndexedDiffCache &cache, MetaDiff& diff, const ProxyVolInfo& volInfo, const std::string& archiveName);
 
 public:
     explicit ProxyWorker(const ProxyTask &task) : task_(task) {
@@ -140,8 +139,7 @@ private:
         bool isForce;
         size_t delaySec;
     };
-    int transferWdiffIfNecessary(PushOpt &); // For sorted diff.
-    int transferWdiffIfNecessary2(PushOpt &); // For indexed diff.
+    int transferWdiffIfNecessary(PushOpt &);
 };
 
 struct ProxySingleton
