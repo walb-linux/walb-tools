@@ -261,7 +261,7 @@ void DiffMemory::checkStatistics() const
 
 void DiffMemory::writeTo(int outFd, int cmprType)
 {
-    DiffWriter writer;
+    SortedDiffWriter writer;
     writer.setFd(outFd);
     writer.writeHeader(fileH_);
     auto it = map_.cbegin();

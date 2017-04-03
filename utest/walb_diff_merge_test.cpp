@@ -99,7 +99,7 @@ int getCompressionTypeRandomly()
  */
 void makeSortedWdiff1(TmpDiffFile &file, const SioList &sl)
 {
-    DiffWriter writer(file.fd());
+    SortedDiffWriter writer(file.fd());
     DiffFileHeader header;
     header.max_io_blocks = 0;
     for (const Sio &sio : sl) {

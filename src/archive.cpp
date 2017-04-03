@@ -226,7 +226,7 @@ bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uint64_t p
     merger.addWdiffs(std::move(fileV));
     merger.prepare();
 
-    DiffWriter writer;
+    SortedDiffWriter writer;
     writer.setFd(tmpFile.fd());
     DiffFileHeader wdiffH = merger.header();
     writer.writeHeader(wdiffH);

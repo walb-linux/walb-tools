@@ -103,7 +103,7 @@ void writeDiffEofPack(Writer& writer)
 /**
  * Walb diff writer.
  */
-class DiffWriter /* final */
+class SortedDiffWriter /* final */
 {
 private:
     cybozu::util::File fileW_;
@@ -119,13 +119,13 @@ private:
     DiffStatistics stat_;
 
 public:
-    DiffWriter() : pack_(edp_.header) {
+    SortedDiffWriter() : pack_(edp_.header) {
         init();
     }
-    explicit DiffWriter(int fd) : DiffWriter() {
+    explicit SortedDiffWriter(int fd) : SortedDiffWriter() {
         setFd(fd);
     }
-    ~DiffWriter() noexcept try {
+    ~SortedDiffWriter() noexcept try {
         close();
     } catch (...) {
     }

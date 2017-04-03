@@ -56,7 +56,7 @@ std::string DiffFileHeader::typeStr() const
     }
 }
 
-void DiffWriter::close()
+void SortedDiffWriter::close()
 {
     if (!isClosed_) {
         writePack(); // if buffered data exist.
@@ -66,7 +66,7 @@ void DiffWriter::close()
     }
 }
 
-void DiffWriter::writeHeader(DiffFileHeader &header)
+void SortedDiffWriter::writeHeader(DiffFileHeader &header)
 {
     if (isWrittenHeader_) {
         throw RT_ERR("Do not call writeHeader() more than once.");
@@ -76,7 +76,7 @@ void DiffWriter::writeHeader(DiffFileHeader &header)
     isWrittenHeader_ = true;
 }
 
-void DiffWriter::writeDiff(const DiffRecord &rec, DiffIo &&io)
+void SortedDiffWriter::writeDiff(const DiffRecord &rec, DiffIo &&io)
 {
     checkWrittenHeader();
     assertRecAndIo(rec, io);
@@ -88,7 +88,7 @@ void DiffWriter::writeDiff(const DiffRecord &rec, DiffIo &&io)
     assert(ret);
 }
 
-void DiffWriter::writeDiff(const DiffRecord &rec, const char *data)
+void SortedDiffWriter::writeDiff(const DiffRecord &rec, const char *data)
 {
     DiffIo io;
     io.set(rec);
@@ -98,7 +98,7 @@ void DiffWriter::writeDiff(const DiffRecord &rec, const char *data)
     writeDiff(rec, std::move(io));
 }
 
-void DiffWriter::compressAndWriteDiff(
+void SortedDiffWriter::compressAndWriteDiff(
     const DiffRecord &rec, const char *data,
     int type, int level)
 {
@@ -117,7 +117,7 @@ void DiffWriter::compressAndWriteDiff(
     writeDiff(compRec, std::move(compIo));
 }
 
-void DiffWriter::init()
+void SortedDiffWriter::init()
 {
     isWrittenHeader_ = false;
     isClosed_ = true;
@@ -127,7 +127,7 @@ void DiffWriter::init()
     stat_.wdiffNr = 1;
 }
 
-bool DiffWriter::addAndPush(const DiffRecord &rec, DiffIo &&io)
+bool SortedDiffWriter::addAndPush(const DiffRecord &rec, DiffIo &&io)
 {
     if (pack_.add(rec)) {
         ioQ_.push(std::move(io));
@@ -137,7 +137,7 @@ bool DiffWriter::addAndPush(const DiffRecord &rec, DiffIo &&io)
 }
 
 #ifdef DEBUG
-void DiffWriter::assertRecAndIo(const DiffRecord &rec, const DiffIo &io)
+void SortedDiffWriter::assertRecAndIo(const DiffRecord &rec, const DiffIo &io)
 {
     if (rec.isNormal()) {
         assert(!io.empty());
@@ -148,10 +148,10 @@ void DiffWriter::assertRecAndIo(const DiffRecord &rec, const DiffIo &io)
     }
 }
 #else
-void DiffWriter::assertRecAndIo(const DiffRecord &, const DiffIo &) {}
+void SortedDiffWriter::assertRecAndIo(const DiffRecord &, const DiffIo &) {}
 #endif
 
-void DiffWriter::writePack()
+void SortedDiffWriter::writePack()
 {
     if (pack_.n_records == 0) {
         assert(ioQ_.empty());

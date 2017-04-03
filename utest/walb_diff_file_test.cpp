@@ -25,7 +25,7 @@ CYBOZU_TEST_AUTO(NullSortedDiffFile)
 {
     cybozu::TmpFile tmpFile(".");
 
-    DiffWriter writer(tmpFile.fd());
+    SortedDiffWriter writer(tmpFile.fd());
     DiffFileHeader header0, header1;
     writer.writeHeader(header0);
     writer.close();
@@ -114,7 +114,7 @@ void testRandomDiffFile(int cmprType, size_t nrIos)
         }
     }
     {
-        DiffWriter writer(tmpFile.fd());
+        SortedDiffWriter writer(tmpFile.fd());
         writer.writeHeader(header0);
         for (size_t i = 0; i < nrIos; i++) {
             DiffRecord& rec = recV0[i];

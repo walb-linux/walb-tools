@@ -53,7 +53,7 @@ public:
         , buf0_(ioSize_) {
     }
     void run(cybozu::util::File &inFile, cybozu::util::File &outFile, bool isIndexed) {
-        DiffWriter sWriter;
+        SortedDiffWriter sWriter;
         IndexedDiffWriter iWriter;
         if (isIndexed) {
             iWriter.setFd(outFile.fd());
@@ -108,7 +108,7 @@ private:
         }
         return c;
     }
-    void writeSortedDiff(DiffWriter& writer, uint64_t addr, uint32_t blks) {
+    void writeSortedDiff(SortedDiffWriter& writer, uint64_t addr, uint32_t blks) {
         DiffRecord rec;
         rec.io_address = addr;
         rec.io_blocks = blks;
