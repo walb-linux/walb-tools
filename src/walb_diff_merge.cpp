@@ -80,7 +80,8 @@ bool DiffMerger::Wdiff::readIndexedDiff() const
 void DiffMerger::mergeToFd(int outFd)
 {
     prepare();
-    DiffWriter writer(outFd);
+    DiffWriter writer;
+    writer.setFd(outFd);
     writer.writeHeader(wdiffH_);
 
     DiffRecIo d;

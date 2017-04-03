@@ -120,7 +120,7 @@ void DiffWriter::compressAndWriteDiff(
 void DiffWriter::init()
 {
     isWrittenHeader_ = false;
-    isClosed_ = false;
+    isClosed_ = true;
     pack_.clear();
     while (!ioQ_.empty()) ioQ_.pop();
     stat_.clear();
@@ -407,7 +407,7 @@ void IndexedDiffWriter::init()
     offset_ = 0;
     n_data_ = 0;
     isWrittenHeader_ = false;
-    isClosed_ = false;
+    isClosed_ = true;
     stat_.clear();
     stat_.wdiffNr = 1;
 }

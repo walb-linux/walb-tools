@@ -123,16 +123,27 @@ public:
         init();
     }
     explicit DiffWriter(int fd) : DiffWriter() {
+        setFd(fd);
+    }
+    ~DiffWriter() noexcept try {
+        close();
+    } catch (...) {
+    }
+
+    void setFd(int fd) {
+        init();
         fileW_.setFd(fd);
+        isClosed_ = false;
     }
-    explicit DiffWriter(const std::string &diffPath, int flags, mode_t mode)
-        : DiffWriter() {
+    void setFile(cybozu::util::File&& file) {
+        init();
+        fileW_ = std::move(file);
+        isClosed_ = false;
+    }
+    void open(const std::string& diffPath, int flags, mode_t mode) {
+        init();
         fileW_.open(diffPath, flags, mode);
-    }
-    ~DiffWriter() noexcept {
-        try {
-            close();
-        } catch (...) {}
+        isClosed_ = false;
     }
 
     void close();
@@ -348,7 +359,7 @@ public:
 
 
 /**
- * QQQ update stat_.
+ * Indexed diff writer.
  */
 class IndexedDiffWriter /* final */
 {
@@ -366,16 +377,24 @@ public:
     IndexedDiffWriter() {
         init();
     }
-    ~IndexedDiffWriter() {
+    ~IndexedDiffWriter() noexcept try {
         finalize();
+    } catch (...) {
     }
     void setFd(int fd) {
         init();
         fileW_.setFd(fd);
+        isClosed_ = false;
+    }
+    void setFile(cybozu::util::File&& file) {
+        init();
+        fileW_ = std::move(file);
+        isClosed_ = false;
     }
     void open(const std::string& diffPath, int flags, mode_t mode) {
         init();
         fileW_.open(diffPath, flags, mode);
+        isClosed_ = false;
     }
     void finalize();
     void writeHeader(DiffFileHeader &header);
