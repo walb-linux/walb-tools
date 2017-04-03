@@ -39,14 +39,16 @@ endif
 ifeq ($(DEBUG),1)
 LDFLAGS += -rdynamic
 ifeq ($(BFD),1)
-LDLIBS += -lbfd
+LDLIBS_BFD = -lbfd
+else
+LDLIBS_BFD =
 endif
 endif
 
 LDLIBS_LOCAL = -lwalb-tools
 LDLIBS_AIO = -laio
 LDLIBS_COMPRESS = -lsnappy -llzma -lz
-LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS)
+LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS) $(LDLIBS_BFD)
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
 BIN_SOURCES = $(wildcard binsrc/*.cpp)
