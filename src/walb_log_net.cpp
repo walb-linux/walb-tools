@@ -8,6 +8,7 @@ CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doComp
     const size_t n = blockS.nBlocks();
     assert(0 < n);
     AlignedArray d(n * pbs);
+    // This is inefficient because of memcpy. Stream compressor will solve the problem.
     for (size_t i = 0; i < n; i++) {
         ::memcpy(&d[i * pbs], blockS.get(i), pbs);
     }
@@ -25,6 +26,7 @@ void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, u
     if (sizePb * pbs != v.size()) throw cybozu::Exception(FUNC) << "invalid size" << v.size() << sizePb;
     blockS.init(pbs);
     blockS.resize(sizePb);
+    // This is inefficient because of memcpy. Stream uncompressor will solve the problem.
     for (size_t i = 0; i < sizePb; i++) {
         ::memcpy(blockS.get(i), &v[i * pbs], pbs);
     }
