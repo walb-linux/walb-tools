@@ -95,9 +95,9 @@ private:
         diff.verify();
     }
     void setupFileHeader() {
-        SortedDiffReader reader;
-        reader.open(wdiffPath);
-        reader.readHeader(fileH);
+        cybozu::util::File file;
+        file.open(wdiffPath, O_RDONLY);
+        fileH.readFrom(file);
         if (!uuidStr.empty()) {
             cybozu::Uuid uuid;
             uuid.set(uuidStr);
