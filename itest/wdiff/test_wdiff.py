@@ -15,49 +15,62 @@ def prepare_test():
     for i in xrange(1, 5):
         #BIN/wlog-gen --nodiscard -s 32M -o ${i}.wlog
         run(BIN + ("/wlog-gen -s 32M -z 32M --minDiscardSize 512 --maxDiscardSize 1M -o %d.wlog" % i))
-        run(BIN + ("/wlog-to-wdiff > %d.wdiff < %d.wlog" % (i, i)))
+        run(BIN + ("/wlog-to-wdiff -o {}.s.wdiff -i {}.wlog".format(i, i)))
+        run(BIN + ("/wlog-to-wdiff -indexed -o {}.i.wdiff -i {}.wlog".format(i, i)))
 
 def log_diff_equality_test():
     print "#################### Log/diff equality test ####################"
     for i in xrange(1, 5):
-        make_zero_image(0, 1)
+        make_zero_image(0, 1, 2)
         run(BIN + ("/wlog-redo -z ddev32M.0 < %d.wlog" % i))
-        run(BIN + ("/wdiff-redo -z ddev32M.1 < %d.wdiff" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.1 -i %d.s.wdiff" % i))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-        check_result("log/diff equality test %dth wlog/wdiff." % i)
+        check_result("log/diff equality test %dth wlog/s.wdiff." % i)
+        run(BIN + ("/wdiff-redo -z ddev32M.2 -i %d.i.wdiff" % i))
+        run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.2")
+        check_result("log/diff equality test %dth wlog/i.wdiff." % i)
 
 def full_image_test():
     print "#################### Full image test ####################"
-    run(BIN + "/wdiff-full < ddev32M > 0.wdiff")
-    make_zero_image(0)
-    run(BIN + "/wdiff-redo -z ddev32M.0 < 0.wdiff")
+    run(BIN + "/wdiff-full -i ddev32M -o 0.s.wdiff")
+    run(BIN + "/wdiff-full -indexed -i ddev32M -o 0.i.wdiff")
+    make_zero_image(0, 1)
+    run(BIN + "/wdiff-redo -z ddev32M.0 -i 0.s.wdiff")
     run(BIN + "/bdiff -b 512 ddev32M ddev32M.0")
-    check_result("full image test")
+    check_result("full image test (s.wdiff)")
+    run(BIN + "/wdiff-redo -z ddev32M.1 -i 0.i.wdiff")
+    run(BIN + "/bdiff -b 512 ddev32M ddev32M.1")
+    check_result("full image test (i.wdiff)")
 
 def consolidation_test1():
     print "##################### Consolidation test ####################"
-    make_zero_image(0, 1, 2)
+    make_zero_image(0, 1, 2, 3, 4)
     for i in xrange(1, 5):
-        run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.wdiff" % i))
-        run(BIN + ("/wlog-redo -z ddev32M.1 < %d.wlog" % i))
+        run(BIN + ("/wlog-redo -z ddev32M.0 < %d.wlog" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.1 -i %d.s.wdiff" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.2 -i %d.i.wdiff" % i))
 
-    run(BIN + "/wdiff-merge -stat -x 16K -i 1.wdiff 2.wdiff 3.wdiff 4.wdiff -o all.wdiff")
-    run(BIN + "/wdiff-redo -z ddev32M.2 < all.wdiff")
-    run("sha1sum ddev32M.0 ddev32M.1 ddev32M.2")
-    run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-    check_result("consolidation test 1a.")
-    run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.2")
-    check_result("consolidation test 1b.")
+    run(BIN + "/wdiff-merge -stat -x 16K -i {} -o all.s.wdiff".format(' '.join('{}.s.wdiff'.format(i) for i in xrange(1, 5))))
+    run(BIN + "/wdiff-redo -z ddev32M.3 -i all.s.wdiff")
+    run(BIN + "/wdiff-merge -stat -x 16K -i {} -o all.i.wdiff".format(' '.join('{}.i.wdiff'.format(i) for i in xrange(1, 5))))
+    run(BIN + "/wdiff-redo -z ddev32M.4 -i all.i.wdiff")
+    run("sha1sum {}".format(' '.join('ddev32M.{}'.format(i) for i in xrange(0, 5))))
+    for i in xrange(1, 5):
+        run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.{}".format(i))
+        check_result("consolidation test 1-{}.".format(i))
 
 def consolidation_test2():
     print "##################### Consolidation test ####################"
     run("cp ddev32M ddev32M.0")
     for i in xrange(1, 5):
-        run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.wdiff" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.0 -i %d.s.wdiff" % i))
 
-    run(BIN + "/virt-full-cat -stat -i ddev32M -o ddev32M.1 -d 1.wdiff 2.wdiff 3.wdiff 4.wdiff")
+    run(BIN + "/virt-full-cat -stat -i ddev32M -o ddev32M.1 -d {}".format(' '.join('{}.s.wdiff'.format(i) for i in xrange(1, 5))))
     run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
-    check_result("consolidation test 3.")
+    check_result("consolidation test 2s.")
+    run(BIN + "/virt-full-cat -stat -i ddev32M -o ddev32M.2 -d {}".format(' '.join('{}.i.wdiff'.format(i) for i in xrange(1, 5))))
+    run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.2")
+    check_result("consolidation test 2i.")
 
 def max_io_blocks_test():
     print "#################### MaxIoBlocks test #################### "
@@ -65,7 +78,7 @@ def max_io_blocks_test():
     for i in xrange(1, 5):
         run(BIN + ("/wlog-to-wdiff -x  4K < %d.wlog > %d-4K.wdiff" % (i, i)))
         run(BIN + ("/wlog-to-wdiff -x 16K < %d.wlog > %d-16K.wdiff" % (i, i)))
-        run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.wdiff" % i))
+        run(BIN + ("/wdiff-redo -z ddev32M.0 < %d.s.wdiff" % i))
         run(BIN + ("/wdiff-redo -z ddev32M.1 < %d-4K.wdiff" % i))
         run(BIN + ("/wdiff-redo -z ddev32M.2 < %d-16K.wdiff" % i))
         run(BIN + "/bdiff -b 512 ddev32M.0 ddev32M.1")
