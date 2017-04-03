@@ -44,6 +44,9 @@ int doMain(int argc, char *argv[])
     SortedDiffReader wdiffR(opt.wdiffPath);
     DiffFileHeader wdiffH;
     wdiffR.readHeader(wdiffH);
+    if (wdiffH.isIndexed()) {
+        throw cybozu::Exception(__func__) << "indexed wdiff files are not supported.";
+    }
 
     cybozu::util::File outF(opt.dumpPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
