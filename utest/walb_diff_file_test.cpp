@@ -59,14 +59,14 @@ CYBOZU_TEST_AUTO(NullIndexedDiffFile)
     CYBOZU_TEST_ASSERT(!reader.readDiff(rec, data));
 }
 
-IndexedDiffRecord makeIrec(uint64_t ioAddr, uint32_t ioBlocks, RecType type)
+IndexedDiffRecord makeIrec(uint64_t ioAddr, uint32_t ioBlocks, DiffRecType type)
 {
     IndexedDiffRecord rec;
     rec.init();
     rec.io_address = ioAddr;
     rec.io_blocks = ioBlocks;
-    if (type == RecType::DISCARD) rec.setDiscard();
-    else if (type == RecType::ALLZERO) rec.setAllZero();
+    if (type == DiffRecType::DISCARD) rec.setDiscard();
+    else if (type == DiffRecType::ALLZERO) rec.setAllZero();
     return rec;
 }
 
@@ -74,9 +74,9 @@ CYBOZU_TEST_AUTO(IndexedDiffMem)
 {
     DiffIndexMem im;
 
-    im.add(makeIrec(0, 4, RecType::NORMAL));
-    im.add(makeIrec(0, 4, RecType::DISCARD));
-    im.add(makeIrec(0, 4, RecType::ALLZERO));
+    im.add(makeIrec(0, 4, DiffRecType::NORMAL));
+    im.add(makeIrec(0, 4, DiffRecType::DISCARD));
+    im.add(makeIrec(0, 4, DiffRecType::ALLZERO));
     std::vector<IndexedDiffRecord> recV = im.getAsVec();
 
     CYBOZU_TEST_EQUAL(recV.size(), 1);

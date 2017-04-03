@@ -473,6 +473,10 @@ void IndexedDiffCache::evictOne()
 
 void IndexedDiffReader::setFile(cybozu::util::File &&fileR, IndexedDiffCache &cache)
 {
+    if (!fileR.seekable()) {
+        throw cybozu::Exception(NAME)
+            << "non-seekable file descriptor is not supported" << fileR.fd();
+    }
     cache_ = &cache;
     memFile_.setReadOnly();
     memFile_.reset(std::move(fileR));

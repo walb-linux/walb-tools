@@ -12,40 +12,37 @@
 
 using namespace walb;
 
-/**
- * Command line configuration.
- */
-class Config
+class Option
 {
 private:
     std::string devPath_;
     std::string inWdiffPath_;
-    bool isDiscard_; /* issue discard IO for discard diffs. */
-    bool isZeroDiscard_; /* issue all-zero IOs for discard diffs. */
+    bool doDiscard_; /* issue discard IO for discard diffs. */
+    bool doZeroDiscard_; /* issue all-zero IOs for discard diffs. */
     bool isVerbose_;
 
 public:
-    Config(int argc, char* argv[])
+    Option(int argc, char* argv[])
         : devPath_()
         , inWdiffPath_("-")
-        , isDiscard_(false)
-        , isZeroDiscard_(false)
+        , doDiscard_(false)
+        , doZeroDiscard_(false)
         , isVerbose_(false) {
         parse(argc, argv);
     }
 
     const std::string &devPath() const { return devPath_; }
     const std::string &inWdiffPath() const { return inWdiffPath_; }
-    bool isDiscard() const { return isDiscard_; }
-    bool isZeroDiscard() const { return isZeroDiscard_; }
+    bool doDiscard() const { return doDiscard_; }
+    bool doZeroDiscard() const { return doZeroDiscard_; }
     bool isVerbose() const { return isVerbose_; }
 private:
     void parse(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("wdiff-redo: redo wdiff file on a block device.");
         opt.appendOpt(&inWdiffPath_, "-", "i", "PATH: input wdiff path. '-' for stdin. (default: '-')");
-        opt.appendBoolOpt(&isDiscard_, "d", ": issue discard IOs for discard diffs.");
-        opt.appendBoolOpt(&isZeroDiscard_, "z", ": issue all-zero IOs for discard diffs.");
+        opt.appendBoolOpt(&doDiscard_, "d", ": issue discard IOs for discard diffs.");
+        opt.appendBoolOpt(&doZeroDiscard_, "z", ": issue all-zero IOs for discard diffs.");
         opt.appendBoolOpt(&isVerbose_, "v", ": verbose messages to stderr.");
         opt.appendHelp("h", ": show this message.");
         opt.appendParam(&devPath_, "DEVICE_PATH");
@@ -56,9 +53,6 @@ private:
     }
 };
 
-/**
- * Simple diff IO executor.
- */
 class SimpleDiffIoExecutor
 {
 private:
@@ -99,9 +93,6 @@ private:
     }
 };
 
-/**
- * Statistics.
- */
 struct Statistics
 {
     uint64_t nIoNormal;
@@ -126,87 +117,38 @@ struct Statistics
     }
 };
 
-/**
- * Wdiff redo manager.
- */
 class WdiffRedoManager
 {
 private:
-    const Config &config_;
+    const Option &opt_;
     Statistics inStat_, outStat_;
     SimpleDiffIoExecutor ioExec_;
 public:
-    WdiffRedoManager(const Config &config)
-        : config_(config)
+    WdiffRedoManager(const Option &opt)
+        : opt_(opt)
         , inStat_()
         , outStat_()
-        , ioExec_(config.devPath(), O_RDWR) {}
-
-    /**
-     * Execute a diff Io.
-     */
-    void executeDiffIo(const DiffRecord& rec, const DiffIo& io) {
-        const uint64_t ioAddr = rec.io_address;
-        const uint32_t ioBlocks = rec.io_blocks;
-        bool isSuccess = false;
-        if (rec.isAllZero()) {
-            isSuccess = executeZeroIo(ioAddr, ioBlocks);
-            if (isSuccess) { outStat_.nIoAllZero++; }
-            inStat_.nIoAllZero++;
-        } else if (rec.isDiscard()) {
-            if (config_.isDiscard()) {
-                isSuccess = executeDiscardIo(ioAddr, ioBlocks);
-            } else if (config_.isZeroDiscard()) {
-                isSuccess = executeZeroIo(ioAddr, ioBlocks);
-            } else {
-                /* Do nothing */
-            }
-            if (isSuccess) { outStat_.nIoDiscard++; }
-            inStat_.nIoDiscard++;
-        } else {
-            /* Normal IO. */
-            assert(rec.isNormal());
-            isSuccess = ioExec_.write(ioAddr, ioBlocks, io.get());
-            if (isSuccess) { outStat_.nIoNormal++; }
-            inStat_.nIoNormal++;
-        }
-        if (isSuccess) {
-            outStat_.nBlocks += ioBlocks;
-        } else {
-            ::printf("Failed to redo: ");
-            rec.printOneline();
-        }
-        inStat_.nBlocks += ioBlocks;
-    }
-
-    /**
-     * Execute redo.
-     */
+        , ioExec_(opt.devPath(), O_RDWR) {}
     void run() {
         /* Read a wdiff file and redo IOs in it. */
         cybozu::util::File file;
-        if (config_.inWdiffPath() != "-") {
-            file.open(config_.inWdiffPath(), O_RDONLY);
-        } else {
+        if (opt_.inWdiffPath() == "-") {
             file.setFd(0);
+        } else {
+            file.open(opt_.inWdiffPath(), O_RDONLY);
         }
-        DiffReader wdiffR(file.fd());
-        DiffFileHeader wdiffH;
-        wdiffR.readHeader(wdiffH);
-        wdiffH.print();
+        BothDiffReader reader;
+        IndexedDiffCache cache;
+        cache.setMaxSize(32 * MEBI);
+        reader.setCache(cache);
+        reader.setFile(std::move(file));
 
-        DiffRecord rec;
-        DiffIo io;
-        while (wdiffR.readAndUncompressDiff(rec, io)) {
-            if (!rec.isValid()) {
-                ::printf("Invalid record: ");
-                rec.printOneline();
-            }
-            if (!io.isValid()) {
-                ::printf("Invalid io: ");
-                io.printOneline();
-            }
-            executeDiffIo(rec, io);
+        uint64_t addr;
+        uint32_t blks;
+        DiffRecType rtype;
+        AlignedArray data;
+        while (reader.read(addr, blks, rtype, data)) {
+            executeDiffIo(addr, blks, rtype, data.data());
         }
         ::printf("Input statistics:\n");
         inStat_.print();
@@ -220,16 +162,47 @@ private:
         zero.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
         return ioExec_.write(ioAddr, ioBlocks, zero.data());
     }
-
     bool executeDiscardIo(uint64_t ioAddr, uint32_t ioBlocks) {
         return ioExec_.discard(ioAddr, ioBlocks);
+    }
+    void executeDiffIo(uint64_t ioAddr, uint32_t ioBlocks, DiffRecType rtype, const void *data) {
+        bool isSuccess = false;
+        if (rtype == DiffRecType::ALLZERO) {
+            isSuccess = executeZeroIo(ioAddr, ioBlocks);
+            if (isSuccess) { outStat_.nIoAllZero++; }
+            inStat_.nIoAllZero++;
+        } else if (rtype == DiffRecType::DISCARD) {
+            if (opt_.doDiscard()) {
+                isSuccess = executeDiscardIo(ioAddr, ioBlocks);
+            } else if (opt_.doZeroDiscard()) {
+                isSuccess = executeZeroIo(ioAddr, ioBlocks);
+            } else {
+                /* Do nothing */
+            }
+            if (isSuccess) { outStat_.nIoDiscard++; }
+            inStat_.nIoDiscard++;
+        } else {
+            /* Normal IO. */
+            assert(rtype == DiffRecType::NORMAL);
+            isSuccess = ioExec_.write(ioAddr, ioBlocks, data);
+            if (isSuccess) { outStat_.nIoNormal++; }
+            inStat_.nIoNormal++;
+        }
+        if (isSuccess) {
+            outStat_.nBlocks += ioBlocks;
+        } else {
+            ::printf("Failed to redo: %" PRIu64 " %" PRIu32 " %s\n"
+                     , ioAddr, ioBlocks, toStr(rtype));
+
+        }
+        inStat_.nBlocks += ioBlocks;
     }
 };
 
 int doMain(int argc, char *argv[])
 {
-    Config config(argc, argv);
-    WdiffRedoManager m(config);
+    Option opt(argc, argv);
+    WdiffRedoManager m(opt);
     m.run();
     return 0;
 }

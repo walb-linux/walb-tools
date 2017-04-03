@@ -234,9 +234,8 @@ public:
     explicit DiffReader(int fd) : DiffReader() {
         fileR_.setFd(fd);
     }
-    // flags will be deprecated.
-    explicit DiffReader(const std::string &diffPath, int flags = O_RDONLY) : DiffReader() {
-        fileR_.open(diffPath, flags);
+    explicit DiffReader(const std::string &diffPath) : DiffReader() {
+        fileR_.open(diffPath, O_RDONLY);
     }
     explicit DiffReader(cybozu::util::File &&fileR) : DiffReader() {
         fileR_ = std::move(fileR);
@@ -529,6 +528,62 @@ public:
 private:
     bool getNextRec(IndexedDiffRecord& rec);
     bool verifyIoData(uint64_t offset, uint32_t size, uint32_t csum, bool throwError) const;
+};
+
+
+/**
+ * The reader supports both sorted and indexed format.
+ */
+class BothDiffReader
+{
+    DiffFileHeader head_;
+    DiffReader sreader_;
+    IndexedDiffReader ireader_;
+    IndexedDiffCache *cache_;
+
+public:
+    constexpr static const char *NAME = "BothDiffReader";
+    BothDiffReader() : head_(), sreader_(), ireader_(), cache_(nullptr) {}
+    void setCache(IndexedDiffCache& cache) { cache_ = &cache; }
+    void setFile(cybozu::util::File&& file) {
+        head_.readFrom(file);
+        if (head_.isIndexed()) {
+            if (cache_ == nullptr) {
+                throw cybozu::Exception(NAME) << "cache is not set for indexed reader.";
+            }
+            ireader_.setFile(std::move(file), *cache_);
+        } else {
+            sreader_.setFile(std::move(file));
+            sreader_.dontReadHeader();
+        }
+    }
+    /**
+     * The filled data will be uncompressed one.
+     * Call this function multiple times after calling setFile().
+     *
+     * Returns:
+     *   false if reached to the end.
+     */
+    bool read(uint64_t &addr, uint32_t &blks, DiffRecType &rtype, AlignedArray& buf) {
+        DiffIo io;
+        if (head_.isIndexed()) {
+            IndexedDiffRecord rec;
+            if (!ireader_.readDiff(rec, io.data)) return false;
+            addr = rec.io_address;
+            blks = rec.io_blocks;
+            rtype = getDiffRecType(rec);
+        } else {
+            DiffRecord rec;
+            if (!sreader_.readAndUncompressDiff(rec, io, false)) return false;
+            addr = rec.io_address;
+            blks = rec.io_blocks;
+            rtype = getDiffRecType(rec);
+        }
+        if (rtype == DiffRecType::NORMAL) {
+            buf = std::move(io.data);
+        }
+        return true;
+    }
 };
 
 

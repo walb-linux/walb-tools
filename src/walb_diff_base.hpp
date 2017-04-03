@@ -299,4 +299,38 @@ struct DiffIndexSuper : walb_diff_index_super
 };
 
 
+enum class DiffRecType : uint8_t
+{
+    NORMAL, DISCARD, ALLZERO
+};
+
+template <typename Record>
+DiffRecType getDiffRecType(const Record& rec)
+{
+    if (rec.isNormal()) return DiffRecType::NORMAL;
+    if (rec.isDiscard()) return DiffRecType::DISCARD;
+    if (rec.isAllZero()) return DiffRecType::ALLZERO;
+    throw cybozu::Exception(__func__) << "bad record type" << rec;
+}
+
+inline const char *toStr(DiffRecType type)
+{
+    if (type == DiffRecType::NORMAL) {
+        return "Normal";
+    } else if (type == DiffRecType::DISCARD) {
+        return "Discard";
+    } else if (type == DiffRecType::ALLZERO) {
+        return "Allzero";
+    } else {
+        return "Unknown";
+    }
+}
+
+inline std::ostream& operator<<(std::ostream& os, DiffRecType type)
+{
+    os << toStr(type);
+    return os;
+}
+
+
 } //namesapce walb

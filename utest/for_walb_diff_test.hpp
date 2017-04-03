@@ -15,23 +15,6 @@ inline void setRandForTest(cybozu::util::Random<size_t>& rand)
 
 namespace walb {
 
-enum class RecType : uint8_t
-{
-    NORMAL, DISCARD, ALLZERO,
-};
-
-inline std::ostream& operator<<(std::ostream& os, RecType type)
-{
-    if (type == RecType::NORMAL) {
-        os << "Normal";
-    } else if (type == RecType::DISCARD) {
-        os << "Discard";
-    } else if (type == RecType::ALLZERO) {
-        os << "Allzero";
-    }
-    return os;
-}
-
 /**
  * Simple IO for test.
  */
@@ -39,13 +22,13 @@ struct Sio
 {
     uint64_t ioAddr;
     uint32_t ioBlocks;
-    RecType type;
+    DiffRecType type;
     AlignedArray data;
 
     void clear() {
         ioAddr = 0;
         ioBlocks = 0;
-        type = RecType::NORMAL;
+        type = DiffRecType::NORMAL;
         data.clear();
     }
     bool operator<(const Sio& rhs) const {
@@ -55,7 +38,7 @@ struct Sio
         if (ioAddr != rhs.ioAddr) return false;
         if (ioBlocks != rhs.ioBlocks) return false;
         if (type != rhs.type) return false;
-        if (type != RecType::NORMAL) return true;
+        if (type != DiffRecType::NORMAL) return true;
         if (data.size() != rhs.data.size()) return false;
         return ::memcmp(data.data(), rhs.data.data(), data.size()) == 0;
     }
@@ -78,13 +61,13 @@ struct Sio
         cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
         const size_t r = rand_() % 100;
         if (r < 80) {
-            type = RecType::NORMAL;
+            type = DiffRecType::NORMAL;
         } else if (r < 90) {
-            type = RecType::DISCARD;
+            type = DiffRecType::DISCARD;
         } else {
-            type = RecType::ALLZERO;
+            type = DiffRecType::ALLZERO;
         }
-        if (type == RecType::NORMAL) {
+        if (type == DiffRecType::NORMAL) {
             data.resize(LOGICAL_BLOCK_SIZE * ioBlocks);
             rand_.fill(data.data(), data.size());
         } else {
@@ -96,12 +79,12 @@ struct Sio
         rec.init();
         rec.io_address = ioAddr;
         rec.io_blocks = ioBlocks;
-        if (type == RecType::NORMAL) {
+        if (type == DiffRecType::NORMAL) {
             rec.setNormal();
-        } else if (type == RecType::DISCARD) {
+        } else if (type == DiffRecType::DISCARD) {
             rec.setDiscard();
         } else {
-            CYBOZU_TEST_EQUAL(type, RecType::ALLZERO);
+            CYBOZU_TEST_EQUAL(type, DiffRecType::ALLZERO);
             rec.setAllZero();
         }
     }
@@ -126,9 +109,9 @@ struct Sio
     void copyFrom(const IndexedDiffRecord& rec, const AlignedArray& data0) {
         ioAddr = rec.io_address;
         ioBlocks = rec.io_blocks;
-        if (rec.isNormal()) type = RecType::NORMAL;
-        else if (rec.isDiscard()) type = RecType::DISCARD;
-        else if (rec.isAllZero()) type = RecType::ALLZERO;
+        if (rec.isNormal()) type = DiffRecType::NORMAL;
+        else if (rec.isDiscard()) type = DiffRecType::DISCARD;
+        else if (rec.isAllZero()) type = DiffRecType::ALLZERO;
         else throw cybozu::Exception("bad type") << type;
         data.resize(data0.size());
         ::memcpy(data.data(), data0.data(), data.size());
@@ -136,7 +119,7 @@ struct Sio
     bool tryMerge(const Sio& rhs) {
         if (ioAddr + ioBlocks != rhs.ioAddr || type != rhs.type) return false;
         ioBlocks += rhs.ioBlocks;
-        if (type == RecType::NORMAL) {
+        if (type == DiffRecType::NORMAL) {
             size_t oldSize = data.size();
             data.resize(oldSize + rhs.data.size());
             ::memcpy(data.data() + oldSize, rhs.data.data(), rhs.data.size());
@@ -146,7 +129,7 @@ struct Sio
     friend inline std::ostream& operator<<(std::ostream& os, const Sio& sio) {
         os << sio.ioAddr << "\t" << sio.ioBlocks << "\t" << sio.type;
         const uint32_t csum =
-            sio.type == RecType::NORMAL ? calcDiffIoChecksum(sio.data) : 0;
+            sio.type == DiffRecType::NORMAL ? calcDiffIoChecksum(sio.data) : 0;
         os << cybozu::util::formatString("\t%08x", csum);
         return os;
     }
