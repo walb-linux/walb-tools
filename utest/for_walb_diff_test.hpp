@@ -315,7 +315,7 @@ public:
                 writeDiff(rec, data);
             }
         } else {
-            DiffReader reader(std::move(file));
+            SortedDiffReader reader(std::move(file));
             reader.dontReadHeader();
             DiffRecord rec;
             DiffIo io;

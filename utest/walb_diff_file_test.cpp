@@ -32,7 +32,7 @@ CYBOZU_TEST_AUTO(NullSortedDiffFile)
 
     cybozu::util::File(tmpFile.fd()).lseek(0);
 
-    DiffReader reader(tmpFile.fd());
+    SortedDiffReader reader(tmpFile.fd());
     reader.readHeader(header1);
     DiffRecord rec;
     DiffIo io;
@@ -130,7 +130,7 @@ void testRandomDiffFile(int cmprType, size_t nrIos)
     }
     cybozu::util::File(tmpFile.fd()).lseek(0);
     {
-        DiffReader reader(tmpFile.fd());
+        SortedDiffReader reader(tmpFile.fd());
         reader.readHeader(header1);
         for (size_t i = 0; i < nrIos; i++) {
             const bool ret = reader.readAndUncompressDiff(recV1[i], ioV1[i], false);

@@ -95,7 +95,7 @@ private:
         diff.verify();
     }
     void setupFileHeader() {
-        DiffReader reader;
+        SortedDiffReader reader;
         reader.open(wdiffPath);
         reader.readHeader(fileH);
         if (!uuidStr.empty()) {

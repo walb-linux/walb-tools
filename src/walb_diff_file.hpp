@@ -212,7 +212,7 @@ private:
  *   (2) call readDiffIo() multiple times after readPackHeader() once.
  *   (3) repeat (2) until readPackHeader() returns false.
  */
-class DiffReader
+class SortedDiffReader
 {
 private:
     cybozu::util::File fileR_;
@@ -227,20 +227,20 @@ private:
     DiffStatistics stat_;
 
 public:
-    constexpr static const char *NAME = "DiffReader";
-    DiffReader() : pack_(edp_.header) {
+    constexpr static const char *NAME = "SortedDiffReader";
+    SortedDiffReader() : pack_(edp_.header) {
         init();
     }
-    explicit DiffReader(int fd) : DiffReader() {
+    explicit SortedDiffReader(int fd) : SortedDiffReader() {
         fileR_.setFd(fd);
     }
-    explicit DiffReader(const std::string &diffPath) : DiffReader() {
+    explicit SortedDiffReader(const std::string &diffPath) : SortedDiffReader() {
         fileR_.open(diffPath, O_RDONLY);
     }
-    explicit DiffReader(cybozu::util::File &&fileR) : DiffReader() {
+    explicit SortedDiffReader(cybozu::util::File &&fileR) : SortedDiffReader() {
         fileR_ = std::move(fileR);
     }
-    ~DiffReader() noexcept try {
+    ~SortedDiffReader() noexcept try {
         close();
     } catch (...) {
     }
@@ -537,7 +537,7 @@ private:
 class BothDiffReader
 {
     DiffFileHeader head_;
-    DiffReader sreader_;
+    SortedDiffReader sreader_;
     IndexedDiffReader ireader_;
     IndexedDiffCache *cache_;
 

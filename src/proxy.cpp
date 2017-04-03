@@ -370,7 +370,7 @@ retry:
                 fileV.clear();
                 goto retry;
             }
-            DiffReader reader(file.fd());
+            SortedDiffReader reader(file.fd());  // QQQ TODO: do not use reader.
             DiffFileHeader header;
             reader.readHeaderWithoutReadingPackHeader(header);
             if (fileV.empty()) {

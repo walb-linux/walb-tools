@@ -38,7 +38,7 @@ class DiffMerger /* final */
 private:
     class Wdiff {
     private:
-        mutable DiffReader sReader_;
+        mutable SortedDiffReader sReader_;
         mutable IndexedDiffReader iReader_;
         mutable bool isIndexed_;  // true: use iReader_, false: use sReader_.
         DiffFileHeader header_;

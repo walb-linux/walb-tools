@@ -175,7 +175,7 @@ void DiffWriter::writePack()
 }
 
 
-void DiffReader::readHeader(DiffFileHeader &head, bool doReadPackHeader)
+void SortedDiffReader::readHeader(DiffFileHeader &head, bool doReadPackHeader)
 {
     if (isReadHeader_) {
         throw RT_ERR("Do not call readHeader() more than once.");
@@ -189,7 +189,7 @@ void DiffReader::readHeader(DiffFileHeader &head, bool doReadPackHeader)
     if (doReadPackHeader) readPackHeader();
 }
 
-bool DiffReader::readDiff(DiffRecord &rec, DiffIo &io)
+bool SortedDiffReader::readDiff(DiffRecord &rec, DiffIo &io)
 {
     if (!prepareRead()) return false;
     assert(pack_.n_records == 0 || recIdx_ < pack_.n_records);
@@ -203,7 +203,7 @@ bool DiffReader::readDiff(DiffRecord &rec, DiffIo &io)
     return true;
 }
 
-bool DiffReader::readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum)
+bool SortedDiffReader::readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum)
 {
     if (!readDiff(rec, io)) {
         return false;
@@ -220,7 +220,7 @@ bool DiffReader::readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChe
     return true;
 }
 
-bool DiffReader::prepareRead()
+bool SortedDiffReader::prepareRead()
 {
     if (pack_.isEnd()) return false;
     bool ret = true;
@@ -230,7 +230,7 @@ bool DiffReader::prepareRead()
     return ret;
 }
 
-void DiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum)
+void SortedDiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum)
 {
     if (rec.data_offset != totalSize_) {
         throw cybozu::Exception(__func__)
@@ -241,7 +241,7 @@ void DiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecks
     recIdx_++;
 }
 
-bool DiffReader::readPackHeader()
+bool SortedDiffReader::readPackHeader()
 {
     try {
         pack_.readFrom(fileR_);
@@ -256,7 +256,7 @@ bool DiffReader::readPackHeader()
     return true;
 }
 
-void DiffReader::init()
+void SortedDiffReader::init()
 {
     pack_.clear();
     isReadHeader_ = false;
