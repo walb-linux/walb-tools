@@ -337,7 +337,7 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
     }
     const uint64_t realSizeLb = volInfo.getSizeLb();
     if (realSizeLb < volSizeLb) {
-        logger.info() << "detect volume grow" << realSizeLb << volSizeLb;
+        logger.info() << "detect volume grow" << volId << realSizeLb << volSizeLb;
         volInfo.setSizeLb(volSizeLb);
     }
     volSt.lastWlogReceivedTime = ::time(0);
@@ -480,16 +480,18 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         ul.lock();
         if (volSt.lastWlogReceivedTime != 0 &&
             curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
-            logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout;
+            logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout
+                           << volId << mergedDiff;
             return SEND_ERROR;
         }
-        logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry;
+        logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry
+                      << volId << mergedDiff;
         pushOpt.isForce = true;
         pushOpt.delaySec = gp.delaySecForRetry;
         return CONTINUE_TO_SEND;
     }
     if (res == msgDifferentUuid || res == msgTooOldDiff) {
-        logger.info() << FUNC << res;
+        logger.info() << FUNC << res << volId << mergedDiff;
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = true;
         pushOpt.delaySec = 0;
