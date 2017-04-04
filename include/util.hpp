@@ -422,13 +422,29 @@ void printList(const C &c)
 
 inline bool isAllZero(const void *data, size_t size)
 {
+#if 1
+    // Faster implementation.
+    uint64_t x;
     const char *p = (const char *)data;
+    while (sizeof(x) <= size) {
+        ::memcpy(&x, p, sizeof(x));
+        if (x != 0) return false;
+        p += sizeof(x);
+        size -= sizeof(x);
+    }
     while (size > 0) {
-        if (*p) return false;
-        ++p;
-        --size;
+        if (*(p++)) return false;
+        size--;
     }
     return true;
+#else
+    const char *p = (const char *)data;
+    while (size > 0) {
+        if (*(p++)) return false;
+        size--;
+    }
+    return true;
+#endif
 }
 
 inline void parseStrVec(
