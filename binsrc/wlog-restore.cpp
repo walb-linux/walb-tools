@@ -110,7 +110,7 @@ public:
         /* Read and write each logpack. */
         uint64_t lsid = wlHead.beginLsid();
         LogPackHeader packH(pbs, salt);
-        std::queue<LogBlockShared> ioQ;
+        std::queue<AlignedArray> ioQ;
         while (lsid < wlHead.endLsid()) {
             if (!readLogPackHeader(wlogFile, packH, lsid)) break;
             clipIfNecessary(packH);
@@ -239,7 +239,7 @@ private:
     }
     void restorePack(
         cybozu::util::File &ldevFile, const device::SuperBlock &super,
-        const LogPackHeader &packH, std::queue<LogBlockShared> &&ioQ) {
+        const LogPackHeader &packH, std::queue<AlignedArray> &&ioQ) {
 
         assert(getPaddingPb(super, packH) == 0);
         const uint64_t offPb = super.getOffsetFromLsid(packH.logpackLsid());
@@ -247,12 +247,15 @@ private:
             ::printf("header %u records\n", packH.nRecords());
             ::printf("offPb %" PRIu64 "\n", offPb);
         }
-        ldevFile.lseek(offPb * packH.pbs());
+        const uint32_t pbs = packH.pbs();
+        ldevFile.lseek(offPb * pbs);
         packH.writeTo(ldevFile);
 
         while (!ioQ.empty()) {
             // lseek is not required because it is contiguous.
-            ioQ.front().write(ldevFile);
+            const AlignedArray& buf = ioQ.front();
+            assert(buf.size() % pbs == 0);
+            ldevFile.write(buf.data(), buf.size());
             ioQ.pop();
         }
     }

@@ -18,9 +18,6 @@ namespace walb {
 
 constexpr size_t Q_SIZE = 16;
 
-CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress);
-void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs);
-
 /**
  * Walb log sender via TCP/IP connection.
  * This will send packets only, never receive packets.
@@ -45,7 +42,7 @@ public:
     WlogSender(cybozu::Socket &sock, Logger &logger, uint32_t pbs, uint32_t salt)
         : packet_(sock), ctrl_(sock), logger_(logger), pbs_(pbs), salt_(salt) {
     }
-    void process(CompressedData& cd);
+    void process(CompressedData& cd, bool doCompress);
 
     /**
      * You must call pushHeader(h) and n times of pushIo(),
@@ -55,12 +52,12 @@ public:
         verifyPbsAndSalt(header);
         CompressedData cd;
         cd.setUncompressed(header.rawData(), pbs_);
-        process(cd);
+        process(cd, true);
     }
     /**
      * You must call this for discard/padding record also.
      */
-    void pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS);
+    void pushIo(const LogPackHeader &header, uint16_t recIdx, const char *data);
 
     /**
      * Notify the end of input.
@@ -109,7 +106,7 @@ public:
      * Get IO data.
      * You must call this for discard/padding record also.
      */
-    void popIo(const WlogRecord &rec, LogBlockShared &blockS);
+    void popIo(const WlogRecord &rec, AlignedArray &data);
 };
 
 } //namespace walb

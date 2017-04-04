@@ -78,19 +78,14 @@ void dumpLogPackHeader(const std::string& wdevName, uint64_t lsid, const LogPack
     tmpFile.save(outPath.str());
 }
 
-void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t i, const LogPackHeader& packH, const LogBlockShared& blockS, const cybozu::Timespec& ts)
+void dumpLogPackIo(const std::string& wdevName, uint64_t lsid, size_t idx, const LogPackHeader& packH, const AlignedArray &buf, const cybozu::Timespec& ts)
 {
     cybozu::TmpFile tmpFile(".");
     cybozu::util::File file(tmpFile.fd());
-    const WlogRecord &rec = packH.record(i);
-    size_t remaining = rec.io_size * LBS;
-    for (size_t j = 0; j < blockS.nBlocks(); j++) {
-        const size_t s = std::min<size_t>(packH.pbs(), remaining);
-        file.write(blockS.get(j), s);
-        remaining -= s;
-    }
+    const WlogRecord &rec = packH.record(idx);
+    file.write(buf.data(), rec.io_size * LBS);
     cybozu::FilePath outPath(".");
-    outPath += cybozu::util::formatString("logpackio-%s-%" PRIu64 "-%zu-%s", wdevName.c_str(), lsid, i, ts.str().c_str());
+    outPath += cybozu::util::formatString("logpackio-%s-%" PRIu64 "-%zu-%s", wdevName.c_str(), lsid, idx, ts.str().c_str());
     tmpFile.save(outPath.str());
 }
 
@@ -168,54 +163,30 @@ bool retryForeverReadLogPackHeader(
     return true;
 }
 
-void copyLogPackIo(AlignedArray& dst, const LogBlockShared& src)
+void copyLogPackIo(AlignedArray& dst, const AlignedArray& src)
 {
-    const size_t pbs = src.pbs();
-    assert(pbs > 0);
-    assert(src.nBlocks() * pbs >= dst.size());
-
-    size_t i = 0;
-    size_t off = 0;
-    while (off < dst.size()) {
-        const size_t s = std::min(dst.size() - off, pbs);
-        ::memcpy(dst.data() + off, src.get(i), s);
-        off += s;
-        i++;
-    }
+    assert(dst.size() <= src.size());
+    ::memcpy(dst.data(), src.data(), dst.size());
 }
 
-bool isEqualLogPackIoImage(const LogBlockShared& blockS, const AlignedArray& prevImg)
+bool isEqualLogPackIoImage(const AlignedArray& buf0, const AlignedArray& buf1)
 {
-    const size_t pbs = blockS.pbs();
-    assert(pbs > 0);
-    assert(blockS.nBlocks() * pbs >= prevImg.size());
-
-    size_t i = 0;
-    size_t off = 0;
-    while (off < prevImg.size()) {
-        const size_t s = std::min(prevImg.size() - off, pbs);
-        if (::memcmp(blockS.get(i), prevImg.data() + off, s) != 0) {
-            return false;
-        }
-        off += s;
-        i++;
-    }
-    return true;
+    return ::memcmp(buf0.data(), buf1.data(), std::min(buf0.size(), buf1.size())) == 0;
 }
 
 bool retryForeverReadLogPackIo(
     const std::string& wdevName, device::SimpleWldevReader& sReader,
-    const LogPackHeader& packH, size_t i, LogBlockShared& blockS, size_t retryMs, uint64_t logCapacityPb)
+    const LogPackHeader& packH, size_t i, AlignedArray& buf, size_t retryMs, uint64_t logCapacityPb)
 {
     const std::string wdevPath = device::getWdevPathFromWdevName(wdevName);
     const cybozu::Timespec ts0 = cybozu::getNowAsTimespec();
     const uint64_t lsid = packH.logpackLsid();
     LOGs.error() << "invalid logpack IO" << wdevName << lsid << i << ts0;
     dumpLogPackHeader(wdevName, lsid, packH, ts0);
-    dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts0);
+    dumpLogPackIo(wdevName, lsid, i, packH, buf, ts0);
     const WlogRecord &rec = packH.record(i);
     AlignedArray prevImg(rec.ioSizeLb() * LBS);
-    copyLogPackIo(prevImg, blockS);
+    copyLogPackIo(prevImg, buf);
 
     size_t c = 0;
     IntervalChecker ic(1000);
@@ -224,17 +195,17 @@ retry:
     waitMs(retryMs);
     c++;
     sReader.reset(rec.lsid);
-    blockS.clear();
-    if (!readLogIo(sReader, packH, i, blockS)) {
-        if (!isEqualLogPackIoImage(blockS, prevImg)) {
+    buf.clear();
+    if (!readLogIo(sReader, packH, i, buf)) {
+        if (!isEqualLogPackIoImage(buf, prevImg)) {
             if (device::isOverflow(wdevPath)) {
                 throw cybozu::Exception("overflow") << wdevPath;
             }
             const cybozu::Timespec ts1 = cybozu::getNowAsTimespec();
             LOGs.info() << "invalid logpack IO changed" << wdevName << lsid << i << ts1 << c;
             dumpLogPackHeader(wdevName, lsid, packH, ts1);
-            dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts1);
-            copyLogPackIo(prevImg, blockS);
+            dumpLogPackIo(wdevName, lsid, i, packH, buf, ts1);
+            copyLogPackIo(prevImg, buf);
         }
         if (ic.isElapsed()) {
             // Check one lap behined.
@@ -250,8 +221,17 @@ retry:
     const cybozu::TimespecDiff td = ts1 - ts0;
     LOGs.info() << "retry succeeded" << wdevName << lsid << i << ts0 << ts1 << td << c;
     dumpLogPackHeader(wdevName, lsid, packH, ts1);
-    dumpLogPackIo(wdevName, lsid, i, packH, blockS, ts1);
+    dumpLogPackIo(wdevName, lsid, i, packH, buf, ts1);
     return true;
+}
+
+void pushCsumPerPb(const AlignedArray& buf, size_t pbs, std::deque<uint32_t>& outQ)
+{
+    assert(buf.size() % pbs == 0);
+    for (size_t off = 0; off < buf.size(); off += pbs) {
+        const uint32_t csum = cybozu::util::calcChecksum(buf.data() + off, pbs, 0);
+        outQ.push_back(csum);
+    }
 }
 
 template <typename Reader>
@@ -325,19 +305,16 @@ void checkWldev(const Option &opt)
                 for (size_t i = 0; i < packH.nRecords(); i++) {
                     const WlogRecord &rec = packH.record(i);
                     if (!rec.hasData()) continue;
-                    LogBlockShared blockS;
+                    AlignedArray buf;
                     const uint64_t nextLsid = rec.lsid + rec.ioSizePb(pbs);
-                    if (!readLogIo(reader, packH, i, blockS)) {
-                        if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, blockS, opt.retryMs, logCapacityPb)) {
+                    if (!readLogIo(reader, packH, i, buf)) {
+                        if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, buf, opt.retryMs, logCapacityPb)) {
                             goto fin;
                         }
                         reader.reset(nextLsid); // for next read.
                     }
                     if (opt.keepCsum) {
-                        for (size_t i = 0; i < blockS.nBlocks(); i++) {
-                            const uint32_t csum = cybozu::util::calcChecksum(blockS.get(i), pbs, 0);
-                            csumDeq.push_back(csum);
-                        }
+                        pushCsumPerPb(buf, pbs, csumDeq);
                         csumLsid = nextLsid;
                     }
                 }

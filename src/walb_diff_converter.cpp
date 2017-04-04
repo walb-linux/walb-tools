@@ -2,55 +2,39 @@
 
 namespace walb {
 
+/**
+ * drec: checksum will not be calculated.
+ */
 bool convertLogToDiff(
-    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffRecord& mrec, DiffIo &diffIo, bool calcChecksum)
+    const WlogRecord &lrec, const void *data, DiffRecord& drec)
 {
     /* Padding */
-    if (rec.isPadding()) return false;
+    if (lrec.isPadding()) return false;
 
-    mrec.init();
-    mrec.io_address = rec.offset;
-    mrec.io_blocks = rec.io_size;
+    drec.init();
+    drec.io_address = lrec.offset;
+    drec.io_blocks = lrec.io_size;
 
     /* Discard */
-    if (rec.isDiscard()) {
-        mrec.setDiscard();
-        mrec.data_size = 0;
-        diffIo.set(mrec);
+    if (lrec.isDiscard()) {
+        drec.setDiscard();
+        drec.data_size = 0;
         return true;
     }
 
     /* AllZero */
-    if (blockS.isAllZero(rec.ioSizeLb())) {
-        mrec.setAllZero();
-        mrec.data_size = 0;
-        diffIo.set(mrec);
+    const size_t ioSizeB = lrec.io_size * LOGICAL_BLOCK_SIZE;
+    if (cybozu::util::isAllZero(data, ioSizeB)) {
+        drec.setAllZero();
+        drec.data_size = 0;
         return true;
     }
 
-    /* Copy data from logpack data to diff io data. */
-    assert(0 < rec.ioSizeLb());
-    const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-    AlignedArray buf(ioSizeB, false);
-    size_t remaining = ioSizeB;
-    size_t off = 0;
-    const uint32_t ioSizePb = rec.ioSizePb(pbs);
-    for (size_t i = 0; i < ioSizePb; i++) {
-        const size_t copySize = std::min<size_t>(pbs, remaining);
-        ::memcpy(&buf[off], blockS.get(i), copySize);
-        off += copySize;
-        remaining -= copySize;
-    }
-    diffIo.set(mrec);
-    diffIo.data.swap(buf);
-
-    /* Compression. (currently NONE). */
-    mrec.compression_type = ::WALB_DIFF_CMPR_NONE;
-    mrec.data_offset = 0;
-    mrec.data_size = ioSizeB;
-
-    if (calcChecksum) mrec.checksum = diffIo.calcChecksum();
+    /* Normal */
+    drec.compression_type = ::WALB_DIFF_CMPR_NONE;
+    drec.data_offset = 0;
+    drec.data_size = ioSizeB;
+    drec.checksum = 0;
 
     return true;
 }
@@ -100,9 +84,6 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
         return false;
     }
 
-    /* Block buffer. */
-    const uint32_t pbs = wlHeader.pbs();
-
     /* Initialize walb diff db. */
     auto verifyUuid = [&]() {
         const cybozu::Uuid diffUuid = diffMem.header().getUuid();
@@ -126,76 +107,19 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
 
     /* Convert each log. */
     WlogRecord lrec;
-    LogBlockShared blockS;
-    while (reader.readLog(lrec, blockS)) {
-        DiffRecord diffRec;
-        DiffIo diffIo;
-        if (convertLogToDiff(pbs, lrec, blockS, diffRec, diffIo, true)) {
-            diffMem.add(diffRec, std::move(diffIo));
-            writtenBlocks += diffRec.io_blocks;
+    AlignedArray buf;
+    while (reader.readLog(lrec, buf)) {
+        DiffRecord drec;
+        if (convertLogToDiff(lrec, buf.data(), drec)) {
+            DiffIo dio;
+            dio.set(drec, std::move(buf));
+            diffMem.add(drec, std::move(dio));
+            writtenBlocks += drec.io_blocks;
         }
     }
 
     lsid = reader.endLsid();
     ::fprintf(::stderr, "converted until lsid %" PRIu64 "\n", lsid);
-    return true;
-}
-
-bool convertLogToDiff(
-    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    IndexedDiffRecord& mrec, AlignedArray &buf, bool calcChecksum)
-{
-    /* Padding */
-    if (rec.isPadding()) return false;
-
-    mrec.init();
-    mrec.io_address = rec.offset;
-    mrec.io_blocks = rec.io_size;
-
-    /* Discard */
-    if (rec.isDiscard()) {
-        mrec.setDiscard();
-        mrec.data_size = 0;
-        mrec.orig_blocks = 0;
-        // Do not touch buf.
-        return true;
-    }
-
-    /* AllZero */
-    if (blockS.isAllZero(rec.ioSizeLb())) {
-        mrec.setAllZero();
-        mrec.data_size = 0;
-        mrec.orig_blocks = 0;
-        // Do not touch buf.
-        return true;
-    }
-
-    mrec.orig_blocks = rec.io_size;
-
-    /* Copy data from logpack data to diff io data. */
-    assert(0 < rec.ioSizeLb());
-    const size_t ioSizeB = rec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
-    buf.resize(ioSizeB, false);
-    size_t remaining = ioSizeB;
-    size_t off = 0;
-    const uint32_t ioSizePb = rec.ioSizePb(pbs);
-    for (size_t i = 0; i < ioSizePb; i++) {
-        const size_t copySize = std::min<size_t>(pbs, remaining);
-        ::memcpy(&buf[off], blockS.get(i), copySize);
-        off += copySize;
-        remaining -= copySize;
-    }
-
-    /* Compression. (currently NONE). */
-    mrec.compression_type = ::WALB_DIFF_CMPR_NONE;
-    mrec.data_offset = 0; // updated later.
-    mrec.io_offset = 0;
-    mrec.data_size = ioSizeB;
-
-    if (calcChecksum) {
-        mrec.io_checksum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
-    }
-
     return true;
 }
 
@@ -244,9 +168,6 @@ bool IndexedDiffConverter::convertWlog(
         return false;
     }
 
-    /* Block buffer. */
-    const uint32_t pbs = wlHeader.pbs();
-
     /* Initialize walb diff db. */
     auto verifyUuid = [&]() {
         const cybozu::Uuid diffUuid = wdiffH.getUuid();
@@ -273,11 +194,10 @@ bool IndexedDiffConverter::convertWlog(
 
     /* Convert each log. */
     WlogRecord lrec;
-    LogBlockShared blockS;
-    while (reader.readLog(lrec, blockS)) {
+    AlignedArray buf;
+    while (reader.readLog(lrec, buf)) {
         IndexedDiffRecord drec;
-        AlignedArray buf;
-        if (convertLogToDiff(pbs, lrec, blockS, drec, buf, false)) {
+        if (convertLogToDiff(lrec, buf.data(), drec)) {
             writer.compressAndWriteDiff(drec, buf.data());
             writtenBlocks += drec.io_blocks;
         }
@@ -286,5 +206,50 @@ bool IndexedDiffConverter::convertWlog(
     ::fprintf(::stderr, "converted until lsid %" PRIu64 "\n", lsid);
     return true;
 }
+
+
+/**
+ * drec: checksums will be not set.
+ * data: uncompressed data buffer with size lrec.ioSizeLb() * LOGICAL_BLOCK_SIZE.
+ */
+bool convertLogToDiff(const WlogRecord &lrec, const void *data, IndexedDiffRecord& drec)
+{
+    /* Padding */
+    if (lrec.isPadding()) return false;
+
+    drec.init();
+    drec.io_address = lrec.offset;
+    drec.io_blocks = lrec.io_size;
+
+    /* Discard */
+    if (lrec.isDiscard()) {
+        drec.setDiscard();
+        drec.data_size = 0;
+        drec.orig_blocks = 0;
+        return true;
+    }
+
+    /* AllZero */
+    const size_t ioSizeB = lrec.io_size * LOGICAL_BLOCK_SIZE;
+    if (cybozu::util::isAllZero(data, ioSizeB)) {
+        drec.setAllZero();
+        drec.data_size = 0;
+        drec.orig_blocks = 0;
+        return true;
+    }
+
+    /* Normal */
+    assert(drec.isNormal());
+    drec.orig_blocks = lrec.io_size;
+    drec.compression_type = ::WALB_DIFF_CMPR_NONE;
+    drec.data_offset = 0; // updated later.
+    drec.io_offset = 0;
+    drec.data_size = ioSizeB;
+
+    // Checksums are not be calculated.
+
+    return true;
+}
+
 
 } //namespace walb

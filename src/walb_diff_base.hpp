@@ -151,6 +151,7 @@ struct DiffIo
     void printOneline(::FILE *fp = ::stdout) const;
 
     void set(const DiffRecord &rec, const char *data0 = nullptr);
+    void set(const DiffRecord &rec, AlignedArray &&data);
 
     /**
      * Split an IO into multiple IOs

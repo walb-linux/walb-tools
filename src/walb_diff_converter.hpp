@@ -31,9 +31,8 @@ namespace walb {
  *   false if the pack IO is padding data.
  *   true if the pack IO is normal IO or discard or allzero.
  */
-bool convertLogToDiff(
-    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    DiffRecord& mrec, DiffIo &diffIo, bool calcChecksum);
+bool convertLogToDiff(const WlogRecord &rec, const void *data, DiffRecord& drec);
+
 
 /**
  * Converter from walb logs to a walb diff.
@@ -59,9 +58,7 @@ private:
 };
 
 
-bool convertLogToDiff(
-    uint32_t pbs, const WlogRecord &rec, const LogBlockShared& blockS,
-    IndexedDiffRecord& mrec, AlignedArray &buf, bool calcChecksum);
+bool convertLogToDiff(const WlogRecord &lrec, const void *data, IndexedDiffRecord& drec);
 
 
 class IndexedDiffConverter /* final */

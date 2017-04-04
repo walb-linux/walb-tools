@@ -118,7 +118,7 @@ public:
      * RETURN:
      *   false when the input reached the end or end pack header was found.
      */
-    bool readLog(WlogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP = nullptr);
+    bool readLog(WlogRecord& rec, AlignedArray& data, uint16_t *recIdxP = nullptr);
 
     /**
      * Get pack header reference.
@@ -199,15 +199,8 @@ public:
     void writePackHeader(const LogPackHeader &packH) {
         writePackHeader(packH.header());
     }
-    /**
-     * Write a pack IO.
-     */
-    void writePackIo(const LogBlockShared &blockS) {
-        blockS.write(fileW_);
-        lsid_ += blockS.nBlocks();
-    }
-
-    void writePack(const LogPackHeader &header, std::queue<LogBlockShared> &&blockSQ);
+    void writePackIo(const AlignedArray &data);
+    void writePack(const LogPackHeader &header, std::queue<AlignedArray> &&ioQ);
 
     /**
      * Get the end lsid that is next lsid of the latest written logpack.

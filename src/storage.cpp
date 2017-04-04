@@ -860,7 +860,7 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
     reader.reset(lsidB);
 
     LOGs.debug() << FUNC << "start" << volId << lsidB << lsidLimit;
-    LogBlockShared blockS;
+    AlignedArray buf;
     uint64_t lsid = lsidB;
     try {
         for (;;) {
@@ -877,10 +877,11 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
             if (lsidLimit < nextLsid) break;
             sender.pushHeader(packH);
             for (size_t i = 0; i < packH.header().n_records; i++) {
-                if (!readLogIo(reader, packH, i, blockS)) {
+                if (!readLogIo(reader, packH, i, buf)) {
                     throw cybozu::Exception(FUNC) << "invalid logpack IO" << volId << lsid << i;
                 }
-                sender.pushIo(packH, i, blockS);
+                sender.pushIo(packH, i, buf.data());
+                buf.clear();
             }
             lsid = nextLsid;
         }

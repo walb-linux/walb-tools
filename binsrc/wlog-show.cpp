@@ -80,8 +80,7 @@ void setupInputFile(LogFile &fileR, const Option &opt)
     }
 }
 
-void validateAndPrintLogPackIos(
-    const LogPackHeader &packH, std::queue<LogBlockShared>& ioQ)
+void validateAndPrintLogPackIos(const LogPackHeader &packH, std::queue<AlignedArray>& ioQ)
 {
     for (size_t i = 0; i < packH.nRecords(); i++) {
         const WlogRecord &rec = packH.record(i);
@@ -96,8 +95,8 @@ void validateAndPrintLogPackIos(
             continue;
         }
 
-        const LogBlockShared &blockS = ioQ.front();
-        const uint32_t csum = blockS.calcChecksum(rec.io_size, packH.salt());
+        const AlignedArray &buf = ioQ.front();
+        const uint32_t csum = cybozu::util::calcChecksum(buf.data(), rec.io_size * LBS, packH.salt());
         if (rec.checksum == csum) {
             LOGs.debug() << "OK" << rec;
         } else {
@@ -126,7 +125,7 @@ int doMain(int argc, char* argv[])
     while (readLogPackHeader(fileR, packH, lsid)) {
         if (opt.showPack) std::cout << packH << std::endl;
         if (opt.doValidate) {
-            std::queue<LogBlockShared> ioQ;
+            std::queue<AlignedArray> ioQ;
             readAllLogIos(fileR, packH, ioQ, false);
             validateAndPrintLogPackIos(packH, ioQ);
         } else {

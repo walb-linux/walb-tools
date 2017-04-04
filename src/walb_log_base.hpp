@@ -352,96 +352,6 @@ struct ChecksumCalculator {
     }
 };
 
-/**
- * Helper class to manage multiple IO blocks.
- * This is copyable and movable.
- */
-class LogBlockShared
-{
-private:
-    static constexpr const char *NAME() { return "LogBlockShared"; }
-    uint32_t pbs_; /* physical block size. */
-    std::vector<AlignedArray> data_; /* Each block's size must be pbs. */
-public:
-    explicit LogBlockShared(uint32_t pbs = 0) : pbs_(pbs) {}
-    void init(size_t pbs) {
-        pbs_ = pbs;
-        checkPbs();
-        resize(0);
-    }
-    size_t nBlocks() const { return data_.size(); }
-    const char *get(size_t idx) const {
-        checkRange(idx);
-        return data_[idx].data();
-    }
-    char *get(size_t idx) {
-        checkRange(idx);
-        return data_[idx].data();
-    }
-    uint32_t pbs() const {
-        return pbs_;
-    }
-    void clear() {
-        pbs_ = 0;
-        data_.clear();
-    }
-    void resize(size_t nBlocks0) {
-        if (nBlocks0 < data_.size()) {
-            data_.resize(nBlocks0);
-        }
-        while (data_.size() < nBlocks0) {
-            data_.emplace_back(pbs_, false);
-        }
-    }
-    void addBlock(AlignedArray &&block) {
-        data_.push_back(std::move(block));
-    }
-    AlignedArray& getBlock(size_t idx) { return data_[idx]; }
-    const AlignedArray& getBlock(size_t idx) const { return data_[idx]; }
-    template <typename Reader>
-    void read(Reader &reader, uint32_t nBlocks0) {
-        checkPbs();
-        resize(nBlocks0);
-        for (size_t i = 0; i < nBlocks0; i++) {
-            reader.read(get(i), pbs_);
-        }
-    }
-    template <typename Writer>
-    void write(Writer &writer) const {
-        checkPbs();
-        for (size_t i = 0; i < nBlocks(); i++) {
-            writer.write(get(i), pbs_);
-        }
-    }
-    bool isAllZero(size_t ioSizeLb) const;
-    uint32_t calcChecksum(size_t ioSizeLb, uint32_t salt) const;
-    std::string str() const;
-    friend inline std::ostream& operator<<(std::ostream& os, const LogBlockShared &blockS) {
-        os << blockS.str();
-        return os;
-    }
-private:
-    void checkPbs() const {
-        if (pbs_ == 0) throw cybozu::Exception(NAME()) << "pbs is zero";
-    }
-    void checkSizeLb(size_t ioSizeLb) const {
-        if (nBlocks() * pbs_ < ioSizeLb * LOGICAL_BLOCK_SIZE) {
-            throw cybozu::Exception(NAME())
-                << "checkSizeLb:ioSizeLb too large"
-                << ioSizeLb << ::capacity_lb(pbs_, nBlocks());
-        }
-    }
-    void checkRange(size_t idx) const {
-        checkPbs();
-        if (nBlocks() <= idx) {
-            throw cybozu::Exception(NAME()) << "index out of range" << idx;
-        }
-    }
-};
-
-void verifyWlogChecksum(const WlogRecord& rec, const LogBlockShared& blockS, uint32_t salt);
-bool isWlogChecksumValid(const WlogRecord& rec, const LogBlockShared& blockS, uint32_t salt);
-
 
 template <typename Reader>
 inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsid = uint64_t(-1))
@@ -456,19 +366,32 @@ inline bool readLogPackHeader(Reader &reader, LogPackHeader &packH, uint64_t lsi
 }
 
 
+/**
+ * data size will be multiples of physical blocks.
+ * padding IO data will also be set.
+ */
 template <typename Reader>
-inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, LogBlockShared &blockS)
+inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, AlignedArray &data)
 {
     const WlogRecord &lrec = packH.record(idx);
     if (!lrec.hasData()) return true;
 
+    // Read.
     const uint32_t pbs = packH.pbs();
     const size_t ioSizePb = lrec.ioSizePb(pbs);
-    if (blockS.pbs() != pbs) blockS.init(pbs);
-    blockS.read(reader, ioSizePb);
-    return isWlogChecksumValid(lrec, blockS, packH.salt());
-}
+    data.resize(ioSizePb * pbs);
+    reader.read(data.data(), data.size()); // physical blocks.
+    if (!lrec.hasDataForChecksum()) {
+        assert(lrec.isPadding());
+        // keep padding data.
+        return true;
+    }
 
+    // checksum.
+    const size_t ioSizeB = lrec.ioSizeLb() * LOGICAL_BLOCK_SIZE;
+    const uint32_t csum = cybozu::util::calcChecksum(data.data(), ioSizeB, packH.salt());
+    return lrec.checksum == csum;
+}
 
 /**
  * Read all lob IOs corresponding to a logpack.
@@ -480,7 +403,7 @@ inline bool readLogIo(Reader &reader, const LogPackHeader &packH, size_t idx, Lo
  */
 template <typename Reader>
 bool readAllLogIos(
-    Reader &reader, LogPackHeader &packH, std::queue<LogBlockShared> &ioQ,
+    Reader &reader, LogPackHeader &packH, std::queue<AlignedArray> &ioQ,
     bool doShrink = true)
 {
     bool isNotShrinked = true;
@@ -488,19 +411,18 @@ bool readAllLogIos(
         const WlogRecord &rec = packH.record(i);
         if (!rec.hasData()) continue;
 
-        LogBlockShared blockS;
-        const bool valid = readLogIo(reader, packH, i, blockS);
+        AlignedArray buf;
+        const bool valid = readLogIo(reader, packH, i, buf);
         if (doShrink && !valid) {
             packH.shrink(i);
             isNotShrinked = false;
             break;
         }
-        ioQ.push(std::move(blockS));
+        ioQ.push(std::move(buf));
     }
     assert(packH.nRecordsHavingData() == ioQ.size());
     return isNotShrinked;
 }
-
 
 /**
  * Skip to read log IOs corresponding to a logpack.

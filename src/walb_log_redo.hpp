@@ -89,9 +89,9 @@ public:
         while (readLogPackHeader(reader, packH, lsid) && !isShrinked) {
             packH_.copyFrom(packH);
             if (cfg_.isVerbose) std::cout << packH.str() << std::endl;
-            LogBlockShared blockS;
+            AlignedArray buf;
             for (size_t i = 0; i < packH.nRecords(); i++) {
-                if (!readLogIo(reader, packH, i, blockS)) {
+                if (!readLogIo(reader, packH, i, buf)) {
                     if (cfg_.doShrink) {
                         packH.shrink(i);
                         packH_.copyFrom(packH);
@@ -101,8 +101,8 @@ public:
                         throw cybozu::Exception(__func__) << "invalid log IO" << i << packH;
                     }
                 }
-                redoLogIo(packH, i, std::move(blockS));
-                blockS.clear();
+                redoLogIo(packH, i, std::move(buf));
+                buf.clear();
             }
             lsid = packH.nextLogpackLsid();
         }
@@ -120,7 +120,7 @@ public:
         if (packH_.isValid()) packH.copyFrom(packH_);
     }
 private:
-    void redoLogIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
+    void redoLogIo(const LogPackHeader &packH, size_t idx, AlignedArray &&buf) {
         const WlogRecord &rec = packH.record(idx);
         assert(rec.isExist());
 
@@ -142,44 +142,34 @@ private:
             }
             /* zero-discard will use redoNormalIo(). */
             stat_.allZeroLb += rec.ioSizeLb();
-            redoNormalIo(packH, idx, std::move(blockS));
+            redoNormalIo(packH, idx, std::move(buf));
             return;
         }
         stat_.normalLb += rec.ioSizeLb();
-        redoNormalIo(packH, idx, std::move(blockS));
+        redoNormalIo(packH, idx, std::move(buf));
     }
     void redoDiscard(const WlogRecord &rec) {
         assert(cfg_.isDiscard);
         assert(rec.isDiscard());
         ddevWriter_.discard(rec.offset, rec.ioSizeLb());
     }
-    void redoNormalIo(const LogPackHeader &packH, size_t idx, LogBlockShared &&blockS) {
+    void redoNormalIo(const LogPackHeader &packH, size_t idx, AlignedArray &&buf) {
         const WlogRecord &rec = packH.record(idx);
-        const uint32_t pbs = packH.pbs();
         assert(!rec.isPadding());
         assert(cfg_.isZeroDiscard || !rec.isDiscard());
 
-        const uint32_t ioSizePb = rec.ioSizePb(pbs);
-        const uint32_t pbsLb = ::n_lb_in_pb(pbs);
-        uint64_t offLb = rec.offset;
-        uint32_t remainingLb = rec.ioSizeLb();
-        for (size_t i = 0; i < ioSizePb; i++) {
-            AlignedArray block;
-            if (rec.isDiscard()) {
-                block.resize(pbs, true);
-            } else {
-                block = std::move(blockS.getBlock(i));
-            }
-            const uint32_t sizeLb = std::min(pbsLb, remainingLb);
-            if (!ddevWriter_.prepare(offLb, sizeLb, std::move(block))) {
-                if (cfg_.isVerbose) {
-                    ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
-                }
-            }
-            offLb += sizeLb;
-            remainingLb -= sizeLb;
+        if (rec.isDiscard()) {
+            // QQQQQ TODO: use global zeroed buffer.
+            buf.clear();
+            buf.resize(rec.ioSizeLb() * LOGICAL_BLOCK_SIZE, true); // zero fill.
         }
-        assert(remainingLb == 0);
+        const uint64_t offLb = rec.offset;
+        const uint32_t sizeLb = rec.ioSizeLb();
+        if (!ddevWriter_.prepare(offLb, sizeLb, std::move(buf))) {
+            if (cfg_.isVerbose) {
+                ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
+            }
+        }
         ddevWriter_.submit();
 
         if (cfg_.isVerbose) {

@@ -83,15 +83,15 @@ void WlogReader::readHeader(WlogFileHeader &fileH)
     packH_.init(pbs_, salt_);
 }
 
-bool WlogReader::readLog(WlogRecord& rec, LogBlockShared& blockS, uint16_t *recIdxP)
+bool WlogReader::readLog(WlogRecord& rec, AlignedArray& data, uint16_t *recIdxP)
 {
     if (!fetchNextPackHeader()) return false;
 
     /* Copy to the record. */
     rec = packH_.record(recIdx_);
 
-    /* Read to the blockS. */
-    if (!readLogIo(fileR_, packH_, recIdx_, blockS)) {
+    /* Read to the data buffer. */
+    if (!readLogIo(fileR_, packH_, recIdx_, data)) {
         throw cybozu::Exception(__func__) << "invalid log IO" << packH_.record(recIdx_);
     }
 
@@ -144,17 +144,26 @@ void WlogWriter::writeHeader(WlogFileHeader &fileH)
     lsid_ = beginLsid_;
 }
 
-void WlogWriter::writePack(const LogPackHeader &header, std::queue<LogBlockShared> &&blockSQ)
+void WlogWriter::writePackIo(const AlignedArray &data)
+{
+    if (data.size() == 0) return;
+    assert(data.size() % pbs_ == 0);
+    fileW_.write(data.data(), data.size());
+    const size_t ioSizePb = data.size() / pbs_;
+    lsid_ += ioSizePb;
+}
+
+void WlogWriter::writePack(const LogPackHeader &header, std::queue<AlignedArray> &&ioQ)
 {
     checkHeader(header);
-    if (blockSQ.size() != header.nRecordsHavingData()) {
+    if (ioQ.size() != header.nRecordsHavingData()) {
         throw cybozu::Exception(__func__)
-            << "bad queue size" << blockSQ.size() << header.nRecordsHavingData();
+            << "bad queue size" << ioQ.size() << header.nRecordsHavingData();
     }
     writePackHeader(header);
-    while (!blockSQ.empty()) {
-        writePackIo(blockSQ.front());
-        blockSQ.pop();
+    while (!ioQ.empty()) {
+        writePackIo(ioQ.front());
+        ioQ.pop();
     }
     assert(lsid_ == header.nextLogpackLsid());
 }

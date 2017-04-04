@@ -143,6 +143,19 @@ void DiffIo::set(const DiffRecord &rec, const char *data0)
     }
 }
 
+void DiffIo::set(const DiffRecord &rec, AlignedArray &&data0)
+{
+    if (rec.isNormal()) {
+        ioBlocks = rec.io_blocks;
+        compressionType = rec.compression_type;
+        data = std::move(data0);
+    } else {
+        ioBlocks = 0;
+        compressionType = ::WALB_DIFF_CMPR_NONE;
+        data.clear();
+    }
+}
+
 std::vector<DiffIo> DiffIo::splitIoDataAll(uint32_t ioBlocks0) const
 {
     if (ioBlocks0 == 0) {

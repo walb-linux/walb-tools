@@ -123,6 +123,9 @@ public:
         getUncompressed(dst);
         setUncompressed(std::move(dst));
     }
+    void moveTo(AlignedArray &outV) {
+        outV = std::move(data_);
+    }
 private:
     void verify() const {
         if (orgSize_ == 0) throw RT_ERR("orgSize must not be 0.");

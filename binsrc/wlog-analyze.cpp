@@ -145,8 +145,8 @@ private:
         }
         /* Read pack IO. */
         WlogRecord rec;
-        LogBlockShared blockS;
-        while (reader.readLog(rec, blockS)) {
+        AlignedArray buf;
+        while (reader.readLog(rec, buf)) {
             updateBitmap(rec);
         }
         return reader.endLsid();

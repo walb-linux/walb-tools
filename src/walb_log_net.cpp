@@ -2,40 +2,9 @@
 
 namespace walb {
 
-CompressedData convertToCompressedData(const LogBlockShared &blockS, bool doCompress)
+void WlogSender::process(CompressedData& cd, bool doCompress) try
 {
-    const uint32_t pbs = blockS.pbs();
-    const size_t n = blockS.nBlocks();
-    assert(0 < n);
-    AlignedArray d(n * pbs);
-    // This is inefficient because of memcpy. Stream compressor will solve the problem.
-    for (size_t i = 0; i < n; i++) {
-        ::memcpy(&d[i * pbs], blockS.get(i), pbs);
-    }
-    CompressedData cd;
-    cd.setUncompressed(std::move(d));
     if (doCompress) cd.compress();
-    return cd;
-}
-
-void convertToLogBlockShared(LogBlockShared& blockS, const CompressedData &cd, uint32_t sizePb, uint32_t pbs)
-{
-    const char *const FUNC = __func__;
-    AlignedArray v;
-    cd.getUncompressed(v);
-    if (sizePb * pbs != v.size()) throw cybozu::Exception(FUNC) << "invalid size" << v.size() << sizePb;
-    blockS.init(pbs);
-    blockS.resize(sizePb);
-    // This is inefficient because of memcpy. Stream uncompressor will solve the problem.
-    for (size_t i = 0; i < sizePb; i++) {
-        ::memcpy(blockS.get(i), &v[i * pbs], pbs);
-    }
-}
-
-
-void WlogSender::process(CompressedData& cd) try
-{
-    cd.compress();
     ctrl_.next();
     cd.send(packet_);
 } catch (std::exception& e) {
@@ -45,16 +14,19 @@ void WlogSender::process(CompressedData& cd) try
     logger_.error() << "WlogSender:process" << e.what();
 }
 
-
-void WlogSender::pushIo(const LogPackHeader &header, uint16_t recIdx, const LogBlockShared &blockS)
+/**
+ * Send padding IO data also so that the receiver can create wlog file for debug purpose.
+ */
+void WlogSender::pushIo(const LogPackHeader &header, uint16_t recIdx, const char *data)
 {
     verifyPbsAndSalt(header);
     const WlogRecord &rec = header.record(recIdx);
-    if (rec.hasDataForChecksum()) {
-        CompressedData cd = convertToCompressedData(blockS, false);
-        assert(0 < cd.originalSize());
-        process(cd);
-    }
+    if (!rec.hasData()) return;
+
+    const size_t size = rec.ioSizePb(pbs_) * pbs_;
+    CompressedData cd;
+    cd.compressFrom(data, size);
+    process(cd, false);
 }
 
 void WlogSender::verifyPbsAndSalt(const LogPackHeader &header) const
@@ -98,15 +70,26 @@ bool WlogReceiver::popHeader(LogPackHeader &header)
     return true;
 }
 
-void WlogReceiver::popIo(const WlogRecord &rec, LogBlockShared &blockS)
+/**
+ * data will be uncompressed IO data with padding (ioSizePb * pbs).
+ */
+void WlogReceiver::popIo(const WlogRecord &rec, AlignedArray &data)
 {
-    if (rec.hasDataForChecksum()) {
-        CompressedData cd;
-        if (!process(cd)) throw cybozu::Exception("WlogReceiver:popIo:failed.");
-        convertToLogBlockShared(blockS, cd, rec.ioSizePb(pbs_), pbs_);
-        verifyWlogChecksum(rec, blockS, salt_);
-    } else {
-        blockS.init(pbs_);
+    data.clear();
+    if (!rec.hasData()) return;
+
+    CompressedData cd;
+    if (!process(cd)) {
+        throw cybozu::Exception("WlogReceiver:popIo:failed") << rec;
+    }
+    assert(!cd.isCompressed());
+    cd.moveTo(data);
+    if (!rec.hasDataForChecksum()) return;
+
+    const size_t ioSizeB = rec.ioSizeLb() * LBS;
+    const uint32_t csum = cybozu::util::calcChecksum(data.data(), ioSizeB, salt_);
+    if (csum != rec.checksum) {
+        throw cybozu::Exception("WlogReceiver:popIo:invalid checksum") << rec << salt_ << csum;
     }
 }
 

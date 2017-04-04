@@ -976,16 +976,18 @@ bool recvWlogAndWriteDiff(
             }
             wlogW->writePackHeader(packH.header());
         }
-        LogBlockShared blockS(pbs);
+        AlignedArray buf;
         for (size_t i = 0; i < packH.header().n_records; i++) {
             WlogRecord &lrec = packH.record(i);
-            receiver.popIo(lrec, blockS);
-            if (wlogW) wlogW->writePackIo(blockS);
+            receiver.popIo(lrec, buf);
+            if (wlogW) wlogW->writePackIo(buf);
             DiffRecord drec;
-            DiffIo diffIo;
-            if (convertLogToDiff(pbs, lrec, blockS, drec, diffIo, false)) {
-                diffMem.add(drec, std::move(diffIo));
+            if (convertLogToDiff(lrec, buf.data(), drec)) {
+                DiffIo dio;
+                dio.set(drec, std::move(buf));
+                diffMem.add(drec, std::move(dio));
             }
+            buf.clear();
         }
     }
     if (wlogW) wlogW->close();
@@ -1017,14 +1019,12 @@ bool recvWlogAndWriteDiff2(
         if (stopState == ForceStopping || ps.isForceShutdown()) {
             return false;
         }
-        LogBlockShared blockS(pbs);
+        AlignedArray data;
         for (size_t i = 0; i < packH.header().n_records; i++) {
             WlogRecord &lrec = packH.record(i);
-            receiver.popIo(lrec, blockS);
-
+            receiver.popIo(lrec, data);
             IndexedDiffRecord drec;
-            AlignedArray data;
-            if (convertLogToDiff(pbs, lrec, blockS, drec, data, false)) {
+            if (convertLogToDiff(lrec, data.data(), drec)) {
                 writer.compressAndWriteDiff(drec, data.data());
             }
         }

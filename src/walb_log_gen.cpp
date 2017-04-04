@@ -57,42 +57,43 @@ void WlogGenerator::generateAndWrite(int fd)
         uint64_t tmpLsid = lsid + 1;
 
         /* Prepare blocks and calc checksum if necessary. */
-        std::queue<LogBlockShared> blockSQ;
+        std::queue<AlignedArray> ioQ;
         for (uint32_t i = 0; i < packH.nRecords(); i++) {
             WlogRecord &rec = packH.record(i);
-            ChecksumCalculator cc(rec.io_size, salt);
-
             if (rec.hasData()) {
                 bool isAllZero = false;
                 if (config_.isAllZero) {
                     isAllZero = rand.get32() % 100 < 10;
                 }
+                ChecksumCalculator cc(rec.io_size, salt);
                 const uint32_t ioSizePb = rec.ioSizePb(pbs);
-                LogBlockShared blockS(pbs);
+                AlignedArray buf(ioSizePb * pbs, true);
                 for (uint32_t j = 0; j < ioSizePb; j++) {
+                    const size_t off = pbs * j;
                     AlignedArray b(pbs, true);
                     if (!isAllZero) {
                         if (config_.isRandom) {
-                            rand.fill(b.data(), b.size());
+                            rand.fill(buf.data() + off, pbs);
                         } else {
-                            ::memcpy(b.data(), &tmpLsid, sizeof(tmpLsid));
+                            ::memcpy(buf.data() + off, &tmpLsid, sizeof(tmpLsid));
                         }
                     }
                     tmpLsid++;
-                    cc.update(b.data(), b.size());
-                    blockS.addBlock(std::move(b));
+                    if (rec.hasDataForChecksum()) {
+                        cc.update(buf.data() + off, pbs);
+                    }
                 }
-                blockSQ.push(std::move(blockS));
-            }
-            if (rec.hasDataForChecksum()) {
-                rec.checksum = cc.get();
+                ioQ.push(std::move(buf));
+                if (rec.hasDataForChecksum()) {
+                    rec.checksum = cc.get();
+                }
             }
         }
-        assert(blockSQ.size() == packH.nRecordsHavingData());
+        assert(ioQ.size() == packH.nRecordsHavingData());
 
         /* Calculate header checksum and write. */
         packH.updateChecksum();
-        writer.writePack(packH, std::move(blockSQ));
+        writer.writePack(packH, std::move(ioQ));
 
         uint64_t w = 1 + packH.totalIoSize();
         assert(tmpLsid == lsid + w);

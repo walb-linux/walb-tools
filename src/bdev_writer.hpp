@@ -14,6 +14,22 @@ namespace walb {
 
 namespace bdev_writer_local {
 
+
+struct AlignedArrayOrPtr
+{
+    AlignedArray buf;
+    const char *ptr;
+
+    const char *data() const {
+        if (ptr == nullptr) {
+            return buf.data();
+        } else {
+            return ptr;
+        }
+    }
+};
+
+
 /**
  * Io data.
  */
@@ -22,7 +38,7 @@ class Io
 private:
     uint64_t offset_; // [bytes].
     size_t size_; // [bytes].
-    std::list<AlignedArray> blocks_;
+    std::list<AlignedArrayOrPtr> blocks_;
 
 public:
     uint32_t aioKey; // IO identifier inside aio.
@@ -41,6 +57,10 @@ public:
         : Io(offset, size) {
         setBlock(std::move(block));
     }
+    Io(int64_t offset, size_t size, const char *ptr)
+        : Io(offset, size) {
+        setPtr(ptr);
+    }
 
     uint64_t offset() const { return offset_; }
     size_t size() const { return size_; }
@@ -49,7 +69,11 @@ public:
 
     void setBlock(AlignedArray &&b) {
         assert(blocks_.empty());
-        blocks_.push_back(std::move(b));
+        blocks_.push_back({std::move(b), nullptr});
+    }
+    void setPtr(const char *ptr) {
+        assert(blocks_.empty());
+        blocks_.push_back({AlignedArray(), ptr});
     }
     void print(::FILE *p = ::stdout) const;
 
@@ -400,6 +424,7 @@ private:
         uint64_t offLb; // [logical block]
         size_t sizeLb; // [logical block]
         AlignedArray block;
+        const char *ptr;
     };
     std::queue<Io2> ioQ_;
 
@@ -413,14 +438,27 @@ public:
     }
     bool prepare(uint64_t offLb, size_t sizeLb, AlignedArray &&block) {
         if (isClipped(offLb, sizeLb)) return false;
-        ioQ_.push({offLb, sizeLb, std::move(block)});
+        ioQ_.push({offLb, sizeLb, std::move(block), nullptr});
+        stat_.addNormal(sizeLb);
+        return true;
+    }
+    /**
+     * data must be kept until submit() called.
+     */
+    bool prepare(uint64_t offLb, size_t sizeLb, const char *data) {
+        if (isClipped(offLb, sizeLb)) return false;
+        ioQ_.push({offLb, sizeLb, AlignedArray(), data});
         stat_.addNormal(sizeLb);
         return true;
     }
     void submit() {
         while (!ioQ_.empty()) {
             Io2 &io = ioQ_.front();
-            bdevFile_.pwrite(io.block.data(), io.sizeLb << 9, io.offLb << 9);
+            if (io.ptr == nullptr) {
+                bdevFile_.pwrite(io.block.data(), io.sizeLb << 9, io.offLb << 9);
+            } else {
+                bdevFile_.pwrite(io.ptr, io.sizeLb << 9, io.offLb << 9);
+            }
             stat_.addWritten(io.sizeLb);
             ioQ_.pop();
         }
@@ -482,6 +520,16 @@ public:
         stat_.addNormal(sizeLb);
         return true;
     }
+    /**
+     * data must be kept until the corresponding IO completes.
+     */
+    bool prepare(uint64_t offLb, size_t sizeLb, const char *ptr) {
+        if (isClipped(offLb, sizeLb)) return false;
+        ioQ_.add(bdev_writer_local::Io(offLb << 9, sizeLb << 9, ptr));
+        stat_.addNormal(sizeLb);
+        return true;
+    }
+
     /**
      * Causion: this may not submit IOs really.
      * Call waitForAll() to force submit.

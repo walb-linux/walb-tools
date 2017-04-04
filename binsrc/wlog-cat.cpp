@@ -91,7 +91,7 @@ void catWldev(const Option& opt)
 
     /* Read and write each logpack. */
     reader.reset(bgnLsid);
-    std::queue<LogBlockShared> ioQ;
+    std::queue<AlignedArray> ioQ;
     uint64_t lsid = bgnLsid;
     LogStatistics logStat;
     logStat.init(bgnLsid, opt.endLsid);
