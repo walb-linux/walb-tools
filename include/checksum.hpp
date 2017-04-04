@@ -7,6 +7,8 @@
  * (C) 2012 Cybozu Labs, Inc.
  */
 #include <cstring>
+#include <cinttypes>
+#include <cassert>
 
 namespace cybozu {
 namespace util {
@@ -21,14 +23,15 @@ namespace util {
  */
 inline uint32_t checksumPartial(const void *data, size_t size, uint32_t csum)
 {
-    const char *p = reinterpret_cast<const char *>(data);
-    while (sizeof(uint32_t) <= size) {
-        uint32_t v;
+    const char *p = (const char *)data;
+    uint32_t v;
+    while (sizeof(v) <= size) {
         ::memcpy(&v, p, sizeof(v));
         csum += v;
-        size -= sizeof(uint32_t);
-        p += sizeof(uint32_t);
+        size -= sizeof(v);
+        p += sizeof(v);
     }
+    assert(size < sizeof(v));
     if (0 < size) {
         uint32_t padding = 0;
         ::memcpy(&padding, p, size);
