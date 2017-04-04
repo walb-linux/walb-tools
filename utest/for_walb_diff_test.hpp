@@ -165,18 +165,34 @@ class RangeSet
     };
 public:
     bool tryAdd(uint64_t bgn, uint64_t end) {
-        Set::iterator it0;
+        Set::iterator it0, it1, it;
         Key key0{bgn, 0};
         bool ret;
         std::tie(it0, ret) = set_.insert(key0);
         if (!ret) return false;
         Deleter d0(set_, key0);
-        Set::iterator it1;
         Key key1{end, 1};
         std::tie(it1, ret) = set_.insert(key1);
         if (!ret) return false;
         Deleter d1(set_, key1);
-        if (++it0 != it1) return false;
+
+        /*
+         * 1st check.
+         *  |       |      |
+         * it0   bgn/end  it1
+         */
+        it = it0;
+        if (++it != it1) return false;
+
+        /*
+         * 2nd check.
+         *  |     |    |    |
+         * bgn   it0  it1  end
+         **/
+        it = it0;
+        if (it != set_.begin() && (--it)->second == 0) return false;
+
+        /* Now there are no overlapped ranges. */
         d0.dontDelete();
         d1.dontDelete();
         return true;

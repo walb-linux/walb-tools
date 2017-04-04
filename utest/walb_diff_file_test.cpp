@@ -145,6 +145,7 @@ void testRandomDiffFile(int cmprType, size_t nrIos)
 
 void testRandomIndexedDiffFile(int cmprType, size_t nrIos)
 {
+    ::printf("cmprType %s\n", compressionTypeToStr(cmprType).c_str());
     cybozu::TmpFile tmpFile0(".");
 
     DiffFileHeader header0;
