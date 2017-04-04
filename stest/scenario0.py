@@ -821,11 +821,9 @@ def test_e10():
         init_repeater_test(sLayoutRepeater1, rL)
         stop_repeater(p0)
         write_over_wldev(wdev0, overflow=True)
-        try:
-            walbc.snapshot_nbk(s0, VOL)
-            raise Exception('test_e10:expect wlog overflow')
-        except:
-            print 'test_e10:wlog overflow ok'
+        if not walbc.is_overflow(s0, VOL):
+            raise Exception('test_e10:must be overflow')
+        print 'test_e10:wlog overflow ok'
         start_repeater(p0)
         walbc.stop(s0, VOL)
         gid = walbc.hash_backup(s0, VOL, TIMEOUT)
