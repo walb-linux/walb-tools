@@ -10,40 +10,10 @@
 #include "thread_util.hpp"
 #include "walb_util.hpp"
 #include "compressor.hpp"
+#include "compression_type.hpp"
 
 using namespace walb;
 using Buffer = AlignedArray;
-
-struct Pair {
-    int mode;
-    const char* name;
-} modeTbl[] = {
-    {::WALB_DIFF_CMPR_NONE, "none"},
-    {::WALB_DIFF_CMPR_SNAPPY, "snappy"},
-    {::WALB_DIFF_CMPR_GZIP, "gzip"},
-    {::WALB_DIFF_CMPR_LZMA, "lzma"},
-    {::WALB_DIFF_CMPR_LZ4, "lz4"},
-};
-
-const char* modeToStr(int mode)
-{
-    for (const Pair& p : modeTbl) {
-        if (mode == p.mode) {
-            return p.name;
-        }
-    }
-    throw cybozu::Exception("bad mode") << mode;
-}
-
-int strToMode(const std::string& s)
-{
-    for (const Pair& p : modeTbl) {
-        if (s == p.name) {
-            return p.mode;
-        }
-    }
-    throw cybozu::Exception("bad mode str") << s;
-}
 
 struct Option
 {
@@ -106,7 +76,7 @@ struct Option
         }
     }
     int getMode() const {
-        return strToMode(modeStr);
+        return parseCompressionType(modeStr);
     }
     bool isStdin() const {
         return srcPath.empty();
@@ -121,7 +91,7 @@ static const std::string HEADER_STRING("walb-compressed");
 void writeFileHeader(cybozu::util::File &outFile, int mode)
 {
     cybozu::save(outFile, HEADER_STRING);
-    cybozu::save(outFile, modeToStr(mode));
+    cybozu::save(outFile, compressionTypeToStr(mode));
     cybozu::save(outFile, mode);
 }
 
@@ -136,7 +106,7 @@ int readFileHeader(cybozu::util::File &inFile)
     cybozu::load(modeStr, inFile);
     int mode;
     cybozu::load(mode, inFile);
-    if (modeToStr(mode) != modeStr) {
+    if (compressionTypeToStr(mode) != modeStr) {
         throw cybozu::Exception("bad mode") << mode << modeStr;
     }
     return mode;
