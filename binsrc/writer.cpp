@@ -28,7 +28,7 @@ struct Option
     size_t aheadSizeB;
     size_t maxThroughputMb;
     size_t monitorIntervalSec;
-    bool fillAll;
+    size_t fillPct;
 
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
@@ -40,7 +40,7 @@ struct Option
         opt.appendOpt(&monitorIntervalSec, 10, "monintvl", ": monitor interval [sec] (default 10)");
         opt.appendBoolOpt(&dontUseAio, "noaio", ": do not use aio.");
         opt.appendBoolOpt(&isDebug, "debug", ": debug print to stderr.");
-        opt.appendBoolOpt(&fillAll, "fill", ": fill all data with random data (default with zero)");
+        opt.appendOpt(&fillPct, 100, "fill", ": filling percentage (default: 0)");
         opt.appendOpt(&logPath, "-", "l", ": log output path. (default: stderr)");
 
         opt.appendHelp("h", ": show this message.");
@@ -49,6 +49,9 @@ struct Option
             ::exit(1);
         }
         if (monitorIntervalSec == 0) throw cybozu::Exception("-monintvl must not be 0.");
+        if (fillPct > 100) {
+            throw cybozu::Exception("-fill must between 0 and 100") << fillPct;
+        }
     }
 };
 
@@ -188,21 +191,24 @@ struct PbRecord
 };
 
 template <typename Rand>
-AlignedArray prepareData(uint32_t pbs, uint32_t pb, uint64_t lsid, Rand& rand, bool fillAll)
+AlignedArray prepareData(uint32_t pbs, uint32_t pb, uint64_t lsid, Rand& rand, size_t fillPct)
 {
-    AlignedArray buf(pb * pbs, !fillAll);
-    if (fillAll) {
-        rand.fill(buf.data(), buf.size());
-    } else {
+    assert(fillPct <= 100);
+
+    AlignedArray buf(pb * pbs, false);
+    const size_t fillSize = fillPct * buf.size() / 100;
+    rand.fill(buf.data(), fillSize);
+    ::memset(buf.data() + fillSize, 0, buf.size() - fillSize);
+
 #if 0
-        for (size_t i = 0; i < pb; i++) {
-            PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
-            rec->set(lsid + i, rand);
-        }
-#else
-        (void)lsid;
-#endif
+    for (size_t i = 0; i < pb; i++) {
+        PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
+        rec->set(lsid + i, rand);
     }
+#else
+    (void)lsid;
+#endif
+
     return buf;
 }
 
@@ -325,7 +331,7 @@ std::atomic<bool> failed_(false);
 
 template <typename Writer>
 void doWriteSubmit(Writer& writer, uint64_t aheadPb, const std::atomic<uint64_t>& readPb, Queue& outQ,
-                   ThroughputMonitor &thMon, size_t maxThroughput, bool fillAll, uint32_t ioPb)
+                   ThroughputMonitor &thMon, size_t maxThroughput, size_t fillPct, uint32_t ioPb)
 try {
     const uint32_t pbs = writer.pbs();
     uint64_t lsid = 0;
@@ -341,7 +347,7 @@ try {
             continue;
         }
         const uint32_t pb = std::min<uint64_t>(writer.tailPb(), ioPb);
-        AlignedArray buf = prepareData(pbs, pb, lsid, rand, fillAll);
+        AlignedArray buf = prepareData(pbs, pb, lsid, rand, fillPct);
         const uint32_t aioKey = writer.prepare(std::move(buf));
         IoRecord rec{lsid, pb * pbs, aioKey};
         writer.submit();
@@ -430,7 +436,7 @@ void writeAndVerify(const Option& opt)
 
     cybozu::thread::ThreadRunnerSet thS;
     thS.add([&]() { doWriteSubmit<Writer>(writer, aheadPb, readPb, queue, thMon,
-                                          maxThroughput, opt.fillAll, ioPb); });
+                                          maxThroughput, opt.fillPct, ioPb); });
     thS.add([&]() { doWriteWait<Writer>(writer, readPb, queue); });
     thS.add([&]() { doMonitor(readPb, opt.monitorIntervalSec, devPb, thMon); } );
     thS.start();
