@@ -1,0 +1,16 @@
+FILES: src/lz4.{h,c}
+LICENSE_TYPE: BSD-2-Clause
+AUTHORS: Yann Collet
+COPYRIGHT: (C) 2011 Yann Collet.
+URL: https://github.com/lz4/lz4/
+INFO: lz4 version 1.7.5
+
+FILES: src/MurmurHash3.{h,cpp}
+LICENSE_TYPE: Public Domain
+AUTHORS: Austin Appleby
+URL: https://github.com/aappleby/smhasher
+
+FILES: all other files.
+LICENSE_TYPE: GPL-2.0 or GPL-3.0
+AUTHORS: Takashi Hoshino, Shigeo Mitsunari
+COPYRIGHT: (C) 2013 Cybozu Labs, Inc.

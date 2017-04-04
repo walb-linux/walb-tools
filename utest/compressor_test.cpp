@@ -31,6 +31,7 @@ CYBOZU_TEST_AUTO(testCompressor)
     test(WALB_DIFF_CMPR_GZIP);
     test(WALB_DIFF_CMPR_SNAPPY);
     test(WALB_DIFF_CMPR_LZMA);
+    test(WALB_DIFF_CMPR_LZ4);
 }
 
 #include <cstdio>
@@ -157,6 +158,7 @@ CYBOZU_TEST_AUTO(walbDiffCompressor)
     testDiffCompression(::WALB_DIFF_CMPR_SNAPPY);
     testDiffCompression(::WALB_DIFF_CMPR_GZIP);
     testDiffCompression(::WALB_DIFF_CMPR_LZMA);
+    testDiffCompression(::WALB_DIFF_CMPR_LZ4);
 }
 
 static const uint32_t headerSize = 4;
@@ -378,5 +380,6 @@ CYBOZU_TEST_AUTO(parallelCompress)
         testParallelCompress(8, 4, ::WALB_DIFF_CMPR_SNAPPY, isFirstDelay);
         testParallelCompress(8, 4, ::WALB_DIFF_CMPR_GZIP, isFirstDelay);
         testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZMA, isFirstDelay);
+        testParallelCompress(8, 4, ::WALB_DIFF_CMPR_LZ4, isFirstDelay);
     }
 }

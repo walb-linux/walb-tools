@@ -22,6 +22,7 @@ struct Pair {
     {::WALB_DIFF_CMPR_SNAPPY, "snappy"},
     {::WALB_DIFF_CMPR_GZIP, "gzip"},
     {::WALB_DIFF_CMPR_LZMA, "lzma"},
+    {::WALB_DIFF_CMPR_LZ4, "lz4"},
 };
 
 const char* modeToStr(int mode)
@@ -58,7 +59,7 @@ struct Option
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Simple compressor/decompressor of a file.\n");
-        opt.appendOpt(&modeStr, "snappy", "m", ": compression mode (snappy, gzip, lzma)");
+        opt.appendOpt(&modeStr, "snappy", "m", ": compression mode (snappy, gzip, lzma, lz4)");
         opt.appendOpt(&concurrency, 0, "c", ": number of concurrency");
         opt.appendOpt(&unitSize, 64 << 10, "s", ": unit size to compress (default: 64KiB).");
         opt.appendOpt(&level, 0, "l", ": compression level [0, 9] (default: 0).");

@@ -59,7 +59,7 @@ BINARIES = $(patsubst %.cpp,%,$(BIN_SOURCES))
 TEST_BINARIES = $(patsubst %.cpp,%,$(TEST_SOURCES))
 LOCAL_LIB = src/libwalb-tools.a
 NON_LIB_OBJ = $(patsubst %, src/%.o, storage storage_vol_info proxy proxy_vol_info archive archive_vol_info controller)
-LOCAL_LIB_OBJ = $(filter-out $(NON_LIB_OBJ),$(patsubst %.cpp,%.o,$(OTHER_SOURCES) src/version.o))
+LOCAL_LIB_OBJ = $(filter-out $(NON_LIB_OBJ),$(patsubst %.cpp,%.o,$(OTHER_SOURCES) src/version.o src/lz4.o))
 MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
 
 all: build
@@ -92,7 +92,7 @@ echo_binaries:
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@ -MMD -MP
 
 $(LOCAL_LIB): $(LOCAL_LIB_OBJ)
 	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)

@@ -30,6 +30,7 @@ struct UncompressorIF {
 #include "compressor-snappy.hpp"
 #include "compressor-zlib.hpp"
 #include "compressor-xz.hpp"
+#include "compressor-lz4.hpp"
 
 namespace walb {
 /**
@@ -39,9 +40,9 @@ class Compressor
 {
 public:
     /**
-     * @param mode [in] select compressor mode(WALB_DIFF_CMPR_{NONE,GZIP,SNAPPY,LZMA}
+     * @param mode [in] select compressor mode(WALB_DIFF_CMPR_{NONE,GZIP,SNAPPY,LZMA,LZ4}
      * @param compressionLevel [in] compression level
-     *                  not used for AsIs, Snappy
+     *                  not used for AsIs, Snappy, Lz4
      *                  [0, 9] (default 6) for Zlib, Xz
      */
     explicit Compressor(int mode, size_t compressionLevel = 0)
@@ -57,8 +58,11 @@ public:
         case WALB_DIFF_CMPR_GZIP:
             engine_ = new CompressorZlib(compressionLevel);
             break;
-        case WALB_DIFF_CMPR_LZMA: \
+        case WALB_DIFF_CMPR_LZMA:
             engine_ = new CompressorXz(compressionLevel);
+            break;
+        case WALB_DIFF_CMPR_LZ4:
+            engine_ = new CompressorLz4(compressionLevel);
             break;
         default:
             throw cybozu::Exception("Compressor:invalid mode") << mode;
@@ -115,6 +119,9 @@ public:
             break;
         case WALB_DIFF_CMPR_LZMA:
             engine_ = new UncompressorXz(para);
+            break;
+        case WALB_DIFF_CMPR_LZ4:
+            engine_ = new UncompressorLz4(para);
             break;
         default:
             throw cybozu::Exception("Uncompressor:invalid mode") << mode;
