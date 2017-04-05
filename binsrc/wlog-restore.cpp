@@ -182,8 +182,9 @@ private:
         uint32_t pbs, uint64_t lsid) {
 
         const uint64_t offPb = super.getOffsetFromLsid(lsid);
-        AlignedArray b(pbs, true);
-        ldevFile.pwrite(b.data(), pbs, offPb * pbs);
+        const AlignedArray &zero = util::zeroedAlignedArray();
+        assert(pbs <= zero.size());
+        ldevFile.pwrite(zero.data(), pbs, offPb * pbs);
     }
     void clipIfNecessary(LogPackHeader &packH) {
         if (opt_.ddevLb == 0) return;

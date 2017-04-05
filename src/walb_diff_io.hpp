@@ -33,7 +33,7 @@ inline IoType decideIoType(const DiffRecord& rec, DiscardType discardType)
  * It's allowed that rec's checksum may not valid.
  * @zero is used as zero-filled buffer. It may be resized.
  */
-inline void issueIo(cybozu::util::File& file, DiscardType discardType, const DiffRecord& rec, const char *iodata, std::vector<char>& zero)
+inline void issueIo(cybozu::util::File& file, DiscardType discardType, const DiffRecord& rec, const char *iodata, AlignedArray& zero)
 {
     assert(!rec.isCompressed());
     const int type = decideIoType(rec, discardType);
@@ -45,7 +45,7 @@ inline void issueIo(cybozu::util::File& file, DiscardType discardType, const Dif
     const uint64_t ioSizeB = rec.io_blocks * LOGICAL_BLOCK_SIZE;
     const char *data;
     if (type == Zero) {
-        if (zero.size() < ioSizeB) zero.resize(ioSizeB);
+        if (zero.size() < ioSizeB) zero.resize(ioSizeB, true);
         data = zero.data();
     } else {
         assert(type == Normal);
@@ -58,7 +58,7 @@ inline void issueIo(cybozu::util::File& file, DiscardType discardType, const Dif
 /*
  * @zero is used as zero-filled buffer. It may be resized.
  */
-inline void issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiffPack& pack, std::vector<char>& zero)
+inline void issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiffPack& pack, AlignedArray& zero)
 {
     const DiffPackHeader& head = pack.header();
     DiffRecord rec;

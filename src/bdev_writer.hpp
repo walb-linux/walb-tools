@@ -437,7 +437,7 @@ public:
         , ioQ_(), stat_() {
     }
     bool prepare(uint64_t offLb, size_t sizeLb, AlignedArray &&block) {
-        if (isClipped(offLb, sizeLb)) return false;
+        if (isClippedWithStat(offLb, sizeLb)) return false;
         ioQ_.push({offLb, sizeLb, std::move(block), nullptr});
         stat_.addNormal(sizeLb);
         return true;
@@ -446,7 +446,7 @@ public:
      * data must be kept until submit() called.
      */
     bool prepare(uint64_t offLb, size_t sizeLb, const char *data) {
-        if (isClipped(offLb, sizeLb)) return false;
+        if (isClippedWithStat(offLb, sizeLb)) return false;
         ioQ_.push({offLb, sizeLb, AlignedArray(), data});
         stat_.addNormal(sizeLb);
         return true;
@@ -464,7 +464,7 @@ public:
         }
     }
     bool discard(uint64_t offLb, size_t sizeLb) {
-        if (isClipped(offLb, sizeLb)) return false;
+        if (isClippedWithStat(offLb, sizeLb)) return false;
         cybozu::util::issueDiscard(bdevFile_.fd(), offLb, sizeLb);
         stat_.addDiscard(sizeLb);
         stat_.addWritten(sizeLb);
@@ -476,13 +476,14 @@ public:
     const WriteIoStatistics &getStat() const {
         return stat_;
     }
+    bool isClipped(uint64_t offLb, size_t sizeLb) const {
+        return offLb + sizeLb > bdevSizeLb_;
+    }
 private:
-    bool isClipped(uint64_t offLb, size_t sizeLb) {
-        if (offLb + sizeLb > bdevSizeLb_) {
-            stat_.addClipped(sizeLb);
-            return true;
-        }
-        return false;
+    bool isClippedWithStat(uint64_t offLb, size_t sizeLb) {
+        if (!isClipped(offLb, sizeLb)) return false;
+        stat_.addClipped(sizeLb);
+        return true;
     }
 };
 
@@ -515,7 +516,7 @@ public:
         ioQ_.waitForAllSubmitted(aio_);
     }
     bool prepare(uint64_t offLb, size_t sizeLb, AlignedArray &&block) {
-        if (isClipped(offLb, sizeLb)) return false;
+        if (isClippedWithStat(offLb, sizeLb)) return false;
         ioQ_.add(bdev_writer_local::Io(offLb << 9, sizeLb << 9, std::move(block)));
         stat_.addNormal(sizeLb);
         return true;
@@ -524,7 +525,7 @@ public:
      * data must be kept until the corresponding IO completes.
      */
     bool prepare(uint64_t offLb, size_t sizeLb, const char *ptr) {
-        if (isClipped(offLb, sizeLb)) return false;
+        if (isClippedWithStat(offLb, sizeLb)) return false;
         ioQ_.add(bdev_writer_local::Io(offLb << 9, sizeLb << 9, ptr));
         stat_.addNormal(sizeLb);
         return true;
@@ -545,6 +546,9 @@ public:
     const WriteIoStatistics &getStat() const {
         return stat_;
     }
+    bool isClipped(uint64_t offLb, size_t sizeLb) const {
+        return offLb + sizeLb > bdevSizeLb_;
+    }
 private:
     void waitForAllProcessingIos();
     void waitForAnIoCompletion();
@@ -557,12 +561,10 @@ private:
             || aio_.queueUsage() >= aio_.queueSize() / 2;
     }
     void processIos(bool force);
-    bool isClipped(uint64_t offLb, size_t sizeLb) {
-        if (offLb + sizeLb > bdevSizeLb_) {
-            stat_.addClipped(sizeLb);
-            return true;
-        }
-        return false;
+    bool isClippedWithStat(uint64_t offLb, size_t sizeLb) {
+        if (!isClipped(offLb, sizeLb)) return false;
+        stat_.addClipped(sizeLb);
+        return true;
     }
 };
 

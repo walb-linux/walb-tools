@@ -158,17 +158,16 @@ private:
         assert(!rec.isPadding());
         assert(cfg_.isZeroDiscard || !rec.isDiscard());
 
-        if (rec.isDiscard()) {
-            // QQQQQ TODO: use global zeroed buffer.
-            buf.clear();
-            buf.resize(rec.ioSizeLb() * LOGICAL_BLOCK_SIZE, true); // zero fill.
-        }
         const uint64_t offLb = rec.offset;
         const uint32_t sizeLb = rec.ioSizeLb();
-        if (!ddevWriter_.prepare(offLb, sizeLb, std::move(buf))) {
-            if (cfg_.isVerbose) {
-                ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
-            }
+        bool ret;
+        if (rec.isDiscard()) {
+            ret = prepareZeroWrite(offLb, sizeLb);
+        } else {
+            ret = ddevWriter_.prepare(offLb, sizeLb, std::move(buf));
+        }
+        if (cfg_.isVerbose && !ret) {
+            ::printf("CLIPPED\t\t%" PRIu64 "\t%u\n", offLb, sizeLb);
         }
         ddevWriter_.submit();
 
@@ -176,6 +175,20 @@ private:
             ::printf("CREATE\t\t%" PRIu64 "\t%u\n",
                      rec.offset, rec.ioSizeLb());
         }
+    }
+    bool prepareZeroWrite(uint64_t offLb, uint32_t sizeLb) {
+        if (ddevWriter_.isClipped(offLb, sizeLb)) return false;
+        const AlignedArray& zero = util::zeroedAlignedArray();
+        const uint32_t unitLb = zero.size() / LOGICAL_BLOCK_SIZE;
+        while (sizeLb > 0) {
+            const uint32_t lb = std::min(unitLb, sizeLb);
+            if (!ddevWriter_.prepare(offLb, lb, zero.data())) {
+                throw cybozu::Exception("prepareZeroWrite") << "something wrong";
+            }
+            offLb += lb;
+            sizeLb -= lb;
+        }
+        return true;
     }
 };
 

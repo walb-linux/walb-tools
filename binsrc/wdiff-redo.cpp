@@ -159,7 +159,8 @@ public:
 private:
     bool executeZeroIo(uint64_t ioAddr, uint32_t ioBlocks) {
         static AlignedArray zero;
-        zero.resize(ioBlocks * LOGICAL_BLOCK_SIZE, true);
+        const size_t size = ioBlocks * LOGICAL_BLOCK_SIZE;
+        if (size > zero.size()) zero.resize(size, true);
         return ioExec_.write(ioAddr, ioBlocks, zero.data());
     }
     bool executeDiscardIo(uint64_t ioAddr, uint32_t ioBlocks) {

@@ -353,10 +353,10 @@ void writeConcurrentlyAndVerify(const Option &opt)
 
     /* Write zero to the target range. */
     std::cout << "zero-clear" << std::endl;
-    AlignedArray blk(bs, true);
+    AlignedArray zero(bs, true);
     file.lseek(opt.offsetB() * bs);
     for (uint64_t i = 0; i < sizeB; i++) {
-        file.write(blk.data(), blk.size());
+        file.write(zero.data(), zero.size());
         if (i % 16 == 0) {
             ::printf(".");
             ::fflush(::stdout);

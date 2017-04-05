@@ -261,6 +261,13 @@ inline void assignAlignedArray(AlignedArray& array, const void *data, size_t siz
     ::memcpy(array.data(), data, size);
 }
 
+inline const AlignedArray& zeroedAlignedArray()
+{
+    /* Do not resize (relocate) after allocated. */
+    static AlignedArray data(DEFAULT_BULK_LB * LBS, true);
+    return data;
+}
+
 inline void flushBdevBufs(const std::string& path)
 {
     cybozu::process::call("/sbin/blockdev", {"--flushbufs", path});

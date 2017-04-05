@@ -79,7 +79,7 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
     DiffRecIo recIo;
     const std::string lvPathStr = lv.path().str();
     cybozu::util::File file(lvPathStr, O_RDWR);
-    std::vector<char> zero;
+    AlignedArray zero;
     const uint64_t lvSnapSizeLb = lv.sizeLb();
     double t0 = cybozu::util::getTime();
     while (merger.getAndRemove(recIo)) {

@@ -75,7 +75,7 @@ inline void readPackAndWrite(
     uint64_t& writeSize, packet::Packet& pkt,
     cybozu::util::File& fileW, bool doWriteDiff, DiscardType discardType,
     uint64_t fsyncIntervalSize,
-    std::vector<char>& zero, AlignedArray& buf)
+    AlignedArray& zero, AlignedArray& buf)
 {
     const char *const FUNC = __func__;
     size_t size;
@@ -237,7 +237,7 @@ bool dirtyHashSyncServer(
     readerTh.start();
 
     cybozu::util::File fileW(outFd);
-    std::vector<char> zero;
+    AlignedArray zero;
 
     if (doWriteDiff) {
         DiffFileHeader wdiffH;
@@ -312,7 +312,7 @@ bool dirtyHashSyncServer2(
     uint64_t hashLb = 0, recvLb = 0;
     AlignedArray buf0, buf1;
     packet::StreamControl2 ctrl(pkt.sock());
-    std::vector<char> zero;
+    AlignedArray zero;
     uint64_t writeSize = 0;
     cybozu::murmurhash3::Hasher hasher(hashSeed);
     size_t sHash = 0, sDummy = 0, sRecv = 0;
