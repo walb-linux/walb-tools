@@ -10,7 +10,7 @@ ifeq ($(BFD),1)
 OPT_FLAGS += -DCYBOZU_STACKTRACE_WITH_BFD_GPL
 endif
 else
-OPT_FLAGS += -O2 -DNDEBUG
+OPT_FLAGS += -O2 -ftree-vectorize -DNDEBUG
 endif
 ifeq ($(PROF),1)
 OPT_FLAGS += -pg
