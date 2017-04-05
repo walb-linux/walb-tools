@@ -31,6 +31,7 @@ struct UncompressorIF {
 #include "compressor-zlib.hpp"
 #include "compressor-xz.hpp"
 #include "compressor-lz4.hpp"
+#include "compressor-zstd.hpp"
 
 namespace walb {
 /**
@@ -63,6 +64,9 @@ public:
             break;
         case WALB_DIFF_CMPR_LZ4:
             engine_ = new CompressorLz4(compressionLevel);
+            break;
+        case WALB_DIFF_CMPR_ZSTD:
+            engine_ = new CompressorZstd(compressionLevel);
             break;
         default:
             throw cybozu::Exception("Compressor:invalid mode") << mode;
@@ -122,6 +126,9 @@ public:
             break;
         case WALB_DIFF_CMPR_LZ4:
             engine_ = new UncompressorLz4(para);
+            break;
+        case WALB_DIFF_CMPR_ZSTD:
+            engine_ = new UncompressorZstd(para);
             break;
         default:
             throw cybozu::Exception("Uncompressor:invalid mode") << mode;

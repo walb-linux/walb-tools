@@ -203,6 +203,7 @@ CYBOZU_TEST_AUTO(SingleIoSortedDiffFile)
     testRandomDiffFile(::WALB_DIFF_CMPR_GZIP, 1);
     testRandomDiffFile(::WALB_DIFF_CMPR_LZMA, 1);
     testRandomDiffFile(::WALB_DIFF_CMPR_LZ4, 1);
+    testRandomDiffFile(::WALB_DIFF_CMPR_ZSTD, 1);
 }
 
 CYBOZU_TEST_AUTO(SingleIoIndexedDiffFile)
@@ -212,6 +213,7 @@ CYBOZU_TEST_AUTO(SingleIoIndexedDiffFile)
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_GZIP, 1);
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_LZMA, 1);
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_LZ4, 1);
+    testRandomIndexedDiffFile(::WALB_DIFF_CMPR_ZSTD, 1);
 }
 
 CYBOZU_TEST_AUTO(RandomSortedDiffFile)
@@ -222,6 +224,7 @@ CYBOZU_TEST_AUTO(RandomSortedDiffFile)
     testRandomDiffFile(::WALB_DIFF_CMPR_GZIP, nr);
     testRandomDiffFile(::WALB_DIFF_CMPR_LZMA, nr);
     testRandomDiffFile(::WALB_DIFF_CMPR_LZ4, nr);
+    testRandomDiffFile(::WALB_DIFF_CMPR_ZSTD, nr);
 }
 
 CYBOZU_TEST_AUTO(RandomIndexedDiffFile)
@@ -232,4 +235,5 @@ CYBOZU_TEST_AUTO(RandomIndexedDiffFile)
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_GZIP, nr);
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_LZMA, nr);
     testRandomIndexedDiffFile(::WALB_DIFF_CMPR_LZ4, nr);
+    testRandomIndexedDiffFile(::WALB_DIFF_CMPR_ZSTD, nr);
 }

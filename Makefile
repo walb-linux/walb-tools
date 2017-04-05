@@ -23,17 +23,17 @@ ifeq ($(DISABLE_COMMIT_ID),1)
 OPT_FLAGS += -DDISABLE_COMMIT_ID
 endif
 
-INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src
+INCLUDES_GLOBAL = -I./cybozulib/include -I./include -I./src -I./3rd/zstd
 INCLUDES_WALB = -I./walb/include
 
 CFLAGS = -Wall -Wextra -D_FILE_OFFSET_BITS=64 $(OPT_FLAGS) $(INCLUDES_GLOBAL) $(INCLUDES_WALB) -DCYBOZU_SOCKET_USE_EPOLL
 CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
-LDFLAGS = -static -static-libgcc -static-libstdc++ -L./src
+LDFLAGS = -static -static-libgcc -static-libstdc++ -L./src -L./3rd/zstd
 LDLIBS = -Wl,--whole-archive -lpthread -lrt -Wl,--no-whole-archive
 else
-LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src
+LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src -L./3rd/zstd
 LDLIBS = -lpthread -lrt
 endif
 ifeq ($(DEBUG),1)
@@ -47,7 +47,7 @@ endif
 
 LDLIBS_LOCAL = -lwalb-tools
 LDLIBS_AIO = -laio
-LDLIBS_COMPRESS = -lsnappy -llzma -lz
+LDLIBS_COMPRESS = -lsnappy -llzma -lz -lzstd
 LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS) $(LDLIBS_BFD)
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
@@ -61,6 +61,7 @@ LOCAL_LIB = src/libwalb-tools.a
 NON_LIB_OBJ = $(patsubst %, src/%.o, storage storage_vol_info proxy proxy_vol_info archive archive_vol_info controller)
 LOCAL_LIB_OBJ = $(filter-out $(NON_LIB_OBJ),$(patsubst %.cpp,%.o,$(OTHER_SOURCES) src/version.o src/lz4.o))
 MANPAGES = $(patsubst %.ronn,%,$(wildcard man/*.ronn))
+STATIC_LIBS = $(LOCAL_LIB) 3rd/zstd/libzstd.a
 
 all: build
 build:
@@ -97,22 +98,27 @@ echo_binaries:
 $(LOCAL_LIB): $(LOCAL_LIB_OBJ)
 	ar rv $(LOCAL_LIB) $(LOCAL_LIB_OBJ)
 
-binsrc/walbc: binsrc/walbc.o src/controller.o $(LOCAL_LIB)
+binsrc/walbc: binsrc/walbc.o src/controller.o $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(filter %.o,$+) $(LDLIBS)
 
-binsrc/walb-%: binsrc/walb-%.o src/%.o src/%_vol_info.o $(LOCAL_LIB)
+binsrc/walb-%: binsrc/walb-%.o src/%.o src/%_vol_info.o $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(filter %.o,$+) $(LDLIBS)
 
-binsrc/%: binsrc/%.o $(LOCAL_LIB)
+binsrc/%: binsrc/%.o $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-utest/%: utest/%.o $(LOCAL_LIB)
+utest/%: utest/%.o $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-clean: cleanobj cleandep cleanman
+3rd/zstd/libzstd.a:
+	$(MAKE) -C 3rd/zstd CC=$(CC) ZSTD_LEGACY_SUPPORT=0 libzstd.a
+
+clean: cleanobj cleanlib cleandep cleanman
 	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.cpp
 cleanobj:
 	rm -f src/*.o binsrc/*.o utest/*.o
+cleanlib:
+	$(MAKE) -C 3rd/zstd clean
 cleandep:
 	rm -f src/*.d binsrc/*.d utest/*.d
 cleanman:

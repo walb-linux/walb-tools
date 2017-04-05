@@ -19,6 +19,7 @@ static const Pair compressionTypeTable[] = {
     { "gzip", ::WALB_DIFF_CMPR_GZIP },
     { "lzma", ::WALB_DIFF_CMPR_LZMA },
     { "lz4", ::WALB_DIFF_CMPR_LZ4 },
+    { "zstd", ::WALB_DIFF_CMPR_ZSTD },
 };
 
 } // namespace compression_type_local
