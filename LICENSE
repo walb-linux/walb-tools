@@ -5,6 +5,13 @@ COPYRIGHT: (C) 2011 Yann Collet.
 URL: https://github.com/lz4/lz4/
 INFO: lz4 version 1.7.5
 
+FILES: 3rd/zstd/*
+LICENSE_TYPE: BSD-3-Clause
+AUTHORS: Yann Collet
+COPYRIGHT: (C) 2016 Facebook, Inc.
+URL: https://github.com/facebook/zstd/
+INFO: zstd version 1.1.4
+
 FILES: src/MurmurHash3.{h,cpp}
 LICENSE_TYPE: Public Domain
 AUTHORS: Austin Appleby
