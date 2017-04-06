@@ -1,5 +1,7 @@
 #pragma once
 #include "walb_diff_base.hpp"
+#include "random.hpp"
+#include <list>
 
 namespace for_walb_diff_test_local {
 
@@ -50,14 +52,22 @@ struct Sio
         cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
         ioAddr = rand_.get64() % (128 * MEBI / LOGICAL_BLOCK_SIZE);
         ioBlocks = rand_() % 15 + 1;
-        setRandomlyBottomHalf();
+        setTypeRandomly();
+        setDataRandomly();
     }
     void setRandomly(uint64_t ioAddr, uint32_t ioBlocks) {
         this->ioAddr = ioAddr;
         this->ioBlocks = ioBlocks;
-        setRandomlyBottomHalf();
+        setTypeRandomly();
+        setDataRandomly();
     }
-    void setRandomlyBottomHalf() {
+    void setRandomly(uint64_t ioAddr, uint32_t ioBlocks, DiffRecType type) {
+        this->ioAddr = ioAddr;
+        this->ioBlocks = ioBlocks;
+        this->type = type;
+        setDataRandomly();
+    }
+    void setTypeRandomly() {
         cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
         const size_t r = rand_() % 100;
         if (r < 80) {
@@ -67,12 +77,34 @@ struct Sio
         } else {
             type = DiffRecType::ALLZERO;
         }
+    }
+    void setDataRandomly() {
+        cybozu::util::Random<size_t> &rand_ = *for_walb_diff_test_local::rand_;
         if (type == DiffRecType::NORMAL) {
             data.resize(LOGICAL_BLOCK_SIZE * ioBlocks);
             rand_.fill(data.data(), data.size());
         } else {
             data.resize(0);
         }
+    }
+    std::vector<Sio> split(const std::vector<uint32_t>& sizeLbV) const {
+        std::vector<Sio> ret;
+        uint64_t offLb = 0;
+        uint32_t remainingLb = ioBlocks;
+        size_t i = 0;
+        while (remainingLb > 0) {
+            const uint32_t lb = i < sizeLbV.size() ? std::min(sizeLbV[i], remainingLb) : remainingLb;
+            Sio sio{ioAddr + offLb, lb, type, AlignedArray()};
+            if (type == DiffRecType::NORMAL) {
+                sio.data.resize(lb * LOGICAL_BLOCK_SIZE);
+                ::memcpy(sio.data.data(), data.data() + (offLb * LOGICAL_BLOCK_SIZE), sio.data.size());
+            }
+            ret.push_back(std::move(sio));
+            offLb += lb;
+            remainingLb -= lb;
+            i++;
+        }
+        return ret;
     }
     template <typename Record>
     void copyTopHalfTo(Record& rec) const {
@@ -106,13 +138,24 @@ struct Sio
         data0.resize(data.size());
         ::memcpy(data0.data(), data.data(), data0.size());
     }
-    void copyFrom(const IndexedDiffRecord& rec, const AlignedArray& data0) {
+    template <typename Record>
+    void copyTopHalfFrom(const Record& rec) {
         ioAddr = rec.io_address;
         ioBlocks = rec.io_blocks;
         if (rec.isNormal()) type = DiffRecType::NORMAL;
         else if (rec.isDiscard()) type = DiffRecType::DISCARD;
         else if (rec.isAllZero()) type = DiffRecType::ALLZERO;
         else throw cybozu::Exception("bad type") << type;
+    }
+    void copyFrom(const DiffRecord& rec, const AlignedArray& data0) {
+        copyTopHalfFrom(rec);
+        CYBOZU_TEST_EQUAL(rec.compression_type, ::WALB_DIFF_CMPR_NONE);
+        data.resize(data0.size());
+        ::memcpy(data.data(), data0.data(), data.size());
+    }
+    void copyFrom(const IndexedDiffRecord& rec, const AlignedArray& data0) {
+        copyTopHalfFrom(rec);
+        CYBOZU_TEST_EQUAL(rec.compression_type, ::WALB_DIFF_CMPR_NONE);
         data.resize(data0.size());
         ::memcpy(data.data(), data0.data(), data.size());
     }
@@ -136,6 +179,7 @@ struct Sio
 };
 
 using SioList = std::list<Sio>;
+using SioVec = std::vector<Sio>;
 
 inline std::string dataToStr(const AlignedArray& data)
 {
@@ -302,6 +346,21 @@ public:
         if (writeDiffTopHalf(rec)) return;
         write(rec.io_address, rec.io_blocks, data.data());
     }
+    void writeSio(const Sio& sio) {
+        if (sio.type == DiffRecType::NORMAL) {
+            write(sio.ioAddr, sio.ioBlocks, sio.data.data());
+            return;
+        }
+        if (sio.type == DiffRecType::ALLZERO) {
+            writeAllZero(sio.ioAddr, sio.ioBlocks);
+            return;
+        }
+        if (sio.type == DiffRecType::DISCARD) {
+            discard(sio.ioAddr, sio.ioBlocks);
+            return;
+        }
+        throw cybozu::Exception("writeSio:bad diff rec type") << sio.type;
+    }
     void verifyEquals(const TmpDisk &rhs) const {
         const size_t len = buf_.size() / LBS;
         AlignedArray buf0(LBS), buf1(LBS);
@@ -315,6 +374,11 @@ public:
             }
         }
         if (nr > 0) throw cybozu::Exception(__func__) << nr;
+    }
+    void apply(const SioList& sioList) {
+        for (const Sio& sio : sioList) {
+            writeSio(sio);
+        }
     }
     void apply(const std::string &diffPath) {
         cybozu::util::File file(diffPath, O_RDONLY);

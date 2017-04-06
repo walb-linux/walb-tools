@@ -30,3 +30,4 @@ walb_diff_file_test
 siphash_test
 address_util_test
 walb_diff_base_test
+walb_diff_mem_test
