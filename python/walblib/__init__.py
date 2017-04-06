@@ -348,6 +348,8 @@ CMPR_NONE = 0
 CMPR_SNAPPY = 1
 CMPR_GZIP = 2
 CMPR_LZMA = 3
+CMPR_LZ4 = 4
+CMPR_ZSTD = 5
 
 
 def printL(ls):
@@ -359,7 +361,7 @@ def verify_compress_kind(kind):
     kind :: int - CMPR_XXX.
     return :: None
     '''
-    if kind not in [CMPR_NONE, CMPR_SNAPPY, CMPR_GZIP, CMPR_LZMA]:
+    if kind not in [CMPR_NONE, CMPR_SNAPPY, CMPR_GZIP, CMPR_LZMA, CMPR_LZ4, CMPR_ZSTD]:
         raise Exception('verify_compress_kind: bad value', kind)
 
 
@@ -369,7 +371,8 @@ def compress_kind_to_str(kind):
     return :: str - string representation.
     '''
     verify_compress_kind(kind)
-    m = {CMPR_NONE: 'none', CMPR_SNAPPY: 'snappy', CMPR_GZIP: 'gzip', CMPR_LZMA: 'lzma'}
+    m = {CMPR_NONE: 'none', CMPR_SNAPPY: 'snappy', CMPR_GZIP: 'gzip', CMPR_LZMA: 'lzma',
+         CMPR_LZ4: 'lz4', CMPR_ZSTD: 'zstd'}
     assert kind in m
     return m[kind]
 
@@ -380,7 +383,8 @@ def compress_str_to_kind(s):
     return :: int - CMPR_XXX
     '''
     verify_type(s, str)
-    m = {'none': CMPR_NONE, 'snappy': CMPR_SNAPPY, 'gzip': CMPR_GZIP, 'lzma': CMPR_LZMA}
+    m = {'none': CMPR_NONE, 'snappy': CMPR_SNAPPY, 'gzip': CMPR_GZIP, 'lzma': CMPR_LZMA,
+         'lz4': CMPR_LZ4, 'zstd': CMPR_ZSTD}
     if s not in m:
         raise Exception('compress_str_to_kind: bad kind', s)
     return m[s]
