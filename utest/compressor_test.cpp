@@ -84,9 +84,9 @@ std::vector<AlignedArray> generateRawPacks()
     const DiffMemory::Map& map = diffMem0.getMap();
     for (const auto& i : map) {
         const DiffRecIo& recIo = i.second;
-        if (!packer.add(recIo.record(), recIo.io().get())) {
+        if (!packer.add(recIo.record(), recIo.io().data())) {
             packV0.push_back(packer.getPackAsArray());
-            packer.add(recIo.record(), recIo.io().get());
+            packer.add(recIo.record(), recIo.io().data());
         }
     }
     if (!packer.empty()) {

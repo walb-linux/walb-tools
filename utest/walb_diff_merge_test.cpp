@@ -131,16 +131,14 @@ void makeSortedWdiffs1(TmpDiffFileVec &tfv, const SioListVec &slv)
  */
 void makeSortedWdiff2(TmpDiffFile &file, const SioList &sl)
 {
-    DiffMemory mem;
-
+    DiffMemory diffM;
     for (const Sio &sio : sl) {
         DiffRecord rec;
-        DiffIo io;
-        sio.copyTo(rec, io.data);
-        io.set(rec);
-        mem.add(rec, std::move(io));
+        AlignedArray buf;
+        sio.copyTo(rec, buf);
+        diffM.add(rec, std::move(buf));
     }
-    mem.writeTo(file.fd());
+    diffM.writeTo(file.fd());
 }
 
 void makeSortedWdiffs2(TmpDiffFileVec &tfv, const SioListVec &slv)

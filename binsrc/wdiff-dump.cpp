@@ -54,8 +54,8 @@ int doMain(int argc, char *argv[])
     uint32_t blks = opt.blks;
     uint64_t totalBlks = 0;
     DiffRecord rec;
-    DiffIo io;
-    while (blks > 0 && wdiffR.readDiff(rec, io)) {
+    AlignedArray buf;
+    while (blks > 0 && wdiffR.readDiff(rec, buf)) {
         if (addr + blks < rec.io_address) break;
         if (!matchAddress(addr, rec)) continue;
         const uint64_t endAddr = std::min<uint64_t>(addr + blks, rec.endIoAddress());
@@ -65,16 +65,20 @@ int doMain(int argc, char *argv[])
         if (rec.isNormal()) {
             if (rec.isCompressed()) {
                 DiffRecord outRec;
-                DiffIo outIo;
-                uncompressDiffIo(rec, io.data.data(), outRec, outIo.data);
-                outIo.set(outRec);
-                io = std::move(outIo);
+                AlignedArray outBuf;
+                uncompressDiffIo(rec, buf.data(), outRec, outBuf);
+                buf = std::move(outBuf);
             }
-            outF.write(io.data.data() + offB * LBS, sizeB * LBS);
+            outF.write(buf.data() + offB * LBS, sizeB * LBS);
         } else {
             // currently dump all-zero for discard records also.
-            const std::vector<char> buf(sizeB * LBS);
-            outF.write(buf.data(), buf.size());
+            size_t remaining = sizeB * LBS;
+            while (remaining > 0) {
+                const AlignedArray &zero = util::zeroedAlignedArray();
+                const size_t sz = std::min(zero.size(), remaining);
+                outF.write(zero.data(), sz);
+                remaining -= sz;
+            }
         }
         ::fprintf(::stderr,
                   "dump %" PRIu64 " %u %c%c\n"

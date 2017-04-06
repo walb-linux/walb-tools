@@ -18,7 +18,7 @@ void DiffMerger::Wdiff::setFile(cybozu::util::File &&file, IndexedDiffCache *cac
     }
 }
 
-void DiffMerger::Wdiff::getAndRemoveIo(DiffIo &io)
+void DiffMerger::Wdiff::getAndRemoveIo(AlignedArray &buf)
 {
     verifyNotEnd(__func__);
 
@@ -26,7 +26,7 @@ void DiffMerger::Wdiff::getAndRemoveIo(DiffIo &io)
     const uint64_t endIoAddr0 = rec_.endIoAddress();
 
     verifyFilled(__func__);
-    io = std::move(io_);
+    buf = std::move(buf_);
     isFilled_ = false;
     fill();
 
@@ -44,7 +44,7 @@ void DiffMerger::Wdiff::fill() const
     if (isIndexed_) {
         success = readIndexedDiff();
     } else {
-        success = sReader_.readAndUncompressDiff(rec_, io_, false);
+        success = sReader_.readAndUncompressDiff(rec_, buf_, false);
     }
     if (success) {
         isFilled_ = true;
@@ -56,7 +56,7 @@ void DiffMerger::Wdiff::fill() const
 bool DiffMerger::Wdiff::readIndexedDiff() const
 {
     IndexedDiffRecord irec;
-    if (!iReader_.readDiff(irec, io_.data)) return false;
+    if (!iReader_.readDiff(irec, buf_)) return false;
 
     // Convert IndexedDiffRecord to DiffRecord.
     rec_.init();
@@ -70,9 +70,7 @@ bool DiffMerger::Wdiff::readIndexedDiff() const
     rec_.data_size = irec.io_blocks * LOGICAL_BLOCK_SIZE;
     rec_.checksum = irec.io_checksum; // not set.
 
-    io_.compressionType = ::WALB_DIFF_CMPR_NONE;
-    io_.ioBlocks = irec.io_blocks;
-    assert(io_.data.size() == io_.ioBlocks * LOGICAL_BLOCK_SIZE);
+    assert(buf_.size() == rec_.data_size);
 
     return true;
 }
@@ -87,7 +85,7 @@ void DiffMerger::mergeToFd(int outFd)
     DiffRecIo d;
     while (getAndRemove(d)) {
         assert(d.isValid());
-        writer.compressAndWriteDiff(d.record(), d.io().get());
+        writer.compressAndWriteDiff(d.record(), d.io().data());
     }
 
     writer.close();
@@ -113,12 +111,12 @@ void DiffMerger::mergeToFdInParallel(int outFd, const CompressOpt& cmpr)
     while (getAndRemove(d)) {
         assert(d.isValid());
         const DiffRecord& rec = d.record();
-        const DiffIo& io = d.io();
-        if (packer.add(rec, io.get())) continue;
+        const AlignedArray& buf = d.io();
+        if (packer.add(rec, buf.data())) continue;
         conv.push(packer.getPackAsArray());
         pushedNr++;
         packer.clear();
-        packer.add(rec, io.get());
+        packer.add(rec, buf.data());
         if (pushedNr < maxPushedNr) continue;
         AlignedArray pack(conv.pop());
         file.write(pack.data(), pack.size());
@@ -258,9 +256,9 @@ size_t DiffMerger::tryMoveToDiffMemory()
         while (shouldMerge(rec, nextDoneAddr)) {
             nr++;
             curRange.merge(Range(rec));
-            DiffIo io;
-            wdiff.getAndRemoveIo(io);
-            mergeIo(rec, std::move(io));
+            AlignedArray buf;
+            wdiff.getAndRemoveIo(buf);
+            mergeIo(rec, std::move(buf));
             if (wdiff.isEnd()) {
                 statIn_.update(wdiff.getStat());
                 it = wdiffs_.erase(it);

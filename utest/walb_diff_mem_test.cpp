@@ -32,11 +32,9 @@ void testDiffMemory(size_t diskLen, const Recipe& recipe)
 
     for (const Sio& sio : sioList0) {
         DiffRecord rec;
-        DiffIo io;
         AlignedArray data;
         sio.copyTo(rec, data);
-        io.set(rec, std::move(data));
-        diffM.add(rec, std::move(io));
+        diffM.add(rec, std::move(data));
     }
     diffM.checkNoOverlappedAndSorted();
 
@@ -44,9 +42,9 @@ void testDiffMemory(size_t diskLen, const Recipe& recipe)
     {
         for (const DiffMemory::Map::value_type& pair : diffM.getMap()) {
             const DiffRecord &rec = pair.second.record();
-            const DiffIo &io = pair.second.io();
+            const AlignedArray &buf = pair.second.io();
             Sio sio;
-            sio.copyFrom(rec, io.data);
+            sio.copyFrom(rec, buf);
             mergeOrAddSioList(sioList1, std::move(sio));
         }
     }

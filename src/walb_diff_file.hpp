@@ -104,7 +104,7 @@ private:
     ExtendedDiffPackHeader edp_;
     DiffPackHeader &pack_;
 
-    std::queue<DiffIo> ioQ_;
+    std::queue<AlignedArray> ioQ_;
 
     DiffStatistics stat_;
 
@@ -153,7 +153,7 @@ public:
      * @io IO data.
      *    if rec is not normal, io must be empty.
      */
-    void writeDiff(const DiffRecord &rec, DiffIo &&io);
+    void writeDiff(const DiffRecord &rec, AlignedArray &&buf);
     void writeDiff(const DiffRecord &rec, const char *data);
 
     /**
@@ -173,8 +173,8 @@ public:
     }
 private:
     void init();
-    bool addAndPush(const DiffRecord &rec, DiffIo &&io);
-    static void assertRecAndIo(const DiffRecord &rec, const DiffIo &io);
+    bool addAndPush(const DiffRecord &rec, AlignedArray &&buf);
+    static void assertRecAndIo(const DiffRecord &rec, const AlignedArray& buf);
 
     /**
      * Write the buffered pack and its related diff ios.
@@ -277,14 +277,14 @@ public:
      *   false if the input stream reached the end,
      *   or the record/data is invalid (only when throwError is false).
      */
-    bool readDiff(DiffRecord &rec, DiffIo &io);
+    bool readDiff(DiffRecord &rec, AlignedArray &buf);
     /**
      * Read a diff IO and uncompress it.
      *
      * RETURN:
      *   false if the input stream reached the end.
      */
-    bool readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum = true);
+    bool readAndUncompressDiff(DiffRecord &rec, AlignedArray &buf, bool calcChecksum = true);
 
     bool prepareRead();
     /**
@@ -292,7 +292,7 @@ public:
      * @rec diff record.
      * @io block IO to be filled.
      */
-    void readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum = true);
+    void readDiffIo(const DiffRecord &rec, AlignedArray &buf, bool verifyChecksum = true);
 
     const DiffStatistics& getStat() const {
         return stat_;
@@ -398,6 +398,8 @@ public:
     const DiffStatistics& getStat() const {
         return stat_;
     }
+
+    void setMaxIoBlocks(uint32_t maxIoBlocks) { indexMem_.setMaxIoBlocks(maxIoBlocks); }
 
     /**
      * for debug and test.
@@ -552,22 +554,18 @@ public:
      *   false if reached to the end.
      */
     bool read(uint64_t &addr, uint32_t &blks, DiffRecType &rtype, AlignedArray& buf) {
-        DiffIo io;
         if (head_.isIndexed()) {
             IndexedDiffRecord rec;
-            if (!ireader_.readDiff(rec, io.data)) return false;
+            if (!ireader_.readDiff(rec, buf)) return false;
             addr = rec.io_address;
             blks = rec.io_blocks;
             rtype = getDiffRecType(rec);
         } else {
             DiffRecord rec;
-            if (!sreader_.readAndUncompressDiff(rec, io, false)) return false;
+            if (!sreader_.readAndUncompressDiff(rec, buf, false)) return false;
             addr = rec.io_address;
             blks = rec.io_blocks;
             rtype = getDiffRecType(rec);
-        }
-        if (rtype == DiffRecType::NORMAL) {
-            buf = std::move(io.data);
         }
         return true;
     }

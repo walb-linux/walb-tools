@@ -95,7 +95,7 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
         if (ioAddress + ioBlocks > lvSnapSizeLb) {
             throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
         }
-        issueIo(file, ga.discardType, rec, recIo.io().get(), zero);
+        issueIo(file, ga.discardType, rec, recIo.io().data(), zero);
 
         const double t1 = cybozu::util::getTime();
         if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
@@ -236,7 +236,7 @@ bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uint64_t p
             return false;
         }
         // TODO: currently we can use snappy only.
-        writer.compressAndWriteDiff(recIo.record(), recIo.io().get());
+        writer.compressAndWriteDiff(recIo.record(), recIo.io().data());
     }
     writer.close();
 

@@ -5,26 +5,21 @@ namespace walb {
 bool DiffRecIo::isValid(bool isChecksum) const
 {
     if (!rec_.isNormal()) {
-        if (io_.ioBlocks != 0) {
+        if (!io_.empty()) {
             LOGd("Fro non-normal record, io.ioBlocks must be 0.\n");
             return false;
         }
         return true;
     }
-    if (rec_.io_blocks != io_.ioBlocks) {
-        LOGd("ioSize invalid %u %u\n", rec_.io_blocks, io_.ioBlocks);
+    if (rec_.data_size != io_.size()) {
+        LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.size());
         return false;
     }
-    if (rec_.data_size != io_.getSize()) {
-        LOGd("dataSize invalid %" PRIu32 " %zu\n", rec_.data_size, io_.getSize());
-        return false;
-    }
-    if (rec_.isCompressed()) {
-        LOGd("DiffRecIo does not support compressed data.\n");
-        return false;
-    }
-    if (isChecksum && rec_.checksum != io_.calcChecksum()) {
-        LOGd("checksum invalid %0x %0x\n", rec_.checksum, io_.calcChecksum());
+    if (!isChecksum) return true;
+
+    const uint32_t csum = calcDiffIoChecksum(io_);
+    if (rec_.checksum != csum) {
+        LOGd("checksum invalid %08x %08x\n", rec_.checksum, csum);
         return false;
     }
     return true;
@@ -36,9 +31,9 @@ std::vector<DiffRecIo> DiffRecIo::splitAll(uint32_t ioBlocks) const
     std::vector<DiffRecIo> v;
 
     std::vector<DiffRecord> recV = rec_.splitAll(ioBlocks);
-    std::vector<DiffIo> ioV;
+    std::vector<AlignedArray> ioV;
     if (rec_.isNormal()) {
-        ioV = io_.splitIoDataAll(ioBlocks);
+        ioV = splitIoDataAll(io_, ioBlocks);
     } else {
         ioV.resize(recV.size());
     }
@@ -100,7 +95,7 @@ std::vector<DiffRecIo> DiffRecIo::minus(const DiffRecIo &rhs) const
         if (recIsNormal) {
             size_t off1 = (addr1 - rec_.io_address) * LOGICAL_BLOCK_SIZE;
             assert(size0 + rhs.rec_.io_blocks * LOGICAL_BLOCK_SIZE + size1 == rec_.data_size);
-            const char *p = io_.get();
+            const char *p = io_.data();
             util::assignAlignedArray(data0, p, size0);
             p += off1;
             util::assignAlignedArray(data1, p, size1);
@@ -131,14 +126,13 @@ std::vector<DiffRecIo> DiffRecIo::minus(const DiffRecIo &rhs) const
 
         size_t size = 0;
         if (rec_.isNormal()) {
-            size = io_.getSize() - rblks * LOGICAL_BLOCK_SIZE;
+            size = io_.size() - rblks * LOGICAL_BLOCK_SIZE;
         }
         AlignedArray data;
         if (rec_.isNormal()) {
-            assert(rec_.data_size == io_.getSize());
+            assert(rec_.data_size == io_.size());
             rec.data_size = size;
-            const char *p = io_.get();
-            util::assignAlignedArray(data, p, size);
+            util::assignAlignedArray(data, io_.data(), size);
         }
 
         v.emplace_back(rec, std::move(data));
@@ -161,21 +155,20 @@ std::vector<DiffRecIo> DiffRecIo::minus(const DiffRecIo &rhs) const
     size_t size = 0;
     const bool isNormal = rec_.isNormal();
     if (isNormal) {
-        size = io_.getSize() - off;
+        size = io_.size() - off;
     }
     AlignedArray data;
     if (isNormal) {
-        assert(rec_.data_size == io_.getSize());
+        assert(rec_.data_size == io_.size());
         rec.data_size = size;
-        const char *p = io_.get() + off;
-        util::assignAlignedArray(data, p, size);
+        util::assignAlignedArray(data, io_.data() + off, size);
     }
     assert(rhsEndIoAddr == rec.io_address);
     v.emplace_back(rec, std::move(data));
     return v;
 }
 
-void DiffMemory::add(const DiffRecord& rec, DiffIo &&io)
+void DiffMemory::add(const DiffRecord& rec, AlignedArray &&buf)
 {
     /* Decide key range to search overlapped items.
      * We must start from the item which have max address
@@ -204,7 +197,7 @@ void DiffMemory::add(const DiffRecord& rec, DiffIo &&io)
     }
 
     /* Eliminate overlaps. */
-    DiffRecIo r0(rec, std::move(io));
+    DiffRecIo r0(rec, std::move(buf));
     while (!q.empty()) {
         std::vector<DiffRecIo> v = q.front().minus(r0);
         for (DiffRecIo &r : v) {
@@ -270,11 +263,11 @@ void DiffMemory::writeTo(int outFd, int cmprType)
         const DiffRecIo &r = it->second;
         assert(r.isValid());
         if (cmprType != ::WALB_DIFF_CMPR_NONE) {
-            writer.compressAndWriteDiff(r.record(), r.io().get(), cmprType);
+            writer.compressAndWriteDiff(r.record(), r.io().data(), cmprType);
         } else {
             DiffRecord rec = r.record();
-            rec.checksum = r.io().calcChecksum();
-            writer.writeDiff(rec, r.io().get());
+            rec.checksum = calcDiffIoChecksum(r.io());
+            writer.writeDiff(rec, r.io().data());
         }
         ++it;
     }
@@ -289,9 +282,9 @@ void DiffMemory::readFrom(int inFd)
     SortedDiffReader reader(inFd);
     reader.readHeader(fileH_);
     DiffRecord rec;
-    DiffIo io;
-    while (reader.readAndUncompressDiff(rec, io, false)) {
-        add(rec, std::move(io));
+    AlignedArray buf;
+    while (reader.readAndUncompressDiff(rec, buf, false)) {
+        add(rec, std::move(buf));
     }
 }
 

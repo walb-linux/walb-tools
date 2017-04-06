@@ -21,12 +21,12 @@ bool wdiffTransferClient(
             return false;
         }
         const DiffRecord& rec = recIo.record();
-        const DiffIo& io = recIo.io();
-        if (packer.add(rec, io.get())) continue;
+        const AlignedArray& buf = recIo.io();
+        if (packer.add(rec, buf.data())) continue;
         conv.push(packer.getPackAsArray());
         pushedNum++;
         packer.clear();
-        packer.add(rec, io.get());
+        packer.add(rec, buf.data());
         if (pushedNum < maxPushedNum) continue;
         wdiff_transfer_local::sendPack(pkt, ctrl, statOut, conv.pop());
         pushedNum--;

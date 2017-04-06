@@ -83,9 +83,10 @@ int printSortedWdiff(
             std::string extra;
             if (rec.isNormal()) {
                 if (opt.verifyCsum) {
-                    DiffIo io;
-                    io.setAndReadFrom(rec, file, false);
-                    const uint32_t csum = io.calcChecksum();
+                    AlignedArray buf;
+                    buf.resize(rec.data_size);
+                    file.read(buf.data(), buf.size());
+                    const uint32_t csum = calcDiffIoChecksum(buf);
                     if (rec.checksum != csum) {
                         extra += cybozu::util::formatString(
                             " invalid data checksum: %08x", csum);

@@ -96,95 +96,6 @@ struct DiffRecord : public walb_diff_record
     std::vector<DiffRecord> splitAll(uint32_t ioBlocks0) const;
 };
 
-/**
- * Block diff for an IO.
- */
-struct DiffIo
-{
-    uint32_t ioBlocks; /* [logical block]. */
-    int compressionType;
-    AlignedArray data;
-
-    const char *get() const { return data.data(); }
-    char *get() { return data.data(); }
-    size_t getSize() const { return data.size(); }
-
-    explicit DiffIo(uint32_t ioBlocks = 0, int compressionType = ::WALB_DIFF_CMPR_NONE, const char *data = nullptr, size_t size = 0)
-        : ioBlocks(ioBlocks), compressionType(compressionType), data() {
-        if (data && size > 0) util::assignAlignedArray(this->data, data, size);
-    }
-    DiffIo(const DiffIo &) = default;
-    DiffIo(DiffIo &&) = default;
-    DiffIo& operator=(const DiffIo&) = default;
-    DiffIo& operator=(DiffIo&&) = default;
-
-    void clear() {
-        ioBlocks = 0;
-        compressionType = ::WALB_DIFF_CMPR_NONE;
-        data.clear();
-    }
-    bool isCompressed() const { return compressionType != ::WALB_DIFF_CMPR_NONE; }
-
-    bool empty() const { return ioBlocks == 0; }
-
-    bool isValid() const;
-
-    /**
-     * Calculate checksum.
-     */
-    uint32_t calcChecksum() const {
-        if (empty()) { return 0; }
-        return cybozu::util::calcChecksum(get(), getSize(), 0);
-    }
-
-    /**
-     * Calculate whether all-zero or not.
-     */
-    bool isAllZero() const {
-        const size_t size = getSize();
-        if (isCompressed() || size == 0) { return false; }
-        assert(size % LOGICAL_BLOCK_SIZE == 0);
-        return cybozu::util::isAllZero(get(), size);
-    }
-
-    void print(::FILE *fp = ::stdout) const;
-    void printOneline(::FILE *fp = ::stdout) const;
-
-    void set(const DiffRecord &rec, const char *data0 = nullptr);
-    void set(const DiffRecord &rec, AlignedArray &&data);
-
-    /**
-     * Split an IO into multiple IOs
-     * each of which io size is not more than a specified one.
-     *
-     * CAUSION:
-     *   Compressed IO can not be splitted.
-     */
-    std::vector<DiffIo> splitIoDataAll(uint32_t ioBlocks0) const;
-
-    template <typename Writer>
-    void writeTo(Writer &writer) const {
-        if (getSize() > 0) {
-            writer.write(get(), getSize());
-        }
-    }
-    template <typename Reader>
-    void readFrom(Reader &reader) {
-        if (getSize() > 0) {
-            reader.read(get(), getSize());
-        }
-    }
-    template <typename Reader>
-    void setAndReadFrom(const DiffRecord &rec, Reader &reader, bool verifyChecksum = true) {
-        set(rec);
-        readFrom(reader);
-        if (!verifyChecksum) return;
-        const uint32_t csum = calcChecksum();
-        if (rec.checksum != csum) {
-            throw cybozu::Exception(__func__) << "checksum differ" << rec.checksum << csum;
-        }
-    }
-};
 
 inline uint32_t calcDiffIoChecksum(const AlignedArray &io)
 {
@@ -196,6 +107,16 @@ inline bool calcDiffIoIsAllZero(const AlignedArray &io)
 {
     if (io.size() == 0) return false;
     return cybozu::util::isAllZero(io.data(), io.size());
+}
+
+
+std::vector<AlignedArray> splitIoDataAll(const AlignedArray &buf, uint32_t ioBlocks);
+
+
+inline void printOnelineDiffIo(const AlignedArray &buf, ::FILE *fp = ::stdout)
+{
+    ::fprintf(fp, "size %zu checksum %08x\n"
+              , buf.size(), calcDiffIoChecksum(buf));
 }
 
 

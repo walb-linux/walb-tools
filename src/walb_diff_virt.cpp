@@ -99,12 +99,11 @@ size_t VirtualFullScanner::readWdiff(void *data, size_t blks)
 {
     assert(recIo_.isValid());
     const DiffRecord& rec = recIo_.record();
-    const DiffIo &io = recIo_.io();
+    const AlignedArray &buf = recIo_.io();
     assert(offInIo_ < rec.io_blocks);
     if (rec.isNormal()) {
-        assert(!io.isCompressed());
         size_t off = offInIo_ * LOGICAL_BLOCK_SIZE;
-        ::memcpy(data, io.get() + off, blks * LOGICAL_BLOCK_SIZE);
+        ::memcpy(data, buf.data() + off, blks * LOGICAL_BLOCK_SIZE);
     } else {
         /* Read zero image for both ALL_ZERO and DISCARD.. */
         assert(rec.isDiscard() || rec.isAllZero());

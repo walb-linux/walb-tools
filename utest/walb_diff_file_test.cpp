@@ -35,8 +35,8 @@ CYBOZU_TEST_AUTO(NullSortedDiffFile)
     SortedDiffReader reader(tmpFile.fd());
     reader.readHeader(header1);
     DiffRecord rec;
-    DiffIo io;
-    CYBOZU_TEST_ASSERT(!reader.readDiff(rec, io));
+    AlignedArray data;
+    CYBOZU_TEST_ASSERT(!reader.readDiff(rec, data));
 }
 
 CYBOZU_TEST_AUTO(NullIndexedDiffFile)
@@ -102,7 +102,7 @@ void testRandomDiffFile(int cmprType, size_t nrIos)
     DiffFileHeader header0, header1;
     std::vector<DiffRecord> recV0(nrIos), recV1(nrIos);
     std::vector<AlignedArray> dataV0(nrIos);
-    std::vector<DiffIo> ioV1(nrIos);
+    std::vector<AlignedArray> ioV1(nrIos);
     std::list<Sio> sioList = generateSioList(nrIos, true);
     {
         // Prepare recV0 and dataV0.
@@ -135,11 +135,11 @@ void testRandomDiffFile(int cmprType, size_t nrIos)
         for (size_t i = 0; i < nrIos; i++) {
             const bool ret = reader.readAndUncompressDiff(recV1[i], ioV1[i], false);
             CYBOZU_TEST_ASSERT(ret);
-            verifyRecIoEquality(recV0[i], dataV0[i], recV1[i], ioV1[i].data);
+            verifyRecIoEquality(recV0[i], dataV0[i], recV1[i], ioV1[i]);
         }
         DiffRecord rec;
-        DiffIo io;
-        CYBOZU_TEST_ASSERT(!reader.readDiff(rec, io));
+        AlignedArray buf;
+        CYBOZU_TEST_ASSERT(!reader.readDiff(rec, buf));
     }
 }
 

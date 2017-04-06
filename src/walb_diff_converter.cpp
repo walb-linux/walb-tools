@@ -112,9 +112,8 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
     while (reader.readLog(lrec, buf)) {
         DiffRecord drec;
         if (convertLogToDiff(lrec, buf.data(), drec)) {
-            DiffIo dio;
-            dio.set(drec, std::move(buf));
-            diffMem.add(drec, std::move(dio));
+            if (!drec.isNormal()) buf.clear();
+            diffMem.add(drec, std::move(buf));
             writtenBlocks += drec.io_blocks;
         }
     }
@@ -126,9 +125,9 @@ bool DiffConverter::convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
 
 void IndexedDiffConverter::convert(int inputLogFd, int outputWdiffFd, uint32_t maxIoBlocks)
 {
-    unusedVar(maxIoBlocks);
     IndexedDiffWriter writer;
     writer.setFd(outputWdiffFd);
+    writer.setMaxIoBlocks(maxIoBlocks);
     DiffFileHeader wdiffH;
 
     /* Loop */

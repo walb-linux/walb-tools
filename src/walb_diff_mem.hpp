@@ -23,27 +23,16 @@ class DiffRecIo /* final */
 {
 private:
     DiffRecord rec_;
-    DiffIo io_;
+    AlignedArray io_;
 public:
     const DiffRecord &record() const { return rec_; }
-    const DiffIo &io() const { return io_; }
+    const AlignedArray &io() const { return io_; }
 
     DiffRecIo() {}
-    DiffRecIo(const DiffRecord &rec, DiffIo &&io)
+    DiffRecIo(const DiffRecord &rec, AlignedArray &&buf)
         : rec_(rec) {
         if (rec.isNormal()) {
-            io_ = std::move(io);
-        } else {
-            io_.clear();
-        }
-        assert(isValid());
-    }
-    DiffRecIo(const DiffRecord &rec, AlignedArray &&data)
-        : rec_(rec) {
-        if (rec.isNormal()) {
-            io_.ioBlocks = rec.io_blocks;
-            io_.compressionType = rec.compression_type;
-            io_.data = std::move(data);
+            io_ = std::move(buf);
         } else {
             io_.clear();
         }
@@ -53,7 +42,7 @@ public:
 
     void print(::FILE *fp = ::stdout) const {
         rec_.printOneline(fp);
-        io_.printOneline(fp);
+        printOnelineDiffIo(io_, fp);
     }
 
     /**
@@ -101,7 +90,7 @@ public:
     ~DiffMemory() noexcept = default;
     void setMaxIoBlocks(uint32_t maxIoBlocks) { maxIoBlocks_ = maxIoBlocks; }
     bool empty() const { return map_.empty(); }
-    void add(const DiffRecord& rec, DiffIo &&io);
+    void add(const DiffRecord& rec, AlignedArray &&buf);
     void print(::FILE *fp = ::stdout) const;
     uint64_t getNBlocks() const { return nBlocks_; }
     uint64_t getNIos() const { return nIos_; }

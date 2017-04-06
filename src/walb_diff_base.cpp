@@ -84,99 +84,23 @@ std::vector<DiffRecord> DiffRecord::splitAll(uint32_t ioBlocks0) const
 }
 
 
-bool DiffIo::isValid() const
+std::vector<AlignedArray> splitIoDataAll(const AlignedArray &buf, uint32_t ioBlocks)
 {
-    if (empty()) {
-        if (!data.empty()) {
-            LOGd("Data is not empty.\n");
-            return false;
-        }
-        return true;
-    } else {
-        if (isCompressed()) {
-            return true;
-        } else {
-            if (getSize() != ioBlocks * LOGICAL_BLOCK_SIZE) {
-                LOGd("dataSize is not the same: %zu %u\n"
-                     , getSize(), ioBlocks * LOGICAL_BLOCK_SIZE);
-                return false;
-            }
-            return true;
-        }
-    }
-}
-
-
-void DiffIo::print(::FILE *fp) const
-{
-    ::fprintf(fp,
-              "ioBlocks %u\n"
-              "type %d\n"
-              "size %zu\n"
-              "checksum %0x\n"
-              , ioBlocks
-              , compressionType
-              , getSize()
-              , calcChecksum());
-}
-
-void DiffIo::printOneline(::FILE *fp) const
-{
-    ::fprintf(fp, "ioBlocks %u type %d size %zu checksum %0x\n"
-              , ioBlocks
-              , compressionType
-              , getSize()
-              , calcChecksum());
-}
-
-void DiffIo::set(const DiffRecord &rec, const char *data0)
-{
-    if (rec.isNormal()) {
-        ioBlocks = rec.io_blocks;
-        compressionType = rec.compression_type;
-        data.resize(rec.data_size, false);
-        if (data0) ::memcpy(data.data(), data0, data.size());
-    } else {
-        ioBlocks = 0;
-        compressionType = ::WALB_DIFF_CMPR_NONE;
-        data.clear();
-    }
-}
-
-void DiffIo::set(const DiffRecord &rec, AlignedArray &&data0)
-{
-    if (rec.isNormal()) {
-        ioBlocks = rec.io_blocks;
-        compressionType = rec.compression_type;
-        data = std::move(data0);
-    } else {
-        ioBlocks = 0;
-        compressionType = ::WALB_DIFF_CMPR_NONE;
-        data.clear();
-    }
-}
-
-std::vector<DiffIo> DiffIo::splitIoDataAll(uint32_t ioBlocks0) const
-{
-    if (ioBlocks0 == 0) {
-        throw cybozu::Exception("splitIoDataAll: ioBlocks0 must not be 0.");
-    }
-    if (isCompressed()) {
-        throw cybozu::Exception("splitIoDataAll: compressed IO can not be splitted.");
-    }
-    assert(isValid());
-    std::vector<DiffIo> v;
-    uint32_t remaining = ioBlocks;
-    const char *p = data.data();
+    std::vector<AlignedArray> v;
+    assert(buf.size() % LOGICAL_BLOCK_SIZE == 0);
+    uint32_t remaining = buf.size() / LOGICAL_BLOCK_SIZE;
+    const char *p = buf.data();
     while (remaining > 0) {
-        uint32_t blks = std::min(remaining, ioBlocks0);
-        size_t size = blks * LOGICAL_BLOCK_SIZE;
-        v.emplace_back(blks, WALB_DIFF_CMPR_NONE, p, size);
-        remaining -= blks;
-        p += size;
+        uint32_t lb = std::min(remaining, ioBlocks);
+        size_t bytes = lb * LOGICAL_BLOCK_SIZE;
+        v.emplace_back(bytes);
+        ::memcpy(v.back().data(), p, bytes);
+        remaining -= lb;
+        p += bytes;
     }
     return v;
 }
+
 
 int compressData(const char *inData, size_t inSize,
                  AlignedArray &outData, size_t &outSize, int type, int level)

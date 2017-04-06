@@ -125,8 +125,8 @@ struct Sio
         rec.data_size = rec.isNormal() ? data.size() : 0;
         rec.compression_type = ::WALB_DIFF_CMPR_NONE;
         rec.checksum = 0; // not calculated now.
-        data0.resize(data.size());
-        ::memcpy(data0.data(), data.data(), data0.size());
+        data0.resize(rec.data_size);
+        if (!data0.empty()) ::memcpy(data0.data(), data.data(), data0.size());
     }
     void copyTo(IndexedDiffRecord& rec, AlignedArray& data0) const {
         copyTopHalfTo(rec);
@@ -135,8 +135,8 @@ struct Sio
         rec.orig_blocks = rec.io_blocks;
         rec.io_checksum = 0; // not calculated now.
         rec.rec_checksum = 0; // not calculated now.
-        data0.resize(data.size());
-        ::memcpy(data0.data(), data.data(), data0.size());
+        data0.resize(rec.data_size);
+        if (!data0.empty()) ::memcpy(data0.data(), data.data(), data0.size());
     }
     template <typename Record>
     void copyTopHalfFrom(const Record& rec) {
@@ -147,17 +147,23 @@ struct Sio
         else if (rec.isAllZero()) type = DiffRecType::ALLZERO;
         else throw cybozu::Exception("bad type") << type;
     }
+    void copyBottomHalfFrom(const AlignedArray& data0) {
+        if (type == DiffRecType::NORMAL) {
+            data.resize(data0.size());
+            ::memcpy(data.data(), data0.data(), data.size());
+        } else {
+            data.clear();
+        }
+    }
     void copyFrom(const DiffRecord& rec, const AlignedArray& data0) {
-        copyTopHalfFrom(rec);
         CYBOZU_TEST_EQUAL(rec.compression_type, ::WALB_DIFF_CMPR_NONE);
-        data.resize(data0.size());
-        ::memcpy(data.data(), data0.data(), data.size());
+        copyTopHalfFrom(rec);
+        copyBottomHalfFrom(data0);
     }
     void copyFrom(const IndexedDiffRecord& rec, const AlignedArray& data0) {
-        copyTopHalfFrom(rec);
         CYBOZU_TEST_EQUAL(rec.compression_type, ::WALB_DIFF_CMPR_NONE);
-        data.resize(data0.size());
-        ::memcpy(data.data(), data0.data(), data.size());
+        copyTopHalfFrom(rec);
+        copyBottomHalfFrom(data0);
     }
     bool tryMerge(const Sio& rhs) {
         if (ioAddr + ioBlocks != rhs.ioAddr || type != rhs.type) return false;
@@ -337,10 +343,10 @@ public:
     void clear() {
         ::memset(buf_.data(), 0, buf_.size());
     }
-    void writeDiff(const DiffRecord &rec, const DiffIo &io) {
+    void writeDiff(const DiffRecord &rec, const AlignedArray &data) {
         if (writeDiffTopHalf(rec)) return;
         assert(!rec.isCompressed());
-        write(rec.io_address, rec.io_blocks, io.data.data());
+        write(rec.io_address, rec.io_blocks, data.data());
     }
     void writeDiff(const IndexedDiffRecord &rec, const AlignedArray &data) {
         if (writeDiffTopHalf(rec)) return;
@@ -398,9 +404,9 @@ public:
             SortedDiffReader reader(std::move(file));
             reader.dontReadHeader();
             DiffRecord rec;
-            DiffIo io;
-            while (reader.readAndUncompressDiff(rec, io, false)) {
-                writeDiff(rec, io);
+            AlignedArray data;
+            while (reader.readAndUncompressDiff(rec, data, false)) {
+                writeDiff(rec, data);
             }
         }
     }

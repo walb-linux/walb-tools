@@ -984,9 +984,8 @@ bool recvWlogAndWriteDiff(
             if (wlogW) wlogW->writePackIo(buf);
             DiffRecord drec;
             if (convertLogToDiff(lrec, buf.data(), drec)) {
-                DiffIo dio;
-                dio.set(drec, std::move(buf));
-                diffMem.add(drec, std::move(dio));
+                if (!drec.isNormal()) buf.clear();
+                diffMem.add(drec, std::move(buf));
             }
             buf.clear();
         }

@@ -75,45 +75,43 @@ void SortedDiffWriter::writeHeader(DiffFileHeader &header)
     isWrittenHeader_ = true;
 }
 
-void SortedDiffWriter::writeDiff(const DiffRecord &rec, DiffIo &&io)
+void SortedDiffWriter::writeDiff(const DiffRecord &rec, AlignedArray &&buf)
 {
     checkWrittenHeader();
-    assertRecAndIo(rec, io);
+    assertRecAndIo(rec, buf);
 
-    if (addAndPush(rec, std::move(io))) return;
+    if (addAndPush(rec, std::move(buf))) return;
     writePack();
-    const bool ret = addAndPush(rec, std::move(io));
+    const bool ret = addAndPush(rec, std::move(buf));
     unusedVar(ret);
     assert(ret);
 }
 
 void SortedDiffWriter::writeDiff(const DiffRecord &rec, const char *data)
 {
-    DiffIo io;
-    io.set(rec);
+    AlignedArray buf;
     if (rec.isNormal()) {
-        ::memcpy(io.get(), data, rec.data_size);
+        buf.resize(rec.data_size);
+        ::memcpy(buf.data(), data, buf.size());
     }
-    writeDiff(rec, std::move(io));
+    writeDiff(rec, std::move(buf));
 }
 
 void SortedDiffWriter::compressAndWriteDiff(
-    const DiffRecord &rec, const char *data,
-    int type, int level)
+    const DiffRecord &rec, const char *data, int type, int level)
 {
     if (rec.isCompressed()) {
         writeDiff(rec, data);
         return;
     }
     if (!rec.isNormal()) {
-        writeDiff(rec, DiffIo());
+        writeDiff(rec, AlignedArray());
         return;
     }
     DiffRecord compRec;
-    DiffIo compIo;
-    compressDiffIo(rec, data, compRec, compIo.data, type, level);
-    compIo.set(compRec);
-    writeDiff(compRec, std::move(compIo));
+    AlignedArray buf;
+    compressDiffIo(rec, data, compRec, buf, type, level);
+    writeDiff(compRec, std::move(buf));
 }
 
 void SortedDiffWriter::init()
@@ -126,28 +124,27 @@ void SortedDiffWriter::init()
     stat_.wdiffNr = 1;
 }
 
-bool SortedDiffWriter::addAndPush(const DiffRecord &rec, DiffIo &&io)
+bool SortedDiffWriter::addAndPush(const DiffRecord &rec, AlignedArray &&buf)
 {
     if (pack_.add(rec)) {
-        ioQ_.push(std::move(io));
+        ioQ_.push(std::move(buf));
         return true;
     }
     return false;
 }
 
 #ifdef DEBUG
-void SortedDiffWriter::assertRecAndIo(const DiffRecord &rec, const DiffIo &io)
+void SortedDiffWriter::assertRecAndIo(const DiffRecord &rec, const AlignedArray &buf)
 {
     if (rec.isNormal()) {
-        assert(!io.empty());
-        assert(io.compressionType == rec.compression_type);
-        assert(rec.checksum == io.calcChecksum());
+        assert(!buf.empty());
+        assert(rec.checksum == calcDiffIoChecksum(buf));
     } else {
-        assert(io.empty());
+        assert(buf.empty());
     }
 }
 #else
-void SortedDiffWriter::assertRecAndIo(const DiffRecord &, const DiffIo &) {}
+void SortedDiffWriter::assertRecAndIo(const DiffRecord &, const AlignedArray &) {}
 #endif
 
 void SortedDiffWriter::writePack()
@@ -163,11 +160,11 @@ void SortedDiffWriter::writePack()
     assert(pack_.n_records == ioQ_.size());
     size_t total = 0;
     while (!ioQ_.empty()) {
-        DiffIo io0 = std::move(ioQ_.front());
+        AlignedArray buf = std::move(ioQ_.front());
         ioQ_.pop();
-        if (io0.empty()) continue;
-        io0.writeTo(fileW_);
-        total += io0.getSize();
+        if (buf.empty()) continue;
+        fileW_.write(buf.data(), buf.size());
+        total += buf.size();
     }
     assert(total == pack_.total_size);
     pack_.clear();
@@ -188,7 +185,7 @@ void SortedDiffReader::readHeader(DiffFileHeader &head, bool doReadPackHeader)
     if (doReadPackHeader) readPackHeader();
 }
 
-bool SortedDiffReader::readDiff(DiffRecord &rec, DiffIo &io)
+bool SortedDiffReader::readDiff(DiffRecord &rec, AlignedArray &buf)
 {
     if (!prepareRead()) return false;
     assert(pack_.n_records == 0 || recIdx_ < pack_.n_records);
@@ -198,24 +195,23 @@ bool SortedDiffReader::readDiff(DiffRecord &rec, DiffIo &io)
         throw cybozu::Exception(__func__)
             << "invalid record" << fileR_.fd() << recIdx_ << rec;
     }
-    readDiffIo(rec, io);
+    readDiffIo(rec, buf);
     return true;
 }
 
-bool SortedDiffReader::readAndUncompressDiff(DiffRecord &rec, DiffIo &io, bool calcChecksum)
+bool SortedDiffReader::readAndUncompressDiff(DiffRecord &rec, AlignedArray &buf, bool calcChecksum)
 {
-    if (!readDiff(rec, io)) {
+    if (!readDiff(rec, buf)) {
         return false;
     }
     if (!rec.isNormal() || !rec.isCompressed()) {
         return true;
     }
     DiffRecord outRec;
-    DiffIo outIo;
-    uncompressDiffIo(rec, io.get(), outRec, outIo.data, calcChecksum);
-    outIo.set(outRec);
+    AlignedArray outBuf;
+    uncompressDiffIo(rec, buf.data(), outRec, outBuf, calcChecksum);
     rec = outRec;
-    io = std::move(outIo);
+    buf = std::move(outBuf);
     return true;
 }
 
@@ -229,13 +225,25 @@ bool SortedDiffReader::prepareRead()
     return ret;
 }
 
-void SortedDiffReader::readDiffIo(const DiffRecord &rec, DiffIo &io, bool verifyChecksum)
+void SortedDiffReader::readDiffIo(const DiffRecord &rec, AlignedArray &buf, bool verifyChecksum)
 {
     if (rec.data_offset != totalSize_) {
         throw cybozu::Exception(__func__)
             << "data offset invalid" << rec.data_offset << totalSize_;
     }
-    io.setAndReadFrom(rec, fileR_, verifyChecksum);
+    if (rec.isNormal()) {
+        buf.resize(rec.data_size);
+        fileR_.read(buf.data(), buf.size());
+        if (verifyChecksum) {
+            const uint32_t csum = calcDiffIoChecksum(buf);
+            if (rec.checksum != csum) {
+                throw cybozu::Exception(__func__) << "checksum differ" << rec.checksum << csum;
+            }
+        }
+    } else {
+        assert(rec.data_size == 0);
+        buf.clear();
+    }
     totalSize_ += rec.data_size;
     recIdx_++;
 }

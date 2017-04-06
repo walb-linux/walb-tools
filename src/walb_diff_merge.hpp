@@ -43,14 +43,14 @@ private:
         mutable bool isIndexed_;  // true: use iReader_, false: use sReader_.
         DiffFileHeader header_;
         mutable DiffRecord rec_; // checksum field may not be calculated.
-        mutable DiffIo io_;
+        mutable AlignedArray buf_;
         mutable bool isFilled_;
         mutable bool isEnd_;
 
     public:
         constexpr static const char *NAME = "DiffMerger::Wdiff";
         Wdiff() : sReader_(), iReader_()
-                , header_(), rec_(), io_(), isFilled_(false), isEnd_(false) {
+                , header_(), rec_(), buf_(), isFilled_(false), isEnd_(false) {
         }
         void open(const std::string &wdiffPath, IndexedDiffCache *cache) {
             setFile(cybozu::util::File(wdiffPath, O_RDONLY), cache);
@@ -66,7 +66,7 @@ private:
             fill();
             return rec_;
         }
-        void getAndRemoveIo(DiffIo &io);
+        void getAndRemoveIo(AlignedArray &buf);
         bool isEnd() const {
             fill();
             return isEnd_;
@@ -264,9 +264,9 @@ private:
     bool moveToMergedQueue();
     void removeEndedWdiffs();
 
-    void mergeIo(const DiffRecord &rec, DiffIo &&io) {
+    void mergeIo(const DiffRecord &rec, AlignedArray &&buf) {
         assert(!rec.isCompressed());
-        diffMem_.add(rec, std::move(io));
+        diffMem_.add(rec, std::move(buf));
     }
 
     void verifyUuid(const cybozu::Uuid &uuid) const;
