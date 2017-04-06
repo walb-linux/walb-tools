@@ -350,6 +350,15 @@ void IndexedDiffWriter::finalize()
 {
     if (isClosed_) return;
 
+    /* Insert padding data for index records to be aligned to 8 bytes. */
+    const size_t delta = offset_ % 8;
+    if (delta > 0) {
+        const AlignedArray& zero = util::zeroedAlignedArray();
+        const size_t padding = 8 - delta;
+        fileW_.write(zero.data(), padding);
+        offset_ += padding;
+    }
+
     indexMem_.writeTo(fileW_, &stat_);
     writeSuper();
 

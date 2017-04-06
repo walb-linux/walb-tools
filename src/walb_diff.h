@@ -32,11 +32,13 @@ extern "C" {
  *
  * [sizeof: walb_diff_file_header]
  * [compressed IO data, ...]
+ * [padding data 0-7 bytes in order to align index records to 8 bytes]
  * [[sizeof: walb_indexed_diff_record], ...]
  * [sizeof: walb_diff_index_super: super block for the index]
  *
- * All IO data is alighed to 2^N (N >= 9).
- * IO may not be sorted by address in the walb_diff_pack array.
+ * All uncompressed IO data size are aligned to 2^N (N >= 9).
+ * Compressed ones are of course not.
+ * IO data may not be sorted by address while index records must be sorted.
  */
 
 /**
@@ -88,7 +90,7 @@ struct walb_diff_file_header
     uint32_t reserved2;
     uint32_t reserved3;
     uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
-} __attribute__((packed));
+} __attribute__((packed, aligned(8)));
 
 
 /**
@@ -107,7 +109,7 @@ struct walb_diff_record
     uint32_t data_size; /* [byte] */
     uint32_t checksum; /* compressed data checksum with salt 0. */
     uint32_t reserved2;
-} __attribute__((packed));
+} __attribute__((packed, aligned(8)));
 
 /**
  * Flag bits of walb_diff_pack.flags.
@@ -131,7 +133,7 @@ struct walb_diff_pack
                             WALB_DIFF_PACK_SIZE + total_size. */
     uint32_t reserved1;
     struct walb_diff_record record[0];
-} __attribute__((packed));
+} __attribute__((packed, aligned(8)));
 
 const size_t WALB_DIFF_PACK_SIZE = 4096; /* 4KiB */
 const size_t MAX_N_RECORDS_IN_WALB_DIFF_PACK =
@@ -162,7 +164,7 @@ struct walb_indexed_diff_record
 
     uint32_t io_checksum; /* chcksum of the compressed image with salt 0. */
     uint32_t rec_checksum; /* self checksum. */
-} __attribute__((packed));
+} __attribute__((packed, aligned(8)));
 
 
 struct walb_diff_index_super
@@ -172,7 +174,7 @@ struct walb_diff_index_super
     uint32_t n_data;  /* number of compressed images. */
     uint32_t reserved1;
     uint32_t checksum; /* self checksum */
-} __attribute__((packed));
+} __attribute__((packed, aligned(8)));
 
 
 #ifdef __cplusplus
