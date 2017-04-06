@@ -107,7 +107,6 @@ private:
 #endif
     };
     bool shouldValidateUuid_;
-    uint32_t maxIoBlocks_;
 
     DiffFileHeader wdiffH_;
     bool isHeaderPrepared_;
@@ -152,7 +151,6 @@ private:
 public:
     explicit DiffMerger(size_t initSearchLen = DEFAULT_MERGE_BUFFER_LB)
         : shouldValidateUuid_(false)
-        , maxIoBlocks_(0)
         , wdiffH_()
         , isHeaderPrepared_(false)
         , wdiffs_()
@@ -162,12 +160,8 @@ public:
         , searchLen_(initSearchLen)
         , statIn_(), statOut_() {
     }
-    /**
-     * @maxIoBlocks Max io blocks in the output wdiff [logical block].
-     *     0 means no limitation.
-     */
     void setMaxIoBlocks(uint32_t maxIoBlocks) {
-        maxIoBlocks_ = maxIoBlocks;
+        diffMem_.setMaxIoBlocks(maxIoBlocks);
     }
     /**
      * @shouldValidateUuid validate that all wdiff's uuid are the same if true,
@@ -272,11 +266,10 @@ private:
 
     void mergeIo(const DiffRecord &rec, DiffIo &&io) {
         assert(!rec.isCompressed());
-        diffMem_.add(rec, std::move(io), maxIoBlocks_);
+        diffMem_.add(rec, std::move(io));
     }
 
     void verifyUuid(const cybozu::Uuid &uuid) const;
-    uint32_t getMaxIoBlocks() const;
 };
 
 } //namespace walb

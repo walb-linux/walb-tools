@@ -30,8 +30,6 @@ const size_t DEFAULT_RETRY_TIMEOUT_SEC = 1800;
 const size_t PROXY_HEARTBEAT_INTERVAL_SEC = 10;
 const size_t PROXY_HEARTBEAT_SOCKET_TIMEOUT_SEC = 3; // seconds.
 
-const size_t DEFAULT_MAX_IO_LB = MEBI / LBS; // used as max diff IO size.
-
 const size_t DEFAULT_SOCKET_TIMEOUT_SEC = 10;
 
 const uint64_t DEFAULT_FULL_SCAN_BYTES_PER_SEC = 0; // unlimited.
@@ -55,7 +53,7 @@ const size_t PROGRESS_INTERVAL_SEC = 60;
 
 const size_t DEFAULT_TS_DELTA_INTERVAL_SEC = 60;
 
-const uint32_t DEFAULT_MAX_WDIFF_IO_BLOCKS = 64 * 1024;
+const uint32_t DEFAULT_MAX_IO_LB = MEBI / LBS; // used as max diff IO size.
 
 const size_t DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC = 10;
 

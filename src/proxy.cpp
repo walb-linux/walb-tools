@@ -448,12 +448,13 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     pkt.write(volId);
     pkt.write(proxyHT);
     pkt.write(fileH.getUuid());
-    pkt.write(fileH.getMaxIoBlocks());
+    uint32_t maxIoBlocks = 0; // unused
+    pkt.write(maxIoBlocks);
     pkt.write(volInfo.getSizeLb());
     pkt.write(mergedDiff);
     pkt.flush();
     logger.debug() << "send" << volId << proxyHT << fileH.getUuid()
-                   << fileH.getMaxIoBlocks() << volInfo.getSizeLb() << mergedDiff;
+                   << volInfo.getSizeLb() << mergedDiff;
 
     std::string res;
     pkt.read(res);
@@ -953,7 +954,7 @@ bool recvWlogAndWriteDiff(
     cybozu::Socket &sock, int fd, const cybozu::Uuid &uuid, uint32_t pbs, uint32_t salt,
     const std::atomic<int> &stopState, const ProcessStatus &ps, int wlogFd)
 {
-    DiffMemory diffMem(DEFAULT_MAX_IO_LB);
+    DiffMemory diffMem;
     diffMem.header().setUuid(uuid);
 
     LogPackHeader packH(pbs, salt);

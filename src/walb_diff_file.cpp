@@ -27,9 +27,8 @@ std::string DiffFileHeader::str() const
         "  checksum: %08x\n"
         "  version: %u\n"
         "  type: %s\n"
-        "  maxIoBlocks: %u\n"
         "  uuid: %s\n"
-        , checksum, version, typeStr().c_str(), max_io_blocks, getUuid().str().c_str());
+        , checksum, version, typeStr().c_str(), getUuid().str().c_str());
 }
 
 bool DiffFileHeader::isIndexed() const

@@ -43,7 +43,8 @@ bool convertLogToDiff(
 void DiffConverter::convert(int inputLogFd, int outputWdiffFd, uint32_t maxIoBlocks)
 {
     /* Prepare walb diff. */
-    DiffMemory diffMem(maxIoBlocks);
+    DiffMemory diffMem;
+    diffMem.setMaxIoBlocks(maxIoBlocks);
 
     /* Loop */
     uint64_t lsid = -1;

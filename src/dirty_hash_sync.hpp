@@ -241,7 +241,6 @@ bool dirtyHashSyncServer(
 
     if (doWriteDiff) {
         DiffFileHeader wdiffH;
-        wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
         wdiffH.setUuid(uuid);
         wdiffH.writeTo(fileW);
     }
@@ -304,7 +303,6 @@ bool dirtyHashSyncServer2(
 
     if (doWriteDiff) {
         DiffFileHeader wdiffH;
-        wdiffH.setMaxIoBlocksIfNecessary(bulkLb);
         wdiffH.setUuid(uuid);
         wdiffH.writeTo(fileW);
     }

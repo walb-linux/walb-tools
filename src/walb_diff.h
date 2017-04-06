@@ -85,9 +85,8 @@ struct walb_diff_file_header
     uint16_t version;        /* WalB diff version */
     uint8_t type;            /* WALB_DIFF_TYPE_XXX */
     uint8_t reserved1;
-    uint32_t max_io_blocks;  /* Max io_blocks inside the diff.
-                                This is used for overlapped check. */
     uint32_t reserved2;
+    uint32_t reserved3;
     uint8_t uuid[UUID_SIZE]; /* Identifier of the target block device. */
 } __attribute__((packed));
 

@@ -122,12 +122,13 @@ void runDummyProxy(const Option &opt)
     pkt.write(opt.volId);
     pkt.write(proxyHT);
     pkt.write(fileH.getUuid());
-    pkt.write(fileH.getMaxIoBlocks());
+    uint32_t maxIoBlocks = 0; // unused
+    pkt.write(maxIoBlocks);
     const uint64_t sizeLb = opt.size >> 9;
     pkt.write(sizeLb);
     pkt.write(opt.diff);
     logger.debug() << "send" << opt.volId << proxyHT << fileH.getUuid()
-                   << fileH.getMaxIoBlocks() << sizeLb << opt.diff;
+                   << sizeLb << opt.diff;
     std::string res;
     pkt.read(res);
     if (res != opt.responseMsg) {

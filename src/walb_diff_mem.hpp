@@ -81,21 +81,27 @@ class DiffMemory
 public:
     using Map = std::map<uint64_t, DiffRecIo>;
 private:
-    /* All IOs must not exceed the size inside the map. */
-    const uint32_t maxIoBlocks_;
+    /*
+     * This parameter is in order not to exist too large IOs.
+     * 0 means no limitation.
+     */
+    uint32_t maxIoBlocks_;
+
     Map map_;
     DiffFileHeader fileH_;
     uint64_t nIos_; /* Number of IOs in the diff. */
     uint64_t nBlocks_; /* Number of logical blocks in the diff. */
 
 public:
-    explicit DiffMemory(uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS)
-        : maxIoBlocks_(maxIoBlocks), map_(), fileH_(), nIos_(0), nBlocks_(0) {
+    DiffMemory()
+        : maxIoBlocks_(DEFAULT_MAX_IO_LB)
+        , map_(), fileH_(), nIos_(0), nBlocks_(0) {
         fileH_.init();
     }
     ~DiffMemory() noexcept = default;
+    void setMaxIoBlocks(uint32_t maxIoBlocks) { maxIoBlocks_ = maxIoBlocks; }
     bool empty() const { return map_.empty(); }
-    void add(const DiffRecord& rec, DiffIo &&io, uint32_t maxIoBlocks = 0);
+    void add(const DiffRecord& rec, DiffIo &&io);
     void print(::FILE *fp = ::stdout) const;
     uint64_t getNBlocks() const { return nBlocks_; }
     uint64_t getNIos() const { return nIos_; }

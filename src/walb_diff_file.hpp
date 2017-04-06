@@ -27,16 +27,7 @@ struct DiffFileHeader : walb_diff_file_header
         init();
     }
     uint32_t getChecksum() const { return checksum; }
-    uint32_t getMaxIoBlocks() const { return max_io_blocks; }
     cybozu::Uuid getUuid() const { return cybozu::Uuid(&uuid[0]); }
-
-    void setMaxIoBlocksIfNecessary(uint32_t ioBlocks) {
-        if (max_io_blocks < ioBlocks) {
-            max_io_blocks = ioBlocks;
-        }
-    }
-
-    void resetMaxIoBlocks() { max_io_blocks = 0; }
 
     size_t getSize() const { return sizeof(walb_diff_file_header); }
 
@@ -82,10 +73,9 @@ struct DiffFileHeader : walb_diff_file_header
 };
 
 template <class Writer>
-void writeDiffFileHeader(Writer& writer, uint32_t maxIoBlocks, const cybozu::Uuid &uuid)
+void writeDiffFileHeader(Writer& writer, const cybozu::Uuid &uuid)
 {
     DiffFileHeader fileH;
-    fileH.setMaxIoBlocksIfNecessary(maxIoBlocks);
     fileH.setUuid(uuid);
     fileH.writeTo(writer);
 }

@@ -41,7 +41,7 @@ class DiffConverter /* final */
 {
 public:
     void convert(int inputLogFd, int outputWdiffFd,
-                 uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS);
+                 uint32_t maxIoBlocks = DEFAULT_MAX_IO_LB);
 private:
     /**
      * Convert a wlog.
@@ -65,7 +65,7 @@ class IndexedDiffConverter /* final */
 {
 public:
     void convert(int inputLogFd, int outputWdiffFd,
-                 uint32_t maxIoBlocks = DEFAULT_MAX_WDIFF_IO_BLOCKS);
+                 uint32_t maxIoBlocks = DEFAULT_MAX_IO_LB);
 private:
     bool convertWlog(uint64_t &lsid, uint64_t &writtenBlocks, int fd,
                      IndexedDiffWriter &writer, DiffFileHeader &wdiffH);

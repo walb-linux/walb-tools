@@ -175,19 +175,22 @@ std::vector<DiffRecIo> DiffRecIo::minus(const DiffRecIo &rhs) const
     return v;
 }
 
-void DiffMemory::add(const DiffRecord& rec, DiffIo &&io, uint32_t maxIoBlocks)
+void DiffMemory::add(const DiffRecord& rec, DiffIo &&io)
 {
-    /* Decide key range to search. */
-    uint64_t addr0 = rec.io_address;
-    if (addr0 <= fileH_.getMaxIoBlocks()) {
-        addr0 = 0;
-    } else {
-        addr0 -= fileH_.getMaxIoBlocks();
-    }
-    /* Search overlapped items. */
-    uint64_t addr1 = rec.endIoAddress();
-    std::queue<DiffRecIo> q;
+    /* Decide key range to search overlapped items.
+     * We must start from the item which have max address
+     * in all the items that address is less than the addr0. */
+    const uint64_t addr0 = rec.io_address;
     auto it = map_.lower_bound(addr0);
+    if (it == map_.end()) {
+        if (!map_.empty()) --it;
+    } else {
+        if (addr0 < it->first && it != map_.begin()) --it;
+    }
+
+    /* Search overlapped items. */
+    const uint64_t addr1 = rec.endIoAddress();
+    std::queue<DiffRecIo> q;
     while (it != map_.end() && it->first < addr1) {
         DiffRecIo &r = it->second;
         if (r.record().isOverlapped(rec)) {
@@ -199,6 +202,7 @@ void DiffMemory::add(const DiffRecord& rec, DiffIo &&io, uint32_t maxIoBlocks)
             ++it;
         }
     }
+
     /* Eliminate overlaps. */
     DiffRecIo r0(rec, std::move(io));
     while (!q.empty()) {
@@ -215,18 +219,15 @@ void DiffMemory::add(const DiffRecord& rec, DiffIo &&io, uint32_t maxIoBlocks)
     nIos_++;
     nBlocks_ += r0.record().io_blocks;
     std::vector<DiffRecIo> rv;
-    if (0 < maxIoBlocks && maxIoBlocks < rec.io_blocks) {
-        rv = r0.splitAll(maxIoBlocks);
-    } else if (maxIoBlocks_ < rec.io_blocks) {
+    if (maxIoBlocks_ < rec.io_blocks) {
+        // split a large IO into smaller IOs.
         rv = r0.splitAll(maxIoBlocks_);
     } else {
         rv.push_back(std::move(r0));
     }
     for (DiffRecIo &r : rv) {
         uint64_t addr = r.record().io_address;
-        uint32_t blks = r.record().io_blocks;
         map_.emplace(addr, std::move(r));
-        fileH_.setMaxIoBlocksIfNecessary(blks);
     }
 }
 
@@ -318,9 +319,6 @@ void DiffMemory::eraseFromMap(Map::iterator& i)
     nIos_--;
     nBlocks_ -= i->second.record().io_blocks;
     i = map_.erase(i);
-    if (map_.empty()) {
-        fileH_.resetMaxIoBlocks();
-    }
 }
 
 } //namespace walb

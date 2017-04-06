@@ -62,7 +62,6 @@ public:
         }
 
         DiffFileHeader head;
-        head.setMaxIoBlocksIfNecessary(ioBlocks_);
         if (isIndexed) {
             iWriter.writeHeader(head);
         } else {

@@ -101,10 +101,6 @@ void makeSortedWdiff1(TmpDiffFile &file, const SioList &sl)
 {
     SortedDiffWriter writer(file.fd());
     DiffFileHeader header;
-    header.max_io_blocks = 0;
-    for (const Sio &sio : sl) {
-        header.max_io_blocks = std::max(header.max_io_blocks, sio.ioBlocks);
-    }
     writer.writeHeader(header);
     for (const Sio &sio : sl) {
         DiffRecord rec;

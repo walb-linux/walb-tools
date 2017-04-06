@@ -854,14 +854,14 @@ bool runNoMergeDiffReplClient(
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     DiffFileHeader fileH;
     fileH.readFrom(fileR);
-    const uint32_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const uint32_t maxIoBlocks = 0; // unused
     const cybozu::Uuid uuid = fileH.getUuid();
     pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
     pkt.write(uuid);
     pkt.write(diff);
     pkt.flush();
-    logger.debug() << "diff-repl-client" << sizeLb << maxIoBlocks << uuid << diff;
+    logger.debug() << "diff-repl-client" << sizeLb << uuid << diff;
 
     std::string res;
     pkt.read(res);
@@ -901,14 +901,14 @@ bool runDiffReplClient(
 
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
     const DiffFileHeader &fileH = merger.header();
-    const uint32_t maxIoBlocks = fileH.getMaxIoBlocks();
+    const uint32_t maxIoBlocks = 0; // unused
     const cybozu::Uuid uuid = fileH.getUuid();
     pkt.write(sizeLb);
     pkt.write(maxIoBlocks);
     pkt.write(uuid);
     pkt.write(mergedDiff);
     pkt.flush();
-    logger.debug() << "diff-repl-client" << sizeLb << maxIoBlocks << uuid << mergedDiff;
+    logger.debug() << "diff-repl-client" << sizeLb << uuid << mergedDiff;
 
     std::string res;
     pkt.read(res);
@@ -943,10 +943,10 @@ bool runDiffReplServer(
     MetaDiff diff;
     try {
         pkt.read(sizeLb);
-        pkt.read(maxIoBlocks);
+        pkt.read(maxIoBlocks); // unused
         pkt.read(uuid);
         pkt.read(diff);
-        logger.debug() << "diff-repl-server" << sizeLb << maxIoBlocks << uuid << diff;
+        logger.debug() << "diff-repl-server" << sizeLb << uuid << diff;
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
         verifyVolumeSize(volSt, volInfo, sizeLb, logger);
         if (!canApply(metaSt, diff)) {
@@ -965,7 +965,7 @@ bool runDiffReplServer(
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
-    writeDiffFileHeader(fileW, maxIoBlocks, uuid);
+    writeDiffFileHeader(fileW, uuid);
     if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps, ga.fsyncIntervalSize)) {
         logger.warn() << "diff-repl-server force-stopped" << volId;
         return false;
@@ -2099,10 +2099,10 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
         pkt.read(volId);
         pkt.read(hostType);
         pkt.read(uuid);
-        pkt.read(maxIoBlocks);
+        pkt.read(maxIoBlocks); // unused
         pkt.read(sizeLb);
         pkt.read(diff);
-        logger.debug() << "recv" << volId << hostType << uuid << maxIoBlocks << sizeLb << diff;
+        logger.debug() << "recv" << volId << hostType << uuid << sizeLb << diff;
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState& volSt = getArchiveVolState(volId);
@@ -2204,7 +2204,7 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
         const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
         cybozu::TmpFile tmpFile(volInfo.volDir.str());
         cybozu::util::File fileW(tmpFile.fd());
-        writeDiffFileHeader(fileW, maxIoBlocks, uuid);
+        writeDiffFileHeader(fileW, uuid);
         if (!wdiffTransferServer(pkt, tmpFile.fd(), volSt.stopState, ga.ps, ga.fsyncIntervalSize)) {
             logger.warn() << FUNC << "force stopped" << volId;
             return;

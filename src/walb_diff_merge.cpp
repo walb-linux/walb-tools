@@ -146,8 +146,6 @@ void DiffMerger::prepare()
 
         wdiffH_.init();
         wdiffH_.setUuid(uuid);
-        wdiffH_.setMaxIoBlocksIfNecessary(
-            maxIoBlocks_ == 0 ? getMaxIoBlocks() : maxIoBlocks_);
 
         removeEndedWdiffs();
         doneAddr_ = getMinimumAddr();
@@ -336,16 +334,6 @@ void DiffMerger::verifyUuid(const cybozu::Uuid &uuid) const
             throw cybozu::Exception(__func__) << "uuid differ" << uuid1 << uuid;
         }
     }
-}
-
-uint32_t DiffMerger::getMaxIoBlocks() const
-{
-    uint32_t ret = 0;
-    for (const WdiffPtr &wdiffP : wdiffs_) {
-        const uint32_t m = wdiffP->header().getMaxIoBlocks();
-        if (ret < m) ret = m;
-    }
-    return ret;
 }
 
 } //namespace walb
