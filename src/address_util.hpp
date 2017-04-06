@@ -24,8 +24,26 @@ inline uint32_t getAlignedSize(uint64_t v)
 }
 
 
+inline bool isAlignedSize(uint32_t s)
+{
+    assert(s != 0);
+    return __builtin_popcount(s) == 1;
+}
+
+
+inline bool isAlignedIo(uint64_t ioAddress, uint32_t ioBlocks)
+{
+    return ioBlocks <= getAlignedSize(ioAddress) && isAlignedSize(ioBlocks);
+}
+
 /**
  * Get max aliend size not greater than a given size.
+ *
+ * Examples:
+ *   input -> output
+ *   4095 -> 2048
+ *   4096 -> 4096
+ *   4097 -> 4096
  */
 inline uint32_t getMaxAlignedSize(uint32_t s)
 {
@@ -42,34 +60,23 @@ inline uint32_t getMaxAlignedSize(uint32_t s)
 
 /**
  * Split an address range to alined ones.
+ * maxIoBlocks: 0 means unlimit. It uses getMaxAlignedSize(maxIoBlocks).
  */
-inline std::vector<uint32_t> splitIoToAligned(uint64_t ioAddress, uint32_t ioBlocks)
+inline std::vector<uint32_t> splitIoToAligned(uint64_t ioAddress, uint32_t ioBlocks, uint32_t maxIoBlocks = 0)
 {
+    maxIoBlocks = getMaxAlignedSize(maxIoBlocks);
     std::vector<uint32_t> v;
     while (ioBlocks > 0) {
-        //::printf("addr %" PRIx64 "\tblks %u\n", ioAddress, ioBlocks);
         uint32_t s = getAlignedSize(ioAddress);
-        //::printf("s0 %u\n", s);
         if (s > ioBlocks) {
             s = getMaxAlignedSize(ioBlocks);
-            //::printf("s1 %u %u\n", s, ioBlocks);
+        }
+        if (maxIoBlocks > 0) {
+            s = std::min(s, maxIoBlocks);
         }
         v.push_back(s);
         ioAddress += s;
         ioBlocks -= s;
     }
     return v;
-}
-
-
-inline bool isAlignedSize(uint32_t s)
-{
-    assert(s != 0);
-    return __builtin_popcount(s) == 1;
-}
-
-
-inline bool isAlignedIo(uint64_t ioAddress, uint32_t ioBlocks)
-{
-    return ioBlocks <= getAlignedSize(ioAddress) && isAlignedSize(ioBlocks);
 }

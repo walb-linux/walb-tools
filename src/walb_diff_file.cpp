@@ -328,7 +328,7 @@ void DiffIndexMem::addDetail(const IndexedDiffRecord &rec)
     /* Eliminate overlaps. */
     while (!q.empty()) {
         for (const IndexedDiffRecord &r0 : q.front().minus(rec)) {
-            for (const IndexedDiffRecord &r1 : r0.split()) {
+            for (const IndexedDiffRecord &r1 : r0.split(maxIoBlocks_)) {
                 index_.emplace(r1.io_address, r1);
             }
         }

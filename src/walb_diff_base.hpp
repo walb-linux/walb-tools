@@ -270,7 +270,7 @@ struct IndexedDiffRecord : public walb_indexed_diff_record
         }
     }
 
-    std::vector<IndexedDiffRecord> split() const;
+    std::vector<IndexedDiffRecord> split(uint32_t maxIoBlocks = 0) const;
     std::vector<IndexedDiffRecord> minus(const IndexedDiffRecord& rhs) const;
 
     void updateRecChecksum();

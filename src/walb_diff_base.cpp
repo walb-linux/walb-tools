@@ -251,10 +251,10 @@ std::string IndexedDiffRecord::toStr(const char *prefix) const
         , isAllZero() ? 'Z' : '-', isDiscard() ? 'D' : '-');
 }
 
-std::vector<IndexedDiffRecord> IndexedDiffRecord::split() const
+std::vector<IndexedDiffRecord> IndexedDiffRecord::split(uint32_t maxIoBlocks) const
 {
     const std::vector<uint32_t> sizeV =
-        splitIoToAligned(io_address, io_blocks);
+        splitIoToAligned(io_address, io_blocks, maxIoBlocks);
 
     uint64_t addr = io_address;
     uint32_t off = io_offset;

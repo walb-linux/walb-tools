@@ -308,11 +308,14 @@ class DiffIndexMem
 private:
     using Map = std::map<uint64_t, IndexedDiffRecord>;
     Map index_; // key: io_address.
+    uint32_t maxIoBlocks_;
 
     void addDetail(const IndexedDiffRecord &rec);
 public:
+    DiffIndexMem() : index_(), maxIoBlocks_(DEFAULT_MAX_IO_LB) {}
+    void setMaxIoBlocks(uint32_t maxIoBlocks) { maxIoBlocks_ = maxIoBlocks; }
     void add(const IndexedDiffRecord &rec) {
-        for (const IndexedDiffRecord& r : rec.split()) {
+        for (const IndexedDiffRecord& r : rec.split(maxIoBlocks_)) {
             addDetail(r);
         }
     }
