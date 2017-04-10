@@ -212,7 +212,7 @@ void DiffMemory::add(const DiffRecord& rec, AlignedArray &&buf)
     nIos_++;
     nBlocks_ += r0.record().io_blocks;
     std::vector<DiffRecIo> rv;
-    if (maxIoBlocks_ < rec.io_blocks) {
+    if (maxIoBlocks_ > 0 && maxIoBlocks_ < rec.io_blocks) {
         // split a large IO into smaller IOs.
         rv = r0.splitAll(maxIoBlocks_);
     } else {
