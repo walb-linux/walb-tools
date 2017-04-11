@@ -53,6 +53,7 @@ void putChunkDigest(cybozu::SipHash24& hasher, uint64_t chunkId)
 {
     cybozu::Hash128 hash = hasher.finalize128();
     ::printf("%016" PRIx64 "\t%s\n", chunkId, hash.str().c_str());
+    ::fflush(::stdout);
 }
 
 
@@ -60,6 +61,7 @@ void putWholeDigest(cybozu::SipHash24& hasher)
 {
     cybozu::Hash128 hash = hasher.finalize128();
     ::printf("%s\n", hash.str().c_str());
+    ::fflush(::stdout);
 }
 
 
