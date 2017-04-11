@@ -1,0 +1,50 @@
+sudo: required
+dist: trusty
+language: cpp
+compiler:
+  - gcc
+before_install:
+  - sudo apt install -y linux-headers-`uname -r`
+  - sudo apt install -y libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
+script:
+  - mkdir work
+  - cd work
+  - git clone https://github.com/herumi/cybozulib
+  - git clone https://github.com/herumi/walb
+  - git clone https://github.com/herumi/walb-tools
+  - pushd walb/module
+  - make
+  - sudo insmod walb-mod.ko
+  - sudo dmesg|tail
+  - popd
+  - pushd walb-tools
+  - ln -s ../walb .
+  - ln -s ../cybozulib .
+  - echo make CXX=g++ CC=gcc utest_all -j4 ENABLE_EXEC_PROTOCOL=1
+  - echo utest/action_counter_test
+  - make CXX=g++ CC=gcc -j4 ENABLE_EXEC_PROTOCOL=1
+  - dd if=/dev/zero of=disk0 count=150 bs=1M
+  - dd if=/dev/zero of=disk1 count=100 bs=1M
+  - dd if=/dev/zero of=disk2 count=100 bs=1M
+  - sudo losetup -f disk0
+  - sudo losetup -f disk1
+  - sudo losetup -f disk2
+  - sudo losetup -a
+  - sudo pvcreate /dev/loop0
+  - sudo pvcreate /dev/loop1
+  - sudo pvcreate /dev/loop2
+  - sudo pvs
+  - sudo vgcreate test /dev/loop0
+  - sudo vgcreate vg0 /dev/loop1
+  - sudo vgcreate vg1 /dev/loop2
+  - sudo vgs
+  - sudo lvcreate -n data -L 15m test
+  - sudo lvcreate -n data2 -L 15m test
+  - sudo lvcreate -n data3 -L 15m test
+  - sudo lvcreate -n log -L 15m test
+  - sudo lvcreate -n log2 -L 15m test
+  - sudo lvcreate -n log3 -L 15m test
+  - echo sudo python stest/scenario0.py n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10 n11a n11b n12 n13 n14
+  - sudo python stest/scenario0.py n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10
+  - cat stest/tmp/*.log
+  - ls -al /dev/walb/*
