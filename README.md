@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/herumi/walb-tools.png)](https://travis-ci.org/herumi/walb-tools)
 ## What are walb-tools?
 
 Backup and replication software for walb devices.
