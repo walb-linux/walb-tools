@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/herumi/walb-tools.png)](https://travis-ci.org/herumi/walb-tools)
+[![Build Status](https://travis-ci.org/walb-linux/walb-tools.png)](https://travis-ci.org/walb-linux/walb-tools)
 ## What are walb-tools?
 
 Backup and replication software for walb devices.
