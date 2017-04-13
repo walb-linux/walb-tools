@@ -9,9 +9,9 @@ before_install:
 script:
   - mkdir work
   - cd work
-  - git clone https://github.com/herumi/cybozulib
-  - git clone https://github.com/herumi/walb
-  - git clone https://github.com/herumi/walb-tools
+  - git clone --depth 1 https://github.com/herumi/cybozulib
+  - git clone --depth 1 https://github.com/herumi/walb
+  - git clone --depth 1 https://github.com/herumi/walb-tools
   - pushd walb/module
   - make
   - sudo insmod walb-mod.ko
@@ -20,31 +20,39 @@ script:
   - pushd walb-tools
   - ln -s ../walb .
   - ln -s ../cybozulib .
-  - echo make CXX=g++ CC=gcc utest_all -j4 ENABLE_EXEC_PROTOCOL=1
+  - make CXX=g++ CC=gcc utest -j4 ENABLE_EXEC_PROTOCOL=1
+  - echo make CXX=g++ CC=gcc utest_all ENABLE_EXEC_PROTOCOL=1
   - echo utest/action_counter_test
   - make CXX=g++ CC=gcc -j4 ENABLE_EXEC_PROTOCOL=1
   - dd if=/dev/zero of=disk0 count=150 bs=1M
-  - dd if=/dev/zero of=disk1 count=100 bs=1M
-  - dd if=/dev/zero of=disk2 count=100 bs=1M
+  - dd if=/dev/zero of=disk1 count=300 bs=1M
+  - dd if=/dev/zero of=disk2 count=300 bs=1M
+  - dd if=/dev/zero of=disk3 count=300 bs=1M
   - sudo losetup -f disk0
   - sudo losetup -f disk1
   - sudo losetup -f disk2
+  - sudo losetup -f disk3
   - sudo losetup -a
   - sudo pvcreate /dev/loop0
   - sudo pvcreate /dev/loop1
   - sudo pvcreate /dev/loop2
+  - sudo pvcreate /dev/loop3
   - sudo pvs
   - sudo vgcreate test /dev/loop0
   - sudo vgcreate vg0 /dev/loop1
   - sudo vgcreate vg1 /dev/loop2
+  - sudo vgcreate vg2 /dev/loop3
   - sudo vgs
+  - echo sudo lvcreate -T -L 100m vg0/tp0
+  - echo sudo lvcreate -T -L 100m vg1/tp0
+  - echo sudo lvcreate -T -L 100m vg2/tp0
   - sudo lvcreate -n data -L 15m test
   - sudo lvcreate -n data2 -L 15m test
   - sudo lvcreate -n data3 -L 15m test
   - sudo lvcreate -n log -L 15m test
   - sudo lvcreate -n log2 -L 15m test
   - sudo lvcreate -n log3 -L 15m test
-  - echo sudo python stest/scenario0.py n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10 n11a n11b n12 n13 n14
-  - sudo python stest/scenario0.py n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10
+  - echo sudo python stest/scenario0.py -tp n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10 n11a n11b n12 n13 n14
+  - sudo python stest/scenario0.py
   - cat stest/tmp/*.log
   - ls -al /dev/walb/*
