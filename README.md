@@ -3,7 +3,7 @@
 
 Backup and replication software for walb devices.
 WalB kernel device driver is available here:
-[walb repository](https://github.com/starpos/walb/)
+[walb repository](https://github.com/walb-linux/walb-driver/)
 
 For details, see [doc/README.md](doc/README.md).
 
