@@ -191,6 +191,41 @@ ALL_SRC=$(BIN_SOURCES) $(OTHER_SOURCES) $(TEST_SOURCES)
 DEPEND_FILE=$(ALL_SRC:.cpp=.d)
 -include $(DEPEND_FILE)
 
+make_files_for_loop_back:
+	dd if=/dev/zero of=disk0 count=150 bs=1M
+	dd if=/dev/zero of=disk1 count=300 bs=1M
+	dd if=/dev/zero of=disk2 count=300 bs=1M
+	dd if=/dev/zero of=disk3 count=300 bs=1M
+
+losetup_for_test:
+	losetup -f disk0
+	losetup -f disk1
+	losetup -f disk2
+	losetup -f disk3
+
+setup_vg_for_test:
+	pvcreate /dev/loop0
+	pvcreate /dev/loop1
+	pvcreate /dev/loop2
+	pvcreate /dev/loop3
+	vgcreate test /dev/loop0
+	vgcreate vg0 /dev/loop1
+	vgcreate vg1 /dev/loop2
+	vgcreate vg2 /dev/loop3
+
+setup_lv_for_test:
+	lvcreate -n data -L 15m test
+	lvcreate -n data2 -L 15m test
+	lvcreate -n data3 -L 15m test
+	lvcreate -n log -L 15m test
+	lvcreate -n log2 -L 15m test
+	lvcreate -n log3 -L 15m test
+
+setup_for_test:
+	make make_files_for_loop_back
+	make losetup_for_test
+	make setup_vg_for_test
+	make setup_lv_for_test
 
 # don't remove these files automatically
 .SECONDARY: $(ALL_SRC:.cpp=.o)
