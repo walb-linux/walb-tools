@@ -17,6 +17,18 @@ LICENSE_TYPE: Public Domain
 AUTHORS: Austin Appleby
 URL: https://github.com/aappleby/smhasher
 
+FILES: cybozulib/*
+LICENSE_TYPE: BSD-3-Clause
+COPYRIGHT: (C) 2012 Cybozu Labs, Inc.
+AUTHORS: Shigeo Mitsunari
+URL: https://github.com/herumi/cybozulib/
+
+FILES: walb/*
+LICENSE_TYPE: GPL-2.0 or GPL-3.0
+AUTHORS: Takashi Hoshino, Shigeo Mitsunari
+COPYRIGHT: (C) 2010 Cybozu Labs, Inc.
+URL: https://github.com/walb-linux/walb-driver/
+
 FILES: all other files.
 LICENSE_TYPE: GPL-2.0 or GPL-3.0
 AUTHORS: Takashi Hoshino, Shigeo Mitsunari
