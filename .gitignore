@@ -2,9 +2,6 @@
 *.o
 *.a
 *.so
-Makefile.depends
-./walb
-cybozulib
 GPATH
 GRTAGS
 GSYMS
