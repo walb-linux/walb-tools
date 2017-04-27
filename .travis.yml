@@ -10,7 +10,6 @@ script:
 # checkout source
   - mkdir work
   - cd work
-  - git clone --depth 1 https://github.com/herumi/cybozulib
   - git clone --depth 1 https://github.com/herumi/walb
   - git clone --depth 1 https://github.com/herumi/walb-tools
 # make driver
@@ -22,8 +21,6 @@ script:
   - popd
 # make userland tools
   - pushd walb-tools
-  - ln -s ../walb .
-  - ln -s ../cybozulib .
   - make CXX=g++ CC=gcc utest -j4 ENABLE_EXEC_PROTOCOL=1
   - echo make CXX=g++ CC=gcc utest_all ENABLE_EXEC_PROTOCOL=1
   - echo utest/action_counter_test
