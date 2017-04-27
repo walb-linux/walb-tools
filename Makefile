@@ -214,18 +214,18 @@ setup_vg_for_test:
 	vgcreate vg2 /dev/loop3
 
 setup_lv_for_test:
-	lvcreate -n data -L 15m test
-	lvcreate -n data2 -L 15m test
-	lvcreate -n data3 -L 15m test
-	lvcreate -n log -L 15m test
-	lvcreate -n log2 -L 15m test
-	lvcreate -n log3 -L 15m test
+	lvcreate -n data -L 12m test
+	lvcreate -n data2 -L 12m test
+	lvcreate -n data3 -L 12m test
+	lvcreate -n log -L 12m test
+	lvcreate -n log2 -L 12m test
+	lvcreate -n log3 -L 12m test
 
 setup_for_test:
-	make make_files_for_loop_back
-	make losetup_for_test
-	make setup_vg_for_test
-	make setup_lv_for_test
+	$(MAKE) make_files_for_loop_back
+	$(MAKE) losetup_for_test
+	$(MAKE) setup_vg_for_test
+	$(MAKE) setup_lv_for_test
 
 # don't remove these files automatically
 .SECONDARY: $(ALL_SRC:.cpp=.o)
