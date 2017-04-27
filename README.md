@@ -16,14 +16,14 @@ For details, see [doc/README.md](doc/README.md).
 - utest: unit test code.
 - itest: integration test code.
 - stest: scenario test code.
+- walb: header files from walb kernel driver.
+- cybozulib: header files from cybozulib. [GitHub repository](https://github.com/herumi/cybozulib/)
 
 ## Requirements for build
 
 - C++11 compiler.
 - libaio.
 - Compression libraries: libsnappy, liblzma, libz.
-- Header files of WalB kernel driver.
-- cybozulib. [GitHub repository](https://github.com/herumi/cybozulib/)
 
 ## Copyright
 

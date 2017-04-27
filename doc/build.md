@@ -26,22 +26,6 @@ Do not use heterogeneous environments.
 ```
 > sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
 ```
-- cybozulib. [Github repository](https://github.com/herumi/cybozulib/)
-- walb headers. [Github repository](https://github.com/starpos/walb/)
-```
-> git clone git@github.com:herumi/cybozulib.git
-> git clone git@github.com:starpos/walb.git
-```
-
-
-## Prepare to build
-
-Create symlinks for make find the cybozulib and walb headers.
-```
-> cd walb-tools.git
-> ln -s /path/to/cybozulib cybozulib
-> ln -s /path/to/walb walb
-```
 
 
 ## Build
