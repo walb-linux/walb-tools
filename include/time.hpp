@@ -198,8 +198,8 @@ struct TimespecBase : timespec
         return (double)this->tv_sec + (double)this->tv_nsec / (double)1000000000;
     }
     void setAsDouble(double sec) {
-        const size_t s = sec;
-        set(s, sec - (double)s);
+        const double s = double(size_t(sec));
+        set(time_t(s), long((sec - s) * (double)1000000000));
     }
 };
 
