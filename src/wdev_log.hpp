@@ -193,7 +193,8 @@ public:
         : SimpleWldevReader(cybozu::util::File(wldevPath, O_RDONLY | O_DIRECT)) {
     }
     SuperBlock &super() { return super_; }
-    void reset(uint64_t lsid) {
+    void reset(uint64_t lsid, uint64_t maxSizePb = UINT64_MAX) {
+        unusedVar(maxSizePb);
         lsid_ = lsid;
         seek();
     }
@@ -274,6 +275,8 @@ private:
     };
     std::queue<Io> ioQ_;
 
+    uint64_t readAheadPb_; // read ahead size [physical block]
+
     static constexpr size_t DEFAULT_BUFFER_SIZE = 4U << 20; /* 4MiB */
     static constexpr size_t DEFAULT_MAX_IO_SIZE = 64U << 10; /* 64KiB. */
 public:
@@ -293,7 +296,8 @@ public:
         , aio_(file_.fd(), bufferSize / pbs_ + 1)
         , aheadLsid_(0)
         , ringBuf_()
-        , ioQ_() {
+        , ioQ_()
+        , readAheadPb_(UINT64_MAX) {
         assert(pbs_ != 0);
         verifyMultiple(bufferSize, pbs_, "bad bufferSize");
         verifyMultiple(maxIoSize_, pbs_, "bad maxIoSize");
@@ -319,7 +323,7 @@ public:
     /**
      * Reset current IOs and start read from a lsid.
      */
-    void reset(uint64_t lsid);
+    void reset(uint64_t lsid, uint64_t maxSizePb = UINT64_MAX);
     void read(void *data, size_t size);
     void skip(size_t size);
 private:
@@ -338,6 +342,10 @@ private:
     void prepareReadableData() {
         if (ringBuf_.getReadableSize() > 0) return;
         if (ioQ_.empty()) readAhead();
+        if (ioQ_.empty()) {
+            assert(readAheadPb_ == 0);
+            throw cybozu::Exception(NAME()) << "reached max read size.";
+        }
         assert(!ioQ_.empty());
         ringBuf_.complete(waitForIo());
     }

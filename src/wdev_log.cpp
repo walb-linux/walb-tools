@@ -125,7 +125,7 @@ bool SuperBlock::isValid(bool isChecksum) const
 }
 
 
-void AsyncWldevReader::reset(uint64_t lsid)
+void AsyncWldevReader::reset(uint64_t lsid, uint64_t maxSizePb)
 {
     /* Wait for all pending aio(s). */
     while (!ioQ_.empty()) {
@@ -134,6 +134,7 @@ void AsyncWldevReader::reset(uint64_t lsid)
     /* Reset indicators. */
     aheadLsid_ = lsid;
     ringBuf_.reset();
+    readAheadPb_ = maxSizePb;
 }
 
 
@@ -164,6 +165,7 @@ void AsyncWldevReader::skip(size_t size)
 bool AsyncWldevReader::prepareAheadIo()
 {
     if (aio_.isQueueFull()) return false;
+    if (readAheadPb_ == 0) return false;
     const size_t ioSize = decideIoSize();
     if (ioSize == 0) return false;
     char *ptr = ringBuf_.prepare(ioSize);
@@ -174,6 +176,10 @@ bool AsyncWldevReader::prepareAheadIo()
     const uint64_t offPb1 = super_.getOffsetFromLsid(aheadLsid_ + ioPb);
     assert(offPb < offPb1 || offPb1 == super_.getRingBufferOffset());
 #endif
+
+    readAheadPb_ -= std::min(ioPb, readAheadPb_);
+    // If readAheadPb_ becomes 0, next prepareAheadIo() will return false.
+
     const uint64_t off = offPb * pbs_;
     const uint32_t aioKey = aio_.prepareRead(off, ioSize, ptr);
     assert(aioKey > 0);

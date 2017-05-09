@@ -857,7 +857,7 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
     WlogSender sender(sock, logger, pbs, salt);
 
     LogPackHeader packH(pbs, salt);
-    reader.reset(lsidB);
+    reader.reset(lsidB, maxLogSizePb);
 
     LOGs.debug() << FUNC << "start" << volId << lsidB << lsidLimit;
     AlignedArray buf;
