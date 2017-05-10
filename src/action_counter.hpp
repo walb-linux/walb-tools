@@ -72,10 +72,12 @@ class ActionCounterTransaction
     std::recursive_mutex &mu_;
     ActionCounterItem *p_;
     bool closed_;
+    size_t count_; // first transaction will have 0.
 public:
     ActionCounterTransaction(ActionCounters &ac, const std::string &name)
-        : mu_(ac.mu_), p_(ac.get(name)), closed_(false) {
+        : mu_(ac.mu_), p_(ac.get(name)), closed_(false), count_(0) {
         std::lock_guard<std::recursive_mutex> lk(mu_);
+        count_ = p_->count;
         p_->count++;
         p_->bgn_time = ::time(0);
     }
@@ -88,6 +90,7 @@ public:
     ~ActionCounterTransaction() noexcept {
         close();
     }
+    size_t count() const { return count_; }
 };
 
 } // namespace walb

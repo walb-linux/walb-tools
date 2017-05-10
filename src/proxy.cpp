@@ -431,11 +431,15 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;
         return DONT_SEND;
     }
-
     const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
-    cybozu::Socket sock;
     ActionCounterTransaction trans(volSt.ac, archiveName);
+    if (trans.count() > 0) {
+        LOGs.debug() << FUNC << "another task is running" << volId << archiveName;
+        return DONT_SEND;
+    }
+
     ul.unlock();
+    cybozu::Socket sock;
     util::connectWithTimeout(sock, hi.addrPort.getSocketAddr(), gp.socketTimeout);
     gp.setSocketParams(sock);
     const std::string serverId = protocol::run1stNegotiateAsClient(sock, gp.nodeId, wdiffTransferPN);
