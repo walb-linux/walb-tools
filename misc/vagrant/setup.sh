@@ -102,3 +102,9 @@ sudo ${BINSRC}/walb-storage -b ${DATA}/s0/ -l ${DATA}/s0.log -archive localhost:
 sudo ${BINSRC}/walb-proxy -b ${DATA}/p0/ -l ${DATA}/p0.log -p 10100 -bg 1 -fg 2 -id p0 &
 sudo ${BINSRC}/walb-archive -b ${DATA}/a0/ -vg tutorial -l ${DATA}/a0.log -p 10200 -fg 2 -id a0 &
 
+# for tutorial.2py
+if [ -f tutorial2-disk ]; then
+	sudo losetup /dev/loop1 tutorial2-disk
+	mkdir ${DATA}/a1
+	sudo ${BINSRC}/walb-archive -b ${DATA}/a1/ -vg tutorial2 -l ${DATA}/a1.log -p 10201 -fg 2 -id a1 &
+fi

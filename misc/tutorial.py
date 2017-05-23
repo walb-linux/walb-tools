@@ -8,10 +8,10 @@ wdevcPath = binDir + 'wdevc'
 walbcPath = binDir + 'walbc'
 
 def dataPath(s):
-  return '/mnt/tutorial/data/%s/' % s
+  return '/mnt/tutorial/%s/' % s
 
 def logPath(s):
-  return '/mnt/tutorial/data/%s.log' % s
+  return '/mnt/tutorial/%s.log' % s
 
 s0_conn  = ServerConnectionParam('s0', 'localhost', 10000, K_STORAGE)
 s0_start = ServerStartupParam(s0_conn, binDir, dataPath('s0'), logPath('s0'))
@@ -34,4 +34,4 @@ walbc = Controller(walbcPath, sLayout) #, isDebug=False) # <= `isDebug` is False
 runCommand = walbc.get_run_remote_command(s0)
 wdev = Device('walb-tutorial-device', '/dev/tutorial/wlog', '/dev/tutorial/wdata', wdevcPath, runCommand)
 
-VOL = 'volm'
+VOL = 'vol'
