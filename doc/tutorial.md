@@ -74,7 +74,6 @@ For Ubuntu 16,
 vagrant box add Ubuntu16 https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-amd64-vagrant.box
 cd walb-tools/misc/vagrant/Ubuntu16
 vagrant up
-vagrant reload
 ```
 
 For CentOS7,
@@ -82,7 +81,6 @@ For CentOS7,
 vagrant box add CentOS7 http://cloud.centos.org/centos/7/vagrant/x86_64/images/CentOS-7.box
 cd walb-tools/misc/vagrant/CentOS7
 vagrant up
-vagrant reload
 ```
 
 ### Login the gust OS and setup WalB
