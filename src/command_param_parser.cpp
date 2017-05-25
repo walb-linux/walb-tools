@@ -292,6 +292,13 @@ KickParam parseKickParam(const StrVec &args)
     return param;
 }
 
+KickParam parseVolIdAndArchiveNameParamForGet(const StrVec &args)
+{
+    KickParam param;
+    cybozu::util::parseStrVec(args, 1, 1, {&param.volId, &param.archiveName});
+    verifyVolIdFormat(param.volId);
+    return param;
+}
 
 uint64_t parseSetFullScanBps(const StrVec &args)
 {

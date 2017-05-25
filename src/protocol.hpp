@@ -91,6 +91,7 @@ const char *const hostTypeTN = "host-type";
 const char *const volTN = "vol";
 const char *const pidTN = "pid";
 const char *const diffTN = "diff";
+const char *const proxyDiffTN = "proxy-diff";
 const char *const applicableDiffTN = "applicable-diff";
 const char *const totalDiffSizeTN = "total-diff-size";
 const char *const numDiffTN = "num-diff";

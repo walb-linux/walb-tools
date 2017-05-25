@@ -211,6 +211,7 @@ struct KickParam
 
 
 KickParam parseKickParam(const StrVec &args);
+KickParam parseVolIdAndArchiveNameParamForGet(const StrVec &args);
 uint64_t parseSetFullScanBps(const StrVec &args);
 
 
@@ -382,5 +383,7 @@ inline void verifyNumActionParamForGet(const StrVec &args) { parseNumActionParam
 inline void verifyIsWdiffSendErrorParamForGet(const StrVec &args) { parseIsWdiffSendErrorParamForGet(args); }
 inline void verifyGetMetaSnapParam(const StrVec &args) { parseVolIdAndGidParam(args, 1, false, UINT64_MAX); }
 inline void verifyGetMetaStateParam(const StrVec &args) { parseGetMetaStateParam(args); }
+inline void verifyVolIdAndArchiveNameParamForGet(const StrVec &args) { parseVolIdAndArchiveNameParamForGet(args); }
+
 
 } // namespace walb

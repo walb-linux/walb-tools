@@ -1118,6 +1118,28 @@ void getHandlerStat(protocol::GetCommandParams &p)
     p.logger.debug() << "get handler-stat succeeded";
 }
 
+static MetaDiffVec getAllWdiffDetail(protocol::GetCommandParams &p)
+{
+    const KickParam param = parseVolIdAndArchiveNameParamForGet(p.params);
+
+    ProxyVolState &volSt = getProxyVolState(param.volId);
+    UniqueLock ul(volSt.mu);
+
+    const MetaDiffManager &mgr = param.archiveName.empty() ?
+        volSt.diffMgr : volSt.diffMgrMap.get(param.archiveName);
+    return mgr.getAll();
+}
+
+void getProxyDiffList(protocol::GetCommandParams &p)
+{
+    const MetaDiffVec diffV = getAllWdiffDetail(p);
+    StrVec v;
+    for (const MetaDiff &diff : diffV) {
+        v.push_back(formatMetaDiff("", diff));
+    }
+    protocol::sendValueAndFin(p, v);
+}
+
 } // namespace proxy_local
 
 } // namespace walb

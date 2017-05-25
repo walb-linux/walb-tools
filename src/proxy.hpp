@@ -304,6 +304,7 @@ void isWdiffSendError(protocol::GetCommandParams &p);
 StrVec getLatestSnapForVolume(const std::string& volId);
 void getLatestSnap(protocol::GetCommandParams &p);
 void getHandlerStat(protocol::GetCommandParams &p);
+void getProxyDiffList(protocol::GetCommandParams &p);
 
 } // namespace proxy_local
 
@@ -315,6 +316,7 @@ const protocol::GetCommandHandlerMap proxyGetHandlerMap = {
     { isWdiffSendErrorTN, proxy_local::isWdiffSendError },
     { getLatestSnapTN, proxy_local::getLatestSnap },
     { getHandlerStatTN, proxy_local::getHandlerStat },
+    { proxyDiffTN, proxy_local::getProxyDiffList },
 };
 
 inline void c2pGetServer(protocol::ServerParams &p)
