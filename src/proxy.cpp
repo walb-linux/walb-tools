@@ -480,36 +480,37 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         pushOpt.delaySec = 0;
         return CONTINUE_TO_SEND;
     }
-    if (res == msgStopped || res == msgWdiffRecv || res == msgTooNewDiff || res == msgSyncing) {
-        const uint64_t curTs = ::time(0);
-        ul.lock();
-        if (volSt.lastWlogReceivedTime != 0 &&
-            curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
-            logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout
-                           << volId << mergedDiff;
-            return SEND_ERROR;
-        }
-        logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry
-                      << volId << mergedDiff;
-        pushOpt.isForce = true;
-        pushOpt.delaySec = gp.delaySecForRetry;
-        return CONTINUE_TO_SEND;
+    if (res == msgSmallerLvSize || res == msgArchiveNotFound) {
+        /**
+         * The background task will stop, and change to stop state.
+         * You must restart by hand.
+         */
+        logger.error() << FUNC << res << volId;
+        return SEND_ERROR;
     }
     if (res == msgDifferentUuid || res == msgTooOldDiff) {
         logger.info() << FUNC << res << volId << mergedDiff;
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = true;
-        pushOpt.delaySec = 0;
+        pushOpt.delaySec = 0; // retry soon.
         return CONTINUE_TO_SEND;
     }
     /**
-     * archive-not-found, not-applicable-diff, smaller-lv-size
-     *
-     * The background task will stop, and change to stop state.
-     * You must start by hand.
+     * msgStopped, msgWdiffRecv, msgTooNewDiff, msgSyncing, and others.
      */
-    logger.error() << FUNC << res;
-    return SEND_ERROR;
+    const uint64_t curTs = ::time(0);
+    ul.lock();
+    if (volSt.lastWlogReceivedTime != 0 &&
+        curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
+        logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout
+                       << volId << mergedDiff;
+        return SEND_ERROR;
+    }
+    logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry
+                  << volId << mergedDiff;
+    pushOpt.isForce = true;
+    pushOpt.delaySec = gp.delaySecForRetry;
+    return CONTINUE_TO_SEND;
 }
 
 
@@ -532,7 +533,7 @@ void ProxyWorker::operator()()
             }
             break;
         case SEND_ERROR:
-            LOGs.error() << "send error" << task_.volId << task_.archiveName;
+            LOGs.error() << "SEND_ERROR_NO_MORE_RETRY" << task_.volId << task_.archiveName;
             getProxyVolState(task_.volId).actionState.set(task_.archiveName);
             break;
         case DONT_SEND:
