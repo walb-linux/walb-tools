@@ -744,6 +744,7 @@ StrVec getVolStatusAsStrVec(const std::string &volId)
         const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
         const std::string tsStr = util::timeToPrintable(volSt.lastWdiffSentTimeMap[archiveName]);
         const char *action = volSt.ac.getValue(archiveName) == 0 ? "None" : "WdiffSend";
+        const bool isWdiffSendError = volSt.actionState.get(archiveName);
 
         ret.push_back(fmt("  archive %s", archiveName.c_str()));
         ret.push_back(fmt("  host %s", hi.addrPort.str().c_str()));
@@ -752,6 +753,7 @@ StrVec getVolStatusAsStrVec(const std::string &volId)
         ret.push_back(fmt("  action %s", action));
         ret.push_back(fmt("  numDiff %zu", mgr.size()));
         ret.push_back(fmt("  lastWdiffSentTime %s", tsStr.c_str()));
+        ret.push_back(fmt("  isWdiffSendError %d", isWdiffSendError));
 
         const MetaDiffVec diffV = mgr.getAll();
         uint64_t totalSize = 0;
