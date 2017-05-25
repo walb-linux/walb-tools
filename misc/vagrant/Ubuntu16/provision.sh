@@ -1,6 +1,6 @@
 # install develop tools
 sudo apt upgrade -y
-sudp apt update -y
+sudo apt update -y
 sudo apt install -y linux-headers-`uname -r` libaio-dev libsnappy-dev liblzma-dev zlib1g-dev python make gcc g++ ipython
 
 # download setup script
