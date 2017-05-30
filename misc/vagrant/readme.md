@@ -46,5 +46,5 @@ sudo ipython
 In [1]: execfile("misc/tutorial.py")
 ```
 
-and type the following commands, and see [tutorial.md](../../../doc/tutorial.md).
+and type the following commands, and see [tutorial.md](../../doc/tutorial.md).
 
