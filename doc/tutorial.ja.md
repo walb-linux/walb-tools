@@ -4,7 +4,7 @@
 詳細は [README](README.md) を参照してください。
 
 ## WalB 概要
-WalB 自体の概要は [WalB is hard](https://slideshare.net/herumi/walb-ishard) を参照してください。
+WalB 自体の概要は [WalB is hard](https://slideshare.net/herumi/walb-ishard/) を参照してください。
 
 
 ## 用語

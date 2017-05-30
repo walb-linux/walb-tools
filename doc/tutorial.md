@@ -4,7 +4,7 @@ This is a tutorial for WalB-tools.
 See [README](README.md) for details.
 
 ## Abstract of WalB
-See [WalB is hard(in Japanese)](https://slideshare.net/herumi/walb-ishard).
+See [WalB is hard(in Japanese)](https://slideshare.net/herumi/walb-ishard/).
 
 
 ## Terminology
