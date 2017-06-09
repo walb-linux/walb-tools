@@ -90,15 +90,196 @@ std::string createDiffFileName(const MetaDiff &diff)
 }
 
 
-MetaDiff getMaxProgressDiff(const MetaDiffVec &v) {
+MetaDiff getMaxProgressDiff(const MetaDiffVec &v)
+{
     if (v.empty()) throw cybozu::Exception("getMaxProgressDiff:empty");
     MetaDiff diff = v[0];
     for (size_t i = 1; i < v.size(); i++) {
-        if (diff.snapE.gidB < v[i].snapE.gidB) {
+        const bool cond0 = diff.snapE.gidB < v[i].snapE.gidB;
+        const bool cond1 = diff.snapE.gidB == v[i].snapE.gidB && diff.snapB.gidB < v[i].snapB.gidB;
+        if (cond0 || cond1) {
             diff = v[i];
         }
     }
     return diff;
+}
+
+
+void GidRangeManager::add(MetaDiffMmap::iterator it)
+{
+    const MetaDiff& d = it->second;
+    GidRange rng{d.snapB.gidB, d.snapE.gidB, {it}};
+    std::list<GidRange> rngL = getRange(rng.gidB, rng.gidE);
+    merge(rngL, std::move(rng));
+    putRange(rngL);
+}
+
+
+void GidRangeManager::remove(MetaDiffMmap::iterator it)
+{
+    const MetaDiff& d = it->second;
+    uint64_t gid = d.snapB.gidB + 1;
+    auto itR = map_.lower_bound(gid);
+    while (gid < d.snapE.gidB && itR != map_.end()) {
+        GidRange& rng = itR->second;
+        std::vector<MetaDiffMmap::iterator>& its = rng.its;
+        its.erase(std::remove(its.begin(), its.end(), it), its.end());
+        gid = rng.gidE + 1;
+        if (its.empty()) {
+            itR = map_.erase(itR);
+        } else {
+            ++itR;
+        }
+    }
+}
+
+
+std::vector<MetaDiffMmap::iterator> GidRangeManager::search(uint64_t gid) const
+{
+    auto itR = map_.lower_bound(gid + 1);
+    if (itR == map_.end()) return {};
+    const GidRange& rng = itR->second;
+    if (rng.gidB < gid) return {};
+    return rng.its; // copy
+}
+
+
+std::list<GidRange> GidRangeManager::getRange(uint64_t gidB, uint64_t gidE)
+{
+    std::list<GidRange> li;
+    auto itR = map_.lower_bound(gidB + 1);
+    while (itR != map_.end()) {
+        GidRange& rng = itR->second;
+        if (rng.gidB >= gidE) break;
+        li.push_back(std::move(rng));
+        itR = map_.erase(itR);
+    }
+    return li;
+}
+
+
+void GidRangeManager::putRange(std::list<GidRange>& rngL)
+{
+    for (GidRange& rng : rngL) {
+        Map::iterator it;
+        bool ret;
+        const uint64_t key = rng.gidE;
+        std::tie(it, ret) = map_.insert(std::make_pair(key, std::move(rng)));
+        assert(ret);
+    }
+    rngL.clear();
+}
+
+
+void GidRangeManager::merge(std::list<GidRange>& rngL, GidRange&& rng)
+{
+    if (rngL.empty()) {
+        rngL.push_back(std::move(rng));
+        return;
+    }
+
+    /*
+     * rngL  |-----| ...
+     * rng      |----------|
+     * rngL' |--|--| ...
+     */
+    if (rngL.front().gidB < rng.gidB) {
+        assert(rng.gidB < rngL.front().gidE);
+        GidRange rng2 = std::move(rngL.front());
+        rngL.pop_front();
+        auto it = rngL.begin();
+        for (GidRange& rng3 : rng2.split(rng.gidB)) {
+            rngL.insert(it, std::move(rng3));
+        }
+    }
+
+    /*
+     * rngL   ... |------|
+     * rng   |--------|
+     * rngL'  ... |---|--|
+     */
+    if (rngL.back().gidE > rng.gidE) {
+        assert(rngL.back().gidB < rng.gidE);
+        GidRange rng2 = std::move(rngL.back());
+        rngL.pop_back();
+        for (GidRange& rng3 : rng2.split(rng.gidE)) {
+            rngL.push_back(std::move(rng3));
+        }
+    }
+
+    auto it = rngL.begin();
+    while (rng.gidB < rng.gidE && it != rngL.end()) {
+        if (it->gidB == rng.gidB) {
+            // merge.
+            for (auto it2 : rng.its) it->its.push_back(it2);
+            rng.gidB = it->gidE; // consume.
+            ++it;
+        } else if (it->gidB < rng.gidB) {
+            // skip.
+            assert(it->gidE <= rng.gidB);
+            ++it;
+        } else {
+            // insert.
+            rngL.insert(it, {rng.gidB, it->gidB, rng.its});
+            rng.gidB = it->gidB; // consume.
+        }
+    }
+    if (rng.gidB < rng.gidE) {
+        // insert.
+        rngL.push_back(std::move(rng));
+    } else {
+        // Do nothing.
+    }
+}
+
+
+void GidRangeManager::print() const
+{
+    for (auto pair : map_) {
+        ::printf("%s", pair.second.str().c_str());
+    }
+}
+
+
+void GidRangeManager::validateExistence(Mmap::const_iterator it, int line) const
+{
+    const MetaDiff& diff = it->second;
+    uint64_t gid = diff.snapB.gidB + 1;
+    auto itR = map_.lower_bound(gid);
+    uint64_t gidE;
+    {
+        // begin point check.
+        if (itR == map_.end()) {
+            throw cybozu::Exception(__func__) << "not found" << line;
+        }
+        const GidRange& rng = itR->second;
+        if (rng.gidB != diff.snapB.gidB) {
+            throw cybozu::Exception(__func__) << "gidB differs." << line;
+        }
+        gidE = rng.gidB; // dummy.
+    }
+    while (itR != map_.end() && gidE < diff.snapE.gidB) {
+        const GidRange& rng = itR->second;
+        if (rng.gidB != gidE) {
+            throw cybozu::Exception(__func__) << "lack of GidRange." << line << rng << gidE;
+        }
+        bool found = false;
+        for (const auto itM : rng.its) {
+            const MetaDiff& d = itM->second;
+            if (d == diff) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw cybozu::Exception(__func__) << "not found the iterator." << line;
+        }
+        gidE = rng.gidE;
+        ++itR;
+    }
+    if (gidE != diff.snapE.gidB) {
+        throw cybozu::Exception(__func__) << "gidE differs" << line;
+    }
 }
 
 
@@ -138,6 +319,7 @@ MetaDiffVec MetaDiffManager::gc(const MetaSnap &snap)
 
     /* All the remaining diffs in mmap_ are garbage. */
     for (Mmap::value_type &p : mmap_) garbages.push_back(p.second);
+    rangeMgr_.clear();
     mmap_.clear();
 
     // Place back non-garbage diffs to mmap_.
@@ -158,6 +340,7 @@ MetaDiffVec MetaDiffManager::gcRange(uint64_t gidB, uint64_t gidE)
         if (gidB <= d.snapB.gidB && d.snapE.gidB <= gidE &&
             !(gidB == d.snapB.gidB && gidE == d.snapE.gidB)) {
             garbages.push_back(d);
+            rangeMgr_.remove(it);
             it = mmap_.erase(it);
         } else {
             ++it;
@@ -181,6 +364,7 @@ MetaDiffVec MetaDiffManager::eraseBeforeGid(uint64_t gid)
         }
         if (d.snapE.gidB <= gid) {
             v.push_back(d);
+            rangeMgr_.remove(it);
             it = mmap_.erase(it);
         } else {
             ++it;
@@ -385,7 +569,8 @@ void MetaDiffManager::addNolock(const MetaDiff &diff)
     if (search(diff) != mmap_.end()) {
         throw cybozu::Exception("MetaDiffManager::add:already exists") << diff;
     }
-    mmap_.emplace(diff.snapB.gidB, diff);
+    auto it = mmap_.emplace(diff.snapB.gidB, diff);
+    rangeMgr_.add(it);
 }
 
 
@@ -398,6 +583,7 @@ void MetaDiffManager::eraseNolock(const MetaDiff &diff, bool doesThrowError)
         }
         return;
     }
+    rangeMgr_.remove(it);
     mmap_.erase(it);
 }
 
@@ -431,57 +617,24 @@ MetaDiffVec MetaDiffManager::getFirstDiffs(uint64_t gid) const
     return v;
 }
 
+
 MetaDiffVec MetaDiffManager::getMergeableCandidates(const MetaDiff &diff) const
 {
     MetaDiffVec v;
-
-    /*
-     * Fast path. O(log(N)).
-     */
-    const bool ret = fastSearch(diff.snapE.gidB, diff.snapE.gidB + 1, v, [&](const MetaDiff &d) {
-            return diff != d && canMerge(diff, d);
-        });
-    if (ret) return v;
-
-    /*
-     * Slow path. O(N).
-     */
-    for (const auto &p : mmap_) {
-        const MetaDiff &d = p.second;
-        if (diff.snapE.gidE < d.snapB.gidB) {
-            // There is no candidates after this.
-            break;
-        }
-        if (diff != d && canMerge(diff, d)) {
-            v.push_back(d);
-        }
+    for (auto it : rangeMgr_.search(diff.snapE.gidB)) {
+        const MetaDiff &d = it->second;
+        if (diff != d && canMerge(diff, d)) v.push_back(d);
     }
     return v;
 }
+
+
 MetaDiffVec MetaDiffManager::getApplicableCandidates(const MetaSnap &snap) const
 {
     MetaDiffVec v;
-
-    /*
-     * Fast path. O(log(N)).
-     */
-    const bool ret = fastSearch(snap.gidB, snap.gidB + 1, v, [&](const MetaDiff &d) {
-            return canApply(snap, d);
-        });
-    if (ret) return v;
-
-    /*
-     * Slow path. O(N).
-     */
-    for (const auto &p : mmap_) {
-        const MetaDiff &d = p.second;
-        if (snap.gidE < d.snapB.gidB) {
-            // There is no candidates after this.
-            break;
-        }
-        if (canApply(snap, d)) {
-            v.push_back(d);
-        }
+    for (auto it : rangeMgr_.search(snap.gidB)) {
+        const MetaDiff &d = it->second;
+        if (canApply(snap, d)) v.push_back(d);
     }
     return v;
 }

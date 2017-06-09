@@ -568,6 +568,7 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
 
     MetaDiffManager mgr;
     for (MetaDiff &d : v) mgr.add(d);
+    mgr.validateForTest(__LINE__);
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), MetaSnap(5));
     CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 0);
     CYBOZU_TEST_EQUAL(mgr.getApplicableDiffListByGid(snap, 4).size(), 4);
@@ -585,18 +586,22 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(v1.size(), 3);
     auto v2 = mgr.getMergeableDiffList(3);
     CYBOZU_TEST_EQUAL(v2.size(), 2);
+
     auto mdiff1 = merge(v1);
     auto mdiff2 = merge(v2);
     mgr.add(mdiff1);
     mgr.add(mdiff2);
+    mgr.validateForTest(__LINE__);
+
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), MetaSnap(5));
     mgr.gc(MetaSnap(0));
+    mgr.validateForTest(__LINE__);
+
     CYBOZU_TEST_EQUAL(mgr.getLatestSnapshot(st), MetaSnap(5));
     auto v3 = mgr.getAll();
     CYBOZU_TEST_EQUAL(v3.size(), 2);
     CYBOZU_TEST_EQUAL(v3[0], mdiff1);
     CYBOZU_TEST_EQUAL(v3[1], mdiff2);
-
 }
 
 /**
@@ -727,6 +732,7 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
         s0 = apply(s0, d);
     }
 
+    mgr.validateForTest(__LINE__);
     auto v1 = mgr.getApplicableDiffList(snap);
     CYBOZU_TEST_ASSERT(v == v1);
 
@@ -746,6 +752,7 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
         if (v2.size() > 1) {
             mgr.add(merge(v2));
             mgr.gc(MetaSnap(0));
+            mgr.validateForTest(__LINE__);
         }
         s1 = mgr.getLatestSnapshot(st);
         CYBOZU_TEST_EQUAL(s0, s1);
@@ -777,12 +784,127 @@ CYBOZU_TEST_AUTO(metaDiffManagerGcRange)
 
     MetaDiffManager mgr;
     for (const MetaDiff& d : v) mgr.add(d);
+    mgr.validateForTest(__LINE__);
 
     MetaDiffVec v2 = mgr.gcRange(1, 3);
+    mgr.validateForTest(__LINE__);
     //printDiffV(v2);
     CYBOZU_TEST_EQUAL(v2.size(), 2);
     CYBOZU_TEST_EQUAL(v2[0], v[2]);
     CYBOZU_TEST_EQUAL(v2[1], v[4]);
+}
+
+CYBOZU_TEST_AUTO(metaDiffManagerMerge1)
+{
+    MetaSnap snap(0);
+    MetaDiffVec v;
+
+    v.emplace_back(0, 1, true, 1000);
+    v.emplace_back(1, 2, true, 1001);
+    v.emplace_back(2, 3, true, 1002);
+    v.emplace_back(3, 4, true, 1003);
+    v.emplace_back(4, 5, true, 1004);
+
+    MetaDiffManager mgr;
+    for (MetaDiff &d : v) mgr.add(d);
+    mgr.validateForTest(__LINE__);
+
+    auto mdiff1 = merge({v[0], v[1], v[2]});
+    auto mdiff2 = merge({v[1], v[2], v[3], v[4]});
+    mgr.add(mdiff1);
+    mgr.add(mdiff2);
+    {
+        mgr.validateForTest(__LINE__);
+        auto v1 = mgr.getApplicableDiffList(snap);
+        CYBOZU_TEST_EQUAL(v1.size(), 2);
+        CYBOZU_TEST_EQUAL(v1[0], mdiff1);
+        CYBOZU_TEST_EQUAL(v1[1], mdiff2);
+    }
+
+    mgr.gc(snap);
+    {
+        mgr.validateForTest(__LINE__);
+        auto v1 = mgr.getApplicableDiffList(snap);
+        CYBOZU_TEST_EQUAL(v1.size(), 2);
+        CYBOZU_TEST_EQUAL(v1[0], mdiff1);
+        CYBOZU_TEST_EQUAL(v1[1], mdiff2);
+    }
+
+    auto mdiff3 = merge({v[3], v[4]});
+    mgr.add(mdiff3);
+    mgr.gc(snap);
+    {
+        mgr.validateForTest(__LINE__);
+        auto v1 = mgr.getApplicableDiffList(snap);
+        CYBOZU_TEST_EQUAL(v1.size(), 2);
+        CYBOZU_TEST_EQUAL(v1[0], mdiff1);
+        CYBOZU_TEST_EQUAL(v1[1], mdiff3);
+    }
+}
+
+CYBOZU_TEST_AUTO(metaDiffManagerMerge2)
+{
+    MetaSnap snap(0);
+    MetaDiffVec v;
+
+    v.emplace_back(0, 1, true, 1000);
+    //v.emplace_back(1, 2, true, 1001);
+    v.emplace_back(2, 3, true, 1002);
+    //v.emplace_back(3, 4, true, 1003);
+    v.emplace_back(4, 5, true, 1004);
+
+    v.emplace_back(0, 3, true, 1002);
+    v.emplace_back(2, 5, true, 1004);
+
+    MetaDiffManager mgr;
+    for (MetaDiff &d : v) mgr.add(d);
+    mgr.validateForTest(__LINE__);
+
+    mgr.gc(snap);
+    {
+        mgr.validateForTest(__LINE__);
+        auto v1 = mgr.getApplicableDiffList(snap);
+        CYBOZU_TEST_EQUAL(v1.size(), 2);
+        CYBOZU_TEST_EQUAL(v1[0], v[3]);
+        CYBOZU_TEST_EQUAL(v1[1], v[4]);
+    }
+}
+
+CYBOZU_TEST_AUTO(metaDiffManagerMerge3)
+{
+    MetaSnap snap0(0);
+    uint64_t ts = ::time(0);
+    MetaDiffManager mgr;
+    for (uint64_t gid = 0; gid < 1000; gid++) {
+        MetaDiff d(gid, gid + 1, true, ts++);
+        d.dataSize = 1 + randx() % 10000;
+        mgr.add(d);
+        mgr.validateForTest(__LINE__);
+        MetaDiffVec v = mgr.getApplicableDiffList(snap0);
+        if (mgr.size() - v.size() > 10) {
+            mgr.gc(snap0);
+            mgr.validateForTest(__LINE__);
+        }
+        if (v.size() > 20) {
+            uint64_t gidE = 2 + randx() % (v.size() - 1);
+            uint64_t gidB = randx() % gidE;
+
+            MetaDiffVec v1;
+            std::copy(v.begin() + gidB, v.begin() + gidE, std::back_inserter(v1));
+            MetaDiff mdiff = merge(v1);
+            mgr.add(mdiff);
+#if 0
+            mgr.erase(v1);
+#endif
+            mgr.validateForTest(__LINE__);
+        }
+        v = mgr.getApplicableDiffList(snap0);
+        if (v.size() > 10) {
+            MetaDiffVec v1 = mgr.eraseBeforeGid(v[randx() % v.size()].snapE.gidB);
+            snap0 = apply(snap0, v1);
+            mgr.validateForTest(__LINE__);
+        }
+    };
 }
 
 void testDiffFileName(const MetaDiff& d)

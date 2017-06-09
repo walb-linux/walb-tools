@@ -10,6 +10,7 @@
 #include <cinttypes>
 #include <string>
 #include <vector>
+#include <list>
 #include <map>
 #include <set>
 #include <functional>
@@ -668,14 +669,88 @@ MetaDiff getMaxProgressDiff(const MetaDiffVec &v);
 
 
 /**
+ * MetaDiff management structure.
+ */
+using MetaDiffMmap = std::multimap<uint64_t, MetaDiff>; // key is (MetaDiff obj).snapB.gidB.
+
+/**
+ * Internal structure to search diffs.
+ */
+struct GidRange
+{
+    uint64_t gidB;
+    uint64_t gidE;
+    std::vector<MetaDiffMmap::iterator> its;
+
+    /**
+     * The object will be moved after calling this method.
+     */
+    std::list<GidRange> split(uint64_t gid) {
+        assert(gidB < gid && gid < gidE);
+        std::list<GidRange> li;
+        li.push_back({gidB, gid, its}); // its will be copied.
+        gidB = gid;
+        li.push_back(std::move(*this));
+        return li;
+    }
+
+    /**
+     * for debug.
+     */
+    std::string str() const {
+        std::stringstream ss;
+        ss << cybozu::util::formatString("GidRange (%" PRIu64 ", %" PRIu64 ") %zu\n"
+                                         , gidB, gidE, its.size());
+        for (auto it : its) ss << "  " << it->second << "\n";
+        return ss.str();
+    }
+    friend inline std::ostream &operator<<(std::ostream &os, const GidRange &obj) {
+        os << obj.str();
+        return os;
+    }
+};
+
+/**
+ * A structure to search ranges that includes a specified gid.
+ *
+ * range0    |------->|
+ * range1        |---------->|
+ * internal  |---|----|------|
+ *            (1) (2)  (3)
+ * (1) has a pointer to range0.
+ * (2) has pointers to range0 and range1.
+ * (3) has a pointer to range1.
+ */
+class GidRangeManager
+{
+private:
+    using Map = std::map<uint64_t, GidRange>; // key: (GidRange obj).end.
+    Map map_;
+    using Mmap = MetaDiffMmap;
+public:
+    void add(Mmap::iterator it);
+    void remove(Mmap::iterator it);
+    std::vector<Mmap::iterator> search(uint64_t gid) const;
+    void clear() { map_.clear(); }
+    void print() const; // for debug.
+    void validateExistence(Mmap::const_iterator it, int line) const; // for test.
+private:
+    std::list<GidRange> getRange(uint64_t gidB, uint64_t gidE);
+    void putRange(std::list<GidRange>& rngL);
+    void merge(std::list<GidRange>& rngL, GidRange&& rng);
+};
+
+
+/**
  * Multiple diffs manager.
  * This is thread-safe.
  */
 class MetaDiffManager
 {
 private:
-    using Mmap = std::multimap<uint64_t, MetaDiff>; // key is d.snapB.gidB.
+    using Mmap = MetaDiffMmap;
     Mmap mmap_;
+    GidRangeManager rangeMgr_;
 
     mutable std::recursive_mutex mu_;
     using AutoLock = std::lock_guard<std::recursive_mutex>;
@@ -725,6 +800,7 @@ public:
      */
     void clear() {
         AutoLock lk(mu_);
+        rangeMgr_.clear();
         mmap_.clear();
     }
     /**
@@ -732,6 +808,7 @@ public:
      */
     void reset(const MetaDiffVec &v) {
         AutoLock lk(mu_);
+        rangeMgr_.clear();
         mmap_.clear();
         for (const MetaDiff &d : v) {
             addNolock(d);
@@ -893,6 +970,25 @@ public:
         if (mmap_.empty()) return false;
         diff = mmap_.crbegin()->second;
         return true;
+    }
+    /* for debug */
+    void debug() {
+        AutoLock lk(mu_);
+        for (auto pair : mmap_) {
+            ::printf("%s\n", pair.second.str().c_str());
+        }
+        rangeMgr_.print();
+    }
+    /**
+     * Validate consistency of mmap_ and rangeMgr_.
+     */
+    void validateForTest(int line) const {
+        AutoLock lk(mu_);
+        auto it = mmap_.begin();
+        while (it != mmap_.end()) {
+            rangeMgr_.validateExistence(it, line);
+            ++it;
+        }
     }
 private:
     void addNolock(const MetaDiff &diff);
