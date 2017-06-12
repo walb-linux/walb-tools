@@ -528,6 +528,18 @@ class Diff(object):
             raise Exception('Diff:bad isCompDiff', s)
         self.ts = str_to_datetime(tsStr, DatetimeFormatPretty)
         self.dataSize = int(sizeStr)
+    def genFileName(self):
+        s = datetime_to_str(self.ts, DatetimeFormatDigits)
+        s += '-'
+        s += 'M' if self.isMergeable else '-'
+        s += 'C' if self.isCompDiff else '-'
+        s += '-'
+        if self.isDirty():
+            s += '{}-{}-{}-{}'.format(self.B.gidB, self.B.gidE, self.E.gidB, self.E.gidE)
+        else:
+            s += '{}-{}'.format(self.B.gidB, self.E.gidB)
+        s += '.wdiff'
+        return s
 
 
 def create_diff_from_str(s):
