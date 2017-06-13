@@ -834,10 +834,8 @@ public:
         return getMergeableDiffList(gid, pred);
     }
     bool getApplicableDiff(const MetaSnap &snap, MetaDiff& diff) const {
-        MetaDiffVec u = getApplicableCandidates(snap);
-        if (u.empty()) return false;
-        diff = getMaxProgressDiff(u);
-        return true;
+        AutoLock lk(mu_);
+        return getApplicableDiffNolock(snap, diff);
     }
     /**
      * Get applicable diff list to a specified snapshot
@@ -993,7 +991,7 @@ public:
 private:
     void addNolock(const MetaDiff &diff);
     void eraseNolock(const MetaDiff &diff, bool doesThrowError = false);
-    Mmap::iterator search(const MetaDiff &diff);
+    Mmap::iterator searchNolock(const MetaDiff &diff);
     /**
      * Get first diffs;
      * @gid start position to search.
@@ -1002,12 +1000,19 @@ private:
      *   Diffs that has smallest diff.snapB.gidB but not less than a specified gid
      *   and they have the same snapB.
      */
-    MetaDiffVec getFirstDiffs(uint64_t gid = 0) const;
-    MetaDiffVec getMergeableCandidates(const MetaDiff &diff) const;
-    MetaDiffVec getApplicableCandidates(const MetaSnap &snap) const;
+    MetaDiffVec getFirstDiffsNolock(uint64_t gid = 0) const;
+    MetaDiffVec getMergeableCandidatesNolock(const MetaDiff &diff) const;
+    MetaDiffVec getApplicableCandidatesNolock(const MetaSnap &snap) const;
+
+    bool getApplicableDiffNolock(const MetaSnap &snap, MetaDiff& diff) const {
+        MetaDiffVec u = getApplicableCandidatesNolock(snap);
+        if (u.empty()) return false;
+        diff = getMaxProgressDiff(u);
+        return true;
+    }
 
     template <typename Pred>
-    bool fastSearch(uint64_t gid0, uint64_t gid1, MetaDiffVec &v, Pred &&pred) const {
+    bool fastSearchNolock(uint64_t gid0, uint64_t gid1, MetaDiffVec &v, Pred &&pred) const {
         assert(gid0 < gid1);
         size_t nr = 0;
         Mmap::const_iterator it, end;

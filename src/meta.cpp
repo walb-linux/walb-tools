@@ -378,13 +378,13 @@ MetaDiffVec MetaDiffManager::getMergeableDiffList(
     uint64_t gid, const std::function<bool(const MetaDiff &)> &pred) const
 {
     AutoLock lk(mu_);
-    MetaDiffVec v = getFirstDiffs(gid);
+    MetaDiffVec v = getFirstDiffsNolock(gid);
     if (v.empty()) return {};
     MetaDiff diff = getMaxProgressDiff(v);
     v = {diff};
     MetaDiff mdiff = diff;
     for (;;) {
-        MetaDiffVec u = getMergeableCandidates(mdiff);
+        MetaDiffVec u = getMergeableCandidatesNolock(mdiff);
         if (u.empty()) break;
         diff = getMaxProgressDiff(u);
         if (!pred(diff)) break;
@@ -451,7 +451,7 @@ MetaState MetaDiffManager::getOldestCleanState(const MetaState &st0) const
 std::vector<uint64_t> MetaDiffManager::getCleanSnapshotList(const MetaState &st) const
 {
     const bool isAll = true;
-    const std::vector<MetaState> v = getRestorableList(st, isAll);
+    const std::vector<MetaState> v = getRestorableList(st, isAll); // using lock.
     std::vector<uint64_t> ret;
     for (const MetaState &st : v) {
         ret.push_back(st.snapB.gidB);
@@ -464,7 +464,7 @@ std::vector<MetaState> MetaDiffManager::getRestorableList(const MetaState &st, b
 {
     std::vector<MetaState> ret;
     MetaDiffVec applicableV, minV;
-    getTargetDiffLists(applicableV, minV, st);
+    getTargetDiffLists(applicableV, minV, st); // using lock.
     MetaState st0 = apply(st, minV);
     if (st0.snapB.isClean()) ret.push_back(st0);
     for (size_t i = minV.size(); i < applicableV.size(); i++) {
@@ -512,7 +512,7 @@ void MetaDiffManager::getTargetDiffLists(MetaDiffVec& applicableV, MetaDiffVec& 
 MetaDiffVec MetaDiffManager::getDiffListToSync(const MetaState &st, const MetaSnap &snap) const
 {
     MetaDiffVec applicableV, minV;
-    getTargetDiffLists(applicableV, minV, st, snap.gidB);
+    getTargetDiffLists(applicableV, minV, st, snap.gidB); // using lock.
     if (minV.size() > applicableV.size()) return {};
     const MetaState appliedSt = apply(st, applicableV);
     if (appliedSt.snapB == snap) {
@@ -531,7 +531,7 @@ MetaDiffVec MetaDiffManager::getAll(uint64_t gid0, uint64_t gid1) const
     }
     AutoLock lk(mu_);
     MetaDiffVec v;
-    fastSearch(gid0, gid1, v, [](const MetaDiff &){ return true; });
+    fastSearchNolock(gid0, gid1, v, [](const MetaDiff &){ return true; });
     return v;
 }
 
@@ -539,7 +539,7 @@ MetaDiffVec MetaDiffManager::getAll(uint64_t gid0, uint64_t gid1) const
 bool MetaDiffManager::exists(const MetaDiff& diff) const
 {
     AutoLock lk(mu_);
-    const MetaDiffVec v = getFirstDiffs(diff.snapB.gidB);
+    const MetaDiffVec v = getFirstDiffsNolock(diff.snapB.gidB);
     for (const MetaDiff& d : v) {
         if (d == diff) {
             return true;
@@ -547,7 +547,6 @@ bool MetaDiffManager::exists(const MetaDiff& diff) const
     }
     return false;
 }
-
 
 
 std::pair<uint64_t, uint64_t> MetaDiffManager::getMinMaxGid() const
@@ -566,7 +565,7 @@ std::pair<uint64_t, uint64_t> MetaDiffManager::getMinMaxGid() const
 
 void MetaDiffManager::addNolock(const MetaDiff &diff)
 {
-    if (search(diff) != mmap_.end()) {
+    if (searchNolock(diff) != mmap_.end()) {
         throw cybozu::Exception("MetaDiffManager::add:already exists") << diff;
     }
     auto it = mmap_.emplace(diff.snapB.gidB, diff);
@@ -576,7 +575,7 @@ void MetaDiffManager::addNolock(const MetaDiff &diff)
 
 void MetaDiffManager::eraseNolock(const MetaDiff &diff, bool doesThrowError)
 {
-    auto it = search(diff);
+    auto it = searchNolock(diff);
     if (it == mmap_.end()) {
         if (doesThrowError) {
             throw cybozu::Exception("MetaDiffManager::erase:not found") << diff;
@@ -588,7 +587,7 @@ void MetaDiffManager::eraseNolock(const MetaDiff &diff, bool doesThrowError)
 }
 
 
-MetaDiffManager::Mmap::iterator MetaDiffManager::search(const MetaDiff &diff)
+MetaDiffManager::Mmap::iterator MetaDiffManager::searchNolock(const MetaDiff &diff)
 {
     Mmap::iterator it, end;
     std::tie(it, end) = mmap_.equal_range(diff.snapB.gidB);
@@ -601,7 +600,7 @@ MetaDiffManager::Mmap::iterator MetaDiffManager::search(const MetaDiff &diff)
 }
 
 
-MetaDiffVec MetaDiffManager::getFirstDiffs(uint64_t gid) const
+MetaDiffVec MetaDiffManager::getFirstDiffsNolock(uint64_t gid) const
 {
     Mmap::const_iterator it0 = mmap_.lower_bound(gid);
     if (it0 == mmap_.cend()) return {};
@@ -618,7 +617,7 @@ MetaDiffVec MetaDiffManager::getFirstDiffs(uint64_t gid) const
 }
 
 
-MetaDiffVec MetaDiffManager::getMergeableCandidates(const MetaDiff &diff) const
+MetaDiffVec MetaDiffManager::getMergeableCandidatesNolock(const MetaDiff &diff) const
 {
     MetaDiffVec v;
     for (auto it : rangeMgr_.search(diff.snapE.gidB)) {
@@ -629,7 +628,7 @@ MetaDiffVec MetaDiffManager::getMergeableCandidates(const MetaDiff &diff) const
 }
 
 
-MetaDiffVec MetaDiffManager::getApplicableCandidates(const MetaSnap &snap) const
+MetaDiffVec MetaDiffManager::getApplicableCandidatesNolock(const MetaSnap &snap) const
 {
     MetaDiffVec v;
     for (auto it : rangeMgr_.search(snap.gidB)) {
