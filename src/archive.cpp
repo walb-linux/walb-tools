@@ -2739,5 +2739,24 @@ void s2aGatherLatestSnapServer(protocol::ServerParams &p)
     }
 }
 
+#ifndef NDEBUG
+void c2aDebugServer(protocol::ServerParams &p)
+{
+    const char *const FUNC = __func__;
+    unusedVar(FUNC);
+    ProtocolLogger logger(ga.nodeId, p.clientId);
+    packet::Packet pkt(p.sock);
+
+    try {
+        pkt.writeFin(msgOk);
+        /* debug code from here. */
+
+
+
+    } catch (std::exception &e) {
+        logger.error() << e.what();
+    }
+}
+#endif
 
 } // namespace walb

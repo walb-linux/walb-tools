@@ -330,6 +330,8 @@ inline void c2pExecServer(protocol::ServerParams &p)
     protocol::runExecServer(p, gp.nodeId, gp.allowExec);
 }
 
+void c2pDebugServer(protocol::ServerParams &p);
+
 const protocol::Str2ServerHandler proxyHandlerMap = {
     { statusCN, c2pStatusServer },
     { startCN, c2pStartServer },
@@ -340,6 +342,9 @@ const protocol::Str2ServerHandler proxyHandlerMap = {
     { kickCN, c2pKickServer },
     { getCN, c2pGetServer },
     { execCN, c2pExecServer },
+#ifndef NDEBUG
+    { debugCN, c2pDebugServer },
+#endif
     // protocols.
     { wlogTransferPN, s2pWlogTransferServer },
 };

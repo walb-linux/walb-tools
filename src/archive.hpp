@@ -582,7 +582,9 @@ void c2aSetStateServer(protocol::ServerParams &p);
 void c2aSetBaseServer(protocol::ServerParams &p);
 void c2aGarbageCollectDiffServer(protocol::ServerParams &p);
 void s2aGatherLatestSnapServer(protocol::ServerParams &p);
-
+#ifndef NDEBUG
+void c2aDebugServer(protocol::ServerParams &p);
+#endif
 
 const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { stateTN, archive_local::getState },
@@ -651,6 +653,9 @@ const protocol::Str2ServerHandler archiveHandlerMap = {
     { enableSnapshotCN, c2aEnableSnapshot },
     { virtualFullScanCN, c2aVirtualFullScan },
     { gcDiffCN, c2aGarbageCollectDiffServer },
+#ifndef NDEBUG
+    { debugCN, c2aDebugServer },
+#endif
     // protocols.
     { dirtyFullSyncPN, s2aDirtyFullSyncServer },
     { dirtyHashSyncPN, s2aDirtyHashSyncServer },

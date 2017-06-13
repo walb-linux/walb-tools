@@ -78,6 +78,7 @@ const char *const enableSnapshotCN = "enable-snapshot";
 const char *const dbgDumpLogpackHeaderCN = "dbg-dump-logpack-header";
 const char *const setFullScanBpsCN = "set-full-scan-bps";
 const char *const gcDiffCN = "gc-diff";
+const char *const debugCN = "debug";
 
 /**
  * Target name of 'get' command.

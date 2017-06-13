@@ -205,6 +205,9 @@ const CommandInfo g_cmdTbl[] = {
     { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },
     { dbgSetBaseCN, c2aSetBaseClient, setupSetState, verifySetBaseParam, "set base(meta-state) for a volume in an archive (for debug)." },
     { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderClient, setupVolIdLsid, verifyDumpLogpackHeader, "dump a logpack header block(for debug)." },
+#ifndef NDEBUG
+    { debugCN, c2xDebugClient, setupStrVec, verifyNoneParam, "debug command (this is empty command for release)" },
+#endif
 };
 
 const CommandInfo* getCommand(const std::string& cmd)

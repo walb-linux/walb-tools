@@ -276,6 +276,13 @@ inline void c2aGarbageCollectDiffClient(protocol::ClientParams &p)
     protocol::sendStrVec(p.sock, p.params, 1, __func__, msgOk);
 }
 
+#ifndef NDEBUG
+inline void c2xDebugClient(protocol::ClientParams &p)
+{
+    protocol::sendStrVec(p.sock, p.params, 0, __func__, msgOk);
+}
+#endif
+
 const protocol::GetCommandInfoMap &getGetCommandInfoMap();
 void c2xGetClient(protocol::ClientParams &p);
 
