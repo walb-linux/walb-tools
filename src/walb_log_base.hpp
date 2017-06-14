@@ -93,8 +93,8 @@ class LogPackHeader
     uint32_t salt_;
 public:
     static constexpr const char *NAME() { return "LogPackHeader"; }
-    LogPackHeader(const void *header = 0, uint32_t pbs = 0, uint32_t salt = 0)
-        : header_((walb_logpack_header*)header), pbs_(pbs), salt_(salt) {
+    LogPackHeader(void *header = 0, uint32_t pbs = 0, uint32_t salt = 0)
+        : header_(reinterpret_cast<walb_logpack_header*>(header)), pbs_(pbs), salt_(salt) {
     }
     LogPackHeader(AlignedArray &&block, uint32_t pbs, uint32_t salt)
         : header_(nullptr), pbs_(pbs), salt_(salt) {
@@ -112,7 +112,7 @@ public:
     void setSalt(uint32_t salt) { salt_ = salt; }
     void setBlock(AlignedArray &&block) {
         block_ = std::move(block);
-        header_ = (walb_logpack_header*)block_.data();
+        header_ = reinterpret_cast<walb_logpack_header*>(block_.data());
     }
     void init(uint32_t pbs, uint32_t salt) {
         setPbs(pbs);

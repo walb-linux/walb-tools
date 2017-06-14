@@ -17,7 +17,10 @@ class SuppressedLogger
         explicit Sync(SuppressedLogger& logger)
             : logger_(logger), osP_(new std::ostringstream()), atBegin_(true) {}
         ~Sync() noexcept {
-            if (osP_) logger_.tryToWrite(osP_->str());
+            try {
+                if (osP_) logger_.tryToWrite(osP_->str());
+            } catch (...){
+            }
         }
         Sync(Sync&& rhs)
             : logger_(rhs.logger_), osP_(std::move(rhs.osP_)), atBegin_(rhs.atBegin_) {}

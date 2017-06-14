@@ -216,10 +216,9 @@ private:
         return cybozu::util::intToHexStr(id, true);
     }
     uint32_t getUniqueId() const {
-        uint32_t id;
         size_t nrRetry = 100;
         for (size_t i = 0; i < nrRetry; i++) {
-            id = rand_();
+            uint32_t id = rand_();
             if (map_.find(id) == map_.cend()) return id;
         }
         throw cybozu::Exception("getUniqueId: proceeds max retry counts")

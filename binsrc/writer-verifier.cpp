@@ -268,7 +268,7 @@ AlignedArray prepareData(uint32_t pbs, uint32_t pb, uint64_t lsid, Rand& rand, u
 {
     AlignedArray buf(pb * pbs, true);
     for (size_t i = 0; i < pb; i++) {
-        PbRecord *rec = (PbRecord *)(buf.data() + i * pbs);
+        PbRecord *rec = reinterpret_cast<PbRecord *>(buf.data() + i * pbs);
         rec->clear();
         rec->setLsid(lsid + i);
         rec->setExprId(exprId_);
@@ -346,7 +346,7 @@ try {
         reader.read(buf.data(), buf.size());
         const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
         for (size_t i = 0; i < ioRec.sizePb; i++) {
-            const PbRecord *pbRec = (PbRecord *)(buf.data() + i * pbs);
+            const PbRecord *pbRec = reinterpret_cast<PbRecord *>(buf.data() + i * pbs);
             if (pbRec->getLsid() != ioRec.lsid + i || pbRec->getExprId() != exprId_) {
                 LOGs.error() << "invalid record" << ioRec.lsid + i << pbRec->getLsid();
             }
@@ -500,6 +500,7 @@ private:
             throw cybozu::Exception("flag must be END");
         }
     }
+#if 0
     void printAllNolock() const {
         LOGs.info() << "<<<<<<<<<<<<<<<";
         for (const auto pair : map_) {
@@ -509,6 +510,7 @@ private:
         }
         LOGs.info() << ">>>>>>>>>>>>>>>";
     }
+#endif
     bool existsNolock(uint64_t bgn, uint64_t end) const {
         return !cond1(bgn) || !cond2(bgn, end);
     }
@@ -616,7 +618,7 @@ try {
         fileR.pread(buf.data(), buf.size(), ioRec.offPb * pbs);
         const uint32_t csum = cybozu::util::calcChecksum(buf.data(), buf.size(), 0);
         for (size_t i = 0; i < ioRec.sizePb; i++) {
-            const PbRecord *pbRec = (PbRecord *)(buf.data() + i * pbs);
+            const PbRecord *pbRec = reinterpret_cast<PbRecord *>(buf.data() + i * pbs);
             if (pbRec->getLsid() != ioRec.lsid + i || pbRec->getExprId() != exprId_) {
                 LOGs.error() << "invalid record" << ioRec.lsid + i << pbRec->getLsid();
             }

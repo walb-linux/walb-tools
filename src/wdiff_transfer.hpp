@@ -17,7 +17,7 @@ inline void sendPack(packet::Packet& pkt, packet::StreamControl& ctrl, DiffStati
     ctrl.next();
     pkt.write<size_t>(pack.size());
     pkt.write(pack.data(), pack.size());
-    statOut.update(*(const DiffPackHeader*)pack.data());
+    statOut.update(*reinterpret_cast<const DiffPackHeader*>(pack.data()));
 }
 
 } // namespace wdiff_transfer_local

@@ -38,9 +38,9 @@ using Buffer = AlignedArray;
 template<class Convertor>
 Buffer g_convert(Convertor& conv, const char *inPackTop, size_t maxOutSize)
 {
-    const DiffPackHeader& inPack = *(const DiffPackHeader*)inPackTop;
+    const DiffPackHeader& inPack = *reinterpret_cast<const DiffPackHeader*>(inPackTop);
     Buffer ret(WALB_DIFF_PACK_SIZE + maxOutSize, false);
-    DiffPackHeader& outPack = *(DiffPackHeader*)ret.data();
+    DiffPackHeader& outPack = *reinterpret_cast<DiffPackHeader*>(ret.data());
     outPack.clear();
     const char *in = inPackTop + WALB_DIFF_PACK_SIZE;
     char *out = &ret[WALB_DIFF_PACK_SIZE];
@@ -115,7 +115,7 @@ public:
      */
     compressor::Buffer convert(const char *inPackTop)
     {
-        const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
+        const walb_diff_pack& inPack = *reinterpret_cast<const walb_diff_pack*>(inPackTop);
         const size_t margin = 4096;
         return compressor::g_convert(*this, inPackTop, inPack.total_size + margin);
     }
@@ -153,7 +153,7 @@ public:
      */
     compressor::Buffer convert(const char *inPackTop)
     {
-        const walb_diff_pack& inPack = *(const walb_diff_pack*)inPackTop;
+        const walb_diff_pack& inPack = *reinterpret_cast<const walb_diff_pack*>(inPackTop);
         const size_t uncompressedSize = compressor::calcTotalBlockNum(inPack) * 512;
         return compressor::g_convert(*this, inPackTop, uncompressedSize);
     }

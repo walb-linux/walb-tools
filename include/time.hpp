@@ -240,7 +240,7 @@ struct Timespec : TimespecBase
 {
     using TimespecBase::TimespecBase;
     TimespecDiff operator-(const Timespec& rhs) const {
-        TimespecDiff ret = *(TimespecDiff*)this;
+        TimespecDiff ret = *reinterpret_cast<TimespecDiff*>(const_cast<Timespec *>(this));
         ret.sub(rhs);
         return ret;
     }

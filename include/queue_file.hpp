@@ -78,10 +78,10 @@ struct QueueRecordHeader
     uint32_t totalSize() const {
         return headerSize() + dataSize;
     }
-    QueueRecordHeader& prev() { return *(QueueRecordHeader *)(prevPtr()); }
-    const QueueRecordHeader& prev() const { return *(const QueueRecordHeader *)(prevPtr()); }
-    QueueRecordHeader& next() { return *(QueueRecordHeader *)(nextPtr()); }
-    const QueueRecordHeader& next() const { return *(const QueueRecordHeader *)(nextPtr()); }
+    QueueRecordHeader& prev() { return *reinterpret_cast<QueueRecordHeader *>(prevPtr()); }
+    const QueueRecordHeader& prev() const { return *reinterpret_cast<const QueueRecordHeader *>(prevPtr()); }
+    QueueRecordHeader& next() { return *reinterpret_cast<QueueRecordHeader *>(nextPtr()); }
+    const QueueRecordHeader& next() const { return *reinterpret_cast<const QueueRecordHeader *>(nextPtr()); }
     void *data() { return (uint8_t *)this + headerSize(); }
     const void *data() const { return (const uint8_t *)this + headerSize(); }
 

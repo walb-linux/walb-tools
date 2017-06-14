@@ -185,7 +185,7 @@ public:
         pack_->clear();
     }
     const DiffPackHeader& header() const {
-        return *(const DiffPackHeader *)abuf_[0].data();
+        return *reinterpret_cast<const DiffPackHeader *>(abuf_[0].data());
     }
     /**
      * This is for debug.
@@ -208,7 +208,7 @@ private:
     void setPackPtr() {
         assert(abuf_.size() > 0);
         assert(abuf_[0].size() == ::WALB_DIFF_PACK_SIZE);
-        pack_ = (DiffPackHeader *)abuf_[0].data();
+        pack_ = reinterpret_cast<DiffPackHeader *>(abuf_[0].data());
     }
 };
 

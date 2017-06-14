@@ -53,7 +53,7 @@ static bool sortedWdiffTransferNoMergeClient(
 {
     packet::StreamControl ctrl(pkt.sock());
     AlignedArray packHBuf(WALB_DIFF_PACK_SIZE);
-    DiffPackHeader &packH = *(DiffPackHeader *)packHBuf.data();
+    DiffPackHeader &packH = *reinterpret_cast<DiffPackHeader *>(packHBuf.data());
     DiffStatistics statOut;
     AlignedArray pack;
     for (;;) {

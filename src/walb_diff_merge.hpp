@@ -49,7 +49,7 @@ private:
 
     public:
         constexpr static const char *NAME = "DiffMerger::Wdiff";
-        Wdiff() : sReader_(), iReader_()
+        Wdiff() : sReader_(), iReader_(), isIndexed_(false)
                 , header_(), rec_(), buf_(), isFilled_(false), isEnd_(false) {
         }
         void open(const std::string &wdiffPath, IndexedDiffCache *cache) {
@@ -57,6 +57,7 @@ private:
         }
         /**
          * File position must be set to the beginning.
+         * isIndexed_ will be set.
          */
         void setFile(cybozu::util::File &&file, IndexedDiffCache *cache);
 

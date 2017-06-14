@@ -124,7 +124,10 @@ public:
      * Get pack header reference.
      */
     LogPackHeader &packHeader() {
-        assert(fetchNextPackHeader());
+#ifndef NDEBUG
+        bool ret = fetchNextPackHeader();
+        assert(ret);
+#endif
         return packH_;
     }
     /**
