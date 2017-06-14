@@ -2910,9 +2910,8 @@ class Controller(object):
         verify_gid_range(gidB, gidE, 'wait_for_merged')
         verify_type(timeoutS, int)
         self._wait_for_no_action(ax, vol, aaMerge, timeoutS)
-        for diff in self.get_applicable_diff_list(ax, vol, gidE):
-            if diff.B.gidB == gidB and diff.E.gidB == gidE:
-                return
+        if self.exists_diff(ax, vol, gidB, gidE):
+            return
         raise Exception("wait_for_merged:failed",
                         ax.name, vol, gidB, gidE)
 
@@ -3029,3 +3028,19 @@ class Controller(object):
         if not ls:
             return []
         return map(create_ts_delta_from_str, ls.split('\n'))
+
+    def exists_diff(self, ax, vol, gidB, gidE):
+        '''
+        ax :: ServerParams - archive server.
+        vol :: str - volume name.
+        gidB :: int - begin generation id of the diff.
+        gidE :: int - end generation id of the diff.
+        return :: bool
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str)
+        verify_u64(gidB)
+        verify_u64(gidE)
+        B = str(gidB)
+        E = str(gidE)
+        return int(self.run_ctl(ax, ['get', 'exists-diff', vol, B, B, E, E])) != 0
