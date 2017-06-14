@@ -97,6 +97,7 @@ class GeneralConfig(object):
         self.max_task = 1
         self.max_replication_task = 1
         self.kick_interval = 1
+        self.timeout = 0
 
     def set(self, d):
         verify_type(d, dict)
@@ -106,7 +107,8 @@ class GeneralConfig(object):
             'walbc_path': identity,
             'max_task': parsePositive,
             'max_replication_task': parsePositive,
-            'kick_interval': parsePositive
+            'kick_interval': parsePositive,
+            'timeout': parsePositive
         }
         for (k, pred) in tbl.items():
             setValIfExist(self, d, k, pred)
@@ -129,6 +131,7 @@ class GeneralConfig(object):
             ('max_task', self.max_task),
             ('max_replication_task', self.max_replication_task),
             ('kick_interval', self.kick_interval),
+            ('timeout', self.timeout),
         ]
         return formatIndent(d, indent)
 

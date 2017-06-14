@@ -270,7 +270,8 @@ class Worker:
         verify_type(cfg, worker.Config)
         self.cfg = cfg
         self.serverLayout = self.createSeverLayout(self.cfg)
-        self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout, walbcDebug)
+        self.walbc = Ctl(self.cfg.general.walbc_path, self.serverLayout,
+                         isDebug=walbcDebug, timeoutS=self.cfg.general.timeout)
         self.doneReplServerList = {}
 
     def selectApplyTask1(self, volL):
