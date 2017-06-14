@@ -732,8 +732,9 @@ public:
     void remove(Mmap::iterator it);
     std::vector<Mmap::iterator> search(uint64_t gid) const;
     void clear() { map_.clear(); }
-    void print() const; // for debug.
+    void print(FILE *fp = ::stdout) const; // for debug.
     void validateExistence(Mmap::const_iterator it, int line) const; // for test.
+    const Map& getMap() const { return map_; } // for test.
 private:
     std::list<GidRange> getRange(uint64_t gidB, uint64_t gidE);
     void putRange(std::list<GidRange>& rngL);
@@ -969,29 +970,27 @@ public:
         diff = mmap_.crbegin()->second;
         return true;
     }
+#if 0
     /* for debug */
-    void debug() {
+    void debug() const {
         AutoLock lk(mu_);
+        FILE *fp = ::fopen("metadiff-manager-debug.log", "w");
         for (auto pair : mmap_) {
-            ::printf("%s\n", pair.second.str().c_str());
+            ::fprintf(fp, "%s\n", pair.second.str().c_str());
         }
-        rangeMgr_.print();
+        rangeMgr_.print(fp);
+        ::fclose(fp);
     }
+#endif
     /**
      * Validate consistency of mmap_ and rangeMgr_.
      */
-    void validateForTest(int line) const {
-        AutoLock lk(mu_);
-        auto it = mmap_.begin();
-        while (it != mmap_.end()) {
-            rangeMgr_.validateExistence(it, line);
-            ++it;
-        }
-    }
+    void validateForTest(int line) const;
 private:
     void addNolock(const MetaDiff &diff);
     void eraseNolock(const MetaDiff &diff, bool doesThrowError = false);
     Mmap::iterator searchNolock(const MetaDiff &diff);
+    Mmap::const_iterator searchNolock(const MetaDiff &diff) const;
     /**
      * Get first diffs;
      * @gid start position to search.

@@ -233,10 +233,10 @@ void GidRangeManager::merge(std::list<GidRange>& rngL, GidRange&& rng)
 }
 
 
-void GidRangeManager::print() const
+void GidRangeManager::print(FILE *fp) const
 {
     for (auto pair : map_) {
-        ::printf("%s", pair.second.str().c_str());
+        ::fprintf(fp, "%s", pair.second.str().c_str());
     }
 }
 
@@ -404,7 +404,7 @@ MetaDiffVec MetaDiffManager::getApplicableDiffList(
     MetaDiffVec v;
     for (;;) {
         MetaDiff d;
-        if (!getApplicableDiff(s, d)) break;
+        if (!getApplicableDiffNolock(s, d)) break;
         s = apply(s, d);
         if (!pred(d, s)) break;
         v.push_back(d);
@@ -439,7 +439,7 @@ MetaState MetaDiffManager::getOldestCleanState(const MetaState &st0) const
     for (;;) {
         if (st.snapB.isClean()) break;
         MetaDiff d;
-        if (!getApplicableDiff(st.snapB, d)) {
+        if (!getApplicableDiffNolock(st.snapB, d)) {
             throw cybozu::Exception("MetaDiffManager::getOldestCleanState:there is no clean snapshot.");
         }
         st = apply(st, d);
@@ -563,6 +563,29 @@ std::pair<uint64_t, uint64_t> MetaDiffManager::getMinMaxGid() const
 }
 
 
+void MetaDiffManager::validateForTest(int line) const
+{
+    AutoLock lk(mu_);
+
+    // Verify that the items in the mmap exist in the rangeMgr also.
+    for (auto it = mmap_.begin(); it != mmap_.end(); ++it) {
+        rangeMgr_.validateExistence(it, line);
+    }
+
+    // Verify that the items in the rangeMgr exist in the mmap also.
+    const auto& map = rangeMgr_.getMap();
+    for (auto it = map.begin(); it != map.end(); ++it) {
+        const GidRange& rng = it->second;
+        for (auto itM : rng.its) {
+            const MetaDiff& d = itM->second;
+            if (searchNolock(d) == mmap_.end()) {
+                throw cybozu::Exception(__func__) << "not found" << d;
+            }
+        }
+    }
+}
+
+
 void MetaDiffManager::addNolock(const MetaDiff &diff)
 {
     if (searchNolock(diff) != mmap_.end()) {
@@ -586,17 +609,31 @@ void MetaDiffManager::eraseNolock(const MetaDiff &diff, bool doesThrowError)
     mmap_.erase(it);
 }
 
+namespace {
 
-MetaDiffManager::Mmap::iterator MetaDiffManager::searchNolock(const MetaDiff &diff)
+template <typename Iterator, typename Mmap>
+Iterator searchNolockDetail(Mmap& mmap, const MetaDiff& diff)
 {
-    Mmap::iterator it, end;
-    std::tie(it, end) = mmap_.equal_range(diff.snapB.gidB);
+    Iterator it, end;
+    std::tie(it, end) = mmap.equal_range(diff.snapB.gidB);
     while (it != end) {
         const MetaDiff &d = it->second;
         if (diff == d) return it;
         ++it;
     }
-    return mmap_.end();
+    return mmap.end();
+}
+
+} // unnamed namespace
+
+MetaDiffManager::Mmap::iterator MetaDiffManager::searchNolock(const MetaDiff &diff)
+{
+    return searchNolockDetail<MetaDiffManager::Mmap::iterator>(mmap_, diff);
+}
+
+MetaDiffManager::Mmap::const_iterator MetaDiffManager::searchNolock(const MetaDiff &diff) const
+{
+    return searchNolockDetail<MetaDiffManager::Mmap::const_iterator>(mmap_, diff);
 }
 
 
