@@ -1234,16 +1234,19 @@ class Controller(object):
     To handle all walb servers in a backup group.
 
     '''
-    def __init__(self, controllerPath, sLayout, isDebug=False):
+    def __init__(self, controllerPath, sLayout, isDebug=False, timeoutS=0):
         '''
         controllerPath :: str   - walb controller executable path.
         sLayout :: ServerLayout - server layout.
         isDebug :: bool
+        timeoutS :: int - timeout for walbc command [sec]. 0 means default of walbc.
         '''
         verify_type(controllerPath, str)
         verify_type(isDebug, bool)
+        verify_type(timeoutS, int)
         self.controllerPath = controllerPath
         self.isDebug = isDebug
+        self.timeoutS = timeoutS
         self.set_server_layout(sLayout)
 
     def __str__(self):
@@ -1276,8 +1279,11 @@ class Controller(object):
                    "-p", str(s.port)]
         if self.isDebug:
             ctlArgs += ['-debug']
-        if timeoutS:
+        if timeoutS > 0:
             ctlArgs += ['-to', str(timeoutS)]
+        elif self.timeoutS > 0:
+            ctlArgs += ['-to', str(self.timeoutS)]
+
         return run_local_command(ctlArgs + cmdArgs, self.isDebug or putMsg,
                                  quietErr=quietErr)
 
