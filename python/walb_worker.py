@@ -44,6 +44,9 @@ def logd(*s):
 def loge(*s):
     log(ERR, *s)
 
+def logw(*s):
+    log(WARN, *s)
+
 def logi(*s):
     log(INFO, *s)
 
@@ -576,6 +579,7 @@ def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
             if g_quit:
                 break
             try:
+                bgnSelectTime = getCurrentTime()
                 volActTimeD = w.walbc.get_vol_dict_without_running_actions(w.a0)
                 if verbose2():
                     logd('volActTimeD', volActTimeD2Str(volActTimeD))
@@ -586,6 +590,11 @@ def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
                     g_quit = True
                     break
                 task = w.selectTask(volActTimeL, curTime)
+                selectPeriod = getCurrentTime() - bgnSelectTime
+                if selectPeriod > datetime.timedelta(seconds=10):
+                    logw('selectPeriod takes more than 10sec', selectPeriod.seconds)
+                else:
+                    logd('selectPeriod', selectPeriod.seconds)
                 break
             except Exception:
                 loge('err', traceback.format_exc())
