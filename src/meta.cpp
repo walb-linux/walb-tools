@@ -120,7 +120,7 @@ void GidRangeManager::remove(MetaDiffMmap::iterator it)
     const MetaDiff& d = it->second;
     uint64_t gid = d.snapB.gidB + 1;
     auto itR = map_.lower_bound(gid);
-    while (gid < d.snapE.gidB && itR != map_.end()) {
+    while (gid <= d.snapE.gidB && itR != map_.end()) {
         GidRange& rng = itR->second;
         std::vector<MetaDiffMmap::iterator>& its = rng.its;
         its.erase(std::remove(its.begin(), its.end(), it), its.end());
