@@ -286,9 +286,9 @@ struct ExistsDiffParam
 inline ExistsDiffParam parseExistsDiffParamForGet(const StrVec &args)
 {
     ExistsDiffParam param;
-    std::string volId, gidS[4];
+    std::string gidS[4];
     uint64_t gid[4];
-    cybozu::util::parseStrVec(args, 1, 5, {&volId, &gidS[0], &gidS[1], &gidS[2], &gidS[3]});
+    cybozu::util::parseStrVec(args, 1, 5, {&param.volId, &gidS[0], &gidS[1], &gidS[2], &gidS[3]});
     for (size_t i = 0; i < 4; i++) {
         gid[i] = cybozu::atoi(gidS[i]);
     }
