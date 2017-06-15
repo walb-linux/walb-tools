@@ -279,7 +279,7 @@ bool mergeDiffs(const std::string &volId, uint64_t gidB, bool isSize, uint64_t p
     LOGs.info() << "merge-mergeIn " << volId << merger.statIn();
     LOGs.info() << "merge-mergeOut" << volId << writer.getStat();
     LOGs.info() << "merge-mergeMemUsage" << volId << merger.memUsageStr();
-    LOGs.info() << "merged" << diffV.size() << mergedDiff;
+    LOGs.info() << "merged" << volId << diffV.size() << mergedDiff;
     return true;
 }
 
