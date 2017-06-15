@@ -134,7 +134,7 @@ static ApplyState applyDiffsToVolumeOnce(const std::string& volId, const MetaSta
         });
     if (diffV.empty()) return ApplyState::DONE;
 
-    LOGs.debug() << "apply-diffs" << st0 << diffV;
+    LOGs.debug() << "apply-diffs" << volId << st0 << diffV;
     const MetaState st01 = beginApplying(st0, diffV);
     volInfo.setMetaState(st01);
 
@@ -144,11 +144,13 @@ static ApplyState applyDiffsToVolumeOnce(const std::string& volId, const MetaSta
     if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
         return ApplyState::FAILURE;
     }
+    st1 = endApplying(st01, diffV);
+
     LOGs.info() << "apply-mergeIn " << volId << statIn;
     LOGs.info() << "apply-mergeOut" << volId << statOut;
     LOGs.info() << "apply-mergeMemUsage" << volId << memUsageStr;
+    LOGs.info() << "apply-status" << volId << st0 << st1;
 
-    st1 = endApplying(st01, diffV);
     volInfo.setMetaState(st1);
     volInfo.removeBeforeGid(st1.snapB.gidB);
     return ApplyState::REMAINING;
@@ -342,16 +344,19 @@ static bool applyDiffsToRestore(
         fileV, volInfo, !allowEmpty, st0, [&](const MetaState &st) {
             return volSt.diffMgr.getDiffListToRestore(st, gid, ga.maxOpenDiffs);
         });
-    LOGs.debug() << "restore-diffs" << st0 << diffV;
+    LOGs.debug() << "restore-diffs" << volId << st0 << diffV;
     DiffStatistics statIn, statOut;
     std::string memUsageStr;
     if (!applyOpenedDiffs(std::move(fileV), tmpLv, volSt.stopState, statIn, statOut, memUsageStr)) {
         return false;
     }
+    st1 = apply(st0, diffV);
+
     LOGs.info() << "restore-mergeIn " << volId << statIn;
     LOGs.info() << "restore-mergeOut" << volId << statOut;
     LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
-    st1 = apply(st0, diffV);
+    LOGs.info() << "restore-status" << volId << st0 << st1;
+
     return true;
 }
 
