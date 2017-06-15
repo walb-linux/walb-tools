@@ -523,13 +523,10 @@ MetaDiffVec MetaDiffManager::getDiffListToSync(const MetaState &st, const MetaSn
 {
     MetaDiffVec applicableV, minV;
     getTargetDiffLists(applicableV, minV, st, snap.gidB); // using lock.
-    if (minV.size() > applicableV.size()) return {};
+    if (minV.size() > applicableV.size()) return {}; // impossible to reproduce the snapshot.
     const MetaState appliedSt = apply(st, applicableV);
-    if (appliedSt.snapB == snap) {
-        return applicableV;
-    } else {
-        return {};
-    }
+    if (appliedSt.snapB != snap) return {}; // impossible also.
+    return applicableV;
 }
 
 

@@ -329,6 +329,33 @@ static void removeColdSnapshotsExceptTheLatestOne(ArchiveVolInfo &volInfo)
                 << cybozu::util::concat(removed, ", ");
 }
 
+
+static bool applyDiffsToRestore(
+    const std::string& volId, cybozu::lvm::Lv& tmpLv,
+    const MetaState& st0, uint64_t gid, MetaState& st1)
+{
+    ArchiveVolState &volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+
+    std::vector<cybozu::util::File> fileV;
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, !allowEmpty, st0, [&](const MetaState &st) {
+            return volSt.diffMgr.getDiffListToRestore(st, gid, ga.maxOpenDiffs);
+        });
+    LOGs.debug() << "restore-diffs" << st0 << diffV;
+    DiffStatistics statIn, statOut;
+    std::string memUsageStr;
+    if (!applyOpenedDiffs(std::move(fileV), tmpLv, volSt.stopState, statIn, statOut, memUsageStr)) {
+        return false;
+    }
+    LOGs.info() << "restore-mergeIn " << volId << statIn;
+    LOGs.info() << "restore-mergeOut" << volId << statOut;
+    LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
+    st1 = apply(st0, diffV);
+    return true;
+}
+
+
 /**
  * Restore a snapshot.
  * (1) create lvm snapshot of base lv. (with temporary lv name)
@@ -350,13 +377,13 @@ bool restore(const std::string &volId, uint64_t gid)
     removeLv(baseLv.vgName(), tmpLvName);
 
     bool useCold;
-    MetaState baseSt = volInfo.getMetaStateForRestore(gid, useCold);
+    MetaState st0 = volInfo.getMetaStateForRestore(gid, useCold);
 
     cybozu::lvm::Lv tmpLv;
     if (isThinpool()) {
         if (useCold) {
             /* Here the cold lv must exist. */
-            cybozu::lvm::Lv coldLv = lvC.getCold(baseSt.snapB.gidB);
+            cybozu::lvm::Lv coldLv = lvC.getCold(st0.snapB.gidB);
             tmpLv = coldLv.createTvSnap(tmpLvName, true);
             if (tmpLv.sizeLb() < baseLv.sizeLb()) {
                 tmpLv.resize(baseLv.sizeLb());
@@ -372,26 +399,13 @@ bool restore(const std::string &volId, uint64_t gid)
     }
     TmpSnapshotDeleter deleter{baseLv.vgName(), tmpLvName};
 
-    const bool noNeedToApply =
-        !baseSt.isApplying && baseSt.snapB.isClean() && baseSt.snapB.gidB == gid;
-
-    MetaState goalSt = baseSt;
-    if (!noNeedToApply) {
-        std::vector<cybozu::util::File> fileV;
-        MetaDiffVec diffV = tryOpenDiffs(
-            fileV, volInfo, !allowEmpty, baseSt, [&](const MetaState &st) {
-                return volSt.diffMgr.getDiffListToRestore(st, gid);
-            });
-        LOGs.debug() << "restore-diffs" << baseSt << diffV;
-        DiffStatistics statIn, statOut;
-        std::string memUsageStr;
-        if (!applyOpenedDiffs(std::move(fileV), tmpLv, volSt.stopState, statIn, statOut, memUsageStr)) {
-            return false;
-        }
-        LOGs.info() << "restore-mergeIn " << volId << statIn;
-        LOGs.info() << "restore-mergeOut" << volId << statOut;
-        LOGs.info() << "restore-mergeMemUsage" << volId << memUsageStr;
-        goalSt = apply(baseSt, diffV);
+    bool noNeedToApply =
+        !st0.isApplying && st0.snapB.isClean() && st0.snapB.gidB == gid;
+    MetaState st1 = st0;
+    while (!noNeedToApply) {
+        if (!applyDiffsToRestore(volId, tmpLv, st0, gid, st1)) return false;
+        noNeedToApply = !st1.isApplying && st1.snapB.isClean() && st1.snapB.gidB == gid;
+        st0 = st1;
     }
     if (isThinpool()) {
         util::flushBdevBufs(tmpLv.path().str());
@@ -399,7 +413,7 @@ bool restore(const std::string &volId, uint64_t gid)
         if (!cybozu::lvm::existsFile(baseLv.vgName(), coldLvName)) {
             cybozu::lvm::Lv coldLv = tmpLv.createTvSnap(coldLvName, false);
             lvC.addCold(gid, coldLv);
-            volInfo.setColdTimestamp(gid, goalSt.timestamp);
+            volInfo.setColdTimestamp(gid, st1.timestamp);
         }
     }
     cybozu::lvm::Lv snapLv = cybozu::lvm::renameLv(baseLv.vgName(), tmpLvName, targetName);

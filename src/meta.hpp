@@ -922,8 +922,10 @@ public:
      * RETURN:
      *   Empty vector means the clean snapshot can not be restored.
      */
-    MetaDiffVec getDiffListToRestore(const MetaState& st, uint64_t gid) const {
-        return getDiffListToSync(st, MetaSnap(gid));
+    MetaDiffVec getDiffListToRestore(const MetaState& st, uint64_t gid, size_t maxNr = 0) const {
+        MetaDiffVec v = getDiffListToSync(st, MetaSnap(gid));
+        if (maxNr > 0 && v.size() > maxNr) v.resize(maxNr);
+        return v;
     }
     /**
      * Get diff list to apply all diffs before a specified gid.
