@@ -927,15 +927,15 @@ public:
     }
     /**
      * Get diff list to apply all diffs before a specified gid.
+     *
+     * @st
+     * @gid
+     * @maxNr 0 means unlimited.
+     *
      * RETURN:
      *   Empty vector means there is no diff to apply.
      */
-    MetaDiffVec getDiffListToApply(const MetaState &st, uint64_t gid) const {
-        MetaDiffVec applicableV, minV;
-        getTargetDiffLists(applicableV, minV, st, gid);
-        if (minV.size() > applicableV.size()) return minV;
-        return applicableV;
-    }
+    MetaDiffVec getDiffListToApply(const MetaState &st, uint64_t gid, size_t maxNr = 0) const;
     /**
      * Get diff list to reproduce a snapshot.
      * RETURN:

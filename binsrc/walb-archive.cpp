@@ -53,6 +53,7 @@ struct Option
         opt.appendOpt(&a.fsyncIntervalSize, DEFAULT_FSYNC_INTERVAL_SIZE, "fi", "SIZE : fsync interval size [bytes].");
         opt.appendBoolOpt(&a.doAutoResize, "autoresize", ": resize base image automatically if necessary");
         opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", ": keep just one cold snapshot per volume.");
+        opt.appendOpt(&a.maxOpenDiffs, DEFAULT_MAX_OPEN_DIFFS, "maxopen", "NUM : max number of wdiff files to open together.");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&a.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif

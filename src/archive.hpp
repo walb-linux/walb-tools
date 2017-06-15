@@ -154,6 +154,7 @@ struct ArchiveSingleton
     KeepAliveParams keepAliveParams;
     bool doAutoResize;
     bool keepOneColdSnapshot;
+    size_t maxOpenDiffs; // 0 means unlimited.
     bool allowExec;
 
     /**

@@ -114,19 +114,57 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
 }
 
 
-bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
+enum class ApplyState {
+    FAILURE,
+    REMAINING,
+    DONE,
+};
+
+static ApplyState applyDiffsToVolumeOnce(const std::string& volId, const MetaState& st0, uint64_t gid, MetaState& st1)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
     MetaDiffManager &mgr = volSt.diffMgr;
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     VolLvCache &lvC = volSt.lvCache;
 
+    std::vector<cybozu::util::File> fileV;
+    MetaDiffVec diffV = tryOpenDiffs(
+        fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
+            return mgr.getDiffListToApply(st, gid, ga.maxOpenDiffs);
+        });
+    if (diffV.empty()) return ApplyState::DONE;
+
+    LOGs.debug() << "apply-diffs" << st0 << diffV;
+    const MetaState st01 = beginApplying(st0, diffV);
+    volInfo.setMetaState(st01);
+
+    cybozu::lvm::Lv lv = lvC.getLv(); // base image.
+    DiffStatistics statIn, statOut;
+    std::string memUsageStr;
+    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
+        return ApplyState::FAILURE;
+    }
+    LOGs.info() << "apply-mergeIn " << volId << statIn;
+    LOGs.info() << "apply-mergeOut" << volId << statOut;
+    LOGs.info() << "apply-mergeMemUsage" << volId << memUsageStr;
+
+    st1 = endApplying(st01, diffV);
+    volInfo.setMetaState(st1);
+    volInfo.removeBeforeGid(st1.snapB.gidB);
+    return ApplyState::REMAINING;
+}
+
+
+bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+
     {
         UniqueLock ul(volSt.mu);
         volInfo.recoverColdToBaseIfNecessary();
     }
 
-    std::vector<cybozu::util::File> fileV;
     bool useCold;
     MetaState st0 = volInfo.getMetaStateForApply(gid, useCold);
 
@@ -143,30 +181,21 @@ bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
         }
     }
 
-    MetaDiffVec diffV = tryOpenDiffs(
-        fileV, volInfo, !allowEmpty, st0, [&](const MetaState &st) {
-            return mgr.getDiffListToApply(st, gid);
-        });
-
-    LOGs.debug() << "apply-diffs" << st0 << diffV;
-    const MetaState st1 = beginApplying(st0, diffV);
-    volInfo.setMetaState(st1);
-
-    cybozu::lvm::Lv lv = lvC.getLv(); // base image.
-    DiffStatistics statIn, statOut;
-    std::string memUsageStr;
-    if (!applyOpenedDiffs(std::move(fileV), lv, volSt.stopState, statIn, statOut, memUsageStr)) {
-        return false;
+    for (;;) {
+        MetaState st1;
+        const ApplyState ret = applyDiffsToVolumeOnce(volId, st0, gid, st1);
+        switch (ret) {
+        case ApplyState::DONE:
+            return true;
+        case ApplyState::FAILURE:
+            return false;
+        case ApplyState::REMAINING:
+            st0 = st1;
+            continue;
+        default:
+            throw cybozu::Exception(__func__) << "BUG";
+        }
     }
-    LOGs.info() << "apply-mergeIn " << volId << statIn;
-    LOGs.info() << "apply-mergeOut" << volId << statOut;
-    LOGs.info() << "apply-mergeMemUsage" << volId << memUsageStr;
-
-    const MetaState st2 = endApplying(st1, diffV);
-    volInfo.setMetaState(st2);
-
-    volInfo.removeBeforeGid(st2.snapB.gidB);
-    return true;
 }
 
 

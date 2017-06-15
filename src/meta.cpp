@@ -478,7 +478,6 @@ std::vector<MetaState> MetaDiffManager::getRestorableList(const MetaState &st, b
 }
 
 
-
 void MetaDiffManager::getTargetDiffLists(
     MetaDiffVec& applicableV, MetaDiffVec& minV, const MetaState &st, uint64_t gid) const
 {
@@ -507,6 +506,17 @@ void MetaDiffManager::getTargetDiffLists(MetaDiffVec& applicableV, MetaDiffVec& 
 #endif
 }
 
+
+MetaDiffVec MetaDiffManager::getDiffListToApply(const MetaState &st, uint64_t gid, size_t maxNr) const
+{
+    MetaDiffVec applicableV, minV;
+    getTargetDiffLists(applicableV, minV, st, gid);
+    if (maxNr > 0 && applicableV.size() > maxNr) {
+        applicableV.resize(maxNr);
+    }
+    if (minV.size() > applicableV.size()) return minV;
+    return applicableV;
+}
 
 
 MetaDiffVec MetaDiffManager::getDiffListToSync(const MetaState &st, const MetaSnap &snap) const
