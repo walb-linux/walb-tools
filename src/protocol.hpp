@@ -104,6 +104,7 @@ const char *const restorableTN = "restorable";
 const char *const uuidTN = "uuid";
 const char *const archiveUuidTN = "archive-uuid";
 const char *const baseTN = "base";
+const char *const baseAllTN = "base-all";
 const char *const volSizeTN = "vol-size";
 const char *const progressTN = "progress";
 const char *const volumeGroupTN = "volume-group";

@@ -192,6 +192,7 @@ const protocol::GetCommandInfoMap &getGetCommandInfoMap()
         {uuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get uuid of a volume."}},
         {archiveUuidTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get archive uuid of a volume."}},
         {baseTN, {protocol::StringType, verifyVolIdParamForGet, "[volId] get base(meta state) of a volume."}},
+        {baseAllTN, {protocol::StringVecType, verifyNoneParam, "get base(meta state) of all the volumes."}},
         {volSizeTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get volume size [logical block]."}},
         {progressTN, {protocol::SizeType, verifyVolIdParamForGet, "[volId] get progress of full/hash backup/replication [logical block]."}},
         {volumeGroupTN, {protocol::StringType, verifyNoneParam, "get volume group name"}},

@@ -1536,23 +1536,45 @@ void getUuidDetail(protocol::GetCommandParams &p, bool isArchive)
 }
 
 
-void getBase(protocol::GetCommandParams &p)
+static bool getMetaState(const std::string& volId, MetaState &metaSt, bool throwError, const std::string &errMsg = "")
 {
-    const char *const FUNC = __func__;
-    const std::string volId = parseVolIdParam(p.params, 1);
-
     ArchiveVolState &volSt = getArchiveVolState(volId);
     UniqueLock ul(volSt.mu);
     const std::string st = volSt.sm.get();
     if (!isStateIn(st, aActive)) {
-        throw cybozu::Exception(FUNC) << "bad state" << volId << st;
+        if (throwError) {
+            throw cybozu::Exception(errMsg) << "bad state" << volId << st;
+        }
+        return false;
     }
-    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    const MetaState metaSt = volInfo.getMetaState();
-    ul.unlock();
+    metaSt  = getArchiveVolInfo(volId).getMetaState();
+    return true;
+}
+
+
+void getBase(protocol::GetCommandParams &p)
+{
+    const std::string volId = parseVolIdParam(p.params, 1);
+    MetaState metaSt;
+    getMetaState(volId, metaSt, true, __func__);
     const std::string metaStStr = metaSt.strTs();
     protocol::sendValueAndFin(p, metaStStr);
     p.logger.debug() << "get base succeeded" << volId << metaStStr;
+}
+
+
+void getBaseAll(protocol::GetCommandParams &p)
+{
+    StrVec ret;
+    for (const std::string &volId : ga.stMap.getKeyList()) {
+        MetaState metaSt;
+        if (!getMetaState(volId, metaSt, false)) continue;
+        ret.push_back(cybozu::util::formatString(
+                          "name:%s\tmetastate:%s"
+                          , volId.c_str(), metaSt.strTs().c_str()));
+    }
+    protocol::sendValueAndFin(p, ret);
+    p.logger.debug() << "get base-all succeeded" << ret.size();
 }
 
 

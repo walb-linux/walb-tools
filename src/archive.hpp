@@ -454,6 +454,7 @@ inline void getArchiveUuid(protocol::GetCommandParams &p)
 
 
 void getBase(protocol::GetCommandParams &p);
+void getBaseAll(protocol::GetCommandParams &p);
 bool getBlockHash(
     const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
     packet::Packet &pkt, Logger &, cybozu::murmurhash3::Hash &hash);
@@ -605,6 +606,7 @@ const protocol::GetCommandHandlerMap archiveGetHandlerMap = {
     { uuidTN, archive_local::getUuid },
     { archiveUuidTN, archive_local::getArchiveUuid },
     { baseTN, archive_local::getBase },
+    { baseAllTN, archive_local::getBaseAll },
     { volSizeTN, archive_local::getVolSize },
     { progressTN, archive_local::getProgress },
     { volumeGroupTN, archive_local::getVolumeGroup },
