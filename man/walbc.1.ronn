@@ -262,6 +262,12 @@ For `walb-storage`,
 * `get uuid`:
   get storage (wdev) uuid.
 
+* `get ts-delta`:
+  get difference of timestamps of the latest snapshot between the self host and the primary backup host for the all volumes.
+  This is useful to monitor continuous backup is running correctly.
+  The almost output data are the same as `walb-archive` except `kind`. `kind` must be 'storage'.
+
+
 ============================================
 
 For `walb-proxy`,
@@ -321,6 +327,10 @@ For `walb-archive`,
 * `get base` <VOLUME>:
   get base state (MetaState) of a volume.
 
+* `get base-all`:
+  get base state (MetaState) of the all volumes.
+  Output format is LTSV. `name` is volume name, `metastate` is MetaState string of the base image.
+
 * `get vol-size` <VOLUME>:
   get volume size [logical block].
 
@@ -329,6 +339,16 @@ For `walb-archive`,
   The task is one of full backup server, hash backup server,
   full replication server, resync replication server, hash replication server.
   There is at most one task concurrently.
+
+* `get ts-delta`:
+  get difference of timestamps of the latest snapshot between the self host and another hosts for the all volumes.
+  This is useful to monitor replication is running correctly.
+  Output format is LTSV.
+  `name` is volume name. `dest` is repication destination.
+  `kind` and `dest_kind` must be 'archive'.
+  `gid` and `ts` are the latest snapshot information of the host: generation id and timestamp.
+  `dest_gid` and `ts` are the latest snapshot information of the destination host.
+  `ts_delta` is the difference of `ts` and `dest_ts` in seconds.
 
 
 ## SEE ALSO
