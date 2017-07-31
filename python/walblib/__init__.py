@@ -1159,7 +1159,7 @@ def dict2args(d):
     return args
 
 
-def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1, maxConn=None):
+def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTasks=2, maxBgTasks=1, maxConn=None, timeoutS=None):
     '''
     Get walb-tools server parameters as a dictionary.
     s :: ServerStartupParam - server.
@@ -1168,6 +1168,7 @@ def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTa
     maxFgTasks :: int or None - max number of foreground tasks.
     maxBgTasks :: int or None - max number of background tasks.
     maxConn :: int or None - max number of connections.
+    timeoutS :: int or None - connection timeout [sec].
     return :: {str: *} - key: option string, value: option argument(s).
     '''
     verify_type(s, ServerStartupParam)
@@ -1178,6 +1179,7 @@ def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTa
     verify_type(maxFgTasks, int, allowNone=True)
     verify_type(maxBgTasks, int, allowNone=True)
     verify_type(maxConn, int, allowNone=True)
+    verify_type(timeoutS, int, allowNone=True)
 
     ret = {}
     if s.kind == K_STORAGE:
@@ -1209,6 +1211,8 @@ def get_server_params(s, sLayout=None, isDebug=False, useRepeater=False, maxFgTa
         ret['bg'] = maxBgTasks
     if maxConn is not None:
         ret['maxconn'] = maxConn
+    if timeoutS is not None:
+        ret['to'] = timeoutS
     if isDebug:
         ret['debug'] = None
     return ret
