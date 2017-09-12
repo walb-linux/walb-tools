@@ -139,7 +139,7 @@ std::vector<MetaDiffMmap::iterator> GidRangeManager::search(uint64_t gid) const
     auto itR = map_.lower_bound(gid + 1);
     if (itR == map_.end()) return {};
     const GidRange& rng = itR->second;
-    if (rng.gidB < gid) return {};
+    if (rng.gidB > gid) return {};
     return rng.its; // copy
 }
 
@@ -236,7 +236,7 @@ void GidRangeManager::merge(std::list<GidRange>& rngL, GidRange&& rng)
 void GidRangeManager::print(FILE *fp) const
 {
     for (auto pair : map_) {
-        ::fprintf(fp, "%s", pair.second.str().c_str());
+        ::fprintf(fp, "key:%" PRIu64 " %s", pair.first, pair.second.str().c_str());
     }
 }
 

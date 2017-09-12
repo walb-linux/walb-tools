@@ -7,6 +7,7 @@ using namespace walb;
 
 cybozu::util::Random<size_t> randx;
 
+
 CYBOZU_TEST_AUTO(diff)
 {
     MetaDiff d0({0, 0}, {1, 2}), d1(1, 2);
@@ -710,10 +711,32 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 1);
 }
 
+
+/**
+ * base   |3|
+ * diff |0|-->|5|
+ */
+CYBOZU_TEST_AUTO(metaDiffManager4)
+{
+    MetaSnap snap(3);
+    MetaState st(snap, 0);
+    MetaDiffVec v = { MetaDiff(0, 5, false, 1000), };
+
+    MetaDiffManager mgr;
+    for (MetaDiff &d : v) mgr.add(d);
+
+    CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 3);
+    auto v0 = mgr.getApplicableDiffList(st.snapB);
+    CYBOZU_TEST_EQUAL(v0.size(), 1);
+    auto v1 = mgr.getMinimumApplicableDiffList(st);
+    CYBOZU_TEST_EQUAL(v1.size(), 0);
+}
+
+
 /**
  * Use randomly generated diff list.
  */
-CYBOZU_TEST_AUTO(metaDiffManager4)
+CYBOZU_TEST_AUTO(metaDiffManager5)
 {
     MetaSnap snap(0), s0(snap), s1(snap);
     MetaState st(snap, 0);
