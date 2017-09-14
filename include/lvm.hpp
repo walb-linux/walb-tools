@@ -245,6 +245,51 @@ inline void waitForTpAvailable(const std::string &vgName, const std::string &tpN
 } //namespace local
 
 
+
+using LvmVersion = std::tuple<uint, uint, uint>; // major, minor, extra.
+
+
+inline LvmVersion getLvmVersion()
+{
+    LvmVersion ver(0, 0, 0);
+    std::string result = cybozu::process::call("/sbin/lvm", {"version"});
+    for (const std::string line : local::splitAndTrim(result, '\n')) {
+        if (line.empty()) continue; /* last '\n' */
+        /* We want to capture the line such as 'LVM version: 2.02.133(2) ...'
+           and get (2, 2, 133) values. */
+        StrVec sv = local::splitAndTrim(line, ' ');
+        sv.erase(std::remove(sv.begin(), sv.end(), ""), sv.end());
+        if (sv.size() < 3 || sv[0] != "LVM" || sv[1] != "version:") continue;
+        std::string& ver_str = sv[2];
+        size_t i = 0;
+        while (i < ver_str.size()) {
+            const char& c = ver_str[i];
+            if (!(('0' <= c && c <= '9') || c == '.')) break;
+            i++;
+        }
+        ver_str.resize(i);
+        StrVec ver_list = local::splitAndTrim(ver_str, '.');
+        if (ver_list.size() != 3) {
+            throw cybozu::Exception(__func__) << "lvm version string invalid" << ver_str;
+        }
+        uint v1, v2, v3;
+        v1 = cybozu::atoi(ver_list[0]);
+        v2 = cybozu::atoi(ver_list[1]);
+        v3 = cybozu::atoi(ver_list[2]);
+        ver = LvmVersion(v1, v2, v3);
+        break;
+    }
+    return ver;
+}
+
+
+inline const LvmVersion& getCachedLvmVersion()
+{
+    static LvmVersion ver = getLvmVersion();
+    return ver;
+}
+
+
 /**
  * Logical volume attributes.
  */
@@ -610,12 +655,18 @@ inline Lv createTvSnap(
         throw cybozu::Exception(__func__) << "not thin volume" << lvStr;
     }
 
-    const StrVec args = {
-        "-s",
-        local::getNameOpt(snapName),
-        local::getPermissionOpt(isWritable),
-        lvStr
-    };
+    StrVec args;
+    args.push_back("-s");
+    if (getCachedLvmVersion() >= LvmVersion(2, 2, 99)) {
+        /* You must specify -k(--setactivationskip) n option
+           to activate the created snapshot. */
+        args.push_back("-k");
+        args.push_back("n");
+    }
+    args.push_back(local::getNameOpt(snapName));
+    args.push_back(local::getPermissionOpt(isWritable));
+    args.push_back(lvStr);
+
     local::putArgsDebug(__func__, args);
     cybozu::process::call("/sbin/lvcreate", args);
 
