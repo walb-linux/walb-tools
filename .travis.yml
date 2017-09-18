@@ -61,4 +61,4 @@ script:
 # show log
   - cat stest/tmp/*.log
   - ls -al /dev/walb/*
-  - dmesg | -n 100
+  - dmesg | tail -n 100
