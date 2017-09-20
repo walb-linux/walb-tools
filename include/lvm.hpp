@@ -214,24 +214,6 @@ inline std::string getDiscardsOpt(int opt)
     throw cybozu::Exception(__func__) << "bad discards opt" << opt;
 }
 
-/**
- * CAUSION:
- *   Do not use this for thinpool volumes.
- *
- * RETURN:
- *   true when available,
- *   false in timeout.
- */
-inline void waitForDeviceAvailable(cybozu::FilePath &path, size_t timeoutMs = DEFAULT_TIMEOUT_MS)
-{
-    const size_t intervalMs = 100;
-    for (size_t i = 0; i < timeoutMs / intervalMs + 1; i++) {
-        if (isDeviceAvailable(path)) return;
-        local::sleepMs(intervalMs);
-    }
-    throw cybozu::Exception(__func__) << "wait for device timeout" << path;
-}
-
 inline void waitForTpAvailable(const std::string &vgName, const std::string &tpName, size_t timeoutMs = DEFAULT_TIMEOUT_MS)
 {
     const size_t intervalMs = 500;
@@ -244,6 +226,25 @@ inline void waitForTpAvailable(const std::string &vgName, const std::string &tpN
 
 } //namespace local
 
+
+/**
+ * CAUSION:
+ *   If you use newer lvm tool, you need to use -k option in lvcreate command line
+ *   to create dm-thin snapshot to activate the created volume and to be detected by this function.
+ *
+ * RETURN:
+ *   true when available,
+ *   false in timeout.
+ */
+inline void waitForDeviceAvailable(const cybozu::FilePath &path, size_t timeoutMs = DEFAULT_TIMEOUT_MS)
+{
+    const size_t intervalMs = 100;
+    for (size_t i = 0; i < timeoutMs / intervalMs + 1; i++) {
+        if (local::isDeviceAvailable(path)) return;
+        local::sleepMs(intervalMs);
+    }
+    throw cybozu::Exception(__func__) << "wait for device timeout" << path;
+}
 
 
 using LvmVersion = std::tuple<uint, uint, uint>; // major, minor, extra.
@@ -545,7 +546,7 @@ inline Lv createLv(const std::string &vgName, const std::string &lvName, uint64_
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
-    local::waitForDeviceAvailable(lvPath);
+    waitForDeviceAvailable(lvPath);
 
     Lv lv = locate(lvPath.str());
     if (lv.vgName() == vgName && lv.lvName() == lvName &&
@@ -570,7 +571,7 @@ inline Lv createTv(const std::string &vgName, const std::string &tpName, const s
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath lvPath = getLvmPath(vgName, lvName);
-    local::waitForDeviceAvailable(lvPath);
+    waitForDeviceAvailable(lvPath);
 
     Lv lv = locate(lvPath.str());
     if (lv.vgName() == vgName && lv.lvName() == lvName &&
@@ -631,7 +632,7 @@ inline Lv createLvSnap(
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
-    local::waitForDeviceAvailable(snapPath);
+    waitForDeviceAvailable(snapPath);
 
     Lv snap = locate(snapPath.str());
     if (snap.snapName() == snapName && snap.isSnap() && snap.lvName() == lvName &&
@@ -671,7 +672,7 @@ inline Lv createTvSnap(
     cybozu::process::call("/sbin/lvcreate", args);
 
     cybozu::FilePath snapPath = getLvmPath(vgName, snapName);
-    local::waitForDeviceAvailable(snapPath);
+    waitForDeviceAvailable(snapPath);
 
     Lv snap = locate(snapPath.str());
     if (snap.snapName() == snapName && snap.isSnap() && snap.lvName() == lvName &&
