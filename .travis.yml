@@ -55,6 +55,7 @@ script:
   - sudo lvcreate -n log -L 15m test
   - sudo lvcreate -n log2 -L 15m test
   - sudo lvcreate -n log3 -L 15m test
+  - for v in data data2 data3 log log2 log3; do sudo binsrc/wait-for-lv /dev/test/$v; done
   - echo sudo python stest/scenario0.py -tp n1 n2 n3 n4a n4b n5 n6 n7 n8 n9 n10 n11a n11b n12 n13 n14
 # start test
   - sudo python stest/scenario0.py
