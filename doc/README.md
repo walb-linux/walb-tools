@@ -1,6 +1,6 @@
 ## Walb-tools documents
 
-* [Tutorial](tutorial.md)
+* [Tutorial](tutorial.md)  [(Japanese version)](tutorial.ja.md)
 * [Overview](overview.md)
 * [Build](build.md)
 * Usage
