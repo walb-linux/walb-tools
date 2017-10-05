@@ -183,7 +183,7 @@ public:
         return *this;
     }
     FilePath operator+(const FilePath &rhs) const {
-        if (rhs.isRoot()) std::runtime_error("full path can not be added.");
+        if (rhs.isRoot()) throw std::runtime_error("full path can not be added.");
         if (path_.empty()) return rhs;
         return FilePath(path_ + SEPARATOR + rhs.path_).removeRedundancy();
     }
