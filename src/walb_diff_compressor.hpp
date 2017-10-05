@@ -210,7 +210,7 @@ class ConverterQueueT
             for (;;) {
                 {
                     UniqueLock lk(*m_);
-                    ready_->wait(lk, [this]() { return !readyQ_->empty() || (*quit_ && readyQ_->empty()); });
+                    ready_->wait(lk, [this]() { return !readyQ_->empty() || *quit_; });
                     if (*quit_ && readyQ_->empty()) break;
                     task = readyQ_->front();
                     readyQ_->pop_front();
