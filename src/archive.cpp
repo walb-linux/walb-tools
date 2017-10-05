@@ -2512,7 +2512,7 @@ void c2aResizeServer(protocol::ServerParams &p)
         logger.info() << "resize succeeded" << volId << newSizeLb << doZeroClear;
     } catch (std::exception &e) {
         logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
+        pkt.write(e.what());
     }
 }
 
