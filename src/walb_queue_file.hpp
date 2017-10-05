@@ -348,7 +348,7 @@ private:
                 return;
             }
         }
-        std::runtime_error("Both header data broken.");
+        throw std::runtime_error("Both header data broken.");
     }
     bool isValidFileHeader() const {
         if (header_.preamble != queue_local::QUEUE_PREAMBLE) {
