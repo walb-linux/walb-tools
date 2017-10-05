@@ -2484,7 +2484,6 @@ void c2aResizeServer(protocol::ServerParams &p)
     ProtocolLogger logger(ga.nodeId, p.clientId);
     packet::Packet pkt(p.sock);
 
-    bool sendErr = true;
     try {
         const ResizeParam param = parseResizeParam(protocol::recvStrVec(p.sock, 0, FUNC), true, false);
         const std::string &volId = param.volId;
