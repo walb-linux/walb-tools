@@ -403,8 +403,7 @@ public:
 template <typename T>
 inline std::shared_ptr<T> allocateMemory(size_t size)
 {
-    T *p = nullptr;
-    p = reinterpret_cast<T *>(::malloc(size));
+    T *p = reinterpret_cast<T *>(::malloc(size));
     if (p == nullptr) {
         throw std::bad_alloc();
     }
