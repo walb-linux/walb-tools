@@ -1347,6 +1347,11 @@ StrVec getAllStatusAsStrVec()
             v.push_back(s);
             continue;
         }
+        if (!volSt.lvCache.exists()) {
+            s += fmt(" ERROR: lvCache is empty. lv must not exsits.");
+            v.push_back(s);
+            continue;
+        }
         const MetaSnap latestSnap = volSt.getLatestMetaState().snapB;
         s += fmt(" latestSnapshot %s", latestSnap.str().c_str());
         const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
@@ -1383,6 +1388,10 @@ StrVec getVolStatusAsStrVec(const std::string &volId)
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (!volInfo.lvExists()) {
         v.push_back("baseLv NOT FOUND");
+        return v;
+    }
+    if (!volSt.lvCache.exists()) {
+        v.push_back("ERROR: lvCache is empty. lv must not exsits.");
         return v;
     }
     for (std::string& s : volInfo.getStatusAsStrVec()) {
