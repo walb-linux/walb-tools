@@ -299,7 +299,7 @@ void runGetCommandServer(ServerParams &p, const std::string &nodeId, const GetCo
         handler(cParams);
     } catch (std::exception &e) {
         logger.error() << e.what();
-        if (sendErr) pkt.write(e.what());
+        pkt.write(e.what());
     }
 }
 
