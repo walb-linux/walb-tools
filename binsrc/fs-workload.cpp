@@ -345,6 +345,7 @@ private:
         stat_.update(READ, fileSize, fileSize, size);
         LOGs.debug() << "read" << id << idToStr(id) << fileSize << size;
     }
+    UNUSED
     static void verifyFileSize(const char* type, size_t size, size_t realSize) {
         if (size != realSize) {
             LOGs.warn() << "file size differ" << type << size << realSize;

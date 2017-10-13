@@ -253,7 +253,8 @@ struct ListWdev : CommandBase {
                 struct walb_disk_data &d = ddata[i];
                 d.name[DISK_NAME_LEN - 1] = '\0';
                 ::printf("%u %u %s\n", d.major, d.minor, d.name);
-                minor[0] = d.minor + 2;
+                minor[0] = d.minor + 2; // starting minor id for next ioctl.
+                (void)minor[0];
             }
         }
         LOGs.debug() << "list done";

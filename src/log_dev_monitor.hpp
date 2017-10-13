@@ -160,6 +160,7 @@ private:
     void resetTrigger(int fd);
 
     /* debug */
+    UNUSED
     void printEvent(const struct epoll_event &ev) const;
 };
 
