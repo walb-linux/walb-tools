@@ -1,7 +1,7 @@
 .PHONY: all utest utest_all itest echo_binaries build clean rebuild install stest pylint manpages core version_cpp
 
-CXX = clang++
-CC = clang
+CXX = g++
+CC = gcc
 
 OPT_FLAGS =-DCYBOZU_EXCEPTION_WITH_STACKTRACE -g
 ifeq ($(DEBUG),1)
