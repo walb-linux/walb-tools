@@ -3,6 +3,11 @@
 CXX = g++
 CC = gcc
 
+CXX_KIND = $(shell $(CXX) --version |head -n1 |cut -d ' ' -f 1)
+CXX_VERSION_GE_7 = $(shell test `$(CXX) -dumpversion |cut -d '.' -f 1` -ge 7 && echo true || echo false)
+CC_KIND = $(shell $(CC) --version |head -n1 |cut -d ' ' -f 1)
+CC_VERSION_GE_7 = $(shell test `$(CC) -dumpversion |cut -d '.' -f 1` -ge 7 && echo true || echo false)
+
 OPT_FLAGS =-DCYBOZU_EXCEPTION_WITH_STACKTRACE -g
 ifeq ($(DEBUG),1)
 OPT_FLAGS += -DDEBUG -DWALB_DEBUG
@@ -49,6 +54,14 @@ LDLIBS_LOCAL = -lwalb-tools
 LDLIBS_AIO = -laio
 LDLIBS_COMPRESS = -lsnappy -llzma -lz -lzstd
 LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS) $(LDLIBS_BFD)
+
+# Zstd options.
+ZSTD_CFLAGS = $(OPT_FLAGS)
+ifeq ($(findstring gcc,$(CC_KIND)),gcc)
+  ifeq ($(CC_VERSION_GE_7),true)
+    ZSTD_CFLAGS += -Wimplicit-fallthrough=0  # to supress warning.
+  endif
+endif
 
 HEADERS = $(wildcard src/*.hpp src/*.h include/*.hpp include/*.h utest/*.hpp)
 BIN_SOURCES = $(wildcard binsrc/*.cpp)
@@ -111,7 +124,7 @@ utest/%: utest/%.o $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 3rd/zstd/libzstd.a:
-	$(MAKE) -C 3rd/zstd CC=$(CC) ZSTD_LEGACY_SUPPORT=0 libzstd.a
+	$(MAKE) -C 3rd/zstd CC=$(CC) CFLAGS="$(ZSTD_CFLAGS)" ZSTD_LEGACY_SUPPORT=0 libzstd.a
 
 clean: cleanobj cleanlib cleandep cleanman
 	rm -f $(BINARIES) $(TEST_BINARIES) $(LOCAL_LIB) src/version.cpp
