@@ -102,7 +102,7 @@ void initArchiveData()
         VolLvCache &lvC = p.second;
         try {
             getArchiveVolState(volId).lvCache = std::move(lvC);
-            verifyArchiveVol(volId);
+            verifyAndRecoverArchiveVol(volId);
             gcArchiveVol(volId);
             LOGs.debug() << "init" << volId;
         } catch (std::exception &e) {

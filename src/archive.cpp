@@ -418,6 +418,8 @@ bool restore(const std::string &volId, uint64_t gid)
         if (!cybozu::lvm::existsFile(baseLv.vgName(), coldLvName)) {
             cybozu::lvm::Lv coldLv = tmpLv.createTvSnap(coldLvName, false);
             lvC.addCold(gid, coldLv);
+            // If crash occurs here, the timestamp file does not exist but lv does.
+            // Such situations must be recovered by verifyAndRecoverArchiveVol().
             volInfo.setColdTimestamp(gid, st1.timestamp);
         }
     }
@@ -1851,7 +1853,7 @@ void ArchiveVolState::initInner(const std::string& volId)
 }
 
 
-void verifyArchiveVol(const std::string& volId)
+void verifyAndRecoverArchiveVol(const std::string& volId)
 {
     const char *const FUNC = __func__;
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -1882,14 +1884,17 @@ void verifyArchiveVol(const std::string& volId)
     // Check cold snapshots.
     for (VolLvCache::LvMap::value_type& p : volSt.lvCache.getColdMap()) {
         const uint64_t gid = p.first;
-        const cybozu::lvm::Lv& lv = p.second;
+        cybozu::lvm::Lv& lv = p.second;
         if (!lv.exists()) {
             throw cybozu::Exception(FUNC)
                 << "cold snapshot does not exist" << volId << gid;
         }
         if (!volInfo.existsColdTimestamp(gid)) {
-            throw cybozu::Exception(FUNC)
-                << "cold timestamp file does not exist" << volId << gid;
+            // It may be possible that the cold snapshot exists but the cold timestamp does not exists.
+            // In such cases the cold snapshot is incomplete so it must be deleted.
+            LOGs.info() << FUNC << "removing an incomplete cold snapshot" << volId << gid;
+            volSt.lvCache.removeCold(gid);
+            lv.remove();
         }
     }
 }

@@ -517,7 +517,7 @@ void getHandlerStat(protocol::GetCommandParams &p);
 } // namespace archive_local
 
 
-void verifyArchiveVol(const std::string& volId);
+void verifyAndRecoverArchiveVol(const std::string& volId);
 void gcArchiveVol(const std::string& volId);
 void c2aStatusServer(protocol::ServerParams &p);
 void c2aInitVolServer(protocol::ServerParams &p);
