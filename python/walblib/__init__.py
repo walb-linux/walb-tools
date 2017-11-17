@@ -2422,7 +2422,7 @@ class Controller(object):
         block :: Bool    - blocking behavior.
         bulkSizeU :: str - bulk size with unit suffix [byte]. '64K' etc.
         syncOpt :: SyncOpt or None - synchronization option.
-        return :: int    - generation id of a clean snapshot.
+        return :: int or None   - generation id of a clean snapshot. (None if block is False.)
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -2438,7 +2438,7 @@ class Controller(object):
             args.append(bulkSizeU)
         self.run_ctl(sx, args)
         if not block:
-            return
+            return None
         self._wait_for_state_change(sx, vol, sDuringFullSync,
                                     [sTarget], timeoutS)
         st = self.get_state(a0, vol)
@@ -2467,7 +2467,7 @@ class Controller(object):
         block :: bool    - blocking behavior.
         bulkSizeU :: str or None - bulk size with unit suffix [byte]. '64K' etc.
         syncOpt :: SyncOpt or None - synchronization option.
-        return :: int    - generation id of a clean snapshot.
+        return :: int or None   - generation id of a clean snapshot. (None if block is False.)
         '''
         verify_server_kind(sx, [K_STORAGE])
         verify_type(vol, str)
@@ -2488,7 +2488,7 @@ class Controller(object):
             args.append(bulkSizeU)
         self.run_ctl(sx, args)
         if not block:
-            return
+            return None
         self._wait_for_state_change(sx, vol, sDuringHashSync,
                                     [sTarget], timeoutS)
         st = self.get_state(a0, vol)
