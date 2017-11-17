@@ -74,6 +74,17 @@ public:
         util::makeDir(getSendtoDir(name).str(),
                       "ProxyVolInfo::addArchiveInfo", ensureNotExistance);
         archiveSet_.insert(name);
+#if 1
+        // Mgr must be empty here. But some bugs exist so we must delete garbages.
+        MetaDiffManager &mgr = diffMgrMap_.get(name);
+        if (ensureNotExistance && !mgr.empty()) {
+            LOGs.warn() << "MetaDiffManager is not empty" << volId << name;
+            for (const MetaDiff& d : mgr.getAll()) {
+                LOGs.info() << "diff" << d;
+            }
+            mgr.clear();
+        }
+#endif
     }
     void deleteArchiveInfo(const std::string &name) {
         diffMgrMap_.get(name).clear();

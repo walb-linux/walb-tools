@@ -217,7 +217,6 @@ void c2pClearVolServer(protocol::ServerParams &p)
         verifyActionNotRunning(volSt.ac, volSt.archiveSet, FUNC);
 
         StateMachineTransaction tran(volSt.sm, pStopped, ptClearVol);
-        volSt.archiveSet.clear();
         ul.unlock();
         ProxyVolInfo volInfo = getProxyVolInfo(volId);
         volInfo.clear();
