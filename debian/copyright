@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: walb-tools
-Source: https://github.com/starpos/walb-tools/
+Source: https://github.com/walb-linux/walb-tools/
 
 Files: *
 Copyright: 2012 Cybozu Labs Inc.

@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Takashi HOSHINO <starpos@gmail.com>
 Build-Depends: debhelper (>= 9), libaio-dev, libsnappy-dev, zlib1g-dev, liblzma-dev, ruby-ronn, python-all(>=2.7), python-setuptools, dh-python, python-docutils
 Standards-Version: 3.9.5
-Homepage: https://github.com/starpos/walb-tools/
+Homepage: https://github.com/walb-linux/walb-tools/
 #Vcs-Git: git://git.debian.org/collab-maint/walb-tools.git
 #Vcs-Browser: http://git.debian.org/?p=collab-maint/walb-tools.git;a=summary
 
