@@ -2019,19 +2019,20 @@ class Controller(object):
             self.run_ctl(s, ['start', vol])
             self._wait_for_state_change(s, vol, [atStart], aActive)
 
-    def del_archive_from_proxy(self, px, vol, ax):
+    def del_archive_from_proxy(self, px, vol, ax, stopEmpty=False):
         '''
         Delete an archive from a proxy.
         px :: ServerParams - proxy server.
         vol :: str       - voume name.
         ax :: ServerParams - archive server.
+        stopEmpty :: bool - run stop empty instead stop force if True.
         '''
         verify_server_kind(px, [K_PROXY])
         verify_type(vol, str)
         verify_server_kind(ax, [K_ARCHIVE])
         st = self.get_state(px, vol)
         if st in pActive:
-            self.stop(px, vol, 'force')
+            self.stop(px, vol, 'empty' if stopEmpty else 'force')
         aL = self.get_archive_info_list(px, vol)
         if ax.name in aL:
             self.run_ctl(px, ['archive-info', 'delete', vol, ax.name])
