@@ -1247,24 +1247,24 @@ bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLoc
 
     cybozu::Uuid archiveUuid;
     pkt.read(archiveUuid);
-    bool canResync;
-    pkt.read(canResync);
+    bool doResync;
+    pkt.read(doResync);
 
     int kind = DO_HASH_OR_DIFF_SYNC;
     const std::string state = volSt.sm.get();
     if (state == aSyncReady) {
-        if (canResync && volInfo.lvExists()) {
+        if (doResync && volInfo.lvExists()) {
             kind = DO_RESYNC;
         } else {
             kind = DO_FULL_SYNC;
         }
     } else {
         // aArchived
-        if (volInfo.getArchiveUuid() != archiveUuid) {
+        if (volInfo.getArchiveUuid() != archiveUuid || doResync) {
             kind = DO_RESYNC;
         }
     }
-    if (!canResync && kind == DO_RESYNC) {
+    if (!doResync && kind == DO_RESYNC) {
         const char *msg = "resync is required but not allowed";
         pkt.write(msg);
         pkt.flush();
