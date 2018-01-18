@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) try
         server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }
-    LOGs.info() << "shutdown walb storage server";
+    LOGs.info() << util::getDescription("shutdown walb storage server");
 
 } catch (std::exception &e) {
     LOGe("StorageServer: error: %s\n", e.what());

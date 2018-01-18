@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) try
     const size_t concurrency = g.maxConnections;
     server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, g.handlerStatMgr,
                concurrency, g.keepAliveParams, g.socketTimeout);
-    LOGs.info() << "shutdown walb archive server";
+    LOGs.info() << util::getDescription("shutdown walb archive server");
 
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());

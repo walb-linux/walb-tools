@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) try
         server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }
-    LOGs.info() << "shutdown walb proxy server";
+    LOGs.info() << util::getDescription("shutdown walb proxy server");
 
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());
