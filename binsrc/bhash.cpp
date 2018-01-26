@@ -74,13 +74,19 @@ int doMain(int argc, char* argv[])
 
     const size_t maxIoLb = opt.ios / LOGICAL_BLOCK_SIZE;
     const uint64_t offsetLb = opt.off / LOGICAL_BLOCK_SIZE;
+    const uint64_t maxLb = cybozu::util::getBlockDeviceSize(file.fd())
+        / LOGICAL_BLOCK_SIZE - offsetLb;
     uint64_t scanLb;
     if (opt.scanSize == 0) {
-        const uint64_t bytes = cybozu::util::getBlockDeviceSize(file.fd());
-        scanLb = bytes / LOGICAL_BLOCK_SIZE - offsetLb;
+        scanLb = maxLb;
     } else {
         scanLb = opt.scanSize / LOGICAL_BLOCK_SIZE;
     }
+    if (scanLb > maxLb) {
+        throw cybozu::Exception("specified scanLb is larger than maxLb")
+            << scanLb << maxLb;
+    }
+
     const bool useChunk = opt.chunkSize > 0;
     const uint64_t chunkLb = useChunk ? opt.chunkSize / LOGICAL_BLOCK_SIZE : scanLb;
 
