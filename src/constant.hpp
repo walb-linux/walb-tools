@@ -35,7 +35,7 @@ const size_t DEFAULT_SOCKET_TIMEOUT_SEC = 10;
 
 const uint64_t DEFAULT_FULL_SCAN_BYTES_PER_SEC = 0; // unlimited.
 
-const uint64_t DEFAULT_FSYNC_INTERVAL_SIZE = 128 * MEBI;
+const uint64_t DEFAULT_FSYNC_INTERVAL_SIZE = 1 * GIBI;
 const size_t DEFAULT_MERGE_BUFFER_LB = 4 * MEBI / LBS;
 
 const char DEFAULT_DISCARD_TYPE_STR[] = "ignore";
