@@ -724,7 +724,7 @@ void backupClient(protocol::ServerParams &p, bool isFull)
 
         // (7) in storage-daemon.txt
         logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN)
-                      << "started" << volId << archiveId;
+                      << "started" << volId << archiveId << sizeLb << bulkLb;
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
             if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {

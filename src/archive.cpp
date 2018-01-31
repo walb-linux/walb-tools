@@ -571,7 +571,8 @@ void backupServer(protocol::ServerParams &p, bool isFull)
     if (st != stFrom) {
         throw cybozu::Exception(FUNC) << "state is not" << stFrom << "but" << st;
     }
-    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN) << "started" << volId;
+    logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN) << "started" << volId
+                  << p.clientId << sizeLb << bulkLb;
     bool isOk;
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
     if (isFull) {
@@ -705,7 +706,7 @@ bool runFullReplClient(
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
     uint64_t startLb;
     pkt.read(startLb);
-    logger.info() << "full-repl-client startLb" << startLb;
+    logger.info() << "full-repl-client started" << volId << dstId << sizeLb << bulkLb << startLb;
 
     const std::string lvPath = lv.path().str();
     const std::atomic<uint64_t> fullScanLbPerSec(0);
@@ -743,7 +744,7 @@ bool runFullReplServer(
     }
     FullReplState fullReplSt;
     const uint64_t startLb = volInfo.initFullReplResume(sizeLb, archiveUuid, metaSt, fullReplSt);
-    logger.info() << "full-repl-server startLb" << startLb;
+    logger.info() << "full-repl-server started" << volId << sizeLb << bulkLb << startLb;
     volSt.progressLb = startLb;
     ZeroResetter resetter(volSt.progressLb);
 
@@ -799,6 +800,7 @@ bool runHashReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
+    logger.info() << "hash-repl-client started" << volId << dstId << sizeLb << bulkLb << diff;
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapE);
     const std::atomic<uint64_t> fullScanLbPerSec(0);
@@ -850,6 +852,7 @@ bool runHashReplServer(
     pkt.write(msgOk);
     pkt.flush();
 
+    logger.info() << "hash-repl-server started" << volId << sizeLb << bulkLb << diff;
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
     ul.unlock();
@@ -1061,6 +1064,7 @@ bool runResyncReplClient(
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
+    logger.info() << "resync-repl-client started" << volId << sizeLb << bulkLb << metaSt;
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, metaSt.snapB);
     const std::atomic<uint64_t> fullScanLbPerSec(0);
@@ -1109,6 +1113,7 @@ bool runResyncReplServer(
     pkt.write(msgOk);
     pkt.flush();
 
+    logger.info() << "resync-repl-server started" << volId << sizeLb << bulkLb << metaSt;
     cybozu::Stopwatch stopwatch;
 
     if (volSt.sm.get() == aArchived) {
