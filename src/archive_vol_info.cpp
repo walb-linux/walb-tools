@@ -372,6 +372,7 @@ void ArchiveVolInfo::createLv(uint64_t sizeLb)
         }
         if (isThinProvisioning()) {
             // Deallocate all the area to execute efficient full backup/replication.
+            LOGs.info() << "try to discard all area" << volId << curSizeLb;
             cybozu::util::File file(lv.path().str(), O_RDWR | O_DIRECT);
             cybozu::util::issueDiscard(file.fd(), 0, curSizeLb);
             file.fdatasync();
