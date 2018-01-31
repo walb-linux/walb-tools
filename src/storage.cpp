@@ -868,10 +868,11 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
             LOGs.warn() << FUNC << res;
         } catch (std::exception &e) {
             LOGs.warn() << FUNC << e.what();
+            if (sock.isValid()) sock.close(true);
         }
     }
     if (!isAvailable) {
-        throw cybozu::Exception(FUNC) << "There is no available proxy";
+        throw cybozu::Exception(FUNC) << "There is no available proxy" << volId;
     }
 
     ProtocolLogger logger(gs.nodeId, serverId);
