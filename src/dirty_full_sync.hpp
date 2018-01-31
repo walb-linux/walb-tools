@@ -8,6 +8,7 @@
 #include "fileio.hpp"
 #include "walb_logger.hpp"
 #include "bdev_reader.hpp"
+#include "bdev_writer.hpp"
 #include "full_repl_state.hpp"
 #include "snappy_util.hpp"
 #include "cybozu/exception.hpp"
