@@ -845,7 +845,6 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
     cybozu::Socket sock;
     packet::Packet pkt(sock);
     std::string serverId;
-    bool isAvailable = false;
     for (const cybozu::SocketAddr &proxy : gs.proxyManager.getAvailableList()) {
         try {
             util::connectWithTimeout(sock, proxy, gs.socketTimeout);
@@ -861,17 +860,14 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
             LOGs.debug() << "send" << volId << uuid << pbs << salt << volSizeLb << maxLogSizePb;
             std::string res;
             pkt.read(res);
-            if (res == msgAccept) {
-                isAvailable = true;
-                break;
-            }
+            if (res == msgAccept) break;
             LOGs.warn() << FUNC << res;
         } catch (std::exception &e) {
             LOGs.warn() << FUNC << e.what();
-            if (sock.isValid()) sock.close(true);
+            sock.close(true); // sock may be reused.
         }
     }
-    if (!isAvailable) {
+    if (!sock.isValid()) {
         throw cybozu::Exception(FUNC) << "There is no available proxy" << volId;
     }
 
