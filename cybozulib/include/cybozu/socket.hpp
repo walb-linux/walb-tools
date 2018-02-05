@@ -637,6 +637,42 @@ public:
 		return fdNum;
 #endif
 	}
+	int queryAcceptNoThrow2(int msec = 1000, bool checkWrite = true)
+	{
+		if (sd_ < 0) return -EBADF;
+#ifdef CYBOZU_SOCKET_USE_EPOLL
+		int err;
+		experimental::Epoll ep;
+		if (!ep.init(&err)) return -err;
+		uint32_t events = checkWrite ? EPOLLIN : EPOLLOUT;
+        events |= EPOLLET;
+		experimental::AutoLock al(ep, sd_, events);
+		experimental::EpollEvent ev;
+		int ret = ep.wait(&ev, 1024, msec);
+		if (ret < 0) return ret;
+		assert(ev.getFd() == sd_);
+		return ret;
+#else
+#ifndef _WIN32
+		// https://msdn.microsoft.com/en-us/library/windows/desktop/ms739169.aspx
+		if (sd_ >= FD_SETSIZE) return -EMFILE;
+#endif
+		struct timeval timeout;
+		timeout.tv_sec = msec / 1000;
+		timeout.tv_usec = (msec % 1000) * 1000;
+		fd_set fds;
+		FD_ZERO(&fds);
+		FD_SET((unsigned)sd_, &fds);
+		int fdNum;
+		if (checkWrite) {
+			fdNum = ::select((int)sd_ + 1, &fds, 0, 0, &timeout);
+		} else {
+			fdNum = ::select((int)sd_ + 1, 0, &fds, 0, &timeout);
+		}
+		if (fdNum < 0) return -errno;
+		return fdNum;
+#endif
+	}
 	/**
 		return true if acceptable, otherwise false
 		return false if one second passed

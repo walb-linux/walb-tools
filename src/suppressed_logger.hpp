@@ -39,17 +39,25 @@ class SuppressedLogger
     cybozu::Timespec ts_;
     cybozu::LogPriority pri_;
     std::string suffix_;
+    time_t intervalSec_;
 public:
     SuppressedLogger()
-        : count_(0), ts_(0), pri_(cybozu::LogDebug), suffix_() {}
+        : count_(0), ts_(0), pri_(cybozu::LogDebug), suffix_()
+        , intervalSec_(1) {}
     void setSuppressMessageSuffix(const std::string &suffix) {
         suffix_ = suffix;
+    }
+    void setInervalSec(size_t intervalSec) {
+        if (intervalSec == 0) {
+            throw cybozu::Exception("SuppressedLogger:intervalSec must not be 0");
+        }
+        intervalSec_ = intervalSec;
     }
     void putSuppressedMessageIfNecessary() {
         if (count_ == 0) return;
         cybozu::Timespec now = cybozu::getNowAsTimespec();
-        const cybozu::TimespecDiff oneSec(1);
-        if (now - ts_ < oneSec) return;
+        const cybozu::TimespecDiff interval((int)intervalSec_);
+        if (now - ts_ < interval) return;
         LOGs.writeS(pri_, suppressMessage());
         count_ = 0;
         ts_ = now;
@@ -65,8 +73,8 @@ private:
     }
     void tryToWrite(const std::string& s) {
         cybozu::Timespec now = cybozu::getNowAsTimespec();
-        const cybozu::TimespecDiff oneSec(1);
-        if (now - ts_ >= oneSec) {
+        const cybozu::TimespecDiff interval((int)intervalSec_);
+        if (now - ts_ >= interval) {
             if (count_ > 0) {
                 LOGs.writeS(pri_, suppressMessage());
                 count_ = 0;

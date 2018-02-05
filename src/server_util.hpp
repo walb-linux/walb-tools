@@ -26,6 +26,8 @@
 namespace walb {
 namespace server {
 
+const int LOG_SUPRESS_INTERVAL_SEC = 10;
+
 /**
  * Multi threaded server.
  */
@@ -40,6 +42,7 @@ private:
 public:
     MultiThreadedServer() : logger_() {
         logger_.setSuppressMessageSuffix(exceedsMaxConcurrencyMsg());
+        logger_.setInervalSec(LOG_SUPRESS_INTERVAL_SEC);
     }
     void run(ProcessStatus &ps, uint16_t port, const std::string& nodeId,
              const protocol::Str2ServerHandler& handlers, protocol::HandlerStatMgr& handlerStatMgr,
