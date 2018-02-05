@@ -97,6 +97,45 @@ void shutdownServer(ServerParams &p)
     pkt.writeFin(msgAccept);
 }
 
+
+void sleepClient(ClientParams &p)
+{
+    const size_t sec = parseSleepParam(p.params);
+    packet::Packet pkt(p.sock);
+    pkt.write(sec);
+    std::string res;
+    pkt.read(res);
+    if (res != msgOk) {
+        throw cybozu::Exception(__func__) << res;
+    }
+}
+
+
+std::atomic<size_t> sleepTaskCount_(0);
+
+
+void sleepServer(ServerParams &p) try
+{
+    packet::Packet pkt(p.sock);
+    size_t sec;
+    pkt.read(sec);
+
+    size_t remaining = sec;
+    LOGs.info() << "sleep started" << sec;
+    for (; remaining > 0; remaining--) {
+        if (p.ps.isForceShutdown()) break;
+        util::sleepMs(1000);
+    }
+    const size_t nr = sleepTaskCount_.fetch_add(1) + 1;
+    LOGs.info() << "sleep ended" << sec << remaining << nr;
+
+    pkt.writeFin(msgOk);
+
+} catch (std::exception& e) {
+    LOGs.info() << "sleep error" << e.what();
+}
+
+
 StrVec prettyPrintHandlerStat(const HandlerStat& stat)
 {
     StrVec ret;
@@ -134,9 +173,8 @@ StrVec prettyPrintHandlerStat(const HandlerStat& stat)
 ServerHandler findServerHandler(
     const Str2ServerHandler &handlers, const std::string &protocolName)
 {
-    if (protocolName == shutdownCN) {
-        return shutdownServer;
-    }
+    if (protocolName == shutdownCN) return shutdownServer;
+    if (protocolName == sleepCN) return sleepServer;
     Str2ServerHandler::const_iterator it = handlers.find(protocolName);
     if (it == handlers.cend()) {
         throw cybozu::Exception(__func__) << "bad protocol" << protocolName;

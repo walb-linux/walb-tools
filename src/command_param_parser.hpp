@@ -224,6 +224,7 @@ struct BackupParam
 
 BackupParam parseBackupParam(const StrVec &args);
 bool parseShutdownParam(const StrVec &args);
+size_t parseSleepParam(const StrVec &args);
 
 
 inline void verifyNoneParam(const StrVec &) {}
@@ -252,6 +253,7 @@ inline void verifyKickParam(const StrVec &args) { parseKickParam(args); }
 inline void verifySetFullScanBps(const StrVec &args) { parseSetFullScanBps(args); }
 inline void verifyBackupParam(const StrVec &args) { parseBackupParam(args); }
 inline void verifyShutdownParam(const StrVec &args) { parseShutdownParam(args); }
+inline void verifySleepParam(const StrVec &args) { parseSleepParam(args); }
 inline void verifyDumpLogpackHeader(const StrVec &args) { parseVolIdAndLsidParam(args); }
 
 

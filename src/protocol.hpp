@@ -79,6 +79,7 @@ const char *const dbgDumpLogpackHeaderCN = "dbg-dump-logpack-header";
 const char *const setFullScanBpsCN = "set-full-scan-bps";
 const char *const gcDiffCN = "gc-diff";
 const char *const debugCN = "debug";
+const char *const sleepCN = "sleep";
 
 /**
  * Target name of 'get' command.
@@ -198,6 +199,9 @@ struct ServerParams
 
 void shutdownClient(ClientParams &p);
 void shutdownServer(ServerParams &p);
+
+void sleepClient(ClientParams &p);
+void sleepServer(ClientParams &p);
 
 
 /**

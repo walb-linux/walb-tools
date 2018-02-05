@@ -135,6 +135,12 @@ void setupShutdown(cybozu::Option& opt)
     opt.appendParamOpt(&force, "", "(opt)", ": force");
 }
 
+void setupSleep(cybozu::Option& opt)
+{
+    static size_t sec;
+    opt.appendParamOpt(&sec, 1, "(sec)", ": specify seconds to sleep.");
+}
+
 void setupDisableSnapshot(cybozu::Option& opt)
 {
     setupVolId(opt);
@@ -199,6 +205,7 @@ const CommandInfo g_cmdTbl[] = {
     { getCN, c2xGetClient, setupGet, verifyNoneParam, "get some information from a server." },
     { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
     { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
+    { sleepCN, protocol::sleepClient, setupSleep, verifySleepParam, "sleep specified seconds. (for debug and test)" },
     { gcDiffCN, c2aGarbageCollectDiffClient, setupVolId, verifyVolIdParam, "garbage collect diffs." },
     { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, "reload metadata of a volue in an archive (for debug)." },
     { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },

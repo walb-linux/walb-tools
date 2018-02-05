@@ -339,4 +339,15 @@ bool parseShutdownParam(const StrVec &args)
 }
 
 
+size_t parseSleepParam(const StrVec &args)
+{
+    std::string secStr;
+    cybozu::util::parseStrVec(args, 0, 0, {&secStr});
+    if (secStr.empty()) {
+        return 1;
+    }
+    return cybozu::atoi(secStr);
+}
+
+
 } // namespace walb
