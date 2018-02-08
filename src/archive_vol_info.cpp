@@ -359,23 +359,18 @@ void ArchiveVolInfo::createLv(uint64_t sizeLb)
         throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is zero");
     }
     if (lvExists()) {
-        cybozu::lvm::Lv lv;
-        if (lvC_.exists()) {
-            lv = lvC_.getLv();
-        } else {
-            lv = cybozu::lvm::locate(getVg().name(), lvName());
-            lvC_.add(lv);
-        }
-        uint64_t curSizeLb = lv.sizeLb();
-        if (curSizeLb != sizeLb) {
-            throw cybozu::Exception("ArchiveVolInfo::createLv:sizeLb is different") << curSizeLb << sizeLb;
-        }
+        cybozu::lvm::Lv lv = getLv();
+        const bool zeroClear = true;
         if (isThinProvisioning()) {
+            growLv(sizeLb, !zeroClear);
             // Deallocate all the area to execute efficient full backup/replication.
-            LOGs.info() << "try to discard all area" << volId << curSizeLb;
+            LOGs.info() << "base image discard all area started" << volId << sizeLb;
             cybozu::util::File file(lv.path().str(), O_RDWR | O_DIRECT);
-            cybozu::util::issueDiscard(file.fd(), 0, curSizeLb);
+            cybozu::util::issueDiscard(file.fd(), 0, sizeLb);
             file.fdatasync();
+            LOGs.info() << "base image discard all area done" << volId << sizeLb;
+        } else {
+            growLv(sizeLb, zeroClear);
         }
         return;
     }
@@ -410,6 +405,33 @@ void ArchiveVolInfo::growLv(uint64_t newSizeLb, bool doZeroClear)
         cybozu::util::File f(lvPathStr, O_RDWR | O_DIRECT);
         cybozu::aio::zeroClear(f.fd(), oldSizeLb, newSizeLb - oldSizeLb);
         f.fdatasync();
+    }
+}
+
+void ArchiveVolInfo::prepareBaseImageForFullRepl(uint64_t sizeLb, uint64_t startLb)
+{
+    assert(startLb < sizeLb);
+    if (startLb == 0) {
+        createLv(sizeLb);
+        return;
+    }
+    if (!lvExists()) {
+        throw cybozu::Exception(__func__) << "lv not exists" << volId;
+    }
+    cybozu::lvm::Lv lv = getLv();
+    if (lv.sizeLb() > sizeLb) {
+        throw cybozu::Exception(__func__) << "lv " << volId;
+    }
+    const bool zeroClear = true;
+    if (isThinProvisioning()) {
+        growLv(sizeLb, !zeroClear);
+        LOGs.info() << "base image discard started" << volId << startLb << sizeLb;
+        cybozu::util::File file(lv.path().str(), O_RDWR | O_DIRECT);
+        cybozu::util::issueDiscard(file.fd(), startLb, sizeLb - startLb);
+        file.fdatasync();
+        LOGs.info() << "base image discard done" << volId << startLb << sizeLb;
+    } else {
+        growLv(sizeLb, zeroClear);
     }
 }
 
@@ -587,5 +609,14 @@ void ArchiveVolInfo::recoverColdToBaseIfNecessary()
     lvC_.removeTmpColdToBaseLv();
     removeBeforeGid(coldGid);
 }
+
+cybozu::lvm::Lv ArchiveVolInfo::getLv()
+{
+    if (lvC_.exists()) return lvC_.getLv();
+    cybozu::lvm::Lv lv = cybozu::lvm::locate(getVg().name(), lvName());
+    lvC_.add(lv);
+    return lv;
+}
+
 
 } // namespace walb

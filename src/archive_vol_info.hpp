@@ -378,6 +378,7 @@ public:
      * @doZeroClar zero-clear the extended area if true.
      */
     void growLv(uint64_t newSizeLb, bool doZeroClear = false);
+    void prepareBaseImageForFullRepl(uint64_t sizeLb, uint64_t startLb);
     StrVec getStatusAsStrVec() const;
     std::string restoredSnapshotName(uint64_t gid) const {
         return restoredSnapshotNamePrefix() + cybozu::itoa(gid);
@@ -482,6 +483,7 @@ public:
     }
     VolLvCache& lvCache() { return lvC_; }
     const VolLvCache& lvCache() const { return lvC_; }
+    cybozu::lvm::Lv getLv();
 private:
     cybozu::lvm::Vg getVg() const {
         return cybozu::lvm::getVg(vgName);

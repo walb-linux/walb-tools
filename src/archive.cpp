@@ -756,7 +756,7 @@ bool runFullReplServer(
     StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
     ul.unlock();
     volInfo.setArchiveUuid(archiveUuid);
-    volInfo.createLv(sizeLb);
+    volInfo.prepareBaseImageForFullRepl(sizeLb, startLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
     if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps,
