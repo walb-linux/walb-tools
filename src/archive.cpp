@@ -81,7 +81,11 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
     cybozu::util::File file(lvPathStr, O_RDWR);
     AlignedArray zero;
     const uint64_t lvSnapSizeLb = lv.sizeLb();
-    double t0 = cybozu::util::getTime();
+    double t0 = cybozu::util::getTimeMonotonic();
+    size_t totalSleepMs = 0;
+    Sleeper sleeper;
+    const size_t minMs = 100, maxMs = 1000;
+    sleeper.init(ga.pctApplySleep * 10, minMs, maxMs, t0);
     while (merger.getAndRemove(recIo)) {
         if (stopState == ForceStopping || ga.ps.isForceShutdown()) {
             return false;
@@ -97,12 +101,13 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
         }
         issueIo(file, ga.discardType, rec, recIo.io().data(), zero);
 
-        const double t1 = cybozu::util::getTime();
+        const double t1 = cybozu::util::getTimeMonotonic();
         if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
             LOGs.info() << FUNC << "progress" << lvPathStr
                         << cybozu::util::formatString("%" PRIu64 "/%" PRIu64 "", ioAddress, lvSnapSizeLb);
             t0 = t1;
         }
+        totalSleepMs += sleeper.sleepIfNecessary(t1);
     }
     file.fdatasync();
     file.close();
@@ -110,6 +115,7 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
     statOut.wdiffNr = -1;
     statOut.dataSize = -1;
     memUsageStr = merger.memUsageStr();
+    LOGs.info() << FUNC << "totalSleepMs" << lvPathStr << totalSleepMs;
     return true;
 }
 

@@ -54,6 +54,7 @@ struct Option
         opt.appendBoolOpt(&a.doAutoResize, "autoresize", ": resize base image automatically if necessary");
         opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", ": keep just one cold snapshot per volume.");
         opt.appendOpt(&a.maxOpenDiffs, DEFAULT_MAX_OPEN_DIFFS, "maxopen", "NUM : max number of wdiff files to open together.");
+        opt.appendOpt(&a.pctApplySleep, DEFAULT_PCT_APPLY_SLEEP, "apply-sleep-pct", "PERCENTAGE : sleep percentage in diff application. (default: 0)");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&a.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
@@ -72,6 +73,10 @@ struct Option
         util::verifyNotZero(a.fsyncIntervalSize, "fsyncIntervalSize");
         a.discardType = parseDiscardType(discardTypeStr, __func__);
         a.keepAliveParams.verify();
+        if (a.pctApplySleep >= 100) {
+            cybozu::Exception("pctApplySleep must be within from 0 to 99.")
+                << a.pctApplySleep;
+        }
     }
 };
 

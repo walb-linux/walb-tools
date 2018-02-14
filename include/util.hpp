@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cctype>
 #include <sstream>
+#include <ctime>
 
 #include <sys/time.h>
 
@@ -97,16 +98,6 @@ inline void checkCond(bool cond, const char *name, int line)
     }
 }
 
-/**
- * Get unix time in double.
- */
-inline double getTime()
-{
-    struct timeval tv;
-    ::gettimeofday(&tv, NULL);
-    return static_cast<double>(tv.tv_sec) +
-        static_cast<double>(tv.tv_usec) / 1000000.0;
-}
 
 /**
  * Libc error wrapper.
@@ -141,6 +132,39 @@ private:
 
 #define throwLibcError(s) throw cybozu::util::LibcError(s, __func__, __LINE__)
 #define throwLibcErrorWithNo(s, err) throw  cybozu::util::LibcError(s, __func__, __LINE__, err)
+
+
+
+inline double getClockTime(clockid_t clk_id)
+{
+    struct timespec ts;
+    if (::clock_gettime(clk_id, &ts) != 0) {
+        throwLibcError("clock_gettime");
+    }
+    return (double)ts.tv_sec + (double)(ts.tv_nsec) / 1000000000.0;
+}
+
+
+/**
+ * Get unix time in double.
+ */
+inline double getTime()
+{
+#if 0
+    struct timeval tv;
+    ::gettimeofday(&tv, NULL);
+    return static_cast<double>(tv.tv_sec) +
+        static_cast<double>(tv.tv_usec) / 1000000.0;
+#else
+    return getClockTime(CLOCK_REALTIME);
+#endif
+}
+
+
+inline double getTimeMonotonic()
+{
+    return getClockTime(CLOCK_MONOTONIC);
+}
 
 
 /**

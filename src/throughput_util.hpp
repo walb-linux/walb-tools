@@ -2,6 +2,8 @@
 #include <chrono>
 #include <deque>
 #include <algorithm>
+#include <thread>
+#include "cybozu/exception.hpp"
 
 /**
  * You can get moving average throughput using this class.
@@ -96,5 +98,75 @@ public:
             total += sleepMs;
             lbPerSec = thMon_.getLbPerSec();
         }
+    }
+};
+
+
+/**
+ * This class is used for throughput controller.
+ * You can specify a permille of max throughput.
+ */
+class Sleeper
+{
+    size_t sleepPermille_; // 0 to 999.
+    size_t minMs_;
+    size_t maxMs_;
+    double baseTs_; // unix timestamp.
+    size_t totalSleepMs_;
+
+    static const size_t MONITOR_MS = 10000;
+
+public:
+    /**
+     * sleepPermille: specify from 0 to 999.
+     * minMs: minimum sleeping period at once [ms].
+     * maxMs: maximum sleeping period at once [ms].
+     * ts: current timestamp. monotonic timer is preferred.
+     */
+    void init(size_t sleepPermille, size_t minMs, size_t maxMs, double ts) {
+        if (minMs == 0) throw cybozu::Exception("Sleeper:minMs must not be 0");
+        if (maxMs == 0) throw cybozu::Exception("Sleeper:maxMs must not be 0");
+        if (minMs > maxMs) {
+            throw cybozu::Exception("Sleeper:bad minMs and maxMs") << minMs << maxMs;
+        }
+        if (sleepPermille >= 1000) {
+            throw cybozu::Exception("Sleeper:bad sleepPerMille") << sleepPermille;
+        }
+        sleepPermille_ = sleepPermille;
+        minMs_ = minMs;
+        maxMs_ = maxMs;
+        baseTs_ = ts;
+        totalSleepMs_ = 0;
+    }
+    /**
+     * ts: current timestamp. monotonic timer is preferred.
+     */
+    size_t sleepIfNecessary(double ts) {
+        if (sleepPermille_ == 0) return 0; // fast pass.
+        size_t sleepMs = 0;
+        size_t elapsedMs = (ts - baseTs_) * 1000;
+        /*
+         * (totalSleepMs_ + minMs_) / elapsedMs < sleepPermille_ / 1000
+         */
+        if ((totalSleepMs_ + minMs_) * 1000 < sleepPermille_ * elapsedMs) {
+            /*
+             * Decide sleeping period.
+             * (totalSleepMs_ + sleepMs) / elapsedMs == sleepPermille_ / 1000
+             */
+            sleepMs = sleepPermille_ * elapsedMs / 1000 - totalSleepMs_;
+            assert(minMs_ <= sleepMs);
+            sleepMs = std::min(sleepMs, maxMs_);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+
+            totalSleepMs_ += sleepMs;
+            elapsedMs += sleepMs;
+        }
+        if (elapsedMs > MONITOR_MS * 2) {
+            baseTs_ += (elapsedMs / 2) / 1000.0;
+            totalSleepMs_ /= 2;
+        }
+
+        return sleepMs;
     }
 };
