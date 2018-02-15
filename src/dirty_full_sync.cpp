@@ -123,6 +123,9 @@ bool dirtyFullSyncServer(
         progressLb = offLb;
         writeSize += size;
         if (writeSize >= fsyncIntervalSize) {
+#ifdef USE_AIO_FOR_DIRTY_FULL_SYNC
+            writer.waitForAll();
+#endif
             file.fdatasync();
             writeSize = 0;
             if (fullReplSt) {
