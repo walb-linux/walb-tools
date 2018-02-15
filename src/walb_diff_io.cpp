@@ -1,5 +1,6 @@
 #include "walb_diff_io.hpp"
 
+
 namespace walb {
 
 IoType decideIoType(const DiffRecord& rec, DiscardType discardType)
@@ -41,6 +42,30 @@ void issueIo(cybozu::util::File& file, DiscardType discardType, const DiffRecord
     }
     file.pwrite(data, ioSizeB, rec.io_address * LOGICAL_BLOCK_SIZE);
 }
+
+
+void issueAio(AsyncBdevWriter& writer, DiscardType discardType,
+              const DiffRecord& rec, AlignedArray&& data)
+{
+    assert(!rec.isCompressed());
+    const int type = decideIoType(rec, discardType);
+    if (type == Ignore) return;
+    if (type == Discard) {
+        writer.discard(rec.io_address, rec.io_blocks);
+        return;
+    }
+    const uint64_t ioSizeB = rec.io_blocks * LOGICAL_BLOCK_SIZE;
+    if (type == Zero) {
+        AlignedArray buf(ioSizeB, true); // zero-filled.
+        writer.prepare(rec.io_address, rec.io_blocks, std::move(buf));
+    } else {
+        assert(type == Normal);
+        assert(!data.empty());
+        writer.prepare(rec.io_address, rec.io_blocks, std::move(data));
+    }
+    writer.submit();
+}
+
 
 /*
  * @zero is used as zero-filled buffer. It may be resized.

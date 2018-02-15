@@ -27,6 +27,7 @@ private:
 public:
     const DiffRecord &record() const { return rec_; }
     const AlignedArray &io() const { return io_; }
+    AlignedArray moveIoFrom() { return std::move(io_); }
 
     DiffRecIo() {}
     DiffRecIo(const DiffRecord &rec, AlignedArray &&buf)

@@ -67,6 +67,11 @@ void verifyApplicable(const std::string& volId, uint64_t gid)
     }
 }
 
+
+#define USE_AIO_FOR_APPLY_OPENED_DIFFS
+const size_t ASYNC_IO_BUFFER_SIZE = (4U << 20);  // bytes
+
+
 bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv,
                       const std::atomic<int>& stopState,
                       DiffStatistics& statIn, DiffStatistics& statOut, std::string& memUsageStr)
@@ -78,11 +83,16 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
     merger.prepare();
     DiffRecIo recIo;
     const std::string lvPathStr = lv.path().str();
-    cybozu::util::File file(lvPathStr, O_RDWR);
+    cybozu::util::File file(lvPathStr, O_RDWR | O_DIRECT);
+#ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+    AsyncBdevWriter writer(file.fd(), ASYNC_IO_BUFFER_SIZE);
+#else
     AlignedArray zero;
+#endif
     const uint64_t lvSnapSizeLb = lv.sizeLb();
     double t0 = cybozu::util::getTimeMonotonic();
     size_t totalSleepMs = 0;
+    size_t writtenSize = 0; // bytes
     Sleeper sleeper;
     const size_t minMs = 100, maxMs = 1000;
     sleeper.init(ga.pctApplySleep * 10, minMs, maxMs, t0);
@@ -99,7 +109,20 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
         if (ioAddress + ioBlocks > lvSnapSizeLb) {
             throw cybozu::Exception(FUNC) << "out of range" << ioAddress << ioBlocks << lvSnapSizeLb;
         }
+#ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+        issueAio(writer, ga.discardType, rec, recIo.moveIoFrom());
+#else
         issueIo(file, ga.discardType, rec, recIo.io().data(), zero);
+#endif
+
+        writtenSize += ioBlocks * LOGICAL_BLOCK_SIZE;
+        if (writtenSize >= ga.fsyncIntervalSize) {
+#ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+            writer.waitForAll();
+#endif
+            file.fdatasync();
+            writtenSize = 0;
+        }
 
         const double t1 = cybozu::util::getTimeMonotonic();
         if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
@@ -109,6 +132,9 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
         }
         totalSleepMs += sleeper.sleepIfNecessary(t1);
     }
+#ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+    writer.waitForAll();
+#endif
     file.fdatasync();
     file.close();
     statIn = merger.statIn();
