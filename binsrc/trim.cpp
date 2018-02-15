@@ -38,7 +38,7 @@ int doMain(int argc, char *argv[])
         throw cybozu::Exception("trim:offset > devSize") << opt.offset << devSize;
     }
     uint64_t offsetLb = opt.offset / LOGICAL_BLOCK_SIZE;
-    const uint64_t totalSize = opt.total == UINT64_MAX ? devSize : opt.total;
+    const uint64_t totalSize = opt.total == UINT64_MAX ? (devSize - opt.offset) : opt.total;
     if (totalSize > devSize - opt.offset) {
         throw cybozu::Exception("trim:total > devSize - offset")
             << totalSize  << devSize - opt.offset;
