@@ -83,16 +83,20 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
     merger.prepare();
     DiffRecIo recIo;
     const std::string lvPathStr = lv.path().str();
-    cybozu::util::File file(lvPathStr, O_RDWR | O_DIRECT);
 #ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+    cybozu::util::File file(lvPathStr, O_RDWR | O_DIRECT);
     AsyncBdevWriter writer(file.fd(), ASYNC_IO_BUFFER_SIZE);
 #else
+    cybozu::util::File file(lvPathStr, O_RDWR);
     AlignedArray zero;
 #endif
     const uint64_t lvSnapSizeLb = lv.sizeLb();
     double t0 = cybozu::util::getTimeMonotonic();
     size_t totalSleepMs = 0;
     size_t writtenSize = 0; // bytes
+#ifndef USE_AIO_FOR_APPLY_OPENED_DIFFS
+    uint64_t fadvOffBgn = 0; // bytes
+#endif
     Sleeper sleeper;
     const size_t minMs = 100, maxMs = 1000;
     sleeper.init(ga.pctApplySleep * 10, minMs, maxMs, t0);
@@ -121,6 +125,13 @@ bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& 
             writer.waitForAll();
 #endif
             file.fdatasync();
+#ifndef USE_AIO_FOR_APPLY_OPENED_DIFFS
+            const uint64_t fadvOffEnd = (ioAddress + ioBlocks) * LOGICAL_BLOCK_SIZE;
+            assert(fadvOffBgn <= fadvOffEnd);
+            const uint64_t fadvLen = fadvOffEnd - fadvOffBgn;
+            file.fadvise(fadvOffBgn, fadvLen, POSIX_FADV_DONTNEED);
+            fadvOffBgn = fadvOffEnd;
+#endif
             writtenSize = 0;
         }
 

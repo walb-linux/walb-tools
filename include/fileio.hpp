@@ -174,6 +174,12 @@ public:
             throwLibcError("ftruncate failed.");
         }
     }
+    void fadvise(off_t off, off_t len, int advise) {
+        int ret = ::posix_fadvise(fd(), off, len, advise);
+        if (ret != 0) {
+            throwLibcErrorWithNo("posix_fadvise failed.", ret);
+        }
+    }
 };
 
 /**

@@ -65,10 +65,11 @@ bool dirtyFullSyncServer(
         assert(fullReplStDir.stat().isDirectory());
         assert(!fullReplStFileName.empty());
     }
-    cybozu::util::File file(bdevPath, O_RDWR);
 #ifdef USE_AIO_FOR_DIRTY_FULL_SYNC
+    cybozu::util::File file(bdevPath, O_RDWR | O_DIRECT);
     AsyncBdevWriter writer(file.fd(), ASYNC_IO_BUFFER_SIZE);
 #else
+    cybozu::util::File file(bdevPath, O_RDWR);
     if (startLb != 0) {
         file.lseek(startLb * LOGICAL_BLOCK_SIZE);
     }
@@ -81,6 +82,9 @@ bool dirtyFullSyncServer(
 
     progressLb = startLb;
     uint64_t offLb = startLb;
+#ifndef USE_AIO_FOR_DIRTY_FULL_SYNC
+    uint64_t fadvOffBgn = startLb * LOGICAL_BLOCK_SIZE;
+#endif
     uint64_t c = 0;
     uint64_t remainingLb = sizeLb - startLb;
     uint64_t writeSize = 0;  // bytes.
@@ -127,6 +131,10 @@ bool dirtyFullSyncServer(
             writer.waitForAll();
 #endif
             file.fdatasync();
+#ifndef USE_AIO_FOR_DIRTY_FULL_SYNC
+            file.fadvise(fadvOffBgn, writeSize, POSIX_FADV_DONTNEED);
+            fadvOffBgn = offLb * LOGICAL_BLOCK_SIZE;
+#endif
             writeSize = 0;
             if (fullReplSt) {
                 fullReplSt->progressLb = progressLb;
