@@ -69,7 +69,10 @@ void verifyApplicable(const std::string& volId, uint64_t gid)
 
 
 #define USE_AIO_FOR_APPLY_OPENED_DIFFS
-const size_t ASYNC_IO_BUFFER_SIZE = (4U << 20);  // bytes
+
+#ifdef USE_AIO_FOR_APPLY_OPENED_DIFFS
+const size_t ASYNC_IO_BUFFER_SIZE = (32U << 20);  // bytes
+#endif
 
 
 bool applyOpenedDiffs(std::vector<cybozu::util::File>&& fileV, cybozu::lvm::Lv& lv,

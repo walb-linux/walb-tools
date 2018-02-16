@@ -3,7 +3,7 @@
 namespace walb {
 
 
-const size_t ASYNC_IO_BUFFER_SIZE = (4U << 20);  // bytes
+const size_t ASYNC_IO_BUFFER_SIZE = (32U << 20);  // bytes
 
 
 bool dirtyFullSyncClient(
