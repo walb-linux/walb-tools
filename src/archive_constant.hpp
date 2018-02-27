@@ -73,7 +73,7 @@ const StrVec allActionVec = {aaMerge, aaApply, aaRestore, aaReplSync, aaResize};
 const StrVec aDenyForRestore = {aaRestore, aaResize};
 const StrVec aDenyForReplSyncClient = {aaRestore, aaReplSync, aaApply, aaMerge, aaResize};
 const StrVec aDenyForApply = {aaRestore, aaReplSync, aaApply, aaMerge, aaResize};
-const StrVec aDenyForMerge = {aaRestore, aaReplSync, aaApply, aaMerge, aaResize};
+const StrVec aDenyForMerge = {aaApply, aaMerge, aaResize};
 const StrVec aDenyForResize = {aaRestore, aaReplSync, aaApply, aaResize};
 const StrVec aDenyForChangeSnapshot = {aaApply, aaMerge};
 
