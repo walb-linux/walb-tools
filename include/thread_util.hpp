@@ -693,13 +693,17 @@ class ThreadRunnerFixedPool /* final */
     std::mutex mu_; // for epV_.
     std::atomic<size_t> id_;
     std::atomic<size_t> nrRunning_;
+    std::function<void()> setQuitFlag_;
 public:
     static constexpr const char *NAME() { return "ThreadRunnerFixedPool"; }
     ThreadRunnerFixedPool()
-        : workerV_(), epV_(), mu_(), id_(0), nrRunning_(0) {
+        : workerV_(), epV_(), mu_(), id_(0), nrRunning_(0), setQuitFlag_() {
     }
     ~ThreadRunnerFixedPool() noexcept {
         stop();
+    }
+    void setSetQuitFlag(std::function<void()> setQuitFlag) {
+        setQuitFlag_ = setQuitFlag;
     }
     /**
      * Start threads.
@@ -723,6 +727,7 @@ public:
      * This is not thread-safe.
      */
     void stop() noexcept {
+        if (setQuitFlag_) setQuitFlag_();
         workerV_.clear();
     }
     /**
