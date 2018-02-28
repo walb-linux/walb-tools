@@ -17,45 +17,39 @@ void MultiThreadedServer::run(
     cybozu::Socket ssock;
     ssock.bind(port);
     cybozu::thread::ThreadRunnerFixedPool pool;
+    pool.setSetQuitFlag([&]() { ps.setForceShutdown(); });
     pool.start(maxNumThreads);
     LOGs.info() << FUNC << "Ready to accept connections";
-    try {
+    for (;;) {
         for (;;) {
-            for (;;) {
-                if (!ps.isRunning()) goto quit;
-                int ret = ssock.queryAcceptNoThrow(acceptTimeoutMs);
-                if (ret > 0) break; // accepted
-                if (ret == 0) continue; // timeout
-                if (ret == -EINTR) {
-                    LOGs.info() << FUNC << "queryAccept:interrupted";
-                    continue;
-                }
-                throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
-            }
-            logErrors(pool.gc());
-            if (pool.nrRunning() >= maxNumThreads) {
-                putLogExceedsMaxConcurrency(maxNumThreads);
-                std::this_thread::sleep_for(std::chrono::milliseconds(acceptTimeoutMs));
+            if (!ps.isRunning()) goto quit;
+            int ret = ssock.queryAcceptNoThrow(acceptTimeoutMs);
+            if (ret > 0) break; // accepted
+            if (ret == 0) continue; // timeout
+            if (ret == -EINTR) {
+                LOGs.info() << FUNC << "queryAccept:interrupted";
                 continue;
             }
-            putLogExceedsMaxConcurrencySuppressed();
-            cybozu::Socket sock;
-            ssock.accept(sock);
-            util::setSocketParams(sock, keepAliveParams, timeoutS);
-            const bool success = pool.add(
-                protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr));
-            assert(success); unusedVar(success);
+            throw cybozu::Exception(FUNC) << "queryAccept" << cybozu::NetErrorNo(-ret);
         }
-      quit:
-        LOGs.info() << FUNC << "Waiting for remaining tasks";
-        pool.stop();
         logErrors(pool.gc());
-    } catch (...) {
-        // We must call setForceShutdown() before pool destructor is called
-        // because running tasks must stop to progress worker destructors.
-        ps.setForceShutdown();
-        throw;
+        if (pool.nrRunning() >= maxNumThreads) {
+            putLogExceedsMaxConcurrency(maxNumThreads);
+            std::this_thread::sleep_for(std::chrono::milliseconds(acceptTimeoutMs));
+            continue;
+        }
+        putLogExceedsMaxConcurrencySuppressed();
+        cybozu::Socket sock;
+        ssock.accept(sock);
+        util::setSocketParams(sock, keepAliveParams, timeoutS);
+        const bool success = pool.add(
+            protocol::RequestWorker(std::move(sock), nodeId, ps, handlers, handlerStatMgr));
+        assert(success); unusedVar(success);
     }
+  quit:
+    LOGs.info() << FUNC << "Waiting for remaining tasks";
+    pool.stop();
+    logErrors(pool.gc());
 }
 
 } // namespace server
