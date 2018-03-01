@@ -321,10 +321,7 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
     // When ack failed, next wlog-transfer will do the remaining procedures.
     ul.lock();
     volInfo.addDiffToReceivedDir(diff);
-    ul.unlock();
-    packet::Ack(p.sock).sendFin();
 
-    ul.lock();
     volSt.actionState.clearAll();
     const MetaDiffVec diffV = volInfo.tryToMakeHardlinkInSendtoDir();
     volInfo.deleteDiffs(diffV);
@@ -341,6 +338,12 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
     }
     volSt.lastWlogReceivedTime = ::time(0);
     tran.commit(pStarted);
+    ul.unlock();
+
+    // The order transaction commit --> send ack is important to avoid
+    // phantom duplication of wlog sending process.
+    packet::Ack(p.sock).sendFin();
+
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.debug() << "wlog-transfer succeeded" << volId << elapsed;
 }
