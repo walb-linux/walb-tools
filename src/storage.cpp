@@ -864,8 +864,8 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
             LOGs.warn() << FUNC << res;
         } catch (std::exception &e) {
             LOGs.warn() << FUNC << e.what();
-            sock.close(true); // sock may be reused.
         }
+        sock.close(true); // sock will be reused.
     }
     if (!sock.isValid()) {
         throw cybozu::Exception(FUNC) << "There is no available proxy" << volId;
