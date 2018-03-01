@@ -297,7 +297,7 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
 #if 0 /* deprecated */
     const bool ret = proxy_local::recvWlogAndWriteDiff(
         p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd());
-#else /* QQQ */
+#else /* use indexed diff. */
     const bool ret = proxy_local::recvWlogAndWriteDiff2(
         p.sock, tmpFile.fd(), uuid, pbs, salt, volSt.stopState, gp.ps, wlogTmpFile.fd());
 #endif
