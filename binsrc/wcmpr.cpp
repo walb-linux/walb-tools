@@ -196,7 +196,7 @@ struct Cmpr
     Buffer compress(void *data, size_t size, size_t enoughSize) {
         Buffer dst(enoughSize);
         size_t s;
-        if (compr_.run(dst.data(), &s, dst.size(), data, size) && s <= size) {
+        if (compr_.run(dst.data(), &s, dst.size(), data, size)) {
             dst.resize(s);
         } else {
             throw cybozu::Exception("Cmpr:compress");
