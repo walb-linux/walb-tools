@@ -47,34 +47,30 @@ public:
      *                  [0, 9] (default 6) for Zlib, Xz
      */
     explicit Compressor(int mode, size_t compressionLevel = 0)
-        : engine_(nullptr)
+        : engine_()
     {
         switch (mode) {
         case WALB_DIFF_CMPR_NONE:
-            engine_ = new CompressorAsIs(compressionLevel);
+            engine_.reset(new CompressorAsIs(compressionLevel));
             break;
         case WALB_DIFF_CMPR_SNAPPY:
-            engine_ = new CompressorSnappy(compressionLevel);
+            engine_.reset(new CompressorSnappy(compressionLevel));
             break;
         case WALB_DIFF_CMPR_GZIP:
-            engine_ = new CompressorZlib(compressionLevel);
+            engine_.reset(new CompressorZlib(compressionLevel));
             break;
         case WALB_DIFF_CMPR_LZMA:
-            engine_ = new CompressorXz(compressionLevel);
+            engine_.reset(new CompressorXz(compressionLevel));
             break;
         case WALB_DIFF_CMPR_LZ4:
-            engine_ = new CompressorLz4(compressionLevel);
+            engine_.reset(new CompressorLz4(compressionLevel));
             break;
         case WALB_DIFF_CMPR_ZSTD:
-            engine_ = new CompressorZstd(compressionLevel);
+            engine_.reset(new CompressorZstd(compressionLevel));
             break;
         default:
             throw cybozu::Exception("Compressor:invalid mode") << mode;
         }
-    }
-    ~Compressor() throw()
-    {
-        delete engine_;
     }
     /**
      * compress data
@@ -93,7 +89,7 @@ public:
 private:
     Compressor(const Compressor&) = delete;
     void operator=(const Compressor&) = delete;
-    compressor_local::CompressorIF *engine_;
+    std::unique_ptr<compressor_local::CompressorIF> engine_;
 };
 
 /**
@@ -109,34 +105,30 @@ public:
      *                  memLimit(default 16MiB) for Xz
      */
     explicit Uncompressor(int mode, size_t para = 0)
-        : engine_(nullptr)
+        : engine_()
     {
         switch (mode) {
         case WALB_DIFF_CMPR_NONE:
-            engine_ = new UncompressorAsIs(para);
+            engine_.reset(new UncompressorAsIs(para));
             break;
         case WALB_DIFF_CMPR_SNAPPY:
-            engine_ = new UncompressorSnappy(para);
+            engine_.reset(new UncompressorSnappy(para));
             break;
         case WALB_DIFF_CMPR_GZIP:
-            engine_ = new UncompressorZlib(para);
+            engine_.reset(new UncompressorZlib(para));
             break;
         case WALB_DIFF_CMPR_LZMA:
-            engine_ = new UncompressorXz(para);
+            engine_.reset(new UncompressorXz(para));
             break;
         case WALB_DIFF_CMPR_LZ4:
-            engine_ = new UncompressorLz4(para);
+            engine_.reset(new UncompressorLz4(para));
             break;
         case WALB_DIFF_CMPR_ZSTD:
-            engine_ = new UncompressorZstd(para);
+            engine_.reset(new UncompressorZstd(para));
             break;
         default:
             throw cybozu::Exception("Uncompressor:invalid mode") << mode;
         }
-    }
-    ~Uncompressor() throw()
-    {
-        delete engine_;
     }
     /**
      * uncompress data
@@ -154,7 +146,7 @@ public:
 private:
     Uncompressor(const Uncompressor&) = delete;
     void operator=(const Uncompressor&) = delete;
-    compressor_local::UncompressorIF *engine_;
+    std::unique_ptr<compressor_local::UncompressorIF> engine_;
 };
 
 } // walb
