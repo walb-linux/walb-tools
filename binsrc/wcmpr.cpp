@@ -29,9 +29,9 @@ struct Option
     Option(int argc, char* argv[]) {
         cybozu::Option opt;
         opt.setDescription("Simple compressor/decompressor of a file.\n");
-        opt.appendOpt(&modeStr, "snappy", "m", ": compression mode (snappy, gzip, lzma, lz4)");
+        opt.appendOpt(&modeStr, "snappy", "m", ": compression mode (snappy, gzip, lzma, lz4, zstd)");
         opt.appendOpt(&concurrency, 0, "c", ": number of concurrency");
-        opt.appendOpt(&unitSize, 64 << 10, "s", ": unit size to compress (default: 64KiB).");
+        opt.appendOpt(&unitSize, 1U << 20, "s", ": unit size to compress (default: 1MiB).");
         opt.appendOpt(&level, 0, "l", ": compression level [0, 9] (default: 0).");
         opt.appendBoolOpt(&isDecompress, "d", ": decompress instead compress.");
         opt.appendBoolOpt(&isDebug, "debug", ": put debug messages to stderr.");
