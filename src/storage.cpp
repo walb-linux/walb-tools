@@ -576,6 +576,7 @@ StrVec getAllStatusAsStrVec()
     v.push_back(fmt("maxBackgroundTasks %zu", gs.maxBackgroundTasks));
     v.push_back(fmt("socketTimeout %zu", gs.socketTimeout));
     v.push_back(fmt("keepAlive %s", gs.keepAliveParams.toStr().c_str()));
+    v.push_back(fmt("fullScanLbPerSec %" PRIu64 "", gs.fullScanLbPerSec.load()));
 
     v.push_back("-----Archive-----");
     v.push_back(fmt("host %s:%u", gs.archive.toStr().c_str(), gs.archive.getPort()));
