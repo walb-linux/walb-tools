@@ -16,6 +16,7 @@
 #include "serializer.hpp"
 #include "fileio.hpp"
 #include "fileio_serializer.hpp"
+#include "host_info.hpp"
 #include "storage.hpp"
 #include "version.hpp"
 
@@ -34,6 +35,7 @@ struct Option
     std::string multiProxyDStr;
     bool isDebug;
     uint64_t defaultFullScanBytesPerSec;
+    std::string cmprOptForSyncStr;
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
@@ -59,6 +61,7 @@ struct Option
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : socket timeout [sec].");
         opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "SIZE : default full scan throughput [bytes/s]");
         opt.appendOpt(&s.tsDeltaGetterIntervalSec, DEFAULT_TS_DELTA_INTERVAL_SEC, "tsdintvl", "PERIOD : ts-delta getter interval [sec].");
+        opt.appendOpt(&cmprOptForSyncStr, DEFAULT_CMPR_OPT_FOR_SYNC, "sync-cmpr", "COMPRESSION_OPT : compression option for full/hash sync like 'snappy:0:1'.");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&s.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
@@ -78,6 +81,7 @@ struct Option
         util::verifyNotZero(s.tsDeltaGetterIntervalSec, "tsDeltaGetterIntervalSec");
         s.keepAliveParams.verify();
         s.fullScanLbPerSec = defaultFullScanBytesPerSec / LOGICAL_BLOCK_SIZE;
+        s.cmprOptForSync = parseCompressOpt(cmprOptForSyncStr);
     }
 };
 

@@ -568,12 +568,14 @@ void backupServer(protocol::ServerParams &p, bool isFull)
 
     std::string hostType, volId;
     uint64_t sizeLb, curTime, bulkLb;
+    CompressOpt cmprOpt;
     pkt.read(hostType);
     pkt.read(volId);
     pkt.read(sizeLb);
     pkt.read(curTime);
     pkt.read(bulkLb);
-    logger.debug() << hostType << volId << sizeLb << curTime << bulkLb;
+    pkt.read(cmprOpt);
+    logger.debug() << hostType << volId << sizeLb << curTime << bulkLb << cmprOpt;
 
     ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
@@ -618,14 +620,15 @@ void backupServer(protocol::ServerParams &p, bool isFull)
         throw cybozu::Exception(FUNC) << "state is not" << stFrom << "but" << st;
     }
     logger.info() << (isFull ? dirtyFullSyncPN : dirtyHashSyncPN) << "started" << volId
-                  << p.clientId << sizeLb << bulkLb;
+                  << p.clientId << sizeLb << bulkLb << cmprOpt;
     bool isOk;
     std::unique_ptr<cybozu::TmpFile> tmpFileP;
     if (isFull) {
         volInfo.createLv(sizeLb);
         const std::string lvPath = volSt.lvCache.getLv().path().str();
         const bool skipZero = isThinpool();
-        isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, volSt.stopState, ga.ps, volSt.progressLb,
+        isOk = dirtyFullSyncServer(pkt, lvPath, 0, sizeLb, bulkLb, cmprOpt,
+                                   volSt.stopState, ga.ps, volSt.progressLb,
                                    skipZero, ga.fsyncIntervalSize);
     } else {
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
@@ -744,19 +747,23 @@ bool runFullReplClient(
     pkt.write(bulkLb);
     pkt.write(metaSt);
     pkt.write(uuid);
+    pkt.write(ga.cmprOptForSync);
     pkt.flush();
-    logger.debug() << "full-repl-client" << sizeLb << bulkLb << metaSt << uuid;
+    logger.debug() << "full-repl-client" << sizeLb << bulkLb
+                   << metaSt << uuid << ga.cmprOptForSync;
 
     std::string res;
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
     uint64_t startLb;
     pkt.read(startLb);
-    logger.info() << "full-repl-client started" << volId << dstId << sizeLb << bulkLb << startLb;
+    logger.info() << "full-repl-client started" << volId << dstId << sizeLb
+                  << bulkLb << ga.cmprOptForSync << startLb;
 
     const std::string lvPath = lv.path().str();
     const std::atomic<uint64_t> fullScanLbPerSec(0);
-    if (!dirtyFullSyncClient(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps, fullScanLbPerSec)) {
+    if (!dirtyFullSyncClient(pkt, lvPath, startLb, sizeLb, bulkLb,
+                             ga.cmprOptForSync, volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "full-repl-client force-stopped" << volId;
         return false;
     }
@@ -774,12 +781,14 @@ bool runFullReplServer(
     uint64_t sizeLb, bulkLb;
     MetaState metaSt;
     cybozu::Uuid uuid;
+    CompressOpt cmprOpt;
     try {
         pkt.read(sizeLb);
         pkt.read(bulkLb);
         pkt.read(metaSt);
         pkt.read(uuid);
-        logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid;
+        pkt.read(cmprOpt);
+        logger.debug() << "full-repl-server" << sizeLb << bulkLb << metaSt << uuid << cmprOpt;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
@@ -790,7 +799,8 @@ bool runFullReplServer(
     }
     FullReplState fullReplSt;
     const uint64_t startLb = volInfo.initFullReplResume(sizeLb, archiveUuid, metaSt, fullReplSt);
-    logger.info() << "full-repl-server started" << volId << sizeLb << bulkLb << startLb;
+    logger.info() << "full-repl-server started" << volId << sizeLb
+                  << bulkLb << cmprOpt << startLb;
     volSt.progressLb = startLb;
     ZeroResetter resetter(volSt.progressLb);
 
@@ -805,7 +815,8 @@ bool runFullReplServer(
     volInfo.prepareBaseImageForFullRepl(sizeLb, startLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
     const bool skipZero = isThinpool();
-    if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, volSt.stopState, ga.ps,
+    if (!dirtyFullSyncServer(pkt, lvPath, startLb, sizeLb, bulkLb, cmprOpt,
+                             volSt.stopState, ga.ps,
                              volSt.progressLb, skipZero, ga.fsyncIntervalSize,
                              &fullReplSt, volInfo.volDir, volInfo.getFullReplStateFileName())) {
         logger.warn() << "full-repl-server force-stopped" << volId;
@@ -838,19 +849,24 @@ bool runHashReplClient(
     pkt.write(bulkLb);
     pkt.write(diff);
     pkt.write(uuid);
+    pkt.write(ga.cmprOptForSync);
     pkt.write(hashSeed);
     pkt.flush();
-    logger.debug() << "hash-repl-client" << sizeLb << bulkLb << diff << uuid << hashSeed;
+    logger.debug() << "hash-repl-client" << sizeLb << bulkLb << diff
+                   << uuid << ga.cmprOptForSync << hashSeed;
 
     std::string res;
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    logger.info() << "hash-repl-client started" << volId << dstId << sizeLb << bulkLb << diff;
+    logger.info() << "hash-repl-client started" << volId << dstId << sizeLb
+                  << bulkLb << ga.cmprOptForSync << diff;
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapE);
     const std::atomic<uint64_t> fullScanLbPerSec(0);
-    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps, fullScanLbPerSec)) {
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb,
+                             ga.cmprOptForSync, hashSeed,
+                             volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "hash-repl-client force-stopped" << volId;
         return false;
     }
@@ -874,14 +890,17 @@ bool runHashReplServer(
     uint64_t sizeLb, bulkLb;
     MetaDiff diff;
     cybozu::Uuid uuid;
+    CompressOpt cmprOpt;
     uint32_t hashSeed;
     try {
         pkt.read(sizeLb);
         pkt.read(bulkLb);
         pkt.read(diff);
         pkt.read(uuid);
+        pkt.read(cmprOpt);
         pkt.read(hashSeed);
-        logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff << uuid << hashSeed;
+        logger.debug() << "hash-repl-server" << sizeLb << bulkLb << diff
+                       << uuid << cmprOpt << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         if (!canApply(metaSt, diff)) {
@@ -898,7 +917,8 @@ bool runHashReplServer(
     pkt.write(msgOk);
     pkt.flush();
 
-    logger.info() << "hash-repl-server started" << volId << sizeLb << bulkLb << diff;
+    logger.info() << "hash-repl-server started" << volId << sizeLb
+                  << bulkLb << cmprOpt << diff;
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
     ul.unlock();
@@ -1102,19 +1122,24 @@ bool runResyncReplClient(
     pkt.write(metaSt);
     pkt.write(uuid);
     pkt.write(archiveUuid);
+    pkt.write(ga.cmprOptForSync);
     pkt.write(hashSeed);
     pkt.flush();
-    logger.debug() << "resync-repl-client" << sizeLb << bulkLb << metaSt << uuid << archiveUuid << hashSeed;
+    logger.debug() << "resync-repl-client" << sizeLb << bulkLb << metaSt
+                   << uuid << archiveUuid << ga.cmprOptForSync << hashSeed;
 
     std::string res;
     pkt.read(res);
     if (res != msgOk) throw cybozu::Exception(FUNC) << "not ok" << res;
 
-    logger.info() << "resync-repl-client started" << volId << sizeLb << bulkLb << metaSt;
+    logger.info() << "resync-repl-client started" << volId << sizeLb
+                  << bulkLb << ga.cmprOptForSync << metaSt;
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, metaSt.snapB);
     const std::atomic<uint64_t> fullScanLbPerSec(0);
-    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb, hashSeed, volSt.stopState, ga.ps, fullScanLbPerSec)) {
+    if (!dirtyHashSyncClient(pkt, virt, sizeLb, bulkLb,
+                             ga.cmprOptForSync, hashSeed,
+                             volSt.stopState, ga.ps, fullScanLbPerSec)) {
         logger.warn() << "resync-repl-client force-stopped" << volId;
         return false;
     }
@@ -1137,6 +1162,7 @@ bool runResyncReplServer(
     uint64_t sizeLb, bulkLb;
     MetaState metaSt;
     cybozu::Uuid uuid, archiveUuid;
+    CompressOpt cmprOpt;
     uint32_t hashSeed;
     try {
         pkt.read(sizeLb);
@@ -1144,8 +1170,10 @@ bool runResyncReplServer(
         pkt.read(metaSt);
         pkt.read(uuid);
         pkt.read(archiveUuid);
+        pkt.read(cmprOpt);
         pkt.read(hashSeed);
-        logger.debug() << "resync-repl-server" << sizeLb << bulkLb << metaSt << uuid << hashSeed;
+        logger.debug() << "resync-repl-server" << sizeLb << bulkLb << metaSt
+                       << uuid << cmprOpt << hashSeed;
         if (sizeLb == 0) throw cybozu::Exception(FUNC) << "sizeLb must not be 0";
         if (bulkLb == 0) throw cybozu::Exception(FUNC) << "bulkLb must not be 0";
         doAutoResizeIfNecessary(volSt, volInfo, sizeLb);
@@ -1159,7 +1187,8 @@ bool runResyncReplServer(
     pkt.write(msgOk);
     pkt.flush();
 
-    logger.info() << "resync-repl-server started" << volId << sizeLb << bulkLb << metaSt;
+    logger.info() << "resync-repl-server started" << volId << sizeLb
+                  << bulkLb << cmprOpt << metaSt;
     cybozu::Stopwatch stopwatch;
 
     if (volSt.sm.get() == aArchived) {

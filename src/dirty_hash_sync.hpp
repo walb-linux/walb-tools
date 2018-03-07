@@ -114,7 +114,7 @@ inline void readPackAndWrite(
 template <typename Reader>
 bool dirtyHashSyncClient(
     packet::Packet &pkt, Reader &reader,
-    uint64_t sizeLb, uint64_t bulkLb, uint32_t hashSeed,
+    uint64_t sizeLb, uint64_t bulkLb, const CompressOpt& cmprOpt, uint32_t hashSeed,
     const std::atomic<int> &stopState, const ProcessStatus &ps,
     const std::atomic<uint64_t>& maxLbPerSec)
 {
@@ -122,7 +122,8 @@ bool dirtyHashSyncClient(
     packet::StreamControl2 recvCtl(pkt.sock());
     packet::StreamControl2 sendCtl(pkt.sock());
     DiffPacker packer;
-    walb::PackCompressor compr(::WALB_DIFF_CMPR_SNAPPY);
+    // TODO: parallel compression.
+    walb::PackCompressor compr(cmprOpt.type, cmprOpt.level);
     cybozu::murmurhash3::Hasher hasher(hashSeed);
     ThroughputStabilizer thStab;
 

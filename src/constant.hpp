@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+#include <cstddef>
 
 namespace walb {
 
@@ -28,6 +30,7 @@ const size_t DEFAULT_DELAY_SEC_FOR_RETRY = 20;
 const size_t DEFAULT_RETRY_TIMEOUT_SEC = 1800;
 const size_t DEFAULT_MAX_OPEN_DIFFS = 0; // 0 means unlimited.
 const size_t DEFAULT_PCT_APPLY_SLEEP = 0; // 0 means no sleep.
+const char DEFAULT_CMPR_OPT_FOR_SYNC[] = "snappy:0:1";
 
 const size_t PROXY_HEARTBEAT_INTERVAL_SEC = 10;
 const size_t PROXY_HEARTBEAT_SOCKET_TIMEOUT_SEC = 3; // seconds.

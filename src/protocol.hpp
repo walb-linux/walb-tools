@@ -120,11 +120,11 @@ const char *const getHandlerStatTN = "handler-stat";
 /**
  * Internal protocol name.
  */
-const char *const dirtyFullSyncPN = "dirty-full-sync";
-const char *const dirtyHashSyncPN = "dirty-hash-sync";
+const char *const dirtyFullSyncPN = "dirty-full-sync2";
+const char *const dirtyHashSyncPN = "dirty-hash-sync2";
 const char *const wlogTransferPN = "wlog-transfer";
 const char *const wdiffTransferPN = "wdiff-transfer";
-const char *const replSyncPN = "repl-sync";
+const char *const replSyncPN = "repl-sync2";
 const char *const gatherLatestSnapPN = "gather-latest-snap";
 
 

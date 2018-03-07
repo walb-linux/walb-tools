@@ -25,7 +25,7 @@ namespace walb {
  */
 bool dirtyFullSyncClient(
     packet::Packet &pkt, const std::string &bdevPath,
-    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb,
+    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb, const CompressOpt& cmprOpt,
     const std::atomic<int> &stopState, const ProcessStatus &ps,
     const std::atomic<uint64_t>& maxLbPerSec);
 
@@ -40,7 +40,7 @@ bool dirtyFullSyncClient(
  */
  bool dirtyFullSyncServer(
     packet::Packet &pkt, const std::string &bdevPath,
-    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb,
+    uint64_t startLb, uint64_t sizeLb, uint64_t bulkLb, const CompressOpt& cmprOpt,
     const std::atomic<int> &stopState, const ProcessStatus &ps, std::atomic<uint64_t> &progressLb,
     bool skipZero, uint64_t fsyncIntervalSize,
     FullReplState *fullReplSt = nullptr, const cybozu::FilePath &fullReplStDir = cybozu::FilePath(),

@@ -698,8 +698,10 @@ void backupClient(protocol::ServerParams &p, bool isFull)
         aPkt.write(sizeLb);
         aPkt.write(curTime);
         aPkt.write(bulkLb);
+        aPkt.write(gs.cmprOptForSync);
         aPkt.flush();
-        logger.debug() << "send" << storageHT << volId << sizeLb << curTime << bulkLb;
+        logger.debug() << "send" << storageHT << volId << sizeLb << curTime
+                       << bulkLb << gs.cmprOptForSync;
         {
             std::string res;
             aPkt.read(res);
@@ -728,14 +730,16 @@ void backupClient(protocol::ServerParams &p, bool isFull)
                       << "started" << volId << archiveId << sizeLb << bulkLb;
         if (isFull) {
             const std::string bdevPath = volInfo.getWdevPath();
-            if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
+            if (!dirtyFullSyncClient(aPkt, bdevPath, 0, sizeLb, bulkLb, gs.cmprOptForSync, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }
         } else {
             const uint32_t hashSeed = curTime;
             AsyncBdevReader reader(volInfo.getWdevPath());
-            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb, hashSeed, volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
+            if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb,
+                                     gs.cmprOptForSync, hashSeed,
+                                     volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {
                 logger.warn() << FUNC << "force stopped" << volId;
                 return;
             }

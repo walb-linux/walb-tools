@@ -181,6 +181,7 @@ struct StorageSingleton
     KeepAliveParams keepAliveParams;
     size_t tsDeltaGetterIntervalSec;
     bool allowExec;
+    CompressOpt cmprOptForSync;
 
     /**
      * Writable and must be thread-safe.

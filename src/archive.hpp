@@ -157,6 +157,7 @@ struct ArchiveSingleton
     size_t maxOpenDiffs; // 0 means unlimited.
     size_t pctApplySleep; // 0 to 100. 0 means no sleep.
     bool allowExec;
+    CompressOpt cmprOptForSync;
 
     /**
      * Writable and must be thread-safe.
