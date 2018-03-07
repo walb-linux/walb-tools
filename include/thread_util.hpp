@@ -1007,6 +1007,9 @@ inline std::string exceptionPtrToStr(std::exception_ptr ep) try
 /**
  * Parallel converter.
  * T1 and T2 must be movable and default constructible.
+ *
+ * This converter holds the order of items, that is FIFO.
+ * This class supports single producer and single consumer with parallel worker.
  */
 template <typename T1, typename T2>
 class ParallelConverter
