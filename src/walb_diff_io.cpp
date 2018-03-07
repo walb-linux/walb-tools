@@ -69,12 +69,14 @@ void issueAio(AsyncBdevWriter& writer, DiscardType discardType,
 
 /*
  * @zero is used as zero-filled buffer. It may be resized.
+ * @return upper offset [logical block].
  */
-void issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiffPack& pack, AlignedArray& zero)
+uint64_t issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiffPack& pack, AlignedArray& zero)
 {
     const DiffPackHeader& head = pack.header();
     DiffRecord rec;
     AlignedArray array; // buffer for uncompressed data.
+    uint64_t offLb = 0;
     for (size_t i = 0; i < head.n_records; i++) {
         const DiffRecord& inRec = head[i];
         const char *iodata = nullptr;
@@ -90,7 +92,9 @@ void issueDiffPack(cybozu::util::File& file, DiscardType discardType, MemoryDiff
             rec = inRec;
         }
         issueIo(file, discardType, rec, iodata, zero);
+        offLb = rec.io_address + rec.io_blocks;
     }
+    return offLb;
 }
 
 } // namespace walb

@@ -72,12 +72,13 @@ void readAndSendHash(
 }
 
 inline void readPackAndWrite(
-    uint64_t& writeSize, packet::Packet& pkt,
+    uint64_t& writeSize, uint64_t& fadvOffset, packet::Packet& pkt,
     cybozu::util::File& fileW, bool doWriteDiff, DiscardType discardType,
     uint64_t fsyncIntervalSize,
     AlignedArray& zero, AlignedArray& buf)
 {
     const char *const FUNC = __func__;
+    uint64_t nextOffLb = 0;
     size_t size;
     pkt.read(size);
     verifyDiffPackSize(size, FUNC);
@@ -89,11 +90,18 @@ inline void readPackAndWrite(
         fileW.write(buf.data(), buf.size());
     } else {
         MemoryDiffPack pack(buf.data(), buf.size());
-        issueDiffPack(fileW, discardType, pack, zero);
+        nextOffLb = issueDiffPack(fileW, discardType, pack, zero);
     }
     writeSize += buf.size();
     if (writeSize >= fsyncIntervalSize) {
         fileW.fdatasync();
+        if (!doWriteDiff && nextOffLb != 0) {
+            const uint64_t nextOffset = nextOffLb * LOGICAL_BLOCK_SIZE;
+            assert(fadvOffset < nextOffset);
+            const uint64_t bytes = nextOffset - fadvOffset;
+            fileW.fadvise(fadvOffset, bytes, POSIX_FADV_DONTNEED);
+            fadvOffset = nextOffset;
+        }
         writeSize = 0;
     }
 }
@@ -248,6 +256,7 @@ bool dirtyHashSyncServer(
     packet::StreamControl2 ctrl(pkt.sock());
     AlignedArray buf;
     uint64_t writeSize = 0;
+    uint64_t fadvOffset = 0;
     size_t sDummy = 0, sRecv = 0;
     try {
     for (;;) {
@@ -265,7 +274,8 @@ bool dirtyHashSyncServer(
             continue;
         }
         dirty_hash_sync_local::readPackAndWrite(
-            writeSize, pkt, fileW, doWriteDiff, discardType, fsyncIntervalSize, zero, buf);
+            writeSize, fadvOffset, pkt, fileW, doWriteDiff,
+            discardType, fsyncIntervalSize, zero, buf);
     }
     } catch (...) {
         LOGs.warn() << "RECV_CTL" << sRecv << sDummy;
@@ -312,6 +322,7 @@ bool dirtyHashSyncServer2(
     packet::StreamControl2 ctrl(pkt.sock());
     AlignedArray zero;
     uint64_t writeSize = 0;
+    uint64_t fadvOffset = 0;
     cybozu::murmurhash3::Hasher hasher(hashSeed);
     size_t sHash = 0, sDummy = 0, sRecv = 0;
 
@@ -344,7 +355,8 @@ bool dirtyHashSyncServer2(
             continue;
         }
         dirty_hash_sync_local::readPackAndWrite(
-            writeSize, pkt, fileW, doWriteDiff, discardType, fsyncIntervalSize, zero, buf1);
+            writeSize, fadvOffset, pkt, fileW, doWriteDiff,
+            discardType, fsyncIntervalSize, zero, buf1);
     }
     } catch (...) {
         LOGs.warn() << "RECV_CTL" << sHash << sRecv << sDummy;
