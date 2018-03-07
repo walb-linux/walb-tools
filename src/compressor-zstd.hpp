@@ -2,19 +2,22 @@
 #include "zstd.h"
 #include "walb_logger.hpp"
 
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
+
 struct CompressorZstd : walb::compressor_local::CompressorIF
 {
     constexpr static const char *NAME() { return "CompressorZstd"; };
     size_t level_;
-    CompressorZstd(size_t level) : level_(level == 0 ? 3 : level) {
+    CompressorZstd(size_t level) : level_(level == 0 ? 1 : level) {
         if (level >= 20) {
             throw cybozu::Exception(NAME()) << "bad compression level" << level;
         }
     }
     bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize) {
         assert(outSize != nullptr);
-        const int level = 1;
-        const size_t ret = ::ZSTD_compress(out, maxOutSize, in, inSize, level);
+        const size_t ret = ::ZSTD_compress(out, maxOutSize, in, inSize, level_);
         if (::ZSTD_isError(ret)) {
             LOGs.warn() << NAME() << ::ZSTD_getErrorName(ret);
             return false;

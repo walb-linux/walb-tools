@@ -1,5 +1,12 @@
 #pragma once
+#include <cassert>
+#include <sys/types.h>
+
 #include "lz4.h"
+
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
 
 struct CompressorLz4 : walb::compressor_local::CompressorIF
 {

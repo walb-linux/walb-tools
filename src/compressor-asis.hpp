@@ -1,5 +1,9 @@
 #pragma once
-#include <string.h>
+#include <cstring>
+
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
 
 struct CompressorAsIs : walb::compressor_local::CompressorIF {
     CompressorAsIs(size_t) {}
@@ -21,4 +25,3 @@ struct UncompressorAsIs : walb::compressor_local::UncompressorIF {
         return inSize;
     }
 };
-

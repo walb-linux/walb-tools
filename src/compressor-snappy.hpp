@@ -2,6 +2,10 @@
 #include <snappy-c.h>
 #include <string>
 
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
+
 struct CompressorSnappy : walb::compressor_local::CompressorIF {
     CompressorSnappy(size_t) {}
     bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize)

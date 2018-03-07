@@ -2,6 +2,10 @@
 #include <cybozu/zlib.hpp>
 #include <cybozu/stream.hpp>
 
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
+
 struct CompressorZlib : walb::compressor_local::CompressorIF {
     size_t compressionLevel_;
     CompressorZlib(size_t compressionLevel)
@@ -28,4 +32,3 @@ struct UncompressorZlib : walb::compressor_local::UncompressorIF {
         return cybozu::ZlibUncompress(out, maxOutSize, in, inSize);
     }
 };
-

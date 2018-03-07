@@ -10,21 +10,7 @@
 #include <cybozu/exception.hpp>
 #include "walb_diff.h"
 
-namespace walb {
-
-namespace compressor_local {
-
-struct CompressorIF {
-    virtual ~CompressorIF() throw() {}
-    virtual bool run(void *out, size_t *outSize, size_t maxOutSize, const void *in, size_t inSize) = 0;
-};
-
-struct UncompressorIF {
-    virtual ~UncompressorIF() throw() {}
-    virtual size_t run(void *out, size_t maxOutSize, const void *in, size_t inSize) = 0;
-};
-
-} } // walb::compressor_local
+#include "compressor_if.hpp"
 
 #include "compressor-asis.hpp"
 #include "compressor-snappy.hpp"
@@ -41,10 +27,11 @@ class Compressor
 {
 public:
     /**
-     * @param mode [in] select compressor mode(WALB_DIFF_CMPR_{NONE,GZIP,SNAPPY,LZMA,LZ4}
+     * @param mode [in] select compressor mode(WALB_DIFF_CMPR_{NONE,GZIP,SNAPPY,LZMA,LZ4,ZSTD}
      * @param compressionLevel [in] compression level
      *                  not used for AsIs, Snappy, Lz4
      *                  [0, 9] (default 6) for Zlib, Xz
+     *                  [0, 9] (default 1) for zstd.
      */
     explicit Compressor(int mode, size_t compressionLevel = 0)
         : engine_()
@@ -76,6 +63,7 @@ public:
      * compress data
      * @param out [out] compressed data
      * @param outSize [out] compressed size
+     *      If run() returned false, outSize is not valid.
      * @param maxOutSize [in] maximum output size
      *        it is better that maxOutSize has margin for snappy.
      * @param in [in] input data
@@ -101,7 +89,7 @@ public:
     /**
      * @param mode [in] select compressor mode
      * @param para [in] extra parameter
-     *                  not used for AsIs, Snappy, Zlib
+     *                  not used for AsIs, Snappy, Zlib, Lz4, Zstd.
      *                  memLimit(default 16MiB) for Xz
      */
     explicit Uncompressor(int mode, size_t para = 0)

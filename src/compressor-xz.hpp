@@ -5,6 +5,10 @@
  */
 #include <lzma.h>
 
+#include "compressor_if.hpp"
+#include "cybozu/exception.hpp"
+
+
 struct CompressorXz : walb::compressor_local::CompressorIF {
     uint32_t present_;
     /* default compression level is 6 */
@@ -43,4 +47,3 @@ struct UncompressorXz : walb::compressor_local::UncompressorIF {
         return out_pos;
     }
 };
-
