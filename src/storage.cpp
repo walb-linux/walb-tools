@@ -233,6 +233,7 @@ void StorageWorker::operator()()
 {
     const char *const FUNC = "StorageWorker::operator()";
     LOGs.debug() << FUNC << "start";
+    const std::string& volId = task_.volId;
     StorageVolState& volSt = getStorageVolState(volId);
     UniqueLock ul(volSt.mu);
     verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -240,7 +241,7 @@ void StorageWorker::operator()()
     LOGs.debug() << FUNC << volId << st;
     if (st == stStartStandby || st == stStartTarget) {
         // This is rare case, but possible.
-        pushTask(volId, 1000);
+        pushTask(volId, 100);
         return;
     }
     verifyStateIn(st, sAcceptForWlogAction, FUNC);
@@ -248,7 +249,7 @@ void StorageWorker::operator()()
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
     } catch (...) {
         // This is rare case, but possible.
-        pushTaskForce(volId, 1000);
+        pushTaskForce(volId, 100);
         return;
     }
 
@@ -280,7 +281,13 @@ void StorageWorker::operator()()
         tran.close();
         if (isRemaining) pushTask(volId);
     } catch (...) {
-        pushTaskForce(volId, gs.delaySecForRetry * 1000);
+        size_t newDelayMs;
+        if (task_.delayMs == 0) {
+            newDelayMs = gs.minDelaySecForRetry * 1000;
+        } else {
+            newDelayMs = std::min(task_.delayMs * 2, gs.maxDelaySecForRetry * 1000);
+        }
+        pushTaskForce(volId, newDelayMs, true);
         throw;
     }
 }
@@ -446,7 +453,8 @@ void c2sKickServer(protocol::ServerParams &p)
         size_t num = 0;
         std::stringstream ss;
         for (const auto &pair : g.taskQueue.getAll()) {
-            const std::string &volId = pair.first;
+            const StorageTask& task = pair.first;
+            const std::string &volId = task.volId;
             const int64_t delay = pair.second;
             if (delay > 0) {
                 pushTaskForce(volId, 0); // run immediately
@@ -555,8 +563,8 @@ void stopMonitoring(const std::string& wdevPath, const std::string& volId)
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
     g.logDevMonitor.del(wdevName);
     g.delWdevName(wdevName);
-    g.taskQueue.remove([&](const std::string &volId2) {
-            return volId == volId2;
+    g.taskQueue.remove([&](const StorageTask& task) {
+            return volId == task.volId;
         });
 }
 
@@ -570,7 +578,8 @@ StrVec getAllStatusAsStrVec()
     v.push_back(fmt("nodeId %s", gs.nodeId.c_str()));
     v.push_back(fmt("baseDir %s", gs.baseDirStr.c_str()));
     v.push_back(fmt("maxWlogSendMb %" PRIu64, gs.maxWlogSendMb));
-    v.push_back(fmt("delaySecForRetry %zu", gs.delaySecForRetry));
+    v.push_back(fmt("minDelaySecForRetry %zu", gs.minDelaySecForRetry));
+    v.push_back(fmt("maxDelaySecForRetry %zu", gs.maxDelaySecForRetry));
     v.push_back(fmt("maxConnections %zu", gs.maxConnections));
     v.push_back(fmt("maxForegroundTasks %zu", gs.maxForegroundTasks));
     v.push_back(fmt("maxBackgroundTasks %zu", gs.maxBackgroundTasks));
@@ -588,7 +597,8 @@ StrVec getAllStatusAsStrVec()
 
     v.push_back("-----TaskQueue-----");
     for (const auto &pair : gs.taskQueue.getAll()) {
-        const std::string &volId = pair.first;
+        const StorageTask& task = pair.first;
+        const std::string &volId = task.volId;
         const int64_t &timeDiffMs = pair.second;
         v.push_back(fmt("volume %s timeDiffMs %" PRIi64 "", volId.c_str(), timeDiffMs));
     }

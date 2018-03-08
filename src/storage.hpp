@@ -37,11 +37,52 @@ private:
     void initInner(const std::string& volId);
 };
 
-class StorageWorker
+
+struct StorageTask
 {
-public:
-    const std::string volId;
-    explicit StorageWorker(const std::string &volId) : volId(volId) {
+    std::string volId;
+    size_t delayMs;
+
+    StorageTask() = default;
+    StorageTask(const std::string& volId, size_t delayMs = 0)
+        : volId(volId), delayMs(delayMs) {
+    }
+    StorageTask(const StorageTask& rhs) = default;
+    StorageTask(StorageTask&& rhs) : StorageTask() { swap(rhs); }
+    StorageTask& operator=(const StorageTask& rhs) = default;
+    StorageTask& operator=(StorageTask&& rhs) { swap(rhs); return *this; }
+
+    bool operator==(const StorageTask& rhs) const {
+        return volId == rhs.volId;
+    }
+    bool operator<(const StorageTask& rhs) const {
+        return volId < rhs.volId;
+    }
+    std::string str() const {
+        std::ostringstream ss;
+        ss << "(" << volId << ", " << delayMs << ")";
+        return ss.str();
+    }
+    friend std::ostream& operator<<(std::ostream& os, const StorageTask& task) {
+        os << task.str();
+        return os;
+    }
+
+    void swap(StorageTask& rhs) {
+        std::swap(volId, rhs.volId);
+        std::swap(delayMs, rhs.delayMs);
+    }
+    StorageTask copyAndSetDelayMs(size_t delayMs0) const {
+        return StorageTask(volId, delayMs0);
+    }
+};
+
+
+struct StorageWorker
+{
+    const StorageTask task_;
+
+    explicit StorageWorker(const StorageTask& task) : task_(task) {
     }
     void operator()();
 };
@@ -173,7 +214,8 @@ struct StorageSingleton
     std::string baseDirStr;
     uint64_t maxWlogSendMb;
     size_t implicitSnapshotIntervalSec;
-    size_t delaySecForRetry;
+    size_t minDelaySecForRetry;
+    size_t maxDelaySecForRetry;
     size_t maxConnections;
     size_t maxForegroundTasks;
     size_t maxBackgroundTasks;
@@ -188,8 +230,8 @@ struct StorageSingleton
      */
     ProcessStatus ps;
     AtomicMap<StorageVolState> stMap;
-    TaskQueue<std::string> taskQueue;
-    std::unique_ptr<DispatchTask<std::string, StorageWorker>> dispatcher;
+    TaskQueue<StorageTask> taskQueue;
+    std::unique_ptr<DispatchTask<StorageTask, StorageWorker>> dispatcher;
     std::unique_ptr<std::thread> wdevMonitor;
     std::atomic<bool> quitWdevMonitor;
     LogDevMonitor logDevMonitor;
@@ -251,14 +293,17 @@ static const StorageSingleton& gs = getStorageGlobal();
 inline void pushTask(const std::string &volId, size_t delayMs = 0)
 {
     LOGs.debug() << __func__ << volId << delayMs;
-    getStorageGlobal().taskQueue.push(volId, delayMs);
+    getStorageGlobal().taskQueue.push(StorageTask(volId, 0), delayMs);
 }
 
-inline void pushTaskForce(const std::string &volId, size_t delayMs)
+
+inline void pushTaskForce(const std::string &volId, size_t delayMs, bool retry = false)
 {
     LOGs.debug() << __func__ << volId << delayMs;
-    getStorageGlobal().taskQueue.pushForce(volId, delayMs);
+    getStorageGlobal().taskQueue.pushForce(
+        StorageTask(volId, retry ? delayMs : 0), delayMs);
 }
+
 
 namespace storage_local {
 
