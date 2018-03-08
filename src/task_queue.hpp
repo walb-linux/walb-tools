@@ -35,6 +35,9 @@ public:
     TaskQueue()
         : mu_(), cv_(), map_(), rmap_(), isStopped_(false) {
     }
+    ~TaskQueue() noexcept {
+        quit();
+    }
     /**
      * Push a task with current time (or with a delay).
      * If the same task already exists in the queue,
@@ -74,23 +77,39 @@ public:
         cv_.notify_all();
     }
     /**
-     * Pop a task with the oldest timestamp and the timestamp
+     * Pop a task with the oldest timestamp if the timestamp
      * is not greater than now.
      * RETURN:
      *   false if there is no task satisfying the condition.
      */
-    bool pop(Task &task, size_t timeoutMs=0) {
+    bool pop(Task &task, size_t timeoutMs = 0) {
         UniqueLock lk(mu_);
-        cv_.wait_for(lk, std::chrono::milliseconds(timeoutMs));
-
         typename Rmap::iterator itr = rmap_.begin();
-        if (itr == rmap_.end()) return false;
-        if (!isStopped_ && Clock::now() < itr->first) return false;
-        task = itr->second;
-        rmap_.erase(itr);
-        map_.erase(task);
-        assert(map_.size() == rmap_.size());
-        return true;
+        auto canPop = [&](const TimePoint& now) -> bool {
+            return itr != rmap_.end() && (isStopped_ || now >= itr->first);
+        };
+        TimePoint now = Clock::now();
+        if (canPop(now)) {
+            popInternal(itr, task);
+            return true;
+        }
+
+        // Reduce timeout to avoid oversleep.
+        auto timeout = MilliSeconds(timeoutMs);
+        if (itr != rmap_.end()) {
+            if (now < itr->first) {
+                auto delayToNext = std::chrono::duration_cast<MilliSeconds>(itr->first - now);
+                timeout = std::min(delayToNext, timeout);
+            }
+        }
+        cv_.wait_for(lk, timeout);
+
+        itr = rmap_.begin();
+        if (canPop(Clock::now())) {
+            popInternal(itr, task);
+            return true;
+        }
+        return false;
     }
     /**
      * Push will do nothing after quit.
@@ -146,6 +165,14 @@ private:
             }
             ++itr;
         }
+    }
+    void popInternal(typename Rmap::iterator itr, Task& task) {
+        // lock must be held.
+        assert(itr != rmap_.end());
+        task = itr->second;
+        rmap_.erase(itr);
+        map_.erase(task);
+        assert(map_.size() == rmap_.size());
     }
 };
 
