@@ -131,7 +131,7 @@ bool dirtyFullSyncClient(
     ThroughputStabilizer thStab;
     const size_t maxPushedNum = cmprOpt.numCpu * 2 + 1;
 
-    Compressor cmpr(cmprOpt.type, cmprOpt.level);
+    Compressor cmpr(cmprOpt.type, cmprOpt.level); // shared by all worker threads.
     cybozu::thread::ParallelConverter<DualBuffer, DualBuffer> pconv([&](DualBuffer&& dbuf) {
         const Buffer& src = dbuf.src;
         Buffer& dst = dbuf.dst;
@@ -225,11 +225,12 @@ bool dirtyFullSyncServer(
     const AlignedArray zeroBuf(bulkLb * LOGICAL_BLOCK_SIZE, true);
     const size_t maxPushedNum = cmprOpt.numCpu * 2 + 1;
 
-    Uncompressor uncmpr(cmprOpt.type);
+    Uncompressor uncmpr(cmprOpt.type); // shared by all worker threads.
     cybozu::thread::ParallelConverter<DualBuffer, DualBuffer> pconv([&](DualBuffer&& dbuf) {
         const Buffer& src = dbuf.src;
         Buffer& dst = dbuf.dst;
         if (src.empty()) {
+            // It means zero data.
             dst.resize(0);
         } else {
             size_t origSize = dbuf.lenLb * LOGICAL_BLOCK_SIZE;
