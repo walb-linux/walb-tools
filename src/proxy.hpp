@@ -95,10 +95,17 @@ struct ProxyTask
 {
     std::string volId;
     std::string archiveName;
+    size_t delayMs; // 0 if first trial. otherwise previous retry interval.
 
     ProxyTask() = default;
-    ProxyTask(const std::string &volId, const std::string &archiveName)
-        : volId(volId), archiveName(archiveName) {}
+    ProxyTask(const std::string &volId, const std::string &archiveName, size_t delayMs = 0)
+        : volId(volId), archiveName(archiveName), delayMs(delayMs) {}
+
+    ProxyTask(const ProxyTask&) = default;
+    ProxyTask& operator=(const ProxyTask&) = default;
+    ProxyTask(ProxyTask&& rhs) : ProxyTask() { swap(rhs); }
+    ProxyTask& operator=(ProxyTask&& rhs) { swap(rhs); return *this; }
+
     bool operator==(const ProxyTask &rhs) const {
         return volId == rhs.volId && archiveName == rhs.archiveName;
     }
@@ -110,19 +117,28 @@ struct ProxyTask
     }
     std::string str() const {
         std::ostringstream ss;
-        ss << "(" << volId << "," << archiveName << ")";
+        ss << "(" << volId << ", " << archiveName << ", " << delayMs << ")";
         return ss.str();
     }
     friend std::ostream& operator<<(std::ostream& os, const ProxyTask& task) {
         os << task.str();
         return os;
     }
+    ProxyTask copyAndSetDelayMs(size_t delayMs0) const {
+        return ProxyTask(volId, archiveName, delayMs0);
+    }
+
+    void swap(ProxyTask& rhs) {
+        std::swap(volId, rhs.volId);
+        std::swap(archiveName, rhs.archiveName);
+        std::swap(delayMs, rhs.delayMs);
+    }
 };
 
 class ProxyWorker
 {
 private:
-    const ProxyTask task_;
+    const ProxyTask task_;  // must not reference.
 
     /**
      * setupMerger currently supports sorted diffs only.
@@ -137,9 +153,15 @@ private:
     struct PushOpt
     {
         bool isForce;
-        size_t delaySec;
+        size_t delayMs;
     };
-    int transferWdiffIfNecessary(PushOpt &);
+    enum TransferState {
+        DONT_SEND,
+        DO_NEXT,
+        RETRY,
+        SEND_ERROR,
+    };
+    TransferState transferWdiffIfNecessary(PushOpt &);
 };
 
 struct ProxySingleton
@@ -156,7 +178,8 @@ struct ProxySingleton
     std::string baseDirStr;
     size_t maxWdiffSendMb;
     size_t maxWdiffSendNr;
-    size_t delaySecForRetry;
+    size_t minDelaySecForRetry;
+    size_t maxDelaySecForRetry;
     size_t retryTimeout;
     size_t maxConnections;
     size_t maxForegroundTasks;
@@ -199,6 +222,21 @@ inline ProxyVolInfo getProxyVolInfo(const std::string &volId)
     ProxyVolState &volSt = getProxyVolState(volId);
     return ProxyVolInfo(gp.baseDirStr, volId, volSt.diffMgr, volSt.diffMgrMap, volSt.archiveSet);
 }
+
+
+inline void pushTask(const ProxyTask& task, size_t delayMs = 0, bool retry = false)
+{
+    getProxyGlobal().taskQueue.push(
+        task.copyAndSetDelayMs(retry ? delayMs : 0), delayMs);
+}
+
+
+inline void pushTaskForce(const ProxyTask& task, size_t delayMs, bool retry = false)
+{
+    getProxyGlobal().taskQueue.pushForce(
+        task.copyAndSetDelayMs(retry ? delayMs : 0), delayMs);
+}
+
 
 namespace proxy_local {
 

@@ -326,9 +326,9 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
     const MetaDiffVec diffV = volInfo.tryToMakeHardlinkInSendtoDir();
     volInfo.deleteDiffs(diffV);
     for (const std::string &archiveName : volSt.archiveSet) {
-        ProxyTask task(volId, archiveName);
         HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
-        getProxyGlobal().taskQueue.push(task, hi.wdiffSendDelaySec * 1000);
+        ProxyTask task(volId, archiveName);
+        pushTask(task, hi.wdiffSendDelaySec * 1000);
         logger.debug() << "task pushed" << task;
     }
     const uint64_t realSizeLb = volInfo.getSizeLb();
@@ -395,18 +395,11 @@ retry:
 }
 
 
-enum {
-    DONT_SEND,
-    CONTINUE_TO_SEND,
-    SEND_ERROR,
-};
-
-
 /**
  * RETURN:
  *   DONT_SEND, CONTINUE_TO_SEND, or SEND_ERROR.
  */
-int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
+ProxyWorker::TransferState ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
 {
     const char *const FUNC = __func__;
     const std::string& volId = task_.volId;
@@ -418,8 +411,8 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     if (st == ptStart) {
         // This is rare case, but possible.
         pushOpt.isForce = false;
-        pushOpt.delaySec = 1;
-        return CONTINUE_TO_SEND;
+        pushOpt.delayMs = 1000;
+        return TransferState::DO_NEXT;
     }
     verifyStateIn(st, pAcceptForWdiffSend, FUNC);
 
@@ -431,13 +424,13 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
     setupMerger(merger, diffV, mergedDiff, volInfo, archiveName);
     if (diffV.empty()) {
         LOGs.debug() << FUNC << "no need to send wdiffs" << volId << archiveName;
-        return DONT_SEND;
+        return TransferState::DONT_SEND;
     }
     const HostInfoForBkp hi = volInfo.getArchiveInfo(archiveName);
     ActionCounterTransaction trans(volSt.ac, archiveName);
     if (trans.count() > 0) {
         LOGs.debug() << FUNC << "another task is running" << volId << archiveName;
-        return DONT_SEND;
+        return TransferState::DONT_SEND;
     }
 
     ul.unlock();
@@ -468,7 +461,7 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         DiffStatistics statOut;
         if (!wdiffTransferClient(pkt, merger, hi.cmpr, volSt.stopState, gp.ps, statOut)) {
             logger.warn() << FUNC << "force stopped wdiff sending" << volId;
-            return DONT_SEND;
+            return TransferState::DONT_SEND;
         }
         packet::Ack(pkt.sock()).recv();
         logger.debug() << "mergeIn " << volId << merger.statIn();
@@ -479,8 +472,8 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         ul.unlock();
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = false;
-        pushOpt.delaySec = 0;
-        return CONTINUE_TO_SEND;
+        pushOpt.delayMs = 0;
+        return TransferState::DO_NEXT;
     }
     if (res == msgSmallerLvSize || res == msgArchiveNotFound) {
         /**
@@ -488,14 +481,14 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
          * You must restart by hand.
          */
         logger.error() << FUNC << res << volId;
-        return SEND_ERROR;
+        return TransferState::SEND_ERROR;
     }
     if (res == msgDifferentUuid || res == msgTooOldDiff) {
         logger.info() << FUNC << res << volId << mergedDiff;
         volInfo.deleteDiffs(diffV, archiveName);
         pushOpt.isForce = true;
-        pushOpt.delaySec = 0; // retry soon.
-        return CONTINUE_TO_SEND;
+        pushOpt.delayMs = 0; // retry soon.
+        return TransferState::DO_NEXT;
     }
     /**
      * msgStopped, msgWdiffRecv, msgTooNewDiff, msgSyncing, and others.
@@ -506,32 +499,33 @@ int ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOpt)
         curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
         logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout
                        << volId << mergedDiff;
-        return SEND_ERROR;
+        return TransferState::SEND_ERROR;
     }
-    logger.info() << FUNC << res << "delay time" << gp.delaySecForRetry
-                  << volId << mergedDiff;
     pushOpt.isForce = true;
-    pushOpt.delaySec = gp.delaySecForRetry;
-    return CONTINUE_TO_SEND;
+    if (task_.delayMs == 0) {
+        pushOpt.delayMs = gp.minDelaySecForRetry * 1000;
+    } else {
+        pushOpt.delayMs = std::min(task_.delayMs * 2, gp.maxDelaySecForRetry * 1000);
+    }
+    logger.info() << FUNC << res << "delay time ms" << pushOpt.delayMs
+                  << volId << mergedDiff;
+    return TransferState::RETRY;
 }
 
 
 void ProxyWorker::operator()()
 {
     const char *const FUNC = __func__;
-    TaskQueue<ProxyTask> &q = getProxyGlobal().taskQueue;
     try {
         PushOpt opt;
-        const int ret = transferWdiffIfNecessary(opt);
+        const TransferState ret = transferWdiffIfNecessary(opt);
         switch (ret) {
-        case CONTINUE_TO_SEND:
-            {
-                const size_t delayMs = opt.delaySec * 1000;
-                if (opt.isForce) {
-                    q.pushForce(task_, delayMs);
-                } else {
-                    q.push(task_, delayMs);
-                }
+        case DO_NEXT:
+        case RETRY:
+            if (opt.isForce) {
+                pushTaskForce(task_, opt.delayMs, ret == RETRY);
+            } else {
+                pushTask(task_, opt.delayMs, ret == RETRY);
             }
             break;
         case SEND_ERROR:
@@ -544,10 +538,10 @@ void ProxyWorker::operator()()
         }
     } catch (std::exception &e) {
         LOGs.error() << FUNC << e.what();
-        q.pushForce(task_, 1000);
+        pushTaskForce(task_, 1000, true);
     } catch (...) {
         LOGs.error() << FUNC << "unknown error";
-        q.pushForce(task_, 1000);
+        pushTaskForce(task_, 1000, true);
     }
 }
 
@@ -625,7 +619,7 @@ void c2pKickServer(protocol::ServerParams &p)
                 }
                 volSt.actionState.clear(archiveName);
                 logger.info() << FUNC << "kick" << volId << archiveName;
-                getProxyGlobal().taskQueue.push(ProxyTask(volId, archiveName));
+                pushTask(ProxyTask(volId, archiveName));
             }
         }
         pkt.writeFin(msgOk);
@@ -671,7 +665,8 @@ StrVec getAllStatusAsStrVec()
     ret.push_back(fmt("nodeId %s", gp.nodeId.c_str()));
     ret.push_back(fmt("baseDir %s", gp.baseDirStr.c_str()));
     ret.push_back(fmt("maxWdiffSendMb %zu", gp.maxWdiffSendMb));
-    ret.push_back(fmt("delaySecForRetry %zu", gp.delaySecForRetry));
+    ret.push_back(fmt("minDelaySecForRetry %zu", gp.minDelaySecForRetry));
+    ret.push_back(fmt("maxDelaySecForRetry %zu", gp.maxDelaySecForRetry));
     ret.push_back(fmt("retryTimeout %zu", gp.retryTimeout));
     ret.push_back(fmt("maxConnections %zu", gp.maxConnections));
     ret.push_back(fmt("maxForegroundTasks %zu", gp.maxForegroundTasks));
@@ -803,7 +798,7 @@ void pushAllTasksForVol(const std::string &volId, Logger *loggerP)
     if (loggerP) loggerP->info() << "pushAllTasksForVol:volId" << volId;
     for (const std::string& archiveName : volSt.archiveSet) {
         if (loggerP) loggerP->info() << "pushAllTasksForVol:archiveName" << archiveName;
-        getProxyGlobal().taskQueue.pushForce(ProxyTask(volId, archiveName), 0);
+        pushTaskForce(ProxyTask(volId, archiveName), 0);
     }
 }
 
@@ -850,7 +845,6 @@ bool hasDiffs(ProxyVolState &volSt)
 void stopAndEmptyProxyVol(const std::string &volId)
 {
     const char *const FUNC = __func__;
-    ProxySingleton &g = getProxyGlobal();
     ProxyVolState &volSt = getProxyVolState(volId);
     UniqueLock ul(volSt.mu);
 
@@ -870,7 +864,7 @@ void stopAndEmptyProxyVol(const std::string &volId)
             const bool hasDiffs = proxy_local::hasDiffs(volSt);
             if (hasDiffs) {
                 for (const std::string &archiveName : volSt.archiveSet) {
-                    g.taskQueue.push(ProxyTask(volId, archiveName));
+                    pushTask(ProxyTask(volId, archiveName));
                 }
                 return false;
             } else {

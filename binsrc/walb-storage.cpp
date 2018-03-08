@@ -57,7 +57,7 @@ struct Option
         opt.appendOpt(&s.maxWlogSendMb, DEFAULT_MAX_WLOG_SEND_MB, "wl", "SIZE : max wlog size to send at once [MiB].");
         opt.appendOpt(&s.implicitSnapshotIntervalSec, DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC, "snapintvl"
                       , "PERIOD : implicit snapshot interval [sec].");
-        opt.appendOpt(&s.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : waiting time for next retry [sec].");
+        opt.appendOpt(&s.delaySecForRetry, DEFAULT_MIN_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : waiting time for next retry [sec].");
         opt.appendOpt(&s.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : socket timeout [sec].");
         opt.appendOpt(&defaultFullScanBytesPerSec, DEFAULT_FULL_SCAN_BYTES_PER_SEC, "fst", "SIZE : default full scan throughput [bytes/s]");
         opt.appendOpt(&s.tsDeltaGetterIntervalSec, DEFAULT_TS_DELTA_INTERVAL_SEC, "tsdintvl", "PERIOD : ts-delta getter interval [sec].");

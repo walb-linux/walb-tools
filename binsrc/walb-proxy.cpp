@@ -45,7 +45,8 @@ struct Option
         opt.appendOpt(&p.maxBackgroundTasks, DEFAULT_MAX_BACKGROUND_TASKS, "bg", "NUM : num of max concurrent background tasks.");
         opt.appendOpt(&p.maxWdiffSendMb, DEFAULT_MAX_WDIFF_SEND_MB, "wd", "SIZE : max size of wdiff files to send [MiB].");
         opt.appendOpt(&p.maxWdiffSendNr, DEFAULT_MAX_WDIFF_SEND_NR, "wn", "NUM : max number of wdiff files to send.");
-        opt.appendOpt(&p.delaySecForRetry, DEFAULT_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : waiting time for next retry [sec].");
+        opt.appendOpt(&p.minDelaySecForRetry, DEFAULT_MIN_DELAY_SEC_FOR_RETRY, "delay", "PERIOD : minimum waiting time for next retry [sec].");
+        opt.appendOpt(&p.maxDelaySecForRetry, DEFAULT_MAX_DELAY_SEC_FOR_RETRY, "maxdelay", "PERIOD : maximum waiting time for next retry [sec].");
         opt.appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "PERIOD : retry timeout (total period) [sec].");
         opt.appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "PATH : base directory");
         opt.appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "SIZE : max memory size of wlog-wdiff conversion [MiB].");
@@ -70,6 +71,11 @@ struct Option
         util::verifyNotZero(p.maxWdiffSendNr, "maxWdiffSendNr");
         util::verifyNotZero(p.maxConversionMb, "maxConversionMb");
         p.keepAliveParams.verify();
+        if (p.minDelaySecForRetry > p.maxDelaySecForRetry) {
+            LOGs.warn() << "reset maxDelaySecForRetry do to bad value"
+                        << p.maxDelaySecForRetry << p.minDelaySecForRetry;
+            p.maxDelaySecForRetry = p.minDelaySecForRetry;
+        }
     }
 };
 
