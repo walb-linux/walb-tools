@@ -495,8 +495,10 @@ ProxyWorker::TransferState ProxyWorker::transferWdiffIfNecessary(PushOpt &pushOp
      */
     const uint64_t curTs = ::time(0);
     ul.lock();
-    if (volSt.lastWlogReceivedTime != 0 &&
+    if (res != msgTooNewDiff && res != msgSyncing &&
+        volSt.lastWlogReceivedTime != 0 &&
         curTs - volSt.lastWlogReceivedTime > gp.retryTimeout) {
+        // Do not giveup for msgTooNewDiff and msgSyncing.
         logger.error() << FUNC << "reached retryTimeout" << gp.retryTimeout
                        << volId << mergedDiff;
         return TransferState::SEND_ERROR;
