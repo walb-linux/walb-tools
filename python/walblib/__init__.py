@@ -1678,6 +1678,16 @@ class Controller(object):
         ''' Kick all storage servers. '''
         self.kick_all(self.sLayout.storageL)
 
+    def kick_proxy(self, vol, ax):
+        '''Kick all proxy servers to start wdiff transfer immediately.
+        for (volume, archive).
+        '''
+        verify_type(vol, str)
+        verify_server_kind(ax, [K_ARCHIVE])
+        ax.name
+        for p in self.sLayout.proxyL:
+            self.run_ctl(p, ['kick', vol, ax.name])
+
     def set_full_scan_bps(self, sx, throughputU):
         '''
         sx :: ServerParams - storage server.
@@ -2446,6 +2456,8 @@ class Controller(object):
         if st not in aActive:
             raise Exception('full_backup: sync failed', sx.name, a0.name, vol, st)
 
+        self.kick_proxy(vol, a0)
+
         t0 = time.time()
         while time.time() < t0 + timeoutS:
             gids = self.get_restorable_gid(a0, vol)
@@ -2495,6 +2507,8 @@ class Controller(object):
         st = self.get_state(a0, vol)
         if st not in aActive:
             raise Exception('hash_backup: sync failed', sx.name, a0.name, vol, st)
+
+        self.kick_proxy(vol, a0)
 
         t0 = time.time()
         while time.time() < t0 + timeoutS:
