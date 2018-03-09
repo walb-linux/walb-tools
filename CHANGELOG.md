@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 ### Security
 
-## [1.0.13] - 2018-03-08
+## [1.0.13] - 2018-03-09
 ### Changed
 - **CAUSION**: internal protocols were changed and renamed.
   - `dirty-full-sync` --> `dirty-full-sync2`
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   such as `bad state:WlogRecv`.
 - fix: improve TaskQueue.
 - bugfix: level setting of zstd compression was ignored.
+- fix: improve proxy to kick and retry of wdiff transfer.
 
 ## [1.0.12] - 2018-02-27
 ### Changed
