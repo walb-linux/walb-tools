@@ -619,7 +619,7 @@ void c2pKickServer(protocol::ServerParams &p)
                 }
                 volSt.actionState.clear(archiveName);
                 logger.info() << FUNC << "kick" << volId << archiveName;
-                pushTask(ProxyTask(volId, archiveName));
+                pushTaskForce(ProxyTask(volId, archiveName), 0);
             }
         }
         pkt.writeFin(msgOk);
