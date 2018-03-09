@@ -556,6 +556,13 @@ def usage():
     print "    -no : select task but no action"
     exit(1)
 
+
+def sleepWithQuitCheck(sec):
+    while not g_quit and sec > 0:
+        time.sleep(1)
+        sec -= 1
+
+
 def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
     verify_type(cfg, worker.Config)
     verify_type(verbose, int)
@@ -598,7 +605,8 @@ def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
                 break
             except Exception:
                 loge('err', traceback.format_exc())
-                time.sleep(10)
+                sleepWithQuitCheck(10)
+                continue
         else:
             loge('max retryNum')
             os._exit(1)
@@ -609,7 +617,7 @@ def workerMain(cfg, verbose=0, step=0, lifetime=0, noAction=False):
                 continue
             logd("task is canceled(max limit)", task)
         logd('no task')
-        time.sleep(cfg.general.kick_interval)
+        sleepWithQuitCheck(cfg.general.kick_interval)
     manager.join()
     logEnd()
 
