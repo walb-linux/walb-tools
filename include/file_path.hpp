@@ -28,12 +28,11 @@ class FileStat
 {
 private:
     struct stat st_;
-    bool isLstat_;
     bool isFailed_;
 public:
-    FileStat() : st_(), isLstat_(), isFailed_(true) {}
+    FileStat() : st_(), isFailed_(true) {}
     explicit FileStat(const std::string &path, bool isLstat = false)
-        : st_(), isLstat_(isLstat), isFailed_(false) {
+        : st_(), isFailed_(false) {
         ::memset(&st_, 0, sizeof(st_));
         if (isLstat) {
             isFailed_ = (::lstat(path.c_str(), &st_) != 0);
@@ -42,7 +41,7 @@ public:
         }
     }
     explicit FileStat(int fd)
-        : st_(), isLstat_(false), isFailed_(false) {
+        : st_(), isFailed_(false) {
         ::memset(&st_, 0, sizeof(st_));
         isFailed_ = (::fstat(fd, &st_) != 0);
     }
