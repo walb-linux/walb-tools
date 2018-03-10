@@ -1026,6 +1026,7 @@ class ParallelConverter
     template <typename TT1, typename TT2>
     struct BaseHolder {
         virtual TT2 convert(TT1&&) = 0;
+        virtual ~BaseHolder() noexcept {}
     };
     template <typename TT1, typename TT2, typename Converter>
     struct Holder : BaseHolder<TT1, TT2> {
