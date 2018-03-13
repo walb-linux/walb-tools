@@ -80,7 +80,7 @@ bool commandRunner(const std::vector<std::string> &cmds, walb::LogDevMonitor &mo
 
     const std::string &cmdType = cmds[0];
     std::string wdevName;
-    if (1 <= cmds.size()) {
+    if (cmds.size() > 1) {
         wdevName = cmds[1];
     }
     if (cmdType == "addForce") {
