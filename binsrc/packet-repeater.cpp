@@ -186,7 +186,9 @@ class Repeater {
                     size_t readSize = from.readSome(buf.data(), buf.size());
                     if (opt_.rateMbps > 0) {
                         sma.append(readSize, cybozu::GetCurrentTimeSec());
-                        while (double rate = sma.getBps(cybozu::GetCurrentTimeSec()) > opt_.rateMbps * 1e6) {
+                        for (;;) {
+                            const double rate = sma.getBps(cybozu::GetCurrentTimeSec());
+                            if (rate < opt_.rateMbps * 1e6) break;
                             if (opt_.verbose) cybozu::PutLog(cybozu::LogDebug, "[%d] loop %d %d rate %f", id_, dir, (int)state_, rate);
                             waitMsec(1);
                         }
