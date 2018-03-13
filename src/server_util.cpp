@@ -17,7 +17,7 @@ void MultiThreadedServer::run(
     cybozu::Socket ssock;
     ssock.bind(port);
     cybozu::thread::ThreadRunnerFixedPool pool;
-    pool.setSetQuitFlag([&]() { ps.setForceShutdown(); });
+    pool.setFinalizeFunc([&]() { ps.setForceShutdown(); });
     pool.start(maxNumThreads);
     LOGs.info() << FUNC << "Ready to accept connections";
     for (;;) {
