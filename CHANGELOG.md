@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 ### Security
 
+
+## [1.0.14] - 2018-03-16
+### Added
+- `version` command/protocol.
+### Fixed
+- bugfix: worker: bad replication target when the latest snapshot of destination server is dirty.
+- fix: worker: avoid long sleep without quit check.
+
 ## [1.0.13] - 2018-03-09
 ### Changed
 - **CAUSION**: internal protocols were changed and renamed.
