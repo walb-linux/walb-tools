@@ -231,6 +231,23 @@ def get_server(name, sL):
     return ret[0]
 
 
+def parse_ltsv(s):
+    '''
+    s :: str - input ltsv string.
+    return :: {tag_name::str, value::str}
+    '''
+    verify_type(s, str)
+    d = {}
+    for kv in s.split('\t'):
+        i = kv.find(':')
+        if i < 0:
+            raise Exception("parse error: not found ':'"), kv
+        k = kv[0:i]
+        v = kv[i + 1:]
+        d[k] = v
+    return d
+
+
 ########################################
 # Constants for walb.
 ########################################
@@ -558,15 +575,8 @@ def create_ts_delta_from_str(s):
     s :: str
     return :: dict(tag_name::str, value::str)
     '''
-    d = {}
-    for kv in s.split('\t'):
-        i = kv.find(':')
-        if i < 0:
-            raise Exception("parse error: not found ':'"), kv
-        k = kv[0:i]
-        v = kv[i + 1:]
-        d[k] = v
-    return d
+    return parse_ltsv(s)
+
 
 class MetaState(object):
     '''
@@ -2752,6 +2762,36 @@ class Controller(object):
             return xL[-1]
         else:
             raise Exception('get_latest_clean_snapshot:not found', ax.name, vol)
+
+    def get_latest_snapshot_info(self, ax, vol=None):
+        '''
+        ax :: ServerParams - archive server.
+        vol :: str or None - volume name. None means all volumes.
+        return :: {vol :: str, gid :: int}
+        '''
+        verify_server_kind(ax, [K_ARCHIVE])
+        verify_type(vol, str, allowNone=True)
+        args = ['get', 'latest-snap']
+        if vol is not None:
+            args.append(vol)
+        ls = self.run_ctl(ax, args)
+        if not ls:
+            return {}
+
+        def verify_snapinfo_ltsv(ltsv):
+            if 'name' not in ltsv:
+                raise Exception('name entry does not exist in ltsv', ltsv)
+            if 'gid' not in ltsv:
+                raise Exception('gid entry does not exist in ltsv', ltsv)
+            if not ltsv['gid'].isdigit():
+                raise Exception('bad gid in ltsv', ltsv)
+
+        d = {}
+        for line in ls.split('\n'):
+            ltsv = parse_ltsv(line)
+            verify_snapinfo_ltsv(ltsv)
+            d[ltsv['name']] = int(ltsv['gid'])
+        return d
 
     def resize_archive(self, ax, vol, sizeMb, doZeroClear):
         '''
