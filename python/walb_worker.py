@@ -369,13 +369,29 @@ class Worker:
         tL = []
         rsL = self.cfg.repl.getEnabledList()
         logdd('selectReplTask', 'rsL', [(rs.name, rs.log_name, rs.addr, rs.port) for rs in rsL])
+        srcSnapGidDict = self.walbc.get_latest_snapshot_info(self.a0)  # {vol: gid}
+        dstSnapGidDictDict = {}  # key: rs.name, val: {vol: gid}
+
+        def getSrcLatestSnapGid(vol):
+            if vol not in srcSnapGidDict:
+                raise Exception('getSrcLatestSnapGid not found for vol', vol)
+            return srcSnapGidDict[vol]
+
+        def getDstLatestSnapGid(rsName, a1, vol):
+            if rsName not in dstSnapGidDictDict:
+                dstSnapGidDictDict[rsName] = self.walbc.get_latest_snapshot_info(a1)
+            dstSnapGidDict = dstSnapGidDictDict[rsName]
+            if vol not in dstSnapGidDict:
+                raise Exception('getDstLatestSnapGid not found for vol', vol, rsName)
+            return dstSnapGidDict[vol]
+
         for vol in volL:
             if vol in self.cfg.repl.disabled_volumes:
                 continue
             a0State = self.walbc.get_state(self.a0, vol)
-            a0latest = self.walbc.get_latest_clean_snapshot(self.a0, vol)
             if a0State not in aActive:
                 continue
+            a0latest = getSrcLatestSnapGid(vol)
             for rs in rsL:
                 a1 = rs.getServerConnectionParam()
                 a1State = self.walbc.get_state(a1, vol)
@@ -384,7 +400,7 @@ class Worker:
                 ts = self.doneReplServerList.get((vol, rs))
                 if ts and curTime < ts + rs.interval:
                     continue
-                a1latest = self.walbc.get_latest_clean_snapshot(a1, vol)
+                a1latest = getDstLatestSnapGid(rs.name, a1, vol)
                 # skip if repl is not necessary
                 if a0latest == a1latest:
                     continue
