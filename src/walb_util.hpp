@@ -294,8 +294,6 @@ inline void parseDecOrHexInt(const std::string& s, Int& v)
     }
 }
 
-std::string getDescription(const char *prefix);
-
 }} // walb::util
 
 int errorSafeMain(int (*doMain)(int, char *[]), int argc, char *argv[], const char *msg);

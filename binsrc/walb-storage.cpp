@@ -19,6 +19,8 @@
 #include "host_info.hpp"
 #include "storage.hpp"
 #include "version.hpp"
+#include "description.hpp"
+
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -39,7 +41,7 @@ struct Option
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
-        opt.setDescription(util::getDescription("walb storage server"));
+        opt.setDescription(getDescription("walb storage server"));
 
         opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
         opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) try
     Option opt(argc, argv);
     StorageSingleton &g = getStorageGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
-    LOGs.info() << util::getDescription("starting walb storage server");
+    LOGs.info() << getDescription("starting walb storage server");
     LOGs.info() << opt.opt;
     {
         StorageThreads threads(opt);
@@ -153,7 +155,7 @@ int main(int argc, char *argv[]) try
         server.run(g.ps, opt.port, g.nodeId, storageHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }
-    LOGs.info() << util::getDescription("shutdown walb storage server");
+    LOGs.info() << getDescription("shutdown walb storage server");
 
 } catch (std::exception &e) {
     LOGe("StorageServer: error: %s\n", e.what());

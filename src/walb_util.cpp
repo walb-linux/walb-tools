@@ -1,4 +1,5 @@
 #include "walb_util.hpp"
+#include <sstream>
 
 namespace walb {
 namespace util {
@@ -123,23 +124,6 @@ uint64_t parseSizeLb(const std::string &str, const char *msg, uint64_t minB, uin
     if (sizeLb < minLb) throw cybozu::Exception(msg) << "too small size" << minB << sizeLb;
     if (maxLb < sizeLb) throw cybozu::Exception(msg) << "too large size" << maxB << sizeLb;
     return sizeLb;
-}
-
-std::string getDescription(const char *prefix)
-{
-    return cybozu::util::formatString(
-        "%s version %s build at %s (wlog version %d)\n"
-#ifndef DISABLE_COMMIT_ID
-        "commit %s\n"
-#endif
-        , prefix
-        , getWalbToolsVersion()
-        , getWalbToolsBuildDate()
-        , WALB_LOG_VERSION
-#ifndef DISABLE_COMMIT_ID
-        , getWalbToolsCommitId()
-#endif
-        );
 }
 
 } // namespace util

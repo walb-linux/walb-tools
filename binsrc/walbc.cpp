@@ -10,6 +10,7 @@
 #include "walb_util.hpp"
 #include "command_param_parser.hpp"
 #include "version.hpp"
+#include "description.hpp"
 
 using namespace walb;
 
@@ -141,6 +142,11 @@ void setupSleep(cybozu::Option& opt)
     opt.appendParamOpt(&sec, 1, "(sec)", ": specify seconds to sleep.");
 }
 
+void setupNone(cybozu::Option&)
+{
+    // do nothing.
+}
+
 void setupDisableSnapshot(cybozu::Option& opt)
 {
     setupVolId(opt);
@@ -206,6 +212,7 @@ const CommandInfo g_cmdTbl[] = {
     { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
     { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
     { sleepCN, protocol::sleepClient, setupSleep, verifySleepParam, "sleep specified seconds. (for debug and test)" },
+    { versionCN, protocol::versionClient, setupNone, verifyNoneParam, "get version string and other description." },
     { gcDiffCN, c2aGarbageCollectDiffClient, setupVolId, verifyVolIdParam, "garbage collect diffs." },
     { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, "reload metadata of a volue in an archive (for debug)." },
     { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
@@ -238,7 +245,7 @@ struct Option
     bool isDebug;
     size_t socketTimeout;
     void setup1stOption() {
-        const std::string desc = util::getDescription("walb server controller");
+        const std::string desc = getDescription("walb server controller");
         opt1.setDescription(desc);
         size_t maxLen = 0;
         for (const CommandInfo& ci : g_cmdTbl) {

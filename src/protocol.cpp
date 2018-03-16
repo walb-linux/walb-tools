@@ -1,4 +1,5 @@
 #include "protocol.hpp"
+#include "description.hpp"
 
 namespace walb {
 
@@ -136,6 +137,24 @@ void sleepServer(ServerParams &p) try
 }
 
 
+void versionClient(ClientParams& p)
+{
+    packet::Packet pkt(p.sock);
+    std::string description;
+    pkt.read(description);
+    ::printf("%s\n", description.c_str());
+}
+
+
+void versionServer(ServerParams& p) try
+{
+    packet::Packet pkt(p.sock);
+    pkt.writeFin(walb::getDescriptionLtsv());
+} catch (std::exception& e) {
+    LOGs.info() << "version protocol error" << e.what();
+}
+
+
 StrVec prettyPrintHandlerStat(const HandlerStat& stat)
 {
     StrVec ret;
@@ -175,6 +194,7 @@ ServerHandler findServerHandler(
 {
     if (protocolName == shutdownCN) return shutdownServer;
     if (protocolName == sleepCN) return sleepServer;
+    if (protocolName == versionCN) return versionServer;
     Str2ServerHandler::const_iterator it = handlers.find(protocolName);
     if (it == handlers.cend()) {
         throw cybozu::Exception(__func__) << "bad protocol" << protocolName;

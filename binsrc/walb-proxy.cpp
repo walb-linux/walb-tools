@@ -15,6 +15,8 @@
 #include "walb_util.hpp"
 #include "proxy.hpp"
 #include "version.hpp"
+#include "description.hpp"
+
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -32,7 +34,7 @@ struct Option
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
-        opt.setDescription(util::getDescription("walb proxy server"));
+        opt.setDescription(getDescription("walb proxy server"));
 
         opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
         opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
@@ -117,7 +119,7 @@ int main(int argc, char *argv[]) try
     Option opt(argc, argv);
     ProxySingleton &g = getProxyGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
-    LOGs.info() << util::getDescription("starting walb proxy server");
+    LOGs.info() << getDescription("starting walb proxy server");
     LOGs.info() << opt.opt;
     {
         ProxyThreads threads(opt);
@@ -126,7 +128,7 @@ int main(int argc, char *argv[]) try
         server.run(g.ps, opt.port, g.nodeId, proxyHandlerMap, g.handlerStatMgr,
                    concurrency, g.keepAliveParams, g.socketTimeout);
     }
-    LOGs.info() << util::getDescription("shutdown walb proxy server");
+    LOGs.info() << getDescription("shutdown walb proxy server");
 
 } catch (std::exception &e) {
     LOGe("ProxyServer: error: %s", e.what());

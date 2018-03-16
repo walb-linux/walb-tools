@@ -15,6 +15,8 @@
 #include "walb_util.hpp"
 #include "archive.hpp"
 #include "version.hpp"
+#include "description.hpp"
+
 
 /* These should be defined in the parameter header. */
 const uint16_t DEFAULT_LISTEN_PORT = 5000;
@@ -34,7 +36,7 @@ struct Option
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
-        opt.setDescription(util::getDescription("walb archive server"));
+        opt.setDescription(getDescription("walb archive server"));
 
         opt.appendOpt(&port, DEFAULT_LISTEN_PORT, "p", "PORT : listen port");
         opt.appendOpt(&logFileStr, DEFAULT_LOG_FILE, "l", "PATH : log file name.");
@@ -125,7 +127,7 @@ int main(int argc, char *argv[]) try
     Option opt(argc, argv);
     ArchiveSingleton &g = getArchiveGlobal();
     util::setLogSetting(createLogFilePath(opt.logFileStr, g.baseDirStr), opt.isDebug);
-    LOGs.info() << util::getDescription("starting walb archive server");
+    LOGs.info() << getDescription("starting walb archive server");
     LOGs.info() << opt.opt;
     initArchiveData();
     util::makeDir(ga.baseDirStr, "ArchiveServer", false);
@@ -133,7 +135,7 @@ int main(int argc, char *argv[]) try
     const size_t concurrency = g.maxConnections;
     server.run(g.ps, opt.port, g.nodeId, archiveHandlerMap, g.handlerStatMgr,
                concurrency, g.keepAliveParams, g.socketTimeout);
-    LOGs.info() << util::getDescription("shutdown walb archive server");
+    LOGs.info() << getDescription("shutdown walb archive server");
 
 } catch (std::exception &e) {
     LOGe("ArchiveServer: error: %s", e.what());
