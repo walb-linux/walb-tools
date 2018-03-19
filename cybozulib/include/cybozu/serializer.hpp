@@ -5,7 +5,7 @@
 
 	Copyright (C) Cybozu Labs, Inc., all rights reserved.
 */
-#include <cybozu/string.hpp>
+#include <assert.h>
 #include <cybozu/stream.hpp>
 
 #ifdef _MSC_VER
@@ -50,14 +50,13 @@ void reserve_if_exists(T& t, size_t size)
 template<class InputStream, class T>
 void loadRange(T *p, size_t num, InputStream& is)
 {
-//	cybozu::InputStreamTag<InputStream>::read(is, p, num * sizeof(T));
-	cybozu::stream::read(is, p, num * sizeof(T));
+	cybozu::read(p, num * sizeof(T), is);
 }
 
 template<class OutputStream, class T>
 void saveRange(OutputStream& os, const T *p, size_t num)
 {
-	cybozu::OutputStreamTag<OutputStream>::write(os, p, num * sizeof(T));
+	cybozu::write(os, p, num * sizeof(T));
 }
 
 template<class InputStream, class T>
@@ -243,18 +242,6 @@ void load(std::string& str, InputStream& is)
 
 template<class OutputStream>
 void save(OutputStream& os, const std::string& str)
-{
-	savePodVec(os, str);
-}
-
-template<class InputStream>
-void load(cybozu::String& str, InputStream& is)
-{
-	loadPodVec(str, is);
-}
-
-template<class OutputStream>
-void save(OutputStream& os, const cybozu::String& str)
 {
 	savePodVec(os, str);
 }

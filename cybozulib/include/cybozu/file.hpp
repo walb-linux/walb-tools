@@ -9,7 +9,6 @@
 #include <assert.h>
 #include <sys/stat.h> // for stat
 #include <cybozu/exception.hpp>
-#include <cybozu/stream_fwd.hpp>
 #include <vector>
 #include <ios>
 #ifdef _WIN32
@@ -153,7 +152,7 @@ public:
 
 	{
 	}
-	~File() throw()
+	~File() CYBOZU_NOEXCEPT
 	{
 		if (!doClose_) return;
 		try {
@@ -165,7 +164,7 @@ public:
 			fprintf(stderr, "File:dstr:unknown\n");
 		}
 	}
-	bool isOpen() const throw() { return hdl_ != INVALID_HANDLE_VALUE; }
+	bool isOpen() const CYBOZU_NOEXCEPT { return hdl_ != INVALID_HANDLE_VALUE; }
 	/**
 		support mode
 		always binary mode

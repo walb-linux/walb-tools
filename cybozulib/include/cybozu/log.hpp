@@ -38,7 +38,7 @@ public:
 		, useMsec_(false)
 	{
 	}
-	~Logger() throw()
+	~Logger() CYBOZU_NOEXCEPT
 	{
 		closeFile();
 	}
@@ -94,7 +94,7 @@ public:
 		fp = fopen(path.c_str(), "a+b");
 #endif
 		if (fp == 0) throw cybozu::Exception("cybozu:Logger:openFile") << path;
-		closeFile();
+		if (!closeFile()) throw cybozu::Exception("cybozu:Logger:openFile:fail to closeFile");
 		fp_ = fp;
 		doClose_ = true;
 		useSyslog_ = false;
@@ -106,7 +106,7 @@ public:
 	*/
 	void set(FILE *fp)
 	{
-		closeFile();
+		if (!closeFile()) throw cybozu::Exception("cybozu:Logger:set:fail to closeFile");
 		fp_ = fp;
 		doClose_ = false;
 		useSyslog_ = false;
@@ -118,7 +118,7 @@ public:
 	{
 		useSyslog_ = useSyslog;
 	}
-	bool closeFile() throw()
+	bool closeFile() CYBOZU_NOEXCEPT
 	{
 		if (!doClose_ || fp_ == 0) return true;
 		if (fp_ == stdout || fp_ == stderr) {
@@ -190,9 +190,9 @@ inline void SetLogUseMsec(bool useMsec = true)
 	Windows : default is file(use openFile)
 */
 #ifdef __GNUC__
-inline void PutLog(LogPriority priority, const char *format, ...) throw() __attribute__((format(printf, 2, 3)));
+inline void PutLog(LogPriority priority, const char *format, ...) CYBOZU_NOEXCEPT __attribute__((format(printf, 2, 3)));
 #endif
-inline void PutLog(LogPriority priority, const char *format, ...) throw()
+inline void PutLog(LogPriority priority, const char *format, ...) CYBOZU_NOEXCEPT
 	try
 {
 	va_list args;
@@ -220,7 +220,7 @@ class Log {
 	void operator=(const Log&);
 public:
 	explicit Log(LogPriority priority = cybozu::LogInfo) : pri_(priority) { }
-	~Log() throw()
+	~Log() CYBOZU_NOEXCEPT
 	{
 		try {
 			log_local::Logger::getInstance().put(pri_, os_.str());
