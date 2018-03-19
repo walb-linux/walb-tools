@@ -1,6 +1,8 @@
 #pragma once
 #include <csignal>
 #include <stdexcept>
+#include <initializer_list>
+
 
 namespace cybozu {
 namespace signal {
