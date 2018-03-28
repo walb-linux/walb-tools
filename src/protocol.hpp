@@ -301,7 +301,8 @@ using ServerHandler = void (*)(ServerParams &);
 typedef std::map<std::string, ServerHandler> Str2ServerHandler;
 
 ServerHandler findServerHandler(
-    const Str2ServerHandler &handlers, const std::string &protocolName);
+    const Str2ServerHandler &handlers, const std::string &protocolName,
+    const std::string& clientId);
 
 /**
  * Server dispatcher.

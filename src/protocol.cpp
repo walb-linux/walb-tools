@@ -190,14 +190,14 @@ StrVec prettyPrintHandlerStat(const HandlerStat& stat)
 }
 
 ServerHandler findServerHandler(
-    const Str2ServerHandler &handlers, const std::string &protocolName)
+    const Str2ServerHandler &handlers, const std::string &protocolName, const std::string& clientId)
 {
     if (protocolName == shutdownCN) return shutdownServer;
     if (protocolName == sleepCN) return sleepServer;
     if (protocolName == versionCN) return versionServer;
     Str2ServerHandler::const_iterator it = handlers.find(protocolName);
     if (it == handlers.cend()) {
-        throw cybozu::Exception(__func__) << "bad protocol" << protocolName;
+        throw cybozu::Exception(__func__) << "bad protocol" << protocolName << clientId;
     }
     return it->second;
 }
@@ -216,7 +216,7 @@ void RequestWorker::operator()() noexcept
         bool sendErr = true;
         try {
             run1stNegotiateAsServer(sock, nodeId, protocolName, clientId);
-            ServerHandler handler = findServerHandler(handlers, protocolName);
+            ServerHandler handler = findServerHandler(handlers, protocolName, clientId);
             ServerParams serverParams(sock, clientId, ps);
             pkt.write(msgOk);
             pkt.flush();
