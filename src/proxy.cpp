@@ -603,7 +603,7 @@ void c2pKickServer(protocol::ServerParams &p)
                 try {
                     ProxyVolState &volSt = getProxyVolState(volId);
                     UniqueLock ul(volSt.mu);
-                    if (isStateIn(volSt.sm.get(), {pStarted})) {
+                    if (isStateIn(volSt.sm.get(), pAcceptForWdiffSend)) {
                         proxy_local::pushAllTasksForVol(volId, &logger);
                     }
                 } catch (std::exception &e) {
@@ -613,7 +613,7 @@ void c2pKickServer(protocol::ServerParams &p)
         } else {
             ProxyVolState &volSt = getProxyVolState(volId);
             UniqueLock ul(volSt.mu);
-            verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
+            verifyStateIn(volSt.sm.get(), pAcceptForWdiffSend, FUNC);
             if (archiveName.empty()) {
                 proxy_local::pushAllTasksForVol(volId, &logger);
             } else {
