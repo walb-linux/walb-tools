@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Security
 
 
+## [1.0.15] - 2018-04-05
+### Changed
+- update cybozulib.
+### Fixed
+- fix: proxy: kick protocol allows not only Started state but also WlogRecv and WaitForEmtpy.
+
 ## [1.0.14] - 2018-03-16
 ### Added
 - `version` command/protocol.
