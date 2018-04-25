@@ -1,0 +1,19 @@
+diff --git a/misc/tutorial.py b/misc/tutorial.py
+index 7ecbbaf..2449f4f 100644
+--- a/misc/tutorial.py
++++ b/misc/tutorial.py
+@@ -26,9 +26,13 @@ p0 = p0_start
+ a0_conn  = ServerConnectionParam('a0', 'localhost', 10200, K_ARCHIVE)
+ a0_start = ServerStartupParam(a0_conn, binDir, dataPath('a0'), logPath('a0'), 'tutorial')
+ 
++a1_conn  = ServerConnectionParam('a1', 'localhost', 10201, K_ARCHIVE)
++a1_start = ServerStartupParam(a1_conn, binDir, dataPath('a1'), logPath('a1'), 'tutorial2')
++
+ a0 = a0_start
++a1 = a1_start
+ 
+-sLayout = ServerLayout([s0], [p0], [a0])
++sLayout = ServerLayout([s0], [p0], [a0, a1])
+ walbc = Controller(walbcPath, sLayout) #, isDebug=False) # <= `isDebug` is False in default.
+ 
+ runCommand = walbc.get_run_remote_command(s0)
