@@ -100,7 +100,7 @@ vagrant ssh
 ```
 sh setup.sh
 ```
-[ipython での使用例](tutorial.md#ipython での使用例)に続く
+[ipython での使用例](tutorial.ja.md#ipython-での使用例)に続く
 
 ## 手動インストール
 
