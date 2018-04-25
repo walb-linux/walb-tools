@@ -18,7 +18,7 @@ WalB 自体の概要は [WalB is hard](https://slideshare.net/herumi/walb-ishard
 * **wdiff**: wlog をユーザが見える形式に変換したもの。
 * **WalB ログデバイス (ldev)**: wlog が実際に書き込まれるデバイス。
 * **WalB データデバイス (ddev)**: wdev に write したデータが実際に書き込まれるデバイス。
-WalB は ldev と wdev をセットにして一つのデバイス wdev に見せている。
+WalB は ldev と ddev をセットにして一つのデバイス wdev に見せている。
 ユーザが wdev を通して見えるデータ領域。
 * **snapshot をとる**: wdev のある瞬間における状態に名前をつけること。
 * **gid**: snapshot をとったときにつけられる名前(一意な64bit整数)。
