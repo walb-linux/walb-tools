@@ -53,7 +53,7 @@ wdiff は archive に転送される。
     * /mnt/tutorial/data/s0/ : storage サーバが管理するメータデータやログ情報を置く場所
     * /mnt/tutorial/data/p0/ : proxy サーバが管理するwdiffなどの情報を置く場所
     * /mnt/tutorial/data/a0/ : archive サーバが管理するwdiffなどの情報を置く場所
-      * restore してできる LVM snapshot は /dev/tutorial/r_vol_??? の形になる。
+      * restore してできる LVM snapshot は /dev/tutorial/wr_vol_??? の形になる。
 
 ## VirtualBoxとVagrantによるテスト
 
@@ -293,13 +293,13 @@ ipython に戻る。
 
 ```
 > walbc.get_restored_path(a0, VOL, 8)
-> '/dev/tutorial/r_vol_8'
+> '/dev/tutorial/wr_vol_8'
 ```
 
 * その snapshot の path を mount する。
 
 ```
-> sudo mount /dev/tutorial/r_vol_8 /mnt/tmp
+> sudo mount /dev/tutorial/wr_vol_8 /mnt/tmp
 ```
 
 * /mnt/tmp の中に ***で書いたファイルがあることを確認する。
@@ -311,8 +311,8 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 > walbc.del_restored(a0, VOL, 8) ; mount したまま実行
 > 2014-11-12 07:03:56 ERROR Controller: error: c2aDelRestoredClient:child process has returned non-zero:1280
 > cmd:/sbin/lvremove
-> args:-f /dev/tutorial/r_vol_8
-> stderr:  Logical volume tutorial/r_vol_8 contains a filesystem in use.
+> args:-f /dev/tutorial/wr_vol_8
+> stderr:  Logical volume tutorial/wr_vol_8 contains a filesystem in use.
 > umount /mnt/tmp
 > walbc.del_restored(a0, VOL, 8) ; これで削除される
 ```
@@ -519,17 +519,17 @@ restore する。
 ```
 > walbc.restore(a1, VOL, 22)
 ```
-すると tutorial2 に r_vol_22 ができる。
+すると tutorial2 に wr_vol_22 ができる。
 `a0` 側も 22 を restore する。
 ```
 > walbc.restore(a0, VOL, 22)
 ```
 二つの sha1 が等しいことを確認する。
 ```
-> sudo sha1sum /dev/tutorial/r_vol_22
-> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
-> sudo sha1sum /dev/tutorial2/r_vol_22
-> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/r_vol_22
+> sudo sha1sum /dev/tutorial/wr_vol_22
+> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/wr_vol_22
+> sudo sha1sum /dev/tutorial2/wr_vol_22
+> ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/wr_vol_22
 ```
 
 * シンクロナイズモード
