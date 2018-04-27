@@ -465,7 +465,31 @@ sudo kill -9 1282 1283 1299 1300 1313 1314
 ```
 
 * サーバの再起動
-ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す（末尾に -allow-exec をつける）。
+ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
+ただし、この出力結果に以下の修正を加える必要がある。
+
+・管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加
+・`-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+・`-l`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+・最後に`-allow-exec &`を追加
+
+（修正前）
+
+```
+/path/to/walb-storage -b /mnt/tutorial/s0/ -l /mnt/tutorial/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0
+/path/to/walb-proxy -b /mnt/tutorial/p0/ -l /mnt/tutorial/p0.log -p 10100 -bg 1 -fg 2 -id p0
+/path/to/walb-archive -b /mnt/tutorial/a0/ -vg tutorial -l /mnt/tutorial/a0.log -p 10200 -fg 2 -id a0
+/path/to/walb-archive -b /mnt/tutorial/a1/ -vg tutorial2 -l /mnt/tutorial/a1.log -p 10201 -fg 2 -id a1
+```
+
+（修正後）
+
+```
+sudo /path/to/walb-storage -b /mnt/tutorial/data/s0/ -l /mnt/tutorial/data/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0 -allow-exec &
+sudo /path/to/walb-proxy -b /mnt/tutorial/data/p0/ -l /mnt/tutorial/data/p0.log -p 10100 -bg 1 -fg 2 -id p0 -allow-exec &
+sudo /path/to/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial/data/a0.log -p 10200 -fg 2 -id a0 -allow-exec &
+sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutorial/data/a1.log -p 10201 -fg 2 -id a1 -allow-exec &
+```
 
 * 状態の確認
 ```
