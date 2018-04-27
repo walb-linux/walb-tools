@@ -113,7 +113,7 @@ sh setup.sh
     git checkout -b for-3.10 origin/for-3.10
     cd module
     make
-    insmod walb-mod.ko
+    sudo insmod walb-mod.ko
     ```
 
 * walb-tools の build
