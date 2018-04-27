@@ -448,7 +448,7 @@ sudo mkdir /mnt/tutorial/data/a1
   ```
 
 * サーバの再起動
-  * ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
+  * ipython を起動し直して、`execfile('misc/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
   * 注意：この出力結果に以下の修正を加える必要がある。
     * 管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加
     * `-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
@@ -517,7 +517,7 @@ sudo mkdir /mnt/tutorial/data/a1
 
 * シンクロナイズモード
   * `replicate_once` 実行後はa0とa1は同期していない。
-  * そのあとも常時動悸するようにするにはシンクロナイズモードに移行しなければならない。
+  * そのあとも常時同期するようにするにはシンクロナイズモードに移行しなければならない。
   * シンクロナイズモードへの移行方法
   ```
   > walbc.synchronize(a0, VOL, a1)
