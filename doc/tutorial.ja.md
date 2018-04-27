@@ -528,7 +528,7 @@ restore する。
 ```
 > sudo sha1sum /dev/tutorial/r_vol_22
 > ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/r_vol_22
-> has:/home/shigeo/Program/walb-tools% sudo sha1sum /dev/tutorial2/r_vol_22
+> sudo sha1sum /dev/tutorial2/r_vol_22
 > ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/r_vol_22
 ```
 
