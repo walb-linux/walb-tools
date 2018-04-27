@@ -214,6 +214,7 @@ walb-tools ディレクトリで
 2. WalB デバイス の作成
   `wdev.create()`
 * これで wdev.path (通常/dev/walb/walb-tutorial-device) ができる。
+* /dev/walb/walb-tutorial-device が既に存在する場合`wdev.create()`が失敗するため、`sudo wdevc delete-wdev /dev/walb/walb-tutorial-device`を実行して削除する必要がある。
 
 ### ボリューム(VOL) の初期化
 
