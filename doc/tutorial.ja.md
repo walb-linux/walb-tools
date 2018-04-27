@@ -405,14 +405,29 @@ walbc.hash_backup(s0, VOL)
 最小構成にもう1個 archive サーバを加える。
 
 * tutorial.py の書き換え
+
+以下の diff を参考に tutorial.py を書き換える。
+
 ```
-a1 = Server('a1', 'localhost', 10201, K_ARCHIVE, binDir, dataPath('a1'), logPath('a1'), 'tutorial2')
+ a0_start = ServerStartupParam(a0_conn, binDir, dataPath('a0'), logPath('a0'), 'tutorial')
+
++a1_conn  = ServerConnectionParam('a1', 'localhost', 10201, K_ARCHIVE)
++a1_start = ServerStartupParam(a1_conn, binDir, dataPath('a1'), logPath('a1'), 'tutorial2')
++
+ a0 = a0_start
++a1 = a1_start
+
+-sLayout = ServerLayout([s0], [p0], [a0])
++sLayout = ServerLayout([s0], [p0], [a0, a1])
 ```
-を追加し、sLayout を
+
+パッチファイルが用意されているため、次のようにそれを使用しても良い。
+
 ```
-sLayout = ServerLayout([s0], [p0], [a0, a1])
+cd walb-tools.git
+patch -p1 < misc/tutorial.patch
 ```
-に変更する。
+
 * ボリュームの追加
 新たに tutorial2-disk を作りそこに tutorial2 というボリュームグループを作る。
 ```
