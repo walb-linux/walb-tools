@@ -188,8 +188,8 @@ sudo binsrc/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial
 
 ### stest/conifg.py の読み込み
 
-walb-tools ディレクトリで
 ```
+> cd walb-tools.git
 > sudo ipython
 > execfile('misc/tutorial.py')
 ```
@@ -227,8 +227,7 @@ a0 localhost:10200 archive Clear
 > sudo mkdir -p /mnt/tmp
 > sudo mount /dev/walb/walb-tutorial-device /mnt/tmp
 ```
-
-/mnt/tmp が walb 化されたファイルシステムである。
+  * /mnt/tmp が walb 化されたファイルシステムである。
 
 ### full-backup
 
@@ -260,6 +259,7 @@ a0 localhost:10200 archive Clear
 ```
 
 * 表示された値がその snapshot に名付けられた gid。
+
 * restore する。
 ```
 > walbc.restore(a0, VOL, 8)
@@ -303,10 +303,10 @@ a0 localhost:10200 archive Clear
   * 複数の wdiff は merge すると apply が速くなることがある。
   * 重複データが除去されるためデータサイズが小さくなることもある。
 
+* wdiff を一覧表示
 ```
 > walbc.print_diff_list(a0, VOL)
 ```
-で wdiff を一覧できる。
 ```
  '|0|-->|1| -- 2014-11-11T07:12:14 4120',
  '|1|-->|2| -- 2014-11-11T07:12:42 17221',
@@ -321,7 +321,7 @@ a0 localhost:10200 archive Clear
  '|10|-->|11| M- 2014-11-11T07:16:11 9278',
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
 ```
-`M` のマークがついた wdiff は merge できる。2から8までの wdiff を merge してみる。
+* `M` のマークがついた wdiff は merge できる。2から8までの wdiff を merge してみる。
 ```
 > walbc.merge(a0, VOL, 2, 8)
 > walbc.print_diff_list(a0, VOL)
@@ -333,7 +333,7 @@ a0 localhost:10200 archive Clear
  '|10|-->|11| M- 2014-11-11T07:16:11 9278',
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
 ```
-8445, 8216, 8732, 8488, 8649, 4120byte の wdiff が merge されて 5570byte の wdiff になったことを確認できる。
+  * 8445, 8216, 8732, 8488, 8649, 4120byte の wdiff が merge されて 5570byte の wdiff になったことを確認できる。
 
 ### apply
 
@@ -343,6 +343,7 @@ a0 localhost:10200 archive Clear
   * 古い snapshot に必要な wdiff が削除されてディスク容量を減らすことができる。
   * restore にかかる時間も短縮できる。
 
+* wdiff の一覧表示
 ```
 > walbc.print_diff_list(a0, VOL)
 ['|0|-->|1| -- 2014-11-11T07:12:14 4120',
@@ -354,7 +355,7 @@ a0 localhost:10200 archive Clear
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
  ...
 ```
-0～8までの wdiff を 0 に apply する。
+* 0～8までの wdiff を 0 に apply する。
 ```
 > walbc.apply(a0, VOL, 8)
 > walbc.print_diff_list(a0, VOL)
@@ -365,7 +366,7 @@ Out[11]:
  '|11|-->|12| M- 2014-11-11T07:16:17 8876',
  ...
 ```
-apply されて 0～8 の diff が削除された。
+  * apply されて 0～8 の diff が削除された。
 
 ### ハッシュバックアップ
 
@@ -447,30 +448,26 @@ sudo mkdir /mnt/tutorial/data/a1
   ```
 
 * サーバの再起動
-
-ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
-
-* 注意：この出力結果に以下の修正を加える必要がある。
-  * 管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加
-  * `-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
-  * `-l`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
-  * 最後に`-allow-exec &`を追加
-
-（修正前）
-```
-/path/to/walb-storage -b /mnt/tutorial/s0/ -l /mnt/tutorial/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0
-/path/to/walb-proxy -b /mnt/tutorial/p0/ -l /mnt/tutorial/p0.log -p 10100 -bg 1 -fg 2 -id p0
-/path/to/walb-archive -b /mnt/tutorial/a0/ -vg tutorial -l /mnt/tutorial/a0.log -p 10200 -fg 2 -id a0
-/path/to/walb-archive -b /mnt/tutorial/a1/ -vg tutorial2 -l /mnt/tutorial/a1.log -p 10201 -fg 2 -id a1
-```
-
-（修正後）
-```
-sudo /path/to/walb-storage -b /mnt/tutorial/data/s0/ -l /mnt/tutorial/data/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0 -allow-exec &
-sudo /path/to/walb-proxy -b /mnt/tutorial/data/p0/ -l /mnt/tutorial/data/p0.log -p 10100 -bg 1 -fg 2 -id p0 -allow-exec &
-sudo /path/to/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial/data/a0.log -p 10200 -fg 2 -id a0 -allow-exec &
-sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutorial/data/a1.log -p 10201 -fg 2 -id a1 -allow-exec &
-```
+  * ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
+  * 注意：この出力結果に以下の修正を加える必要がある。
+    * 管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加
+    * `-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+    * `-l`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+    * 最後に`-allow-exec &`を追加
+  * 修正前
+  ```
+  /path/to/walb-storage -b /mnt/tutorial/s0/ -l /mnt/tutorial/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0
+  /path/to/walb-proxy -b /mnt/tutorial/p0/ -l /mnt/tutorial/p0.log -p 10100 -bg 1 -fg 2 -id p0
+  /path/to/walb-archive -b /mnt/tutorial/a0/ -vg tutorial -l /mnt/tutorial/a0.log -p 10200 -fg 2 -id a0
+  /path/to/walb-archive -b /mnt/tutorial/a1/ -vg tutorial2 -l /mnt/tutorial/a1.log -p 10201 -fg 2 -id a1
+  ```
+  * 修正後
+  ```
+  sudo /path/to/walb-storage -b /mnt/tutorial/data/s0/ -l /mnt/tutorial/data/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0 -allow-exec &
+  sudo /path/to/walb-proxy -b /mnt/tutorial/data/p0/ -l /mnt/tutorial/data/p0.log -p 10100 -bg 1 -fg 2 -id p0 -allow-exec &
+  sudo /path/to/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial/data/a0.log -p 10200 -fg 2 -id a0 -allow-exec &
+  sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutorial/data/a1.log -p 10201 -fg 2 -id a1 -allow-exec &
+  ```
 
 * 状態の確認
 ```
@@ -480,6 +477,7 @@ sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutor
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive Clear
 ```
+
 * `a1` の追加直後は `Clear` 状態なので `SyncReady` 状態に持っていく。
 ```
 > walbc._init(a1, VOL)
@@ -490,6 +488,7 @@ sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutor
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive SyncReady
 ```
+
 * レプリケーションを一度だけする。レプリケーションされたあと継続しない。
 ```
 > walbc.replicate_once(a0, VOL, a1)
@@ -507,6 +506,7 @@ sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutor
 ```
 > walbc.restore(a0, VOL, 22)
 ```
+
 * 二つの sha1 が等しいことを確認する。
 ```
 > sudo sha1sum /dev/tutorial/wr_vol_22
