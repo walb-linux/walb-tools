@@ -219,6 +219,7 @@ walb-tools ディレクトリで
 ### ボリューム(VOL) の初期化
 
 * `walbc.init_storage(s0, VOL, wdev.path)`
+* 初期化に失敗する場合、口述の [状態の確認](tutorial.ja.md#状態の確認) を参考に strage, proxy, archive の全ての状態が Clear であることを確認し、 Clear でなかった場合は口述の [full-backup](tutorial.ja.md#full-backup) を参考に全ての状態を Clear にする必要がある。
 
 ### 状態の確認
 
