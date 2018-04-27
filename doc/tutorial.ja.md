@@ -404,6 +404,12 @@ walbc.hash_backup(s0, VOL)
 * archive の非同期レプリケーションを行う。
 最小構成にもう1個 archive サーバを加える。
 
+* 追加する archive 用のディレクトリを作成する。
+
+```
+sudo mkdir /mnt/tutorial/data/a1
+```
+
 * tutorial.py の書き換え
 
 以下の diff を参考に tutorial.py を書き換える。
