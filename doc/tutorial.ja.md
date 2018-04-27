@@ -282,13 +282,13 @@ a0 localhost:10200 archive Clear
   * restore してできた LVM snapshot は `walbc.del_restored` で削除できる。
   * 対象となる LVM snapshot が mount されていると削除できないのでまず umount が必要。
   ```
-  > walbc.del_restored(a0, VOL, 8) ; mount したまま実行
+  > walbc.del_restored(a0, VOL, 8) # mount したまま実行
   > 2014-11-12 07:03:56 ERROR Controller: error: c2aDelRestoredClient:child process has returned non-zero:1280
   > cmd:/sbin/lvremove
   > args:-f /dev/tutorial/wr_vol_8
   > stderr:  Logical volume tutorial/wr_vol_8 contains a filesystem in use.
   > umount /mnt/tmp
-  > walbc.del_restored(a0, VOL, 8) ; これで削除される
+  > walbc.del_restored(a0, VOL, 8) # これで削除される
   ```
 
 * restore した LVM snapshot一覧は `walbc.get_restored(a0, VOL)` で取得できる。
