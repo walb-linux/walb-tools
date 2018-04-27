@@ -442,6 +442,28 @@ sudo losetup /dev/loop1 tutorial2-disk
 sudo pvcreate /dev/loop1
 sudo vgcreate tutorial2 /dev/loop1
 ```
+
+* サーバの停止
+
+次のステップで行うサーバの再起動の前段階として、既に起動してあるサーバを停止(kill)する。
+
+```
+ps aux | grep walb
+```
+
+```
+root      1282  0.0  0.0  51420  3836 pts/1    S    13:44   0:00 sudo walb-storage -b /mnt/tutorial/data/s0/ -l /mnt/tutorial/data/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0 -allow-exec
+root      1283  0.0  0.1 1219128 13396 pts/1   Sl   13:44   0:05 walb-storage -b /mnt/tutorial/data/s0/ -l /mnt/tutorial/data/s0.log -archive localhost:10200 -p 10000 -bg 1 -proxy localhost:10100 -fg 2 -id s0 -allow-exec
+root      1299  0.0  0.0  51420  3844 pts/1    S    13:45   0:00 sudo walb-proxy -b /mnt/tutorial/data/p0/ -l /mnt/tutorial/data/p0.log -p 10100 -bg 1 -fg 2 -id p0 -allow-exec
+root      1300  0.0  0.0 985824  4776 pts/1    Sl   13:45   0:04 walb-proxy -b /mnt/tutorial/data/p0/ -l /mnt/tutorial/data/p0.log -p 10100 -bg 1 -fg 2 -id p0 -allow-exec
+root      1313  0.0  0.0  51420  3832 pts/1    S    13:45   0:00 sudo walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial/data/a0.log -p 10200 -fg 2 -id a0 -allow-exec
+root      1314  0.0  0.2 914136 18980 pts/1    Sl   13:45   0:03 walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial/data/a0.log -p 10200 -fg 2 -id a0 -allow-exec
+```
+
+```
+sudo kill -9 1282 1283 1299 1300 1313 1314
+```
+
 * サーバの再起動
 ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す（末尾に -allow-exec をつける）。
 
