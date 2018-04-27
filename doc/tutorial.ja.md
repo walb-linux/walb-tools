@@ -1,7 +1,6 @@
 # WalB-tools チュートリアル
 
-このチュートリアルは WalB-tools(以下 tools) の簡単な使い方を説明します。  
-詳細は [README](README.md) を参照してください。
+このチュートリアルは WalB-tools(以下 tools) の簡単な使い方を説明します。詳細は [README](README.md) を参照してください。
 
 ## WalB 概要
 
@@ -9,8 +8,7 @@ WalB 自体の概要は [WalB is hard](https://slideshare.net/herumi/walb-ishard
 
 ## 用語
 
-詳しくは [用語一覧](word.md) - まだ作ってない - を参照。  
-ここでは最小限の言葉を記す。
+詳しくは [用語一覧](word.md) - まだ作ってない - を参照。ここでは最小限の言葉を記す。
 
 * **WalB ブロックデバイス (wdev)**: WalB デバイスドライバがユーザに見せるブロックデバイス。
 ユーザはこの上にファイルシステムを作ったり、パーティションを切ったりしてデータを置く。
@@ -75,7 +73,7 @@ vagrant box add Ubuntu16 https://cloud-images.ubuntu.com/xenial/current/xenial-s
 vagrant box add CentOS7 http://cloud.centos.org/centos/7/vagrant/x86_64/images/CentOS-7.box
 ```
 
-* どちらかのOSを起動する  
+* どちらかのOSを起動する
 ```
 # Ubuntu16
 cd walb-tools/misc/vagrant/Ubuntu16
@@ -281,7 +279,7 @@ a0 localhost:10200 archive Clear
 * /mnt/tmp の中に *** で書いたファイルがあることを確認する。
 
 * snapshot を削除する。
-  * restore してできた LVM snapshot は `walbc.del_restored` で削除できる。  
+  * restore してできた LVM snapshot は `walbc.del_restored` で削除できる。
   * 対象となる LVM snapshot が mount されていると削除できないのでまず umount が必要。
   ```
   > walbc.del_restored(a0, VOL, 8) ; mount したまま実行
@@ -297,9 +295,14 @@ a0 localhost:10200 archive Clear
 
 ### merge
 
-複数の wdiff は merge すると apply が速くなることがある。  
-また重複データが除去されるためデータサイズが小さくなることもある。  
-運用時には定期的に merge するとよい。
+複数の wdiff を一つにまとめることができる場合がある。
+
+以下のようなメリットがあるため、運用時には定期的に merge するとよい。
+
+* メリット
+  * 複数の wdiff は merge すると apply が速くなることがある。
+  * 重複データが除去されるためデータサイズが小さくなることもある。
+
 ```
 > walbc.print_diff_list(a0, VOL)
 ```
@@ -334,8 +337,12 @@ a0 localhost:10200 archive Clear
 
 ### apply
 
-古い snapshot を restore する必要がなくなると、apply することで古い snapshot に必要な wdiff が削除されてディスク容量を減らすことができる。  
-また restore にかかる時間も短縮できる。
+古い snapshot を restore する必要がなくなった場合、 wdiff を base image に適用することができる。
+
+* メリット
+  * 古い snapshot に必要な wdiff が削除されてディスク容量を減らすことができる。
+  * restore にかかる時間も短縮できる。
+
 ```
 > walbc.print_diff_list(a0, VOL)
 ['|0|-->|1| -- 2014-11-11T07:12:14 4120',
@@ -362,17 +369,22 @@ apply されて 0～8 の diff が削除された。
 
 ### ハッシュバックアップ
 
-なんらかの障害で proxy サーバのデータが飛んだときなどに storage と archive の間で持っているデータの hash を比較して必要なものだけを転送する。  
-フルバックアップに比べて転送データ量が少なくてすむ。  
-ハッシュバックアップを試してみる。  
-storage を止める。
+なんらかの障害で proxy サーバのデータが飛んだときなどに storage と archive の間で持っているデータの hash を比較して必要なものだけを転送する。
+
+* メリット
+  * フルバックアップに比べて転送データ量が少なくてすむ。
+
+ハッシュバックアップを試してみる。
+
+* storage を止める。
 ```
 > walbc.get_state_all(VOL)
 > s0 localhost:10000 storage Stopped
 > p0 localhost:10100 proxy Started
 > a0 localhost:10200 archive Archived
 ```
-この状態でハッシュバックアップを行う。
+
+* この状態でハッシュバックアップを行う。
 ```
 walbc.hash_backup(s0, VOL)
 ```
@@ -436,13 +448,13 @@ sudo mkdir /mnt/tutorial/data/a1
 
 * サーバの再起動
 
-ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。  
-ただし、この出力結果に以下の修正を加える必要がある。  
+ipython を起動し直して、`execfile('stest/tutorial.py')` して `sLayout.to_cmd_string()` の結果を使ってサーバを起動し直す。
 
-・管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加  
-・`-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正  
-・`-l`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正  
-・最後に`-allow-exec &`を追加
+* 注意：この出力結果に以下の修正を加える必要がある。
+  * 管理者権限を持っていないユーザで実行するなら、冒頭に`sudo`を追加
+  * `-b`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+  * `-l`オプションの引数の`/mnt/tutorial`を`/mnt/tutorial/data`に修正
+  * 最後に`-allow-exec &`を追加
 
 （修正前）
 ```
@@ -468,7 +480,7 @@ sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutor
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive Clear
 ```
-`a1` の追加直後は `Clear` 状態なので `SyncReady` 状態に持っていく。
+* `a1` の追加直後は `Clear` 状態なので `SyncReady` 状態に持っていく。
 ```
 > walbc._init(a1, VOL)
 
@@ -478,22 +490,24 @@ sudo /path/to/walb-archive -b /mnt/tutorial/data/a1/ -vg tutorial2 -l /mnt/tutor
 > a0 localhost:10200 archive Archived
 > a1 localhost:10201 archive SyncReady
 ```
-レプリケーションを一度だけする。レプリケーションされたあと継続しない。
+* レプリケーションを一度だけする。レプリケーションされたあと継続しない。
 ```
 > walbc.replicate_once(a0, VOL, a1)
 > 22
 ```
-この gid(22) は環境によって変わる。  
-restore する。
+  * この gid(22) は環境によって変わる。
+
+* restore する。
 ```
 > walbc.restore(a1, VOL, 22)
 ```
-すると tutorial2 に wr_vol_22 ができる。  
-`a0` 側も 22 を restore する。
+  * tutorial2 に wr_vol_22 ができる。
+
+* `a0` 側も 22 を restore する。
 ```
 > walbc.restore(a0, VOL, 22)
 ```
-二つの sha1 が等しいことを確認する。
+* 二つの sha1 が等しいことを確認する。
 ```
 > sudo sha1sum /dev/tutorial/wr_vol_22
 > ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial/wr_vol_22
@@ -501,21 +515,24 @@ restore する。
 > ff24c0b72da6491d6ec2288579257e7c423cedb3  /dev/tutorial2/wr_vol_22
 ```
 
-* シンクロナイズモード  
-
-`replicate_once` は実行後はa0とa1は同期していない。  
-そのあとも常時動悸するようにするにはシンクロナイズモードに移行しなければならない。
-```
-> walbc.synchronize(a0, VOL, a1)
-```
-で同期モードになる。  
-今同期モードかそうでないかは `is_synchronizing` でわかる。
-```
-> walbc.synchronize(a0, VOL, a1)
-> walbc.is_synchronizing(a1, VOL)
-> True
-> walbc.stop_synchronizing(a1, VOL)
-> walbc.is_synchronizing(a1, VOL)
-> False
-```
-最初からシンクロナイズモードでレプリケーションするには `replicate_once` ではなく `replicate` を使えばよい。
+* シンクロナイズモード
+  * `replicate_once` 実行後はa0とa1は同期していない。
+  * そのあとも常時動悸するようにするにはシンクロナイズモードに移行しなければならない。
+  * シンクロナイズモードへの移行方法
+  ```
+  > walbc.synchronize(a0, VOL, a1)
+  ```
+  * 同期を止める方法
+  ```
+  > walbc.stop_synchronizing(a1, VOL)
+  ```
+  * 現在のモードの確認方法
+  ```
+  > walbc.synchronize(a0, VOL, a1)
+  > walbc.is_synchronizing(a1, VOL)
+  > True
+  > walbc.stop_synchronizing(a1, VOL)
+  > walbc.is_synchronizing(a1, VOL)
+  > False
+  ```
+  * 最初からシンクロナイズモードでレプリケーションするには `replicate_once` ではなく `replicate` を使えばよい。
