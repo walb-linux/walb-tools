@@ -373,7 +373,7 @@ restore してできた LVM snapshot は `walbc.del_restored` で削除できる
 0～8までの wdiff を 0 に apply する。
 ```
 > walbc.apply(a0, VOL, 8)
-walbc.print_diff_list(a0, VOL)
+> walbc.print_diff_list(a0, VOL)
 Out[11]:
 ['|8|-->|9| -- 2014-11-11T07:15:52 8496',
  '|9|-->|10| M- 2014-11-11T07:16:01 8542',
