@@ -80,7 +80,7 @@ Prepare to run scenario test.
 A sample command:
 ```
 cd walb
-git co -b 3.10 corigin/for-3.10 # for ubuntu 14.0
+git co -b 3.10 origin/for-3.10 # for ubuntu 14.0
 cd module
 make
 sudo insmod walb-mod.ko
