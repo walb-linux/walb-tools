@@ -38,7 +38,7 @@ This test will check error handling code and crash recoery code are valid.
 You need **crashblk** to run this test, which is available 
 at [crashblk repository](https://github.com/starpos/crashblk/).
 
-Before running the test, load `crashclk-mod.ko` and `walb-mod.ko` modules.
+Before running the test, load `crashblk-mod.ko` and `walb-mod.ko` modules.
 
 Then create two crashblk devices. The size 100MB is enough.
 
