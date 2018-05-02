@@ -52,11 +52,12 @@ Then create two crashblk devices. The size 100MB is enough.
 251        1     102400 crashblk1
 ```
 
-Before you run the test, check variables `crash-test.sh` script.
+Before you run the test, check variables `crash-test.py` script.
 
 Finally, run the test:
 ```
-> sh crash-test.sh
+> cd itest/crash
+> python2 crash-test.py
 ```
 
 ## Scenario tests (stest)
