@@ -194,6 +194,8 @@ sudo binsrc/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial
 > execfile('misc/tutorial.py')
 ```
 
+内部状態などのパラメータはPython側では全く保持しておらず、全てサーバプロセス側で保持しているので、途中でipythonを終了させても、再び `execfile('misc/tutorial.py')` を実行すれば続きから再開することができます。
+
 ### WalB デバイスの初期化
 
 1. /dev/tutorial/wlog の初期化: `wdev.format_ldev()`
