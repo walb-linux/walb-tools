@@ -62,10 +62,7 @@ If you want to daemonize them, use daemontools, upstart, or so.
 
 ## Server process configuration in python
 
-This is example setting of a simple backup group with
-a simple server layout and two volumes
-Modify and save it as `walb-config.py`.
-This will be used to control your backup group also.
+This is example setting of a simple backup group with a simple server layout and two volumes. Modify and save it as `walb-config.py`. This will be used to control your backup group also.
 
 ```python
 #!/usr/bin/env python
