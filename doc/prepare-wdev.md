@@ -14,7 +14,7 @@ runCommand = walbc.get_run_remote_command(s0)
 wdev0 = Device('vol0', '/dev/ldev0', '/dev/ddev0', wdevcPath, runCommand)
 ```
 
-- 1st argument is walb device name. THe walb device path will `/dev/walb/name`.
+- 1st argument is walb device name. The walb device path will `/dev/walb/name`.
 - 2nd argument is underlying log device path.
 - 3rd argument is underlying data device path.
 - Underlying devices must exist.
