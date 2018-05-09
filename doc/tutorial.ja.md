@@ -186,7 +186,7 @@ sudo binsrc/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial
 
 ## ipython での使用例
 
-### stest/tutorial.py の読み込み
+### misc/tutorial.py の読み込み
 
 ```
 > cd walb-tools.git
