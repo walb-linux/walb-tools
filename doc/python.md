@@ -70,7 +70,7 @@ def __init__(self, name, address, port, kind, binDir, dataDir,
 
 ## Remote command execution
 
-Several functions and classes supports remote command execution using `RunCommand` interface. However, default configuration don't permit remote command execution. If you want to execute remote command, you should `make` with `ENABLE_EXEC_PROTOCOL=1` .
+Several functions and classes supports remote command execution using `RunCommand` interface. However, the default configuration does not permit remote command execution. If you want to execute remote command, you should run `make` with `ENABLE_EXEC_PROTOCOL=1` .
 
 See `RunCommand` type in `walb.py`.
 
