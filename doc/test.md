@@ -38,7 +38,7 @@ This test will check error handling code and crash recoery code are valid.
 You need **crashblk** to run this test, which is available 
 at [crashblk repository](https://github.com/starpos/crashblk/).
 
-Before running the test, load `crashclk-mod.ko` and `walb-mod.ko` modules.
+Before running the test, load `crashblk-mod.ko` and `walb-mod.ko` modules.
 
 Then create two crashblk devices. The size 100MB is enough.
 
@@ -52,11 +52,12 @@ Then create two crashblk devices. The size 100MB is enough.
 251        1     102400 crashblk1
 ```
 
-Before you run the test, check variables `crash-test.sh` script.
+Before you run the test, check variables `crash-test.py` script.
 
 Finally, run the test:
 ```
-> sh crash-test.sh
+> cd itest/crash
+> python2 crash-test.py
 ```
 
 ## Scenario tests (stest)
@@ -79,7 +80,7 @@ Prepare to run scenario test.
 A sample command:
 ```
 cd walb
-git co -b 3.10 corigin/for-3.10 # for ubuntu 14.0
+git checkout -b 3.10 origin/for-3.10 # for ubuntu 14.0
 cd module
 make
 sudo insmod walb-mod.ko

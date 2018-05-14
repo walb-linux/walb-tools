@@ -62,10 +62,7 @@ If you want to daemonize them, use daemontools, upstart, or so.
 
 ## Server process configuration in python
 
-This is example setting of a simple backup group with
-a simple server layout and two volumes
-Modify and save it as `walb-config.py`.
-This will be used to control your backup group also.
+This is example setting of a simple backup group with a simple server layout and two volumes. Modify and save it as `walb-config.py`. This will be used to control your backup group also.
 
 ```python
 #!/usr/bin/env python
@@ -82,15 +79,19 @@ def dataPath(s):
 def logPath(s):
   return '/var/walb/%s.log' % s
 
-s0 = Server('s0', 'hostS0', 10000, K_STORAGE, binDir, dataPath('s0'), logPath('s0'))
-p0 = Server('p0', 'hostP0', 10000, K_PROXY,   binDir, dataPath('p0'), logPath('p0'))
-a0 = Server('a0', 'hostA0', 10000, K_ARCHIVE, binDir, dataPath('a0'), logPath('a0'), 'vg0')
+s0c = ServerConnectionParam('s0', 'hostS0', 10000, K_STORAGE)
+p0c = ServerConnectionParam('p0', 'hostP0', 10000, K_PROXY)
+a0c = ServerConnectionParam('a0', 'hostA0', 10000, K_ARCHIVE)
+
+s0 = ServerStartupParam(s0c, binDir, dataPath('s0'), logPath('s0'))
+p0 = ServerStartupParam(p0c, binDir, dataPath('p0'), logPath('p0'))
+a0 = ServerStartupParam(a0c, binDir, dataPath('a0'), logPath('a0'), 'vg0')
 
 sLayout = ServerLayout([s0], [p0], [a0])
 walbc = Controller(walbcPath, sLayout, isDebug=True)
 ```
 
-If you use thinpools, set member `tp` of `Server` class for archive servers.
+If you use thinpools, set member `tp` of `ServerStartupParam` class for archive servers.
 ```python
 a0.tp = 'tp0'
 ```
@@ -100,7 +101,7 @@ You can load the configuration in a python shell as follows:
 python> execfile('walb-config.py')
 ```
 
-For details of `Server`, `ServerLayout`, and `Controller` class,
+For details of `ServerConnectionParam`, `ServerStartupParam`, `ServerLayout`, and `Controller` class,
 see [python library](python.md) document.
 
 You can get command-line arguments for servers as follows:

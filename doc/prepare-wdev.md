@@ -11,10 +11,10 @@ Add the following code to `walb-config.py`:
 
 ```python
 runCommand = walbc.get_run_remote_command(s0)
-wdev0 = Device(0, '/dev/ldev0', '/dev/ddev0', wdevcPath, runCommand)
+wdev0 = Device('vol0', '/dev/ldev0', '/dev/ddev0', wdevcPath, runCommand)
 ```
 
-- 1st argument is walb device iD. THe walb device path will `/dev/walb/iD`.
+- 1st argument is walb device name. The walb device path will `/dev/walb/name`.
 - 2nd argument is underlying log device path.
 - 3rd argument is underlying data device path.
 - Underlying devices must exist.

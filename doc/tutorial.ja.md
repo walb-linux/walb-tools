@@ -37,7 +37,7 @@ wdiff は archive に転送される。
 * PC 1台で walb-storage, walb-proxy, walb-archive を動かす。
   * これらは単なる exeなので デーモンとして起動するときは別途設定が必要。
   * walbc コマンドを使ってこれらのプロセスと通信し操作を行う。
-  * 更に python/walblib/__init__.py を使うとより抽象度の高い操作ができる。
+  * 更に python/walblib/\_\_init\_\_.py を使うとより抽象度の高い操作ができる。
 * サービス構成
   * s0(storage) : port 10000
   * p0(proxy) : port 10100
@@ -186,13 +186,15 @@ sudo binsrc/walb-archive -b /mnt/tutorial/data/a0/ -vg tutorial -l /mnt/tutorial
 
 ## ipython での使用例
 
-### stest/conifg.py の読み込み
+### misc/tutorial.py の読み込み
 
 ```
 > cd walb-tools.git
 > sudo ipython
 > execfile('misc/tutorial.py')
 ```
+
+内部状態などのパラメータはPython側では全く保持しておらず、全てサーバプロセス側で保持しているので、途中でipythonを終了させても、再び `execfile('misc/tutorial.py')` を実行すれば続きから再開することができます。
 
 ### WalB デバイスの初期化
 
