@@ -106,17 +106,18 @@ private:
     mutable queue_local::QueueFileHeader header_;
     cybozu::util::MmappedFile mmappedFile_;
     cybozu::file::Lock lock_;
+    bool updated_;
 
 public:
     QueueFile(const std::string& filePath, int flags)
         : mmappedFile_(0, filePath, flags)
-        , lock_(filePath) {
+        , lock_(filePath), updated_(false) {
         init(false);
     }
     QueueFile(const std::string& filePath, int flags, int mode)
         : mmappedFile_(getFileHeaderSize() + sizeof(queue_local::QueueRecordHeader),
                        filePath, flags, mode)
-        , lock_(filePath) {
+        , lock_(filePath), updated_(false) {
         init(true);
     }
     ~QueueFile() noexcept {
@@ -129,11 +130,13 @@ public:
         std::string s;
         cybozu::saveToStr(s, t);
         pushFrontRaw(&s[0], s.size());
+        updated_ = true;
     }
     void pushBack(const T& t) {
         std::string s;
         cybozu::saveToStr(s, t);
         pushBackRaw(&s[0], s.size());
+        updated_ = true;
     }
     void front(T& t) {
         std::string s;
@@ -149,10 +152,12 @@ public:
         verifyNotEmpty(__func__);
         queue_local::QueueRecordHeader &rec = record(header_.beginOffset);
         header_.beginOffset += rec.totalSize();
+        updated_ = true;
     }
     void popBack() {
         verifyNotEmpty(__func__);
         header_.endOffset -= record(header_.endOffset).toPrev;
+        updated_ = true;
     }
     bool empty() const {
         return header_.beginOffset == header_.endOffset;
@@ -164,14 +169,17 @@ public:
     void clear() {
         header_.beginOffset = header_.endOffset;
         record(header_.endOffset).toPrev = 0;
+        updated_ = true;
     }
-    void sync() {
+    void sync(bool force = false) {
+        if (!updated_ && !force) return;
         updateFileHeaderChecksum();
         /* Double write for atomicity. */
         for (int i = 0; i < 2; i++) {
             ::memcpy(ptrInFile(sizeof(header_) * i), &header_, sizeof(header_));
             mmappedFile_.sync();
         }
+        updated_ = false;
     }
     /**
      * Garbage collect.
@@ -191,20 +199,20 @@ public:
         }
 
         /* Sync current begin/end offset. */
-        sync();
+        sync(true);
         /* Copy data. */
         ::memcpy(&record(0), &record(bgn), len);
-        sync();
+        sync(true);
         /* Update the file header. */
         {
             // These must be atomic.
             header_.beginOffset = 0;
             header_.endOffset = len - sizeof(queue_local::QueueRecordHeader);
         }
-        sync();
+        sync(true);
         /* Truncate the file. */
         mmappedFile_.resize(getRequiredFileSize(0));
-        sync();
+        sync(true);
     }
     void reserveFrontSpace(uint64_t size) {
         if (size <= header_.beginOffset) {
@@ -219,19 +227,19 @@ public:
         const uint64_t newBgn = std::max(end, size);
 
         /* Sync current begin/end offset. */
-        sync();
+        sync(true);
         /* Grow the file */
         mmappedFile_.resize(getFileHeaderSize() + newBgn + len);
         /* Copy data. */
         ::memcpy(&record(newBgn), &record(bgn), len);
-        sync();
+        sync(true);
         /* Update the file header. */
         {
             // These must be atomic.
             header_.beginOffset = newBgn;
             header_.endOffset = newBgn + len - sizeof(queue_local::QueueRecordHeader);
         }
-        sync();
+        sync(true);
     }
 
     template <class It, class Qf, class RecHeader>
@@ -337,7 +345,7 @@ private:
             header_.endOffset = 0;
             queue_local::QueueRecordHeader &rec = record(0);
             rec.init();
-            sync();
+            sync(true);
             return;
         }
         for (int i = 0; i < 2; i++) {
