@@ -128,7 +128,8 @@ public:
         if (::msync(mapped_, mappedSize_, MS_SYNC)) {
             throw std::runtime_error("msync failed.");
         }
-        file_.fdatasync();
+        // fdatasync is not required because msync make the data permanent.
+        // file_.fdatasync();
     }
     /**
      * Resize the file and mapping.
