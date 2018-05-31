@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Security
 
 
+## [1.0.16] - 2018-05-31
+### Fixed
+- update documents.
+- fix: storage: reduce write IOs for permanent queue.
+
+
 ## [1.0.15] - 2018-04-05
 ### Changed
 - update cybozulib.
