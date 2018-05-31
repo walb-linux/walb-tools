@@ -277,9 +277,10 @@ void StorageWorker::operator()()
     ActionCounterTransaction tran(volSt.ac, saWlogSend);
     ul.unlock();
     try {
-        const bool isRemaining = storage_local::extractAndSendAndDeleteWlog(volId);
+        int delayMs = storage_local::extractAndSendAndDeleteWlog(volId);
         tran.close();
-        if (isRemaining) pushTask(volId);
+        if (delayMs < 0) return;  // no need action soon.
+        pushTask(volId, delayMs);
     } catch (...) {
         size_t newDelayMs;
         if (task_.delayMs == 0) {
@@ -820,30 +821,59 @@ void dumpLogPackHeader(const std::string &volId, uint64_t lsid, const LogPackHea
 }
 
 
+/*
+ * MAX_DELAY_MS ____1/10
+ *                    \
+ *                     \
+ *                      \
+ *                       \_____ MIN_DELAY_MS
+ *                      1/2
+ */
+static size_t calcDelayMsWithRemainingMb(uint64_t remainingMb)
+{
+    size_t MIN_DELAY_MS = 100;
+    size_t MAX_DELAY_MS = 1000;
+    if (remainingMb * 2 >= gs.maxWlogSendMb) {
+        return MIN_DELAY_MS;
+    }
+    if (remainingMb * 10 <= gs.maxWlogSendMb) {
+        return MAX_DELAY_MS;
+    }
+    return MAX_DELAY_MS - (MAX_DELAY_MS - MIN_DELAY_MS) * (remainingMb * 10 - gs.maxWlogSendMb) / (gs.maxWlogSendMb * 4);
+}
+
+
 /**
  * RETURN:
- *   true if there is remaining to send or delete.
+ *   -1 means there are no remaining logs to send or delete.
+ *   0 means there are remaining logs to send or delete immediately.
+ *   >0 means milliseconds to wait for next check becuase there are non-permanent logs.
  */
-bool extractAndSendAndDeleteWlog(const std::string &volId)
+int extractAndSendAndDeleteWlog(const std::string &volId)
 {
     const char *const FUNC = __func__;
     StorageVolState &volSt = getStorageVolState(volId);
     StorageVolInfo volInfo(gs.baseDirStr, volId);
 
     bool isRemainingGarbage = volInfo.deleteGarbageWlogs();
-    if (!volInfo.mayWlogTransferBeRequiredNow()) {
+    uint64_t remainingMb;
+    if (!volInfo.mayWlogTransferBeRequiredNow(remainingMb)) {
         LOGs.debug() << FUNC << "no need to run wlog-transfer now" << volId;
-        return isRemainingGarbage || volInfo.isWlogTransferRequiredLater();
+        if (isRemainingGarbage) return 0;
+        if (volInfo.isWlogTransferRequiredLater(remainingMb)) {
+            return calcDelayMsWithRemainingMb(remainingMb);
+        }
+        return -1;
     }
 
     MetaLsidGid rec0, rec1;
     uint64_t lsidLimit;
     bool doLater;
-    std::tie(rec0, rec1, lsidLimit, doLater) =
+    std::tie(rec0, rec1, lsidLimit, doLater, remainingMb) =
         volInfo.prepareWlogTransfer(gs.maxWlogSendMb, gs.implicitSnapshotIntervalSec);
     if (doLater) {
         LOGs.debug() << FUNC << "wait a bit for wlogs to be permanent" << volId;
-        return true;
+        return calcDelayMsWithRemainingMb(remainingMb);
     }
     const std::string wdevPath = volInfo.getWdevPath();
     const std::string wdevName = device::getWdevNameFromWdevPath(wdevPath);
@@ -931,7 +961,11 @@ bool extractAndSendAndDeleteWlog(const std::string &volId)
     const bool isRemainingData = volInfo.finishWlogTransfer(rec0, rec1, lsidE);
     isRemainingGarbage = volInfo.deleteGarbageWlogs();
     LOGs.debug() << FUNC << "end  " << volId << lsidB << lsidE;
-    return isRemainingData || isRemainingGarbage || volInfo.isWlogTransferRequiredLater();
+    if (isRemainingData || isRemainingGarbage) return 0;
+    if (volInfo.isWlogTransferRequiredLater(remainingMb)) {
+        return calcDelayMsWithRemainingMb(remainingMb);
+    }
+    return -1;
 }
 
 
@@ -1216,6 +1250,7 @@ void getHandlerStat(protocol::GetCommandParams &p)
     protocol::sendValueAndFin(p, ret);
     p.logger.debug() << "get handler-stat succeeded";
 }
+
 
 } // namespace storage_local
 

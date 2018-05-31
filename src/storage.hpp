@@ -403,7 +403,7 @@ namespace storage_local {
 void verifyMaxWlogSendPbIsNotTooSmall(uint64_t maxWlogSendPb, uint64_t logpackPb, const char *msg);
 LogPackHeader readLogPackHeaderOnce(const std::string &volId, uint64_t lsid);
 void dumpLogPackHeader(const std::string &volId, uint64_t lsid, const LogPackHeader &packH) noexcept;
-bool extractAndSendAndDeleteWlog(const std::string &volId);
+int extractAndSendAndDeleteWlog(const std::string &volId);
 
 SnapshotInfo getLatestSnapshotInfo(const std::string &volId);
 TsDelta generateTsDelta(const SnapshotInfo &src, const SnapshotInfo &dst, const std::string& archiveId);

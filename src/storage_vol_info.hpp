@@ -14,7 +14,9 @@
 #include "wdev_log.hpp"
 #include "storage_constant.hpp"
 
+
 namespace walb {
+
 
 /**
  * Persistent data for a volume managed by a storage daemon.
@@ -132,13 +134,12 @@ public:
      *   (4) getTransferDiff()
      *   (5) finishWlogTransfer()
      *   (6) deleteGarbageWlogs()
-     *
      */
-    bool mayWlogTransferBeRequiredNow() {
-        return isWlogTransferRequiredDetail(false);
+    bool mayWlogTransferBeRequiredNow(uint64_t& remainingMb) {
+        return isWlogTransferRequiredDetail(false, remainingMb);
     }
-    bool isWlogTransferRequiredLater() {
-        return isWlogTransferRequiredDetail(true);
+    bool isWlogTransferRequiredLater(uint64_t& remainingMb) {
+        return isWlogTransferRequiredDetail(true, remainingMb);
     }
     /**
      * @maxWlogSendMb
@@ -149,10 +150,11 @@ public:
      * RETURN:
      *   target lsid/gid range by two MetaLsidGids: recB and recE,
      *   and lsidLimit as uint64_t value,
-     *   and boolean value which is true if we must pospone the wlog-transfer.
+     *   and boolean value which is true if we must pospone the wlog-transfer,
+     *   and remaining log size to send in MiB.
      *   Do not transfer logpacks which lsid >= lsidLimit.
      */
-    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> prepareWlogTransfer(uint64_t maxWlogSendMb, size_t intervalSec);
+    std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool, uint64_t> prepareWlogTransfer(uint64_t maxWlogSendMb, size_t intervalSec);
     /**
      * RETURN:
      *   generated diff will be transferred to a proxy daemon.
@@ -181,6 +183,19 @@ public:
     uint32_t getPbs() const {
         cybozu::util::File file = device::getWldevFile(getWdevName());
         return cybozu::util::getPhysicalBlockSize(file.fd());
+    }
+
+    // debug code.
+    std::vector<MetaLsidGid> getAllInQueue() const {
+        std::vector<MetaLsidGid> v;
+        QFile qf(queuePath().str(), O_RDWR);
+        QFile::ConstIterator itr = qf.cbegin();
+        while (itr != qf.cend()) {
+            const MetaLsidGid rec = *itr;
+            v.push_back(rec);
+            ++itr;
+        }
+        return v;
     }
 private:
     void loadWdevPath() {
@@ -234,7 +249,7 @@ private:
         super.read(file.fd());
         return super;
     }
-    bool isWlogTransferRequiredDetail(bool isLater);
+    bool isWlogTransferRequiredDetail(bool isLater, uint64_t& remainingMb);
     std::pair<MetaLsidGid, uint64_t> getEndSnapshot(
         QFile &qf, const MetaLsidGid &recB, uint64_t maxWlogSendPb, uint64_t permanentLsid);
     void removeOldRecordsFromQueueFile(QFile &qf, const MetaLsidGid &recB);

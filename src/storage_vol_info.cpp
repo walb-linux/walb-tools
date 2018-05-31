@@ -1,5 +1,6 @@
 #include "storage_vol_info.hpp"
 
+
 namespace walb {
 
 
@@ -125,7 +126,7 @@ void StorageVolInfo::deleteAllWlogs()
 }
 
 
-std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> StorageVolInfo::prepareWlogTransfer(
+std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool, uint64_t> StorageVolInfo::prepareWlogTransfer(
     uint64_t maxWlogSendMb, size_t intervalSec) {
     const char *const FUNC = __func__;
     QFile qf(queuePath().str(), O_RDWR);
@@ -144,7 +145,8 @@ std::tuple<MetaLsidGid, MetaLsidGid, uint64_t, bool> StorageVolInfo::prepareWlog
     uint64_t lsidLimit;
     std::tie(recE, lsidLimit) = getEndSnapshot(qf, recB, maxWlogSendPb, lsids.permanent);
     const bool doLater = lsids.permanent < lsidLimit;
-    return std::make_tuple(recB, recE, lsidLimit, doLater);
+    const uint64_t remainingMb = (lsids.latest - recB.lsid) * getPbs() / MEBI + 1;
+    return std::make_tuple(recB, recE, lsidLimit, doLater, remainingMb);
 }
 
 
@@ -243,6 +245,7 @@ void StorageVolInfo::verifyBaseDirExistance(const std::string &baseDirStr)
 }
 
 
+
 uint64_t StorageVolInfo::takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMergeable, QFile& qf, uint64_t lsid)
 {
     const char *const FUNC = __func__;
@@ -256,6 +259,7 @@ uint64_t StorageVolInfo::takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMerge
     if (device::isOverflow(wdevPath)) {
         throw cybozu::Exception(FUNC) << "wlog overflow" << wdevPath;
     }
+    // pre.lsid == lsid that leads to generate empty diffs is permitted for explicit snapshots.
     if (pre.lsid > lsid) {
         throw cybozu::Exception(FUNC) << "invalid lsid" << pre.lsid << lsid;
     }
@@ -268,13 +272,18 @@ uint64_t StorageVolInfo::takeSnapshotDetail(uint64_t maxWlogSendPb, bool isMerge
 }
 
 
-bool StorageVolInfo::isWlogTransferRequiredDetail(bool isLater)
+bool StorageVolInfo::isWlogTransferRequiredDetail(bool isLater, uint64_t& remainingMb)
 {
     const uint64_t doneLsid = getDoneLsid();
     const std::string wdevName = getWdevName();
     device::LsidSet lsids;
     device::getLsidSet(wdevName, lsids);
     const uint64_t targetLsid = isLater ? lsids.latest : lsids.permanent;
+    if (doneLsid < targetLsid) {
+        remainingMb = (targetLsid - doneLsid) * getPbs() / MEBI + 1;  // >0
+    } else {
+        remainingMb = 0;
+    }
     bool isQueueEmpty;
     {
         QFile qf(queuePath().str(), O_RDWR);
