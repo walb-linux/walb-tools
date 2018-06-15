@@ -239,6 +239,8 @@ setup_for_test:
 	$(MAKE) losetup_for_test
 	$(MAKE) setup_vg_for_test
 	$(MAKE) setup_lv_for_test
+cppcheck:
+	cppcheck -j4 --xml-version=2 --enable=all --suppressions-list=misc/cppcheck_suppress.txt -I walb/include -I include -I cybozulib/include -I src binsrc/*.cpp src/*.cpp -D_GNU_SOURCE -DNDEBUG -UDEBUG -U__cplusplus --xml 2> cppcheck_result.xml
 
 # don't remove these files automatically
 .SECONDARY: $(ALL_SRC:.cpp=.o)

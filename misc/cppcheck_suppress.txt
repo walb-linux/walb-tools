@@ -1,0 +1,13 @@
+noConstructor
+//cstyleCast
+//missingIncludeSystem
+//assertWithSideEffect
+*:cybozulib/*
+*:walb/*
+uninitMemberVar:src/walb_diff_file.hpp
+useInitializationList:src/walb_diff_file.hpp
+unreadVariable:binsrc/write_overlapped_and_verify.cpp
+unassignedVariable:src/walb_diff_file.hpp:91
+uninitMemberVar:include/siphash.hpp:52
+unusedPrivateFunction:binsrc/fs-workload.cpp:349
+unusedPrivateFunction:src/log_dev_monitor.hpp:164
