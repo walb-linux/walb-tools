@@ -31,7 +31,7 @@ TMP_FILE = "tmp.txt"
 TMP_FILE0 = "tmp0.txt"
 TMP_FILE1 = "tmp1.txt"
 
-cmd = "../../get_lo_id.bash"
+cmd = "../../misc/get_lo_id.bash"
 proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 lo_id = proc.stdout.readlines()[0]
 lo_id = lo_id.replace("\n", "")
