@@ -92,19 +92,44 @@ get_lonr_max() {
 create_4lvm() {
     vg_nr=0
     for nr in $(seq "$1" "$((${1}+3))") ;do
-        echo -e "\n*** dd if=/dev/zero of=disk$nr bs=1M count=300 ***"
-        dd if=/dev/zero of=disk$nr bs=1M count=300
-        echo -e "\n*** losetup /dev/loop$nr disk$nr ***"
-        losetup /dev/loop$nr disk$nr
-        echo -e "\n*** pvcreate /dev/loop$nr ***"
-        pvcreate /dev/loop$nr
-        if [ $nr -eq $1 ] ;then
-            echo -e "\n*** vgcreate test /dev/loop$nr ***"
-            vgcreate test /dev/loop$nr
+        if [ ! -s disk$nr ] ;then
+            echo -e "\n*** dd if=/dev/zero of=disk$nr bs=1M count=300 ***"
+            dd if=/dev/zero of=disk$nr bs=1M count=300
         else
-            echo -e "\n*** vgcreate vg$vg_nr /dev/loop$nr ***"
-            vgcreate vg$vg_nr /dev/loop$nr
-            vg_nr=$((${vg_nr}+1))
+            echo -e "\n*** ERROR: file \"disk$nr\" is allready exists ***"
+            exit 1
+        fi
+        if [ ! "$(losetup | grep -o "^/dev/loop$nr")" ] ;then
+            echo -e "\n*** losetup /dev/loop$nr disk$nr ***"
+            losetup /dev/loop$nr disk$nr
+        else
+            echo -e "\n*** ERROR: loopback device \"/dev/loop$nr\" is allready exists ***"
+            exit 1
+        fi
+        if [ ! "$(pvs | grep -o "^ */dev/loop$nr")" ] ;then
+            echo -e "\n*** pvcreate /dev/loop$nr ***"
+            pvcreate /dev/loop$nr
+        else
+            echo -e "\n*** ERROR: physical volume \"/dev/loop$nr\" is allready exists ***"
+            exit 1
+        fi
+        if [ $nr -eq $1 ] ;then
+            if [ ! "$(vgs | grep -o "^ *vg0")" ] ;then
+                echo -e "\n*** vgcreate test /dev/loop$nr ***"
+                vgcreate test /dev/loop$nr
+            else
+                echo -e "\n*** ERROR: volume group \"test\" is allready exists ***"
+                exit 1
+            fi
+        else
+            if [ ! "$(vgs | grep -o "^ *vg${vg_nr}")" ] ;then
+                echo -e "\n*** vgcreate vg$vg_nr /dev/loop$nr ***"
+                vgcreate vg$vg_nr /dev/loop$nr
+                vg_nr=$((${vg_nr}+1))
+            else
+                echo -e "\n*** ERROR: volume group \"vg${vg_nr}\" is allready exists ***"
+                exit 1
+            fi
         fi
     done
 }
@@ -133,9 +158,6 @@ main() {
     fi
     echo -e "\n*** STARTING ***"
     losetup > .stest_init_losetup.tmp
-    all_remove
-    #sleep 0.5
-    #losetup > .stest_init_losetup.tmp
     sed -i -e '1,1d' .stest_init_losetup.tmp
     cat .stest_init_losetup.tmp | sed -E "s@.*/dev/loop([^ ]*).*@\1@g" > .stest_init_lonr.tmp
     if [ -s .stest_init_lonr.tmp ] ;then
