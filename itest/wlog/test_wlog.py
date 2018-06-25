@@ -31,12 +31,12 @@ TMP_FILE = "tmp.txt"
 TMP_FILE0 = "tmp0.txt"
 TMP_FILE1 = "tmp1.txt"
 
-cmd = "../../get_lo_nr"
+cmd = "../../get_lo_id"
 proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-lo_nr = proc.stdout.readlines()[0]
-lo_nr = lo_nr.replace("\n", "")
-LOOP0="/dev/loop" + lo_nr
-LOOP1="/dev/loop" + str(int(lo_nr) + 1)
+lo_id = proc.stdout.readlines()[0]
+lo_id = lo_id.replace("\n", "")
+LOOP0="/dev/loop" + lo_id
+LOOP1="/dev/loop" + str(int(lo_id) + 1)
 #LOOP0=/dev/data/test-log
 #LOOP1=/dev/data/test-data
 USE_LOOP_DEV=1

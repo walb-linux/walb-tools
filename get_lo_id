@@ -12,14 +12,14 @@ get_lonr_max() {
     echo $lonr_max
 }
 
-losetup > .get_lo_nr.tmp
-sed -i -e '1,1d' .get_lo_nr.tmp
-cat .get_lo_nr.tmp | sed -E "s@.*/dev/loop([^ ]*).*@\1@g" > .get_lo_nr_nr.tmp
-if [ -s .get_lo_nr_nr.tmp ] ;then
-    lonr_max="$(cat .get_lo_nr_nr.tmp | get_lonr_max)"
+losetup > .get_lo_id.tmp
+sed -i -e '1,1d' .get_lo_id.tmp
+cat .get_lo_id.tmp | sed -E "s@.*/dev/loop([^ ]*).*@\1@g" > .get_lo_id_id.tmp
+if [ -s .get_lo_id_id.tmp ] ;then
+    lonr_max="$(cat .get_lo_id_id.tmp | get_lonr_max)"
     lonr="$(($lonr_max+1))"
     echo $lonr
 else
     echo 0
 fi
-rm -rf .get_lo_nr*.tmp
+rm -rf .get_lo_id*.tmp
