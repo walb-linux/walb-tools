@@ -37,7 +37,7 @@ check_argv() {
 }
 
 remove_tmpfiles() {
-    rm -rf "\.stest_init*\.tmp"
+    rm -rf .stest_init*.tmp
 }
 
 all_remove() {
