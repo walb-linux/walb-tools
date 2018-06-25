@@ -6,7 +6,6 @@ from run import *
 #
 # If you use loopback devices, set USE_LOOP_DEV=1.
 # You must have privilege of 'disk' group to use losetup commands.
-# /dev/loop6 and /dev/loop7 will be used.
 #
 # If you set USE_LOOP_DEV=0,
 # LOOP0 and LOOP1 must be ordinal block devices.
@@ -32,8 +31,12 @@ TMP_FILE = "tmp.txt"
 TMP_FILE0 = "tmp0.txt"
 TMP_FILE1 = "tmp1.txt"
 
-LOOP0="/dev/loop6"
-LOOP1="/dev/loop7"
+cmd = "../../get_lo_nr"
+proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+lo_nr = proc.stdout.readlines()[0]
+lo_nr = lo_nr.replace("\n", "")
+LOOP0="/dev/loop" + lo_nr
+LOOP1="/dev/loop" + str(int(lo_nr) + 1)
 #LOOP0=/dev/data/test-log
 #LOOP1=/dev/data/test-data
 USE_LOOP_DEV=1
@@ -49,7 +52,7 @@ def getKeyValue(fileName, keyword, pos):
 	raise RuntimeError("getKeyValue", (fileName, keyword, pos))
 
 def prepare_bdev(devPath, devFile):
-	# ex. /dev/loop6
+	# ex. /dev/loop0
 	# ex. ldev64M.0
 	if USE_LOOP_DEV == 1:
 		run("losetup %s %s" % (devPath, devFile))
