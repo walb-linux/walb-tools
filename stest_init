@@ -138,8 +138,12 @@ main() {
     #losetup > .stest_init_losetup.tmp
     sed -i -e '1,1d' .stest_init_losetup.tmp
     cat .stest_init_losetup.tmp | sed -E "s@.*/dev/loop([^ ]*).*@\1@g" > .stest_init_lonr.tmp
-    lonr_max="$(cat .stest_init_lonr.tmp | get_lonr_max)"
-    lonr="$(($lonr_max+1))"
+    if [ -s .stest_init_lonr.tmp ] ;then
+        lonr_max="$(cat .stest_init_lonr.tmp | get_lonr_max)"
+        lonr="$(($lonr_max+1))"
+    else
+        lonr=0
+    fi
     create_4lvm $lonr
     do_lvcreate
     remove_tmpfiles
