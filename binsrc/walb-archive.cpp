@@ -78,7 +78,7 @@ struct Option
         a.discardType = parseDiscardType(discardTypeStr, __func__);
         a.keepAliveParams.verify();
         if (a.pctApplySleep >= 100) {
-            cybozu::Exception("pctApplySleep must be within from 0 to 99.")
+            throw cybozu::Exception("pctApplySleep must be within from 0 to 99.")
                 << a.pctApplySleep;
         }
         a.cmprOptForSync = parseCompressOpt(cmprOptForSyncStr);
