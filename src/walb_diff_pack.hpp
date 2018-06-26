@@ -16,10 +16,10 @@ struct DiffPackHeader : walb_diff_pack
 {
     constexpr static const char *NAME = "DiffPackHeader";
     DiffRecord &operator[](size_t i) {
-        return static_cast<DiffRecord&>(record[i]);
+        return *(DiffRecord *)(record + i);
     }
     const DiffRecord &operator[](size_t i) const {
-        return static_cast<const DiffRecord&>(record[i]);
+        return *(const DiffRecord *)(record + i);
     }
     uint32_t wholePackSize() const { return WALB_DIFF_PACK_SIZE + total_size; }
     uint32_t uncompressedTotalSize() const {
