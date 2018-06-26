@@ -9,6 +9,8 @@
 #include "bdev_util.hpp"
 #include "bdev_reader.hpp"
 #include "constant.hpp"
+#include "throughput_util.hpp"
+
 
 struct Option
 {
@@ -16,6 +18,7 @@ struct Option
     uint64_t off;
     uint64_t scanSize;
     uint64_t chunkSize;
+    size_t pctScanSleep;
     bool useAio;
     std::string filePath;
 
@@ -26,6 +29,7 @@ struct Option
         opt.appendOpt(&scanSize, 0, "size", ": scan size [byte]. (default: whole file size - start offset)");
         opt.appendOpt(&chunkSize, 0, "chunk", ": chunk size [byte]. put hash for each chunk. "
                       "(default: 0. 0 means there is just one chunk.)");
+        opt.appendOpt(&pctScanSleep, 0, "scan-sleep-pct", "PERCENTAGE: sleep percentage in scan. (default: 0)");
         opt.appendBoolOpt(&useAio, "aio", ": use aio instead blocking IOs.");
         opt.appendParam(&filePath, "FILE_PATH", ": path of a block device or a file.");
         opt.appendHelp("h", ": put this message.");
@@ -40,6 +44,9 @@ struct Option
         verifyMultipleIos(off, "bad offset");
         verifyMultipleIos(scanSize, "bad scan size");
         verifyMultipleIos(chunkSize, "bad chunk size");
+        if (pctScanSleep >= 100) {
+            throw cybozu::Exception("pctScanSleep must be within from 0 to 99.") << pctScanSleep;
+        }
     }
     void verifyMultipleIos(uint64_t v, const char *errMsg) {
         if (v != 0 && v % ios != 0) {
@@ -98,6 +105,12 @@ int doMain(int argc, char* argv[])
         file.lseek(offsetLb * LOGICAL_BLOCK_SIZE);
     }
 
+    Sleeper sleeper;
+    const size_t minMs = 100, maxMs = 1000;
+    double t0 = cybozu::util::getTimeMonotonic();
+    sleeper.init(opt.pctScanSleep * 10, minMs, maxMs, t0);
+
+
     cybozu::SipHash24 hasher;
     cybozu::AlignedArray<char> buf(opt.ios, false);
 
@@ -121,6 +134,7 @@ int doMain(int argc, char* argv[])
             chunkId += chunkLb;
         }
         remainingLb -= ioLb;
+        sleeper.sleepIfNecessary(cybozu::util::getTimeMonotonic());
     }
     if (useChunk && readLb > 0) {
         putChunkDigest(hasher, chunkId);
