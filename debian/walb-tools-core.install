@@ -1,5 +1,0 @@
-binsrc/wdevc usr/bin
-binsrc/walbc usr/bin
-binsrc/walb-storage usr/sbin
-binsrc/walb-proxy usr/sbin
-binsrc/walb-archive usr/sbin
