@@ -38,7 +38,7 @@
 
 #define CHECKx(cond) cybozu::util::checkCond(cond, __func__, __LINE__)
 
-#define DISABLE_COPY_AND_ASSIGN(ClassName)              \
+#define WALB_DISABLE_COPY_AND_ASSIGN(ClassName)              \
     ClassName(const ClassName &rhs) = delete;           \
     ClassName &operator=(const ClassName &rhs) = delete
 

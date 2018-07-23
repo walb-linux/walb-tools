@@ -164,7 +164,7 @@ public:
         assert(array_ != nullptr);
     }
     ~BlockBuffer() noexcept { ::free(array_); }
-    DISABLE_COPY_AND_ASSIGN(BlockBuffer);
+    WALB_DISABLE_COPY_AND_ASSIGN(BlockBuffer);
     DISABLE_MOVE(BlockBuffer);
 
     T *alloc() {
@@ -221,7 +221,7 @@ public:
         , bb_(nr, alignment, blockSize)
         , totalPre_(0), totalNew_(0) {}
     ~BlockAllocator() noexcept = default;
-    DISABLE_COPY_AND_ASSIGN(BlockAllocator);
+    WALB_DISABLE_COPY_AND_ASSIGN(BlockAllocator);
     DISABLE_MOVE(BlockAllocator);
 
     /**
@@ -273,7 +273,7 @@ public:
     }
 
     ~BlockMultiBuffer() noexcept { ::free(buf_); }
-    DISABLE_COPY_AND_ASSIGN(BlockMultiBuffer);
+    WALB_DISABLE_COPY_AND_ASSIGN(BlockMultiBuffer);
     DISABLE_MOVE(BlockMultiBuffer);
 
     /**
@@ -369,7 +369,7 @@ public:
         , totalPre_(0), totalNew_(0) {}
 
     ~BlockMultiAllocator() noexcept {}
-    DISABLE_COPY_AND_ASSIGN(BlockMultiAllocator);
+    WALB_DISABLE_COPY_AND_ASSIGN(BlockMultiAllocator);
     DISABLE_MOVE(BlockMultiAllocator);
 
     /**

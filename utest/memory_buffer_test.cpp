@@ -12,7 +12,7 @@ private:
     std::queue<std::shared_ptr<T> > q_;
 public:
     SequentialQueue() : q_() {}
-    DISABLE_COPY_AND_ASSIGN(SequentialQueue);
+    WALB_DISABLE_COPY_AND_ASSIGN(SequentialQueue);
     DISABLE_MOVE(SequentialQueue);
 
     void push(std::shared_ptr<T> ptr) {
@@ -46,7 +46,7 @@ private:
 
 public:
     RandomQueue() : m_(), rand_() {}
-    DISABLE_COPY_AND_ASSIGN(RandomQueue);
+    WALB_DISABLE_COPY_AND_ASSIGN(RandomQueue);
     DISABLE_MOVE(RandomQueue);
 
     void push(std::shared_ptr<T> ptr) {
