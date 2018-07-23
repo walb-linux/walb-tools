@@ -23,6 +23,8 @@ Do not use heterogeneous environments.
   - libsnappy
   - liblzma
   - libz
+  - binutils-dev (for BFD=1)
+  - libiberty-dev (for BFD=1 and STATIC=1)
 ```
 > sudo apt-get install libaio-dev libsnappy-dev liblzma-dev zlib1g-dev
 ```
