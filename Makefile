@@ -36,15 +36,19 @@ CXXFLAGS = -std=c++11 -pthread $(CFLAGS)
 
 ifeq ($(STATIC),1)
 LDFLAGS = -static -static-libgcc -static-libstdc++ -L./src -L./3rd/zstd
-LDLIBS = -Wl,--whole-archive -lpthread -lrt -Wl,--no-whole-archive
+LDLIBS_PTHREAD = -Wl,--whole-archive -lpthread -lrt -Wl,--no-whole-archive
 else
 LDFLAGS = -Wl,-R,'$$ORIGIN' -L./src -L./3rd/zstd
-LDLIBS = -lpthread -lrt
+LDLIBS_PTHREAD = -lpthread -lrt
 endif
+
 ifeq ($(DEBUG),1)
 LDFLAGS += -rdynamic
 ifeq ($(BFD),1)
 LDLIBS_BFD = -lbfd
+ifeq ($(STATIC),1)
+LDLIBS_BFD += -liberty -ldl -lz
+endif
 else
 LDLIBS_BFD =
 endif
@@ -53,7 +57,7 @@ endif
 LDLIBS_LOCAL = -lwalb-tools
 LDLIBS_AIO = -laio
 LDLIBS_COMPRESS = -lsnappy -llzma -lz -lzstd
-LDLIBS += $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS) $(LDLIBS_BFD)
+LDLIBS = $(LDLIBS_LOCAL) $(LDLIBS_AIO) $(LDLIBS_COMPRESS) $(LDLIBS_BFD) $(LDLIBS_PTHREAD)
 
 # Zstd options.
 ZSTD_CFLAGS = $(OPT_FLAGS)
