@@ -283,13 +283,15 @@ void checkWldev(const Option &opt)
             continue;
         }
         const uint64_t lsidEnd = std::min(lsid + readStepPb, lsidSet.permanent);
-        reader.reset(lsid);
+        uint64_t aheadPb = lsidEnd - lsid;
+        reader.reset(lsid, aheadPb);
         while (lsid < lsidEnd) {
             if (!readLogPackHeader(reader, packH, lsid)) {
                 if (!retryForeverReadLogPackHeader(wdevName, sReader, packH, lsid, opt.retryMs, logCapacityPb)) {
                     goto fin;
                 }
-                reader.reset(lsid + 1); // for next read.
+                aheadPb = lsidEnd - (lsid + 1);
+                reader.reset(lsid + 1, aheadPb); // for next read.
             }
             if (opt.monitorPadding && packH.nPadding() > 0) {
                 LOGs.info() << std::string("padding found\n") + packH.str();
@@ -311,7 +313,8 @@ void checkWldev(const Option &opt)
                         if (!retryForeverReadLogPackIo(wdevName, sReader, packH, i, buf, opt.retryMs, logCapacityPb)) {
                             goto fin;
                         }
-                        reader.reset(nextLsid); // for next read.
+                        aheadPb = lsidEnd - nextLsid;
+                        reader.reset(nextLsid, aheadPb); // for next read.
                     }
                     if (opt.keepCsum) {
                         pushCsumPerPb(buf, pbs, csumDeq);
