@@ -3,10 +3,13 @@
 	@file
 	@brief convert integer to string(ascii)
 
-	Copyright (C) 2008 Cybozu Labs, Inc., all rights reserved.
+	@author MITSUNARI Shigeo(@herumi)
 */
 #include <limits.h>
+#ifndef CYBOZU_DONT_USE_STRING
 #include <string>
+#endif
+#include <memory.h>
 #include <cybozu/inttype.hpp>
 #include <cybozu/bit_operation.hpp>
 
@@ -16,6 +19,12 @@ template<class T>
 size_t getHexLength(T x)
 {
 	return x == 0 ? 1 : cybozu::bsr(x) / 4 + 1;
+}
+
+template<class T>
+size_t getBinLength(T x)
+{
+	return x == 0 ? 1 : cybozu::bsr(x) + 1;
 }
 /*
 	convert x to hex string with len
@@ -35,12 +44,6 @@ void itohex(char *out, size_t len, T x, bool upCase = true)
 		x /= 16;
 	}
 }
-
-template<class T>
-size_t getBinLength(T x)
-{
-	return x == 0 ? 1 : cybozu::bsr(x) + 1;
-}
 /*
 	convert x to bin string with len
 	@note out should have getBinLength(x) size
@@ -57,50 +60,106 @@ void itobin(char *out, size_t len, T x)
 
 namespace itoa_local {
 
-template<typename T, typename UT, int n>
-void convertFromInt(std::string& out, T x, T minusMax, const char (&minusMaxStr)[n])
+/*
+	convert x to dec
+	use buf[0, bufSize)
+	return 0 if false
+	return writtenSize which is not terminated
+	@REMARK the top of string is buf + bufSize - writtenSize
+*/
+template<class UT>
+size_t uintToDec(char *buf, size_t bufSize, UT x)
 {
-	if (x == minusMax) {
-		out.assign(minusMaxStr, minusMaxStr + n - 1);
-		return;
+	for (size_t i = 0; i < bufSize; i++) {
+		buf[bufSize - 1 - i] = '0' + static_cast<int>(x % 10);
+		x /= 10;
+		if (x == 0) return i + 1;
 	}
-	if (x == 0) {
-		out.assign(1, '0');
-		return;
-	}
-	UT absX = x < 0 ? -x : x;
-	char buf[40];
-	int p = 0;
-	while (absX > 0) {
-		buf[p++] = '0' + static_cast<int>(absX % 10);
-		absX /= 10;
-	}
-	if (x < 0) {
-		buf[p++] = '-';
-	}
-	out.resize(p);
-	for (int i = 0; i < p; i++) {
-		out[i] = buf[p - 1 - i];
-	}
+	return 0;
 }
 
+/*
+	convert x to hex
+	use buf[0, bufSize)
+	return 0 if false
+	return writtenSize which is not terminated
+	@REMARK the top of string is buf + bufSize - writtenSize
+*/
+template<class UT>
+size_t uintToHex(char *buf, size_t bufSize, UT x, bool upCase = true)
+{
+	static const char *hexTbl[] = {
+		"0123456789abcdef",
+		"0123456789ABCDEF"
+	};
+	const char *tbl = hexTbl[upCase];
+	for (size_t i = 0; i < bufSize; i++) {
+		buf[bufSize - 1 - i] = tbl[x % 16];
+		x /= 16;
+		if (x == 0) return i + 1;
+	}
+	return 0;
+}
+
+/*
+	convert x to bin
+	use buf[0, bufSize)
+	return 0 if false
+	return writtenSize which is not terminated
+	@REMARK the top of string is buf + bufSize - writtenSize
+*/
+template<class UT>
+size_t uintToBin(char *buf, size_t bufSize, UT x)
+{
+	for (size_t i = 0; i < bufSize; i++) {
+		buf[bufSize - 1 - i] = '0' + (x & 1);
+		x >>= 1;
+		if (x == 0) return i + 1;
+	}
+	return 0;
+}
+
+template<class T>
+size_t intToDec(char *buf, size_t bufSize, T x)
+{
+	if (x == LLONG_MIN) {
+		const char minStr[] = "-9223372036854775808";
+		const size_t minStrLen = sizeof(minStr) - 1;
+		if (bufSize < minStrLen) {
+			return 0;
+		} else {
+			memcpy(buf + bufSize - minStrLen, minStr, minStrLen);
+			return minStrLen;
+		}
+	}
+	bool negative = x < 0;
+	uint64_t absX = negative ? -x : x;
+	size_t n = uintToDec(buf, bufSize, absX);
+	if (n == 0) return 0;
+	if (negative) {
+		if (bufSize == n) return 0;
+		n++;
+		buf[bufSize - n] = '-';
+	}
+	return n;
+}
+
+#ifndef CYBOZU_DONT_USE_STRING
 template<typename T>
 void convertFromUint(std::string& out, T x)
 {
-	if (x == 0) {
-		out.assign(1, '0');
-		return;
-	}
 	char buf[40];
-	int p = 0;
-	while (x > 0) {
-		buf[p++] = '0' + static_cast<int>(x % 10);
-		x /= 10;
-	}
-	out.resize(p);
-	for (int i = 0; i < p; i++) {
-		out[i] = buf[p - 1 - i];
-	}
+	size_t n = uintToDec(buf, sizeof(buf), x);
+	assert(n > 0);
+	out.assign(buf + sizeof(buf) - n, n);
+}
+
+inline void convertFromInt(std::string& out, long long x)
+{
+	char buf[40];
+	size_t n = intToDec(buf, sizeof(buf), x);
+	assert(n > 0);
+	out.assign(buf + sizeof(buf) - n, n);
 }
 
 template<typename T>
@@ -118,9 +177,11 @@ void itobinLocal(std::string& out, T x, bool withZero)
 	out.resize(size);
 	itobin(&out[0], size, x);
 }
+#endif
 
 } // itoa_local
 
+#ifndef CYBOZU_DONT_USE_STRING
 /**
 	convert int to string
 	@param out [out] string
@@ -128,7 +189,7 @@ void itobinLocal(std::string& out, T x, bool withZero)
 */
 inline void itoa(std::string& out, int x)
 {
-	itoa_local::convertFromInt<int, unsigned int>(out, x, INT_MIN, "-2147483648");
+	itoa_local::convertFromInt(out, x);
 }
 
 /**
@@ -138,7 +199,7 @@ inline void itoa(std::string& out, int x)
 */
 inline void itoa(std::string& out, long long x)
 {
-	itoa_local::convertFromInt<long long, unsigned long long>(out, x, LLONG_MIN, "-9223372036854775808");
+	itoa_local::convertFromInt(out, x);
 }
 
 /**
@@ -271,5 +332,6 @@ inline std::string itoaWithZero(T x, size_t len, char c = '0')
 	}
 	return ret;
 }
+#endif
 
 } // cybozu

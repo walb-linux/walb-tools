@@ -12,7 +12,9 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <wincrypt.h>
+#ifdef _MSC_VER
 #pragma comment (lib, "advapi32.lib")
+#endif
 #include <cybozu/critical_section.hpp>
 #else
 #include <sys/types.h>

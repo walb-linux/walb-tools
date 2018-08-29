@@ -3,7 +3,7 @@
 	@file
 	@brief tiny thread class
 
-	Copyright (C) 2007 Cybozu Labs, Inc., all rights reserved.
+	@author MITSUNARI Shigeo(@herumi)
 	@author MITSUNARI Shigeo
 */
 
@@ -173,12 +173,15 @@ protected:
 	/*
 		thread loop interface
 	*/
-	static void threadLoopIF(void *arg)
+#ifdef _WIN32
+	static unsigned __stdcall threadLoopIF(void *arg)
+#else
+	static void* threadLoopIF(void *arg)
+#endif
 	{
 		ThreadBase* main = static_cast<ThreadBase*>(arg);
 		main->threadEntry();
-		// end of thread
-//		main->detachThread();
+		return 0;
 	}
 public:
 	ThreadBase()
@@ -192,7 +195,7 @@ public:
 
 	bool beginThread(int stackSize = 0)
 	{
-		return thread::Begin(threadHdl_, reinterpret_cast<thread::ThreadEntryCallback*>(threadLoopIF), this, stackSize);
+		return thread::Begin(threadHdl_, threadLoopIF, this, stackSize);
 	}
 
 	bool detachThread()
