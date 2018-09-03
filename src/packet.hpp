@@ -18,6 +18,8 @@ namespace packet {
 const uint32_t VERSION = 1;
 const uint32_t ACK_MSG = 0x626c6177; /* "walb" (little endian). */
 
+const size_t MAX_SIZE_PER_WRITE = 64 * 1024; /* 64KiB */
+
 
 /**
  * Try to send written data to a socket immediately.
@@ -53,7 +55,7 @@ public:
      */
     size_t readSome(void *data, size_t size) { return sock_.readSome(data, size); }
     void read(void *data, size_t size) { sock_.read(data, size); }
-    void write(const void *data, size_t size) { sock_.write(data, size); }
+    void write(const void *data, size_t size) { sock_.write(data, size, MAX_SIZE_PER_WRITE); }
 
     /**
      * Serializer.
