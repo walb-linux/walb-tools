@@ -495,11 +495,11 @@ public:
 		@param buf [out] send buffer
 		@param bufSize [in] send buffer size(byte)
 	*/
-	void write(const void *buf, size_t bufSize)
+	void write(const void *buf, size_t bufSize, size_t unitSize = 0x7ffffff)
 	{
 		const char *p = (const char *)buf;
 		while (bufSize > 0) {
-			int size = (int)(std::min)(size_t(0x7fffffff), bufSize);
+			int size = (int)(std::min)(unitSize, bufSize);
 #ifdef _WIN32
 			int writeSize = ::send(sd_, p, size, 0);
 #else
