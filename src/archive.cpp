@@ -10,7 +10,7 @@ namespace archive_local {
  *      other --> use cold snapshot with the gid.
  */
 void prepareRawFullScanner(
-    cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb, uint64_t gid)
+    FileReader &file, ArchiveVolState &volSt, uint64_t sizeLb, uint64_t gid)
 {
     const bool useCold = (gid != UINT64_MAX);
     VolLvCache& lvC = volSt.lvCache;
@@ -24,7 +24,7 @@ void prepareRawFullScanner(
             throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
         }
     }
-    file.open(lv.path().str(), O_RDONLY);
+    file.open(lv.path().str());
 }
 
 
@@ -40,7 +40,7 @@ void prepareVirtualFullScanner(
         st0 = volInfo.getMetaState();
     }
 
-    cybozu::util::File fileR;
+    FileReader fileR;
     const uint64_t gid = (isCold ? st0.snapB.gidB : UINT64_MAX);
     prepareRawFullScanner(fileR, volSt, sizeLb, gid);
 
@@ -1204,8 +1204,9 @@ bool runResyncReplServer(
     volInfo.clearAllSnapLv();
     volInfo.clearAllWdiffs();
     {
-        cybozu::util::File reader;
+        FileReader reader;
         prepareRawFullScanner(reader, volSt, sizeLb);
+        reader.readAhead(SIZE_MAX);
         cybozu::util::File writer(volSt.lvCache.getLv().path().str(), O_RDWR);
         /* Reader and writer indicates the same block device.
            We must have independent file descriptors for them. */

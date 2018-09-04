@@ -101,6 +101,7 @@ int doMain(int argc, char* argv[])
         file.close();
         const size_t bufferSize = std::min<size_t>(64 << 20 /* 64MiB */, opt.ios * 128);
         reader.reset(new walb::AsyncBdevReader(opt.filePath, offsetLb, bufferSize, opt.ios));
+        reader->setReadAheadUnlimited();
     } else {
         file.lseek(offsetLb * LOGICAL_BLOCK_SIZE);
     }

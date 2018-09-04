@@ -125,6 +125,7 @@ bool dirtyFullSyncClient(
     AsyncBdevReader reader(bdevPath, startLb,
                            dirty_full_sync_local::ASYNC_IO_BUFFER_SIZE,
                            bulkLb * LOGICAL_BLOCK_SIZE);
+    reader.setReadAheadUnlimited();
     dirty_full_sync_local::DualBufferCache dbufCache;
     using Buffer = dirty_full_sync_local::Buffer;
     using DualBuffer = dirty_full_sync_local::DualBuffer;

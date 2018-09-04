@@ -748,6 +748,7 @@ void backupClient(protocol::ServerParams &p, bool isFull)
         } else {
             const uint32_t hashSeed = curTime;
             AsyncBdevReader reader(volInfo.getWdevPath());
+            reader.setReadAheadUnlimited();
             if (!dirtyHashSyncClient(aPkt, reader, sizeLb, bulkLb,
                                      gs.cmprOptForSync, hashSeed,
                                      volSt.stopState, gs.ps, gs.fullScanLbPerSec)) {

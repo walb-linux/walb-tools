@@ -16,8 +16,22 @@
 #include "walb_diff_file.hpp"
 #include "walb_diff_mem.hpp"
 #include "walb_diff_merge.hpp"
+#include "bdev_reader.hpp"
+
 
 namespace walb {
+
+
+#define USE_AIO_FOR_VIRT_SCAN
+//#undef USE_AIO_FOR_VIRT_SCAN
+
+
+#ifdef USE_AIO_FOR_VIRT_SCAN
+using FileReader = AsyncBdevFileReader;
+#else
+using FileReader = SyncBdevFileReader;
+#endif
+
 
 /**
  * Virtual full image scanner.
@@ -28,9 +42,7 @@ namespace walb {
 class VirtualFullScanner
 {
 private:
-    cybozu::util::File reader_;
-    bool isInputFdSeekable_;
-    AlignedArray bufForSkip_;
+    FileReader reader_;
     DiffMerger merger_;
     uint64_t addr_; /* Indicator of previous read amount [logical block]. */
     DiffRecIo recIo_; /* current diff rec IO. */
@@ -39,10 +51,11 @@ private:
     bool emptyWdiff_;
     DiffStatistics statOut_;
 
-    void init_inner(cybozu::util::File&& reader) {
+    void init_inner(FileReader&& reader) {
         reader_ = std::move(reader);
-        isInputFdSeekable_ = reader_.seekable();
-        if (!isInputFdSeekable_) bufForSkip_.resize(LOGICAL_BLOCK_SIZE, false);
+        if (!reader.seekable()) {
+            throw cybozu::Exception("non-seekable reader is not allowed");
+        }
     }
 public:
     /**
@@ -52,8 +65,6 @@ public:
      */
     VirtualFullScanner()
         : reader_()
-        , isInputFdSeekable_(false)
-        , bufForSkip_()
         , merger_()
         , addr_(0)
         , recIo_()
@@ -62,8 +73,8 @@ public:
         , emptyWdiff_(false)
         , statOut_() {}
 
-    void init(cybozu::util::File&& reader, const StrVec &wdiffPaths);
-    void init(cybozu::util::File&& reader, std::vector<cybozu::util::File> &&fileV);
+    void init(FileReader&& reader, const StrVec &wdiffPaths);
+    void init(FileReader&& reader, std::vector<cybozu::util::File> &&fileV);
 
     /**
      * Write all data to a specified fd.

@@ -237,7 +237,7 @@ inline MetaDiffVec tryOpenDiffs(
 const bool allowEmpty = true;
 
 void prepareRawFullScanner(
-    cybozu::util::File &file, ArchiveVolState &volSt, uint64_t sizeLb, uint64_t gid = UINT64_MAX);
+    FileReader &file, ArchiveVolState &volSt, uint64_t sizeLb, uint64_t gid = UINT64_MAX);
 void prepareVirtualFullScanner(
     VirtualFullScanner &virt, ArchiveVolState &volSt,
     ArchiveVolInfo &volInfo, uint64_t sizeLb, const MetaSnap &snap);

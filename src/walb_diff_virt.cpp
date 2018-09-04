@@ -2,7 +2,7 @@
 
 namespace walb {
 
-void VirtualFullScanner::init(cybozu::util::File&& reader, const StrVec &wdiffPaths)
+void VirtualFullScanner::init(FileReader&& reader, const StrVec &wdiffPaths)
 {
     init_inner(std::move(reader));
     emptyWdiff_ = wdiffPaths.empty();
@@ -13,7 +13,7 @@ void VirtualFullScanner::init(cybozu::util::File&& reader, const StrVec &wdiffPa
     statOut_.clear();
 }
 
-void VirtualFullScanner::init(cybozu::util::File&& reader, std::vector<cybozu::util::File> &&fileV)
+void VirtualFullScanner::init(FileReader&& reader, std::vector<cybozu::util::File> &&fileV)
 {
     init_inner(std::move(reader));
     emptyWdiff_ = fileV.empty();
@@ -62,6 +62,7 @@ size_t VirtualFullScanner::readSome(void *data, size_t size)
     if (blksToIo < blks) {
         blks0 = blksToIo;
     }
+    reader_.readAhead(blksToIo * LOGICAL_BLOCK_SIZE);
     return readBase(data, blks0);
 }
 
@@ -95,6 +96,7 @@ size_t VirtualFullScanner::readBase(void *data, size_t blks)
     return readLb * LOGICAL_BLOCK_SIZE;
 }
 
+
 size_t VirtualFullScanner::readWdiff(void *data, size_t blks)
 {
     assert(recIo_.isValid());
@@ -116,15 +118,10 @@ size_t VirtualFullScanner::readWdiff(void *data, size_t blks)
     return blks * LOGICAL_BLOCK_SIZE;
 }
 
+
 void VirtualFullScanner::skipBase(size_t blks)
 {
-    if (isInputFdSeekable_) {
-        reader_.lseek(blks * LOGICAL_BLOCK_SIZE, SEEK_CUR);
-    } else {
-        for (size_t i = 0; i < blks; i++) {
-            reader_.read(bufForSkip_.data(), LOGICAL_BLOCK_SIZE);
-        }
-    }
+    reader_.lseek(blks * LOGICAL_BLOCK_SIZE, SEEK_CUR);
 }
 
 

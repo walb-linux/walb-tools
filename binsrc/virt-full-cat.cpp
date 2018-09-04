@@ -24,13 +24,13 @@ struct Option : public cybozu::Option
                  "  a base full image and additional wdiff files.\n"
                  "Usage: virt-full-cat (options) -i [input image] -d [input wdiffs] -o [output image]\n"
                  "Options:\n"
-                 "  -i arg:  Input full image path. '-' means stdin. (default '-')\n"
+                 "  -i arg:  Input full image path. This must be seekable.\n"
                  "  -o arg:  Output full image path. '-' means stdout. (default '-')\n"
                  "  -w args: Input wdiff paths\n"
                  "  -b arg:  Buffer size [byte]. default: '64K'\n"
                  "  -stat:   Put merging statistics.\n"
                  "  -h:      Show this help message.\n");
-        appendOpt(&inputPath, "-", "i", "Input full image path. '-' means stdin. (default '-')");
+        appendMust(&inputPath, "i", "Input full image path. This must be seekable.");
         appendOpt(&outputPath, "-", "o", "Output full image path. '-' means stdout. (default '-')");
         appendVec(&inputWdiffs, "d", "Input wdiff paths");
         appendOpt(&bufferSize, 2 << 16, "b", "Buffer size [byte].");
@@ -50,13 +50,11 @@ struct Option : public cybozu::Option
     }
 };
 
-void setupFiles(cybozu::util::File &inFile, cybozu::util::File &outFile, Option &opt)
+
+void setupFiles(FileReader &inFile, cybozu::util::File &outFile, Option &opt)
 {
-    if (opt.inputPath != "-") {
-        inFile.open(opt.inputPath, O_RDONLY);
-    } else {
-        inFile.setFd(0);
-    }
+    inFile.open(opt.inputPath);
+    inFile.readAhead(SIZE_MAX);
     if (opt.outputPath != "-") {
         outFile.open(opt.outputPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     } else {
@@ -64,11 +62,13 @@ void setupFiles(cybozu::util::File &inFile, cybozu::util::File &outFile, Option 
     }
 }
 
+
 int doMain(int argc, char *argv[])
 {
     Option opt;
     if (!opt.parse(argc, argv)) return 1;
-    cybozu::util::File inFile, outFile;
+    FileReader inFile;
+    cybozu::util::File outFile;
     setupFiles(inFile, outFile, opt);
     VirtualFullScanner virt;
     virt.init(std::move(inFile), opt.inputWdiffs);
