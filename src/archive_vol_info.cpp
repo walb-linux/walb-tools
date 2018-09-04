@@ -420,7 +420,7 @@ void ArchiveVolInfo::prepareBaseImageForFullRepl(uint64_t sizeLb, uint64_t start
     }
     cybozu::lvm::Lv lv = getLv();
     if (lv.sizeLb() > sizeLb) {
-        throw cybozu::Exception(__func__) << "lv " << volId;
+        throw cybozu::Exception(__func__) << "lv size too large" << volId << lv.sizeLb() << sizeLb;
     }
     const bool zeroClear = true;
     if (isThinProvisioning()) {
