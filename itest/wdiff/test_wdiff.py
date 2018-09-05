@@ -6,12 +6,12 @@ BIN="../../binsrc"
 
 def make_zero_image(*args):
     for i in args:
-        run("dd if=/dev/zero of=./ddev32M.{} bs=1048576 count=32".format(i))
+        run("dd oflag=direct if=/dev/zero of=./ddev32M.{} bs=1048576 count=32".format(i))
 
 def prepare_test():
     # Generate wlog/wdiff files for test.
     print "#################### Generate wlog/wdiff files for test ####################"
-    run("dd if=/dev/urandom of=./ddev32M bs=1048576 count=32")
+    run("dd oflag=direct if=/dev/urandom of=./ddev32M bs=1048576 count=32")
     for i in xrange(1, 5):
         #BIN/wlog-gen --nodiscard -s 32M -o ${i}.wlog
         run(BIN + ("/wlog-gen -s 32M -z 32M --minDiscardSize 512 --maxDiscardSize 1M -o {}.wlog".format(i)))

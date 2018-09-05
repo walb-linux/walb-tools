@@ -66,8 +66,8 @@ def finalize_bdev(devPath, devFile):
 		run("dd oflag=direct if=%s of=%s bs=1M" % (devPath, devFile))
 
 def format_ldev():
-	run("dd if=/dev/zero of=%s bs=1M count=128" % LDEV)
-	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_0)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=128" % LDEV)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=64" % DDEV_0)
 	prepare_bdev(LOOP0, LDEV)
 	prepare_bdev(LOOP1,  DDEV_0)
 	run("%s format-ldev %s %s" % (CTL2, LOOP0, LOOP1))
@@ -121,10 +121,10 @@ def SimpleTest():
 
 
 def restore_test(testId, lsidDiff, invalidLsid):
-	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_1)
-	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_1z)
-	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_2)
-	run("dd if=/dev/zero of=%s bs=1M count=64" % DDEV_3)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=64" % DDEV_1)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=64" % DDEV_1z)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=64" % DDEV_2)
+	run("dd oflag=direct if=/dev/zero of=%s bs=1M count=64" % DDEV_3)
 	run("%s/wlog-restore %s --verify -d %d -i %d < %s" % (BIN, LDEV, lsidDiff, invalidLsid, WLOG_0))
 	run("%s/wlog-cat %s -v -o %s" % (BIN, LDEV, WLOG_1))
 	prepare_bdev(LOOP0, LDEV)
