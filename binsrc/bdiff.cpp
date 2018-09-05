@@ -79,8 +79,8 @@ void showDifference(const void *data0, const void *data1, size_t s, size_t lineS
  */
 uint64_t checkBlockDiff(Config& config)
 {
-    cybozu::util::File fileR1(config.filePath1(), O_RDONLY);
-    cybozu::util::File fileR2(config.filePath2(), O_RDONLY);
+    cybozu::util::File fileR1(config.filePath1(), O_RDONLY | O_DIRECT);
+    cybozu::util::File fileR2(config.filePath2(), O_RDONLY | O_DIRECT);
 
     const uint32_t bs = config.blockSize();
     AlignedArray a1(bs, false), a2(bs, false);
