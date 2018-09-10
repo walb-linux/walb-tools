@@ -95,11 +95,13 @@ void virtualFullScanClient(
 {
     const char *const FUNC = __func__;
 
+    const bool useStdout = (devPath == "stdout");
+
     uint64_t sizeLb;
     pkt.read(sizeLb);
 
     cybozu::util::File file;
-    if (devPath == "stdout") {
+    if (useStdout) {
         file.setFd(1);
     } else {
         const cybozu::FileStat stat = cybozu::FilePath(devPath).stat();
@@ -140,14 +142,16 @@ void virtualFullScanClient(
         }
         writtenSize += bytes;
         if (writtenSize >= fsyncIntervalSize) {
-            file.fdatasync();
+            if (!useStdout) file.fdatasync();
             writtenSize = 0;
         }
         remaining -= lb;
     }
     if (remaining != 0) throw cybozu::Exception(FUNC) << "remaining must be 0" << remaining;
-    file.fsync();
-    file.close();
+    if (!useStdout) {
+        file.fsync();
+        file.close();
+    }
 
     packet::Ack(pkt.sock()).send();
     pkt.flush();
