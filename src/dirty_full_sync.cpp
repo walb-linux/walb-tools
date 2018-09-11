@@ -156,6 +156,7 @@ bool dirtyFullSyncClient(
         }
         return std::move(dbuf);
     });
+    pconv.setLogger([](const std::exception& e) { LOGs.error() << e.what(); });
     pconv.start(cmprOpt.numCpu);
 
     auto popAndSendIoData = [&]() {
@@ -257,6 +258,7 @@ bool dirtyFullSyncServer(
         }
         return std::move(dbuf);
     });
+    pconv.setLogger([](const std::exception& e) { LOGs.error() << e.what(); });
     pconv.start(cmprOpt.numCpu);
 
     auto popAndWriteIoData = [&]() -> std::pair<uint64_t, size_t> {

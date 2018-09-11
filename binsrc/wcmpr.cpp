@@ -228,9 +228,10 @@ void parallelCompress(
     Cmpr cmpr(mode, level);
 
     cybozu::thread::ParallelConverter<Buffer, CmprData> pconv([&](Buffer&& src) {
-            Buffer dst = cmpr.compress(src.data(), src.size(), src.size() * 2 + 4096);
-            return CmprData { src.size(), std::move(dst) };
-        });
+        Buffer dst = cmpr.compress(src.data(), src.size(), src.size() * 2 + 4096);
+        return CmprData { src.size(), std::move(dst) };
+    });
+    pconv.setLogger([](const std::exception& e) { LOGs.error() << e.what(); });
     pconv.start(concurrency);
 
     cybozu::thread::ThreadRunner writer([&]() {
@@ -270,6 +271,7 @@ void parallelDecompress(
     cybozu::thread::ParallelConverter<CmprData, Buffer> pconv([&](CmprData&& src) {
             return cmpr.uncompress(src.data.data(), src.data.size(), src.origSize);
         });
+    pconv.setLogger([](const std::exception& e) { LOGs.error() << e.what(); });
     pconv.start(concurrency);
 
     cybozu::thread::ThreadRunner writer([&]() {

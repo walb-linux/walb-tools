@@ -1051,6 +1051,7 @@ class ParallelConverter
     BoundedQueue<Dst> outQ_;
     ThreadRunnerSet workerSet_;
 
+    std::function<void(const std::exception&)> putLog_;
 public:
     /**
      * Convrter must be function of type T2 (*)(T1&&).
@@ -1061,7 +1062,8 @@ public:
         , pushMu_(), pushId_(0)
         , popMu_(), popId_(0), map_()
         , inQ_(2), outQ_(2)
-        , workerSet_() {
+        , workerSet_()
+        , putLog_() {
     }
     ~ParallelConverter() noexcept {
         // You called sync() before, this will not effect anything.
@@ -1124,6 +1126,11 @@ public:
         outQ_.fail();
         joinWorkerSet();
     }
+
+    void setLogger(const std::function<void(const std::exception&)>& putLog) {
+        putLog_ = putLog;
+    }
+
 private:
     /**
      * Lock must be held.
@@ -1148,9 +1155,20 @@ private:
             dst.t2 = holderP_->convert(std::move(src.t1));
             outQ_.push(std::move(dst));
         }
-    } catch (...) {
+    } catch (std::exception& e) {
+        if (putLog_) putLog(e);
         inQ_.fail();
         outQ_.fail();
+    } catch (...) {
+        if (putLog_) putLog(std::runtime_error("unknown error"));
+        inQ_.fail();
+        outQ_.fail();
+    }
+    void putLog(const std::exception& e) noexcept {
+        try {
+            putLog_(e);
+        } catch (...) {
+        }
     }
 };
 
