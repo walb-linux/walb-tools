@@ -24,6 +24,11 @@ void prepareRawFullScanner(
             throw cybozu::Exception(__func__) << "bad sizeLb" << sizeLb << lv.sizeLb();
         }
     }
+    if (useCold) {
+        LOGs.info() << __func__ << lv.path() << gid;
+    } else {
+        LOGs.info() << __func__ << lv.path();
+    }
     file.open(lv.path().str());
 }
 
@@ -49,8 +54,15 @@ void prepareVirtualFullScanner(
         fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
             return volInfo.getDiffMgr().getDiffListToSync(st, snap);
         });
-    LOGs.debug() << "virtual-full-scan-diffs" << st0 << diffV;
-
+    LOGs.debug() << __func__ << st0 << diffV;
+    if (diffV.empty()) {
+        LOGs.info() << __func__ << "state" << st0 << "empty";
+    } else {
+        LOGs.info() << __func__ << "state" << st0
+                    << "numDiff" << diffV.size()
+                    << "firstDiff" << diffV.front()
+                    << "lastDiff" << diffV.back();
+    }
     virt.init(std::move(fileR), std::move(fileV));
 }
 
