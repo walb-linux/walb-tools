@@ -48,9 +48,9 @@ struct StorageTask
         : volId(volId), delayMs(delayMs) {
     }
     StorageTask(const StorageTask& rhs) = default;
-    StorageTask(StorageTask&& rhs) : StorageTask() { swap(rhs); }
+    StorageTask(StorageTask&& rhs) noexcept : StorageTask() { swap(rhs); }
     StorageTask& operator=(const StorageTask& rhs) = default;
-    StorageTask& operator=(StorageTask&& rhs) { swap(rhs); return *this; }
+    StorageTask& operator=(StorageTask&& rhs) noexcept { swap(rhs); return *this; }
 
     bool operator==(const StorageTask& rhs) const {
         return volId == rhs.volId;
@@ -68,7 +68,7 @@ struct StorageTask
         return os;
     }
 
-    void swap(StorageTask& rhs) {
+    void swap(StorageTask& rhs) noexcept {
         std::swap(volId, rhs.volId);
         std::swap(delayMs, rhs.delayMs);
     }

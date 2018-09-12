@@ -103,8 +103,8 @@ struct ProxyTask
 
     ProxyTask(const ProxyTask&) = default;
     ProxyTask& operator=(const ProxyTask&) = default;
-    ProxyTask(ProxyTask&& rhs) : ProxyTask() { swap(rhs); }
-    ProxyTask& operator=(ProxyTask&& rhs) { swap(rhs); return *this; }
+    ProxyTask(ProxyTask&& rhs) noexcept : ProxyTask() { swap(rhs); }
+    ProxyTask& operator=(ProxyTask&& rhs) noexcept { swap(rhs); return *this; }
 
     bool operator==(const ProxyTask &rhs) const {
         return volId == rhs.volId && archiveName == rhs.archiveName;
@@ -128,7 +128,7 @@ struct ProxyTask
         return ProxyTask(volId, archiveName, delayMs0);
     }
 
-    void swap(ProxyTask& rhs) {
+    void swap(ProxyTask& rhs) noexcept {
         std::swap(volId, rhs.volId);
         std::swap(archiveName, rhs.archiveName);
         std::swap(delayMs, rhs.delayMs);

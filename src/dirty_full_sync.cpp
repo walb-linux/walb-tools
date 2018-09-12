@@ -26,15 +26,15 @@ struct DualBuffer
 
     DualBuffer() = default;
     DualBuffer(const DualBuffer&) = delete;
-    DualBuffer(DualBuffer&& rhs) : DualBuffer() { swap(rhs); }
+    DualBuffer(DualBuffer&& rhs) noexcept : DualBuffer() { swap(rhs); }
     DualBuffer& operator=(const DualBuffer&) = delete;
-    DualBuffer& operator=(DualBuffer&& rhs) { swap(rhs); return *this; }
+    DualBuffer& operator=(DualBuffer&& rhs) noexcept { swap(rhs); return *this; }
 
     void clear() {
         src.clear();
         dst.clear();
     }
-    void swap(DualBuffer& rhs) {
+    void swap(DualBuffer& rhs) noexcept {
         std::swap(src, rhs.src);
         std::swap(dst, rhs.dst);
         std::swap(csum, rhs.csum);

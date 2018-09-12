@@ -89,7 +89,7 @@ public:
                 logger_.writeS(priority, s_);
             }
         }
-        Sync(Sync&& rhs)
+        Sync(Sync&& rhs) noexcept
             : logger_(rhs.logger_), s_(std::move(rhs.s_)) {}
         template <typename T>
         Sync& operator<<(const T& t) {

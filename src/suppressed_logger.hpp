@@ -22,7 +22,7 @@ class SuppressedLogger
             } catch (...){
             }
         }
-        Sync(Sync&& rhs)
+        Sync(Sync&& rhs) noexcept
             : logger_(rhs.logger_), osP_(std::move(rhs.osP_)), atBegin_(rhs.atBegin_) {}
         Sync(const Sync& rhs) = delete;
         template <typename T>

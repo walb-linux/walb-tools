@@ -62,12 +62,15 @@ public:
     explicit File(int fd, bool autoClose = false)
         : fd_(fd), autoClose_(autoClose) {
     }
-    File(File&& rhs)
+    File(File&& rhs) noexcept
         : File() {
         swap(rhs);
     }
-    File& operator=(File&& rhs) {
-        close();
+    File& operator=(File&& rhs) noexcept {
+        try {
+            close();
+        } catch (...) {
+        }
         swap(rhs);
         return *this;
     }

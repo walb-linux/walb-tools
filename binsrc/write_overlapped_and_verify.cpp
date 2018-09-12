@@ -212,15 +212,15 @@ public:
         size_ = size;
         lock();
     }
-    RangeLock(RangeLock&& rhs) : RangeLock() {
+    RangeLock(RangeLock&& rhs) noexcept : RangeLock() {
         swap(rhs);
     }
-    RangeLock& operator=(RangeLock&& rhs) {
+    RangeLock& operator=(RangeLock&& rhs) noexcept {
         unlock();
         swap(rhs);
         return *this;
     }
-    void swap(RangeLock& rhs) {
+    void swap(RangeLock& rhs) noexcept {
         std::swap(muP_, rhs.muP_);
         std::swap(idx_, rhs.idx_);
         std::swap(size_, rhs.size_);
