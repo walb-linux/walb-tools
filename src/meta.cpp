@@ -485,8 +485,6 @@ void MetaDiffManager::getTargetDiffLists(
     applicableV = getApplicableDiffListByGid(st.snapB, gid);
     // use this if timestamp
     // ret = getApplicableDiffListByTime(st.snapB, timestamp);
-    if (applicableV.empty()) return;
-
     minV = getMinimumApplicableDiffList(st);
 }
 
@@ -507,26 +505,49 @@ void MetaDiffManager::getTargetDiffLists(MetaDiffVec& applicableV, MetaDiffVec& 
 }
 
 
-MetaDiffVec MetaDiffManager::getDiffListToApply(const MetaState &st, uint64_t gid, size_t maxNr) const
+bool MetaDiffManager::getDiffListToMaterializeSnapshot(
+    MetaDiffVec& out, const MetaState& st, uint64_t gid, bool mustBeClean) const
 {
-    MetaDiffVec applicableV, minV;
-    getTargetDiffLists(applicableV, minV, st, gid);
-    if (maxNr > 0 && applicableV.size() > maxNr) {
-        applicableV.resize(maxNr);
-    }
-    if (minV.size() > applicableV.size()) return minV;
-    return applicableV;
+    // The specified gid indicates a snapshot.
+    MetaDiffVec minV;
+    getTargetDiffLists(out, minV, st, gid);
+    if (minV.size() > out.size()) return false;
+    const MetaState appliedSt = apply(st, out);
+    assert(!appliedSt.isApplying);
+    if (appliedSt.snapB.gidB != gid) return false;
+    if (mustBeClean && appliedSt.snapB.isDirty()) return false;
+    return true;
 }
 
 
-MetaDiffVec MetaDiffManager::getDiffListToSync(const MetaState &st, const MetaSnap &snap) const
+bool MetaDiffManager::getDiffListToRestore2(MetaDiffVec& out, const MetaState& st, uint64_t gid, size_t maxNr) const
 {
-    MetaDiffVec applicableV, minV;
-    getTargetDiffLists(applicableV, minV, st, snap.gidB); // using lock.
-    if (minV.size() > applicableV.size()) return {}; // impossible to reproduce the snapshot.
-    const MetaState appliedSt = apply(st, applicableV);
-    if (appliedSt.snapB != snap) return {}; // impossible also.
-    return applicableV;
+    const bool mustBeClean = true;
+    if (!getDiffListToMaterializeSnapshot(out, st, gid, mustBeClean)) return false;
+    // In restore operation, we can split the diff applying task to several ones.
+    if (maxNr > 0 && out.size() > maxNr) out.resize(maxNr);
+    return true;
+}
+
+
+bool MetaDiffManager::getDiffListToScan2(MetaDiffVec& out, const MetaState& st, uint64_t gid, size_t maxNr) const
+{
+    const bool mustBeClean = true;
+    if (!getDiffListToMaterializeSnapshot(out, st, gid, !mustBeClean)) return false;
+    if (maxNr > 0 && out.size() > maxNr) return false;
+    return true;
+}
+
+
+MetaDiffVec MetaDiffManager::getDiffListToApply2(const MetaState& st, uint64_t gid, size_t maxNr) const
+{
+    MetaDiffVec out, minV;
+    getTargetDiffLists(out, minV, st, gid);
+    // In apply operation, we can split the diff applying task to several ones.
+    if (maxNr > 0 && out.size() > maxNr) out.resize(maxNr);
+    // In applying state, we must apply the diffs together.
+    if (minV.size() > out.size()) out = std::move(minV);
+    return out;
 }
 
 

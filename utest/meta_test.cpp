@@ -237,7 +237,7 @@ CYBOZU_TEST_AUTO(apply)
         CYBOZU_TEST_ASSERT(getRelation(s0, d0) == Relation::TOO_OLD_DIFF);
         CYBOZU_TEST_ASSERT(!canApply(s0, d0));
     }
-    // Dirty snaphsots and clean diffs.
+    // Dirty snapshots and clean diffs.
     {
         MetaSnap s0(0, 2);
         MetaDiff d0({0}, {2});
@@ -307,6 +307,25 @@ CYBOZU_TEST_AUTO(oldOrNew)
         CYBOZU_TEST_ASSERT(!isTooNew(s0, d1));
     }
 }
+
+
+CYBOZU_TEST_AUTO(applyCompDiff)
+{
+    {
+        MetaSnap s0(5);
+        MetaDiff d1(5, 10);
+        d1.isCompDiff = true;
+        CYBOZU_TEST_ASSERT(canApply(s0, d1));
+    }
+    {
+        MetaSnap s0(5);
+        MetaDiff d1(4, 10);
+        d1.isCompDiff = true;
+        CYBOZU_TEST_ASSERT(getRelation(s0, d1) == Relation::NOT_APPLICABLE_DIFF);
+        CYBOZU_TEST_ASSERT(!canApply(s0, d1));
+    }
+}
+
 
 /**
  * Generate a diff randomly that can be applied to a specified snap.
@@ -574,12 +593,23 @@ CYBOZU_TEST_AUTO(metaDiffManager1)
     CYBOZU_TEST_EQUAL(mgr.getOldestCleanSnapshot(st), 0);
     CYBOZU_TEST_EQUAL(mgr.getApplicableDiffListByGid(snap, 4).size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getApplicableDiffListByTime(snap, 1003).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 2).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 4).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 2).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 4).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(2)).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(4)).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 0).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 1).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 2).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 4).size(), 4);
+    MetaDiffVec v0;
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v0, st, 2));
+    CYBOZU_TEST_EQUAL(v0.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v0, st, 4));
+    CYBOZU_TEST_EQUAL(v0.size(), 4);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v0, st, 2, true));
+    CYBOZU_TEST_EQUAL(v0.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v0, st, 4, true));
+    CYBOZU_TEST_EQUAL(v0.size(), 4);
+    for (size_t i = 0; i <= 5; i++) {
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v0, st, i));
+        CYBOZU_TEST_EQUAL(v0.size(), i);
+    }
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 6);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 3);
 
@@ -635,19 +665,38 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     auto v1 = mgr.getMinimumApplicableDiffList(st);
     CYBOZU_TEST_EQUAL(v1.size(), 0);
 
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 15).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 20).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 25).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 5).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 15).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 20).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 25).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(5)).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(5, 10)).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(15, 20)).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(20)).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(25)).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 0).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 5).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 15).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 20).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 25).size(), 4);
+    MetaDiffVec v2;
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 5));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 15));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st, 20));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st, 25));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToMaterializeSnapshot(v2, st, 5, true));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 5, false));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToMaterializeSnapshot(v2, st, 15, true));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 15, false));
+    CYBOZU_TEST_EQUAL(v2.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 20, true));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 25, true));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 0));
+    CYBOZU_TEST_EQUAL(v2.size(), 0);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 5));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 15));
+    CYBOZU_TEST_EQUAL(v2.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 20));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 25));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 2);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 2);
 
@@ -662,15 +711,23 @@ CYBOZU_TEST_AUTO(metaDiffManager2)
     CYBOZU_TEST_EQUAL(st2a, st2b);
     CYBOZU_TEST_EQUAL(st2a, st2c);
 
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 5).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 20).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st1c, 25).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 5).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 20).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st1c, 25).size(), 4);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(5)).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(20)).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st1c, MetaSnap(25)).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st1c, 0).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st1c, 5).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st1c, 20).size(), 4);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st1c, 25).size(), 4);
+
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st1c, 5));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st1c, 20));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st1c, 25));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToMaterializeSnapshot(v2, st1c, 5, false));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToMaterializeSnapshot(v2, st1c, 20, false));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st1c, 25, true));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st1c, 5));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st1c, 20));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st1c, 25));
+    CYBOZU_TEST_EQUAL(v2.size(), 4);
 }
 
 /**
@@ -696,19 +753,35 @@ CYBOZU_TEST_AUTO(metaDiffManager3)
     auto v1 = mgr.getMinimumApplicableDiffList(st);
     CYBOZU_TEST_EQUAL(v1.size(), 0);
 
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 5).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 10).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 15).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply(st, 20).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 5).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 10).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 15).size(), 0);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToRestore(st, 20).size(), 3);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(5, 10)).size(), 1);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(15, 20)).size(), 2);
-    CYBOZU_TEST_EQUAL(mgr.getDiffListToSync(st, MetaSnap(20)).size(), 3);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 0).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 5).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 10).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 15).size(), 2);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 20).size(), 3);
+
+    MetaDiffVec v2;
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 5));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 10));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 15));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st, 20));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 5, false));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 15, false));
+    CYBOZU_TEST_EQUAL(v2.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToMaterializeSnapshot(v2, st, 20, true));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, true).size(), 1);
     CYBOZU_TEST_EQUAL(mgr.getRestorableList(st, false).size(), 1);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 5));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 15));
+    CYBOZU_TEST_EQUAL(v2.size(), 2);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 20));
+    CYBOZU_TEST_EQUAL(v2.size(), 3);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st, 4));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st, 8));
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st, 22));
 }
 
 
@@ -730,13 +803,130 @@ CYBOZU_TEST_AUTO(metaDiffManager4)
     CYBOZU_TEST_EQUAL(v0.size(), 1);
     auto v1 = mgr.getMinimumApplicableDiffList(st);
     CYBOZU_TEST_EQUAL(v1.size(), 0);
+
+    MetaDiffVec v2;
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 2));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st, 3));
+    CYBOZU_TEST_EQUAL(v2.size(), 0);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v2, st, 4));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v2, st, 5));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 4).size(), 0);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 5).size(), 1);
+    CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 6).size(), 1);
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 3));
+    CYBOZU_TEST_EQUAL(v2.size(), 0);
+    CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v2, st, 4));
+    CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v2, st, 5));
+    CYBOZU_TEST_EQUAL(v2.size(), 1);
+}
+
+
+/**
+ * Scan test.
+ */
+CYBOZU_TEST_AUTO(metaDiffManager5)
+{
+    {
+        MetaSnap snap(3);
+        MetaState st(snap, 0);
+        MetaDiffVec v = { MetaDiff(0, 5, false, 1000), };
+
+        MetaDiffManager mgr;
+        for (MetaDiff &d : v) mgr.add(d);
+
+        MetaDiffVec v0;
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 4));
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 6));
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v0, st, 5));
+        CYBOZU_TEST_EQUAL(v0.size(), 1);
+    }
+    {
+        MetaSnap snap(0);
+        MetaState st(snap, 0);
+        MetaDiffVec v = { MetaDiff(2, 5, false, 1000), };
+
+        MetaDiffManager mgr;
+        for (MetaDiff &d : v) mgr.add(d);
+
+        MetaDiffVec v0;
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 5));
+    }
+    {
+        MetaSnap snap(0);
+        MetaState st(snap, 0);
+        MetaDiffVec v = {
+            MetaDiff(0, 1, false, 1000),
+            MetaDiff(1, 2, false, 1001),
+            MetaDiff(2, 3, false, 1002),
+            MetaDiff(3, 4, false, 1003),
+            MetaDiff(4, 5, false, 1004),
+        };
+
+        MetaDiffManager mgr;
+        for (MetaDiff &d : v) mgr.add(d);
+
+        MetaDiffVec v0;
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 5, 3));
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v0, st, 5, 5));
+        CYBOZU_TEST_EQUAL(v0.size(), 5);
+    }
+}
+
+
+/**
+ * Bad pair of metastate and diff.
+ */
+CYBOZU_TEST_AUTO(metaDiffManager6)
+{
+    {
+        /**
+         *  snap |
+         *  diff    |----|
+         */
+        MetaSnap snap(0);
+        MetaState st(snap, 0);
+        MetaDiffVec v = { MetaDiff(2, 5, false, 1000), };
+        MetaDiffManager mgr;
+        for (MetaDiff &d : v) mgr.add(d);
+
+        MetaDiffVec v0;
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 5));
+        CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 0).size(), 0);
+        CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 5).size(), 0);
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v0, st, 5));
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v0, st, 0));
+        CYBOZU_TEST_EQUAL(v0.size(), 0);
+    }
+    {
+        /**
+         *  snap         |
+         *  diff |----|
+         */
+        MetaSnap snap(10);
+        MetaState st(snap, 0);
+        MetaDiffVec v = { MetaDiff(2, 5, false, 1000), };
+        MetaDiffManager mgr;
+        for (MetaDiff &d : v) mgr.add(d);
+
+        MetaDiffVec v0;
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToScan2(v0, st, 5));
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToScan2(v0, st, 10));
+        CYBOZU_TEST_EQUAL(v0.size(), 0);
+        CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 0).size(), 0);
+        CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 5).size(), 0);
+        CYBOZU_TEST_EQUAL(mgr.getDiffListToApply2(st, 10).size(), 0);
+        CYBOZU_TEST_ASSERT(!mgr.getDiffListToRestore2(v0, st, 5));
+        CYBOZU_TEST_ASSERT(mgr.getDiffListToRestore2(v0, st, 10));
+        CYBOZU_TEST_EQUAL(v0.size(), 0);
+    }
 }
 
 
 /**
  * Use randomly generated diff list.
  */
-CYBOZU_TEST_AUTO(metaDiffManager5)
+CYBOZU_TEST_AUTO(metaDiffManager7)
 {
     MetaSnap snap(0), s0(snap), s1(snap);
     MetaState st(snap, 0);

@@ -437,6 +437,14 @@ enum class Relation
 
 inline Relation getRelation(const MetaSnap &s, const MetaDiff &d)
 {
+    if (d.isCompDiff) {
+        if (d.snapB.gidB == s.gidB) {
+            return Relation::APPLICABLE_DIFF;
+        } else {
+            return Relation::NOT_APPLICABLE_DIFF;
+        }
+    }
+
     if (d.snapB.gidB > s.gidB) {
         return Relation::TOO_NEW_DIFF;
     }
@@ -920,13 +928,9 @@ public:
     /**
      * Get diff list to restore a clean snapshot specified by a gid.
      * RETURN:
-     *   Empty vector means the clean snapshot can not be restored.
+     *   True if the correct diff list was got successfully.
      */
-    MetaDiffVec getDiffListToRestore(const MetaState& st, uint64_t gid, size_t maxNr = 0) const {
-        MetaDiffVec v = getDiffListToSync(st, MetaSnap(gid));
-        if (maxNr > 0 && v.size() > maxNr) v.resize(maxNr);
-        return v;
-    }
+    bool getDiffListToRestore2(MetaDiffVec& out, const MetaState& st, uint64_t gid, size_t maxNr = 0) const;
     /**
      * Get diff list to apply all diffs before a specified gid.
      *
@@ -937,13 +941,24 @@ public:
      * RETURN:
      *   Empty vector means there is no diff to apply.
      */
-    MetaDiffVec getDiffListToApply(const MetaState &st, uint64_t gid, size_t maxNr = 0) const;
+    MetaDiffVec getDiffListToApply2(const MetaState& st, uint64_t gid, size_t maxNr = 0) const;
     /**
-     * Get diff list to reproduce a snapshot.
+     * Get diff list to scan a clean/dirty snapshot.
      * RETURN:
-     *   Empty vector means the snapshot can not be reprodusable.
+     *   True if the correct diff list was got.
      */
-    MetaDiffVec getDiffListToSync(const MetaState &st, const MetaSnap &snap) const;
+    bool getDiffListToScan2(MetaDiffVec& out, const MetaState& st, uint64_t gid, size_t maxNr = 0) const;
+    /**
+     * Get diff list to materialize a clean/dirty snapshot.
+     * @out: result diff list will be assigned.
+     * @st: base metastate (can be applying state)
+     * @gid: gid indicating a snaphsot.
+     * @mustBeClean: specify true if you require clean snapshot.
+     * RETURN:
+     *   True if the snapshot can be materialized.
+     */
+    bool getDiffListToMaterializeSnapshot(MetaDiffVec& out, const MetaState& st, uint64_t gid, bool mustBeClean) const;
+
     /**
      * Get all diffs between gid0 and gid1.
      */

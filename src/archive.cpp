@@ -52,7 +52,12 @@ void prepareVirtualFullScanner(
     std::vector<cybozu::util::File> fileV;
     MetaDiffVec diffV = tryOpenDiffs(
         fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
-            return volInfo.getDiffMgr().getDiffListToSync(st, snap);
+            MetaDiffVec v;
+            if (!volInfo.getDiffMgr().getDiffListToScan2(v, st, snap.gidB, ga.maxOpenDiffs)) {
+                throw cybozu::Exception(__func__)
+                    << "snapshot can not be materialized" << volInfo.volId << snap;
+            }
+            return v;
         });
     LOGs.debug() << __func__ << st0 << diffV;
     if (diffV.empty()) {
@@ -67,15 +72,29 @@ void prepareVirtualFullScanner(
 }
 
 
+void verifyRestorable(const std::string& volId, uint64_t gid)
+{
+    ArchiveVolState& volSt = getArchiveVolState(volId);
+    ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
+
+    const MetaState st = volInfo.getMetaState();
+    MetaDiffVec diffV;
+    const bool mustBeClean = true;
+    if (!volSt.diffMgr.getDiffListToMaterializeSnapshot(diffV, st, gid, mustBeClean)) {
+        throw cybozu::Exception(__func__) << "bad gid to restore" << volId << gid;
+    }
+}
+
+
 void verifyApplicable(const std::string& volId, uint64_t gid)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-    UniqueLock ul(volSt.mu);
-
     const MetaState st = volInfo.getMetaState();
-    if (volSt.diffMgr.getDiffListToApply(st, gid).empty()) {
-        throw cybozu::Exception(__func__) << "There is no diff to apply" << volId;
+
+    if (volSt.diffMgr.getDiffListToApply2(st, gid).empty()) {
+        throw cybozu::Exception(__func__)
+            << "gid not applicable" << volId << gid << st;
     }
 }
 
@@ -188,7 +207,7 @@ static ApplyState applyDiffsToVolumeOnce(const std::string& volId, const MetaSta
     std::vector<cybozu::util::File> fileV;
     MetaDiffVec diffV = tryOpenDiffs(
         fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
-            return mgr.getDiffListToApply(st, gid, ga.maxOpenDiffs);
+            return mgr.getDiffListToApply2(st, gid, ga.maxOpenDiffs);
         });
     if (diffV.empty()) return ApplyState::DONE;
 
@@ -400,7 +419,12 @@ static bool applyDiffsToRestore(
     std::vector<cybozu::util::File> fileV;
     MetaDiffVec diffV = tryOpenDiffs(
         fileV, volInfo, !allowEmpty, st0, [&](const MetaState &st) {
-            return volSt.diffMgr.getDiffListToRestore(st, gid, ga.maxOpenDiffs);
+            MetaDiffVec v;
+            if (!volSt.diffMgr.getDiffListToRestore2(v, st, gid, ga.maxOpenDiffs)) {
+                throw cybozu::Exception(__func__)
+                    << "could not get diffs to restore" << volId << gid << st;
+            }
+            return v;
         });
     LOGs.debug() << "restore-diffs" << volId << st0 << diffV;
     DiffStatistics statIn, statOut;
@@ -462,12 +486,13 @@ bool restore(const std::string &volId, uint64_t gid)
     }
     TmpSnapshotDeleter deleter{baseLv.vgName(), tmpLvName};
 
-    bool noNeedToApply =
-        !st0.isApplying && st0.snapB.isClean() && st0.snapB.gidB == gid;
-    MetaState st1 = st0;
-    while (!noNeedToApply) {
+    for (;;) {
+        if (!st0.isApplying && st0.snapB.isClean() && st0.snapB.gidB == gid) {
+            // completely materialied.
+            break;
+        }
+        MetaState st1;
         if (!applyDiffsToRestore(volId, tmpLv, st0, gid, st1)) return false;
-        noNeedToApply = !st1.isApplying && st1.snapB.isClean() && st1.snapB.gidB == gid;
         st0 = st1;
     }
     if (isThinpool()) {
@@ -478,7 +503,7 @@ bool restore(const std::string &volId, uint64_t gid)
             lvC.addCold(gid, coldLv);
             // If crash occurs here, the timestamp file does not exist but lv does.
             // Such situations must be recovered by verifyAndRecoverArchiveVol().
-            volInfo.setColdTimestamp(gid, st1.timestamp);
+            volInfo.setColdTimestamp(gid, st0.timestamp);
         }
     }
     cybozu::lvm::Lv snapLv = cybozu::lvm::renameLv(baseLv.vgName(), tmpLvName, targetName);
@@ -1506,7 +1531,7 @@ void getApplicableDiffList(protocol::GetCommandParams &p)
 
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const MetaState metaSt = volInfo.getMetaState();
-    const MetaDiffVec diffV = volSt.diffMgr.getDiffListToApply(metaSt, param.gid);
+    const MetaDiffVec diffV = volSt.diffMgr.getApplicableDiffListByGid(metaSt.snapB, param.gid);
     StrVec v;
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
@@ -2210,6 +2235,7 @@ void c2aRestoreServer(protocol::ServerParams &p)
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForRestore, FUNC);
+        archive_local::verifyRestorable(volId, gid);
     } catch (std::exception &e) {
         logger.error() << e.what();
         pkt.write(e.what());

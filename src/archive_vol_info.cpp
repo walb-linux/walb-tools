@@ -523,8 +523,16 @@ MetaDiffVec ArchiveVolInfo::getDiffListToMergeGid(uint64_t gidB, uint64_t gidE) 
 int ArchiveVolInfo::shouldDoRepl(const MetaSnap &srvSnap, const MetaSnap &cliSnap, bool isSize, uint64_t param) const
 {
     if (srvSnap.gidB >= cliSnap.gidB) return DONT_REPL;
-    const MetaDiffVec diffV = getDiffMgr().getDiffListToSync(MetaState(srvSnap, 0), cliSnap);
-    if (diffV.empty()) return DO_HASH_REPL;
+
+    const MetaState st0 = getMetaState();
+    if (srvSnap.gidB < st0.snapB.gidB) return DO_HASH_REPL;
+
+    const bool mustBeClean = true;
+    MetaDiffVec diffV;
+    if (!getDiffMgr().getDiffListToMaterializeSnapshot(diffV, MetaState(srvSnap, 0), cliSnap.gidB, !mustBeClean) ||
+        diffV.empty()) {
+        throw cybozu::Exception(__func__) << "timing problem may occur" << volId << srvSnap << cliSnap;
+    }
 
     if (isSize) {
         const uint64_t minSizeB = param * MEBI;
