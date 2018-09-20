@@ -194,8 +194,8 @@ ResizeParam parseResizeParam(const StrVec &args, bool allowZeroClear, bool allow
 VirtualFullScanParam parseVirtualFullScanParam(const StrVec &args)
 {
     VirtualFullScanParam param;
-    std::string gidStr, bulkSizeU, sizeU;
-    cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU, &sizeU});
+    std::string gidStr, bulkSizeU, sizeU, scanSleepPctStr;
+    cybozu::util::parseStrVec(args, 0, 2, {&param.volId, &gidStr, &bulkSizeU, &sizeU, &scanSleepPctStr});
     verifyVolIdFormat(param.volId);
     param.gid = cybozu::atoi(gidStr);
     if (bulkSizeU.empty()) {
@@ -207,6 +207,15 @@ VirtualFullScanParam parseVirtualFullScanParam(const StrVec &args)
         param.sizeLb = 0;
     } else {
         param.sizeLb = util::parseSizeLb(sizeU, __func__);
+    }
+    if (scanSleepPctStr.empty()) {
+        param.scanSleepPct = 0;
+    } else {
+        param.scanSleepPct = cybozu::atoi(scanSleepPctStr);
+        if (param.scanSleepPct >= 100) {
+            throw cybozu::Exception(__func__)
+                << "scanSleepPct must be within from 0 to 99." << param.scanSleepPct;
+        }
     }
     return param;
 }

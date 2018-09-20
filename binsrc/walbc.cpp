@@ -110,7 +110,7 @@ void setupSetFullScanBps(cybozu::Option& opt)
 void setupVirtualFullScan(cybozu::Option& opt)
 {
     setupVolIdGid(opt);
-    setupOpt(opt, "(bulk size) (scanning size)");
+    setupOpt(opt, "(bulk size) (scanning size) (scan sleep pct)");
 }
 void setupVirtualFullScanCmd(cybozu::Option& opt)
 {

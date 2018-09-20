@@ -1766,7 +1766,7 @@ bool getBlockHash(
  * sizeLb: 0 means whole device size.
  */
 bool virtualFullScanServer(
-    const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb,
+    const std::string &volId, uint64_t gid, uint64_t bulkLb, uint64_t sizeLb, size_t scanSleepPct,
     packet::Packet &pkt, Logger &logger)
 {
     const char *const FUNC = __func__;
@@ -1789,7 +1789,11 @@ bool virtualFullScanServer(
     std::string encBuf;
     uint64_t c = 0;
     uint64_t remaining = sizeLb;
-    double t0 = cybozu::util::getTime();
+    double t0 = cybozu::util::getTimeMonotonic();
+    Sleeper sleeper;
+    const size_t minMs = 100, maxMs = 1000;
+    size_t totalSleepMs = 0;
+    sleeper.init(scanSleepPct * 10, minMs, maxMs, t0);
     while (remaining > 0) {
         if (volSt.stopState == ForceStopping || ga.ps.isForceShutdown()) {
             ctrl.sendError();
@@ -1808,11 +1812,12 @@ bool virtualFullScanServer(
         }
         remaining -= lb;
         c++;
-        const double t1 = cybozu::util::getTime();
+        const double t1 = cybozu::util::getTimeMonotonic();
         if (t1 - t0 > PROGRESS_INTERVAL_SEC) {
             LOGs.info() << FUNC << "progress" << sizeLb - remaining;
             t0 = t1;
         }
+        totalSleepMs += sleeper.sleepIfNecessary(t1);
     }
     ctrl.sendEnd();
     pkt.flush();
@@ -1822,6 +1827,7 @@ bool virtualFullScanServer(
     logger.info() << "virt-full-scan-mergeIn " << volId << virt.statIn();
     logger.info() << "virt-full-scan-mergeOut" << volId << virt.statOut();
     logger.info() << "virt-full-scan-mergeMemUsage" << volId << virt.memUsageStr();
+    logger.info() << "virt-full-scan-totalSleepMs" << volId << totalSleepMs;
     return true;
 }
 
@@ -2735,6 +2741,7 @@ void c2aVirtualFullScan(protocol::ServerParams &p)
         const uint64_t gid = param.gid;
         const uint64_t bulkLb = param.bulkLb;
         const uint64_t sizeLb = param.sizeLb;
+        const size_t scanSleepPct = param.scanSleepPct;
 
         ForegroundCounterTransaction foregroundTasksTran;
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
@@ -2744,7 +2751,7 @@ void c2aVirtualFullScan(protocol::ServerParams &p)
         pkt.flush();
         sendErr = false;
 
-        if (!archive_local::virtualFullScanServer(volId, gid, bulkLb, sizeLb, pkt, logger)) {
+        if (!archive_local::virtualFullScanServer(volId, gid, bulkLb, sizeLb, scanSleepPct, pkt, logger)) {
             throw cybozu::Exception(FUNC) << "force stopped" << volId;
         }
         pkt.writeFin(msgOk);

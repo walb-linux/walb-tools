@@ -137,6 +137,7 @@ struct VirtualFullScanParam
     uint64_t gid;
     uint64_t bulkLb;
     uint64_t sizeLb; // 0 means whole device size.
+    size_t scanSleepPct; // 0 to 99.
 };
 
 
