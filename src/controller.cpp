@@ -150,6 +150,7 @@ void virtualFullScanClient(
     if (remaining != 0) throw cybozu::Exception(FUNC) << "remaining must be 0" << remaining;
     if (!useStdout) {
         file.fsync();
+        cybozu::util::flushBufferCache(file.fd());
         file.close();
     }
 
