@@ -13,11 +13,41 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Security
 
 
+## [1.0.18] - 2018-10-03
+### Added
+- virt-full-scan: add scan-sleep-pct option.
+### Fixed
+- bugfix and refactor: getting diff list algorithm for apply/restore/scan.
+- controller: bugfix: virt-full-scan with stdout does not work.
+- wldev-checker: limit wlog readahead.
+### Changed
+- **CAUSION**: add checksum for dirty full sync. Some internal protocols were changed.
+  - `dirty-full-sync2` --> `dirty-full-sync3`
+  - `repl-sync2` --> `repl-sync3`
+- bhash: support stdin.
+- VirtualFullScanner: supports aio for base images.
+- packet: set default write unit size to 64KiB.
+- cybozulib
+  - update to release20180830.
+  - Socket::write() supports unitSize.
+### Deprecated
+- static build was confirmed not to work correctly.
+  This is not removed for debug or test.
+
+## [1.0.17] - 2018-06-28
+### Added
+- bhash: add -scan-sleep-pct option.
+### Removed
+- remove debian directory.
+  Debian packages will be maintained in another (cloned) repository.
+### Fixed
+- update documents.
+- fix and add several scripts for test.
+
 ## [1.0.16] - 2018-05-31
 ### Fixed
 - update documents.
 - fix: storage: reduce write IOs for permanent queue.
-
 
 ## [1.0.15] - 2018-04-05
 ### Changed
@@ -188,3 +218,4 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [1.0.0-b3] - 2015-06-30
 ## [1.0.0-b2] - 2015-06-24
 ## [1.0.0-b1] - 2015-06-24
+
