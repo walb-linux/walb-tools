@@ -4,7 +4,7 @@
 
 Walb-tools are backup and replication software for walb devices.
 WalB kernel device driver is available here:
-[walb repository on GitHub](https://github.com/starpos/walb/)
+[walb repository on GitHub](https://github.com/walb-linux/walb-driver/)
 
 Walb-tools mainly consists of three servers storage/proxy/archive,
 their controller walbc, and walb device controller wdevc.
