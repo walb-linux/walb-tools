@@ -16,8 +16,9 @@ inline void c2xGetStrVecClient(protocol::ClientParams &p)
 {
     const char *const FUNC = __func__;
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
-    protocol::recvValueAndPut(p.sock, protocol::StringVecType, FUNC);
+    protocol::recvValueAndCloseAndPut(p.sock, protocol::StringVecType, FUNC);
 }
+
 
 /**
  * For storage:

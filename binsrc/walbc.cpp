@@ -182,45 +182,46 @@ struct CommandInfo {
     protocol::ClientHandler handler;
     void (*setup)(cybozu::Option&);
     void (*verify)(const StrVec&);
+    bool supportsRetry;
     const char *help;
 };
 const CommandInfo g_cmdTbl[] = {
-    { statusCN, c2xGetStrVecClient, setupStrVec, verifyVolIdOrAllParam, "print human-readable status." },
-    { initVolCN, c2xInitVolClient, setupInitVol, verifyInitVolParam, "initialize a volume." },
-    { clearVolCN, c2xClearVolClient, setupVolId, verifyVolIdParam, "clear a volume." },
-    { resetVolCN, c2xResetVolClient, setupResetVol, verifyResetVolParam, "reset a volume in a server." },
-    { fullBkpCN, c2sBackupClient, setupBkp, verifyBackupParam, "execute full-backup." },
-    { hashBkpCN, c2sBackupClient, setupBkp, verifyBackupParam, "execute hash-backup." },
-    { restoreCN, c2aRestoreClient, setupVolIdGid, verifyRestoreParam, "restore a volume in an archive server." },
-    { delRestoredCN, c2aDelRestoredClient, setupVolIdGid, verifyDelRestoredParam, "delete a restored volume." },
-    { delColdCN, c2aDelColdClient, setupVolIdGid, verifyDelColdParam, "delete a cold volume." },
-    { startCN, c2xStartClient, setupStart, verifyStartParam, "start a volume in a server." },
-    { stopCN, c2xStopClient, setupStop, verifyStopParam, "stop a volume in a server." },
-    { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, verifyArchiveInfoParam, "control archive information in a proxy." },
-    { snapshotCN, c2sSnapshotClient, setupVolId, verifyVolIdParam, "take a snapshot in a storage." },
-    { disableSnapshotCN, c2aDisableSnapshot, setupDisableSnapshot, verifyChangeSnapshotParam, "disable a snapshot in an archive." },
-    { enableSnapshotCN, c2aEnableSnapshot, setupEnableSnapshot, verifyChangeSnapshotParam, "enable a snapshot in an archive." },
-    { replicateCN, c2aReplicateClient, setupReplicate, verifyReplicateParam, "replicate a volume from an archive to another archive." },
-    { applyCN, c2aApplyClient, setupVolIdGid, verifyApplyParam, "apply old wdiff files to the base image of a volume in an archive." },
-    { mergeCN, c2aMergeClient, setupMerge, verifyMergeParam, "merge wdiff files for a volume in an archive." },
-    { resizeCN, c2xResizeClient, setupResize, verifyResizeParam, "resize a volume in a storage or an archive." },
-    { kickCN, c2xKickClient, setupKick, verifyKickParam, "kick background tasks if necessary." },
-    { setFullScanBpsCN, c2sSetFullScanBpsClient, setupSetFullScanBps, verifySetFullScanBps, "set max full scan bytes per second parameter." },
-    { blockHashCN, c2aBlockHashClient, setupVirtualFullScan, verifyVirtualFullScanParam, "calculate block hash of a volume in an archive." },
-    { virtualFullScanCN, c2aVirtualFullScanClient, setupVirtualFullScanCmd, verifyVirtualFullScanCmdParam, "virtual full scan of a volume in an archive." },
-    { getCN, c2xGetClient, setupGet, verifyNoneParam, "get some information from a server." },
-    { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, "execute a command-line at a server's side." },
-    { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, "shutdown a server process." },
-    { sleepCN, protocol::sleepClient, setupSleep, verifySleepParam, "sleep specified seconds. (for debug and test)" },
-    { versionCN, protocol::versionClient, setupNone, verifyNoneParam, "get version string and other description." },
-    { gcDiffCN, c2aGarbageCollectDiffClient, setupVolId, verifyVolIdParam, "garbage collect diffs." },
-    { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, "reload metadata of a volue in an archive (for debug)." },
-    { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, "set uuid for a volume in an archive (for debug)." },
-    { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, "set state for a volume in an archive (for debug)." },
-    { dbgSetBaseCN, c2aSetBaseClient, setupSetState, verifySetBaseParam, "set base(meta-state) for a volume in an archive (for debug)." },
-    { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderClient, setupVolIdLsid, verifyDumpLogpackHeader, "dump a logpack header block(for debug)." },
+    { statusCN, c2xGetStrVecClient, setupStrVec, verifyVolIdOrAllParam, true, "print human-readable status." },
+    { initVolCN, c2xInitVolClient, setupInitVol, verifyInitVolParam, false, "initialize a volume." },
+    { clearVolCN, c2xClearVolClient, setupVolId, verifyVolIdParam, false, "clear a volume." },
+    { resetVolCN, c2xResetVolClient, setupResetVol, verifyResetVolParam, false, "reset a volume in a server." },
+    { fullBkpCN, c2sBackupClient, setupBkp, verifyBackupParam, false, "execute full-backup." },
+    { hashBkpCN, c2sBackupClient, setupBkp, verifyBackupParam, false, "execute hash-backup." },
+    { restoreCN, c2aRestoreClient, setupVolIdGid, verifyRestoreParam, false, "restore a volume in an archive server." },
+    { delRestoredCN, c2aDelRestoredClient, setupVolIdGid, verifyDelRestoredParam, false, "delete a restored volume." },
+    { delColdCN, c2aDelColdClient, setupVolIdGid, verifyDelColdParam, false, "delete a cold volume." },
+    { startCN, c2xStartClient, setupStart, verifyStartParam, false, "start a volume in a server." },
+    { stopCN, c2xStopClient, setupStop, verifyStopParam, false, "stop a volume in a server." },
+    { archiveInfoCN, c2pArchiveInfoClient, setupArchiveInfo, verifyArchiveInfoParam, false, "control archive information in a proxy." },
+    { snapshotCN, c2sSnapshotClient, setupVolId, verifyVolIdParam, false, "take a snapshot in a storage." },
+    { disableSnapshotCN, c2aDisableSnapshot, setupDisableSnapshot, verifyChangeSnapshotParam, false, "disable a snapshot in an archive." },
+    { enableSnapshotCN, c2aEnableSnapshot, setupEnableSnapshot, verifyChangeSnapshotParam, false, "enable a snapshot in an archive." },
+    { replicateCN, c2aReplicateClient, setupReplicate, verifyReplicateParam, false, "replicate a volume from an archive to another archive." },
+    { applyCN, c2aApplyClient, setupVolIdGid, verifyApplyParam, false, "apply old wdiff files to the base image of a volume in an archive." },
+    { mergeCN, c2aMergeClient, setupMerge, verifyMergeParam, false, "merge wdiff files for a volume in an archive." },
+    { resizeCN, c2xResizeClient, setupResize, verifyResizeParam, false, "resize a volume in a storage or an archive." },
+    { kickCN, c2xKickClient, setupKick, verifyKickParam, false, "kick background tasks if necessary." },
+    { setFullScanBpsCN, c2sSetFullScanBpsClient, setupSetFullScanBps, verifySetFullScanBps, false, "set max full scan bytes per second parameter." },
+    { blockHashCN, c2aBlockHashClient, setupVirtualFullScan, verifyVirtualFullScanParam, false, "calculate block hash of a volume in an archive." },
+    { virtualFullScanCN, c2aVirtualFullScanClient, setupVirtualFullScanCmd, verifyVirtualFullScanCmdParam, false, "virtual full scan of a volume in an archive." },
+    { getCN, c2xGetClient, setupGet, verifyNoneParam, true, "get some information from a server." },
+    { execCN, c2xGetStrVecClient, setupStrVec, verifyNoneParam, false, "execute a command-line at a server's side." },
+    { shutdownCN, protocol::shutdownClient, setupShutdown, verifyShutdownParam, false, "shutdown a server process." },
+    { sleepCN, protocol::sleepClient, setupSleep, verifySleepParam, false, "sleep specified seconds. (for debug and test)" },
+    { versionCN, protocol::versionClient, setupNone, verifyNoneParam, false, "get version string and other description." },
+    { gcDiffCN, c2aGarbageCollectDiffClient, setupVolId, verifyVolIdParam, false, "garbage collect diffs." },
+    { dbgReloadMetadataCN, c2aReloadMetadataClient, setupVolId, verifyVolIdParam, false, "reload metadata of a volue in an archive (for debug)." },
+    { dbgSetUuidCN, c2aSetUuidClient, setupUuid, verifySetUuidParam, false, "set uuid for a volume in an archive (for debug)." },
+    { dbgSetStateCN, c2aSetStateClient, setupSetState, verifySetStateParam, false, "set state for a volume in an archive (for debug)." },
+    { dbgSetBaseCN, c2aSetBaseClient, setupSetState, verifySetBaseParam, false, "set base(meta-state) for a volume in an archive (for debug)." },
+    { dbgDumpLogpackHeaderCN, c2sDumpLogpackHeaderClient, setupVolIdLsid, verifyDumpLogpackHeader, false, "dump a logpack header block(for debug)." },
 #ifndef NDEBUG
-    { debugCN, c2xDebugClient, setupStrVec, verifyNoneParam, "debug command (this is empty command for release)" },
+    { debugCN, c2xDebugClient, setupStrVec, verifyNoneParam, false, "debug command (this is empty command for release)" },
 #endif
 };
 
@@ -244,6 +245,7 @@ struct Option
     std::string ctrlId;
     bool isDebug;
     size_t socketTimeout;
+    size_t nrRetry;
     void setup1stOption() {
         const std::string desc = getDescription("walb server controller");
         opt1.setDescription(desc);
@@ -273,8 +275,23 @@ struct Option
         opt1.appendOpt(&socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "Socket timeout [sec].");
         const std::string hostName = cybozu::net::getHostName();
         opt1.appendOpt(&ctrlId, hostName, "id", "controller identfier");
+        opt1.appendOpt(&nrRetry, SIZE_MAX, "retry", "retry count");
 
         opt1.appendHelp("h");
+    }
+    void setNrRetry() {
+        assert(pci != nullptr);
+        if (pci->supportsRetry) {
+            if (nrRetry == SIZE_MAX) {
+                nrRetry = DEFAULT_CONTROLLER_RETRY_COUNT;
+            }
+        } else {
+            if (nrRetry != SIZE_MAX) {
+                throw cybozu::Exception("The command does not support -retry option") << pci->name;
+            }
+            nrRetry = 0;
+        }
+        assert(nrRetry != SIZE_MAX);
     }
     int parse1(int argc, char *argv[]) {
         setup1stOption();
@@ -284,6 +301,7 @@ struct Option
         const std::string cmdName = argv[cmdPos - 1];
         pci = getCommand(cmdName);
         if (pci == nullptr) return 0;
+        setNrRetry();
         pci->setup(opt2);
         opt2.appendHelp("h");
         return cmdPos;
@@ -308,12 +326,22 @@ struct Option
         util::setLogSetting("-", isDebug);
         pci->verify(params);
 
-        cybozu::Socket sock;
-        util::connectWithTimeout(sock, cybozu::SocketAddr(addr, port), socketTimeout);
-        std::string serverId = protocol::run1stNegotiateAsClient(sock, ctrlId, pci->name);
-        ProtocolLogger logger(ctrlId, serverId);
-        protocol::ClientParams clientParams(sock, logger, params);
-        pci->handler(clientParams);
+        for (size_t i = 0; i < nrRetry + 1; i++) {
+            try {
+                cybozu::Socket sock;
+                util::connectWithTimeout(sock, cybozu::SocketAddr(addr, port), socketTimeout);
+                std::string serverId = protocol::run1stNegotiateAsClient(sock, ctrlId, pci->name);
+                ProtocolLogger logger(ctrlId, serverId);
+                protocol::ClientParams clientParams(sock, logger, params);
+                pci->handler(clientParams);
+                break; // succeeded.
+            } catch (std::exception& e) {
+                if (i == nrRetry) throw;
+                ::fprintf(::stderr, "error: %s\n", e.what());
+                util::sleepMs(100);
+                ::fprintf(::stderr, "retry %zu\n", i + 1);
+            }
+        }
         return 0;
     }
 };

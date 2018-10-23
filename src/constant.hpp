@@ -67,4 +67,6 @@ const size_t INDEXED_DIFF_CACHE_SIZE = 32 * MEBI;
 
 const double DEFAULT_LOCK_TIME_THRESHOLD = 10.0;
 
+const size_t DEFAULT_CONTROLLER_RETRY_COUNT = 2;
+
 } // walb

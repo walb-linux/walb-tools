@@ -221,7 +221,7 @@ void c2xGetClient(protocol::ClientParams &p)
     const protocol::GetCommandInfo &info = protocol::getGetCommandInfo(targetName, getGetCommandInfoMap(), FUNC);
     info.verify(p.params);
     protocol::sendStrVec(p.sock, p.params, 0, FUNC, msgOk);
-    protocol::recvValueAndPut(p.sock, info.valueType, FUNC);
+    protocol::recvValueAndCloseAndPut(p.sock, info.valueType, FUNC);
 }
 
 } // namespace walb

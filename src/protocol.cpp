@@ -301,6 +301,7 @@ const GetCommandInfo &getGetCommandInfo(const std::string &name, const GetComman
     return it->second;
 }
 
+
 namespace local {
 
 template <typename T>
@@ -316,21 +317,35 @@ inline T recvValue(cybozu::Socket &sock)
 } // namespace local
 
 
-void recvValueAndPut(cybozu::Socket &sock, ValueType valType, const char *msg)
+void recvValueAndCloseAndPut(cybozu::Socket &sock, ValueType valType, const char *msg)
 {
-    packet::Packet pkt(sock);
     switch (valType) {
     case protocol::SizeType:
-        std::cout << local::recvValue<size_t>(sock) << std::endl;
+    {
+        size_t s = local::recvValue<size_t>(sock);
+        sock.close();
+        // do not throw from now.
+        std::cout << s << std::endl;
         return;
+    }
     case protocol::StringType:
-        std::cout << local::recvValue<std::string>(sock) << std::endl;
+    {
+        std::string s = local::recvValue<std::string>(sock);
+        sock.close();
+        // do not throw from now.
+        std::cout << s << std::endl;
         return;
+    }
     case protocol::StringVecType:
-        for (const std::string &s : local::recvValue<StrVec>(sock)) {
+    {
+        StrVec v = local::recvValue<StrVec>(sock);
+        sock.close();
+        // do not throw from now.
+        for (const std::string &s : v) {
             std::cout << s << std::endl;
         }
         return;
+    }
     default:
         throw cybozu::Exception(msg) << "bad ValueType" << int(valType);
     }

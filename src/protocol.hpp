@@ -355,7 +355,7 @@ struct GetCommandInfo
 using GetCommandInfoMap = std::map<std::string, GetCommandInfo>;
 
 const GetCommandInfo &getGetCommandInfo(const std::string &name, const GetCommandInfoMap &infoM, const char *msg);
-void recvValueAndPut(cybozu::Socket &sock, ValueType valType, const char *msg);
+void recvValueAndCloseAndPut(cybozu::Socket &sock, ValueType valType, const char *msg);
 
 
 struct GetCommandParams
