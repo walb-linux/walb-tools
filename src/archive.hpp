@@ -2,6 +2,8 @@
 #include "protocol.hpp"
 #include "archive_vol_info.hpp"
 #include <algorithm>
+#include <atomic>
+#include <type_traits>
 #include <snappy.h>
 #include "linux/walb/block_size.h"
 #include "walb_diff_virt.hpp"
@@ -27,7 +29,110 @@ namespace walb {
  */
 struct ArchiveVolState
 {
-    std::recursive_mutex mu;
+private:
+    std::recursive_mutex mu_;
+public:
+    static std::atomic<double>& lockTimeThreshold() {
+        static std::atomic<double> value(DEFAULT_LOCK_TIME_THRESHOLD);
+        return value;
+    }
+    /**
+     * This is a wrapper of UniqueLock
+     * to track lock wait time and log if it exceeds a threshold.
+     */
+    class Lock {
+        UniqueLock ul_;
+        std::string context_;
+        cybozu::Stopwatch stopwatch_;
+        size_t count_;
+    public:
+        Lock() = default;
+        /**
+         * args will be concatinated into context_.
+         */
+        template <typename... Args>
+        Lock(std::recursive_mutex& mu, Args&&... args)
+            : ul_(mu, std::defer_lock), context_(), stopwatch_(false), count_(0) {
+            lock(args...);
+        }
+        ~Lock() {
+            unlock();
+        }
+        Lock(const Lock&) = delete;
+        Lock(Lock&& rhs) noexcept : Lock() {
+            swap(rhs);
+        }
+        Lock& operator=(const Lock&) = delete;
+        Lock& operator=(Lock&& rhs) noexcept {
+            swap(rhs);
+            return *this;
+        }
+        void swap(Lock& rhs) noexcept {
+            std::swap(ul_, rhs.ul_);
+            std::swap(context_, rhs.context_);
+            std::swap(stopwatch_, rhs.stopwatch_);
+            std::swap(count_, rhs.count_);
+        }
+
+        template <typename T>
+        void addContext(T&& t) {
+            std::stringstream ss;
+            if (!context_.empty()) ss << ",";
+            ss << std::forward<T>(t);
+            context_ += ss.str();
+        }
+        template <typename Head, typename... Tail>
+        void addContext(Head&& head, Tail&&... tail) {
+            addContext<Head>(std::forward<Head>(head));
+            addContext<Tail...>(std::forward<Tail>(tail)...);
+        }
+        void addContext() {}
+        void resetContext() { context_.clear(); }
+
+        template <typename... Args>
+        void lock(Args&&... args) {
+            resetContext();
+            addContext(std::forward<Args>(args)...);
+            lockDetail();
+        }
+        void lock() {
+            lockDetail();
+        }
+        void unlock() {
+            unlockDetail();
+        }
+    private:
+        void lockDetail() {
+            if (ul_.owns_lock()) return;
+            count_++;
+            stopwatch_.reset();
+            ul_.lock();
+            putLogIfNecessary("Lock waiting time exceeds threshold", stopwatch_.get());
+        }
+        void unlockDetail() {
+            if (!ul_.owns_lock()) return;
+            ul_.unlock();
+            putLogIfNecessary("Lock holding time exceeds threshold", stopwatch_.get());
+        }
+        void putLogIfNecessary(const char* description, double elapsedSec) {
+            if (elapsedSec > lockTimeThreshold().load()) {
+                LOGs.warn() << description
+                            << util::getElapsedTimeStr(elapsedSec)
+                            << context_ << count_;
+            }
+        }
+    };
+
+    template <typename... Args>
+    Lock lock(Args&&... args) {
+        return Lock(mu_, args...);
+    }
+    Lock lock() {
+        return Lock(mu_, volId);
+    }
+
+    std::string volId;
+
     std::atomic<int> stopState;
     StateMachine sm;
     ActionCounters ac;
@@ -60,35 +165,36 @@ private:
     MetaState latestMetaSt;
 public:
 
-    explicit ArchiveVolState(const std::string& volId)
-        : stopState(NotStopping)
-        , sm(mu)
-        , ac(mu)
+    explicit ArchiveVolState(const std::string& volId0)
+        : volId(volId0)
+        , stopState(NotStopping)
+        , sm(mu_)
+        , ac(mu_)
         , diffMgr()
         , lvCache()
         , progressLb(0)
         , lastSyncTime(0)
         , lastWdiffReceivedTime(0) {
         sm.init(statePairTbl);
-        initInner(volId);
+        initInner(volId0);
     }
     void updateLastSyncTime() {
-        UniqueLock ul(mu);
+        Lock lk = lock(__func__, volId);
         lastSyncTime = ::time(0);
     }
     void updateLastWdiffReceivedTime() {
-        UniqueLock ul(mu);
+        Lock lk = lock(__func__, volId);
         lastWdiffReceivedTime = ::time(0);
     }
     void setLatestMetaState(const MetaState& metaSt) {
         if (metaSt.isApplying) {
             throw cybozu::Exception(__func__) << "bad metaSt" << metaSt;
         }
-        UniqueLock ul(mu);
+        Lock lk = lock(__func__, volId, metaSt);
         latestMetaSt = metaSt;
     }
     MetaState getLatestMetaState() {
-        UniqueLock ul(mu);
+        Lock lk = lock(__func__, volId);
         return latestMetaSt;
     }
 private:
@@ -321,13 +427,13 @@ bool runFullReplClient(
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger);
 bool runFullReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, const cybozu::Uuid &archiveUuid, UniqueLock &ul, Logger &logger);
+    packet::Packet &pkt, const cybozu::Uuid &archiveUuid, ArchiveVolState::Lock &lk, Logger &logger);
 bool runHashReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, uint64_t bulkLb, const MetaDiff &diff, Logger &logger);
 bool runHashReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger);
+    packet::Packet &pkt, ArchiveVolState &lk, const MetaState &metaSt, Logger &logger);
 bool runNoMergeDiffReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, Logger &logger);
@@ -336,13 +442,13 @@ bool runDiffReplClient(
     packet::Packet &pkt, const MetaSnap &srvLatestSnap, const CompressOpt &cmpr, uint64_t wdiffMergeSize, Logger &logger);
 bool runDiffReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger);
+    packet::Packet &pkt, ArchiveVolState &lk, const MetaState &metaSt, Logger &logger);
 bool runResyncReplClient(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo, const std::string &dstId,
     packet::Packet &pkt, uint64_t bulkLb, Logger &logger);
 bool runResyncReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, Logger &logger);
+    packet::Packet &pkt, ArchiveVolState &lk, Logger &logger);
 
 enum {
     DO_FULL_SYNC = 0,
@@ -352,7 +458,7 @@ enum {
 
 bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const HostInfoForRepl &hostInfo,
                        bool isSize, uint64_t param, const std::string &dstId, Logger &logger);
-bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLock &ul, Logger &logger);
+bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, ArchiveVolState &lk, Logger &logger);
 
 StrVec getAllStatusAsStrVec();
 StrVec getVolStatusAsStrVec(const std::string &volId);
@@ -387,7 +493,7 @@ inline MetaDiffVec getAllWdiffDetail(protocol::GetCommandParams &p)
     const VolIdAndGidRangeParam param = parseVolIdAndGidRangeParamForGet(p.params);
 
     ArchiveVolState &volSt = getArchiveVolState(param.volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volSt.volId);
     return volSt.diffMgr.getAll(param.gid[0], param.gid[1]);
 }
 

@@ -65,4 +65,6 @@ const size_t DEFAULT_IMPLICIT_SNAPSHOT_INTERVAL_SEC = 10;
 
 const size_t INDEXED_DIFF_CACHE_SIZE = 32 * MEBI;
 
+const double DEFAULT_LOCK_TIME_THRESHOLD = 10.0;
+
 } // walb

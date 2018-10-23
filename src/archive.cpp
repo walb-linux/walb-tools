@@ -240,7 +240,7 @@ bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     {
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(__func__, volId, gid);
         volInfo.recoverColdToBaseIfNecessary();
     }
 
@@ -248,7 +248,7 @@ bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
     MetaState st0 = volInfo.getMetaStateForApply(gid, useCold);
 
     if (useCold) {
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(__func__, volId, gid);
         const uint64_t coldGid = st0.snapB.gidB;
         LOGs.info() << "make cold image to base: start" << volId << coldGid;
         volInfo.makeColdToBase(coldGid);
@@ -281,7 +281,7 @@ bool applyDiffsToVolume(const std::string& volId, uint64_t gid)
 void verifyNotApplying(const std::string &volId)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
 
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (volInfo.getMetaState().isApplying) {
@@ -295,7 +295,7 @@ void verifyNotApplying(const std::string &volId)
 void verifyMergeable(const std::string &volId, uint64_t gid)
 {
     ArchiveVolState& volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId, gid);
 
     MetaDiffVec diffV = volSt.diffMgr.getMergeableDiffList(gid);
     if (diffV.size() < 2) {
@@ -583,7 +583,7 @@ void dbgVerifyLatestMetaState(const std::string &volId)
     unusedVar(volId);
 #else
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
     const std::string state = volSt.sm.get();
     if (!isStateIn(state, aActiveOrStopped)) return;
 
@@ -616,7 +616,7 @@ void backupServer(protocol::ServerParams &p, bool isFull)
 
     ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, isFull ? "full" : "hash", volId);
     StateMachine &sm = volSt.sm;
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
@@ -649,7 +649,7 @@ void backupServer(protocol::ServerParams &p, bool isFull)
 
     const std::string &stPass = isFull ? atFullSync : atHashSync;
     StateMachineTransaction tran(sm, stFrom, stPass, FUNC);
-    ul.unlock();
+    lk.unlock();
 
     cybozu::Stopwatch stopwatch;
     const std::string st = volInfo.getState();
@@ -731,11 +731,11 @@ void delSnapshotServer(protocol::ServerParams &p, bool isCold)
         const uint64_t gid = param.gid;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, gid);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
         verifyActionNotRunning(volSt.ac, aActionOnLvm, FUNC);
-        ul.unlock();
+        lk.unlock();
 
         delSnapshot(volId, gid, isCold);
 
@@ -812,7 +812,7 @@ bool runFullReplClient(
 
 bool runFullReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, const cybozu::Uuid &archiveUuid, UniqueLock &ul, Logger &logger)
+    packet::Packet &pkt, const cybozu::Uuid &archiveUuid, ArchiveVolState::Lock &lk, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -847,7 +847,7 @@ bool runFullReplServer(
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aSyncReady, atFullSync, FUNC);
-    ul.unlock();
+    lk.unlock();
     volInfo.setArchiveUuid(archiveUuid);
     volInfo.prepareBaseImageForFullRepl(sizeLb, startLb);
     const std::string lvPath = volSt.lvCache.getLv().path().str();
@@ -859,7 +859,7 @@ bool runFullReplServer(
         logger.warn() << "full-repl-server force-stopped" << volId;
         return false;
     }
-    ul.lock();
+    lk.lock();
     volInfo.setMetaState(metaSt);
     volSt.setLatestMetaState(metaSt);
     dbgVerifyLatestMetaState(volId);
@@ -921,7 +921,7 @@ bool runHashReplClient(
 
 bool runHashReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger)
+    packet::Packet &pkt, ArchiveVolState::Lock &lk, const MetaState &metaSt, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -958,7 +958,7 @@ bool runHashReplServer(
                   << bulkLb << cmprOpt << diff;
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
-    ul.unlock();
+    lk.unlock();
     VirtualFullScanner virt;
     archive_local::prepareVirtualFullScanner(virt, volSt, volInfo, sizeLb, diff.snapB);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
@@ -970,7 +970,7 @@ bool runHashReplServer(
     }
     diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
     tmpFile.save(volInfo.getDiffPath(diff).str());
-    ul.lock();
+    lk.lock();
     volSt.diffMgr.add(diff);
     volSt.setLatestMetaState(apply(metaSt, diff));
     dbgVerifyLatestMetaState(volId);
@@ -1090,7 +1090,7 @@ bool runDiffReplClient(
 
 bool runDiffReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, const MetaState &metaSt, Logger &logger)
+    packet::Packet &pkt, ArchiveVolState::Lock &lk, const MetaState &metaSt, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb;
@@ -1117,7 +1117,7 @@ bool runDiffReplServer(
 
     cybozu::Stopwatch stopwatch;
     StateMachineTransaction tran(volSt.sm, aArchived, atReplSync, FUNC);
-    ul.unlock();
+    lk.unlock();
     const cybozu::FilePath fPath = volInfo.getDiffPath(diff);
     cybozu::TmpFile tmpFile(volInfo.volDir.str());
     cybozu::util::File fileW(tmpFile.fd());
@@ -1135,7 +1135,7 @@ bool runDiffReplServer(
     pkt.flush();
     volSt.updateLastWdiffReceivedTime();
     const size_t nrGc = volInfo.gcDiffsRange(diff.snapB.gidB, diff.snapE.gidB);
-    ul.lock();
+    lk.lock();
     tran.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.info() << "diff-repl-server done" << volId << diff << elapsed << nrGc;
@@ -1193,7 +1193,7 @@ bool runResyncReplClient(
 
 bool runResyncReplServer(
     const std::string &volId, ArchiveVolState &volSt, ArchiveVolInfo &volInfo,
-    packet::Packet &pkt, UniqueLock &ul, Logger &logger)
+    packet::Packet &pkt, ArchiveVolState::Lock &lk, Logger &logger)
 {
     const char *const FUNC = __func__;
     uint64_t sizeLb, bulkLb;
@@ -1236,7 +1236,7 @@ bool runResyncReplServer(
         tran1.commit(aSyncReady);
     }
     StateMachineTransaction tran2(volSt.sm, aSyncReady, atResync, FUNC);
-    ul.unlock();
+    lk.unlock();
 
     volInfo.clearAllSnapLv();
     volInfo.clearAllWdiffs();
@@ -1261,7 +1261,7 @@ bool runResyncReplServer(
     volInfo.setArchiveUuid(archiveUuid);
     volSt.updateLastSyncTime();
     volInfo.setState(aArchived);
-    ul.lock();
+    lk.lock();
     tran2.commit(aArchived);
     const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
     logger.info() << "resync-repl-server done" << volId << metaSt << elapsed;
@@ -1356,7 +1356,7 @@ bool runReplSyncClient(const std::string &volId, cybozu::Socket &sock, const Hos
 /**
  * ul is locked at the function beginning.
  */
-bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLock &ul, Logger &logger)
+bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, ArchiveVolState::Lock &lk, Logger &logger)
 {
     const char *const FUNC = __func__;
     packet::Packet pkt(sock);
@@ -1393,11 +1393,11 @@ bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLoc
     pkt.flush();
 
     if (kind == DO_FULL_SYNC) {
-        if (!runFullReplServer(volId, volSt, volInfo, pkt, archiveUuid, ul, logger)) {
+        if (!runFullReplServer(volId, volSt, volInfo, pkt, archiveUuid, lk, logger)) {
             return false;
         }
     } else if (kind == DO_RESYNC) {
-        if (!runResyncReplServer(volId, volSt, volInfo, pkt, ul, logger)) {
+        if (!runResyncReplServer(volId, volSt, volInfo, pkt, lk, logger)) {
             return false;
         }
     } else {
@@ -1413,9 +1413,9 @@ bool runReplSyncServer(const std::string &volId, cybozu::Socket &sock, UniqueLoc
         if (repl == ArchiveVolInfo::DONT_REPL) break;
 
         if (repl == ArchiveVolInfo::DO_HASH_REPL) {
-            if (!runHashReplServer(volId, volSt, volInfo, pkt, ul, latestMetaSt, logger)) return false;
+            if (!runHashReplServer(volId, volSt, volInfo, pkt, lk, latestMetaSt, logger)) return false;
         } else {
-            if (!runDiffReplServer(volId, volSt, volInfo, pkt, ul, latestMetaSt, logger)) return false;
+            if (!runDiffReplServer(volId, volSt, volInfo, pkt, lk, latestMetaSt, logger)) return false;
         }
     }
     packet::Ack(sock).sendFin();
@@ -1445,7 +1445,7 @@ StrVec getAllStatusAsStrVec()
     v.push_back("-----Volume-----");
     for (const std::string &volId : ga.stMap.getKeyList()) {
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
         std::string s;
         const std::string state = volSt.sm.get();
         if (state == aClear) continue;
@@ -1489,7 +1489,7 @@ StrVec getVolStatusAsStrVec(const std::string &volId)
     auto fmt = cybozu::util::formatString;
     StrVec v;
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
 
     const std::string &state = volSt.sm.get();
     v.push_back(fmt("hostType archive"));
@@ -1527,7 +1527,7 @@ void getApplicableDiffList(protocol::GetCommandParams &p)
     const std::string &volId = param.volId;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
 
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const MetaState metaSt = volInfo.getMetaState();
@@ -1536,7 +1536,7 @@ void getApplicableDiffList(protocol::GetCommandParams &p)
     for (const MetaDiff &diff : diffV) {
         v.push_back(formatMetaDiff("", diff));
     }
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, v);
 }
 
@@ -1546,11 +1546,11 @@ void existsDiff(protocol::GetCommandParams &p)
     const ExistsDiffParam param = parseExistsDiffParamForGet(p.params);
 
     ArchiveVolState &volSt = getArchiveVolState(param.volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volSt.volId);
     verifyStateIn(volSt.sm.get(), aActiveOrStopped, __func__);
 
     const bool s = volSt.diffMgr.exists(param.diff);
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, s);
 }
 
@@ -1559,10 +1559,10 @@ void existsBaseImage(protocol::GetCommandParams &p)
 {
     const std::string volId = parseVolIdParam(p.params, 1);
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const bool s = volInfo.lvExists();
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, s);
 }
 
@@ -1578,13 +1578,13 @@ void getNumAction(protocol::GetCommandParams &p)
         throw cybozu::Exception(FUNC) << "no such action" << action;
     }
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, action);
     const std::string st = volSt.sm.get();
     if (st == aClear) {
         throw cybozu::Exception(FUNC) << "bad state" << volId << action << st;
     }
     const size_t num = volSt.ac.getValue(action);
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, num);
     p.logger.debug() << "get num-action succeeded" << volId;
 }
@@ -1595,7 +1595,7 @@ void getAllActions(protocol::GetCommandParams &p)
     StrVec v;
     for (const std::string& volId : getVolIdList()) {
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
         if (!isStateIn(volSt.sm.get(), aActive)) continue;
         const bool useTime = true;
         v.push_back(formatActions(volId.c_str(), volSt.ac, allActionVec, useTime));
@@ -1610,11 +1610,11 @@ void getSnapshot(protocol::GetCommandParams &p, bool isCold)
     const std::string volId = parseVolIdParam(p.params, 1);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, isCold);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
     const StrVec strV = archive_local::listSnapshot(volId, isCold);
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, strV);
 
     std::string msg = cybozu::util::formatString(
@@ -1630,14 +1630,14 @@ void getRestorable(protocol::GetCommandParams &p)
     const std::string &volId = param.volId;
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
     verifyNotStopping(volSt.stopState, volId, FUNC);
     const std::string st = volSt.sm.get();
     StrVec strV;
     if (isStateIn(st, aActive)) {
         strV = archive_local::listRestorable(volId, param.isAll);
     }
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, strV);
     p.logger.debug() << "get restorable succeeded" << volId;
 }
@@ -1649,14 +1649,14 @@ void getUuidDetail(protocol::GetCommandParams &p, bool isArchive)
     const std::string volId = parseVolIdParam(p.params, 1);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, isArchive);
     const std::string st = volSt.sm.get();
     if (!isStateIn(st, aActive)) {
         throw cybozu::Exception(FUNC) << "bad state" << volId << st;
     }
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     const cybozu::Uuid uuid = isArchive ? volInfo.getArchiveUuid() : volInfo.getUuid();
-    ul.unlock();
+    lk.unlock();
     const std::string uuidStr = uuid.str();
     protocol::sendValueAndFin(p, uuidStr);
     p.logger.debug()
@@ -1668,7 +1668,7 @@ void getUuidDetail(protocol::GetCommandParams &p, bool isArchive)
 static bool getMetaState(const std::string& volId, MetaState &metaSt, bool throwError, const std::string &errMsg = "")
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
     const std::string st = volSt.sm.get();
     if (!isStateIn(st, aActive)) {
         if (throwError) {
@@ -1838,13 +1838,13 @@ void getVolSize(protocol::GetCommandParams &p)
     const std::string volId = parseVolIdParam(p.params, 1);
 
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
     if (!volInfo.lvExists()) {
         throw cybozu::Exception(FUNC) << "base image does not exist" << volId;
     }
     const uint64_t sizeLb = volSt.lvCache.getLv().sizeLb();
-    ul.unlock();
+    lk.unlock();
     protocol::sendValueAndFin(p, sizeLb);
     p.logger.debug() << "get vol-size succeeded" << volId << sizeLb;
 }
@@ -1853,7 +1853,7 @@ void getVolSize(protocol::GetCommandParams &p)
 MetaState getMetaStateDetail(const std::string &volId, bool isApplying, uint64_t gid)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId, isApplying, gid);
     ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
 
     const MetaState metaSt = volInfo.getMetaState();
@@ -1870,7 +1870,7 @@ MetaState getMetaStateDetail(const std::string &volId, bool isApplying, uint64_t
 bool getLatestMetaState(const std::string &volId, MetaState &metaSt)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
     const std::string state = volSt.sm.get();
     if (!isStateIn(state, aActiveOrStopped)) return false;
 
@@ -1961,7 +1961,7 @@ void getHandlerStat(protocol::GetCommandParams &p)
 
 void ArchiveVolState::initInner(const std::string& volId)
 {
-    UniqueLock ul(mu);
+    Lock lk = lock(__func__, volId);
     ArchiveVolInfo volInfo(ga.baseDirStr, volId, ga.volumeGroup, ga.thinpool, diffMgr, lvCache);
     if (volInfo.existsVolDir()) {
         const std::string st = volInfo.getState();
@@ -1981,7 +1981,7 @@ void verifyAndRecoverArchiveVol(const std::string& volId)
 {
     const char *const FUNC = __func__;
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
     const std::string st = volSt.sm.get();
 
     if (st == aClear) return;
@@ -2027,7 +2027,7 @@ void verifyAndRecoverArchiveVol(const std::string& volId)
 void gcArchiveVol(const std::string& volId)
 {
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(__func__, volId);
     const std::string st = volSt.sm.get();
 
     if (!isStateIn(st, aActive)) return;
@@ -2077,11 +2077,11 @@ void c2aInitVolServer(protocol::ServerParams &p)
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         StateMachineTransaction tran(volSt.sm, aClear, atInitVol, FUNC);
-        ul.unlock();
+        lk.unlock();
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.init();
         tran.commit(aSyncReady);
@@ -2103,14 +2103,14 @@ void c2aClearVolServer(protocol::ServerParams &p)
     try {
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
 
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         StateMachine &sm = volSt.sm;
         const std::string &currSt = sm.get(); // aStopped or aSyncReady
 
         StateMachineTransaction tran(sm, currSt, atClearVol, FUNC);
-        ul.unlock();
+        lk.unlock();
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.clear();
         getArchiveGlobal().remoteSnapshotManager.remove(volId);
@@ -2137,11 +2137,11 @@ void c2aStartServer(protocol::ServerParams &p)
     try {
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         StateMachineTransaction tran(volSt.sm, aStopped, atStart, FUNC);
-        ul.unlock();
+        lk.unlock();
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string st = volInfo.getState();
         if (st != aStopped) {
@@ -2182,10 +2182,10 @@ void c2aStopServer(protocol::ServerParams &p)
         }
         pkt.writeFin(msgAccept);
         sendErr = false;
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         StateMachine &sm = volSt.sm;
 
-        waitUntil(ul, [&]() {
+        waitUntil(lk, [&]() {
                 return isStateIn(sm.get(), aSteadyStates)
                     && volSt.ac.isAllZero(allActionVec);
             }, FUNC);
@@ -2194,7 +2194,7 @@ void c2aStopServer(protocol::ServerParams &p)
         verifyStateIn(sm.get(), {aArchived}, FUNC);
 
         StateMachineTransaction tran(sm, aArchived, atStop, FUNC);
-        ul.unlock();
+        lk.unlock();
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         const std::string fst = volInfo.getState();
         if (fst != aArchived) {
@@ -2232,7 +2232,7 @@ void c2aRestoreServer(protocol::ServerParams &p)
 
     ForegroundCounterTransaction foregroundTasksTran;
     ArchiveVolState &volSt = getArchiveVolState(volId);
-    UniqueLock ul(volSt.mu);
+    ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, gid);
     try {
         if (volSt.lvCache.hasRestored(gid)) {
             throw cybozu::Exception(FUNC) << "already restored" << volId << gid;
@@ -2250,7 +2250,7 @@ void c2aRestoreServer(protocol::ServerParams &p)
     pkt.writeFin(msgAccept);
 
     ActionCounterTransaction tran(volSt.ac, aaRestore);
-    ul.unlock();
+    lk.unlock();
     logger.info() << "restore started" << volId << gid;
     cybozu::Stopwatch stopwatch;
     if (!archive_local::restore(volId, gid)) {
@@ -2275,7 +2275,7 @@ void c2aReloadMetadataServer(protocol::ServerParams &p)
     try {
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
@@ -2315,7 +2315,7 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, diff);
         StateMachine &sm = volSt.sm;
         if (volId.empty()) {
             isErr = false;
@@ -2339,7 +2339,7 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
             }
             if (msg) {
                 logger.info() << FUNC << "rejected due to" << msg << volId;
-                ul.unlock();
+                lk.unlock();
                 pkt.writeFin(msg);
                 return;
             }
@@ -2353,14 +2353,14 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
         if (!volInfo.existsVolDir()) {
             const char *msg = msgArchiveNotFound;
             logger.info() << FUNC << "rejected due to" << msg << volId;
-            ul.unlock();
+            lk.unlock();
             pkt.writeFin(msg);
             return;
         }
         if (hostType == proxyHT && volInfo.getUuid() != uuid) {
             const char *msg = msgDifferentUuid;
             logger.info() << FUNC << "rejected due to" << msg << volId;
-            ul.unlock();
+            lk.unlock();
             pkt.writeFin(msg);
             return;
         }
@@ -2396,7 +2396,7 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
             }
             logger.info() << FUNC << "rejected due to"
                           << msg << volId << latestSnap << diff;
-            ul.unlock();
+            lk.unlock();
             pkt.writeFin(msg);
             return;
         }
@@ -2406,7 +2406,7 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
 
         // main procedure
         StateMachineTransaction tran(sm, aArchived, atWdiffRecv, FUNC);
-        ul.unlock();
+        lk.unlock();
         logger.debug() << "wdiff-transfer started" << volId;
         cybozu::Stopwatch stopwatch;
 
@@ -2421,13 +2421,13 @@ void p2aWdiffTransferServer(protocol::ServerParams &p)
         diff.dataSize = cybozu::FileStat(tmpFile.fd()).size();
         tmpFile.save(fPath.str());
 
-        ul.lock();
+        lk.lock();
         volSt.diffMgr.add(diff);
         volSt.setLatestMetaState(apply(latestMetaSt, diff));
         archive_local::dbgVerifyLatestMetaState(volId);
         tran.commit(aArchived);
         volSt.updateLastWdiffReceivedTime();
-        ul.unlock();
+        lk.unlock();
         packet::Ack(p.sock).sendFin();
         const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
         logger.debug() << "wdiff-transfer succeeded" << volId << elapsed;
@@ -2461,7 +2461,7 @@ void c2aReplicateServer(protocol::ServerParams &p)
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -2469,7 +2469,7 @@ void c2aReplicateServer(protocol::ServerParams &p)
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aaReplSync);
-        ul.unlock();
+        lk.unlock();
         cybozu::Socket aSock;
         std::string dstId;
         archive_local::runReplSync1stNegotiation(volId, hostInfo.addrPort, aSock, dstId);
@@ -2502,7 +2502,7 @@ void a2aReplSyncServer(protocol::ServerParams &p)
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -2515,11 +2515,11 @@ void a2aReplSyncServer(protocol::ServerParams &p)
 
         logger.info() << "replication as server started" << volId;
         cybozu::Stopwatch stopwatch;
-        if (!archive_local::runReplSyncServer(volId, p.sock, ul, logger)) {
+        if (!archive_local::runReplSyncServer(volId, p.sock, lk, logger)) {
             logger.warn() << FUNC << "replication as server force stopped" << volId;
             return;
         }
-        ul.unlock();
+        lk.unlock();
         const std::string elapsed = util::getElapsedTimeStr(stopwatch.get());
         logger.info() << "replication as server succeeded" << volId << elapsed;
     } catch (std::exception &e) {
@@ -2543,7 +2543,7 @@ void c2aApplyServer(protocol::ServerParams &p)
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, gid);
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -2555,7 +2555,7 @@ void c2aApplyServer(protocol::ServerParams &p)
         sendErr = false;
 
         ActionCounterTransaction tran(volSt.ac, aaApply);
-        ul.unlock();
+        lk.unlock();
         logger.info() << "apply started" << volId << gid;
         cybozu::Stopwatch stopwatch;
         if (!archive_local::applyDiffsToVolume(volId, gid)) {
@@ -2588,7 +2588,7 @@ void c2aMergeServer(protocol::ServerParams &p)
 
         ForegroundCounterTransaction foregroundTasksTran;
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId, gidB);
 
         verifyMaxForegroundTasks(ga.maxForegroundTasks, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
@@ -2601,7 +2601,7 @@ void c2aMergeServer(protocol::ServerParams &p)
         sendErr = false;
 
         ActionCounterTransaction tran(volSt.ac, aaMerge);
-        ul.unlock();
+        lk.unlock();
         logger.info() << "merge started" << volId << gidB << type << param3;
         cybozu::Stopwatch stopwatch;
         if (!archive_local::mergeDiffs(volId, gidB, isSize, param3)) {
@@ -2630,14 +2630,14 @@ void c2aResizeServer(protocol::ServerParams &p)
         const bool doZeroClear = param.doZeroClear;
 
         ArchiveVolState &volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForResize, FUNC);
         verifyStateIn(volSt.sm.get(), aAcceptForResize, FUNC);
 
         ActionCounterTransaction tran(volSt.ac, aaResize);
-        ul.unlock();
+        lk.unlock();
 
         if (doZeroClear) {
             pkt.writeFin(msgOk);
@@ -2664,12 +2664,12 @@ void c2aResetVolServer(protocol::ServerParams &p)
     try {
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
         const std::string &currSt = volSt.sm.get(); // aStopped or aSyncReady
 
         StateMachineTransaction tran(volSt.sm, currSt, atResetVol, FUNC);
-        ul.unlock();
+        lk.unlock();
 
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.clear();
@@ -2696,7 +2696,7 @@ void changeSnapshot(protocol::ServerParams &p, bool enable)
         const std::string &volId = param.volId;
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyStateIn(volSt.sm.get(), aActive, FUNC);
         verifyActionNotRunning(volSt.ac, aDenyForChangeSnapshot, FUNC);
 
@@ -2719,7 +2719,7 @@ void changeSnapshot(protocol::ServerParams &p, bool enable)
             throw cybozu::Exception(FUNC) << "change snapshot failed" << volId << enable;
 #endif
         }
-        ul.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
+        lk.unlock(); // There is no aaChangeSnapshot action so we held lock during the operation.
         pkt.writeFin(msgOk);
     } catch (std::exception &e) {
         logger.error() << e.what();
@@ -2817,10 +2817,10 @@ void c2aSetUuidServer(protocol::ServerParams &p)
         const cybozu::Uuid &uuid = param.uuid;
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.setUuid(uuid);
-        ul.unlock();
+        lk.unlock();
         pkt.writeFin(msgOk);
         logger.info() << "set-uuid succeeded" << volId << uuid;
     } catch (std::exception &e) {
@@ -2846,11 +2846,11 @@ void c2aSetStateServer(protocol::ServerParams &p)
 
         verifyStateIn(param.state, aSteadyStates, FUNC);
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volSt.sm.set(state);
         volInfo.setState(state);
-        ul.unlock();
+        lk.unlock();
         pkt.writeFin(msgOk);
         logger.info() << "set-state succeeded" << volId << state;
     } catch (std::exception &e) {
@@ -2876,10 +2876,10 @@ void c2aSetBaseServer(protocol::ServerParams &p)
         MetaState metaSt = strToMetaState(metaStateStr);
 
         ArchiveVolState& volSt = getArchiveVolState(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
         volInfo.setMetaState(metaSt);
-        ul.unlock();
+        lk.unlock();
         pkt.writeFin(msgOk);
         logger.info() << "set-base succeeded" << volId << metaSt;
     } catch (std::exception &e) {
@@ -2899,14 +2899,14 @@ void c2aGarbageCollectDiffServer(protocol::ServerParams &p)
         const std::string volId = parseVolIdParam(protocol::recvStrVec(p.sock, 1, FUNC), 0);
         ArchiveVolState &volSt = getArchiveVolState(volId);
         ArchiveVolInfo volInfo = getArchiveVolInfo(volId);
-        UniqueLock ul(volSt.mu);
+        ArchiveVolState::Lock lk = volSt.lock(FUNC, volId);
         verifyStateIn(volSt.sm.get(), aActiveOrStopped, FUNC);
         verifyActionNotRunning(volSt.ac, allActionVec, FUNC);
 
         // Do not unlock volSt due to this command will not change the state.
         const size_t num = volInfo.gcDiffs();
 
-        ul.unlock();
+        lk.unlock();
         pkt.writeFin(msgOk);
         logger.info() << "gc-diff succeeded" << volId << num;
     } catch (std::exception &e) {

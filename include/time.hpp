@@ -284,8 +284,8 @@ class StopwatchT
 {
     std::chrono::time_point<Clock> t0, t1;
 public:
-    StopwatchT() : t0(), t1() {
-        reset();
+    explicit StopwatchT(bool doReset = true) : t0(), t1() {
+        if (doReset) reset();
     }
     void reset() {
         t0 = t1 = Clock::now();

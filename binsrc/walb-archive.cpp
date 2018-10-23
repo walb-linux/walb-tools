@@ -33,6 +33,7 @@ struct Option
     std::string discardTypeStr;
     bool isDebug;
     std::string cmprOptForSyncStr;
+    double lockTimeThreshold;
     cybozu::Option opt;
 
     Option(int argc, char *argv[]) {
@@ -59,6 +60,7 @@ struct Option
         opt.appendOpt(&a.maxOpenDiffs, DEFAULT_MAX_OPEN_DIFFS, "maxopen", "NUM : max number of wdiff files to open together.");
         opt.appendOpt(&a.pctApplySleep, DEFAULT_PCT_APPLY_SLEEP, "apply-sleep-pct", "PERCENTAGE : sleep percentage in diff application. (default: 0)");
         opt.appendOpt(&cmprOptForSyncStr, DEFAULT_CMPR_OPT_FOR_SYNC, "sync-cmpr", "COMPRESSION_OPT : compression option for full/hash replsync like 'snappy:0:1'.");
+        opt.appendOpt(&lockTimeThreshold, DEFAULT_LOCK_TIME_THRESHOLD, "lock-time-th", "SEC : lock waiting/holding time threshold to log.");
 #ifdef ENABLE_EXEC_PROTOCOL
         opt.appendBoolOpt(&a.allowExec, "allow-exec", ": allow exec protocol for test. This is NOT SECURE.");
 #endif
@@ -82,6 +84,7 @@ struct Option
                 << a.pctApplySleep;
         }
         a.cmprOptForSync = parseCompressOpt(cmprOptForSyncStr);
+        ArchiveVolState::lockTimeThreshold().store(lockTimeThreshold);
     }
 };
 
