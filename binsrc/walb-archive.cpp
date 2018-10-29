@@ -58,6 +58,7 @@ struct Option
         opt.appendBoolOpt(&a.doAutoResize, "autoresize", ": resize base image automatically if necessary");
         opt.appendBoolOpt(&a.keepOneColdSnapshot, "keep-one-cold-snap", ": keep just one cold snapshot per volume.");
         opt.appendOpt(&a.maxOpenDiffs, DEFAULT_MAX_OPEN_DIFFS, "maxopen", "NUM : max number of wdiff files to open together.");
+        opt.appendOpt(&a.maxOpenDiffsForVirtScan, DEFAULT_MAX_OPEN_DIFFS_FOR_VIRTSCAN, "maxopen-virt", "NUM : max number of wdiff files to open together for virtual scan.");
         opt.appendOpt(&a.pctApplySleep, DEFAULT_PCT_APPLY_SLEEP, "apply-sleep-pct", "PERCENTAGE : sleep percentage in diff application. (default: 0)");
         opt.appendOpt(&cmprOptForSyncStr, DEFAULT_CMPR_OPT_FOR_SYNC, "sync-cmpr", "COMPRESSION_OPT : compression option for full/hash replsync like 'snappy:0:1'.");
         opt.appendOpt(&lockTimeThreshold, DEFAULT_LOCK_TIME_THRESHOLD, "lock-time-th", "SEC : lock waiting/holding time threshold to log.");

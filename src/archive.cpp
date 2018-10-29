@@ -53,7 +53,8 @@ void prepareVirtualFullScanner(
     MetaDiffVec diffV = tryOpenDiffs(
         fileV, volInfo, allowEmpty, st0, [&](const MetaState &st) {
             MetaDiffVec v;
-            if (!volInfo.getDiffMgr().getDiffListToScan2(v, st, snap.gidB, ga.maxOpenDiffs)) {
+            if (!volInfo.getDiffMgr()
+                .getDiffListToScan2(v, st, snap.gidB, ga.maxOpenDiffsForVirtScan)) {
                 throw cybozu::Exception(__func__)
                     << "snapshot can not be materialized" << volInfo.volId << snap;
             }
