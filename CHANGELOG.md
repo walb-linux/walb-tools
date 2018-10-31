@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Security
 
 
+## [1.0.19] - 2018-10-31
+### Added
+- walbc: add -retry option for status and get command.
+### Changed
+- archive: add -lock-time-th option.
+  It tracks lock waiting/holding time and logs if it exceeds the threshold.
+- archive: add -max-open-virt option.
+  It limits max open files for virtual scan used by
+  hash backup/replication and virt-full-scan command.
+### Removed
+- proxy: -wl option is removed.
+  maxConversionMb is no longer meaningful in >=1.0.4 versions
+  where proxy uses indexed wdiff format instead sorted wdiff format.
+### Fixed
+- version 1.0.18 uses -max-open option value to limit max open files in virtual full scan operations.
+  Those operations in <=1.0.17 versions were not effected by -max-open option, it was unlimited.
+  From 1.0.19, we use -max-open-virt option to limit max open files in virtual full scan.
+  -max-open option still limits apply/restore operations.
+
 ## [1.0.18] - 2018-10-03
 ### Added
 - virt-full-scan: add scan-sleep-pct option.
