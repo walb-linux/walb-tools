@@ -184,7 +184,6 @@ struct ProxySingleton
     size_t maxConnections;
     size_t maxForegroundTasks;
     size_t maxBackgroundTasks;
-    size_t maxConversionMb;
     size_t socketTimeout;
     KeepAliveParams keepAliveParams;
     bool allowExec;
@@ -196,7 +195,6 @@ struct ProxySingleton
     AtomicMap<ProxyVolState> stMap;
     TaskQueue<ProxyTask> taskQueue;
     std::unique_ptr<DispatchTask<ProxyTask, ProxyWorker> > dispatcher;
-    std::atomic<uint64_t> conversionUsageMb;
     protocol::HandlerStatMgr handlerStatMgr;
 
     void setSocketParams(cybozu::Socket& sock) const {
@@ -239,28 +237,6 @@ inline void pushTaskForce(const ProxyTask& task, size_t delayMs, bool retry = fa
 
 
 namespace proxy_local {
-
-class ConversionMemoryTransaction
-{
-private:
-    size_t sizeMb_;
-public:
-    explicit ConversionMemoryTransaction(size_t sizeMb)
-        : sizeMb_(sizeMb) {
-        getProxyGlobal().conversionUsageMb += sizeMb_;
-    }
-    ~ConversionMemoryTransaction() noexcept {
-        getProxyGlobal().conversionUsageMb -= sizeMb_;
-    }
-};
-
-inline void verifyMaxConversionMemory(const char *msg)
-{
-    if (gp.conversionUsageMb > gp.maxConversionMb) {
-        throw cybozu::Exception(msg)
-            << "exceeds max conversion memory size in MB" << gp.maxConversionMb;
-    }
-}
 
 inline void verifyDiskSpaceAvailable(uint64_t maxLogSizeMb, const char *msg)
 {

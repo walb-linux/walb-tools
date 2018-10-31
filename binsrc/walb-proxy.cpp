@@ -51,7 +51,6 @@ struct Option
         opt.appendOpt(&p.maxDelaySecForRetry, DEFAULT_MAX_DELAY_SEC_FOR_RETRY, "maxdelay", "PERIOD : maximum waiting time for next retry [sec].");
         opt.appendOpt(&p.retryTimeout, DEFAULT_RETRY_TIMEOUT_SEC, "rto", "PERIOD : retry timeout (total period) [sec].");
         opt.appendOpt(&p.baseDirStr, DEFAULT_BASE_DIR, "b", "PATH : base directory");
-        opt.appendOpt(&p.maxConversionMb, DEFAULT_MAX_CONVERSION_MB, "wl", "SIZE : max memory size of wlog-wdiff conversion [MiB].");
         std::string hostName = cybozu::net::getHostName();
         opt.appendOpt(&p.nodeId, hostName, "id", "STRING : node identifier");
         opt.appendOpt(&p.socketTimeout, DEFAULT_SOCKET_TIMEOUT_SEC, "to", "PERIOD : Socket timeout [sec].");
@@ -71,7 +70,6 @@ struct Option
         util::verifyNotZero(p.maxForegroundTasks, "maxForegroundtasks");
         util::verifyNotZero(p.maxWdiffSendMb, "maxWdiffSendMb");
         util::verifyNotZero(p.maxWdiffSendNr, "maxWdiffSendNr");
-        util::verifyNotZero(p.maxConversionMb, "maxConversionMb");
         p.keepAliveParams.verify();
         if (p.minDelaySecForRetry > p.maxDelaySecForRetry) {
             LOGs.warn() << "reset maxDelaySecForRetry do to bad value"

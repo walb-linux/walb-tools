@@ -270,10 +270,8 @@ void s2pWlogTransferServer(protocol::ServerParams &p)
 
     ForegroundCounterTransaction foregroundTasksTran;
     const uint64_t maxLogSizeMb = maxLogSizePb * pbs / MEBI + 1;
-    proxy_local::ConversionMemoryTransaction convTran(maxLogSizeMb);
     try {
         verifyMaxForegroundTasks(gp.maxForegroundTasks, FUNC);
-        proxy_local::verifyMaxConversionMemory(FUNC);
         proxy_local::verifyDiskSpaceAvailable(maxLogSizeMb, FUNC);
         verifyNotStopping(volSt.stopState, volId, FUNC);
         verifyStateIn(volSt.sm.get(), {pStarted}, FUNC);
@@ -675,7 +673,6 @@ StrVec getAllStatusAsStrVec()
     ret.push_back(fmt("maxConnections %zu", gp.maxConnections));
     ret.push_back(fmt("maxForegroundTasks %zu", gp.maxForegroundTasks));
     ret.push_back(fmt("maxBackgroundTasks %zu", gp.maxBackgroundTasks));
-    ret.push_back(fmt("maxConversionMb %zu", gp.maxConversionMb));
     ret.push_back(fmt("socketTimeout %zu", gp.socketTimeout));
     ret.push_back(fmt("keepAlive %s", gp.keepAliveParams.toStr().c_str()));
 
